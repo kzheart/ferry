@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from . import convert, edit as edit_mod
+from .reader_codex import session_id as codex_session_id
 
 REPO = Path(__file__).resolve().parent.parent
 HISTORY = Path.home() / ".resume-harness" / "history.jsonl"
@@ -30,6 +31,7 @@ NATIVE_OPS = {"claude", "codex", "opencode"}
 # ---------- 会话扫描 ----------
 
 SCAN_CACHE = Path.home() / ".resume-harness" / "scan-cache.json"
+SCAN_CACHE_VERSION = 3
 _cache: dict | None = None
 
 
@@ -41,22 +43,24 @@ def _cache_get(path: Path, st) -> dict | None:
         except (OSError, json.JSONDecodeError):
             _cache = {}
     hit = _cache.get(str(path))
-    if hit and hit["mtime"] == st.st_mtime_ns and hit["size"] == st.st_size:
+    if hit and hit.get("version") == SCAN_CACHE_VERSION and \
+            hit["mtime"] == st.st_mtime_ns and hit["size"] == st.st_size:
         return hit["meta"]
     return None
 
 
 def _cache_put(path: Path, st, meta: dict):
-    _cache[str(path)] = {"mtime": st.st_mtime_ns, "size": st.st_size,
+    _cache[str(path)] = {"version": SCAN_CACHE_VERSION,
+                         "mtime": st.st_mtime_ns, "size": st.st_size,
                          "meta": meta}
 
 
 def _cache_flush():
     if _cache is not None:
         SCAN_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = SCAN_CACHE.with_suffix(".tmp")
+        tmp = SCAN_CACHE.with_name(f"{SCAN_CACHE.name}.{os.getpid()}.tmp")
         tmp.write_text(json.dumps(_cache))
-        tmp.rename(SCAN_CACHE)
+        os.replace(tmp, SCAN_CACHE)
 
 
 def _clip(s: str, n: int = 80) -> str:
@@ -116,14 +120,16 @@ def _scan_codex() -> list[dict]:
                 out.append(cached)
             continue
         sid, cwd, title, count = p.stem, "", "", 0
+        has_meta = False
         try:
             for line in p.read_text().splitlines():
                 if not line.strip():
                     continue
                 r = json.loads(line)
-                if r.get("type") == "session_meta":
-                    sid = r["payload"].get("session_id", sid)
+                if r.get("type") == "session_meta" and not has_meta:
+                    sid = codex_session_id(r["payload"], sid)
                     cwd = r["payload"].get("cwd", "")
+                    has_meta = True
                 elif r.get("type") == "response_item":
                     pl = r["payload"]
                     if pl.get("type") == "message":

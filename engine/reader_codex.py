@@ -14,7 +14,12 @@ _PATCH_RE = re.compile(r"tools\.apply_patch\((.*?)\)\s*;?", re.S)
 _ADD_FILE_RE = re.compile(r"\*\*\* Add File: (.+?)\n(.*?)\n?\*\*\* End Patch", re.S)
 _UPD_FILE_RE = re.compile(r"\*\*\* Update File: (.+?)\n(.*?)\n?\*\*\* End Patch", re.S)
 _SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",
-                     "<ENVIRONMENT_CONTEXT>", "<turn_aborted>")
+                      "<ENVIRONMENT_CONTEXT>", "<turn_aborted>")
+
+
+def session_id(meta: dict, fallback: str) -> str:
+    # 子代理的 session_id 指向父会话，id 才是当前 rollout 的身份。
+    return meta.get("id") or meta.get("session_id") or fallback
 
 
 def _parse_call(payload, sess) -> ToolCall:
@@ -75,7 +80,7 @@ def read(path: str) -> Session:
              if l.strip()]
     meta = next((l["payload"] for l in lines if l["type"] == "session_meta"), {})
     sess = Session(source_tool="codex",
-                   source_id=meta.get("session_id", Path(path).stem),
+                   source_id=session_id(meta, Path(path).stem),
                    cwd=meta.get("cwd", ""))
     pending: dict[str, ToolCall] = {}
     cur_tools: list[Block] = []          # 未落消息的工具块,附到下一条 assistant
