@@ -263,6 +263,11 @@ def _scan_opencode() -> list[dict]:
     return [root for root in _session_roots(out) if root["count"]]
 
 
+SOURCE_PATHS = {"claude": "~/.claude/projects",
+                "codex": "~/.codex/sessions",
+                "opencode": "~/.local/share/opencode"}
+
+
 def scan() -> dict:
     """三家会话列表 + 各家扫描状态(未安装/出错如实报告)。"""
     tools = {}
@@ -272,9 +277,11 @@ def scan() -> dict:
         try:
             rows = fn()
             sessions.extend(rows)
-            tools[name] = {"ok": True, "count": len(rows)}
+            tools[name] = {"ok": True, "count": len(rows),
+                           "path": SOURCE_PATHS[name]}
         except Exception as e:
-            tools[name] = {"ok": False, "error": str(e)[:200]}
+            tools[name] = {"ok": False, "error": str(e)[:200],
+                           "path": SOURCE_PATHS[name]}
     _cache_flush()
     sessions.sort(key=lambda s: s["updated"], reverse=True)
     return {"tools": tools, "sessions": sessions}
@@ -402,6 +409,108 @@ def _loss_stats(sess, dst: str) -> dict:
             "degrade_details": details, "drop_details": dropped}
 
 
+# ---------- 敏感信息检测 / 脱敏 ----------
+
+SENSITIVE_PATTERNS = [
+    ("api_key", "疑似 API Key", re.compile(
+        r"(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}"
+        r"|xox[bapors]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}"
+        r"|AIza[0-9A-Za-z_-]{30,})")),
+    ("bearer", "Bearer Token", re.compile(
+        r"Bearer\s+[A-Za-z0-9._~+/-]{20,}=*")),
+    ("email", "邮箱地址", re.compile(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}\b")),
+]
+
+
+def _mask_secret(kind: str, text: str) -> str:
+    if kind == "email":
+        name, _, domain = text.partition("@")
+        return f"{name[:1]}***@{domain}"
+    return f"{text[:6]}…[已脱敏]"
+
+
+def _session_strings(sess):
+    """产出树内所有可含敏感信息的字符串及其写回函数。"""
+    for node in sess.walk():
+        for m in node.messages:
+            for b in m.blocks:
+                if b.kind in ("text", "thinking") and b.text:
+                    yield b.text, (lambda blk: (lambda v: setattr(blk, "text", v)))(b)
+                elif b.kind == "tool" and b.tool:
+                    t = b.tool
+                    if t.output:
+                        yield t.output, (lambda tc: (lambda v: setattr(tc, "output", v)))(t)
+                    if isinstance(t.input, str) and t.input:
+                        yield t.input, (lambda tc: (lambda v: setattr(tc, "input", v)))(t)
+                    elif isinstance(t.input, dict):
+                        for key, val in t.input.items():
+                            if isinstance(val, str) and val:
+                                yield val, (lambda d, k: (lambda v: d.__setitem__(k, v)))(t.input, key)
+
+
+def _scan_sensitive(sess) -> dict:
+    findings = {}
+    for text, _setter in _session_strings(sess):
+        for kind, label, pat in SENSITIVE_PATTERNS:
+            for m in pat.finditer(text):
+                f = findings.setdefault(kind, {"kind": kind, "label": label,
+                                               "count": 0, "samples": []})
+                f["count"] += 1
+                masked = _mask_secret(kind, m.group(0))
+                if masked not in f["samples"] and len(f["samples"]) < 3:
+                    f["samples"].append(masked)
+    out = sorted(findings.values(), key=lambda f: -f["count"])
+    return {"findings": out, "total": sum(f["count"] for f in out)}
+
+
+def _redact_session(sess) -> dict:
+    """就地把树内敏感片段替换为脱敏占位,返回各类命中数。"""
+    counts: dict[str, int] = {}
+    for text, setter in _session_strings(sess):
+        new = text
+        for kind, _label, pat in SENSITIVE_PATTERNS:
+            def repl(m, kind=kind):
+                counts[kind] = counts.get(kind, 0) + 1
+                return _mask_secret(kind, m.group(0))
+            new = pat.sub(repl, new)
+        if new != text:
+            setter(new)
+    return counts
+
+
+def redact_scan(tool: str, ref: str) -> dict:
+    return _scan_sensitive(_read_tree(tool, ref))
+
+
+# ---------- 范围截断 ----------
+
+def _truncate_rounds(sess, max_turn: int):
+    """仅保留到第 max_turn 轮(用户消息计轮),含该轮的全部后续回应。"""
+    kept, turn = [], 0
+    for m in sess.messages:
+        if m.role == "user":
+            turn += 1
+        if turn > max_turn:
+            break
+        kept.append(m)
+    dropped = len(sess.messages) - len(kept)
+    if dropped:
+        sess.loss.append(f"按迁移范围截断: 丢弃第 {max_turn} 轮之后的 {dropped} 条消息")
+    sess.messages = kept
+    kept_ids = {m.source_id for m in kept if m.source_id}
+    edges = [e for e in sess.agent_edges
+             if e.spawn_message_id is None or e.spawn_message_id in kept_ids]
+    kept_children = {e.child_session_id for e in edges}
+    removed = [c for c in sess.children
+               if sess.agent_edges and c.source_id not in kept_children]
+    if removed:
+        sess.loss.append(f"截断范围外的 {len(removed)} 个子会话未迁移")
+        sess.children = [c for c in sess.children if c.source_id in kept_children]
+        sess.agent_edges = edges
+    return sess
+
+
 def _append_history(entry: dict):
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
     with HISTORY.open("a") as f:
@@ -409,8 +518,11 @@ def _append_history(entry: dict):
 
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
-            dry_run: bool = False, probe: bool = True) -> dict:
+            dry_run: bool = False, probe: bool = True,
+            redact: bool = False, max_turn: int | None = None) -> dict:
     sess = _read_tree(src, ref)
+    if max_turn:
+        _truncate_rounds(sess, int(max_turn))
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     stats = _loss_stats(sess, dst)
     tree_count = sum(1 for _ in sess.walk())
@@ -424,10 +536,14 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
     base = {"src": src, "dst": dst, "source_id": sess.source_id,
             "title": sess.title, "cwd": target_cwd, "loss": stats,
             "tree_count": tree_count, "child_count": tree_count - 1,
-            "topology": topology}
+            "topology": topology,
+            "max_turn": max_turn, "msg_count": len(sess.messages)}
     if dry_run:
-        return {**base, "dry_run": True}
+        return {**base, "dry_run": True,
+                "sensitive": _scan_sensitive(sess)}
 
+    if redact:
+        base["redacted"] = _redact_session(sess)
     sid, dest = convert.WRITERS[dst](sess, cwd=target_cwd)
     # 写回阶段可能追加新的损耗(writer 分发时才知道)
     base["loss"] = _loss_stats(sess, dst)
@@ -633,7 +749,10 @@ def edit_preview(ref: str, ops: list[dict]) -> dict:
     return {"before": before, "after": after, "notes": notes}
 
 
-def edit_apply(ref: str, ops: list[dict], probe: bool = True) -> dict:
+def edit_apply(ref: str, ops: list[dict], probe: bool = True,
+               save_as: bool = False) -> dict:
+    if save_as:
+        return _edit_save_as(ref, ops, probe)
     path = edit_mod.resolve(ref)
     bak = edit_mod.backup(path)
     records = edit_mod.load(path)
@@ -650,6 +769,32 @@ def edit_apply(ref: str, ops: list[dict], probe: bool = True) -> dict:
             import shutil
             shutil.copy(bak, path)
             result.update(ok=False, error="探针未通过,已自动还原快照")
+    return result
+
+
+def _edit_save_as(ref: str, ops: list[dict], probe: bool = True) -> dict:
+    """另存为新会话:原会话保持不变,操作施加在同目录的新副本上。"""
+    import uuid
+    path = edit_mod.resolve(ref)
+    records = edit_mod.load(path)
+    records, notes = _apply_ops(records, ops)
+    edit_mod.check_invariants(records)
+    new_id = str(uuid.uuid4())
+    for r in records:
+        if "sessionId" in r:
+            r["sessionId"] = new_id
+    new_path = path.with_name(f"{new_id}.jsonl")
+    edit_mod.save(new_path, records)
+    cwd = next((r.get("cwd") for r in records if r.get("cwd")), ".")
+    result = {"ok": True, "session_id": new_id, "saved_as": str(new_path),
+              "notes": notes,
+              "resume": resume_command("claude", new_id, cwd)}
+    if probe:
+        ok, detail = run_probe("claude", new_id, cwd)
+        result["probe"] = {"ok": ok, "detail": detail}
+        if not ok:                       # 副本验收失败:删除,不留半成品
+            new_path.unlink(missing_ok=True)
+            result.update(ok=False, error="探针未通过,已删除新副本,原会话未受影响")
     return result
 
 
@@ -709,25 +854,38 @@ RPC_METHODS = {
     "migrate": lambda p: migrate(p["src"], p["dst"], p["ref"],
                                  cwd=p.get("cwd"),
                                  dry_run=p.get("dry_run", False),
-                                 probe=p.get("probe", True)),
+                                 probe=p.get("probe", True),
+                                 redact=p.get("redact", False),
+                                 max_turn=p.get("max_turn")),
+    "redact_scan": lambda p: redact_scan(p["tool"], p["ref"]),
     "handoff": lambda p: handoff(p["src"], p["ref"], p["dst"],
                                  cwd=p.get("cwd")),
     "edit_preview": lambda p: edit_preview(p["ref"], p["ops"]),
     "edit_apply": lambda p: edit_apply(p["ref"], p["ops"],
-                                       probe=p.get("probe", True)),
+                                       probe=p.get("probe", True),
+                                       save_as=p.get("save_as", False)),
     "snapshot_restore": lambda p: snapshot_restore(p["session"]),
     "snapshot_delete": lambda p: snapshot_delete(p["path"]),
 }
 
 
 def rpc(request: str) -> dict:
-    """统一入口:{"method": ..., "params": {...}} → 结果 dict(GUI 桥)。"""
+    """统一入口:{"method": ..., "params": {...}} → 结果 dict(GUI 桥)。
+
+    执行期间 stdout 重定向到 stderr:底层 edit 操作会 print 进度,
+    不能让它污染桥接层要解析的 JSON 输出。
+    """
+    import contextlib
     req = json.loads(request)
     fn = RPC_METHODS.get(req.get("method"))
     if fn is None:
         return {"error": f"未知 method: {req.get('method')}"}
     try:
-        return {"ok": True, "result": fn(req.get("params") or {})}
+        with contextlib.redirect_stdout(sys.stderr):
+            result = fn(req.get("params") or {})
+        return {"ok": True, "result": result}
+    except SystemExit as e:               # 底层 CLI 工具可能 sys.exit
+        return {"ok": False, "error": str(e)[:500]}
     except Exception as e:
         return {"ok": False, "error": str(e)[:500]}
 
