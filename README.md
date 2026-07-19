@@ -56,7 +56,7 @@ docs/research/       前期调研记录
 - [x] M2 格式规格:spec/formats/ 三家字段级文档,逐字段由样本佐证
 - [x] M3 映射表:spec/mapping/tools.yaml 初稿(shell/read/edit/write/grep)
 - [x] M4 探针:无头加载验收脚本(每家一个"能否 resume 这个会话"的判定器)
-- [ ] M5 引擎 MVP:Claude→Codex 单方向全链路(读 → 中间格式 → 写回 → 探针通过)
+- [x] M5 引擎 MVP:Claude→Codex 单方向全链路(读 → 中间格式 → 写回 → 探针通过)
 - [ ] M6 反方向 + OpenCode + 编辑操作(delete-turn / truncate / redact / rewrite)
 - [ ] M7 CI:每晚装最新版 CLI 重跑全链路,格式漂移报警
 
