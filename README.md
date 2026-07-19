@@ -1,12 +1,12 @@
 # resume-harness
 
-跨 AI 编码 Agent 的会话互通工具:让 Claude Code、Codex CLI、OpenCode 的聊天会话可以**原生迁移**(在 A 里聊到一半,转到 B 里以原生会话形式无缝 resume)和**原地编辑**(删轮次、裁工具输出、脱敏、改写)。
+跨 AI 编码 Agent 的会话互通工具:让 Claude Code、Codex CLI、OpenCode 的聊天会话可以**原生迁移**(在 A 里聊到一半,转到 B 里以原生会话形式无缝 resume)和**原地编辑**(删轮次、裁工具输出、改写)。附带 Tauri + React 桌面端(`app/`)。
 
 ## 为什么做
 
 - 限流/配额:一家额度用完,把会话带上上下文迁到另一家继续。
 - 各有所长:不同任务适合不同 Agent,切换时不丢历史。
-- 会话手术:历史里的巨型工具输出、密钥、跑偏的轮次,应该能修剪后再继续。
+- 会话手术:历史里的巨型工具输出、跑偏的轮次,应该能修剪后再继续。
 
 调研结论(2026-07):已有一批同类项目(ctxmv、session-convert、ai-session-bridge 等),但全部极早期(0–40 star)、硬编码格式、无版本漂移防护。社区高星产品集中在只读浏览(agent-sessions)和单向 handoff(cli-continues)。**空档 = 高保真双向写回 + OpenCode 支持 + 格式漂移防护**。
 
@@ -44,9 +44,25 @@ spec/
   mapping/           跨家工具映射表 YAML
 golden/              受控生成的黄金样本会话(按 工具/版本/用例 分层)
 harness/             样本生成脚本 + 探针验证脚本
-engine/              转换/编辑引擎(最后做)
-docs/research/       前期调研记录
+engine/              转换/编辑引擎;api.py 是 GUI 的结构化接口层(rpc 桥)
+app/                 桌面端:Tauri v2(Rust 壳)+ React/Vite 前端
+docs/                gui-features.md 功能说明;research/ 前期调研
 ```
+
+## 桌面端(app/)
+
+架构:CLI 引擎是核心,Tauri 壳只有两个 command——`engine_rpc`(把前端请求
+转发给 `python3 -m engine.api rpc`)和 `open_terminal`(在 Terminal.app 执行接续命令)。
+前端不含任何会话格式知识。
+
+```
+cd app && npm install        # 首次
+npm run tauri dev            # 开发运行
+npm run tauri build          # 打包 .app/.dmg
+```
+
+引擎仓库位置默认取 app/src-tauri 的上两级;打包分发时用环境变量
+`SESSION_BRIDGE_REPO=/path/to/resume-harness` 指定。
 
 ## 路线图
 
