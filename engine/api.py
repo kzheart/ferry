@@ -11,6 +11,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -31,7 +32,7 @@ NATIVE_OPS = {"claude", "codex", "opencode"}
 # ---------- 会话扫描 ----------
 
 SCAN_CACHE = Path.home() / ".resume-harness" / "scan-cache.json"
-SCAN_CACHE_VERSION = 3
+SCAN_CACHE_VERSION = 5
 _cache: dict | None = None
 
 
@@ -68,9 +69,67 @@ def _clip(s: str, n: int = 80) -> str:
     return s[:n] + ("…" if len(s) > n else "")
 
 
+def _session_roots(rows: list[dict]) -> list[dict]:
+    """把扫描得到的扁平节点挂成树，并把子树统计汇总到每个节点。"""
+    nodes = {}
+    for source in rows:
+        node = dict(source)
+        node["children"] = []
+        node["own_count"] = source.get("own_count", source.get("count", 0))
+        node["own_size"] = source.get("own_size", source.get("size", 0))
+        node["own_updated"] = source.get(
+            "own_updated", source.get("updated", 0))
+        nodes[node["id"]] = node
+
+    roots = []
+    for node in nodes.values():
+        parent = nodes.get(node.get("parent_id"))
+        cursor = parent
+        seen = {node["id"]}
+        while cursor is not None and cursor["id"] not in seen:
+            seen.add(cursor["id"])
+            cursor = nodes.get(cursor.get("parent_id"))
+        if cursor is not None:
+            parent = None
+        if parent is not None and parent is not node:
+            parent["children"].append(node)
+        else:
+            node["parent_id"] = None
+            roots.append(node)
+
+    visiting = set()
+
+    def summarize(node, root_id):
+        if node["id"] in visiting:  # 格式损坏时切断环，仍让会话可见。
+            node["children"] = []
+        visiting.add(node["id"])
+        node["root_id"] = root_id
+        for child in node["children"]:
+            summarize(child, root_id)
+        visiting.discard(node["id"])
+        node["children"].sort(
+            key=lambda child: child.get("updated", 0), reverse=True)
+        node["child_count"] = len(node["children"])
+        node["tree_count"] = 1 + sum(
+            child["tree_count"] for child in node["children"])
+        node["count"] = node["own_count"] + sum(
+            child["count"] for child in node["children"])
+        node["size"] = node["own_size"] + sum(
+            child["size"] for child in node["children"])
+        node["updated"] = max(
+            [node["own_updated"],
+             *(child["updated"] for child in node["children"])])
+
+    for root in roots:
+        summarize(root, root["id"])
+    roots.sort(key=lambda node: node["updated"], reverse=True)
+    return roots
+
+
 def _scan_claude() -> list[dict]:
     out = []
-    for f in glob.glob(os.path.expanduser("~/.claude/projects/*/*.jsonl")):
+    base = Path(os.path.expanduser("~/.claude/projects"))
+    for f in glob.glob(str(base / "**/*.jsonl"), recursive=True):
         p = Path(f)
         st = p.stat()
         cached = _cache_get(p, st)
@@ -89,7 +148,7 @@ def _scan_claude() -> list[dict]:
                     count += 1
                     if not cwd:
                         cwd = r.get("cwd", "")
-                    if not title and t == "user" and not r.get("isSidechain"):
+                    if not title and t == "user":
                         c = (r.get("message") or {}).get("content")
                         if isinstance(c, str) and c.strip() and \
                                 not c.strip().startswith("<"):
@@ -98,14 +157,22 @@ def _scan_claude() -> list[dict]:
                     title = r.get("title", "") or title
         except (json.JSONDecodeError, OSError):
             continue
+        try:
+            rel = p.relative_to(base)
+        except ValueError:
+            rel = p
+        is_child = len(rel.parts) > 2
+        root_id = rel.parts[1] if is_child else p.stem
         meta = {} if count == 0 else \
             {"tool": "claude", "id": p.stem, "title": title,
              "dir": cwd, "updated": int(st.st_mtime * 1000),
-             "count": count, "size": st.st_size, "path": str(p)}
+             "count": count, "size": st.st_size, "path": str(p),
+             "parent_id": root_id if is_child else None,
+             "root_id": root_id}
         _cache_put(p, st, meta)
         if meta:
             out.append(meta)
-    return out
+    return _session_roots(out)
 
 
 def _scan_codex() -> list[dict]:
@@ -119,7 +186,8 @@ def _scan_codex() -> list[dict]:
             if cached:
                 out.append(cached)
             continue
-        sid, cwd, title, count = p.stem, "", "", 0
+        sid, cwd, title, count, parent_id = p.stem, "", "", 0, None
+        root_id, agent_id, agent_path, agent_type = None, None, None, None
         has_meta = False
         try:
             for line in p.read_text().splitlines():
@@ -127,8 +195,29 @@ def _scan_codex() -> list[dict]:
                     continue
                 r = json.loads(line)
                 if r.get("type") == "session_meta" and not has_meta:
-                    sid = codex_session_id(r["payload"], sid)
-                    cwd = r["payload"].get("cwd", "")
+                    payload = r["payload"]
+                    sid = codex_session_id(payload, sid)
+                    cwd = payload.get("cwd", "")
+                    source = payload.get("source") or payload.get("thread_source")
+                    source = source if isinstance(source, dict) else {}
+                    subagent = source.get("subagent")
+                    subagent = subagent if isinstance(subagent, dict) else {}
+                    spawn = subagent.get("thread_spawn")
+                    spawn = spawn if isinstance(spawn, dict) else {}
+                    root_id = payload.get("session_id") or sid
+                    parent_id = (payload.get("parent_thread_id") or
+                                 spawn.get("parent_thread_id") or
+                                 subagent.get("parent_thread_id"))
+                    if not parent_id and root_id != sid:
+                        parent_id = root_id
+                    agent_id = (subagent.get("agent_id") or
+                                spawn.get("agent_id") or payload.get("agent_id"))
+                    agent_path = (subagent.get("agent_path") or
+                                  spawn.get("agent_path") or
+                                  payload.get("agent_path"))
+                    agent_type = (subagent.get("agent_type") or
+                                  spawn.get("agent_type") or
+                                  payload.get("agent_type"))
                     has_meta = True
                 elif r.get("type") == "response_item":
                     pl = r["payload"]
@@ -144,11 +233,14 @@ def _scan_codex() -> list[dict]:
         meta = {} if count == 0 else \
             {"tool": "codex", "id": sid, "title": title,
              "dir": cwd, "updated": int(st.st_mtime * 1000),
-             "count": count, "size": st.st_size, "path": str(p)}
+             "count": count, "size": st.st_size, "path": str(p),
+             "parent_id": parent_id, "root_id": root_id or sid,
+             "agent_id": agent_id, "agent_path": agent_path,
+             "agent_type": agent_type}
         _cache_put(p, st, meta)
         if meta:
             out.append(meta)
-    return out
+    return _session_roots(out)
 
 
 def _scan_opencode() -> list[dict]:
@@ -160,16 +252,15 @@ def _scan_opencode() -> list[dict]:
         counts = dict(db.execute(
             "SELECT session_id, COUNT(*) FROM message GROUP BY session_id"))
         rows = db.execute(
-            "SELECT id, title, directory, time_updated FROM session "
-            "WHERE parent_id IS NULL").fetchall()
-    for sid, title, d, upd in rows:
+            "SELECT id, title, directory, time_updated, parent_id "
+            "FROM session").fetchall()
+    for sid, title, d, upd, parent_id in rows:
         n = counts.get(sid, 0)
-        if n == 0:
-            continue
         out.append({"tool": "opencode", "id": sid, "title": title or "",
                     "dir": d or "", "updated": upd or 0,
-                    "count": n, "size": 0, "path": ""})
-    return out
+                    "count": n, "size": 0, "path": "",
+                    "parent_id": parent_id})
+    return [root for root in _session_roots(out) if root["count"]]
 
 
 def scan() -> dict:
@@ -191,11 +282,52 @@ def scan() -> dict:
 
 # ---------- 会话详情 ----------
 
-def show(tool: str, ref: str) -> dict:
+def _walk_meta(nodes):
+    for node in nodes:
+        yield node
+        yield from _walk_meta(node.get("children", []))
+
+
+def _read_tree(tool: str, ref: str):
     path = convert.resolve_ref(tool, ref)
     sess = convert.READERS[tool](path)
+    if sess.children:
+        return sess
+    scanner = {"claude": _scan_claude, "codex": _scan_codex,
+               "opencode": _scan_opencode}[tool]
+    roots = scanner()
+    target = next((node for node in _walk_meta(roots)
+                   if node["id"] == sess.source_id
+                   or (node.get("path") and node["path"] == str(path))), None)
+    if target is None:
+        return sess
+
+    metadata = {node["id"]: node for node in _walk_meta(roots)}
+
+    def attach(current, meta, root_id):
+        current.source_id = meta["id"]
+        current.root_id = root_id
+        current.parent_id = meta.get("parent_id")
+        current.title = current.title or meta.get("title", "")
+        current.cwd = current.cwd or meta.get("dir", "")
+        existing = {child.source_id: child for child in current.children}
+        children = []
+        for child_meta in meta.get("children", []):
+            child = existing.get(child_meta["id"])
+            if child is None:
+                child_ref = child_meta.get("path") or child_meta["id"]
+                child = convert.READERS[tool](child_ref)
+            attach(child, child_meta, root_id)
+            children.append(child)
+        current.children = children
+
+    attach(sess, target, target.get("root_id") or target["id"])
+    return sess
+
+
+def _message_json(messages) -> list[dict]:
     msgs = []
-    for i, m in enumerate(sess.messages):
+    for i, m in enumerate(messages):
         blocks = []
         for b in m.blocks:
             if b.kind == "text":
@@ -211,9 +343,31 @@ def show(tool: str, ref: str) -> dict:
         if m.raw and isinstance(m.raw[0], dict) and m.raw[0].get("uuid"):
             entry["uuid"] = m.raw[0]["uuid"]
         msgs.append(entry)
-    return {"tool": tool, "id": sess.source_id, "title": sess.title,
-            "dir": sess.cwd, "count": len(msgs), "loss": sess.loss,
-            "messages": msgs}
+    return msgs
+
+
+def _session_json(sess) -> dict:
+    children = [_session_json(child) for child in sess.children]
+    edges = []
+    for edge in sess.agent_edges:
+        edges.append({name: getattr(edge, name) for name in (
+            "parent_session_id", "child_session_id", "source_call_id",
+            "spawn_message_id", "result_message_id", "agent_id", "agent_path",
+            "agent_type", "prompt", "status", "meta")})
+    messages = _message_json(sess.messages)
+    return {"tool": sess.source_tool, "id": sess.source_id,
+            "title": sess.title, "dir": sess.cwd,
+            "root_id": sess.root_id or sess.source_id,
+            "parent_id": sess.parent_id, "agent_id": sess.agent_id,
+            "agent_path": sess.agent_path, "agent_type": sess.agent_type,
+            "count": len(messages), "child_count": len(children),
+            "tree_count": 1 + sum(child["tree_count"] for child in children),
+            "loss": list(sess.loss), "messages": messages,
+            "children": children, "agent_edges": edges}
+
+
+def show(tool: str, ref: str) -> dict:
+    return _session_json(_read_tree(tool, ref))
 
 
 # ---------- 迁移 ----------
@@ -230,17 +384,20 @@ def _loss_stats(sess, dst: str) -> dict:
     """预演:统计原生映射/降级/丢弃(与 writer 的分发逻辑一致)。"""
     native = degrade = 0
     details = []
-    for m in sess.messages:
-        for b in m.blocks:
-            if b.kind == "text":
-                native += 1
-            elif b.kind == "tool":
-                if b.tool.op:
+    dropped = []
+    for node in sess.walk():
+        dropped.extend(node.loss)
+        for m in node.messages:
+            for b in m.blocks:
+                if b.kind == "text":
                     native += 1
-                else:
-                    degrade += 1
-                    details.append(f"工具 {b.tool.name} 将降级为叙述文本")
-    dropped = list(sess.loss)
+                elif b.kind == "tool":
+                    if b.tool.op:
+                        native += 1
+                    else:
+                        degrade += 1
+                        details.append(
+                            f"工具 {b.tool.name} 将降级为叙述文本")
     return {"native": native, "degrade": degrade, "drop": len(dropped),
             "degrade_details": details, "drop_details": dropped}
 
@@ -253,12 +410,21 @@ def _append_history(entry: dict):
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             dry_run: bool = False, probe: bool = True) -> dict:
-    path = convert.resolve_ref(src, ref)
-    sess = convert.READERS[src](path)
+    sess = _read_tree(src, ref)
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     stats = _loss_stats(sess, dst)
+    tree_count = sum(1 for _ in sess.walk())
+    edge_count = sum(len(node.agent_edges) for node in sess.walk())
+    topology = {"nodes": tree_count,
+                "edges": max(0, tree_count - 1),
+                "agent_edges": edge_count,
+                "preserved": True,
+                "detail": "父子会话关系将按原拓扑写入" if tree_count > 1
+                          else "普通单会话,无子会话拓扑"}
     base = {"src": src, "dst": dst, "source_id": sess.source_id,
-            "title": sess.title, "cwd": target_cwd, "loss": stats}
+            "title": sess.title, "cwd": target_cwd, "loss": stats,
+            "tree_count": tree_count, "child_count": tree_count - 1,
+            "topology": topology}
     if dry_run:
         return {**base, "dry_run": True}
 
@@ -269,7 +435,13 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
               "resume": resume_command(dst, sid, target_cwd)}
 
     if probe:
-        ok, detail = run_probe(dst, sid, target_cwd)
+        ok, tree_detail = validate_written_tree(
+            dst, sid, dest, _tree_shape(sess))
+        if ok:
+            ok, runtime_detail = run_probe(dst, sid, target_cwd)
+            detail = f"{tree_detail}\n{runtime_detail}"
+        else:
+            detail = tree_detail
         result["probe"] = {"ok": ok, "detail": detail}
         if not ok:                      # 验收失败:删除产物,不留半成品
             _cleanup_artifact(dst, sid, dest)
@@ -286,17 +458,67 @@ def run_probe(tool: str, sid: str, cwd: str) -> tuple[bool, str]:
     return r.returncode == 0, (r.stdout + r.stderr)[-400:]
 
 
+def _tree_shape(sess) -> tuple:
+    return tuple(sorted((_tree_shape(child) for child in sess.children),
+                        key=repr))
+
+
+def validate_written_tree(tool: str, sid: str, dest,
+                          expected_shape: tuple) -> tuple[bool, str]:
+    try:
+        ref = sid if tool == "opencode" else str(dest)
+        restored = convert.READERS[tool](ref)
+        nodes = list(restored.walk())
+        ids = [node.source_id for node in nodes]
+        edge_count = sum(len(node.children) for node in nodes)
+        expected = 1 + sum(1 for _ in _shape_nodes(expected_shape))
+        ok = (len(nodes) == expected and len(set(ids)) == expected and
+              edge_count == max(0, expected - 1) and
+              _tree_shape(restored) == expected_shape)
+        detail = (f"树结构验收: 节点 {len(nodes)}/{expected}, "
+                  f"父子边 {edge_count}/{max(0, expected - 1)}, "
+                  f"层级拓扑 {'一致' if _tree_shape(restored) == expected_shape else '不一致'}")
+        return ok, detail
+    except Exception as error:
+        return False, f"树结构验收失败: {error}"
+
+
+def _shape_nodes(shape):
+    for child in shape:
+        yield child
+        yield from _shape_nodes(child)
+
+
 def _cleanup_artifact(dst: str, sid: str, dest):
-    if dst in ("claude", "codex"):
+    if dst == "claude":
         try:
             hits = glob.glob(os.path.expanduser(
-                {"claude": f"~/.claude/projects/*/{sid}.jsonl",
-                 "codex": f"~/.codex/sessions/*/*/*/rollout-*-{sid}.jsonl"}[dst]))
+                f"~/.claude/projects/*/{sid}.jsonl"))
             for h in hits:
                 os.unlink(h)
+                shutil.rmtree(Path(h).with_suffix(""), ignore_errors=True)
         except OSError:
             pass
-    # opencode 产物删除需 server 配合,保留并在结果中标注即可
+    elif dst == "codex":
+        for h in glob.glob(os.path.expanduser(
+                "~/.codex/sessions/*/*/*/rollout-*.jsonl")):
+            try:
+                with open(h) as stream:
+                    meta = next((json.loads(line).get("payload", {})
+                                 for line in stream if line.strip() and
+                                 json.loads(line).get("type") == "session_meta"), {})
+                if meta.get("id") == sid or meta.get("session_id") == sid:
+                    os.unlink(h)
+            except (OSError, json.JSONDecodeError):
+                continue
+    elif dst == "opencode":
+        try:
+            tree = convert.READERS["opencode"](sid)
+            for node in reversed(list(tree.walk())):
+                subprocess.run(["opencode", "session", "delete", node.source_id],
+                               capture_output=True, text=True, timeout=30)
+        except Exception:
+            pass
 
 
 def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:

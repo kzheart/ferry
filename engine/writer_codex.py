@@ -138,19 +138,33 @@ def _native_records(tpl, t, cwd) -> list | None:
     return None
 
 
-def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
-    """写出 rollout 文件,返回 (新 session_id, 文件路径)。"""
-    tpl = _load_templates()
-    sid = _uuid7()
-    cwd = cwd or sess.cwd
+def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
+                     parent_id: str | None, depth: int,
+                     agent_path: str | None) -> list[dict]:
     now = _now_iso()
-
     meta = _clone(tpl["session_meta"])
     meta["timestamp"] = now
     mp = meta["payload"]
-    mp["id"] = mp["session_id"] = sid
+    mp["id"] = sid
+    mp["session_id"] = root_id
     mp["timestamp"] = now
     mp["cwd"] = cwd
+    if parent_id:
+        mp["parent_thread_id"] = parent_id
+        mp["forked_from_id"] = parent_id
+        mp["source"] = {
+            "subagent": {
+                "thread_spawn": {
+                    "parent_thread_id": parent_id,
+                    "agent_path": agent_path,
+                    "depth": depth,
+                    "agent_nickname": sess.meta.get("agent_nickname"),
+                    "agent_role": sess.meta.get("agent_role"),
+                },
+            }
+        }
+        mp["thread_source"] = "subagent"
+        mp["agent_path"] = agent_path
 
     tc = _clone(tpl["turn_context"])
     tc["timestamp"] = now
@@ -160,30 +174,159 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
     out_lines = [meta, tc]
     for m in sess.messages:
         texts = []
+        role = m.role if m.role in ("user", "assistant") else "user"
         for b in m.blocks:
             if b.kind == "text":
-                texts.append(b.text)
+                text = b.text
+                if m.role not in ("user", "assistant"):
+                    text = f"[{m.role}]\n{text}"
+                texts.append(text)
             elif b.kind == "tool":
                 t = b.tool
+                if t.op == "agent.spawn":
+                    continue
                 native = _native_records(tpl, t, cwd)
                 if native:
                     if texts:
-                        out_lines.append(_msg(tpl, m.role, "\n\n".join(texts)))
+                        out_lines.append(_msg(tpl, role, "\n\n".join(texts)))
                         texts = []
                     out_lines += native
                 else:
                     sess.lose(f"工具 {t.name} 降级为叙述文本")
                     texts.append(_narration(t))
         if texts:
-            out_lines.append(_msg(tpl, m.role, "\n\n".join(texts)))
+            out_lines.append(_msg(tpl, role, "\n\n".join(texts)))
+    return out_lines
 
+
+def _assistant_result(sess: Session) -> str:
+    for message in reversed(sess.messages):
+        if message.role != "assistant":
+            continue
+        text = "\n".join(block.text for block in message.blocks
+                         if block.kind == "text" and block.text)
+        if text:
+            return text
+    return ""
+
+
+def _edge_for(parent: Session, child: Session):
+    return next((edge for edge in parent.agent_edges
+                 if edge.child_session_id == child.source_id), None)
+
+
+def _child_link_records(parent: Session, child: Session, child_id: str,
+                        agent_path: str) -> list[dict]:
+    edge = _edge_for(parent, child)
+    call_id = (edge.source_call_id if edge and edge.source_call_id else
+               "call_" + secrets.token_urlsafe(18)[:24])
+    prompt = edge.prompt if edge else ""
+    agent_type = (edge.agent_type if edge and edge.agent_type else
+                  child.agent_type)
+    arguments = {"message": prompt}
+    if agent_type:
+        arguments["agent_type"] = agent_type
+    now = _now_iso()
+    spawn = {
+        "timestamp": now,
+        "type": "response_item",
+        "payload": {
+            "type": "function_call",
+            "name": "spawn_agent",
+            "arguments": json.dumps(arguments, ensure_ascii=False),
+            "call_id": call_id,
+        },
+    }
+    activity = {
+        "timestamp": now,
+        "type": "event_msg",
+        "payload": {
+            "type": "sub_agent_activity",
+            "agent_thread_id": child_id,
+            "agent_path": agent_path,
+            "kind": "completed",
+        },
+    }
+    result_text = _assistant_result(child)
+    result = {
+        "timestamp": now,
+        "type": "response_item",
+        "payload": {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": json.dumps({"task_name": agent_path},
+                                  ensure_ascii=False),
+        },
+    }
+    agent_message = {
+        "timestamp": now,
+        "type": "response_item",
+        "payload": {
+            "type": "agent_message",
+            "id": "amsg_" + secrets.token_hex(12),
+            "author": agent_path,
+            "recipient": "/root",
+            "content": [{"type": "input_text", "text": result_text}],
+        },
+    }
+    event_message = {
+        "timestamp": now,
+        "type": "event_msg",
+        "payload": {"type": "agent_message", "message": result_text},
+    }
+    return [spawn, activity, result, event_message, agent_message]
+
+
+def _destination(sessions_dir: Path, sid: str, ordinal: int) -> Path:
     day = time.strftime("%Y/%m/%d")
     stamp = time.strftime("%Y-%m-%dT%H-%M-%S")
-    dest = Path.home() / ".codex" / "sessions" / day / \
-        f"rollout-{stamp}-{sid}.jsonl"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(".tmp")
-    tmp.write_text("\n".join(json.dumps(l, ensure_ascii=False)
-                             for l in out_lines) + "\n")
-    tmp.rename(dest)
-    return sid, dest
+    suffix = f"-{ordinal}" if ordinal else ""
+    return sessions_dir / day / f"rollout-{stamp}{suffix}-{sid}.jsonl"
+
+
+def write(sess: Session, cwd: str | None = None,
+          sessions_dir: str | Path | None = None) -> tuple[str, Path]:
+    """写出整棵 rollout 树,返回根会话的 (session_id, 文件路径)。"""
+    tpl = _load_templates()
+    root_id = _uuid7()
+    base_cwd = cwd or sess.cwd
+    output_root = (Path(sessions_dir).expanduser() if sessions_dir else
+                   Path.home() / ".codex" / "sessions")
+    nodes = list(sess.walk())
+    ids = {id(node): root_id if node is sess else _uuid7() for node in nodes}
+    paths = {}
+
+    def emit(node: Session, parent: Session | None, depth: int,
+             agent_path: str | None, ordinal: int):
+        sid = ids[id(node)]
+        node_cwd = cwd or node.cwd or base_cwd
+        records = _session_records(tpl, node, node_cwd, sid, root_id,
+                                   ids[id(parent)] if parent else None,
+                                   depth, agent_path)
+        for child_index, child in enumerate(node.children):
+            child_path = (child.agent_path or
+                          f"{agent_path or '/root'}/{child.agent_id or child_index + 1}")
+            records.extend(_child_link_records(node, child, ids[id(child)],
+                                               child_path))
+        dest = _destination(output_root, sid, ordinal)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(".tmp")
+        tmp.write_text("\n".join(json.dumps(line, ensure_ascii=False)
+                                  for line in records) + "\n")
+        tmp.rename(dest)
+        paths[id(node)] = dest
+
+        next_ordinal = ordinal + 1
+        for child_index, child in enumerate(node.children):
+            child_path = (child.agent_path or
+                          f"{agent_path or '/root'}/{child.agent_id or child_index + 1}")
+            emit(child, node, depth + 1, child_path, next_ordinal)
+            next_ordinal += sum(1 for _ in child.walk())
+
+    try:
+        emit(sess, None, 0, sess.agent_path or "/root", 0)
+    except Exception:
+        for path in paths.values():
+            path.unlink(missing_ok=True)
+        raise
+    return root_id, paths[id(sess)]
