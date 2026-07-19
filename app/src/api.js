@@ -14,6 +14,7 @@ export const openTerminal = (command) => invoke("open_terminal", { command });
 
 export const TOOL_NAME = { claude: "Claude Code", codex: "Codex CLI", opencode: "OpenCode" };
 export const TOOL_SHORT = { claude: "CC", codex: "CX", opencode: "OC" };
+export const TOOLS = ["claude", "codex", "opencode"];
 export const BIG = 100 * 1024;
 
 export function fmtSize(n) {

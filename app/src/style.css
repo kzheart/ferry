@@ -62,6 +62,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 .chip.native{background:#E6F5F0;color:#0B7A5E}
 .chip.degrade{background:#FCF5E6;color:#8A5A00}
 .chip.drop{background:#FBEEEC;color:#9E332D}
+.chip.compatibility{background:#FCF5E6;color:#8A5A00;border:1px solid #ECDCB4;cursor:pointer}
 
 /* 会话库 */
 .toolbar{display:flex;align-items:center;gap:10px;margin-top:16px}
@@ -73,13 +74,22 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 .filter.on{background:#2563EB;border-color:#2563EB;color:#fff}
 .scanbar{display:flex;gap:10px;margin-top:14px}
 .scanchip{flex:1;display:flex;align-items:center;gap:10px;background:#fff;
-  border:1px solid #D9E0E7;border-radius:10px;padding:10px 14px;font-size:12.5px}
+  border:1px solid #D9E0E7;border-radius:10px;padding:10px 14px;font-size:12.5px;
+  cursor:pointer;text-align:left;transition:border-color .12s,box-shadow .12s,background .12s}
+.scanchip:hover:not(.disabled):not(.on){border-color:#B4BEC9}
+.scanchip.on{border-color:#2563EB;background:#EAF2FF;box-shadow:0 0 0 2px #2563EB inset}
+.scanchip.on .t{color:#1D4FD7}
+.scanchip.on .d{color:#2563EB}
+.scanchip.on::after{content:"✓ 已筛选";margin-left:auto;font-size:11px;font-weight:600;color:#2563EB;flex:none}
+.scanchip.disabled{cursor:default;opacity:.7}
 .scanchip .t{font-weight:600;color:#2B3540}
 .scanchip .d{font-size:11px;color:#78828D;margin-top:1px}
-.bigdot{width:15px;height:15px;border-radius:50%;flex:none}
-.bigdot.ok{background:#E6F5F0;border:1px solid #BFE7DC}
-.bigdot.miss{background:#E7ECF1}
-.bigdot.warn{background:#FCF5E6;border:1px solid #ECDCB4}
+.chip-mark{position:relative;flex:none}
+.chip-mark .bigdot{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;
+  border-radius:50%;flex:none;box-shadow:0 0 0 2px #fff}
+.bigdot.ok{background:#22C55E}
+.bigdot.miss{background:#C5CDD6}
+.bigdot.warn{background:#F59E0B}
 .grid-head{display:grid;grid-template-columns:46px 1fr 128px 76px 90px 20px;gap:16px;
   padding:0 14px 9px;font-size:11px;color:#8A94A0;font-weight:600}
 .rows{background:#fff;border:1px solid #D9E0E7;border-radius:12px;overflow:hidden}
@@ -89,12 +99,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 .row:hover{background:#F7FAFC}
 .row .title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .dir{font-size:11px;color:#8A94A0;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree-hint{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  color:#2563EB;background:#EAF2FF;border-radius:4px;padding:1px 5px;margin-left:8px}
 .badge{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;
-  justify-content:center;font-size:11px;font-weight:700;flex:none}
-.badge.sm{width:22px;height:22px;font-size:9px;border-radius:6px}
-.badge.claude{background:#EAEEF3;color:#475569}
-.badge.codex{background:#E2F4EE;color:#0F9D7A}
-.badge.opencode{background:#F0EAF6;color:#7C4DBE}
+  justify-content:center;flex:none}
+.badge svg{display:block}
+.badge.sm{width:22px;height:22px;border-radius:6px}
+.badge.claude{background:#F5EFE6;color:#C96442}
+.badge.codex{background:#E2F4EE;color:#10A37F}
+.badge.opencode{background:#F0EAF6;color:#211E1E}
 .num{text-align:right;font-size:12.5px;color:#2B3540}
 .foot{display:flex;justify-content:space-between;margin-top:12px;font-size:11.5px;color:#8A94A0}
 
@@ -105,7 +118,28 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 .detail-title .h{font-size:19px;font-weight:700;letter-spacing:-.01em}
 .detail-title .dir{font-size:12px;color:#78828D;margin-top:4px}
 .detail-meta{display:flex;gap:20px;margin-top:14px;font-size:12px;color:#5A6672;flex-wrap:wrap;align-items:center}
+.compatibility-panel{margin-top:10px;width:560px;max-width:100%;background:#FFFBF2;border:1px solid #ECDCB4;
+  border-radius:10px;overflow:hidden;font-size:12px;color:#5A6672}
+.compatibility-intro{padding:10px 13px;border-bottom:1px solid #F0E1BD;line-height:1.55;color:#785B1D}
+.compatibility-list{max-height:220px;overflow:auto}.compatibility-item{padding:9px 13px;border-bottom:1px solid #F3E8CE;
+  display:flex;flex-direction:column;gap:4px}.compatibility-item:last-child{border-bottom:none}
+.compatibility-reason{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;color:#2B3540}
+.compatibility-count{flex:none;color:#8A5A00;background:#F7E8C5;border-radius:5px;padding:1px 6px;font-size:11px}
+.compatibility-scope{font-size:10.5px;color:#9A865F}
 .timeline{display:flex;flex-direction:column;gap:14px;max-width:980px}
+.detail-content{display:flex;align-items:flex-start;gap:18px;max-width:1240px}
+.session-tree{width:252px;flex:none;padding:8px 0;position:sticky;top:0;max-height:calc(100vh - 190px);overflow:auto}
+.session-tree-head{padding:4px 12px 9px;font-size:11px;font-weight:700;color:#8A94A0;
+  border-bottom:1px solid #EAEEF2;margin-bottom:5px}
+.session-node{display:flex;align-items:center;gap:5px;padding-top:7px;padding-right:8px;padding-bottom:7px;cursor:pointer}
+.session-node:hover{background:#F7FAFC}.session-node.on{background:#EAF2FF;color:#1D4FD7}
+.tree-toggle{width:18px;height:18px;flex:none;color:#78828D;font-size:14px}
+.session-node-copy{min-width:0}.session-node-title{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-node-meta{font-size:10.5px;color:#8A94A0;margin-top:2px}
+.session-messages{flex:1;min-width:0}.selected-session-head{display:flex;justify-content:space-between;align-items:center;
+  gap:12px;margin-bottom:12px;padding:10px 13px;background:#fff;border:1px solid #D9E0E7;border-radius:9px;font-size:12px;color:#5A6672}
+.selected-session-head div{min-width:0;display:flex;gap:9px;align-items:center}.selected-session-head .mono{font-size:10.5px;
+  color:#8A94A0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg{display:flex;gap:12px}
 .avatar{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;
   justify-content:center;font-size:10px;font-weight:700;flex:none}
