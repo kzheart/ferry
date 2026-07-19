@@ -201,7 +201,10 @@ def show(tool: str, ref: str) -> dict:
                 blocks.append({"kind": "tool", "name": t.name, "op": t.op,
                                "input": inp, "output": t.output,
                                "size": len(t.output or "")})
-        msgs.append({"index": i, "role": m.role, "blocks": blocks})
+        entry = {"index": i, "role": m.role, "blocks": blocks}
+        if m.raw and isinstance(m.raw[0], dict) and m.raw[0].get("uuid"):
+            entry["uuid"] = m.raw[0]["uuid"]
+        msgs.append(entry)
     return {"tool": tool, "id": sess.source_id, "title": sess.title,
             "dir": sess.cwd, "count": len(msgs), "loss": sess.loss,
             "messages": msgs}
@@ -288,6 +291,46 @@ def _cleanup_artifact(dst: str, sid: str, dest):
         except OSError:
             pass
     # opencode 产物删除需 server 配合,保留并在结果中标注即可
+
+
+def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
+    """降级迁移:把会话渲染成上下文摘要文档 + 目标工具的开始命令。
+
+    原生迁移不可行时的兜底(F22)。摘要是确定性浓缩,不逐轮还原。
+    """
+    path = convert.resolve_ref(src, ref)
+    sess = convert.READERS[src](path)
+    target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
+    lines = [f"# 会话接力摘要(来自 {src})",
+             f"- 源会话: {sess.source_id}",
+             f"- 工作目录: {target_cwd}", "",
+             "以下是此前对话的浓缩记录。请把它当作已经发生的上下文,"
+             "直接从这里继续工作,不要重做已完成的步骤。", ""]
+    turn = 0
+    for m in sess.messages:
+        if m.role == "user":
+            turn += 1
+            lines.append(f"## 第 {turn} 轮")
+        who = "用户" if m.role == "user" else "助手"
+        for b in m.blocks:
+            if b.kind == "text" and b.text.strip():
+                lines.append(f"**{who}**: {b.text[:800]}")
+            elif b.kind == "tool":
+                t = b.tool
+                inp = json.dumps(t.input, ensure_ascii=False)[:200] \
+                    if isinstance(t.input, dict) else str(t.input)[:200]
+                out_clip = (t.output or "").strip()[:300]
+                lines.append(f"- 工具 `{t.name}` {inp}\n  结果: {out_clip}")
+        lines.append("")
+    doc_dir = Path.home() / ".resume-harness" / "handoff"
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    doc = doc_dir / f"{sess.source_id}.md"
+    doc.write_text("\n".join(lines))
+    starter = {"claude": f'cd {target_cwd} && claude "$(cat {doc})"',
+               "codex": f'cd {target_cwd} && codex "$(cat {doc})"',
+               "opencode": f'cd {target_cwd} && opencode run "$(cat {doc})"'}
+    return {"doc": str(doc), "preview": "\n".join(lines)[:3000],
+            "command": starter[dst]}
 
 
 # ---------- 迁移历史 / 快照 ----------
@@ -429,11 +472,47 @@ def env() -> dict:
 
 # ---------- CLI ----------
 
+RPC_METHODS = {
+    "scan": lambda p: scan(),
+    "env": lambda p: env(),
+    "history": lambda p: history(),
+    "snapshots": lambda p: snapshots(),
+    "show": lambda p: show(p["tool"], p["ref"]),
+    "migrate": lambda p: migrate(p["src"], p["dst"], p["ref"],
+                                 cwd=p.get("cwd"),
+                                 dry_run=p.get("dry_run", False),
+                                 probe=p.get("probe", True)),
+    "handoff": lambda p: handoff(p["src"], p["ref"], p["dst"],
+                                 cwd=p.get("cwd")),
+    "edit_preview": lambda p: edit_preview(p["ref"], p["ops"]),
+    "edit_apply": lambda p: edit_apply(p["ref"], p["ops"],
+                                       probe=p.get("probe", True)),
+    "snapshot_restore": lambda p: snapshot_restore(p["session"]),
+    "snapshot_delete": lambda p: snapshot_delete(p["path"]),
+}
+
+
+def rpc(request: str) -> dict:
+    """统一入口:{"method": ..., "params": {...}} → 结果 dict(GUI 桥)。"""
+    req = json.loads(request)
+    fn = RPC_METHODS.get(req.get("method"))
+    if fn is None:
+        return {"error": f"未知 method: {req.get('method')}"}
+    try:
+        return {"ok": True, "result": fn(req.get("params") or {})}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:500]}
+
+
 def main():
     args = sys.argv[1:]
     if not args:
         sys.exit(__doc__)
     cmd, rest = args[0], args[1:]
+    if cmd == "rpc":
+        print(json.dumps(rpc(rest[0] if rest else sys.stdin.read()),
+                         ensure_ascii=False))
+        return
     if cmd == "scan":
         r = scan()
     elif cmd == "show":
