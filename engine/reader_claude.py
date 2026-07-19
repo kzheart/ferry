@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from .model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from .reasoning import visible_text
 
 TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
             "Write": "fs.write", "Edit": "fs.edit"}
@@ -95,7 +96,12 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
             if kind == "text":
                 blocks.append(Block("text", item.get("text", "")))
             elif kind == "thinking":
-                session.lose("thinking 块丢弃(签名绑定 Anthropic)")
+                text = visible_text(item.get("thinking"))
+                if text is not None:
+                    blocks.append(Block("text", text))
+                    session.lose("thinking 降级为 text(丢弃 signature)")
+                else:
+                    session.lose("thinking 无可见正文,丢弃(含 signature)")
             elif kind == "tool_use":
                 name = item.get("name", "")
                 op = "agent.spawn" if name == "Agent" else TOOL_OPS.get(name)

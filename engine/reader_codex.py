@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from .model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from .reasoning import codex_summary_text
 
 _EXEC_RE = re.compile(r"tools\.exec_command\((\{.*?\})\)", re.S)
 _PATCH_RE = re.compile(r"tools\.apply_patch\((.*?)\)\s*;?", re.S)
@@ -199,11 +200,13 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         sess.meta["depth"] = ident["depth"]
     pending: dict[str, ToolCall] = {}
     cur_tools: list[Block] = []          # 未落消息的工具块,附到下一条 assistant
+    cur_reasoning: list[Block] = []      # 可见 reasoning 降级为 text,附到下一条 assistant
 
-    def flush_tools_into(blocks):
-        nonlocal cur_tools
-        blocks[:0] = cur_tools
+    def flush_pending_into(blocks):
+        nonlocal cur_tools, cur_reasoning
+        blocks[:0] = cur_reasoning + cur_tools
         cur_tools = []
+        cur_reasoning = []
 
     for ordinal, l in enumerate(lines):
         sess.raw_records.append(_raw_record(l, ordinal, path))
@@ -217,11 +220,11 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             text = "\n".join(t for t in texts if t)
             if p["role"] == "user" and text.strip().startswith(_SKIP_USER_PREFIX):
                 continue
-            if not text.strip() and not cur_tools:
+            if not text.strip() and not cur_tools and not cur_reasoning:
                 continue
             blocks = [Block("text", text)] if text.strip() else []
             if p["role"] == "assistant":
-                flush_tools_into(blocks)
+                flush_pending_into(blocks)
             sess.messages.append(Message(role=p["role"], blocks=blocks, raw=[l]))
         elif pt in ("custom_tool_call", "function_call"):
             if pt == "function_call":
@@ -266,11 +269,18 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             else:
                 sess.lose(f"孤儿 tool output: {p.get('call_id')}")
         elif pt == "reasoning":
-            sess.lose("reasoning 块丢弃(加密/不可迁移)")
+            text = codex_summary_text(p)
+            if text is not None:
+                cur_reasoning.append(Block("text", text))
+                sess.lose("reasoning 降级为 text(丢弃 encrypted_content)")
+            else:
+                sess.lose("reasoning 无可见正文,丢弃(含 encrypted_content)")
         else:
             sess.lose(f"未知 response_item 丢弃: {pt}")
-    if cur_tools:
-        sess.messages.append(Message(role="assistant", blocks=cur_tools, raw=[]))
+    if cur_tools or cur_reasoning:
+        blocks = []
+        flush_pending_into(blocks)
+        sess.messages.append(Message(role="assistant", blocks=blocks, raw=[]))
     return sess
 
 

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from .model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from .reasoning import visible_text
 
 TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
             "write": "fs.write", "edit": "fs.edit"}
@@ -97,7 +98,12 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
             if pt == "text":
                 blocks.append(Block("text", p.get("text", "")))
             elif pt == "reasoning":
-                sess.lose("reasoning part 丢弃")
+                text = visible_text(p.get("text"))
+                if text is not None:
+                    blocks.append(Block("text", text))
+                    sess.lose("reasoning 降级为 text(丢弃 metadata/加密字段)")
+                else:
+                    sess.lose("reasoning 无可见正文,丢弃")
             elif pt == "tool":
                 st = p.get("state", {})
                 inp = dict(st.get("input") or {})
