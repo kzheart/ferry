@@ -13,6 +13,22 @@ TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
             "Write": "fs.write", "Edit": "fs.edit"}
 
 
+def _norm_input(name: str, inp: dict) -> dict:
+    """原生参数 → 规范参数名(file_path/old/new/command/content)。"""
+    if name == "Edit":
+        return {"file_path": inp.get("file_path", ""),
+                "old": inp.get("old_string", ""),
+                "new": inp.get("new_string", "")}
+    if name == "Read":
+        return {"file_path": inp.get("file_path", "")}
+    if name == "Write":
+        return {"file_path": inp.get("file_path", ""),
+                "content": inp.get("content", "")}
+    if name == "Bash":
+        return {"command": inp.get("command", "")}
+    return inp
+
+
 def _result_text(block) -> str:
     c = block.get("content")
     if isinstance(c, str):
@@ -53,9 +69,12 @@ def read(path: str) -> Session:
             elif t == "thinking":
                 sess.lose("thinking 块丢弃(签名绑定 Anthropic)")
             elif t == "tool_use":
-                tc = ToolCall(name=b.get("name", ""),
-                              op=TOOL_OPS.get(b.get("name")),
-                              input=b.get("input", {}), output="")
+                name = b.get("name", "")
+                op = TOOL_OPS.get(name)
+                inp = b.get("input") or {}
+                tc = ToolCall(name=name, op=op,
+                              input=_norm_input(name, inp) if op else inp,
+                              output="")
                 pending[b.get("id")] = tc
                 blocks.append(Block("tool", tool=tc))
             elif t == "tool_result":

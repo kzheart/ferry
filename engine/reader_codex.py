@@ -12,6 +12,7 @@ from .model import Block, Message, Session, ToolCall
 _EXEC_RE = re.compile(r"tools\.exec_command\((\{.*?\})\)", re.S)
 _PATCH_RE = re.compile(r"tools\.apply_patch\((.*?)\)\s*;?", re.S)
 _ADD_FILE_RE = re.compile(r"\*\*\* Add File: (.+?)\n(.*?)\n?\*\*\* End Patch", re.S)
+_UPD_FILE_RE = re.compile(r"\*\*\* Update File: (.+?)\n(.*?)\n?\*\*\* End Patch", re.S)
 _SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",
                      "<ENVIRONMENT_CONTEXT>", "<turn_aborted>")
 
@@ -29,16 +30,24 @@ def _parse_call(payload, sess) -> ToolCall:
             pass
     m = _PATCH_RE.search(src)
     if m:
-        # patch 文本存在 JS 字符串字面量/变量里,尝试从整段源码提取 Add File
-        m2 = _ADD_FILE_RE.search(src.encode().decode("unicode_escape")
-                                 if "\\n" in src else src)
+        # patch 文本存在 JS 字符串字面量/变量里,尝试从整段源码提取
+        text = src.encode().decode("unicode_escape") if "\\n" in src else src
+        m2 = _ADD_FILE_RE.search(text)
         if m2:
             body = "\n".join(l[1:] for l in m2.group(2).splitlines()
                              if l.startswith("+"))
             return ToolCall(name="apply_patch", op="fs.write",
                             input={"file_path": m2.group(1).strip(),
                                    "content": body}, output="")
-        sess.lose("apply_patch 无法解析出 Add File,降级")
+        m3 = _UPD_FILE_RE.search(text)
+        if m3:
+            lines = m3.group(2).splitlines()
+            old = "\n".join(l[1:] for l in lines if l.startswith("-"))
+            new = "\n".join(l[1:] for l in lines if l.startswith("+"))
+            return ToolCall(name="apply_patch", op="fs.edit",
+                            input={"file_path": m3.group(1).strip(),
+                                   "old": old, "new": new}, output="")
+        sess.lose("apply_patch 无法解析出 Add/Update File,降级")
     return ToolCall(name=payload.get("name", "custom_tool"), op=None,
                     input=src, output="")
 

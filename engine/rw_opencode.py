@@ -49,6 +49,10 @@ def read(session_id: str) -> Session:
                 inp = dict(st.get("input") or {})
                 if "filePath" in inp:          # 归一化为规范参数名
                     inp["file_path"] = inp.pop("filePath")
+                if "oldString" in inp:
+                    inp["old"] = inp.pop("oldString")
+                if "newString" in inp:
+                    inp["new"] = inp.pop("newString")
                 blocks.append(Block("tool", tool=ToolCall(
                     name=p.get("tool", "?"),
                     op=TOOL_OPS.get(p.get("tool")),
@@ -104,8 +108,14 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
     for m in sess.messages:
         mid = _new_id("msg")
         minfo = _clone(tpl.get(f"msg.{m.role}", tpl["msg.user"]))
-        minfo.update({"id": mid, "sessionID": sid,
-                      "time": {"created": now}})
+        minfo.update({"id": mid, "sessionID": sid})
+        if m.role == "assistant":
+            # completed + finish 缺失会让 runtime 认为该轮未结束而死循环
+            minfo["time"] = {"created": now, "completed": now}
+            minfo["finish"] = ("tool-calls" if any(
+                b.kind == "tool" for b in m.blocks) else "stop")
+        else:
+            minfo["time"] = {"created": now}
         parts = []
 
         def add_part(ptype, fill):
@@ -119,23 +129,46 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
             parts.append(p)
             return True
 
+        def add_tool_part(tool, native_input, output, title, metadata):
+            st = _clone(tpl["part.tool"]["state"])
+            st.update({"status": "completed", "input": native_input,
+                       "output": output, "title": title[:80],
+                       "metadata": metadata})
+            return add_part("tool", {"tool": tool,
+                                     "callID": "call-" + secrets.token_hex(8),
+                                     "state": st})
+
         for b in m.blocks:
             if b.kind == "text":
                 add_part("text", {"text": b.text})
             elif b.kind == "tool":
                 t = b.tool
-                if t.op == "shell.exec" and isinstance(t.input, dict):
-                    st = _clone(tpl["part.tool"]["state"])
-                    st.update({"status": "completed",
-                               "input": {"command": t.input.get("command", "")},
-                               "output": t.output,
-                               "title": t.input.get("command", "")[:80],
-                               "metadata": {"output": t.output,
-                                            "exit": t.meta.get("exit", 0) or 0,
-                                            "truncated": False}})
-                    add_part("tool", {"tool": "bash",
-                                      "callID": "call-" + secrets.token_hex(8),
-                                      "state": st})
+                i = t.input if isinstance(t.input, dict) else {}
+                # 常用工具原生映射(spec/mapping/tools.yaml)
+                if t.op == "shell.exec" and i.get("command"):
+                    add_tool_part("bash", {"command": i["command"]},
+                                  t.output, i["command"],
+                                  {"output": t.output,
+                                   "exit": t.meta.get("exit", 0) or 0,
+                                   "truncated": False})
+                elif t.op == "fs.read" and i.get("file_path"):
+                    add_tool_part("read", {"filePath": i["file_path"]},
+                                  t.output, i["file_path"],
+                                  {"truncated": False})
+                elif t.op == "fs.write" and i.get("file_path"):
+                    add_tool_part("write", {"filePath": i["file_path"],
+                                            "content": i.get("content", "")},
+                                  t.output or "Wrote file successfully.",
+                                  i["file_path"],
+                                  {"filepath": i["file_path"],
+                                   "exists": False, "truncated": False,
+                                   "diagnostics": {}})
+                elif t.op == "fs.edit" and i.get("file_path"):
+                    add_tool_part("edit", {"filePath": i["file_path"],
+                                           "oldString": i.get("old", ""),
+                                           "newString": i.get("new", "")},
+                                  t.output or "Edited file.",
+                                  i["file_path"], {"truncated": False})
                 else:
                     sess.lose(f"工具 {t.name} 降级为叙述文本")
                     inp = json.dumps(t.input, ensure_ascii=False)[:500] \

@@ -54,7 +54,8 @@ def probe_opencode(sid, dirpath):
     cmd = ["opencode", "run", "-s", sid, PROBE_PROMPT]
     if dirpath:
         cmd[2:2] = ["--dir", dirpath]
-    r = _run(cmd, cwd=dirpath)
+    # server 冷启动可能很慢,超时放宽
+    r = _run(cmd, cwd=dirpath, timeout=360)
     ok = r.returncode == 0 and bool(r.stdout.strip())
     return ok, (r.stdout if ok else r.stderr)[-500:]
 

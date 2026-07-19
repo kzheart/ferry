@@ -100,6 +100,44 @@ def _narration(tool) -> str:
             f"参数: {inp}\n结果:\n{out}")
 
 
+def _apply_patch_pair(tpl, patch: str, output: str = "{}") -> list:
+    call, outrec = _exec_pair(tpl, "", "", "{}", 0)
+    call["payload"]["input"] = (f"const patch = {json.dumps(patch)};\n"
+                                "text(await tools.apply_patch(patch));\n")
+    outrec["payload"]["output"] = json.dumps([
+        {"type": "input_text",
+         "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"},
+        {"type": "input_text", "text": output}])
+    return [call, outrec]
+
+
+def _native_records(tpl, t, cwd) -> list | None:
+    """规范操作 → Codex 原生记录;无法映射返回 None(由调用方降级)。
+
+    常用工具必须原生映射:目标缺同类工具时用等价 shell 形式(如 fs.read → cat)。
+    """
+    i = t.input if isinstance(t.input, dict) else {}
+    if t.op == "shell.exec" and i.get("command"):
+        return _exec_pair(tpl, i["command"], cwd,
+                          t.meta.get("stdout", t.output), None)
+    if t.op == "fs.read" and i.get("file_path"):
+        return _exec_pair(tpl, f"cat {i['file_path']}", cwd,
+                          t.output or "", 0)
+    if t.op == "fs.write" and i.get("file_path"):
+        body = str(i.get("content", ""))
+        patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
+            i["file_path"], "\n".join("+" + l for l in body.splitlines()))
+        return _apply_patch_pair(tpl, patch)
+    if t.op == "fs.edit" and i.get("file_path"):
+        hunk = "\n".join(["@@"]
+                         + ["-" + l for l in str(i.get("old", "")).splitlines()]
+                         + ["+" + l for l in str(i.get("new", "")).splitlines()])
+        patch = "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch".format(
+            i["file_path"], hunk)
+        return _apply_patch_pair(tpl, patch)
+    return None
+
+
 def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
     """写出 rollout 文件,返回 (新 session_id, 文件路径)。"""
     tpl = _load_templates()
@@ -127,32 +165,12 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
                 texts.append(b.text)
             elif b.kind == "tool":
                 t = b.tool
-                if t.op == "shell.exec" and isinstance(t.input, dict) \
-                        and t.input.get("command"):
+                native = _native_records(tpl, t, cwd)
+                if native:
                     if texts:
                         out_lines.append(_msg(tpl, m.role, "\n\n".join(texts)))
                         texts = []
-                    out_lines += _exec_pair(
-                        tpl, t.input["command"], cwd,
-                        t.meta.get("stdout", t.output), None)
-                elif t.op == "fs.write" and isinstance(t.input, dict) \
-                        and t.input.get("file_path"):
-                    if texts:
-                        out_lines.append(_msg(tpl, m.role, "\n\n".join(texts)))
-                        texts = []
-                    body = str(t.input.get("content", ""))
-                    patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
-                        t.input["file_path"],
-                        "\n".join("+" + l for l in body.splitlines()))
-                    call, outrec = _exec_pair(tpl, "", cwd, "{}", 0)
-                    call["payload"]["input"] = (
-                        f"const patch = {json.dumps(patch)};\n"
-                        "text(await tools.apply_patch(patch));\n")
-                    outrec["payload"]["output"] = json.dumps([
-                        {"type": "input_text",
-                         "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"},
-                        {"type": "input_text", "text": "{}"}])
-                    out_lines += [call, outrec]
+                    out_lines += native
                 else:
                     sess.lose(f"工具 {t.name} 降级为叙述文本")
                     texts.append(_narration(t))
