@@ -1,6 +1,7 @@
 // 首次启动:检测到的工具 + 开始扫描
-import { ACCENT, TOOL_NAME, TOOLS } from "../api.js";
+import { TOOL_NAME, TOOLS } from "../api.js";
 import { ToolIcon } from "../icons.jsx";
+import appIcon from "../assets/app-icon.png";
 
 export default function FirstRun({ env, scan, onStart }) {
   return (
@@ -9,9 +10,7 @@ export default function FirstRun({ env, scan, onStart }) {
       <div style={{ width: 460, background: "#fff", border: "1px solid #E4E9EE", borderRadius: 14,
         boxShadow: "0 12px 34px -18px rgba(20,28,38,.28)", padding: "30px 30px 26px",
         animation: "ffade .3s ease" }}>
-        <div style={{ width: 44, height: 44, borderRadius: 11, background: ACCENT, display: "flex",
-          alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700,
-          fontSize: 20 }}>F</div>
+        <img src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
         <div style={{ fontSize: 20, fontWeight: 650, marginTop: 16, letterSpacing: "-.01em" }}>
           欢迎使用 Ferry</div>
         <div style={{ fontSize: 13, color: "#6B7682", marginTop: 6, lineHeight: 1.55 }}>
