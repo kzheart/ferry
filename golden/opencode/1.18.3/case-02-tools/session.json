@@ -1,0 +1,57 @@
+{
+  "session": {
+    "id": "fixture-opencode-tools",
+    "directory": "/fixture/opencode/tools",
+    "title": "Tools fixture",
+    "version": "1.18.3"
+  },
+  "messages": [
+    {
+      "id": "fixture-message-user-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-message-user-tools\",\"sessionID\":\"fixture-opencode-tools\",\"role\":\"user\"}"
+    },
+    {
+      "id": "fixture-message-assistant-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"parentID\":\"fixture-message-user-tools\",\"role\":\"assistant\",\"finish\":\"tool-calls\"}"
+    },
+    {
+      "id": "fixture-message-assistant-final",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-message-assistant-final\",\"sessionID\":\"fixture-opencode-tools\",\"parentID\":\"fixture-message-user-tools\",\"role\":\"assistant\",\"finish\":\"stop\"}"
+    }
+  ],
+  "parts": [
+    {
+      "id": "fixture-part-user-tools",
+      "message_id": "fixture-message-user-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-part-user-tools\",\"messageID\":\"fixture-message-user-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"text\",\"text\":\"Run the fixture shell, write, and read operations.\"}"
+    },
+    {
+      "id": "fixture-part-shell",
+      "message_id": "fixture-message-assistant-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-part-shell\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"fixture-call-shell\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"echo golden-shell-test\"},\"output\":\"golden-shell-test\\n\",\"metadata\":{\"exit\":0}}}"
+    },
+    {
+      "id": "fixture-part-write",
+      "message_id": "fixture-message-assistant-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-part-write\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"write\",\"callID\":\"fixture-call-write\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/golden.txt\",\"content\":\"hello golden\"},\"output\":\"File created.\",\"metadata\":{}}}"
+    },
+    {
+      "id": "fixture-part-read",
+      "message_id": "fixture-message-assistant-tools",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-part-read\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"read\",\"callID\":\"fixture-call-read\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/golden.txt\"},\"output\":\"hello golden\",\"metadata\":{}}}"
+    },
+    {
+      "id": "fixture-part-assistant-final",
+      "message_id": "fixture-message-assistant-final",
+      "session_id": "fixture-opencode-tools",
+      "data": "{\"id\":\"fixture-part-assistant-final\",\"messageID\":\"fixture-message-assistant-final\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"text\",\"text\":\"Fixture operations completed.\"}"
+    }
+  ]
+}

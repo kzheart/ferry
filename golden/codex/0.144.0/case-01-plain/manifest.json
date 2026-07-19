@@ -1,0 +1,10 @@
+{
+  "tool": "codex",
+  "cli_version": "0.144.0",
+  "case": "01-plain",
+  "prompt": "Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools.",
+  "session_id": "fixture-codex-plain",
+  "source_paths": [
+    "/fixture/codex/rollout-fixture-codex-plain.jsonl"
+  ]
+}

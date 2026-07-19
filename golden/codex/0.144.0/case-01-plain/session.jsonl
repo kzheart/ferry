@@ -1,0 +1,4 @@
+{"type":"session_meta","payload":{"id":"fixture-codex-plain","session_id":"fixture-codex-plain","cwd":"/fixture/codex/plain","cli_version":"0.144.0"}}
+{"type":"turn_context","payload":{"turn_id":"fixture-turn-plain","cwd":"/fixture/codex/plain"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools."}]}}
+{"type":"response_item","payload":{"type":"message","id":"fixture-message-assistant-plain","role":"assistant","content":[{"type":"output_text","text":"GOLDEN_PLAIN_OK"}],"phase":"final_answer"}}

@@ -1,0 +1,10 @@
+{
+  "tool": "codex",
+  "cli_version": "0.144.0",
+  "case": "02-tools",
+  "prompt": "Run the shell command `echo golden-shell-test`, create golden.txt containing 'hello golden', then read it back.",
+  "session_id": "fixture-codex-tools",
+  "source_paths": [
+    "/fixture/codex/rollout-fixture-codex-tools.jsonl"
+  ]
+}

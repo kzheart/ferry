@@ -1,0 +1,10 @@
+{"type":"session_meta","payload":{"id":"fixture-codex-tools","session_id":"fixture-codex-tools","cwd":"/fixture/codex/tools","cli_version":"0.144.0"}}
+{"type":"turn_context","payload":{"turn_id":"fixture-turn-tools","cwd":"/fixture/codex/tools"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Run the fixture shell, write, and read operations."}]}}
+{"type":"response_item","payload":{"type":"custom_tool_call","id":"fixture-custom-call-shell","status":"completed","call_id":"fixture-call-shell","name":"exec","input":"const r = await tools.exec_command({\"cmd\":\"echo golden-shell-test\",\"workdir\":\"/fixture/codex/tools\"});\ntext(JSON.stringify(r));\n"}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"fixture-call-shell","output":[{"type":"input_text","text":"{\"exit_code\":0,\"output\":\"golden-shell-test\\n\"}"}]}}
+{"type":"response_item","payload":{"type":"custom_tool_call","id":"fixture-custom-call-write","status":"completed","call_id":"fixture-call-write","name":"exec","input":"const patch = \"*** Begin Patch\\n*** Add File: /fixture/codex/tools/golden.txt\\n+hello golden\\n*** End Patch\";\ntext(await tools.apply_patch(patch));\n"}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"fixture-call-write","output":[{"type":"input_text","text":"{}"}]}}
+{"type":"response_item","payload":{"type":"custom_tool_call","id":"fixture-custom-call-read","status":"completed","call_id":"fixture-call-read","name":"exec","input":"const r = await tools.exec_command({\"cmd\":\"cat golden.txt\",\"workdir\":\"/fixture/codex/tools\"});\ntext(JSON.stringify(r));\n"}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"fixture-call-read","output":[{"type":"input_text","text":"{\"exit_code\":0,\"output\":\"hello golden\\n\"}"}]}}
+{"type":"response_item","payload":{"type":"message","id":"fixture-message-assistant-tools","role":"assistant","content":[{"type":"output_text","text":"Fixture operations completed."}],"phase":"final_answer"}}
