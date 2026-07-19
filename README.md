@@ -1,4 +1,4 @@
-# Ferry(摆渡)
+# Ferry
 
 跨 AI 编码 Agent 的会话互通工具:让 Claude Code、Codex CLI、OpenCode 的聊天会话可以**原生迁移**(在 A 里聊到一半,转到 B 里以原生会话形式无缝 resume)和**原地编辑**(删轮次、裁工具输出、改写)。附带 Tauri + React 桌面端(`app/`)。
 
