@@ -1,10 +1,10 @@
 [package]
-name = "session-bridge"
+name = "ferry"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "session_bridge_lib"
+name = "ferry_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

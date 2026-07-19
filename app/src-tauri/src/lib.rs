@@ -5,10 +5,10 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-/// 引擎仓库根目录:优先 SESSION_BRIDGE_REPO 环境变量,
+/// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
 /// 否则取本 crate 上两级(app/src-tauri → 仓库根,开发形态)。
 fn repo_root() -> PathBuf {
-    if let Ok(p) = std::env::var("SESSION_BRIDGE_REPO") {
+    if let Ok(p) = std::env::var("FERRY_REPO") {
         return PathBuf::from(p);
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -53,5 +53,5 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![engine_rpc, open_terminal])
         .run(tauri::generate_context!())
-        .expect("Session Bridge 启动失败");
+        .expect("Ferry 启动失败");
 }

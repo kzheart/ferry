@@ -1,4 +1,4 @@
-# resume-harness
+# Ferry(摆渡)
 
 跨 AI 编码 Agent 的会话互通工具:让 Claude Code、Codex CLI、OpenCode 的聊天会话可以**原生迁移**(在 A 里聊到一半,转到 B 里以原生会话形式无缝 resume)和**原地编辑**(删轮次、裁工具输出、改写)。附带 Tauri + React 桌面端(`app/`)。
 
@@ -62,7 +62,7 @@ npm run tauri build          # 打包 .app/.dmg
 ```
 
 引擎仓库位置默认取 app/src-tauri 的上两级;打包分发时用环境变量
-`SESSION_BRIDGE_REPO=/path/to/resume-harness` 指定。
+`FERRY_REPO=/path/to/resume-harness` 指定。
 
 ## 路线图
 

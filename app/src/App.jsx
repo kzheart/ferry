@@ -124,7 +124,7 @@ function First({ env, onScan }) {
     <div className="page"><div className="first">
       <div className="logo" style={{ width: 44, height: 44, fontSize: 20, borderRadius: 11 }}>S</div>
       <div className="big">尚未扫描到任何会话</div>
-      <div className="desc">Session Bridge 会读取本机 CLI 工具的会话记录,统一浏览、迁移与编辑。
+      <div className="desc">Ferry 会读取本机 CLI 工具的会话记录,统一浏览、迁移与编辑。
         所有读取与处理都在本地完成,不上传任何会话内容。</div>
       <div className="tools">
         {TOOLS.map(k => {
@@ -940,7 +940,7 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand"><span className="logo">S</span>Session Bridge</div>
+        <div className="brand"><span className="logo">F</span>Ferry</div>
         {nav.map(([v, label]) => (
           <a className={`nav ${navOn(v) ? "on" : ""}`} key={v}
             onClick={() => setView(v)}>{label}</a>
