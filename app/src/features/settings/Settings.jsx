@@ -1,7 +1,10 @@
 // 设置悬浮弹窗(参考 LM Studio):左侧分类 + 偏好设置 / 数据来源
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { SUPPORTED_LOCALES } from "../../i18n/index.js";
 import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
+import { RadioDot } from "../../components/ui/primitives.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 
 const SECTIONS = [["prefs", "偏好设置"], ["sources", "数据来源"], ["updates", "软件更新"]];
@@ -45,10 +48,16 @@ function Toggle({ on, onChange }) {
 
 // ---------- 偏好设置 ----------
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
+  const { t } = useTranslation();
   const themes = [
     ["light", "浅色", "#FBFCFD"],
     ["dark", "深色", "#17171A"],
     ["system", "跟随系统", "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
+  ];
+  const locales = [
+    [null, t("language.followSystem"), "按系统语言自动选择"],
+    ["zh-CN", "简体中文", "Simplified Chinese"],
+    ["en", "English", "English"],
   ];
   return (
     <div style={{ animation: "fslide .16s ease" }}>
@@ -75,6 +84,25 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
           );
         })}
       </div>
+
+      <GroupTitle>{t("language.label")}</GroupTitle>
+      <Card>
+        {locales.map(([k, label, desc], i) => {
+          const on = (s.locale ?? null) === k;
+          return (
+            <div key={k ?? "system"} onClick={() => set({ locale: k })}
+              className="hov-item"
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+                borderTop: i === 0 ? "none" : "1px solid var(--line6)", cursor: "pointer" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{label}</div>
+                <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>
+              </div>
+              <RadioDot on={on} />
+            </div>
+          );
+        })}
+      </Card>
 
       <GroupTitle>写入验收</GroupTitle>
       <Card>

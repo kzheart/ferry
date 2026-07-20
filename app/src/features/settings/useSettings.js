@@ -1,6 +1,7 @@
-// 外观设置:主题 / 减少动效
+// 外观设置:主题 / 减少动效 / 语言
 // 落 localStorage,并以 data-* 属性作用到根节点;配色为黑白中性色,由 style.css 变量定义
 import { useEffect, useState } from "react";
+import { changeLanguage } from "../../i18n/index.js";
 
 const KEY = "ferry-settings";
 
@@ -9,6 +10,7 @@ export const DEFAULTS = {
   reduceMotion: false,
   runtimeProbe: false,
   autoCheckUpdates: true,
+  locale: null,
 };
 
 function load() {
@@ -37,6 +39,11 @@ export function useSettings() {
     root.dataset.reduce = s.reduceMotion ? "1" : "0";
     root.dataset.theme = dark ? "dark" : "light";
   }, [s, dark]);
+
+  // locale 变化时同步到 i18next(跟随系统时传 null,由 changeLanguage 归一化)
+  useEffect(() => {
+    changeLanguage(s.locale);
+  }, [s.locale]);
 
   return [s, patch => setS(v => ({ ...v, ...patch })), dark];
 }
