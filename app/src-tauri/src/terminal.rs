@@ -77,3 +77,88 @@ pub(crate) async fn open_terminal(launch: TerminalLaunch) -> Result<(), String> 
         Ok(())
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::{shell_quote, terminal_command, TerminalLaunch, TerminalTool};
+
+    fn resume_launch(tool: TerminalTool) -> TerminalLaunch {
+        TerminalLaunch {
+            tool,
+            session_id: Some("session '42'".to_string()),
+            cwd: Some("/tmp/project dir's".to_string()),
+            handoff_doc: None,
+        }
+    }
+
+    fn handoff_launch(tool: TerminalTool) -> TerminalLaunch {
+        TerminalLaunch {
+            tool,
+            session_id: None,
+            cwd: Some("/tmp/project dir's".to_string()),
+            handoff_doc: Some("/tmp/handoff doc's.md".to_string()),
+        }
+    }
+
+    #[test]
+    fn shell_quote_safely_escapes_single_quotes_and_shell_syntax() {
+        assert_eq!(shell_quote("plain text"), "'plain text'");
+        assert_eq!(
+            shell_quote("a'b; $(touch /tmp/pwned)"),
+            "'a'\\''b; $(touch /tmp/pwned)'"
+        );
+    }
+
+    #[test]
+    fn constructs_resume_commands_for_each_tool() {
+        let cwd = "'/tmp/project dir'\\''s'";
+        let id = "'session '\\''42'\\'''";
+
+        assert_eq!(
+            terminal_command(&resume_launch(TerminalTool::Claude)).unwrap(),
+            format!("cd {cwd} && claude --resume {id}")
+        );
+        assert_eq!(
+            terminal_command(&resume_launch(TerminalTool::Codex)).unwrap(),
+            format!("cd {cwd} && codex resume {id}")
+        );
+        assert_eq!(
+            terminal_command(&resume_launch(TerminalTool::Opencode)).unwrap(),
+            format!("cd {cwd} && opencode -s {id}")
+        );
+    }
+
+    #[test]
+    fn constructs_handoff_commands_for_each_tool() {
+        let cwd = "'/tmp/project dir'\\''s'";
+        let doc = "'/tmp/handoff doc'\\''s.md'";
+
+        assert_eq!(
+            terminal_command(&handoff_launch(TerminalTool::Claude)).unwrap(),
+            format!("cd {cwd} && claude \"$(cat {doc})\"")
+        );
+        assert_eq!(
+            terminal_command(&handoff_launch(TerminalTool::Codex)).unwrap(),
+            format!("cd {cwd} && codex \"$(cat {doc})\"")
+        );
+        assert_eq!(
+            terminal_command(&handoff_launch(TerminalTool::Opencode)).unwrap(),
+            format!("cd {cwd} && opencode run \"$(cat {doc})\"")
+        );
+    }
+
+    #[test]
+    fn resume_command_requires_a_session_id() {
+        let launch = TerminalLaunch {
+            tool: TerminalTool::Claude,
+            session_id: None,
+            cwd: None,
+            handoff_doc: None,
+        };
+
+        assert_eq!(
+            terminal_command(&launch),
+            Err("缺少 session_id".to_string())
+        );
+    }
+}
