@@ -1,6 +1,8 @@
 // 快照详情:状态/大小/创建原因/关联会话/变更摘要/差异预览 + 还原入口
-import { TOOL_NAME, fmtSize, fmtTime } from "../api.js";
-import { ToolIcon } from "../icons.jsx";
+import { TOOL_NAME } from "../../api/contract/tools.js";
+import { fmtSize } from "../../domain/tools/toolDisplay.js";
+import { fmtTime } from "../../domain/sessions/sessionModel.js";
+import { ToolIcon } from "../../components/ui/icons.jsx";
 
 const REASON_TEXT = {
   "会话编辑前自动": "应用会话编辑前自动创建,可随时还原到编辑前状态。",

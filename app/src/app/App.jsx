@@ -1,32 +1,29 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACCENT, BUCKETS, TOOLS, TOOL_NAME, bucketOf, fmtTime,
-  histStatus, repoOf, rpc, sessionRef } from "./api.js";
-import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "./icons.jsx";
-import { HistoryList, LibraryList, Pane, SnapList } from "./components/Pane.jsx";
-import SessionDetail from "./pages/SessionDetail.jsx";
-import HistoryDetail from "./pages/HistoryDetail.jsx";
-import SnapshotDetail from "./pages/SnapshotDetail.jsx";
-import FirstRun from "./pages/FirstRun.jsx";
-import MigrateSheet from "./overlays/MigrateSheet.jsx";
-import SettingsPage from "./overlays/Settings.jsx";
+import { rpc } from "../api/transport/rpc.js";
+import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
+import { ACCENT } from "../domain/tools/toolDisplay.js";
+import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
+import { histStatus } from "../features/migration/migrationModel.js";
+import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
+import { HistoryList, LibraryList, Pane, SnapList } from "../components/layout/ResourcePane.jsx";
+import SessionDetail from "../domain/sessions/SessionDetail.jsx";
+import HistoryDetail from "../features/migration/HistoryDetail.jsx";
+import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
+import FirstRun from "../features/onboarding/FirstRun.jsx";
+import MigrateSheet from "../features/migration/MigrateSheet.jsx";
+import SettingsPage from "../features/settings/Settings.jsx";
 import { DiffSheet, Guide, HistoryFilter, InplaceConfirm,
-  LibraryFilter, SnapFilter, SnapRestoreConfirm, Toast } from "./overlays/Overlays.jsx";
-import { useSettings } from "./settings.js";
-import { useAppUpdater } from "./updater.js";
-
-const TRIM_THRESHOLD = 4096;
-const roundBytes = r => (r.user?.length || 0) + r.ai.join("").length +
-  r.tools.reduce((a, t) => a + (t.size || 0), 0);
+  LibraryFilter, SnapFilter, SnapRestoreConfirm, Toast } from "../components/ui/Overlays.jsx";
+import { useSettings } from "../features/settings/useSettings.js";
+import { useAppUpdater } from "../features/settings/useAppUpdater.js";
+import { useBrowserData } from "../features/browser/useBrowserData.js";
+import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 
 export default function App() {
   // ----- 数据 -----
-  const [env, setEnv] = useState(null);
-  const [scan, setScan] = useState(null);
-  const [scanning, setScanning] = useState(false);
-  const [lastScan, setLastScan] = useState(null);
-  const [historyRows, setHistoryRows] = useState([]);
-  const [snapRows, setSnapRows] = useState([]);
+  const { env, scan, scanning, lastScan, historyRows, snapRows,
+    doScan, loadHistory, loadSnaps } = useBrowserData();
 
   // ----- 导航与选中 -----
   const [view, setView] = useState(
@@ -37,16 +34,6 @@ export default function App() {
   const [detail, setDetail] = useState(null);   // {id, data, error}
 
   // ----- 编辑 -----
-  const [mode, setMode] = useState("view");
-  const [ops, setOps] = useState([]);
-  const [saveMode, setSaveMode] = useState("saveas");
-  const [diff, setDiff] = useState(null);       // {preview, loading}
-  const [confirmInplace, setConfirmInplace] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [applying, setApplying] = useState(false);
-  const [scope, setScope] = useState(null);
-  const [editCaps, setEditCaps] = useState(null);
-
   // ----- 迁移 / 快照 -----
   const [mig, setMig] = useState(null);         // {scope}
   const [snapConfirm, setSnapConfirm] = useState(null);
@@ -76,29 +63,17 @@ export default function App() {
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
   const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
   const visibleIds = useRef({});
-  const booted = useRef(false);
-
-  // ----- 加载 -----
-  const doScan = async () => {
-    if (scanning) return;
-    setScanning(true);
-    try { setScan(await rpc("scan")); setLastScan(Date.now()); }
-    catch (e) { setScan(s => ({ tools: {}, sessions: [], error: e.message, ...(s || {}) })); }
-    setScanning(false);
-  };
-  const loadHistory = () => rpc("history").then(setHistoryRows).catch(() => {});
-  const loadSnaps = () => rpc("snapshots").then(setSnapRows).catch(() => {});
-
-  useEffect(() => {
-    if (booted.current) return;
-    booted.current = true;
-    rpc("env").then(setEnv).catch(() => {});
-    doScan(); loadHistory(); loadSnaps();
-  }, []);
 
   const sessions = scan?.sessions || [];
   const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
   const migratedIds = useMemo(() => new Set(historyRows.map(h => h.source_id)), [historyRows]);
+  const cur = selId ? byId[selId] : null;
+  const editing = useSessionEditing({ current: cur,
+    runtimeProbe: !!settings.runtimeProbe, doScan, loadSnaps,
+    onInplaceApplied: () => select(selId) });
+  const { mode, setMode, ops, setOps, saveMode, setSaveMode, diff, setDiff,
+    confirmInplace, setConfirmInplace, toast, setToast, applying, scope, setScope,
+    editCaps, resetSelection, loadCapabilities, addOp, removeOp, updateOp, openDiff, applyEdit } = editing;
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -106,21 +81,15 @@ export default function App() {
   }, [sessions]);
 
   const select = id => {
-    setSelId(id); setMode("view"); setScope(null); setOps([]);
+    setSelId(id); resetSelection();
     const s = byId[id] || sessions.find(x => x.id === id);
     if (!s) return;
     setDetail({ id, data: null });
     rpc("show", { tool: s.tool, ref: sessionRef(s) })
       .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
       .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
-    setEditCaps(null);
-    rpc("edit_capabilities", { tool: s.tool }).then(caps => {
-      setEditCaps(caps);
-      setSaveMode(caps.save_as ? "saveas" : "inplace");
-    }).catch(() => setEditCaps({ operations: [], inplace: false, save_as: false }));
+    loadCapabilities(s.tool);
   };
-
-  const cur = selId ? byId[selId] : null;
 
   // ----- 键盘 -----
   useEffect(() => {
@@ -191,77 +160,6 @@ export default function App() {
   const finishGuide = () => {
     setGuideStep(0); setGuideSeen(true);
     localStorage.setItem("ferry-guide-seen", "1");
-  };
-
-  // ----- 编辑操作 -----
-  const addOp = (type, r) => {
-    if (ops.some(o => o.type === type && (type === "trim" || o.n === r.n))) return;
-    let op;
-    if (type === "delete") {
-      op = { type, n: r.n, label: `删除 第 ${r.n} 轮`, dot: "var(--err)", bytes: roundBytes(r),
-        before: `第 ${r.n} 轮 用户与 AI 消息、工具调用`, after: "",
-        rpc: { op: "delete-turn", turn: r.n } };
-    } else if (type === "trim") {
-      const bytes = r.tools.reduce((a, t) => a + Math.max(0, (t.size || 0) - TRIM_THRESHOLD), 0);
-      op = { type, n: r.n, label: `裁剪超长工具输出`, dot: "var(--warn)", bytes,
-        before: `完整工具输出(超过 ${TRIM_THRESHOLD} 字符的部分)`, after: "保留前段 + 截断标记",
-        rpc: { op: "truncate", threshold: TRIM_THRESHOLD } };
-    } else {
-      op = { type, n: r.n, label: `改写 第 ${r.n} 轮`, dot: ACCENT, bytes: 0,
-        before: "原始用户措辞", after: "改写后的等价指令(可在下方编辑)",
-        text: r.user, locator: r.locator };
-    }
-    const backendOp = type === "delete" ? "delete-turn" : type === "trim" ? "truncate" : "rewrite";
-    const allowed = editCaps?.operation_modes?.[backendOp] || [];
-    if (allowed.length && !allowed.includes(saveMode)) setSaveMode(allowed[0]);
-    setOps(v => [...v, { id: `${type}-${r.n}-${Date.now()}`, ...op }]);
-  };
-  const removeOp = id => setOps(v => v.filter(o => o.id !== id));
-  const updateOp = (id, patch) => setOps(v => v.map(o => o.id === id ? { ...o, ...patch } : o));
-  const rpcOps = () => ops.map(o =>
-    o.type === "rewrite" ? { op: "rewrite", locator: o.locator, text: o.text } : o.rpc);
-
-  const detailRef = cur ? sessionRef(cur) : null;
-
-  const openDiff = async () => {
-    setDiff({ loading: true, preview: null });
-    if (cur && ops.length) {
-      try {
-        const preview = await rpc("edit_preview", { tool: cur.tool, ref: detailRef, ops: rpcOps() });
-        setDiff(d => d && { ...d, loading: false, preview });
-      } catch (e) {
-        setDiff(d => d && { ...d, loading: false, preview: null, error: e.message });
-      }
-    } else setDiff({ loading: false, preview: null });
-  };
-
-  const applyEdit = async () => {
-    if (!ops.length) return;
-    if (saveMode === "inplace" && !confirmInplace) { setConfirmInplace(true); return; }
-    setConfirmInplace(false); setApplying(true);
-    const probeOn = !!settings.runtimeProbe;
-    setToast({ kind: "run", title: "正在应用…",
-      desc: `创建快照 → 应用操作 → ${probeOn ? "结构验证 + 隔离探针" : "结构验证"}` });
-    try {
-      const r = await rpc("edit_apply", { tool: cur.tool, ref: detailRef, ops: rpcOps(),
-        probe: probeOn, save_as: saveMode === "saveas" });
-      if (r.ok) {
-        const verdict = probeOn ? "隔离探针通过" : "结构验证通过";
-        setToast({ kind: "ok",
-          title: (saveMode === "saveas" ? "已另存为新会话 · " : "已原地应用 · ") + verdict,
-          desc: saveMode === "saveas" ? "原会话保持不变。" :
-            "原会话已更新，快照已保存到「快照与还原」。" });
-        setOps([]); setMode("view");
-        doScan(); loadSnaps();
-        if (saveMode === "inplace") select(selId);
-      } else {
-        setToast({ kind: "fail", title: "验收未通过 · 已自动还原",
-          desc: r.error || "应用后验收未通过,已自动还原,未保留改动。" });
-      }
-    } catch (e) {
-      setToast({ kind: "fail", title: "应用失败", desc: e.message });
-    }
-    setApplying(false);
   };
 
   // ----- 快照还原 -----

@@ -1,10 +1,12 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;编辑模式附 Inspector
 import { useMemo, useRef, useState } from "react";
-import { ACCENT, TOOL_NAME, fmtSize, fmtTime, resumeCommand, toRounds } from "../api.js";
+import { TOOL_NAME } from "../../api/contract/tools.js";
+import { ACCENT, fmtSize, resumeCommand } from "../tools/toolDisplay.js";
+import { fmtTime, toRounds } from "./sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
-  PencilIcon, ScissorsIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../icons.jsx";
-import { RadioDot } from "../components/ui.jsx";
-import Markdown from "../components/Markdown.jsx";
+  PencilIcon, ScissorsIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
+import { RadioDot } from "../../components/ui/primitives.jsx";
+import Markdown from "../../components/ui/Markdown.jsx";
 
 const BIG_OUT = 4096;   // 与后端 truncate 默认阈值一致
 

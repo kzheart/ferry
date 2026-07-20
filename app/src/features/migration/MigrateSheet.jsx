@@ -1,8 +1,11 @@
 // 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
-import { ACCENT, TOOL_NAME, TOOLS, openTerminal, rpc, sessionRef } from "../api.js";
-import { CheckBadge, Spinner, ToolIcon } from "../icons.jsx";
-import { CheckSquare, CmdRow, LossCols, Sheet } from "../components/ui.jsx";
+import { openTerminal, rpc } from "../../api/transport/rpc.js";
+import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { ACCENT } from "../../domain/tools/toolDisplay.js";
+import { sessionRef } from "../../domain/sessions/sessionModel.js";
+import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
+import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
 
 const ORDER = ["target", "preview", "confirm", "result"];
 

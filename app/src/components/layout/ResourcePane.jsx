@@ -1,6 +1,6 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+数量/搜索/筛选/标签/列表/页脚)
-import { ACCENT } from "../api.js";
-import { Caret, FilterIcon, SearchIcon, SortCaret, ToolIcon } from "../icons.jsx";
+import { ACCENT } from "../../domain/tools/toolDisplay.js";
+import { Caret, FilterIcon, SearchIcon, SortCaret, ToolIcon } from "../ui/icons.jsx";
 
 export function Pane({ collapsed, width, dragging, title, count, placeholder,
   query, onQuery, filterCount, filterOn, onFilter, sortLabel, footer,

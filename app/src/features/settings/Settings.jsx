@@ -1,8 +1,8 @@
 // 设置悬浮弹窗(参考 LM Studio):左侧分类 + 偏好设置 / 数据来源
 import { useState } from "react";
-import { TOOL_NAME, TOOLS } from "../api.js";
-import { SetGlyph, ToolIcon } from "../icons.jsx";
-import { formatBytes } from "../updater.js";
+import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
+import { formatBytes } from "./useAppUpdater.js";
 
 const SECTIONS = [["prefs", "偏好设置"], ["sources", "数据来源"], ["updates", "软件更新"]];
 

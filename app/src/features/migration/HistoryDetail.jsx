@@ -1,7 +1,10 @@
 // 迁移历史详情:范围/损耗报告/上下文水位/验收结果/回滚信息/接续命令
-import { TOOL_NAME, fmtSize, fmtTime, histStatus } from "../api.js";
-import { ToolIcon } from "../icons.jsx";
-import { CmdRow, LossCols, StatusPill } from "../components/ui.jsx";
+import { TOOL_NAME } from "../../api/contract/tools.js";
+import { fmtSize } from "../../domain/tools/toolDisplay.js";
+import { fmtTime } from "../../domain/sessions/sessionModel.js";
+import { histStatus } from "./migrationModel.js";
+import { ToolIcon } from "../../components/ui/icons.jsx";
+import { CmdRow, LossCols, StatusPill } from "../../components/ui/primitives.jsx";
 
 const ST_STYLE = {
   "成功": ["var(--ok-bg)", "var(--ok)"],

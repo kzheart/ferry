@@ -1,7 +1,7 @@
 // 首次启动:检测到的工具 + 开始扫描
-import { TOOL_NAME, TOOLS } from "../api.js";
-import { ToolIcon } from "../icons.jsx";
-import appIcon from "../assets/app-icon.png";
+import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { ToolIcon } from "../../components/ui/icons.jsx";
+import appIcon from "../../assets/app-icon.png";
 
 export default function FirstRun({ env, scan, onStart }) {
   return (

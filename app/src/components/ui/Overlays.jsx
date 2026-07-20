@@ -1,9 +1,11 @@
 // 其余弹层:差异预览 / 原地修改确认 / 快照还原确认 / 结果 toast /
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
-import { ACCENT, TOOL_NAME, TOOLS, fmtSize, fmtTime } from "../api.js";
-import { Spinner, ToolIcon } from "../icons.jsx";
-import { CheckSquare, RadioDot, Sheet } from "../components/ui.jsx";
+import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
+import { fmtTime } from "../../domain/sessions/sessionModel.js";
+import { Spinner, ToolIcon } from "./icons.jsx";
+import { CheckSquare, RadioDot, Sheet } from "./primitives.jsx";
 
 // ---------- 差异预览 ----------
 export function DiffSheet({ ops, preview, loading, onClose }) {
