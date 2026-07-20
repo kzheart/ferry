@@ -1,6 +1,6 @@
 // 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
-import { ACCENT, TOOL_NAME, TOOLS, fmtSize, openTerminal, rpc, sessionRef } from "../api.js";
+import { ACCENT, TOOL_NAME, TOOLS, openTerminal, rpc, sessionRef } from "../api.js";
 import { CheckBadge, Spinner, ToolIcon, WarnTriangle } from "../icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../components/ui.jsx";
 
@@ -23,6 +23,63 @@ function StepsHeader({ step }) {
   );
 }
 
+function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, onCustom }) {
+  const models = catalog?.models || [];
+  const filterable = models.length > 12;
+  const [q, setQ] = useState("");
+  const qn = q.trim().toLowerCase();
+  const shown = !filterable || !qn ? models
+    : models.filter(m => (m.id + " " + (m.label || "")).toLowerCase().includes(qn));
+  const srcHint = {
+    cli: "来自目标 CLI 实时列表",
+    alias: "Claude 文档 alias(无官方 models 命令)",
+    fallback: "发现失败,使用内置回退",
+    cache: "本地缓存",
+    user: "用户配置",
+  }[catalog?.source] || "";
+
+  return (
+    <div style={{ border: "1px solid #E4E9EE", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>探针模型</div>
+        <div style={{ fontSize: 11, color: "#8A939D" }}>
+          {loading ? "加载中…" : srcHint}
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6B7682", marginBottom: 10, lineHeight: 1.45 }}>
+        验收时用该模型 resume 并发送极小探测消息。留空则用目标工具默认模型。
+        也可在 <code className="mono">~/.resume-harness/models.json</code> 追加自定义 id。
+      </div>
+      {err && <div style={{ fontSize: 11.5, color: "#B4433A", marginBottom: 8 }}>列表加载失败:{err}</div>}
+      {catalog?.error && !err && (
+        <div style={{ fontSize: 11.5, color: "#96524B", marginBottom: 8 }}>
+          动态发现告警:{catalog.error}
+        </div>
+      )}
+      {filterable && (
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="筛选模型…"
+          style={{ width: "100%", height: 32, border: "1px solid #E1E7EC", borderRadius: 8,
+            padding: "0 10px", fontSize: 12.5, marginBottom: 8, outline: "none" }} />
+      )}
+      <select value={selected} onChange={e => onSelect(e.target.value)}
+        disabled={loading}
+        style={{ width: "100%", height: 34, border: "1px solid #E1E7EC", borderRadius: 8,
+          padding: "0 10px", fontSize: 12.5, background: "#fff", color: "#334155" }}>
+        <option value="">工具默认{catalog?.default ? ` (${catalog.default})` : ""}</option>
+        {shown.map(m => (
+          <option key={m.id} value={m.id}>{m.label || m.id}</option>
+        ))}
+      </select>
+      {catalog?.allow_custom !== false && (
+        <input value={custom} onChange={e => onCustom(e.target.value)}
+          placeholder="或手填模型 id(优先于上方选择)"
+          style={{ width: "100%", height: 32, border: "1px solid #E1E7EC", borderRadius: 8,
+            padding: "0 10px", fontSize: 12.5, marginTop: 8, outline: "none" }} />
+      )}
+    </div>
+  );
+}
+
 export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
   const targets = TOOLS.filter(t => t !== meta.tool);
   const [step, setStep] = useState("target");
@@ -35,12 +92,20 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
   const [wroteFirst, setWroteFirst] = useState(false);
   const [handoff, setHandoff] = useState(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
+  const [modelCatalog, setModelCatalog] = useState({}); // { [tool]: catalog }
+  const [modelLoad, setModelLoad] = useState({});
+  const [modelErr, setModelErr] = useState({});
+  const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
+  const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
   const doneRef = useRef(false);
   const ref = sessionRef(meta);
 
   const d = dry?.[target];
   const sensitive = d?.sensitive;
   const scopeLabel = scope ? `仅迁移到第 ${scope} 轮` : "完整会话";
+  const resolvedProbeModel = (probeCustom[target] || "").trim()
+    || (probeModel[target] || "").trim()
+    || undefined;
 
   const loadDry = async tgt => {
     setDryErr(null);
@@ -51,9 +116,26 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
     } catch (e) { setDryErr(e.message); }
   };
 
+  const loadModels = async tgt => {
+    if (modelCatalog[tgt] || modelLoad[tgt]) return;
+    setModelLoad(prev => ({ ...prev, [tgt]: true }));
+    setModelErr(prev => ({ ...prev, [tgt]: null }));
+    try {
+      const r = await rpc("models", { tool: tgt });
+      setModelCatalog(prev => ({ ...prev, [tgt]: r }));
+    } catch (e) {
+      setModelErr(prev => ({ ...prev, [tgt]: e.message }));
+    }
+    setModelLoad(prev => ({ ...prev, [tgt]: false }));
+  };
+
+  useEffect(() => {
+    if (step === "confirm" || step === "preview") loadModels(target);
+  }, [step, target]);
+
   const next = () => {
     if (step === "target") { if (!dry?.[target]) loadDry(target); setStep("preview"); }
-    else if (step === "preview") setStep("confirm");
+    else if (step === "preview") { loadModels(target); setStep("confirm"); }
     else if (step === "confirm") execute();
   };
   const back = () => {
@@ -68,7 +150,8 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
     try {
       const r = await rpc("migrate", { src: meta.tool, dst: target, ref,
         redact: redact && (sensitive?.total || 0) > 0,
-        max_turn: scope || undefined });
+        max_turn: scope || undefined,
+        probe_model: resolvedProbeModel });
       setResult(r);
     } catch (e) { setError(e.message); }
     setStep("result");
@@ -182,6 +265,7 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
               ["脱敏", sensitive?.total > 0
                 ? (redact ? `迁移前脱敏 ${sensitive.findings.map(f => `${f.count} 处${f.label}`).join("、")}` : "不脱敏")
                 : "无需(未检测到敏感信息)"],
+              ["探针模型", resolvedProbeModel || "工具默认"],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
                 <span style={{ color: "#8A939D", flex: "none" }}>{k}</span>
@@ -194,6 +278,15 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
             </div>
           </div>
         </div>
+        <ProbeModelPicker
+          catalog={modelCatalog[target]}
+          loading={!!modelLoad[target]}
+          err={modelErr[target]}
+          selected={probeModel[target] || ""}
+          custom={probeCustom[target] || ""}
+          onSelect={v => setProbeModel(prev => ({ ...prev, [target]: v }))}
+          onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
+        />
         <div style={{ fontSize: 12, color: "#6B7682", margin: "14px 0 0", lineHeight: 1.55 }}>
           Ferry 将写入目标工具,然后运行探针验收(校验消息完整性与可续接性,需数十秒并消耗一次极小的模型调用)。若探针失败,会自动回滚,不在目标保留任何产物。</div>
       </>
@@ -252,10 +345,16 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 650, color: "#8A3E37" }}>迁移失败 · 探针未通过</div>
             <div style={{ fontSize: 12.5, color: "#96524B", marginTop: 5, lineHeight: 1.5 }}>
-              已自动回滚,未在 {TOOL_NAME[target]} 保留任何产物。源会话完好,你可以改用上下文摘要继续。</div>
+              已自动回滚,未在 {TOOL_NAME[target]} 保留任何产物。源会话完好,你可以改用上下文摘要继续。
+              {(result?.probe?.model || result?.probe_model) && (
+                <> · 探针模型 <code className="mono">{result.probe?.model || result.probe_model}</code></>
+              )}
+            </div>
             {(error || result?.probe?.detail) && (
-              <pre className="mono selectable fscroll" style={{ margin: "8px 0 0", fontSize: 11,
-                color: "#96524B", whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>
+              <pre className="mono selectable fscroll" style={{ margin: "10px 0 0", fontSize: 11,
+                color: "#7A3A34", whiteSpace: "pre-wrap", maxHeight: 280, overflow: "auto",
+                background: "#FFF8F7", border: "1px solid #F0D4D0", borderRadius: 8, padding: "10px 12px",
+                lineHeight: 1.5 }}>
                 {error || result.probe.detail}</pre>
             )}
           </div>

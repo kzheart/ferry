@@ -519,7 +519,8 @@ def _append_history(entry: dict):
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             dry_run: bool = False, probe: bool = True,
-            redact: bool = False, max_turn: int | None = None) -> dict:
+            redact: bool = False, max_turn: int | None = None,
+            probe_model: str | None = None) -> dict:
     sess = _read_tree(src, ref)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
@@ -537,7 +538,8 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "title": sess.title, "cwd": target_cwd, "loss": stats,
             "tree_count": tree_count, "child_count": tree_count - 1,
             "topology": topology,
-            "max_turn": max_turn, "msg_count": len(sess.messages)}
+            "max_turn": max_turn, "msg_count": len(sess.messages),
+            "probe_model": probe_model or None}
     if dry_run:
         return {**base, "dry_run": True,
                 "sensitive": _scan_sensitive(sess)}
@@ -554,11 +556,13 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
         ok, tree_detail = validate_written_tree(
             dst, sid, dest, _tree_shape(sess))
         if ok:
-            ok, runtime_detail = run_probe(dst, sid, target_cwd)
+            ok, runtime_detail = run_probe(
+                dst, sid, target_cwd, model=probe_model)
             detail = f"{tree_detail}\n{runtime_detail}"
         else:
             detail = tree_detail
-        result["probe"] = {"ok": ok, "detail": detail}
+        result["probe"] = {"ok": ok, "detail": detail,
+                           "model": probe_model or None}
         if not ok:                      # 验收失败:删除产物,不留半成品
             _cleanup_artifact(dst, sid, dest)
             result["rolled_back"] = True
@@ -566,12 +570,18 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
     return result
 
 
-def run_probe(tool: str, sid: str, cwd: str) -> tuple[bool, str]:
+def run_probe(tool: str, sid: str, cwd: str,
+              model: str | None = None) -> tuple[bool, str]:
     cmd = [sys.executable, str(REPO / "harness/probe.py"), tool, sid]
     if tool != "codex":
         cmd += ["--dir", cwd]
+    if model:
+        cmd += ["--model", model]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
-    return r.returncode == 0, (r.stdout + r.stderr)[-400:]
+    detail = ((r.stdout or "") + (r.stderr or "")).strip()
+    if len(detail) > 12000:
+        detail = detail[:12000] + f"\n…(截断,共 {len(detail)} 字符)"
+    return r.returncode == 0, detail
 
 
 def _tree_shape(sess) -> tuple:
@@ -818,7 +828,23 @@ def _apply_ops(records, ops):
     return records, notes
 
 
-# ---------- 环境 ----------
+# ---------- 环境 / 模型列表 ----------
+
+MODELS_CONFIG = Path.home() / ".resume-harness" / "models.json"
+
+# Claude Code 无 models 子命令;文档公开的 alias 作为稳定回退
+_CLAUDE_ALIAS_MODELS = [
+    ("default", "默认(账号推荐)"),
+    ("best", "best"),
+    ("fable", "fable · Fable 5"),
+    ("opus", "opus"),
+    ("sonnet", "sonnet"),
+    ("haiku", "haiku"),
+    ("opus[1m]", "opus[1m]"),
+    ("sonnet[1m]", "sonnet[1m]"),
+    ("opusplan", "opusplan"),
+]
+
 
 def env() -> dict:
     out = {}
@@ -843,11 +869,179 @@ def env() -> dict:
     return out
 
 
+def _user_model_ids(tool: str) -> list[str]:
+    """~/.resume-harness/models.json 中用户追加的模型 id。"""
+    try:
+        data = json.loads(MODELS_CONFIG.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    raw = data.get(tool) if isinstance(data, dict) else None
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if isinstance(item, str) and item.strip():
+            out.append(item.strip())
+        elif isinstance(item, dict) and item.get("id"):
+            out.append(str(item["id"]).strip())
+    return out
+
+
+def _dedupe_models(rows: list[dict]) -> list[dict]:
+    seen, out = set(), []
+    for row in rows:
+        mid = row.get("id")
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        out.append(row)
+    return out
+
+
+def _discover_claude_models() -> tuple[list[dict], str, str | None]:
+    """Claude 无官方列表:用文档 alias + 可选 settings 默认值。"""
+    models = [{"id": mid, "label": label, "source": "alias"}
+              for mid, label in _CLAUDE_ALIAS_MODELS]
+    default = None
+    for path in (Path.home() / ".claude" / "settings.json",
+                 Path.home() / ".claude" / "settings.local.json"):
+        try:
+            cfg = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(cfg, dict) and cfg.get("model"):
+            default = str(cfg["model"])
+            break
+    # 用户/缓存里出现过的额外选项(不绑账号 API)
+    try:
+        cache = json.loads(
+            (Path.home() / ".claude.json").read_text()).get(
+            "additionalModelOptionsCache") or []
+        for item in cache:
+            if isinstance(item, dict) and item.get("value"):
+                models.append({
+                    "id": str(item["value"]),
+                    "label": str(item.get("label") or item["value"]),
+                    "source": "cache",
+                })
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    return models, "alias", default
+
+
+def _discover_codex_models() -> tuple[list[dict], str, str | None]:
+    r = subprocess.run(["codex", "debug", "models"], capture_output=True,
+                       text=True, timeout=60)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "codex debug models 失败")[:300])
+    data = json.loads(r.stdout)
+    rows = data.get("models") if isinstance(data, dict) else data
+    if not isinstance(rows, list):
+        raise RuntimeError("codex debug models 输出格式异常")
+    models = []
+    for m in rows:
+        if not isinstance(m, dict):
+            continue
+        slug = m.get("slug") or m.get("id")
+        if not slug:
+            continue
+        # hide 的仍列出,标注即可;探针可选
+        vis = m.get("visibility") or "list"
+        label = m.get("display_name") or slug
+        if vis and vis != "list":
+            label = f"{label} ({vis})"
+        models.append({"id": str(slug), "label": str(label), "source": "cli"})
+    default = None
+    try:
+        for line in (Path.home() / ".codex" / "config.toml").read_text().splitlines():
+            s = line.strip()
+            if s.startswith("model") and "=" in s and not s.startswith("model_"):
+                val = s.split("=", 1)[1].strip().strip('"').strip("'")
+                if val:
+                    default = val
+                break
+    except OSError:
+        pass
+    return models, "cli", default
+
+
+def _discover_opencode_models() -> tuple[list[dict], str, str | None]:
+    r = subprocess.run(["opencode", "models"], capture_output=True,
+                       text=True, timeout=90)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "opencode models 失败")[:300])
+    models = []
+    for line in (r.stdout or "").splitlines():
+        mid = line.strip()
+        if not mid or mid.startswith("┌") or mid.startswith("│") or mid.startswith("└"):
+            continue
+        # 过滤 credentials 装饰输出
+        if " " in mid and "/" not in mid:
+            continue
+        models.append({"id": mid, "label": mid, "source": "cli"})
+    if not models:
+        raise RuntimeError("opencode models 未返回任何模型")
+    return models, "cli", None
+
+
+def list_models(tool: str) -> dict:
+    """动态列出目标工具可用模型(供探针选择)。
+
+    - opencode: `opencode models`
+    - codex: `codex debug models`
+    - claude: 文档 alias + 本地 cache/settings(无官方 models 命令)
+    - 均合并 ~/.resume-harness/models.json 用户自定义
+    - 发现失败时回退内置列表,并允许 UI 手填任意 id
+    """
+    if tool not in ("claude", "codex", "opencode"):
+        raise ValueError(f"未知工具: {tool}")
+    error = None
+    source = "fallback"
+    default = None
+    models: list[dict] = []
+    try:
+        if tool == "claude":
+            models, source, default = _discover_claude_models()
+        elif tool == "codex":
+            models, source, default = _discover_codex_models()
+        else:
+            models, source, default = _discover_opencode_models()
+    except Exception as e:
+        error = str(e)[:400]
+        if tool == "claude":
+            models = [{"id": m, "label": l, "source": "fallback"}
+                      for m, l in _CLAUDE_ALIAS_MODELS]
+            source = "fallback"
+        elif tool == "codex":
+            models = [{"id": "gpt-5.4", "label": "gpt-5.4", "source": "fallback"},
+                      {"id": "gpt-5.5", "label": "gpt-5.5", "source": "fallback"},
+                      {"id": "o3", "label": "o3", "source": "fallback"}]
+            source = "fallback"
+        else:
+            models = []
+            source = "fallback"
+
+    for mid in _user_model_ids(tool):
+        models.append({"id": mid, "label": mid, "source": "user"})
+    models = _dedupe_models(models)
+    # 列表头始终有「工具默认」空选项,由 UI 用 id="" 表示不传 --model
+    return {
+        "tool": tool,
+        "default": default,
+        "models": models,
+        "source": source,
+        "error": error,
+        "allow_custom": True,
+        "config_path": str(MODELS_CONFIG),
+    }
+
+
 # ---------- CLI ----------
 
 RPC_METHODS = {
     "scan": lambda p: scan(),
     "env": lambda p: env(),
+    "models": lambda p: list_models(p["tool"]),
     "history": lambda p: history(),
     "snapshots": lambda p: snapshots(),
     "show": lambda p: show(p["tool"], p["ref"]),
@@ -856,7 +1050,8 @@ RPC_METHODS = {
                                  dry_run=p.get("dry_run", False),
                                  probe=p.get("probe", True),
                                  redact=p.get("redact", False),
-                                 max_turn=p.get("max_turn")),
+                                 max_turn=p.get("max_turn"),
+                                 probe_model=p.get("probe_model") or None),
     "redact_scan": lambda p: redact_scan(p["tool"], p["ref"]),
     "handoff": lambda p: handoff(p["src"], p["ref"], p["dst"],
                                  cwd=p.get("cwd")),

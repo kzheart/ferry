@@ -25,12 +25,15 @@ export default function HistoryDetail({ h }) {
         `${v} 处${{ api_key: "密钥", bearer: "令牌", email: "邮箱" }[k] || k}`).join("、")
     : "未脱敏(可在迁移预演时勾选)";
   const range = h.max_turn ? `到第 ${h.max_turn} 轮` : "完整会话";
+  const probeDetail = h.probe?.detail || "";
   const probeLines = h.probe
-    ? h.probe.detail.split("\n").filter(Boolean).slice(0, 4)
+    ? (ok ? probeDetail.split("\n").filter(Boolean).slice(0, 4)
+      : probeDetail.split("\n").filter(Boolean))
     : ["未运行探针验收"];
   const probeColor = ok ? "#1C7C43" : fail ? "#B4433A" : "#6B7682";
   const probeBg = ok ? "#F1FBF5" : fail ? "#FDF3F1" : "#F5F6F7";
   const probeBorder = ok ? "#CDE9D7" : fail ? "#EBCBC7" : "#E4E9EE";
+  const probeModel = h.probe?.model || h.probe_model;
 
   return (
     <div className="fscroll" style={{ flex: 1, overflowY: "auto", minHeight: 0, animation: "ffade .16s ease" }}>
@@ -78,12 +81,21 @@ export default function HistoryDetail({ h }) {
 
         <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,
           borderRadius: 10, padding: "13px 15px" }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>探针验收结果</div>
-          {probeLines.map((p, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>探针验收结果</div>
+            {probeModel && (
+              <div className="mono" style={{ fontSize: 11, color: "#6B7682" }}>{probeModel}</div>
+            )}
+          </div>
+          {fail && probeDetail ? (
+            <pre className="mono selectable fscroll" style={{ margin: "8px 0 0", fontSize: 11,
+              color: "#7A3A34", whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto",
+              lineHeight: 1.5 }}>{probeDetail}</pre>
+          ) : probeLines.map((p, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12,
               color: "#40494F", marginTop: 7 }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: probeColor,
-                flex: "none" }} />{p}
+                flex: "none", marginTop: 6 }} />{p}
             </div>
           ))}
         </div>
