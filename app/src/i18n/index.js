@@ -7,14 +7,16 @@ import zhCNErrors from "../locales/zh-CN/errors.json";
 import enErrors from "../locales/en/errors.json";
 import zhCNEvents from "../locales/zh-CN/events.json";
 import enEvents from "../locales/en/events.json";
+import zhCNBrowser from "../locales/zh-CN/browser.json";
+import enBrowser from "../locales/en/browser.json";
 
 export const SUPPORTED_LOCALES = ["zh-CN", "en"];
 export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents },
-  "en": { common: enCommon, errors: enErrors, events: enEvents },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser },
+  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -59,7 +61,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common", "errors", "events"],
+      ns: ["common", "errors", "events", "browser"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,

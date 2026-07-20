@@ -1,0 +1,71 @@
+{
+  "session": {
+    "untitled": "(Untitled session)",
+    "source": "Source",
+    "messages": "{{n}} messages",
+    "active": "Active {{time}}",
+    "copyResume": "Copy resume command",
+    "copiedResume": "Copied resume command",
+    "migrate": "Migrate…",
+    "readFailed": "Failed to load: {{error}}",
+    "parsing": "Parsing session…",
+    "noMessages": "No displayable messages in this session",
+    "subSessions": "{{n}} sub-sessions",
+    "subSessionsLine": "{{tool}} session",
+    "arrow": "→"
+  },
+  "tool": {
+    "noOutput": "(no output)",
+    "bigOutput": "Large output {{size}}",
+    "stepCount": "{{n}} steps"
+  },
+  "round": {
+    "undoDelete": "Undo delete",
+    "deleteTurn": "Delete turn {{n}}",
+    "rewriteUser": "Rewrite user message",
+    "cancelRewrite": "Cancel rewrite Esc",
+    "confirmRewrite": "Confirm rewrite ⌘↵",
+    "rewritten": "Edited",
+    "clickToEdit": "Click to continue editing",
+    "imagesCount": "{{n}} images",
+    "copiedAi": "Copied",
+    "copyAi": "Copy reply",
+    "scopeHere": "Migrate up to here",
+    "scopeOnly": "Migrate only up to turn {{n}}",
+    "cancel": "Cancel",
+    "migrateWithScope": "Start migration with this scope"
+  },
+  "pendingBar": {
+    "pendingCount": "{{n}} pending",
+    "previewDiff": "Preview diff",
+    "applying": "Applying…",
+    "applyChanges": "Apply changes…",
+    "discard": "Discard",
+    "undoOp": "Undo this operation"
+  },
+  "diff": {
+    "contentUnchanged": "Content unchanged"
+  },
+  "replyEditor": {
+    "toolNamed": "Tool · {{name}}",
+    "toolUnnamed": "Unnamed",
+    "aiText": "AI text",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeItem": "Remove item",
+    "aiTextPlaceholder": "Assistant reply text",
+    "toolName": "Tool name",
+    "params": "Parameters",
+    "jsonFormat": "JSON",
+    "textFormat": "Raw text",
+    "fakeOutput": "Faked tool output",
+    "blockedHint": "Apply or discard other pending operations first",
+    "startHint": "Edit or forge assistant reply and tool calls",
+    "startButton": "Author assistant reply",
+    "panelTitle": "Assistant reply authoring",
+    "panelHint": "Only edits history, does not execute tools",
+    "cancel": "Cancel assistant reply edit",
+    "addText": "+ Text",
+    "addTool": "+ Tool call"
+  }
+}

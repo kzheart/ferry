@@ -1,5 +1,6 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { resumeDescriptor } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
@@ -26,13 +27,13 @@ function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
   );
 }
 
-function ToolCard({ t, open, onToggle }) {
+function ToolCard({ t, tt, open, onToggle }) {
   const big = (t.size || 0) > BIG_OUT;
   const cmd = typeof t.input === "object"
     ? (t.input.command || t.input.file_path || t.input.pattern ||
        JSON.stringify(t.input).slice(0, 80))
     : String(t.input || "").slice(0, 80);
-  const out = t.output || "(无输出)";
+  const out = t.output || tt("browser:tool.noOutput");
   return (
     <div style={{ margin: "5px 0", border: "1px solid var(--line3)", borderRadius: 8,
       overflow: "hidden", background: "var(--fill)" }}>
@@ -44,7 +45,7 @@ function ToolCard({ t, open, onToggle }) {
           overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
         {big && (
           <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
-            padding: "1px 7px", borderRadius: 20, flex: "none" }}>大输出 {fmtSize(t.size)}</span>
+            padding: "1px 7px", borderRadius: 20, flex: "none" }}>{tt("browser:tool.bigOutput", { size: fmtSize(t.size) })}</span>
         )}
       </div>
       {open && (
@@ -63,6 +64,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
   replyOp, canAuthor, authoringBlocked, onStartReply, onUpdateReply, onCancelReply,
   scopeOn, onScope, onClearScope, onMigrateScope, scopeStats }) {
+  const { t: tt } = useTranslation();
   const [open, setOpen] = useState({});
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rewEditing, setRewEditing] = useState(false);
@@ -99,19 +101,19 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
           <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
           <div style={{ display: "flex", gap: 3 }}>
             {deleted ? (
-              <IconBtn title="撤销删除" onClick={onUndoDelete}><UndoIcon /></IconBtn>
+              <IconBtn title={tt("browser:round.undoDelete")} onClick={onUndoDelete}><UndoIcon /></IconBtn>
             ) : (
-              <IconBtn title={`删除第 ${r.n} 轮`} danger onClick={onDelete}><TrashIcon /></IconBtn>
+              <IconBtn title={tt("browser:round.deleteTurn", { n: r.n })} danger onClick={onDelete}><TrashIcon /></IconBtn>
             )}
             {r.locator && !deleted &&
-              <IconBtn title="改写用户消息" onClick={startRewrite}><PencilIcon /></IconBtn>}
+              <IconBtn title={tt("browser:round.rewriteUser")} onClick={startRewrite}><PencilIcon /></IconBtn>}
           </div>
         </div>
       )}
       <div className={deleted ? "fdel" : undefined}>
         {r.user && imgs > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0 4px" }}>
-            <span title={`${imgs} 张图片`} style={{ display: "inline-flex", alignItems: "center",
+            <span title={tt("browser:round.imagesCount", { n: imgs })} style={{ display: "inline-flex", alignItems: "center",
               gap: 5, padding: "2px 9px", borderRadius: 20, background: "var(--chip)",
               color: "var(--tx4)", fontSize: 10.5 }}>
               <ImageGlyph /> ×{imgs}</span>
@@ -136,15 +138,15 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                     fontSize: 13, lineHeight: 1.65, outline: "none", userSelect: "text",
                     fontFamily: "inherit", whiteSpace: "pre-wrap", overflowWrap: "break-word" }} />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 6 }}>
-                  <IconBtn title="取消改写 Esc" onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
+                  <IconBtn title={tt("browser:round.cancelRewrite")} onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
                     <CloseIcon /></IconBtn>
-                  <IconBtn title="确认改写 ⌘↵" accent onClick={() => setRewEditing(false)}>
+                  <IconBtn title={tt("browser:round.confirmRewrite")} accent onClick={() => setRewEditing(false)}>
                     <CheckIcon /></IconBtn>
                 </div>
               </div>
             ) : (
               <div className="fdel-text selectable" onClick={rewOp && !deleted ? startRewrite : undefined}
-                title={rewOp && !deleted ? "点击继续编辑" : undefined}
+                title={rewOp && !deleted ? tt("browser:round.clickToEdit") : undefined}
                 style={{ maxWidth: "82%", background: "var(--fill4)", color: "var(--tx1b)",
                   padding: "9px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
                   whiteSpace: "pre-wrap", overflowWrap: "break-word",
@@ -153,7 +155,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                 {rewOp && !deleted && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
                     color: ACCENT, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    <PencilIcon size={10} /> 已改写</span>
+                    <PencilIcon size={10} /> {tt("browser:round.rewritten")}</span>
                 )}
               </div>
             )}
@@ -165,7 +167,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
               alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 7,
               cursor: "pointer", color: "var(--tx4)", fontSize: 12 }} className="hov-ghost">
               <Caret open={toolsOpen} size={9} />
-              <span>{r.steps.length} 步</span>
+              <span>{tt("browser:tool.stepCount", { n: r.steps.length })}</span>
             </div>
             {toolsOpen && (
               <div style={{ marginLeft: 18, marginTop: 2, borderLeft: "2px solid var(--line5)",
@@ -175,7 +177,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                     lineHeight: 1.65, color: "var(--tx3b)", whiteSpace: "pre-wrap",
                     overflowWrap: "break-word" }}>{s.text.slice(0, 4000)}</div>
                 ) : (
-                  <ToolCard key={i} t={s.tool} open={open[i] ?? false}
+                  <ToolCard key={i} t={s.tool} tt={tt} open={open[i] ?? false}
                     onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))} />
                 ))}
               </div>
@@ -186,7 +188,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
           <div style={{ margin: "10px 0 0" }}>
             <div className="fdel-text"><Markdown text={aiText} /></div>
             <div className="fhact" style={{ marginTop: 4 }}>
-              <IconBtn title={copied ? "已复制" : "复制回复"} onClick={copyAi}>
+              <IconBtn title={copied ? tt("browser:round.copiedAi") : tt("browser:round.copyAi")} onClick={copyAi}>
                 {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
             </div>
           </div>
@@ -209,19 +211,19 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                 className="ficon-btn accent" onClick={onScope}
                 style={{ width: "auto", padding: "0 11px", gap: 6, fontSize: 11.5, fontWeight: 500,
                   border: "1px dashed var(--acc-line2)", borderRadius: 13 }}>
-                <BookmarkIcon /> 迁移到此为止</button>
+                <BookmarkIcon /> {tt("browser:round.scopeHere")}</button>
               <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
             </div>
           ) : (
             <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 9,
               padding: "11px 13px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12.5 }}>仅迁移到第 {r.n} 轮</span>
-                <IconBtn title="取消" onClick={onClearScope} style={{ marginLeft: "auto" }}><CloseIcon /></IconBtn>
+                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12.5 }}>{tt("browser:round.scopeOnly", { n: r.n })}</span>
+                <IconBtn title={tt("browser:round.cancel")} onClick={onClearScope} style={{ marginLeft: "auto" }}><CloseIcon /></IconBtn>
               </div>
               <div style={{ fontSize: 12, color: "var(--tx2b)", marginTop: 5 }}>{scopeStats}</div>
               <button className="fbtn-primary" onClick={onMigrateScope}
-                style={{ marginTop: 9, height: 28, padding: "0 13px", fontSize: 12 }}>用此范围开始迁移</button>
+                style={{ marginTop: 9, height: 28, padding: "0 13px", fontSize: 12 }}>{tt("browser:round.migrateWithScope")}</button>
             </div>
           )}
         </div>
@@ -231,6 +233,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
 }
 
 function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onDiscardAll }) {
+  const { t: tt } = useTranslation();
   const [listOpen, setListOpen] = useState(false);
   const jump = n => document.querySelector(`[data-round="${n}"]`)
     ?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -248,7 +251,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
               <a onClick={() => jump(o.n)} style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
                 cursor: "pointer", whiteSpace: "nowrap" }}>{o.label}</a>
-              <IconBtn title="撤销此操作" onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
+              <IconBtn title={tt("browser:pendingBar.undoOp")} onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
             </div>
           ))}
         </div>
@@ -258,14 +261,14 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
         boxShadow: "0 14px 40px -14px rgba(20,28,38,.5)" }}>
         <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18, fontWeight: 600 }}
           onClick={() => setListOpen(v => !v)}>
-          {ops.length} 项待应用 <Caret open={listOpen} size={9} /></button>
+          {tt("browser:pendingBar.pendingCount", { n: ops.length })} <Caret open={listOpen} size={9} /></button>
         <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18 }}
-          disabled={!!invalid} title={invalid || undefined} onClick={onOpenDiff}>预览差异</button>
+          disabled={!!invalid} title={invalid || undefined} onClick={onOpenDiff}>{tt("browser:pendingBar.previewDiff")}</button>
         <button className="fbtn-primary" style={{ height: 28, fontSize: 12, padding: "0 14px",
           borderRadius: 18 }} disabled={applying || !!invalid} title={invalid || undefined} onClick={onApply}>
-          {applying ? "应用中…" : "应用更改…"}</button>
+          {applying ? tt("browser:pendingBar.applying") : tt("browser:pendingBar.applyChanges")}</button>
         <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18,
-          color: "var(--tx4)" }} onClick={onDiscardAll}>放弃</button>
+          color: "var(--tx4)" }} onClick={onDiscardAll}>{tt("browser:pendingBar.discard")}</button>
       </div>
       {invalid && <div style={{ position: "absolute", right: 14, bottom: "calc(100% + 5px)",
         maxWidth: 360, padding: "5px 9px", borderRadius: 7, background: "var(--err-bg2)",
@@ -278,6 +281,7 @@ export default function SessionDetail({ meta, data, error,
   scope, setScope, ops, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
   onOpenMigrate, editCaps, authoringCaps }) {
+  const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
   const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
@@ -315,40 +319,40 @@ export default function SessionDetail({ meta, data, error,
             <ToolIcon tool={meta.tool} size={40} dot="var(--ok)" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: "-.01em" }}>
-                {meta.title || "(无标题会话)"}</div>
+                {meta.title || tt("browser:session.untitled")}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 6,
                 fontSize: 12, color: "var(--tx3b)" }}>
-                <span>来源 <b style={{ color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[meta.tool]}</b></span>
+                <span>{tt("browser:session.source")} <b style={{ color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[meta.tool]}</b></span>
                 <span className="mono" style={{ color: "var(--tx4)" }}>{meta.dir}</span>
-                <span>{data ? data.count : meta.count} 条消息</span>
+                <span>{tt("browser:session.messages", { n: data ? data.count : meta.count })}</span>
                 <span>{fmtSize(meta.size)}</span>
-                <span>活跃 {fmtTime(meta.updated)}</span>
+                <span>{tt("browser:session.active", { time: fmtTime(meta.updated) })}</span>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
               <button className="fbtn" style={{ height: 30, fontSize: 12.5 }} onClick={copyResume}>
-                {copied ? "已复制接续命令" : "复制接续命令"}</button>
+                {copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}</button>
               <button data-guide="migrate" className="fbtn-primary"
                 style={{ height: 30, padding: "0 14px" }}
-                onClick={() => onOpenMigrate(null)}>迁移…</button>
+                onClick={() => onOpenMigrate(null)}>{tt("browser:session.migrate")}</button>
             </div>
           </div>
           {subCount > 0 && (
             <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
               fontSize: 11.5, color: "var(--tx4)" }}>
               <span style={{ padding: "2px 8px", borderRadius: 6, background: "var(--chip)",
-                color: "var(--tx3b)" }}>{TOOL_NAME[meta.tool]} 会话</span>
-              <span>→</span>
+                color: "var(--tx3b)" }}>{tt("browser:session.subSessionsLine", { tool: TOOL_NAME[meta.tool] })}</span>
+              <span>{tt("browser:session.arrow")}</span>
               <span style={{ padding: "2px 8px", borderRadius: 6, color: "var(--tx3b)" }}>
-                {subCount} 个子会话</span>
+                {tt("browser:session.subSessions", { n: subCount })}</span>
             </div>
           )}
         </div>
         <div style={{ padding: `20px 26px ${ops.length ? 110 : 48}px`, maxWidth: 720, margin: "0 auto" }}>
-          {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>读取失败:{error}</div>}
+          {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>{tt("browser:session.readFailed", { error })}</div>}
           {!data && !error && (
             <div style={{ padding: 40, display: "flex", alignItems: "center", gap: 10,
-              color: "var(--tx4)", fontSize: 13 }}><Spinner size={16} /> 解析会话中…</div>
+              color: "var(--tx4)", fontSize: 13 }}><Spinner size={16} /> {tt("browser:session.parsing")}</div>
           )}
           {data && rounds.map(r => (
             <Round key={r.n} r={r} editable={canEdit}
@@ -372,7 +376,7 @@ export default function SessionDetail({ meta, data, error,
               scopeStats={scopeStats} />
           ))}
           {data && rounds.length === 0 && (
-            <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12.5 }}>该会话没有可展示的消息</div>
+            <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12.5 }}>{tt("browser:session.noMessages")}</div>
           )}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { CloseIcon, PencilIcon, TrashIcon } from "../../components/ui/icons.jsx";
 
@@ -16,6 +17,7 @@ const fieldStyle = {
 };
 
 function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(
     item.kind === "text" ? !item.text : !item.name);
   return (
@@ -27,35 +29,37 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
           color: "var(--tx4)", cursor: "pointer", fontSize: 11 }}>{expanded ? "▾" : "▸"}</button>
         <span className="mono" style={{ flex: 1, fontSize: 11.5, fontWeight: 600,
           color: item.kind === "tool" ? "var(--acc-text)" : "var(--tx3b)" }}>
-          {item.kind === "tool" ? `工具 · ${item.name || "未命名"}` : "AI 文本"}
+          {item.kind === "tool"
+            ? t("browser:replyEditor.toolNamed", { name: item.name || t("browser:replyEditor.toolUnnamed") })
+            : t("browser:replyEditor.aiText")}
         </span>
-        <SmallButton title="上移" disabled={index === 0} onClick={() => onMove(-1)}>↑</SmallButton>
-        <SmallButton title="下移" disabled={index === count - 1} onClick={() => onMove(1)}>↓</SmallButton>
-        <SmallButton title="删除内容块" danger onClick={onRemove}><TrashIcon size={11} /></SmallButton>
+        <SmallButton title={t("browser:replyEditor.moveUp")} disabled={index === 0} onClick={() => onMove(-1)}>↑</SmallButton>
+        <SmallButton title={t("browser:replyEditor.moveDown")} disabled={index === count - 1} onClick={() => onMove(1)}>↓</SmallButton>
+        <SmallButton title={t("browser:replyEditor.removeItem")} danger onClick={onRemove}><TrashIcon size={11} /></SmallButton>
       </div>
       {expanded && item.kind === "text" && (
         <div style={{ padding: 9 }}>
           <textarea className="fscroll selectable" value={item.text}
             onChange={event => onPatch({ text: event.target.value })}
-            placeholder="AI 回复文本" rows={3} style={{ ...fieldStyle, fontFamily: "inherit" }} />
+            placeholder={t("browser:replyEditor.aiTextPlaceholder")} rows={3} style={{ ...fieldStyle, fontFamily: "inherit" }} />
         </div>
       )}
       {expanded && item.kind === "tool" && (
         <div style={{ padding: 9, display: "grid", gap: 8 }}>
-          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>工具名称
+          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.toolName")}
             <input className="mono selectable" value={item.name}
               onChange={event => onPatch({ name: event.target.value })}
               placeholder="Read / bash / custom_tool" style={{ ...fieldStyle, marginTop: 4 }} />
           </label>
           <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>
-            参数 · <button onClick={() => onPatch({ inputFormat: item.inputFormat === "json" ? "text" : "json" })}
+            {t("browser:replyEditor.params")} · <button onClick={() => onPatch({ inputFormat: item.inputFormat === "json" ? "text" : "json" })}
               style={{ border: 0, padding: 0, background: "none", color: ACCENT, cursor: "pointer",
-                fontSize: 10.5 }}>{item.inputFormat === "json" ? "JSON" : "原始文本"}</button>
+                fontSize: 10.5 }}>{item.inputFormat === "json" ? t("browser:replyEditor.jsonFormat") : t("browser:replyEditor.textFormat")}</button>
             <textarea className="mono fscroll selectable" value={item.inputText}
               onChange={event => onPatch({ inputText: event.target.value })}
               rows={4} style={{ ...fieldStyle, marginTop: 4 }} />
           </label>
-          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>伪造的工具输出
+          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.fakeOutput")}
             <textarea className="mono fscroll selectable" value={item.output}
               onChange={event => onPatch({ output: event.target.value })}
               rows={4} style={{ ...fieldStyle, marginTop: 4 }} />
@@ -67,12 +71,13 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
 }
 
 export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, onChange, onCancel }) {
+  const { t } = useTranslation();
   if (!op) {
     return (
       <button className="fbtn" disabled={!canAuthor || blocked} onClick={onStart}
-        title={blocked ? "请先应用或放弃其他暂存操作" : "修改或伪造 AI 回复与工具调用"}
+        title={blocked ? t("browser:replyEditor.blockedHint") : t("browser:replyEditor.startHint")}
         style={{ height: 27, padding: "0 10px", fontSize: 11.5, color: ACCENT }}>
-        <PencilIcon size={11} /> 编排 AI 回复
+        <PencilIcon size={11} /> {t("browser:replyEditor.startButton")}
       </button>
     );
   }
@@ -94,9 +99,9 @@ export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, 
     <div style={{ marginTop: 10, border: `1.5px solid ${ACCENT}`, borderRadius: 11,
       background: "var(--acc-soft5)", padding: 10 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 9 }}>
-        <span style={{ fontSize: 12, fontWeight: 650, color: "var(--acc-text)" }}>AI 回复编排</span>
-        <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--tx4)" }}>仅修改历史，不会执行工具</span>
-        <button className="ficon-btn" title="放弃 AI 回复修改" onClick={onCancel}
+        <span style={{ fontSize: 12, fontWeight: 650, color: "var(--acc-text)" }}>{t("browser:replyEditor.panelTitle")}</span>
+        <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.panelHint")}</span>
+        <button className="ficon-btn" title={t("browser:replyEditor.cancel")} onClick={onCancel}
           style={{ marginLeft: "auto" }}><CloseIcon size={11} /></button>
       </div>
       <div className="fscroll" style={{ maxHeight: 560, overflowY: "auto", paddingRight: 3 }}>
@@ -108,9 +113,9 @@ export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, 
       </div>
       <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
         <button className="fbtn" onClick={() => add("text")}
-          style={{ height: 27, fontSize: 11.5 }}>+ 文本</button>
+          style={{ height: 27, fontSize: 11.5 }}>{t("browser:replyEditor.addText")}</button>
         <button className="fbtn" onClick={() => add("tool")}
-          style={{ height: 27, fontSize: 11.5 }}>+ 工具调用</button>
+          style={{ height: 27, fontSize: 11.5 }}>{t("browser:replyEditor.addTool")}</button>
       </div>
     </div>
   );
