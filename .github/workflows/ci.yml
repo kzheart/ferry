@@ -50,7 +50,7 @@ jobs:
           target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          workspaces: app/src-tauri
+          workspaces: app/src-tauri -> target
           key: ${{ matrix.target }}
       - run: python -m pip install -r requirements-build.txt
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"

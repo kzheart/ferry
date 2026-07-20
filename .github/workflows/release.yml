@@ -60,8 +60,7 @@ jobs:
             bundle-targets: nsis
             bundle-paths: |
               app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-              app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
-              app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip.sig
+              app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe.sig
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -80,7 +79,7 @@ jobs:
           target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          workspaces: app/src-tauri
+          workspaces: app/src-tauri -> target
           key: ${{ matrix.target }}
       - run: python -m pip install -r requirements-build.txt
       - run: npm ci

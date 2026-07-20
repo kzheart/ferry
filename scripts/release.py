@@ -110,7 +110,7 @@ def latest(assets: Path, output: Path, repository: str, version: str, notes: str
     base = f"https://github.com/{repository}/releases/download/v{version}"
     specs = {
         "darwin-aarch64": ("*.app.tar.gz", "*.app.tar.gz.sig"),
-        "windows-x86_64": ("*.nsis.zip", "*.nsis.zip.sig"),
+        "windows-x86_64": ("*.exe", "*.exe.sig"),
     }
     platforms = {}
     for platform, (artifact_glob, sig_glob) in specs.items():
