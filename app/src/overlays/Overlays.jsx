@@ -9,47 +9,47 @@ import { CheckSquare, RadioDot, Sheet } from "../components/ui.jsx";
 export function DiffSheet({ ops, preview, loading, onClose }) {
   return (
     <Sheet width={760} maxHeight={780} onClose={onClose}>
-      <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid #E8ECF0",
+      <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center" }}>
         <div style={{ fontSize: 14.5, fontWeight: 650 }}>差异预览</div>
-        <div style={{ fontSize: 12, color: "#8A939D", marginLeft: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--tx4)", marginLeft: 12 }}>
           {ops.length} 项暂存操作
           {preview && ` · ${fmtSize(preview.before.size)} → ${fmtSize(preview.after.size)}
             · ${preview.before.count} → ${preview.after.count} 条记录`}
         </div>
         <div style={{ flex: 1 }} />
-        <a onClick={onClose} style={{ color: "#9AA3AD", fontSize: 18 }}>×</a>
+        <a onClick={onClose} style={{ color: "var(--tx5)", fontSize: 18 }}>×</a>
       </div>
       <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
         {ops.length === 0 && (
-          <div style={{ textAlign: "center", color: "#9AA3AD", fontSize: 13, padding: 40 }}>尚无暂存操作</div>)}
+          <div style={{ textAlign: "center", color: "var(--tx5)", fontSize: 13, padding: 40 }}>尚无暂存操作</div>)}
         {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#8A939D",
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--tx4)",
             fontSize: 12.5, marginBottom: 14 }}><Spinner size={14} /> 正在计算前后差异…</div>)}
         {ops.map(o => (
-          <div key={o.id} style={{ border: "1px solid #E4E9EE", borderRadius: 10, overflow: "hidden",
+          <div key={o.id} style={{ border: "1px solid var(--line3)", borderRadius: 10, overflow: "hidden",
             marginBottom: 12 }}>
-            <div style={{ padding: "9px 13px", background: "#F4F7F9", borderBottom: "1px solid #E8ECF0",
+            <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
               display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: o.dot }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>{o.label}</span>
-              <span style={{ fontSize: 11, color: "#9AA3AD", marginLeft: "auto" }}>{o.delta}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.label}</span>
+              <span style={{ fontSize: 11, color: "var(--tx5)", marginLeft: "auto" }}>{o.delta}</span>
             </div>
             <div className="mono" style={{ padding: "11px 13px", fontSize: 11.5, lineHeight: 1.7 }}>
-              <div style={{ background: "#FBEDEC", color: "#9A3E37", padding: "2px 8px", borderRadius: 5,
+              <div style={{ background: "var(--err-bg2)", color: "var(--err-text)", padding: "2px 8px", borderRadius: 5,
                 marginBottom: 4, textDecoration: o.type === "delete" ? "line-through" : "none",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>− {o.before}</div>
               {o.after && (
-                <div style={{ background: "#EAF6EE", color: "#2A6B44", padding: "2px 8px", borderRadius: 5,
+                <div style={{ background: "var(--ok-bg2)", color: "var(--ok-body2)", padding: "2px 8px", borderRadius: 5,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>+ {o.after}</div>)}
             </div>
           </div>
         ))}
         {preview?.notes?.length > 0 && (
-          <div style={{ fontSize: 12, color: "#6B7682", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: "var(--tx3b)", lineHeight: 1.6 }}>
             引擎确认:{preview.notes.join(";")}</div>)}
       </div>
-      <div style={{ flex: "none", padding: "13px 20px", borderTop: "1px solid #E8ECF0",
+      <div style={{ flex: "none", padding: "13px 20px", borderTop: "1px solid var(--line5)",
         display: "flex", justifyContent: "flex-end" }}>
         <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onClose}>关闭</button>
       </div>
@@ -60,9 +60,9 @@ export function DiffSheet({ ops, preview, loading, onClose }) {
 // ---------- 小确认框 ----------
 function ConfirmBox({ width = 400, title, children, actions }) {
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(24,33,43,.34)", display: "flex",
+    <div style={{ position: "absolute", inset: 0, background: "var(--scrim)", display: "flex",
       alignItems: "center", justifyContent: "center", zIndex: 44, animation: "ffade .15s ease" }}>
-      <div style={{ width, background: "#FBFCFD", borderRadius: 12,
+      <div style={{ width, background: "var(--bg)", borderRadius: 12,
         boxShadow: "0 24px 60px -18px rgba(20,28,38,.5)", padding: 22, animation: "fsheet .2s ease" }}>
         <div style={{ fontSize: 15, fontWeight: 650 }}>{title}</div>
         {children}
@@ -76,11 +76,11 @@ export function InplaceConfirm({ onCancel, onConfirm }) {
   return (
     <ConfirmBox title="原地修改原会话?" actions={<>
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
-      <button style={{ height: 34, padding: "0 16px", background: "#C4564C", border: "none",
+      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
         borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
         onClick={onConfirm}>确认原地修改</button>
     </>}>
-      <div style={{ fontSize: 12.5, color: "#6B7682", marginTop: 8, lineHeight: 1.55 }}>
+      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 8, lineHeight: 1.55 }}>
         这会直接改写原始会话文件。Ferry 会先自动创建快照;若应用后探针失败将自动还原。此操作可通过快照撤销。</div>
     </ConfirmBox>
   );
@@ -88,10 +88,10 @@ export function InplaceConfirm({ onCancel, onConfirm }) {
 
 export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
   const bullets = [
-    ["#E09112", "当前会话在此快照之后的改动将被覆盖。"],
-    ["#1C9E5A", "Ferry 会在还原前自动创建一个当前状态的保护快照。"],
+    ["var(--warn)", "当前会话在此快照之后的改动将被覆盖。"],
+    ["var(--ok)", "Ferry 会在还原前自动创建一个当前状态的保护快照。"],
     ["var(--accent)", "还原完成后可通过该保护快照撤销本次操作。"],
-    ["#8AA0B6", "源工具中的其他会话不受影响。"],
+    ["var(--info-dot)", "源工具中的其他会话不受影响。"],
   ];
   return (
     <ConfirmBox width={440} title="还原到此快照?" actions={<>
@@ -99,12 +99,12 @@ export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
       <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
         onClick={onConfirm}>创建保护快照并还原</button>
     </>}>
-      <div style={{ fontSize: 12.5, color: "#6B7682", marginTop: 7, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
         会话「{snap.title}」将恢复到 {fmtTime(snap.time)} 的状态。</div>
-      <div style={{ marginTop: 14, border: "1px solid #E4E9EE", borderRadius: 10, padding: "12px 14px",
+      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
         display: "flex", flexDirection: "column", gap: 9 }}>
         {bullets.map(([c, t], i) => (
-          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "#40494F", lineHeight: 1.45 }}>
+          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
               marginTop: 6 }} />{t}
           </div>
@@ -117,24 +117,24 @@ export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
 // ---------- 结果 toast ----------
 export function Toast({ toast, onDismiss }) {
   const kind = toast.kind;
-  const bg = kind === "fail" ? "#FDF3F1" : kind === "ok" ? "#F1FBF5" : "#FBFCFD";
-  const border = kind === "fail" ? "#EBCBC7" : kind === "ok" ? "#CDE9D7" : "#E4E9EE";
-  const color = kind === "fail" ? "#8A3E37" : kind === "ok" ? "#1C7C43" : "#334155";
+  const bg = kind === "fail" ? "var(--err-bg)" : kind === "ok" ? "var(--ok-bg)" : "var(--bg)";
+  const border = kind === "fail" ? "var(--err-line)" : kind === "ok" ? "var(--ok-line)" : "var(--line3)";
+  const color = kind === "fail" ? "var(--err-text)" : kind === "ok" ? "var(--ok-deep)" : "var(--tx2)";
   return (
     <div style={{ position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)",
       zIndex: 45, display: "flex", alignItems: "center", gap: 11, padding: "12px 16px",
       borderRadius: 10, background: bg, border: `1px solid ${border}`,
       boxShadow: "0 12px 30px -12px rgba(20,28,38,.4)", animation: "fsheet .22s ease", maxWidth: 560 }}>
-      {kind === "run" ? <Spinner size={20} track="#E1E7EC" /> : (
+      {kind === "run" ? <Spinner size={20} track="var(--line)" /> : (
         <span style={{ width: 26, height: 26, flex: "none", borderRadius: "50%",
-          background: kind === "ok" ? "#1C9E5A" : "#D5544A", display: "inline-flex",
+          background: kind === "ok" ? "var(--ok)" : "var(--err)", display: "inline-flex",
           alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14 }}>
           {kind === "ok" ? "✓" : "×"}</span>)}
       <div>
         <div style={{ fontSize: 13, fontWeight: 600, color }}>{toast.title}</div>
-        <div style={{ fontSize: 11.5, color: "#6B7682", marginTop: 2 }}>{toast.desc}</div>
+        <div style={{ fontSize: 11.5, color: "var(--tx3b)", marginTop: 2 }}>{toast.desc}</div>
       </div>
-      <a onClick={onDismiss} style={{ color: "#9AA3AD", fontSize: 16, marginLeft: 6 }}>×</a>
+      <a onClick={onDismiss} style={{ color: "var(--tx5)", fontSize: 16, marginLeft: 6 }}>×</a>
     </div>
   );
 }
@@ -145,15 +145,15 @@ function PopShell({ onClose, onClear, children }) {
     <>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 35 }} />
       <div style={{ position: "absolute", left: 66, top: 190, width: 272, zIndex: 36,
-        background: "#FBFCFD", borderRadius: 11,
-        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px rgba(20,28,38,.08)",
+        background: "var(--bg)", borderRadius: 11,
+        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
         overflow: "hidden", animation: "fpop .14s ease" }}>
         <div className="fscroll" style={{ maxHeight: 430, overflowY: "auto", padding: "12px 13px" }}>
           {children}
         </div>
         <div style={{ display: "flex", alignItems: "center", padding: "9px 13px",
-          borderTop: "1px solid #E8ECF0" }}>
-          <a onClick={onClear} style={{ fontSize: 11.5, color: "#6B7682" }}>清除筛选</a>
+          borderTop: "1px solid var(--line5)" }}>
+          <a onClick={onClear} style={{ fontSize: 11.5, color: "var(--tx3b)" }}>清除筛选</a>
           <span style={{ flex: 1 }} />
           <button className="fbtn-primary" style={{ height: 28, padding: "0 14px", fontSize: 12 }}
             onClick={onClose}>完成</button>
@@ -164,7 +164,7 @@ function PopShell({ onClose, onClear, children }) {
 }
 
 const SectionTitle = ({ children, first }) => (
-  <div style={{ fontSize: 11, fontWeight: 600, color: "#9AA3AD", letterSpacing: ".03em",
+  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".03em",
     margin: first ? "0 0 6px" : "12px 0 6px" }}>{children}</div>
 );
 
@@ -175,9 +175,9 @@ function CheckRow({ on, onClick, icon, label, extra }) {
         cursor: "pointer" }}>
       <CheckSquare on={on} />
       {icon}
-      <span style={{ fontSize: 12.5, color: "#334155", flex: 1, whiteSpace: "nowrap",
+      <span style={{ fontSize: 12.5, color: "var(--tx2)", flex: 1, whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-      {extra && <span style={{ fontSize: 11, color: "#9AA3AD" }}>{extra}</span>}
+      {extra && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{extra}</span>}
     </div>
   );
 }
@@ -188,7 +188,7 @@ function RadioRow({ on, onClick, label }) {
       style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 7,
         cursor: "pointer" }}>
       <RadioDot on={on} />
-      <span style={{ fontSize: 12.5, color: "#334155", whiteSpace: "nowrap", overflow: "hidden",
+      <span style={{ fontSize: 12.5, color: "var(--tx2)", whiteSpace: "nowrap", overflow: "hidden",
         textOverflow: "ellipsis" }}>{label}</span>
     </div>
   );
@@ -218,11 +218,11 @@ export function LibraryFilter({ f, setF, counts, dirs, onClose, onClear }) {
           return (
             <button key={d} className="mono" onClick={() => setF(v => ({ ...v, dir: on ? null : d }))}
               style={{ height: 24, padding: "0 9px", borderRadius: 20,
-                border: `1px solid ${on ? ACCENT : "#E1E7EC"}`, background: on ? "#EAF0FB" : "#fff",
-                color: on ? ACCENT : "#5B6672", fontSize: 11, cursor: "pointer" }}>{d}</button>
+                border: `1px solid ${on ? ACCENT : "var(--line)"}`, background: on ? "var(--acc-soft)" : "var(--surface)",
+                color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{d}</button>
           );
         })}
-        {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "#9AA3AD" }}>暂无目录</span>}
+        {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>暂无目录</span>}
       </div>
       <SectionTitle>内容</SectionTitle>
       <CheckRow on={f.mig} label="仅含迁移记录"
@@ -346,7 +346,7 @@ export function Guide({ step, onGo, onFinish }) {
 
   if (!cfg) return null;
   const b = box || { l: -9999, t: 0, w: 0, h: 0, W: 4000, H: 3000 };
-  const dim = "rgba(20,28,38,.44)";
+  const dim = "var(--dim)";
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 50 }}>
       {box && (
@@ -365,8 +365,8 @@ export function Guide({ step, onGo, onFinish }) {
         </>
       )}
       <div style={{ position: "absolute", left: card?.left ?? -9999, top: card?.top ?? 0, width: 324,
-        background: "#FBFCFD", borderRadius: 11,
-        boxShadow: "0 18px 44px -16px rgba(20,28,38,.5),0 0 0 1px rgba(20,28,38,.08)",
+        background: "var(--bg)", borderRadius: 11,
+        boxShadow: "0 18px 44px -16px rgba(20,28,38,.5),0 0 0 1px var(--ring)",
         padding: "16px 18px 14px", transition: "all .26s cubic-bezier(.2,.7,.3,1)",
         animation: "fslide .16s ease" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -375,13 +375,13 @@ export function Guide({ step, onGo, onFinish }) {
           <div style={{ display: "flex", gap: 4, marginLeft: 2 }}>
             {GUIDE_STEPS.map((_, idx) => idx + 1).map(i => (
               <span key={i} style={{ width: 16, height: 3, borderRadius: 2,
-                background: i <= step ? ACCENT : "#D8DEE4" }} />))}
+                background: i <= step ? ACCENT : "var(--dots)" }} />))}
           </div>
           <span style={{ flex: 1 }} />
-          <a onClick={onFinish} style={{ fontSize: 11.5, color: "#9AA3AD" }}>跳过</a>
+          <a onClick={onFinish} style={{ fontSize: 11.5, color: "var(--tx5)" }}>跳过</a>
         </div>
         <div style={{ fontSize: 14.5, fontWeight: 650, marginTop: 11, letterSpacing: "-.01em" }}>{cfg.title}</div>
-        <div style={{ fontSize: 12.5, color: "#5B6672", lineHeight: 1.55, marginTop: 6 }}>{cfg.body}</div>
+        <div style={{ fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.55, marginTop: 6 }}>{cfg.body}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 15 }}>
           {step > 1 && (
             <button className="fbtn" style={{ height: 31, fontSize: 12.5 }}

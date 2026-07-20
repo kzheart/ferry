@@ -14,22 +14,22 @@ const SECTIONS = [
 
 // ---------- 通用排版件 ----------
 const GroupTitle = ({ children, first }) => (
-  <div style={{ fontSize: 11.5, fontWeight: 700, color: "#9AA3AD", letterSpacing: ".05em",
+  <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
     margin: first ? "0 0 9px 2px" : "22px 0 9px 2px" }}>{children}</div>
 );
 
 const Card = ({ children }) => (
-  <div style={{ border: "1px solid #E7ECF0", borderRadius: 12, background: "#fff",
+  <div style={{ border: "1px solid var(--line4)", borderRadius: 12, background: "var(--surface)",
     overflow: "hidden" }}>{children}</div>
 );
 
 function Row({ title, desc, children, first }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
-      borderTop: first ? "none" : "1px solid #F0F3F6" }}>
+      borderTop: first ? "none" : "1px solid var(--line6)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#1C2530" }}>{title}</div>
-        {desc && <div style={{ fontSize: 11.5, color: "#8A939D", marginTop: 2 }}>{desc}</div>}
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{title}</div>
+        {desc && <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
       </div>
       {children}
     </div>
@@ -45,8 +45,8 @@ function Segmented({ options, value, onChange }) {
         return (
           <button key={k} onClick={() => onChange(k)}
             style={{ height: 30, minWidth: 44, padding: "0 13px", borderRadius: 8,
-              border: `1px solid ${on ? "var(--accent)" : "#DCE2E8"}`,
-              background: on ? "var(--accent)" : "#fff", color: on ? "#fff" : "#334155",
+              border: `1px solid ${on ? "var(--accent)" : "var(--line2)"}`,
+              background: on ? "var(--accent)" : "var(--surface)", color: on ? "#fff" : "var(--tx2)",
               fontSize: 12.5, cursor: "pointer", fontWeight: 500 }}>{label}</button>
         );
       })}
@@ -58,7 +58,7 @@ function Toggle({ on, onChange }) {
   return (
     <button onClick={() => onChange(!on)} aria-pressed={on}
       style={{ width: 44, height: 26, borderRadius: 20, border: "none", flex: "none",
-        background: on ? "var(--accent)" : "#CBD3DB", cursor: "pointer", padding: 0,
+        background: on ? "var(--accent)" : "var(--toggle-off)", cursor: "pointer", padding: 0,
         position: "relative", transition: "background .15s ease" }}>
       <span style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20,
         borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.28)",
@@ -74,13 +74,13 @@ function General({ guideSeen, onOpenGuide, onFirstRun }) {
       <GroupTitle first>应用</GroupTitle>
       <Card>
         <Row first title="版本">
-          <div className="mono" style={{ fontSize: 12.5, color: "#6B7682" }}>{VERSION} · 本地版</div>
+          <div className="mono" style={{ fontSize: 12.5, color: "var(--tx3b)" }}>{VERSION} · 本地版</div>
         </Row>
         <Row title="运行方式" desc="引擎为本机 Python 进程,不连任何服务器">
-          <div style={{ fontSize: 12.5, color: "#6B7682" }}>本机</div>
+          <div style={{ fontSize: 12.5, color: "var(--tx3b)" }}>本机</div>
         </Row>
         <Row title="界面语言">
-          <div style={{ fontSize: 12.5, color: "#334155" }}>简体中文</div>
+          <div style={{ fontSize: 12.5, color: "var(--tx2)" }}>简体中文</div>
         </Row>
       </Card>
 
@@ -106,9 +106,9 @@ function Sources({ scan, env, scanning, onRescan }) {
   return (
     <div style={{ animation: "fslide .16s ease" }}>
       <div style={{ display: "flex", alignItems: "flex-end", margin: "0 0 9px 2px" }}>
-        <div style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: "#9AA3AD",
+        <div style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: "var(--tx5)",
           letterSpacing: ".05em" }}>已连接的工具</div>
-        <div style={{ fontSize: 11.5, color: "#8A939D" }}>
+        <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>
           {connected} 个已连接 · {total} 个会话</div>
       </div>
       <Card>
@@ -117,25 +117,25 @@ function Sources({ scan, env, scanning, onRescan }) {
           const ok = info.ok;
           return (
             <div key={t} style={{ display: "flex", alignItems: "center", gap: 13,
-              padding: "14px 16px", borderTop: i === 0 ? "none" : "1px solid #F0F3F6" }}>
-              <ToolIcon tool={t} size={30} dot={ok ? "#1C9E5A" : "#D5544A"} />
+              padding: "14px 16px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
+              <ToolIcon tool={t} size={30} dot={ok ? "var(--ok)" : "var(--err)"} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1C2530" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>
                   {TOOL_NAME[t]}
-                  {env?.[t]?.version && <span style={{ fontWeight: 400, color: "#9AA3AD",
+                  {env?.[t]?.version && <span style={{ fontWeight: 400, color: "var(--tx5)",
                     fontSize: 11.5 }}> · v{env[t].version}</span>}
                 </div>
-                <div className="mono" style={{ fontSize: 11, color: "#9AA3AD", marginTop: 2,
+                <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 2,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {info.path || "—"}</div>
               </div>
               <div style={{ textAlign: "right", flex: "none", marginRight: 4 }}>
-                <div style={{ fontSize: 12, color: "#6B7682" }}>
+                <div style={{ fontSize: 12, color: "var(--tx3b)" }}>
                   {ok ? `${info.count} 个会话` : (info.error || "不可用")}</div>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5,
-                  fontWeight: 600, color: ok ? "#1C7C43" : "#B4433A", marginTop: 2 }}>
+                  fontWeight: 600, color: ok ? "var(--ok-deep)" : "var(--err-deep)", marginTop: 2 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%",
-                    background: ok ? "#1C9E5A" : "#D5544A" }} />{ok ? "已连接" : "扫描失败"}</div>
+                    background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? "已连接" : "扫描失败"}</div>
               </div>
               <button className="fbtn" style={{ height: 30, fontSize: 12, flex: "none" }}
                 onClick={onRescan} disabled={scanning}>
@@ -144,7 +144,7 @@ function Sources({ scan, env, scanning, onRescan }) {
           );
         })}
       </Card>
-      <div style={{ fontSize: 11, color: "#9AA3AD", marginTop: 10, lineHeight: 1.55,
+      <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55,
         paddingLeft: 2 }}>
         Ferry 在本机自动发现受支持工具的会话目录。源会话保持只读,不会被修改。</div>
     </div>
@@ -154,8 +154,8 @@ function Sources({ scan, env, scanning, onRescan }) {
 function Appearance({ s, set }) {
   const themes = [
     ["light", "亮色", "#FBFCFD"],
-    ["dark", "暗色", "#1C2530"],
-    ["system", "跟随系统", "linear-gradient(105deg,#FBFCFD 0 50%,#1C2530 50% 100%)"],
+    ["dark", "暗色", "#17171A"],
+    ["system", "跟随系统", "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
   ];
   return (
     <div style={{ animation: "fslide .16s ease" }}>
@@ -165,18 +165,18 @@ function Appearance({ s, set }) {
           const on = s.theme === k;
           return (
             <div key={k} onClick={() => set({ theme: k })}
-              style={{ border: `1.5px solid ${on ? "var(--accent)" : "#E7ECF0"}`,
-                background: on ? "#F3F7FE" : "#fff", borderRadius: 12, padding: 12,
+              style={{ border: `1.5px solid ${on ? "var(--accent)" : "var(--line4)"}`,
+                background: on ? "var(--acc-soft6)" : "var(--surface)", borderRadius: 12, padding: 12,
                 cursor: "pointer" }}>
               <div style={{ height: 54, borderRadius: 8, background: sw,
                 border: "1px solid rgba(20,28,38,.10)" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11 }}>
                 <span style={{ width: 15, height: 15, borderRadius: "50%", flex: "none",
-                  border: `2px solid ${on ? "var(--accent)" : "#CBD3DB"}`, display: "inline-flex",
+                  border: `2px solid ${on ? "var(--accent)" : "var(--toggle-off)"}`, display: "inline-flex",
                   alignItems: "center", justifyContent: "center" }}>
                   <span style={{ width: 7, height: 7, borderRadius: "50%",
                     background: on ? "var(--accent)" : "transparent" }} /></span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#334155" }}>{label}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{label}</span>
               </div>
             </div>
           );
@@ -184,20 +184,20 @@ function Appearance({ s, set }) {
       </div>
 
       <GroupTitle>强调色</GroupTitle>
-      <div style={{ border: "1px solid #E7ECF0", borderRadius: 12, background: "#fff",
+      <div style={{ border: "1px solid var(--line4)", borderRadius: 12, background: "var(--surface)",
         padding: "15px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         {ACCENTS.map(c => {
           const on = s.accent.toLowerCase() === c.toLowerCase();
           return (
             <button key={c} onClick={() => set({ accent: c })} title={c}
               style={{ width: 30, height: 30, borderRadius: "50%", background: c, padding: 0,
-                border: `2px solid ${on ? "#1C2530" : "transparent"}`, cursor: "pointer",
+                border: `2px solid ${on ? "var(--tx1)" : "transparent"}`, cursor: "pointer",
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 color: "#fff", fontSize: 13, lineHeight: 1 }}>{on ? "✓" : ""}</button>
           );
         })}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11.5, color: "#9AA3AD" }}>用于按钮、选中态与强调元素</span>
+        <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>用于按钮、选中态与强调元素</span>
       </div>
 
       <GroupTitle>动效</GroupTitle>
@@ -219,19 +219,19 @@ function Typography({ s, set }) {
           <Segmented value={s.uiFont} onChange={v => set({ uiFont: v })}
             options={[["system", "系统默认"], ["sans", "无衬线"], ["mono", "等宽"]]} />
         </Row>
-        <div style={{ padding: "14px 16px", borderTop: "1px solid #F0F3F6" }}>
+        <div style={{ padding: "14px 16px", borderTop: "1px solid var(--line6)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#1C2530" }}>字体大小</div>
-              <div style={{ fontSize: 11.5, color: "#8A939D", marginTop: 2 }}>调整全局文字与控件尺寸</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>字体大小</div>
+              <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 2 }}>调整全局文字与控件尺寸</div>
             </div>
             <Segmented value={s.fontScale} onChange={v => set({ fontScale: v })}
               options={FONT_SIZES.map(([v, l]) => [v, l])} />
           </div>
-          <div style={{ marginTop: 13, border: "1px solid #EEF1F4", borderRadius: 9,
-            background: "#F8FAFB", padding: "13px 15px" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1C2530" }}>预览</div>
-            <div style={{ fontSize: 12.5, color: "#5B6672", marginTop: 4, lineHeight: 1.55 }}>
+          <div style={{ marginTop: 13, border: "1px solid var(--line6)", borderRadius: 9,
+            background: "var(--fill)", padding: "13px 15px" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>预览</div>
+            <div style={{ fontSize: 12.5, color: "var(--tx3)", marginTop: 4, lineHeight: 1.55 }}>
               将「重构支付网关重试逻辑」会话迁移至 Codex CLI,并在写入后运行探针验收。</div>
           </div>
         </div>
@@ -244,22 +244,22 @@ function About() {
   const links = [["帮助文档", "查看"], ["反馈问题", "查看"], ["开源许可", "查看"]];
   return (
     <div style={{ animation: "fslide .16s ease" }}>
-      <div style={{ border: "1px solid #E7ECF0", borderRadius: 12, background: "#fff", padding: 20,
+      <div style={{ border: "1px solid var(--line4)", borderRadius: 12, background: "var(--surface)", padding: 20,
         display: "flex", alignItems: "center", gap: 15 }}>
         <img className="noinvert" src={appIcon} alt="Ferry" width={56} height={56}
           style={{ borderRadius: 14, flex: "none", display: "block" }} />
         <div>
-          <div style={{ fontSize: 16, fontWeight: 650, color: "#1C2530" }}>Ferry</div>
-          <div className="mono" style={{ fontSize: 12, color: "#8A939D", marginTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 650, color: "var(--tx1)" }}>Ferry</div>
+          <div className="mono" style={{ fontSize: 12, color: "var(--tx4)", marginTop: 2 }}>
             版本 {VERSION}</div>
-          <div style={{ fontSize: 12, color: "#6B7682", marginTop: 6, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 6, lineHeight: 1.5 }}>
             在本机各 AI 编码工具之间迁移与管理会话的桌面工具。</div>
         </div>
       </div>
 
       <GroupTitle>隐私</GroupTitle>
-      <div style={{ border: "1px solid #E7ECF0", borderRadius: 12, background: "#fff",
-        padding: "15px 16px", fontSize: 12.5, color: "#40494F", lineHeight: 1.6 }}>
+      <div style={{ border: "1px solid var(--line4)", borderRadius: 12, background: "var(--surface)",
+        padding: "15px 16px", fontSize: 12.5, color: "var(--tx2b)", lineHeight: 1.6 }}>
         Ferry 完全在本机运行,会话与快照数据不会离开这台设备,也不会上传到任何服务器。
         探针验收会真实调用一次目标工具的模型,除此之外没有任何出网行为。</div>
 
@@ -267,9 +267,9 @@ function About() {
       <Card>
         {links.map(([label, action], i) => (
           <div key={label} style={{ display: "flex", alignItems: "center", padding: "13px 16px",
-            borderTop: i === 0 ? "none" : "1px solid #F0F3F6" }}>
-            <span style={{ flex: 1, fontSize: 13, color: "#1C2530" }}>{label}</span>
-            <span style={{ fontSize: 12.5, color: "#9AA3AD" }}>{action}</span>
+            borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
+            <span style={{ flex: 1, fontSize: 13, color: "var(--tx1)" }}>{label}</span>
+            <span style={{ fontSize: 12.5, color: "var(--tx5)" }}>{action}</span>
           </div>
         ))}
       </Card>
@@ -285,11 +285,11 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
 
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 60, display: "flex",
-      background: "#F6F8FA", animation: "ffade .14s ease" }}>
+      background: "var(--settings-bg)", animation: "ffade .14s ease" }}>
       {/* 分类栏 */}
-      <div style={{ width: 212, flex: "none", background: "#EEF1F4", borderRight: "1px solid #E1E7EC",
+      <div style={{ width: 212, flex: "none", background: "var(--settings-rail)", borderRight: "1px solid var(--line)",
         display: "flex", flexDirection: "column", padding: "16px 12px" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#9AA3AD", letterSpacing: ".08em",
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".08em",
           padding: "2px 8px 12px" }}>设置</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {SECTIONS.map(([k, label]) => {
@@ -297,22 +297,22 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             return (
               <button key={k} className={on ? undefined : "hov-item"} onClick={() => setSection(k)}
                 style={{ display: "flex", alignItems: "center", gap: 11, height: 36, padding: "0 11px",
-                  border: "none", borderRadius: 8, background: on ? "#fff" : "transparent",
-                  color: on ? "#1C2530" : "#4A545E", fontSize: 13, fontWeight: on ? 650 : 500,
+                  border: "none", borderRadius: 8, background: on ? "var(--seg-on)" : "transparent",
+                  color: on ? "var(--tx1)" : "var(--tx2b)", fontSize: 13, fontWeight: on ? 650 : 500,
                   cursor: "pointer", textAlign: "left" }}>
-                <SetGlyph name={k} color={on ? "var(--accent)" : "#6B7682"} />{label}
+                <SetGlyph name={k} color={on ? "var(--accent)" : "var(--tx3b)"} />{label}
               </button>
             );
           })}
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px",
-          borderRadius: 10, background: "#E4E8EC" }}>
+          borderRadius: 10, background: "var(--badge)" }}>
           <img className="noinvert" src={appIcon} alt="Ferry" width={28} height={28}
             style={{ borderRadius: 7, flex: "none", display: "block" }} />
           <div style={{ lineHeight: 1.3 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>Ferry</div>
-            <div style={{ fontSize: 10.5, color: "#9AA3AD" }}>版本 {VERSION}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>Ferry</div>
+            <div style={{ fontSize: 10.5, color: "var(--tx5)" }}>版本 {VERSION}</div>
           </div>
         </div>
       </div>
@@ -320,12 +320,12 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
       {/* 内容 */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div style={{ height: 56, flex: "none", display: "flex", alignItems: "center", gap: 12,
-          padding: "0 22px", borderBottom: "1px solid #E7ECF0", background: "#FBFCFD" }}>
-          <div style={{ fontSize: 16, fontWeight: 650, color: "#1C2530" }}>{title}</div>
+          padding: "0 22px", borderBottom: "1px solid var(--line4)", background: "var(--bg)" }}>
+          <div style={{ fontSize: 16, fontWeight: 650, color: "var(--tx1)" }}>{title}</div>
           <div style={{ flex: 1 }} />
           <button className="hov" onClick={onClose} title="关闭设置 (Esc)"
             style={{ width: 30, height: 30, borderRadius: "50%", border: "none",
-              background: "#EEF1F4", color: "#6B7682", cursor: "pointer",
+              background: "var(--fill4)", color: "var(--tx3b)", cursor: "pointer",
               display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
             <svg viewBox="0 0 14 14" style={{ width: 13, height: 13 }}>
               <line x1="3" y1="3" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

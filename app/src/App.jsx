@@ -190,12 +190,12 @@ export default function App() {
     if (ops.some(o => o.type === type && (type === "trim" || o.n === r.n))) return;
     let op;
     if (type === "delete") {
-      op = { type, n: r.n, label: `删除 第 ${r.n} 轮`, dot: "#D5544A", bytes: roundBytes(r),
+      op = { type, n: r.n, label: `删除 第 ${r.n} 轮`, dot: "var(--err)", bytes: roundBytes(r),
         before: `第 ${r.n} 轮 用户与 AI 消息、工具调用`, after: "",
         rpc: { op: "delete-turn", turn: r.n } };
     } else if (type === "trim") {
       const bytes = r.tools.reduce((a, t) => a + Math.max(0, (t.size || 0) - TRIM_THRESHOLD), 0);
-      op = { type, n: r.n, label: `裁剪超长工具输出`, dot: "#E09112", bytes,
+      op = { type, n: r.n, label: `裁剪超长工具输出`, dot: "var(--warn)", bytes,
         before: `完整工具输出(超过 ${TRIM_THRESHOLD} 字符的部分)`, after: "保留前段 + 截断标记",
         rpc: { op: "truncate", threshold: TRIM_THRESHOLD } };
     } else {
@@ -297,7 +297,7 @@ export default function App() {
       return { key, label, count: rows.length, expanded: !isCollapsed,
         onToggle: () => setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })),
         rows: rows.map(s => ({ id: s.id, title: s.title || "(无标题会话)", repo: repoOf(s.dir),
-          dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "#1C9E5A",
+          dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
           hasSub: (s.tree_count || 1) > 1, subLabel: `含 ${(s.tree_count || 1) - 1} 个子会话`,
           hasMig: migratedIds.has(s.id), selected: s.id === selId,
           onClick: () => select(s.id) })) };
@@ -341,7 +341,7 @@ export default function App() {
       ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
       .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time),
         from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
-        stColor: { "成功": "#1C9E5A", "失败": "#D5544A", "已回滚": "#6B7682", "预演": "#E09112" }[h.status],
+        stColor: { "成功": "var(--ok)", "失败": "var(--err)", "已回滚": "var(--tx3b)", "预演": "var(--warn)" }[h.status],
         tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
         onClick: () => setSelHist(h._id) })),
   })).filter(g => g.rows.length);
@@ -378,7 +378,7 @@ export default function App() {
     const rst = snapRestoring[s.id];
     const status = rst === "done" ? "已还原" : rst ? "还原中" : "可还原";
     return { id: s.id, title: s.title, short: fmtTime(s.time), trigger: s.trigger, status,
-      stColor: rst && rst !== "done" ? "#E09112" : "#1C9E5A", tool: s.tool,
+      stColor: rst && rst !== "done" ? "var(--warn)" : "var(--ok)", tool: s.tool,
       selected: s.id === (selSnap ?? snapFiltered[0]?.id), onClick: () => setSelSnap(s.id) };
   });
   const snapTokens = [];
@@ -432,29 +432,29 @@ export default function App() {
 
   return (
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex", flexDirection: "column",
-      background: "#FBFCFD", position: "relative", overflow: "hidden", fontSize: 13 }}>
+      background: "var(--bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
       {/* 标题栏 */}
       <div className="drag-region" style={{ height: 44, flex: "none", display: "flex",
-        alignItems: "center", gap: 12, padding: "0 12px 0 86px", background: "#F1F4F7",
-        borderBottom: "1px solid #E1E7EC" }}>
+        alignItems: "center", gap: 12, padding: "0 12px 0 86px", background: "var(--titlebar)",
+        borderBottom: "1px solid var(--line)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <b style={{ fontSize: 13, fontWeight: 600 }}>Ferry</b>
-          <span style={{ color: "#9AA3AD" }}>/</span>
-          <span style={{ color: "#6B7682", fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden",
+          <span style={{ color: "var(--tx5)" }}>/</span>
+          <span style={{ color: "var(--tx3b)", fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden",
             textOverflow: "ellipsis", maxWidth: 420 }}>{crumb}</span>
         </div>
         <button className="hov" onClick={() => setCollapsed(v => !v)}
           title={collapsed ? "展开侧边栏 ⌘B" : "收起侧边栏 ⌘B"}
           style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
             justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
-            cursor: "pointer", color: "#6B7682", marginLeft: 2 }}>
+            cursor: "pointer", color: "var(--tx3b)", marginLeft: 2 }}>
           <SidebarIcon />
         </button>
         <div style={{ flex: 1 }} />
         {view === "library" && (
           <button onClick={doScan} style={{ height: 26, display: "flex", alignItems: "center",
-            gap: 7, padding: "0 11px", background: "#fff", border: "1px solid #E1E7EC",
-            borderRadius: 7, fontSize: 12.5, color: "#334155", cursor: "pointer" }}>
+            gap: 7, padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
+            borderRadius: 7, fontSize: 12.5, color: "var(--tx2)", cursor: "pointer" }}>
             {scanning ? <Spinner /> : <RescanIcon />}
             {scanning ? "扫描中…" : "重新扫描"}
           </button>
@@ -464,7 +464,7 @@ export default function App() {
       {/* 主体 */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* 导航轨 */}
-        <div style={{ width: 56, flex: "none", background: "#E8ECF0", borderRight: "1px solid #DEE4E9",
+        <div style={{ width: 56, flex: "none", background: "var(--rail)", borderRight: "1px solid var(--rail-line)",
           display: "flex", flexDirection: "column", alignItems: "center", padding: "11px 0 12px",
           gap: 4, zIndex: 5 }}>
           {railItems.map(n => {
@@ -475,9 +475,9 @@ export default function App() {
                 onMouseEnter={e => railEnter(n.label, e)} onMouseLeave={railLeave}
                 onClick={() => { setView(n.k); setSettingsOpen(false); setPopover(null); railLeave(); }}
                 style={{ width: 40, height: 40, border: "none", borderRadius: 9,
-                  background: on ? "#E4EDFB" : "transparent", display: "flex", alignItems: "center",
+                  background: on ? "var(--acc-soft2)" : "transparent", display: "flex", alignItems: "center",
                   justifyContent: "center", cursor: "pointer", transition: "background .12s ease" }}>
-                <RailGlyph name={n.k} color={on ? ACCENT : "#7A8591"} />
+                <RailGlyph name={n.k} color={on ? ACCENT : "var(--tx4b)"} />
               </button>
             );
           })}
@@ -486,10 +486,10 @@ export default function App() {
             onMouseEnter={e => railEnter("设置", e)} onMouseLeave={railLeave}
             onClick={() => { setSettingsOpen(v => !v); railLeave(); }}
             style={{ width: 40, height: 40, border: "none", borderRadius: 9,
-              background: settingsOpen ? "#E4EDFB" : "transparent", display: "flex",
+              background: settingsOpen ? "var(--acc-soft2)" : "transparent", display: "flex",
               alignItems: "center", justifyContent: "center", cursor: "pointer",
               transition: "background .12s ease" }}>
-            <RailGlyph name="settings" color={settingsOpen ? ACCENT : "#7A8591"} />
+            <RailGlyph name="settings" color={settingsOpen ? ACCENT : "var(--tx4b)"} />
           </button>
         </div>
 
@@ -509,7 +509,7 @@ export default function App() {
             listKey={view}>
             {view === "library" && (
               scanning && !sessions.length
-                ? <div style={{ padding: "34px 12px", textAlign: "center", color: "#9AA3AD",
+                ? <div style={{ padding: "34px 12px", textAlign: "center", color: "var(--tx5)",
                     fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center",
                     gap: 8 }}><Spinner /> 正在扫描本机会话…</div>
                 : <LibraryList groups={libGroups}
@@ -530,7 +530,7 @@ export default function App() {
             style={{ width: 9, flex: "none", cursor: "col-resize", position: "relative",
               background: dragging ? "rgba(11,103,245,.10)" : "transparent", zIndex: 6 }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 1,
-              background: dragging ? ACCENT : "#E1E7EC" }} />
+              background: dragging ? ACCENT : "var(--line)" }} />
           </div>
         )}
 
@@ -546,7 +546,7 @@ export default function App() {
             onOpenMigrate={sc => setMig({ scope: sc ?? scope })} />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#9AA3AD", fontSize: 13 }}>
+            color: "var(--tx5)", fontSize: 13 }}>
             {scanning ? "正在扫描本机会话…" : "没有可显示的会话 —— 点右上角「重新扫描」"}</div>
         ))}
         {view === "history" && <HistoryDetail h={histSel} />}
@@ -571,7 +571,7 @@ export default function App() {
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {railTip && (
         <div style={{ position: "absolute", left: 62, top: railTip.top,
-          transform: "translateY(-50%)", zIndex: 60, background: "#2B333C", color: "#fff",
+          transform: "translateY(-50%)", zIndex: 60, background: "var(--tooltip)", color: "#fff",
           fontSize: 11.5, padding: "5px 9px", borderRadius: 6,
           boxShadow: "0 6px 16px -6px rgba(0,0,0,.4)", pointerEvents: "none",
           whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}

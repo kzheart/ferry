@@ -14,29 +14,29 @@ function ToolCard({ t, k, open, trimmed, onToggle, onTrim, trimStaged }) {
     : String(t.input || "").slice(0, 80);
   const hideBody = trimmed && !open;
   return (
-    <div style={{ margin: "6px 0 6px 31px", border: "1px solid #E4E9EE", borderRadius: 8,
-      overflow: "hidden", background: "#F8FAFB" }}>
+    <div style={{ margin: "6px 0 6px 31px", border: "1px solid var(--line3)", borderRadius: 8,
+      overflow: "hidden", background: "var(--fill)" }}>
       <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9,
         padding: "7px 11px", cursor: "pointer" }}>
         <Caret open={open} size={10} />
-        <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "#4A5560" }}>{t.name}</span>
-        <span className="mono" style={{ fontSize: 11.5, color: "#8A939D", whiteSpace: "nowrap",
+        <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
+        <span className="mono" style={{ fontSize: 11.5, color: "var(--tx4)", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
-        {big && <span style={{ fontSize: 10.5, color: "#B4571A", background: "#FBEEDF",
+        {big && <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
           padding: "1px 7px", borderRadius: 20, flex: "none" }}>大输出 {fmtSize(t.size)}</span>}
       </div>
       {open && (
-        <div style={{ borderTop: "1px solid #E8ECF0" }}>
+        <div style={{ borderTop: "1px solid var(--line5)" }}>
           {trimStaged && (
-            <div style={{ padding: "10px 12px", fontSize: 12, color: "#8A939D",
+            <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--tx4)",
               display: "flex", alignItems: "center", gap: 10 }}>
               <span>输出将被裁剪 · 保留前 {BIG_OUT} 字符 · 原始 {fmtSize(t.size)}</span>
             </div>
           )}
           {!hideBody && (
             <pre className="mono fscroll selectable" style={{ margin: 0, padding: "11px 13px",
-              fontSize: 11.5, lineHeight: 1.6, color: "#3A4450", whiteSpace: "pre-wrap",
-              maxHeight: 200, overflow: "auto", background: "#fff" }}>
+              fontSize: 11.5, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
+              maxHeight: 200, overflow: "auto", background: "var(--surface)" }}>
               {(t.output || "(无输出)").slice(0, 200000)}
             </pre>
           )}
@@ -53,24 +53,24 @@ function Round({ r, editable, staged, onDelete, onTrim, onRewrite, migratable,
   return (
     <div style={{ marginBottom: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "14px 0 8px" }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "#9AA3AD", letterSpacing: ".03em" }}>第 {r.n} 轮</span>
-        <span style={{ flex: 1, height: 1, background: "#EBEEF2" }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".03em" }}>第 {r.n} 轮</span>
+        <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
         {editable && (
           <div style={{ display: "flex", gap: 5 }}>
-            <button onClick={onDelete} style={{ height: 22, padding: "0 8px", border: "1px solid #E5CFCF",
-              background: "#fff", color: "#B4433A", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>删除</button>
+            <button onClick={onDelete} style={{ height: 22, padding: "0 8px", border: "1px solid var(--err-line)",
+              background: "var(--surface)", color: "var(--err-deep)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>删除</button>
             {hasBigOut && <button onClick={onTrim} style={{ height: 22, padding: "0 8px",
-              border: "1px solid #DCE2E8", background: "#fff", color: "#5B6672", borderRadius: 6,
+              border: "1px solid var(--line2)", background: "var(--surface)", color: "var(--tx3)", borderRadius: 6,
               fontSize: 11, cursor: "pointer" }}>裁剪</button>}
             {r.uuid && <button onClick={onRewrite} style={{ height: 22, padding: "0 8px",
-              border: "1px solid #DCE2E8", background: "#fff", color: "#5B6672", borderRadius: 6,
+              border: "1px solid var(--line2)", background: "var(--surface)", color: "var(--tx3)", borderRadius: 6,
               fontSize: 11, cursor: "pointer" }}>改写</button>}
           </div>
         )}
       </div>
       {staged && (
-        <div style={{ margin: "0 0 8px", padding: "6px 10px", borderRadius: 7, background: "#FBEEDF",
-          border: "1px solid #F0D9BC", fontSize: 11.5, color: "#8A5316" }}>已暂存:{staged}</div>
+        <div style={{ margin: "0 0 8px", padding: "6px 10px", borderRadius: 7, background: "var(--warn-bg)",
+          border: "1px solid var(--warn-line)", fontSize: 11.5, color: "var(--warn-text)" }}>已暂存:{staged}</div>
       )}
       {r.user && (
         <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
@@ -82,11 +82,11 @@ function Round({ r, editable, staged, onDelete, onTrim, onRewrite, migratable,
       )}
       {r.ai.length > 0 && (
         <div style={{ display: "flex", gap: 9, margin: "6px 0" }}>
-          <span style={{ width: 22, height: 22, flex: "none", borderRadius: 6, background: "#EEF2F6",
-            border: "1px solid #E1E7EC", display: "inline-flex", alignItems: "center",
-            justifyContent: "center", fontSize: 10, color: "#6B7682", fontWeight: 700 }}>AI</span>
-          <div className="selectable" style={{ flex: 1, background: "#fff", border: "1px solid #E8ECF0",
-            padding: "9px 13px", borderRadius: "3px 12px 12px 12px", fontSize: 13, color: "#26303B",
+          <span style={{ width: 22, height: 22, flex: "none", borderRadius: 6, background: "var(--chip)",
+            border: "1px solid var(--line)", display: "inline-flex", alignItems: "center",
+            justifyContent: "center", fontSize: 10, color: "var(--tx3b)", fontWeight: 700 }}>AI</span>
+          <div className="selectable" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--line5)",
+            padding: "9px 13px", borderRadius: "3px 12px 12px 12px", fontSize: 13, color: "var(--tx1b)",
             whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
             {r.ai.join("\n\n").slice(0, 8000)}</div>
         </div>
@@ -100,17 +100,17 @@ function Round({ r, editable, staged, onDelete, onTrim, onRewrite, migratable,
         <div style={{ margin: "8px 0 4px 31px" }}>
           {!scopeOn ? (
             <button data-guide={r.n === 1 ? "scope" : undefined} onClick={onScope}
-              style={{ height: 26, padding: "0 11px", background: "#fff",
-                border: "1px dashed #C3D6F2", color: ACCENT, borderRadius: 7, fontSize: 12,
+              style={{ height: 26, padding: "0 11px", background: "var(--surface)",
+                border: "1px dashed var(--acc-line2)", color: ACCENT, borderRadius: 7, fontSize: 12,
                 cursor: "pointer", fontWeight: 500 }}>↧ 迁移到此为止</button>
           ) : (
-            <div style={{ border: "1px solid #C3D6F2", background: "#EEF4FE", borderRadius: 9,
+            <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 9,
               padding: "11px 13px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 600, color: "#0B4FBE", fontSize: 12.5 }}>仅迁移到第 {r.n} 轮</span>
-                <a onClick={onClearScope} style={{ fontSize: 11.5, marginLeft: "auto", color: "#6B7682" }}>取消</a>
+                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12.5 }}>仅迁移到第 {r.n} 轮</span>
+                <a onClick={onClearScope} style={{ fontSize: 11.5, marginLeft: "auto", color: "var(--tx3b)" }}>取消</a>
               </div>
-              <div style={{ fontSize: 12, color: "#456", marginTop: 5 }}>{scopeStats}</div>
+              <div style={{ fontSize: 12, color: "var(--tx2b)", marginTop: 5 }}>{scopeStats}</div>
               <button className="fbtn-primary" onClick={onMigrateScope}
                 style={{ marginTop: 9, height: 28, padding: "0 13px", fontSize: 12 }}>用此范围开始迁移</button>
             </div>
@@ -129,70 +129,70 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
     ["inplace", "原地修改", "改写原始会话文件 · 需二次确认"],
   ];
   return (
-    <div style={{ width: 300, flex: "none", borderLeft: "1px solid #E1E7EC", background: "#F7F9FB",
+    <div style={{ width: 300, flex: "none", borderLeft: "1px solid var(--line)", background: "var(--inset)",
       display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid #E8ECF0" }}>
+      <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid var(--line5)" }}>
         <div style={{ fontSize: 13, fontWeight: 650 }}>编辑 Inspector</div>
-        <div style={{ fontSize: 11.5, color: "#8A939D", marginTop: 3 }}>暂存的操作在应用前不会改动原会话</div>
+        <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 3 }}>暂存的操作在应用前不会改动原会话</div>
       </div>
       <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
         {!hasOps && (
-          <div style={{ padding: "26px 12px", textAlign: "center", color: "#9AA3AD", fontSize: 12,
-            border: "1px dashed #DCE2E8", borderRadius: 9 }}>
+          <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--tx5)", fontSize: 12,
+            border: "1px dashed var(--line2)", borderRadius: 9 }}>
             在左侧时间线对某一轮点击<br />删除 / 裁剪 / 改写以暂存操作</div>
         )}
         {ops.map(o => (
-          <div key={o.id} style={{ padding: "9px 10px", border: "1px solid #E4E9EE", borderRadius: 8,
-            background: "#fff", marginBottom: 7 }}>
+          <div key={o.id} style={{ padding: "9px 10px", border: "1px solid var(--line3)", borderRadius: 8,
+            background: "var(--surface)", marginBottom: 7 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, color: "#334155", fontWeight: 500 }}>{o.label}</div>
-                <div style={{ fontSize: 11, color: "#9AA3AD" }}>{o.delta}</div>
+                <div style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{o.label}</div>
+                <div style={{ fontSize: 11, color: "var(--tx5)" }}>{o.delta}</div>
               </div>
-              <a onClick={() => removeOp(o.id)} style={{ color: "#9AA3AD", fontSize: 14 }}>×</a>
+              <a onClick={() => removeOp(o.id)} style={{ color: "var(--tx5)", fontSize: 14 }}>×</a>
             </div>
             {o.type === "rewrite" && (
               <textarea className="fscroll" value={o.text}
                 onChange={e => updateOp(o.id, { text: e.target.value })}
                 style={{ width: "100%", marginTop: 8, minHeight: 64, resize: "vertical",
-                  border: "1px solid #E1E7EC", borderRadius: 6, padding: "6px 8px",
-                  fontSize: 12, color: "#334155", outline: "none", userSelect: "text" }} />
+                  border: "1px solid var(--line)", borderRadius: 6, padding: "6px 8px",
+                  fontSize: 12, color: "var(--tx2)", outline: "none", userSelect: "text" }} />
             )}
           </div>
         ))}
       </div>
-      <div style={{ flex: "none", borderTop: "1px solid #E8ECF0", padding: "13px 16px" }}>
+      <div style={{ flex: "none", borderTop: "1px solid var(--line5)", padding: "13px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12,
-          color: "#6B7682", marginBottom: 4 }}>
+          color: "var(--tx3b)", marginBottom: 4 }}>
           <span>体积变化</span>
-          <span style={{ color: "#1C7C43", fontWeight: 600 }}>{sizeInfo.delta}</span>
+          <span style={{ color: "var(--ok-deep)", fontWeight: 600 }}>{sizeInfo.delta}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#8A939D" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--tx4)" }}>
           <span>{sizeInfo.before}</span><span>→</span>
-          <span style={{ color: "#334155", fontWeight: 600 }}>{sizeInfo.after}</span>
+          <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{sizeInfo.after}</span>
         </div>
-        <div style={{ height: 6, borderRadius: 4, background: "#E7ECF1", marginTop: 8, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: sizeInfo.barW, background: "#1C7C43",
+        <div style={{ height: 6, borderRadius: 4, background: "var(--track)", marginTop: 8, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: sizeInfo.barW, background: "var(--ok-deep)",
             transition: "width .3s ease" }} />
         </div>
-        <div style={{ marginTop: 14, fontSize: 11.5, fontWeight: 600, color: "#6B7682" }}>保存方式</div>
+        <div style={{ marginTop: 14, fontSize: 11.5, fontWeight: 600, color: "var(--tx3b)" }}>保存方式</div>
         {modes.map(([k, l, d]) => {
           const on = saveMode === k;
           return (
             <label key={k} onClick={() => setSaveMode(k)}
               style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "8px 9px",
-                border: `1px solid ${on ? ACCENT : "#E4E9EE"}`, background: on ? "#F1F6FE" : "#fff",
+                border: `1px solid ${on ? ACCENT : "var(--line3)"}`, background: on ? "var(--acc-soft4)" : "var(--surface)",
                 borderRadius: 8, marginTop: 7, cursor: "pointer" }}>
               <span style={{ marginTop: 1, display: "inline-flex" }}><RadioDot on={on} /></span>
               <span>
-                <span style={{ fontSize: 12.5, color: "#334155", fontWeight: 500 }}>{l}</span><br />
-                <span style={{ fontSize: 11, color: "#9AA3AD" }}>{d}</span>
+                <span style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
+                <span style={{ fontSize: 11, color: "var(--tx5)" }}>{d}</span>
               </span>
             </label>
           );
         })}
-        <div style={{ fontSize: 11, color: "#9AA3AD", marginTop: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.5 }}>
           应用前自动创建快照;探针失败将自动还原到应用前状态。</div>
         <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
           <button className="fbtn" style={{ flex: 1, height: 32, fontSize: 12.5 }}
@@ -201,7 +201,7 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
             disabled={!hasOps || applying || !canEdit} onClick={onApply}>
             {applying ? "应用中…" : hasOps ? "应用更改" : "无待应用"}</button>
         </div>
-        {!canEdit && <div style={{ fontSize: 11, color: "#B4571A", marginTop: 8 }}>
+        {!canEdit && <div style={{ fontSize: 11, color: "var(--warn-deep)", marginTop: 8 }}>
           目前仅支持编辑 Claude Code 会话</div>}
       </div>
     </div>
@@ -247,7 +247,7 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
   };
 
   const treeChips = [
-    { label: `${TOOL_NAME[meta.tool]} 会话`, bg: "#EEF2F6" },
+    { label: `${TOOL_NAME[meta.tool]} 会话`, bg: "var(--chip)" },
     ...(data && data.tree_count > 1
       ? [{ label: `${data.tree_count - 1} 个子会话` }] : []),
     { label: `${data ? data.count : meta.count} 条消息` },
@@ -257,17 +257,17 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
     <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0 }}>
       <div className="fscroll" data-guide-scroll="1"
         style={{ flex: 1, overflowY: "auto", minWidth: 0, animation: "ffade .16s ease" }}>
-        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid #E8ECF0", position: "sticky",
-          top: 0, background: "rgba(251,252,253,.92)", backdropFilter: "blur(6px)", zIndex: 2 }}>
+        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid var(--line5)", position: "sticky",
+          top: 0, background: "var(--veil)", backdropFilter: "blur(6px)", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
-            <ToolIcon tool={meta.tool} size={40} dot="#1C9E5A" />
+            <ToolIcon tool={meta.tool} size={40} dot="var(--ok)" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: "-.01em" }}>
                 {meta.title || "(无标题会话)"}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 6,
-                fontSize: 12, color: "#6B7682" }}>
-                <span>来源 <b style={{ color: "#334155", fontWeight: 600 }}>{TOOL_NAME[meta.tool]}</b></span>
-                <span className="mono" style={{ color: "#8A939D" }}>{meta.dir}</span>
+                fontSize: 12, color: "var(--tx3b)" }}>
+                <span>来源 <b style={{ color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[meta.tool]}</b></span>
+                <span className="mono" style={{ color: "var(--tx4)" }}>{meta.dir}</span>
                 <span>{data ? data.count : meta.count} 条消息</span>
                 <span>{fmtSize(meta.size)}</span>
                 <span>活跃 {fmtTime(meta.updated)}</span>
@@ -285,8 +285,8 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
-                <span style={{ fontSize: 12, color: "#B4571A", background: "#FBEEDF",
-                  border: "1px solid #F0D9BC", padding: "3px 9px", borderRadius: 20,
+                <span style={{ fontSize: 12, color: "var(--warn-deep)", background: "var(--warn-bg)",
+                  border: "1px solid var(--warn-line)", padding: "3px 9px", borderRadius: 20,
                   fontWeight: 600 }}>编辑模式</span>
                 <button className="fbtn" style={{ height: 30, fontSize: 12.5 }}
                   onClick={onExitEdit}>退出编辑</button>
@@ -294,21 +294,21 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
             )}
           </div>
           <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
-            fontSize: 11.5, color: "#8A939D" }}>
+            fontSize: 11.5, color: "var(--tx4)" }}>
             {treeChips.map((t, i) => (
               <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
                 <span style={{ padding: "2px 8px", borderRadius: 6, background: t.bg || "transparent",
-                  color: "#6B7682" }}>{t.label}</span>
+                  color: "var(--tx3b)" }}>{t.label}</span>
                 {i < treeChips.length - 1 && <span>→</span>}
               </span>
             ))}
           </div>
         </div>
         <div style={{ padding: "16px 22px 40px", maxWidth: 760 }}>
-          {error && <div style={{ padding: 30, color: "#B4433A", fontSize: 13 }}>读取失败:{error}</div>}
+          {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>读取失败:{error}</div>}
           {!data && !error && (
             <div style={{ padding: 40, display: "flex", alignItems: "center", gap: 10,
-              color: "#8A939D", fontSize: 13 }}><Spinner size={16} /> 解析会话中…</div>
+              color: "var(--tx4)", fontSize: 13 }}><Spinner size={16} /> 解析会话中…</div>
           )}
           {data && rounds.map(r => (
             <Round key={r.n} r={r} editable={isEdit && canEdit}
@@ -324,7 +324,7 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
               scopeStats={scopeStats} />
           ))}
           {data && rounds.length === 0 && (
-            <div style={{ padding: 30, color: "#9AA3AD", fontSize: 12.5 }}>该会话没有可展示的消息</div>
+            <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12.5 }}>该会话没有可展示的消息</div>
           )}
         </div>
       </div>

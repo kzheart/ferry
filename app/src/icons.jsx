@@ -41,12 +41,12 @@ export function ToolIcon({ tool, size = 26, dot = null }) {
   return (
     <span className="noinvert" style={{ position: "relative", display: "inline-flex",
       alignItems: "center", justifyContent: "center", width: size, height: size, borderRadius: 8,
-      background: icon.bg, border: "1px solid #E1E7EC", overflow: "hidden", flex: "none" }}>
+      background: icon.bg, border: "1px solid var(--line)", overflow: "hidden", flex: "none" }}>
       <svg viewBox={icon.viewBox} style={{ width: inner, height: inner, display: "block" }}>
         {icon.children}
       </svg>
       {dot && <span style={{ position: "absolute", right: -3, bottom: -3, width: 10, height: 10,
-        borderRadius: "50%", background: dot, boxShadow: "0 0 0 2px #fff" }} />}
+        borderRadius: "50%", background: dot, boxShadow: "0 0 0 2px var(--dot-ring)" }} />}
     </span>
   );
 }
@@ -57,31 +57,34 @@ const svg = (vb, w, h, html, extra) => (
 );
 
 export const SearchIcon = () => svg("0 0 16 16", 13, 13,
-  '<circle cx="7" cy="7" r="5" fill="none" stroke="#9AA3AD" stroke-width="1.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke="#9AA3AD" stroke-width="1.5" stroke-linecap="round"/>',
-  { flex: "none" });
+  '<circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  { flex: "none", color: "var(--tx5)" });
 
 export const FilterIcon = () => svg("0 0 16 16", 12, 12,
-  '<path d="M2 4h12M4.5 8h7M6.5 12h3" stroke="#6B7682" stroke-width="1.5" stroke-linecap="round"/>');
+  '<path d="M2 4h12M4.5 8h7M6.5 12h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  { color: "var(--tx3b)" });
 
 export const Caret = ({ open, size = 9 }) => svg("0 0 12 12", size, size,
-  '<path d="M4 2l4 4-4 4" fill="none" stroke="#9AA3AD" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
-  { flex: "none", transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .16s ease" });
+  '<path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none", color: "var(--tx5)", transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .16s ease" });
 
 export const SortCaret = () => svg("0 0 16 16", 10, 10,
-  '<path d="M4 6l4 4 4-4" fill="none" stroke="#9AA3AD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>');
+  '<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  { color: "var(--tx5)" });
 
-export const Spinner = ({ size = 13, accent = "var(--accent)", track = "#c7ced6" }) => svg("0 0 16 16", size, size,
-  `<circle cx="8" cy="8" r="6" fill="none" stroke="${track}" stroke-width="2"/><path d="M8 2 a6 6 0 0 1 6 6" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round"/>`,
+export const Spinner = ({ size = 13, accent = "var(--accent)", track = "var(--spin-track)" }) => svg("0 0 16 16", size, size,
+  `<circle cx="8" cy="8" r="6" fill="none" style="stroke:${track}" stroke-width="2"/><path d="M8 2 a6 6 0 0 1 6 6" fill="none" style="stroke:${accent}" stroke-width="2" stroke-linecap="round"/>`,
   { animation: "fspin .8s linear infinite", flex: "none" });
 
 export const RescanIcon = () => svg("0 0 16 16", 13, 13,
-  '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2h-2" fill="none" stroke="#334155" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>');
+  '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  { color: "var(--tx2)" });
 
 export const SidebarIcon = () => svg("0 0 18 18", 16, 16,
   '<rect x="2" y="3.5" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="6.8" y1="3.5" x2="6.8" y2="14.5" stroke="currentColor" stroke-width="1.4"/><rect x="3.4" y="5.4" width="2" height="1.2" rx=".4" fill="currentColor"/><rect x="3.4" y="7.6" width="2" height="1.2" rx=".4" fill="currentColor"/>');
 
 export const CheckBadge = ({ size = 18 }) => (
-  <span style={{ width: size, height: size, borderRadius: "50%", background: "#1C9E5A",
+  <span style={{ width: size, height: size, borderRadius: "50%", background: "var(--ok)",
     display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
     {svg("0 0 12 12", size * 0.6, size * 0.6,
       '<path d="M2.5 6.2 5 8.6 9.5 3.6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>')}
@@ -89,8 +92,8 @@ export const CheckBadge = ({ size = 18 }) => (
 );
 
 export const WarnTriangle = () => svg("0 0 16 16", 16, 16,
-  '<path d="M8 1.5 15 14H1z" fill="none" stroke="#C4564C" stroke-width="1.3" stroke-linejoin="round"/><line x1="8" y1="6" x2="8" y2="9.5" stroke="#C4564C" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#C4564C"/>',
-  { flex: "none", marginTop: 1 });
+  '<path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><line x1="8" y1="6" x2="8" y2="9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="currentColor"/>',
+  { flex: "none", marginTop: 1, color: "var(--err2)" });
 
 // 导航轨图标
 const RAIL = {
@@ -100,7 +103,7 @@ const RAIL = {
   settings: '<circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.7v1.5M8 12.8v1.5M14.3 8h-1.5M3.2 8H1.7M12.4 3.6l-1 1M4.6 11.4l-1 1M12.4 12.4l-1-1M4.6 4.6l-1-1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
 };
 
-export const RailGlyph = ({ name, color = "#7A8591", size = 19 }) =>
+export const RailGlyph = ({ name, color = "var(--tx4b)", size = 19 }) =>
   svg("0 0 16 16", size, size, RAIL[name], { color });
 
 // 设置页分类图标
@@ -112,5 +115,5 @@ const SETTINGS_GLYPH = {
   about: '<circle cx="9" cy="9" r="6.6" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M9 8.2v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="5.8" r=".9" fill="currentColor"/>',
 };
 
-export const SetGlyph = ({ name, color = "#6B7682" }) =>
+export const SetGlyph = ({ name, color = "var(--tx3b)" }) =>
   svg("0 0 18 18", 17, 17, SETTINGS_GLYPH[name], { color, flex: "none" });

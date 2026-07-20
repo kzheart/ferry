@@ -1,18 +1,223 @@
-/* Ferry 桌面端 —— 按 session-bridge-desktop 原型复刻的全局样式 */
+/* Ferry 桌面端 —— 全局样式与亮/暗双主题色板(组件内联样式统一引用这些变量) */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+
 :root {
   --accent: #0B67F5;
   --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
   --font-size: 13px;
+  color-scheme: light;
+
+  /* 背景 / 表面 */
+  --bg: #FBFCFD;
+  --surface: #FFFFFF;
+  --titlebar: #F1F4F7;
+  --rail: #E8ECF0;
+  --rail-line: #DEE4E9;
+  --pane: #F3F5F7;
+  --pane-foot: #F0F3F5;
+  --inset: #F7F9FB;
+  --fill: #F8FAFB;
+  --fill2: #F4F7F9;
+  --fill3: #F5F6F7;
+  --fill4: #EEF1F4;
+  --chip: #EEF2F6;
+  --badge: #E4E8EC;
+  --settings-bg: #F6F8FA;
+  --settings-rail: #EEF1F4;
+  --seg-on: #FFFFFF;
+  --track: #E7ECF1;
+  --hairline: #EBEEF2;
+
+  /* 边框 */
+  --line: #E1E7EC;
+  --line2: #DCE2E8;
+  --line3: #E4E9EE;
+  --line4: #E7ECF0;
+  --line5: #E8ECF0;
+  --line6: #F0F3F6;
+  --line-strong: #C3CBD3;
+  --check: #CDD5DD;
+  --toggle-off: #CBD3DB;
+  --dots: #D8DEE4;
+  --spin-track: #C7CED6;
+
+  /* 文本 */
+  --tx1: #1C2530;
+  --tx1b: #26303B;
+  --tx2: #334155;
+  --tx2b: #40494F;
+  --tx3: #5B6672;
+  --tx3b: #6B7682;
+  --tx4: #8A939D;
+  --tx4b: #7A8591;
+  --tx5: #9AA3AD;
+  --info-dot: #8AA0B6;
+  --tooltip: #2B333C;
+
+  /* 浮层 / 阴影辅助 */
+  --scrim: rgba(24,33,43,.34);
+  --dim: rgba(20,28,38,.44);
+  --veil: rgba(251,252,253,.92);
+  --ring: rgba(20,28,38,.08);
+  --dot-ring: #FFFFFF;
+
+  /* 强调色衍生(浅底/描边/文字) */
+  --acc-soft: #EAF0FB;
+  --acc-soft2: #E4EDFB;
+  --acc-soft3: #E7F0FE;
+  --acc-soft4: #F1F6FE;
+  --acc-soft5: #EEF4FE;
+  --acc-soft6: #F3F7FE;
+  --acc-line: #CBDDF8;
+  --acc-line2: #C3D6F2;
+  --acc-text: #0B4FBE;
+  --acc-mut: #6E8FC4;
+
+  /* 状态:绿 / 红 / 橙 */
+  --ok: #1C9E5A;
+  --ok-deep: #1C7C43;
+  --ok-body: #40694F;
+  --ok-body2: #2A6B44;
+  --ok-bg: #F1FBF5;
+  --ok-bg2: #EAF6EE;
+  --ok-line: #CDE9D7;
+  --err: #D5544A;
+  --err2: #C4564C;
+  --err-deep: #B4433A;
+  --err-text: #8A3E37;
+  --err-mut: #96524B;
+  --err-pre: #7A3A34;
+  --err-bg: #FDF3F1;
+  --err-bg2: #FBEDEC;
+  --err-bg3: #FBE4E1;
+  --err-bg4: #FFF8F7;
+  --err-line: #EBCBC7;
+  --warn: #E09112;
+  --warn-deep: #B4571A;
+  --warn-text: #8A5316;
+  --warn-bg: #FBEEDF;
+  --warn-line: #F0D9BC;
+
+  /* 交互态 */
+  --hov: #E4E9EE;
+  --hov-rail: #DDE3E9;
+  --hov-row: #E7ECF1;
+  --hov-item: #EEF2F6;
+  --hov-ghost: #F2F5F8;
+  --btn-hov: #F5F7F9;
+  --btn-disabled: #B8C0C8;
+  --sb-thumb: #CFD6DD;
+  --sb-thumb-hov: #B6BFC8;
 }
+
+/* 暗色主题:中性深灰色板(参考 Linear 风格),不再使用整窗反相 */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #17171A;
+  --surface: #1E1E21;
+  --titlebar: #151517;
+  --rail: #141416;
+  --rail-line: #26262B;
+  --pane: #19191C;
+  --pane-foot: #18181B;
+  --inset: #19191C;
+  --fill: #222226;
+  --fill2: #232327;
+  --fill3: #232327;
+  --fill4: #26262B;
+  --chip: #26262B;
+  --badge: #222226;
+  --settings-bg: #17171A;
+  --settings-rail: #141416;
+  --seg-on: #2A2A2F;
+  --track: #2C2C31;
+  --hairline: #26262B;
+
+  --line: #2A2A2E;
+  --line2: #313136;
+  --line3: #28282C;
+  --line4: #27272B;
+  --line5: #26262B;
+  --line6: #242428;
+  --line-strong: #3E3E44;
+  --check: #3E3E44;
+  --toggle-off: #3A3B42;
+  --dots: #33343A;
+  --spin-track: #3A3B42;
+
+  --tx1: #ECECEE;
+  --tx1b: #DEDFE2;
+  --tx2: #C6C7CC;
+  --tx2b: #BFC0C6;
+  --tx3: #A6A7AE;
+  --tx3b: #9EA0A7;
+  --tx4: #85868D;
+  --tx4b: #8D8E96;
+  --tx5: #6F7077;
+  --info-dot: #6C7891;
+  --tooltip: #3A3B42;
+
+  --scrim: rgba(0,0,0,.55);
+  --dim: rgba(0,0,0,.6);
+  --veil: rgba(23,23,26,.92);
+  --ring: rgba(255,255,255,.08);
+  --dot-ring: #19191C;
+
+  --acc-soft: #1E2A42;
+  --acc-soft2: #212E4A;
+  --acc-soft3: #1E2B48;
+  --acc-soft4: #1A2438;
+  --acc-soft5: #1B2740;
+  --acc-soft6: #1A2438;
+  --acc-line: #2E4066;
+  --acc-line2: #2E4066;
+  --acc-text: #82A9F0;
+  --acc-mut: #6C86B4;
+
+  --ok: #37B575;
+  --ok-deep: #58C088;
+  --ok-body: #8FC3A4;
+  --ok-body2: #82C79E;
+  --ok-bg: #16241C;
+  --ok-bg2: #142118;
+  --ok-line: #2C4A38;
+  --err: #E0685C;
+  --err2: #D96A5E;
+  --err-deep: #E4796C;
+  --err-text: #E29288;
+  --err-mut: #C69289;
+  --err-pre: #D6968C;
+  --err-bg: #291D1A;
+  --err-bg2: #2B1B18;
+  --err-bg3: #3A2420;
+  --err-bg4: #221614;
+  --err-line: #4A2E29;
+  --warn: #E2A144;
+  --warn-deep: #DB9256;
+  --warn-text: #D3A468;
+  --warn-bg: #2B2113;
+  --warn-line: #493A1F;
+
+  --hov: #2A2A2F;
+  --hov-rail: #232327;
+  --hov-row: #242428;
+  --hov-item: #26262B;
+  --hov-ghost: #222226;
+  --btn-hov: #242428;
+  --btn-disabled: #3A3B42;
+  --sb-thumb: #3A3B42;
+  --sb-thumb-hov: #4A4B52;
+}
+
 body {
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--font-size);
   line-height: 1.45;
-  color: #1C2530;
-  background: #FBFCFD;
+  color: var(--tx1);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   user-select: none;
@@ -21,6 +226,7 @@ body {
 }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
 a:hover { filter: brightness(.9); }
+[data-theme="dark"] a:hover { filter: brightness(1.15); }
 .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
 .selectable { user-select: text; cursor: text; }
 input, button, textarea { font-family: inherit; }
@@ -28,10 +234,10 @@ input { user-select: text; }
 
 .fscroll::-webkit-scrollbar { width: 9px; height: 9px; }
 .fscroll::-webkit-scrollbar-thumb {
-  background: #cfd6dd; border-radius: 6px;
+  background: var(--sb-thumb); border-radius: 6px;
   border: 2px solid transparent; background-clip: content-box;
 }
-.fscroll::-webkit-scrollbar-thumb:hover { background: #b6bfc8; background-clip: content-box; }
+.fscroll::-webkit-scrollbar-thumb:hover { background: var(--sb-thumb-hov); background-clip: content-box; }
 
 @keyframes fspin { to { transform: rotate(360deg); } }
 @keyframes fsheet { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -46,25 +252,25 @@ input { user-select: text; }
 }
 
 /* 悬停态(原型 style-hover 的等价) */
-.hov:hover { background: #E4E9EE !important; }
-.hov-rail:hover { background: #DDE3E9 !important; }
-.hov-row:hover { background: #E7ECF1 !important; }
-.hov-item:hover { background: #EEF2F6 !important; }
-.hov-ghost:hover { background: #F2F5F8 !important; }
+.hov:hover { background: var(--hov) !important; }
+.hov-rail:hover { background: var(--hov-rail) !important; }
+.hov-row:hover { background: var(--hov-row) !important; }
+.hov-item:hover { background: var(--hov-item) !important; }
+.hov-ghost:hover { background: var(--hov-ghost) !important; }
 
 /* 常用按钮 */
 .fbtn {
-  height: 28px; padding: 0 12px; background: #fff;
-  border: 1px solid #DCE2E8; border-radius: 7px;
-  font-size: 12px; color: #334155; cursor: pointer;
+  height: 28px; padding: 0 12px; background: var(--surface);
+  border: 1px solid var(--line2); border-radius: 7px;
+  font-size: 12px; color: var(--tx2); cursor: pointer;
 }
-.fbtn:hover { background: #F5F7F9; }
+.fbtn:hover { background: var(--btn-hov); }
 .fbtn-primary {
   border: none; background: var(--accent); color: #fff; font-weight: 600;
   border-radius: 7px; cursor: pointer; font-size: 12.5px;
 }
 .fbtn-primary:hover { filter: brightness(1.05); }
-.fbtn-primary:disabled { background: #B8C0C8; cursor: default; opacity: .7; }
+.fbtn-primary:disabled { background: var(--btn-disabled); cursor: default; opacity: .7; }
 
 /* 设置里的「减少动效」(与系统偏好等效,但由用户显式开关) */
 [data-reduce="1"] * {
@@ -72,11 +278,6 @@ input { user-select: text; }
   transition-duration: .001s !important;
   scroll-behavior: auto !important;
 }
-
-/* 暗色主题:整窗反相(同原型做法);品牌图标与位图二次反相还原本色。
-   invert(1) 与 hue-rotate(180deg) 各自成对抵消,所以还原是精确的。 */
-[data-theme="dark"] #root { filter: invert(1) hue-rotate(180deg); }
-[data-theme="dark"] .noinvert { filter: invert(1) hue-rotate(180deg); }
 
 /* 标题栏可拖拽窗口 */
 .drag-region { -webkit-app-region: drag; }
