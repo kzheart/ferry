@@ -86,12 +86,12 @@ export function toRounds(messages) {
     const texts = m.blocks.filter(b => b.kind === "text" && b.text.trim());
     if (m.role === "user" && texts.length) {
       cur = { n: rounds.length + 1, user: texts.map(t => t.text).join("\n"),
-              uuid: m.uuid, index: m.index, ai: [], tools: [], seq: [] };
+              locator: m.locator || m.uuid, index: m.index, ai: [], tools: [], seq: [] };
       rounds.push(cur);
       continue;
     }
     if (!cur) {
-      cur = { n: 1, user: "", uuid: null, index: m.index, ai: [], tools: [], seq: [] };
+      cur = { n: 1, user: "", locator: null, index: m.index, ai: [], tools: [], seq: [] };
       rounds.push(cur);
     }
     m.blocks.forEach(b => {

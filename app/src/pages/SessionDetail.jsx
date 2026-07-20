@@ -221,12 +221,17 @@ function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTr
 }
 
 function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
-  onOpenDiff, onApply, applying, canEdit }) {
+  onOpenDiff, onApply, applying, canEdit, editCaps }) {
   const hasOps = ops.length > 0;
   const modes = [
     ["saveas", "另存为新会话", "保留原会话不变(默认)"],
     ["inplace", "原地修改", "改写原始会话文件 · 需二次确认"],
-  ];
+  ].filter(([mode]) => {
+    if (!ops.length) return mode === "saveas" ? editCaps?.save_as : editCaps?.inplace;
+    const names = ops.map(op => op.type === "delete" ? "delete-turn" :
+      op.type === "trim" ? "truncate" : "rewrite");
+    return names.every(name => editCaps?.operation_modes?.[name]?.includes(mode));
+  });
   return (
     <div style={{ width: 300, flex: "none", borderLeft: "1px solid var(--line)", background: "var(--inset)",
       display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -298,7 +303,7 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
             {applying ? "应用中…" : hasOps ? "应用更改" : "无待应用"}</button>
         </div>
         {!canEdit && <div style={{ fontSize: 11, color: "var(--warn-deep)", marginTop: 8 }}>
-          目前仅支持编辑 Claude Code 会话</div>}
+          当前 Agent 尚未实现可用的编辑后端</div>}
       </div>
     </div>
   );
@@ -306,10 +311,10 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
 
 export default function SessionDetail({ meta, data, error, mode, onEnterEdit, onExitEdit,
   scope, setScope, ops, addOp, removeOp, updateOp, saveMode, setSaveMode,
-  onOpenDiff, onApply, applying, onOpenMigrate }) {
+  onOpenDiff, onApply, applying, onOpenMigrate, editCaps }) {
   const rounds = useMemo(() => toRounds(data?.messages), [data]);
   const isEdit = mode === "edit";
-  const canEdit = meta.tool === "claude";
+  const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
   const [copied, setCopied] = useState(false);
 
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
@@ -423,7 +428,8 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
       {isEdit && (
         <Inspector ops={ops} removeOp={removeOp} updateOp={updateOp}
           saveMode={saveMode} setSaveMode={setSaveMode} sizeInfo={sizeInfo}
-          onOpenDiff={onOpenDiff} onApply={onApply} applying={applying} canEdit={canEdit} />
+          onOpenDiff={onOpenDiff} onApply={onApply} applying={applying}
+          canEdit={canEdit} editCaps={editCaps} />
       )}
     </div>
   );

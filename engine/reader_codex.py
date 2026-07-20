@@ -225,7 +225,8 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             blocks = [Block("text", text)] if text.strip() else []
             if p["role"] == "assistant":
                 flush_pending_into(blocks)
-            sess.messages.append(Message(role=p["role"], blocks=blocks, raw=[l]))
+            sess.messages.append(Message(role=p["role"], blocks=blocks, raw=[l],
+                                         source_id=f"record:{ordinal}"))
         elif pt in ("custom_tool_call", "function_call"):
             if pt == "function_call":
                 args = _json_args(p.get("arguments", "{}"))

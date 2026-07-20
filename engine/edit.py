@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""会话编辑(会话手术),MVP 支持 Claude Code 会话的原地编辑。
+"""Claude Code 会话编辑原语；跨工具编排见 engine.edit_backend。
 
 用法:
     python3 -m engine.edit truncate <会话ref> [--threshold 4096]   裁剪超大工具输出
@@ -38,7 +38,8 @@ def resolve(ref: str) -> Path:
 def backup(path: Path, reason: str = "会话编辑前自动", tool: str = "claude") -> Path:
     """复制一份快照,并写同名 .meta.json 记录创建原因(供 UI 分组与筛选)。"""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    dest = BACKUP_DIR / f"{path.stem}-{int(time.time())}.jsonl"
+    # 纳秒级 ID 避免同一秒内“编辑前快照”和“还原前保护”互相覆盖。
+    dest = BACKUP_DIR / f"{path.stem}-{time.time_ns()}.jsonl"
     shutil.copy(path, dest)
     dest.with_suffix(".meta.json").write_text(json.dumps(
         {"reason": reason, "tool": tool, "source": str(path)},

@@ -18,7 +18,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import convert, edit as edit_mod
+from harness import probe as probe_mod
+
+from . import convert, edit as edit_mod, edit_backend
 from .reader_codex import session_id as codex_session_id
 
 REPO = Path(__file__).resolve().parent.parent
@@ -349,6 +351,12 @@ def _message_json(messages) -> list[dict]:
         entry = {"index": i, "role": m.role, "blocks": blocks}
         if m.raw and isinstance(m.raw[0], dict) and m.raw[0].get("uuid"):
             entry["uuid"] = m.raw[0]["uuid"]
+            entry["locator"] = m.raw[0]["uuid"]
+        elif m.source_id:
+            entry["locator"] = m.source_id
+        else:
+            # 非 Claude 格式未必有稳定 message id；后端用 revision 防止序号漂移。
+            entry["locator"] = f"index:{i}"
         msgs.append(entry)
     return msgs
 
@@ -519,16 +527,14 @@ def _isolated_migrate_probe(dst: str, sess, cwd: str,
 
 def run_probe(tool: str, sid: str, cwd: str,
               model: str | None = None) -> tuple[bool, str]:
-    cmd = [sys.executable, str(REPO / "harness/probe.py"), tool, sid]
-    if tool != "codex":
-        cmd += ["--dir", cwd]
-    if model:
-        cmd += ["--model", model]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=420)
-    detail = ((r.stdout or "") + (r.stderr or "")).strip()
+    try:
+        ok, detail = probe_mod.run_probe(
+            tool, sid, cwd if tool != "codex" else None, model)
+    except probe_mod.ProbeTimeout as error:
+        return False, str(error)
     if len(detail) > 12000:
         detail = detail[:12000] + f"\n…(截断,共 {len(detail)} 字符)"
-    return r.returncode == 0, detail
+    return ok, detail
 
 
 def _isolated_claude_probe(path: Path, cwd: str,
@@ -684,27 +690,62 @@ def snapshots() -> list[dict]:
             meta = json.loads(f.with_suffix(".meta.json").read_text())
         except (OSError, json.JSONDecodeError):
             pass            # 旧快照没有 sidecar,用默认值
-        out.append({"session": m.group(1), "time": int(m.group(2)) * 1000,
+        raw_time = int(m.group(2))
+        snapshot_time = raw_time // 1_000_000 if raw_time > 10**15 else raw_time * 1000
+        out.append({"session": m.group(1), "time": snapshot_time,
                     "size": f.stat().st_size, "path": str(f),
                     "reason": meta.get("reason") or "会话编辑前自动",
-                    "tool": meta.get("tool") or "claude"})
+                    "tool": meta.get("tool") or "claude",
+                    "source": meta.get("source") or m.group(1)})
     return out
 
 
-def snapshot_restore(session_id: str, run_probe_after: bool = False) -> dict:
-    path = edit_mod.resolve(session_id)
-    cands = sorted(edit_mod.BACKUP_DIR.glob(f"{path.stem}-*.jsonl"))
+def snapshot_restore(session_id: str, run_probe_after: bool = False,
+                     tool: str = "claude") -> dict:
+    impl = edit_backend.backend(tool)
+    doc = impl.load(session_id)
+    path = doc.handle if isinstance(doc.handle, Path) else None
+    stem = path.stem if path else str(doc.ref)
+    cands = sorted(edit_mod.BACKUP_DIR.glob(f"{stem}-*.jsonl"))
     if not cands:
         return {"ok": False, "error": "没有该会话的快照"}
+    if path is None:
+        guard = impl.snapshot(doc, reason="还原前保护")
+        impl.restore_snapshot(cands[-1], doc)
+        result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
+        if run_probe_after:
+            restored = impl.load(session_id)
+            shadow = impl.save_copy(restored)
+            try:
+                cwd = restored.data.get("info", {}).get("directory") or "."
+                ok, detail = run_probe(tool, shadow["session_id"], cwd)
+            finally:
+                impl.discard(shadow)
+            result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
+            if not ok:
+                impl.restore_snapshot(guard, restored)
+                result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
+        return result
     import shutil
     cur = path.read_bytes()               # 保住现状,探针失败时回退
-    guard = edit_mod.backup(path, reason="还原前保护")   # UI 承诺的保护快照
+    guard = impl.snapshot(doc, reason="还原前保护")      # UI 承诺的保护快照
     shutil.copy(cands[-1], path)
     result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
     if run_probe_after:
-        cwd = next((json.loads(l).get("cwd") for l in
-                    path.read_text().splitlines() if l.strip()), None)
-        ok, detail = _isolated_claude_probe(path, cwd or ".")
+        restored = impl.load(str(path))
+        if tool == "claude":
+            cwd = next((r.get("cwd") for r in restored.data if r.get("cwd")), ".")
+            ok, detail = _isolated_claude_probe(path, cwd)
+        else:
+            meta = next((r.get("payload", {}) for r in restored.data
+                         if r.get("type") == "session_meta"), {})
+            saved = {"session_id": meta.get("id") or meta.get("session_id"),
+                     "saved_as": str(path)}
+            closure = getattr(restored, "context", None)
+            if closure is not None and hasattr(closure, "nodes"):
+                saved["published_paths"] = [str(node.path)
+                                            for node in closure.nodes.values()]
+            ok, detail = _probe_edited(tool, impl, restored, saved)
         result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
         if not ok:
             path.write_bytes(cur)
@@ -721,49 +762,78 @@ def snapshot_delete(path: str) -> dict:
     return {"ok": True}
 
 
-# ---------- 会话编辑(claude 会话) ----------
+# ---------- 会话编辑(可扩展原生后端) ----------
 
 class _Args:
     def __init__(self, **kw):
         self.__dict__.update(kw)
 
 
-def edit_preview(ref: str, ops: list[dict]) -> dict:
+def edit_capabilities(tool: str) -> dict:
+    return edit_backend.backend(tool).capabilities()
+
+
+def edit_preview(ref: str, ops: list[dict], tool: str = "claude") -> dict:
     """在内存中施加操作,返回前后统计与摘要,不落盘。"""
-    path = edit_mod.resolve(ref)
-    records = edit_mod.load(path)
-    before = {"count": len(records),
-              "size": sum(len(json.dumps(r)) for r in records)}
-    records, notes = _apply_ops(records, ops)
-    edit_mod.check_invariants(records)
-    after = {"count": len(records),
-             "size": sum(len(json.dumps(r)) for r in records)}
-    return {"before": before, "after": after, "notes": notes}
+    return edit_backend.preview(tool, ref, ops)
 
 
 def edit_apply(ref: str, ops: list[dict], probe: bool = False,
-               save_as: bool = False) -> dict:
+               save_as: bool = False, tool: str = "claude") -> dict:
+    result, impl, doc, snapshot = edit_backend.apply(
+        tool, ref, ops, save_as=save_as)
+    if not probe:
+        return result
+    ok, detail = _probe_edited(tool, impl, doc, result)
+    result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
+    if ok:
+        return result
     if save_as:
-        return _edit_save_as(ref, ops, probe)
-    path = edit_mod.resolve(ref)
-    bak = edit_mod.backup(path)
-    records = edit_mod.load(path)
-    records, notes = _apply_ops(records, ops)
-    edit_mod.check_invariants(records)
-    edit_mod.save(path, records)
-    # 静态验证:重读落盘结果,确认仍满足格式约束
-    edit_mod.check_invariants(edit_mod.load(path))
-    cwd = next((r.get("cwd") for r in records if r.get("cwd")), ".")
-    result = {"ok": True, "snapshot": str(bak), "notes": notes,
-              "resume": resume_command("claude", path.stem, cwd)}
-    if probe:
-        # 探针只打影子副本,原会话 id 从不被 resume
-        ok, detail = _isolated_claude_probe(path, cwd)
-        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-        if not ok:                       # 自动还原快照
-            shutil.copy(bak, path)
-            result.update(ok=False, error="隔离探针未通过,已自动还原快照")
+        impl.discard(result)
+        result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
+    elif snapshot:
+        impl.restore_snapshot(snapshot, doc)
+        result.update(ok=False, error="隔离探针未通过,已自动还原快照")
     return result
+
+
+def _probe_edited(tool: str, impl, doc, result: dict) -> tuple[bool, str]:
+    """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
+    if tool == "claude":
+        path = Path(result["saved_as"])
+        cwd = next((r.get("cwd") for r in edit_mod.load(path) if r.get("cwd")), ".")
+        return _isolated_claude_probe(path, cwd)
+    if tool == "codex":
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="ferry-codex-probe-") as tmp:
+            codex_home = Path(tmp) / ".codex"
+            sessions = codex_home / "sessions" / "probe" / "01" / "01"
+            sessions.mkdir(parents=True)
+            for raw in result.get("published_paths", [result["saved_as"]]):
+                shutil.copy(raw, sessions / Path(raw).name)
+            source_home = Path.home() / ".codex"
+            for name in ("auth.json", "config.toml"):
+                source = source_home / name
+                if source.exists():
+                    shutil.copy(source, codex_home / name)
+            env = dict(os.environ)
+            env["CODEX_HOME"] = str(codex_home)
+            try:
+                ok, detail = probe_mod.probe_codex_in_env(
+                    result["session_id"], env=env)
+            except probe_mod.ProbeTimeout as error:
+                ok, detail = False, str(error)
+            return ok, (f"(临时 CODEX_HOME 完整树探测 {result['session_id']}，已清理)\n"
+                        f"{detail}")
+    # OpenCode 的交付副本保持不动，再 import 一份影子后探测并删除。
+    shadow_doc = impl.load(result["session_id"])
+    shadow = impl.save_copy(shadow_doc)
+    try:
+        cwd = shadow_doc.data.get("info", {}).get("directory") or "."
+        ok, detail = run_probe("opencode", shadow["session_id"], cwd)
+        return ok, f"(影子副本 {shadow['session_id']} 已探测并清理)\n{detail}"
+    finally:
+        impl.discard(shadow)
 
 
 def _edit_save_as(ref: str, ops: list[dict], probe: bool = False) -> dict:
@@ -1024,6 +1094,7 @@ def list_models(tool: str) -> dict:
 
 # ---------- CLI ----------
 
+
 RPC_METHODS = {
     "scan": lambda p: scan(),
     "env": lambda p: env(),
@@ -1039,12 +1110,16 @@ RPC_METHODS = {
                                  probe_model=p.get("probe_model") or None),
     "handoff": lambda p: handoff(p["src"], p["ref"], p["dst"],
                                  cwd=p.get("cwd")),
-    "edit_preview": lambda p: edit_preview(p["ref"], p["ops"]),
+    "edit_capabilities": lambda p: edit_capabilities(p["tool"]),
+    "edit_preview": lambda p: edit_preview(p["ref"], p["ops"],
+                                            tool=p.get("tool", "claude")),
     "edit_apply": lambda p: edit_apply(p["ref"], p["ops"],
-                                       probe=p.get("probe", False),
-                                       save_as=p.get("save_as", False)),
+                                        probe=p.get("probe", False),
+                                        save_as=p.get("save_as", False),
+                                        tool=p.get("tool", "claude")),
     "snapshot_restore": lambda p: snapshot_restore(
-        p["session"], run_probe_after=p.get("probe", False)),
+        p["session"], run_probe_after=p.get("probe", False),
+        tool=p.get("tool", "claude")),
     "snapshot_delete": lambda p: snapshot_delete(p["path"]),
 }
 

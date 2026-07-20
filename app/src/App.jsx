@@ -44,6 +44,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [applying, setApplying] = useState(false);
   const [scope, setScope] = useState(null);
+  const [editCaps, setEditCaps] = useState(null);
 
   // ----- 迁移 / 快照 -----
   const [mig, setMig] = useState(null);         // {scope}
@@ -110,6 +111,11 @@ export default function App() {
     rpc("show", { tool: s.tool, ref: sessionRef(s) })
       .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
       .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
+    setEditCaps(null);
+    rpc("edit_capabilities", { tool: s.tool }).then(caps => {
+      setEditCaps(caps);
+      setSaveMode(caps.save_as ? "saveas" : "inplace");
+    }).catch(() => setEditCaps({ operations: [], inplace: false, save_as: false }));
   };
 
   const cur = selId ? byId[selId] : null;
@@ -201,22 +207,25 @@ export default function App() {
     } else {
       op = { type, n: r.n, label: `改写 第 ${r.n} 轮`, dot: ACCENT, bytes: 0,
         before: "原始用户措辞", after: "改写后的等价指令(可在下方编辑)",
-        text: r.user, uuid: r.uuid };
+        text: r.user, locator: r.locator };
     }
+    const backendOp = type === "delete" ? "delete-turn" : type === "trim" ? "truncate" : "rewrite";
+    const allowed = editCaps?.operation_modes?.[backendOp] || [];
+    if (allowed.length && !allowed.includes(saveMode)) setSaveMode(allowed[0]);
     setOps(v => [...v, { id: `${type}-${r.n}-${Date.now()}`, ...op }]);
   };
   const removeOp = id => setOps(v => v.filter(o => o.id !== id));
   const updateOp = (id, patch) => setOps(v => v.map(o => o.id === id ? { ...o, ...patch } : o));
   const rpcOps = () => ops.map(o =>
-    o.type === "rewrite" ? { op: "rewrite", uuid: o.uuid, text: o.text } : o.rpc);
+    o.type === "rewrite" ? { op: "rewrite", locator: o.locator, text: o.text } : o.rpc);
 
   const detailRef = cur ? sessionRef(cur) : null;
 
   const openDiff = async () => {
     setDiff({ loading: true, preview: null });
-    if (cur?.tool === "claude" && ops.length) {
+    if (cur && ops.length) {
       try {
-        const preview = await rpc("edit_preview", { ref: detailRef, ops: rpcOps() });
+        const preview = await rpc("edit_preview", { tool: cur.tool, ref: detailRef, ops: rpcOps() });
         setDiff(d => d && { ...d, loading: false, preview });
       } catch (e) {
         setDiff(d => d && { ...d, loading: false, preview: null, error: e.message });
@@ -232,14 +241,14 @@ export default function App() {
     setToast({ kind: "run", title: "正在应用…",
       desc: `创建快照 → 应用操作 → ${probeOn ? "结构验证 + 隔离探针" : "结构验证"}` });
     try {
-      const r = await rpc("edit_apply", { ref: detailRef, ops: rpcOps(),
+      const r = await rpc("edit_apply", { tool: cur.tool, ref: detailRef, ops: rpcOps(),
         probe: probeOn, save_as: saveMode === "saveas" });
       if (r.ok) {
         const verdict = probeOn ? "隔离探针通过" : "结构验证通过";
         setToast({ kind: "ok",
           title: (saveMode === "saveas" ? "已另存为新会话 · " : "已原地应用 · ") + verdict,
-          desc: (saveMode === "saveas" ? "原会话保持不变," : "原会话已更新,") +
-            "快照已保存到「快照与还原」。" });
+          desc: saveMode === "saveas" ? "原会话保持不变。" :
+            "原会话已更新，快照已保存到「快照与还原」。" });
         setOps([]); setMode("view");
         doScan(); loadSnaps();
         if (saveMode === "inplace") select(selId);
@@ -261,7 +270,8 @@ export default function App() {
     setSnapRestoring(v => ({ ...v, [snap.id]: true }));
     try {
       const r = await rpc("snapshot_restore",
-        { session: snap.session, probe: !!settings.runtimeProbe });
+        { session: snap.source || snap.session, tool: snap.tool,
+          probe: !!settings.runtimeProbe });
       setSnapResults(v => ({ ...v, [snap.id]: r }));
       setSnapRestoring(v => ({ ...v, [snap.id]: r.ok ? "done" : false }));
       if (!r.ok) setToast({ kind: "fail", title: "还原未生效", desc: r.error || "验收未通过,已保持当前状态" });
@@ -533,6 +543,7 @@ export default function App() {
             scope={scope} setScope={setScope}
             ops={ops} addOp={addOp} removeOp={removeOp} updateOp={updateOp}
             saveMode={saveMode} setSaveMode={setSaveMode}
+            editCaps={editCaps}
             onOpenDiff={openDiff} onApply={applyEdit} applying={applying}
             onOpenMigrate={sc => setMig({ scope: sc ?? scope })} />
         ) : (

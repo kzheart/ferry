@@ -21,13 +21,16 @@ import sys
 PROBE_PROMPT = "Reply with exactly: PROBE_OK"
 
 
-def _run(cmd, cwd=None, timeout=180):
+class ProbeTimeout(RuntimeError):
+    pass
+
+
+def _run(cmd, cwd=None, timeout=180, env=None):
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True,
-                              text=True, timeout=timeout)
+                              text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
-        print(f"探针超时: {' '.join(cmd)}", file=sys.stderr)
-        sys.exit(3)
+        raise ProbeTimeout(f"探针超时: {' '.join(cmd)}")
 
 
 def _clip(text: str, limit: int = 8000) -> str:
@@ -92,6 +95,18 @@ def probe_codex(sid, _dirpath, model=None):
     return ok, _clip(detail)
 
 
+def probe_codex_in_env(sid, model=None, env=None):
+    """在独立 CODEX_HOME 中运行 Codex 探针。"""
+    cmd = ["codex", "exec", "resume", sid, "--skip-git-repo-check"]
+    if model:
+        cmd += ["-m", model]
+    cmd.append(PROBE_PROMPT)
+    r = _run(cmd, env=env)
+    ok = r.returncode == 0
+    detail = (r.stdout if ok else (r.stderr or r.stdout)) or ""
+    return ok, _clip(detail or f"codex 退出码 {r.returncode}")
+
+
 def probe_opencode(sid, dirpath, model=None):
     cmd = ["opencode", "run", "-s", sid]
     if model:
@@ -111,7 +126,17 @@ PROBES = {"claude": probe_claude, "codex": probe_codex,
           "opencode": probe_opencode}
 
 
-def main():
+def run_probe(tool: str, session_id: str, dirpath: str | None = None,
+              model: str | None = None) -> tuple[bool, str]:
+    """运行指定工具探针，供引擎进程内调用。"""
+    if tool not in PROBES:
+        raise ValueError(f"未知工具: {tool}")
+    if tool == "claude" and not dirpath:
+        raise ValueError("claude 探针必须提供 --dir(项目目录)")
+    return PROBES[tool](session_id, dirpath, model)
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("tool", choices=PROBES)
     ap.add_argument("session_id")
@@ -119,14 +144,18 @@ def main():
                     help="claude: 项目目录(必填); opencode: 会话目录")
     ap.add_argument("--model", default=None,
                     help="探针使用的模型(各 CLI 原生 --model/-m)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if args.tool == "claude" and not args.dir:
         ap.error("claude 探针必须提供 --dir(项目目录)")
-    ok, detail = PROBES[args.tool](args.session_id, args.dir, args.model)
+    try:
+        ok, detail = run_probe(args.tool, args.session_id, args.dir, args.model)
+    except ProbeTimeout as error:
+        print(str(error), file=sys.stderr)
+        return 3
     tag = "PASS" if ok else "FAIL"
     print(f"[{tag}] {args.tool} {args.session_id}\n{detail}")
-    sys.exit(0 if ok else 1)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
