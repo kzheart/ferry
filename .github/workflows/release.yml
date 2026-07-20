@@ -33,24 +33,10 @@ jobs:
         env:
           UPDATER_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
         shell: python
         run: |
           import os
-          required = [name for name, value in os.environ.items() if name in {
-            "UPDATER_PRIVATE_KEY", "UPDATER_PUBLIC_KEY", "APPLE_CERTIFICATE",
-            "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY", "APPLE_ID",
-            "APPLE_PASSWORD", "APPLE_TEAM_ID", "WINDOWS_CERTIFICATE",
-            "WINDOWS_CERTIFICATE_PASSWORD", "WINDOWS_CERTIFICATE_THUMBPRINT"
-          } and not value]
+          required = [name for name in ("UPDATER_PRIVATE_KEY", "UPDATER_PUBLIC_KEY") if not os.environ.get(name)]
           if required:
               raise SystemExit("missing release secrets: " + ", ".join(sorted(required)))
 
@@ -102,14 +88,56 @@ jobs:
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
         env:
           BUILD_TARGET: ${{ matrix.target }}
+      - name: Detect optional system signing configuration
+        id: system-signing
+        shell: python
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: |
+          import os
+
+          apple = all(os.environ.get(name) for name in (
+              "APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY",
+              "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID",
+          ))
+          windows = all(os.environ.get(name) for name in (
+              "WINDOWS_CERTIFICATE", "WINDOWS_CERTIFICATE_PASSWORD", "WINDOWS_CERTIFICATE_THUMBPRINT",
+          ))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"apple={'true' if apple else 'false'}\n")
+              output.write(f"windows={'true' if windows else 'false'}\n")
+
+          platform = os.environ["RUNNER_OS"]
+          signed = apple if platform == "macOS" else windows
+          if not signed:
+              warning = (
+                  f"::warning::{platform} system signing is disabled because its complete certificate "
+                  "and identity secret set is not configured. The updater artifacts remain signed, but "
+                  "users may see Gatekeeper or SmartScreen warnings."
+              )
+              print(warning)
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+                  summary.write(
+                      f"## {platform} system signing disabled\n\n"
+                      "The installer/application is not system-signed. The Tauri updater artifacts are still "
+                      "cryptographically signed, but users may see Apple Gatekeeper or Windows SmartScreen warnings.\n"
+                  )
       - name: Import macOS signing certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.system-signing.outputs.apple == 'true'
         uses: apple-actions/import-codesign-certs@63fff01cd422d4b7b855d40ca1e9d34d2de9427d # v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       - name: Import Windows signing certificate
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.system-signing.outputs.windows == 'true'
         shell: pwsh
         env:
           CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -118,7 +146,21 @@ jobs:
           $path = Join-Path $env:RUNNER_TEMP "codesign.pfx"
           [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:CERTIFICATE))
           Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:CERTIFICATE_PASSWORD -AsPlainText -Force) | Out-Null
-      - name: Generate repository-specific release config
+      - name: Generate release config without Windows certificate
+        if: runner.os != 'Windows' || steps.system-signing.outputs.windows != 'true'
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BUNDLE_TARGETS: ${{ matrix.bundle-targets }}
+          UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: >-
+          python scripts/release.py config
+          --output app/src-tauri/tauri.release.conf.json
+          --repository "$REPOSITORY"
+          --pubkey "$UPDATER_PUBLIC_KEY"
+          --targets $BUNDLE_TARGETS
+        shell: bash
+      - name: Generate release config with Windows certificate
+        if: runner.os == 'Windows' && steps.system-signing.outputs.windows == 'true'
         env:
           REPOSITORY: ${{ github.repository }}
           BUNDLE_TARGETS: ${{ matrix.bundle-targets }}
@@ -132,7 +174,16 @@ jobs:
           --targets $BUNDLE_TARGETS
           --windows-thumbprint "$WINDOWS_THUMBPRINT"
         shell: bash
-      - name: Build signed Tauri bundles and updater artifacts
+      - name: Build Tauri bundles and signed updater artifacts
+        if: runner.os != 'macOS' || steps.system-signing.outputs.apple != 'true'
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build -- --target "$BUILD_TARGET" --config src-tauri/tauri.release.conf.json
+        working-directory: app
+      - name: Build Apple-signed Tauri bundles and signed updater artifacts
+        if: runner.os == 'macOS' && steps.system-signing.outputs.apple == 'true'
         env:
           BUILD_TARGET: ${{ matrix.target }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

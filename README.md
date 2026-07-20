@@ -31,3 +31,7 @@ python3.12 -m pip install -r requirements-build.txt
 ```
 
 也可直接使用源码入口：`python3 sidecar.py health` 或 `python3 -m engine.api health`。
+
+## 发布签名
+
+Release workflow 始终要求 `TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_UPDATER_PUBLIC_KEY`，私钥密码可留空；updater 包及 `latest.json` 中的签名不会因系统签名缺失而关闭。Apple Developer ID 与 Windows Authenticode secrets 是可选的，但必须分别完整配置才会启用对应平台的证书导入和系统签名。未配置时仍可发布，macOS Gatekeeper 或 Windows SmartScreen 可能向用户显示警告。

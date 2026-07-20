@@ -26,9 +26,9 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://example.invalid/ferry-updater-placeholder/{{target}}/{{arch}}/{{current_version}}"
+        "https://github.com/kzheart/ferry/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaW5pIHB1YmxpYyBrZXk6IDVFNzFCNjg5OUFEOTBENUMKUldSY0RkbWFpYlp4WGhkZmlQVzE2SUVDalgrRjJCVzNmZ2taV3VCUG1zZ3RmaUNMN3JBblRGT3IK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaW5pIHB1YmxpYyBrZXk6IDNGNzQzRkFEQ0RDQUFEMDEKUldRQnJjck5yVDkwUDhydnZwWTY0Yk1ITHZKeHpZQS93WlhIeWgyaHJvVzBySEp2bjNKVXdLTXMK"
     }
   },
   "bundle": {
