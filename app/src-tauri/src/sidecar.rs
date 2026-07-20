@@ -8,6 +8,7 @@ static ENGINE_HANDSHAKE: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
 /// 否则取本 crate 上两级(app/src-tauri → 仓库根,开发形态)。
+#[cfg(debug_assertions)]
 fn repo_root() -> PathBuf {
     if let Ok(p) = std::env::var("FERRY_REPO") {
         return PathBuf::from(p);
