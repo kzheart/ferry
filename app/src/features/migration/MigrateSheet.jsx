@@ -1,5 +1,6 @@
 // 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { openTerminal, rpc } from "../../api/transport/rpc.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
@@ -10,9 +11,13 @@ import { probeFailed, probeText } from "../../api/contract/events.js";
 
 const ORDER = ["target", "preview", "confirm", "result"];
 
-function StepsHeader({ step }) {
-  const labels = { target: "目标", preview: "预演", confirm: "确认",
-    result: step === "writing" ? "写入" : "结果" };
+function StepsHeader({ step, t }) {
+  const labels = {
+    target: t("migration:steps.target"),
+    preview: t("migration:steps.preview"),
+    confirm: t("migration:steps.confirm"),
+    result: step === "writing" ? t("migration:steps.writing") : t("migration:steps.result"),
+  };
   const cur = ORDER.indexOf(step === "writing" ? "result" : step);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: 6 }}>
@@ -27,7 +32,7 @@ function StepsHeader({ step }) {
   );
 }
 
-function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, onCustom }) {
+function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, onCustom, t }) {
   const models = catalog?.models || [];
   const filterable = models.length > 12;
   const [q, setQ] = useState("");
@@ -35,33 +40,32 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
   const shown = !filterable || !qn ? models
     : models.filter(m => (m.id + " " + (m.label || "")).toLowerCase().includes(qn));
   const srcHint = {
-    cli: "来自目标 CLI 实时列表",
-    alias: "Claude 文档 alias(无官方 models 命令)",
-    fallback: "发现失败,使用内置回退",
-    cache: "本地缓存",
-    user: "用户配置",
+    cli: t("migration:probeModel.sourceCli"),
+    alias: t("migration:probeModel.sourceAlias"),
+    fallback: t("migration:probeModel.sourceFallback"),
+    cache: t("migration:probeModel.sourceCache"),
+    user: t("migration:probeModel.sourceUser"),
   }[catalog?.source] || "";
 
   return (
     <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>探针模型</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:probeModel.title")}</div>
         <div style={{ fontSize: 11, color: "var(--tx4)" }}>
-          {loading ? "加载中…" : srcHint}
+          {loading ? t("migration:probeModel.loading") : srcHint}
         </div>
       </div>
       <div style={{ fontSize: 11.5, color: "var(--tx3b)", marginBottom: 10, lineHeight: 1.45 }}>
-        验收时用该模型 resume 并发送极小探测消息。留空则用目标工具默认模型。
-        也可在 <code className="mono">~/.resume-harness/models.json</code> 追加自定义 id。
+        {t("migration:probeModel.hint")}
       </div>
-      {err && <div style={{ fontSize: 11.5, color: "var(--err-deep)", marginBottom: 8 }}>列表加载失败:{err}</div>}
+      {err && <div style={{ fontSize: 11.5, color: "var(--err-deep)", marginBottom: 8 }}>{t("migration:probeModel.loadFailed", { error: err })}</div>}
       {catalog?.error && !err && (
         <div style={{ fontSize: 11.5, color: "var(--err-mut)", marginBottom: 8 }}>
-          动态发现告警:{catalog.error}
+          {t("migration:probeModel.discoverWarn", { error: catalog.error })}
         </div>
       )}
       {filterable && (
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="筛选模型…"
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("migration:probeModel.filterPlaceholder")}
           style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
             padding: "0 10px", fontSize: 12.5, marginBottom: 8, outline: "none" }} />
       )}
@@ -69,14 +73,14 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
         disabled={loading}
         style={{ width: "100%", height: 34, border: "1px solid var(--line)", borderRadius: 8,
           padding: "0 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--tx2)" }}>
-        <option value="">工具默认{catalog?.default ? ` (${catalog.default})` : ""}</option>
+        <option value="">{t("migration:probeModel.toolDefault", { suffix: catalog?.default ? ` (${catalog.default})` : "" })}</option>
         {shown.map(m => (
           <option key={m.id} value={m.id}>{m.label || m.id}</option>
         ))}
       </select>
       {catalog?.allow_custom !== false && (
         <input value={custom} onChange={e => onCustom(e.target.value)}
-          placeholder="或手填模型 id(优先于上方选择)"
+          placeholder={t("migration:probeModel.customPlaceholder")}
           style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
             padding: "0 10px", fontSize: 12.5, marginTop: 8, outline: "none" }} />
       )}
@@ -85,7 +89,8 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
 }
 
 export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, onDone }) {
-  const targets = TOOLS.filter(t => t !== meta.tool);
+  const { t } = useTranslation();
+  const targets = TOOLS.filter(t2 => t2 !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0]);
   const [probeOn, setProbeOn] = useState(!!defaultProbe);
@@ -106,7 +111,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   const ref = sessionRef(meta);
 
   const d = dry?.[target];
-  const scopeLabel = scope ? `仅迁移到第 ${scope} 轮` : "完整会话";
+  const scopeLabel = scope ? t("migration:target.scopeToTurn", { n: scope }) : t("migration:target.scopeFull");
   const resolvedProbeModel = (probeCustom[target] || "").trim()
     || (probeModel[target] || "").trim()
     || undefined;
@@ -181,23 +186,24 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     body = (
       <>
         <div style={{ fontSize: 13, color: "var(--tx3b)", marginBottom: 6 }}>
-          源会话 <b style={{ color: "var(--tx2)" }}>{meta.title || meta.id}</b> · {scopeLabel}</div>
+          {t("migration:target.sourceSession")} <b style={{ color: "var(--tx2)" }}>{meta.title || meta.id}</b> · {scopeLabel}</div>
         <div style={{ fontSize: 12, color: "var(--tx4)", marginBottom: 14 }}>
-          选择迁移目标工具(源会话保持只读,不会被修改)</div>
-        {targets.map(t => {
-          const on = target === t;
-          const inst = installed(t);
+          {t("migration:target.chooseHint")}</div>
+        {targets.map(t2 => {
+          const on = target === t2;
+          const inst = installed(t2);
           return (
-            <div key={t} onClick={() => inst && setTarget(t)}
+            <div key={t2} onClick={() => inst && setTarget(t2)}
               style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
                 border: `1.5px solid ${on ? ACCENT : "var(--line3)"}`, background: on ? "var(--acc-soft4)" : "var(--surface)",
                 borderRadius: 10, marginBottom: 9, cursor: inst ? "pointer" : "not-allowed",
                 opacity: inst ? 1 : 0.55 }}>
-              <ToolIcon tool={t} size={32} />
+              <ToolIcon tool={t2} size={32} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t]}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t2]}</div>
                 <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>
-                  {inst ? `v${env[t].version || "?"} · 写入 ${t} 的本地会话存储` : "未检测到安装,无法作为目标"}
+                  {inst ? t("migration:target.installedMeta", { version: env[t2].version || "?", tool: t2 })
+                    : t("migration:target.notInstalled")}
                 </div>
               </div>
               <span style={{ width: 18, height: 18, borderRadius: "50%",
@@ -215,8 +221,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     body = !d ? (
       <div style={{ padding: "60px 0", display: "flex", alignItems: "center", justifyContent: "center",
         gap: 10, color: "var(--tx4)", fontSize: 13 }}>
-        {dryErr ? <span style={{ color: "var(--err-deep)" }}>预演失败:{dryErr}</span>
-          : <><Spinner size={16} /> 正在预演转换、计算损耗…</>}
+        {dryErr ? <span style={{ color: "var(--err-deep)" }}>{t("migration:preview.failed", { error: dryErr })}</span>
+          : <><Spinner size={16} /> {t("migration:preview.loading")}</>}
       </div>
     ) : (
       <>
@@ -228,13 +234,13 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[target]}</span>
         </div>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", marginBottom: 8 }}>
-          损耗预演 · {scopeLabel}</div>
+          {t("migration:preview.lossTitle", { scope: scopeLabel })}</div>
         <div style={{ marginBottom: 16 }}><LossCols loss={d.loss} /></div>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-          <span style={{ color: "var(--tx2)", fontWeight: 600 }}>迁移规模</span>
+          <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{t("migration:preview.scaleLabel")}</span>
           <span className="mono" style={{ color: "var(--tx2)" }}>
-            {d.msg_count} 条消息 · {d.tree_count} 个树节点</span>
+            {t("migration:preview.scaleMeta", { msg: d.msg_count, tree: d.tree_count })}</span>
         </div>
       </>
     );
@@ -242,17 +248,18 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     body = (
       <>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "16px 18px" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 650, marginBottom: 12 }}>确认迁移</div>
+          <div style={{ fontSize: 13.5, fontWeight: 650, marginBottom: 12 }}>{t("migration:confirm.title")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
-            {[["目标", TOOL_NAME[target], true],
-              ["范围", `${scopeLabel}${d ? ` · ${d.msg_count} 条` : ""}`],
-              ["结构验证", "始终执行 · 无模型调用"],
-              ["运行时探针", probeOn
-                ? `开启 · ${resolvedProbeModel || "工具默认模型"}(影子副本)` : "关闭"],
-              ["降级叙述语言", narrLocale === "en" ? "English" : "中文"],
+            {[["target", TOOL_NAME[target], true],
+              ["scope", d ? t("migration:confirm.scopeWithCount", { scope: scopeLabel, n: d.msg_count }) : scopeLabel],
+              ["structureCheck", t("migration:confirm.structureAlways")],
+              ["runtimeProbe", probeOn
+                ? t("migration:confirm.probeOn", { model: resolvedProbeModel || t("migration:confirm.probeOff") })
+                : t("migration:confirm.probeOff")],
+              ["narrLocale", narrLocale === "en" ? t("migration:narrLocale.en") : t("migration:narrLocale.zhCN")],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
-                <span style={{ color: "var(--tx4)", flex: "none" }}>{k}</span>
+                <span style={{ color: "var(--tx4)", flex: "none" }}>{t(`migration:confirm.${k}`)}</span>
                 <span style={{ color: "var(--tx2)", fontWeight: bold ? 600 : 400, textAlign: "right" }}>{v}</span>
               </div>
             ))}
@@ -264,11 +271,10 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
             style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "none",
               marginTop: 1 }}>
             <CheckSquare on={probeOn} accent={ACCENT} fg="#fff" />
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>运行时探针</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:confirm.probeTitle")}</span>
           </label>
           <div style={{ fontSize: 11.5, color: "var(--tx3b)", lineHeight: 1.5 }}>
-            在临时影子会话上真实 resume 验证(需数十秒并消耗一次极小的模型调用,
-            完成后自动清理,不向迁移产物追加任何消息)。关闭时仅做结构验证。</div>
+            {t("migration:confirm.probeDesc")}</div>
         </div>
         {probeOn && (
           <ProbeModelPicker
@@ -279,14 +285,15 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
             custom={probeCustom[target] || ""}
             onSelect={v => setProbeModel(prev => ({ ...prev, [target]: v }))}
             onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
+            t={t}
           />
         )}
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)", flex: "none" }}>
-            降级叙述语言</span>
+            {t("migration:confirm.narrLocale")}</span>
           <div style={{ display: "flex", gap: 14 }}>
-            {[["zh-CN", "中文"], ["en", "English"]].map(([v, l]) => (
+            {[["zh-CN", t("migration:narrLocale.zhCN")], ["en", t("migration:narrLocale.en")]].map(([v, l]) => (
               <label key={v} onClick={() => setNarrLocale(v)}
                 style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                 <RadioDot on={narrLocale === v} accent={ACCENT} />
@@ -295,17 +302,16 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
             ))}
           </div>
           <span style={{ fontSize: 11.5, color: "var(--tx3b)" }}>
-            无法原生迁移的工具调用,以该语言写入目标会话正文</span>
+            {t("migration:confirm.narrLocaleHint")}</span>
         </div>
         <div style={{ fontSize: 12, color: "var(--tx3b)", margin: "14px 0 0", lineHeight: 1.55 }}>
-          Ferry 将写入目标工具,并重读产物做结构验证(节点数、父子关系与层级拓扑)。
-          {probeOn ? "随后在影子副本上运行探针。" : ""}若验收失败,会自动回滚,不在目标保留任何产物。</div>
+          {t("migration:confirm.epilogue", { probe: probeOn ? t("migration:confirm.probeEpilogue") : "" })}</div>
       </>
     );
   } else if (step === "writing") {
     const items = [
-      { label: `写入 ${TOOL_NAME[target]} 会话存储`, state: wroteFirst ? "done" : "spin" },
-      { label: probeOn ? "结构验证 + 隔离探针(影子副本)" : "结构验证(节点 · 拓扑)",
+      { label: t("migration:writing.writeTarget", { tool: TOOL_NAME[target] }), state: wroteFirst ? "done" : "spin" },
+      { label: probeOn ? t("migration:writing.structureProbe") : t("migration:writing.structureOnly"),
         state: wroteFirst ? "spin" : "wait" },
     ];
     body = (
@@ -333,16 +339,16 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
                 strokeLinecap="round" strokeLinejoin="round" /></svg>
           </span>
           <div style={{ fontSize: 15, fontWeight: 650, marginTop: 12 }}>
-            迁移完成 · {result.validation?.runtime?.status === "passed"
-              ? "结构验证与隔离探针通过" : "结构验证通过"}</div>
+            {result.validation?.runtime?.status === "passed"
+              ? t("migration:result.doneBoth") : t("migration:result.doneStructure")}</div>
           <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 5 }}>
-            {result.msg_count} 条消息已写入 {TOOL_NAME[target]},源会话保持不变。</div>
+            {t("migration:result.doneDesc", { n: result.msg_count, tool: TOOL_NAME[target] })}</div>
         </div>
         <div style={{ marginTop: 18 }}>
-          <CmdRow cmd={result.resume} head={`在 ${TOOL_NAME[target]} 中接续`} />
+          <CmdRow cmd={result.resume} head={t("migration:result.handoffIn", { tool: TOOL_NAME[target] })} />
         </div>
         <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12.5 }}
-          onClick={() => openTerminal(result.resume)}>在终端打开</button>
+          onClick={() => openTerminal(result.resume)}>{t("migration:result.openTerminal")}</button>
       </>
     );
   } else if (fail) {
@@ -357,11 +363,11 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
               <line x1="12" y1="4" x2="4" y2="12" stroke="var(--err2)" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>迁移失败 · 验收未通过</div>
+            <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>{t("migration:result.failTitle")}</div>
             <div style={{ fontSize: 12.5, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
-              已自动回滚,未在 {TOOL_NAME[target]} 保留任何产物。源会话完好,你可以改用上下文摘要继续。
+              {t("migration:result.failDesc", { tool: TOOL_NAME[target] })}
               {(result?.probe?.model || result?.probe_model) && (
-                <> · 探针模型 <code className="mono">{result.probe?.model || result.probe_model}</code></>
+                <>{t("migration:result.failDescProbe", { model: result.probe?.model || result.probe_model })}</>
               )}
             </div>
             {(error || probeText(result?.probe)) && (
@@ -375,12 +381,12 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
         </div>
         <button className="fbtn" style={{ width: "100%", height: 36, marginTop: 14, fontSize: 13 }}
           onClick={doHandoff} disabled={handoffBusy}>
-          {handoffBusy ? "正在生成上下文摘要…" : "使用上下文摘要继续"}</button>
+          {handoffBusy ? t("migration:result.handoffBusy") : t("migration:result.useHandoff")}</button>
         {handoff && (
           <div style={{ marginTop: 12, border: "1px solid var(--line3)", borderRadius: 10,
             overflow: "hidden", animation: "ffade .2s ease" }}>
             <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
-              fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>上下文摘要预览</div>
+              fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>{t("migration:result.handoffPreview")}</div>
             <div className="fscroll selectable" style={{ padding: "12px 14px", fontSize: 12,
               color: "var(--tx2b)", lineHeight: 1.6, maxHeight: 180, overflowY: "auto",
               whiteSpace: "pre-wrap" }}>{handoff.preview}</div>
@@ -388,7 +394,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
               borderTop: "1px solid var(--line6)", background: "var(--fill)" }}>
               <code className="mono selectable" style={{ flex: 1, fontSize: 12.5, color: "var(--tx2)",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{handoff.command}</code>
-              <button className="fbtn" onClick={() => openTerminal(handoff.command)}>在终端打开</button>
+              <button className="fbtn" onClick={() => openTerminal(handoff.command)}>{t("migration:result.openTerminal")}</button>
             </div>
           </div>
         )}
@@ -405,8 +411,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     <Sheet width={720} maxHeight={800} onClose={step === "writing" ? undefined : onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 650 }}>迁移会话</div>
-        <StepsHeader step={step} />
+        <div style={{ fontSize: 14.5, fontWeight: 650 }}>{t("migration:sheet.title")}</div>
+        <StepsHeader step={step} t={t} />
         <div style={{ flex: 1 }} />
         {step !== "writing" &&
           <a onClick={onClose} style={{ color: "var(--tx5)", fontSize: 18, lineHeight: 1 }}>×</a>}
@@ -418,17 +424,17 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
       {step !== "writing" && (
         <div style={{ flex: "none", padding: "13px 20px", borderTop: "1px solid var(--line5)",
           display: "flex", alignItems: "center", gap: 10 }}>
-          {canBack && <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={back}>上一步</button>}
+          {canBack && <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={back}>{t("migration:sheet.back")}</button>}
           <div style={{ flex: 1 }} />
           {step !== "result" && (
-            <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onClose}>取消</button>)}
+            <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onClose}>{t("migration:sheet.cancel")}</button>)}
           {step !== "result" ? (
             <button className="fbtn-primary" style={{ height: 34, padding: "0 18px", fontSize: 13 }}
               disabled={!canNext} onClick={next}>
-              {step === "confirm" ? "开始迁移" : "下一步"}</button>
+              {step === "confirm" ? t("migration:sheet.start") : t("migration:sheet.next")}</button>
           ) : (
             <button className="fbtn-primary" style={{ height: 34, padding: "0 18px", fontSize: 13 }}
-              onClick={onClose}>完成</button>
+              onClick={onClose}>{t("migration:sheet.done")}</button>
           )}
         </div>
       )}

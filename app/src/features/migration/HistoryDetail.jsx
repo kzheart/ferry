@@ -19,21 +19,21 @@ export default function HistoryDetail({ h }) {
   const { t } = useTranslation();
   if (!h) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-      color: "var(--tx5)", fontSize: 13 }}>还没有迁移记录 —— 在会话详情里点「迁移…」试试</div>
+      color: "var(--tx5)", fontSize: 13 }}>{t("migration:history.empty")}</div>
   );
   const status = histStatus(h);
   const [stBg, stColor] = ST_STYLE[status] || ST_STYLE[STATUS_CODE.failed];
   const ok = status === STATUS_CODE.success;
   const fail = status === STATUS_CODE.failed;
   const rolled = h.rolled_back;
-  const range = h.max_turn ? `到第 ${h.max_turn} 轮` : "完整会话";
+  const range = h.max_turn ? t("migration:history.rangeToTurn", { n: h.max_turn }) : t("migration:history.rangeFull");
   const probeDetail = probeText(h.probe);
   const probeLines = h.probe
     ? (ok ? probeDetail.split("\n").filter(Boolean).slice(0, 4)
       : probeDetail.split("\n").filter(Boolean))
     : h.validation?.structure
-      ? [h.validation.structure.detail, "运行时探针未执行(默认关闭,可在设置中开启)"]
-      : ["未运行探针验收"];
+      ? [h.validation.structure.detail, t("migration:history.probeNotRunDefault")]
+      : [t("migration:history.probeNotRun")];
   const probeColor = ok ? "var(--ok-deep)" : fail ? "var(--err-deep)" : "var(--tx3b)";
   const probeBg = ok ? "var(--ok-bg)" : fail ? "var(--err-bg)" : "var(--fill3)";
   const probeBorder = ok ? "var(--ok-line)" : fail ? "var(--err-line)" : "var(--line3)";
@@ -60,28 +60,28 @@ export default function HistoryDetail({ h }) {
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px",
           display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--tx4)" }}>迁移范围</span>
-            <span style={{ color: "var(--tx2)" }}>{range}{h.msg_count ? ` · ${h.msg_count} 条` : ""}</span>
+            <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldRange")}</span>
+            <span style={{ color: "var(--tx2)" }}>{h.msg_count ? t("migration:history.rangeWithCount", { range, n: h.msg_count }) : range}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--tx4)" }}>源工具 → 目标工具</span>
+            <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldSrcToDst")}</span>
             <span style={{ color: "var(--tx2)" }}>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
           </div>
           {h.tree_count != null && (
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--tx4)" }}>会话树</span>
-              <span style={{ color: "var(--tx2)" }}>{h.tree_count} 个节点{h.topology?.detail ? ` · ${h.topology.detail}` : ""}</span>
+              <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldTree")}</span>
+              <span style={{ color: "var(--tx2)" }}>{t("migration:history.treeMeta", { n: h.tree_count, detail: h.topology?.detail ? ` · ${h.topology.detail}` : "" })}</span>
             </div>
           )}
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "18px 0 8px" }}>损耗报告</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "18px 0 8px" }}>{t("migration:history.lossReport")}</div>
         <LossCols loss={h.loss} />
 
         <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,
           borderRadius: 10, padding: "13px 15px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>验收结果</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>{t("migration:history.verdict")}</div>
             {probeModel && (
               <div className="mono" style={{ fontSize: 11, color: "var(--tx3b)" }}>{probeModel}</div>
             )}
@@ -102,14 +102,14 @@ export default function HistoryDetail({ h }) {
         {rolled && (
           <div style={{ marginTop: 14, border: "1px solid var(--err-line)", background: "var(--err-bg)",
             borderRadius: 10, padding: "13px 15px", fontSize: 12.5, color: "var(--err-text)", lineHeight: 1.55 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>回滚信息</div>
-            探针未通过,Ferry 已自动回滚,未在 {TOOL_NAME[h.dst]} 保留任何产物。源会话完好,可重试或改用上下文摘要继续。
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("migration:history.rollbackTitle")}</div>
+            {t("migration:history.rollbackDesc", { tool: TOOL_NAME[h.dst] })}
           </div>
         )}
 
         {ok && h.resume && (
           <div style={{ marginTop: 14 }}>
-            <CmdRow cmd={h.resume} head={`交付 · 在 ${TOOL_NAME[h.dst]} 中接续`} />
+            <CmdRow cmd={h.resume} head={t("migration:history.handoffIn", { tool: TOOL_NAME[h.dst] })} />
           </div>
         )}
       </div>

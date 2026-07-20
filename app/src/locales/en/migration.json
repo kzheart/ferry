@@ -1,0 +1,103 @@
+{
+  "steps": {
+    "target": "Target",
+    "preview": "Preview",
+    "confirm": "Confirm",
+    "writing": "Writing",
+    "result": "Result"
+  },
+  "probeModel": {
+    "title": "Probe model",
+    "loading": "Loading…",
+    "sourceCli": "Live list from target CLI",
+    "sourceAlias": "Claude doc alias (no official models command)",
+    "sourceFallback": "Discovery failed, using built-in fallback",
+    "sourceCache": "Local cache",
+    "sourceUser": "User config",
+    "hint": "Resumes with this model and sends a tiny probe message during verification. Leave empty to use the target tool's default model. You can also append custom ids in ~/.resume-harness/models.json.",
+    "loadFailed": "Failed to load list: {{error}}",
+    "discoverWarn": "Dynamic discovery warning: {{error}}",
+    "filterPlaceholder": "Filter models…",
+    "toolDefault": "Tool default{{suffix}}",
+    "customPlaceholder": "Or enter a model id manually (overrides the selection above)"
+  },
+  "target": {
+    "sourceSession": "Source session",
+    "scopeFull": "Full session",
+    "scopeToTurn": "Migrate only up to turn {{n}}",
+    "chooseHint": "Choose the migration target tool (source session stays read-only and is not modified)",
+    "notInstalled": "Not detected, cannot be used as a target",
+    "installedMeta": "v{{version}} · writes to {{tool}} local session store"
+  },
+  "preview": {
+    "failed": "Preview failed: {{error}}",
+    "loading": "Previewing conversion and computing losses…",
+    "lossTitle": "Loss preview · {{scope}}",
+    "scaleLabel": "Migration scale",
+    "scaleMeta": "{{msg}} messages · {{tree}} tree nodes"
+  },
+  "confirm": {
+    "title": "Confirm migration",
+    "target": "Target",
+    "scope": "Scope",
+    "scopeWithCount": "{{scope}} · {{n}} msgs",
+    "structureCheck": "Structure check",
+    "runtimeProbe": "Runtime probe",
+    "narrLocale": "Degraded narration language",
+    "structureAlways": "Always performed · no model calls",
+    "probeOn": "On · {{model}} (shadow copy)",
+    "probeOff": "Off",
+    "narrLocaleHint": "Tool calls that cannot be migrated natively are written into the target session body in this language",
+    "probeTitle": "Runtime probe",
+    "probeDesc": "Performs a real resume on a temporary shadow session for verification (takes tens of seconds and consumes one tiny model call; cleaned up automatically, no messages appended to the migration artifact). When off, only structure validation is performed.",
+    "epilogue": "Ferry will write to the target tool and re-read the artifact for structure validation (node count, parent-child relationships, and topology). {{probe}}If verification fails, it rolls back automatically and leaves nothing in the target.",
+    "probeEpilogue": "Then runs the probe on a shadow copy."
+  },
+  "writing": {
+    "writeTarget": "Writing to {{tool}} session store",
+    "structureProbe": "Structure validation + isolated probe (shadow copy)",
+    "structureOnly": "Structure validation (nodes · topology)"
+  },
+  "result": {
+    "doneBoth": "Migration complete · structure validation and isolated probe passed",
+    "doneStructure": "Migration complete · structure validation passed",
+    "doneDesc": "{{n}} messages written to {{tool}}, source session unchanged.",
+    "handoffIn": "Continue in {{tool}}",
+    "openTerminal": "Open in terminal",
+    "failTitle": "Migration failed · verification did not pass",
+    "failDesc": "Rolled back automatically, no artifacts kept in {{tool}}. Source session intact; you can retry or continue with a context summary.",
+    "failDescProbe": " · probe model {{model}}",
+    "useHandoff": "Continue with context summary",
+    "handoffBusy": "Generating context summary…",
+    "handoffPreview": "Context summary preview"
+  },
+  "sheet": {
+    "title": "Migrate session",
+    "back": "Back",
+    "cancel": "Cancel",
+    "start": "Start migration",
+    "next": "Next",
+    "done": "Done"
+  },
+  "narrLocale": {
+    "zhCN": "中文",
+    "en": "English"
+  },
+  "history": {
+    "empty": "No migration records yet — click \"Migrate…\" in a session detail",
+    "rangeToTurn": "Up to turn {{n}}",
+    "rangeFull": "Full session",
+    "rangeWithCount": "{{range}} · {{n}} msgs",
+    "fieldRange": "Migration scope",
+    "fieldSrcToDst": "Source tool → Target tool",
+    "fieldTree": "Session tree",
+    "treeMeta": "{{n}} nodes{{detail}}",
+    "lossReport": "Loss report",
+    "verdict": "Verification result",
+    "probeNotRunDefault": "Runtime probe not executed (off by default, can be enabled in settings)",
+    "probeNotRun": "Probe verification not run",
+    "rollbackTitle": "Rollback info",
+    "rollbackDesc": "Probe did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. Source session intact; you can retry or continue with a context summary.",
+    "handoffIn": "Delivered · continue in {{tool}}"
+  }
+}
