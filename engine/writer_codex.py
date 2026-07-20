@@ -13,8 +13,9 @@ import uuid
 from pathlib import Path
 
 from .model import Session
+from .resources import resource_path
 
-GOLDEN = Path(__file__).resolve().parent.parent / "golden" / "codex"
+GOLDEN = resource_path("golden", "codex")
 
 
 def _uuid7() -> str:

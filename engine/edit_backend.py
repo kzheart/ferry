@@ -1,7 +1,7 @@
 """可扩展的原生会话编辑后端。
 
 通用层只编排 preview/apply/save-as；每个后端负责原生记录闭包、校验与落盘。
-新增 coding agent 时实现 ``EditBackend`` 并注册到 ``BACKENDS`` 即可。
+新增 coding agent 时实现 ``EditBackend`` 并组合进工具 adapter 即可。
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import codex_native, convert, edit as claude_edit, opencode_api, rw_opencode
+from . import codex_native, edit as claude_edit, opencode_api, rw_opencode
 
 
 @dataclass
@@ -174,7 +174,15 @@ class CodexBackend(EditBackend):
         self._store_factory = store_factory
 
     def load(self, ref):
-        path = Path(convert.resolve_ref("codex", ref))
+        if Path(ref).exists():
+            path = Path(ref)
+        else:
+            import glob
+            hits = glob.glob(os.path.expanduser(
+                f"~/.codex/sessions/*/*/*/rollout-*-{ref}.jsonl"))
+            if not hits:
+                raise ValueError(f"找不到 codex 会话: {ref}")
+            path = Path(hits[0])
         raw = path.read_bytes()
         records = [json.loads(line) for line in raw.decode().splitlines()
                    if line.strip()]
@@ -554,45 +562,3 @@ class OpenCodeBackend(EditBackend):
             ids = [result["session_id"]]
         for sid in ids:
             rw_opencode._oc(["session", "delete", sid])
-
-
-BACKENDS = {backend.name: backend for backend in (
-    ClaudeBackend(), CodexBackend(), OpenCodeBackend())}
-
-
-def backend(tool: str) -> EditBackend:
-    try:
-        return BACKENDS[tool]
-    except KeyError as error:
-        raise ValueError(f"{tool} 尚未实现会话编辑后端") from error
-
-
-def preview(tool: str, ref: str, ops: list[dict]) -> dict:
-    impl = backend(tool)
-    doc = impl.load(ref)
-    before = impl.stats(doc)
-    notes = impl.apply_ops(doc, ops)
-    impl.validate(doc)
-    return {"before": before, "after": impl.stats(doc), "notes": notes,
-            "revision": doc.revision, "capabilities": impl.capabilities()}
-
-
-def apply(tool: str, ref: str, ops: list[dict], save_as: bool) -> tuple[dict, EditBackend, EditDocument, Path | None]:
-    impl = backend(tool)
-    if not impl.supports_mode(ops, save_as):
-        mode = "另存为" if save_as else "原地编辑"
-        raise ValueError(f"{tool} 不支持以{mode}执行当前操作组合")
-    doc = impl.load(ref)
-    notes = impl.apply_ops(doc, ops)
-    impl.validate(doc)
-    snapshot = None if save_as else impl.snapshot(doc)
-    try:
-        result = impl.save_copy(doc) if save_as else impl.commit(doc)
-        result.update(ok=True, notes=notes, revision=doc.revision)
-        if snapshot:
-            result["snapshot"] = str(snapshot)
-        return result, impl, doc, snapshot
-    except Exception:
-        if snapshot:
-            impl.restore_snapshot(snapshot, doc)
-        raise

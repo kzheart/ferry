@@ -1,0 +1,5 @@
+# Build with CPython 3.12 for the supported sidecar baseline.
+pyinstaller==6.14.2
+pyinstaller-hooks-contrib==2026.6
+altgraph==0.17.5
+macholib==1.16.4

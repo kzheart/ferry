@@ -13,8 +13,8 @@ export async function rpc(method, params) {
   return j.result;
 }
 
-export const openTerminal = (command) =>
-  inTauri() ? invoke("open_terminal", { command }) : Promise.resolve();
+export const openTerminal = (launch) =>
+  inTauri() ? invoke("open_terminal", { launch }) : Promise.resolve();
 
 export const TOOL_NAME = { claude: "Claude Code", codex: "Codex CLI", opencode: "OpenCode" };
 export const TOOLS = ["claude", "codex", "opencode"];

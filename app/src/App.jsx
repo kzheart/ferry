@@ -13,6 +13,7 @@ import SettingsPage from "./overlays/Settings.jsx";
 import { DiffSheet, Guide, HistoryFilter, InplaceConfirm,
   LibraryFilter, SnapFilter, SnapRestoreConfirm, Toast } from "./overlays/Overlays.jsx";
 import { useSettings } from "./settings.js";
+import { useAppUpdater } from "./updater.js";
 
 const TRIM_THRESHOLD = 4096;
 const roundBytes = r => (r.user?.length || 0) + r.ai.join("").length +
@@ -68,6 +69,7 @@ export default function App() {
   const [popover, setPopover] = useState(null); // 'lib'|'hist'|'snap'
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
+  const updater = useAppUpdater(settings.autoCheckUpdates);
   const [railTip, setRailTip] = useState(null);  // {label, top}
   const tipTimer = useRef(null);
   const [guideStep, setGuideStep] = useState(0);
@@ -580,6 +582,7 @@ export default function App() {
           whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}
       {settingsOpen && (
         <SettingsPage settings={settings} setSettings={setSettings}
+          updater={updater}
           scan={scan} env={env} scanning={scanning} onRescan={doScan}
           guideSeen={guideSeen}
           onOpenGuide={() => { setSettingsOpen(false); openGuide(); }}

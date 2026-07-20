@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 
 const KEY = "ferry-settings";
 
-export const DEFAULTS = { theme: "light", reduceMotion: false, runtimeProbe: false };
+export const DEFAULTS = {
+  theme: "light",
+  reduceMotion: false,
+  runtimeProbe: false,
+  autoCheckUpdates: true,
+};
 
 function load() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
@@ -27,8 +32,7 @@ export function useSettings() {
   const dark = s.theme === "dark" || (s.theme === "system" && sysDark);
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(
-      { theme: s.theme, reduceMotion: s.reduceMotion, runtimeProbe: s.runtimeProbe }));
+    localStorage.setItem(KEY, JSON.stringify(s));
     const root = document.documentElement;
     root.dataset.reduce = s.reduceMotion ? "1" : "0";
     root.dataset.theme = dark ? "dark" : "light";

@@ -14,10 +14,11 @@ from pathlib import Path
 
 from .model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from .reasoning import visible_text
+from .resources import resource_path
 
 TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
             "write": "fs.write", "edit": "fs.edit"}
-GOLDEN = Path(__file__).resolve().parent.parent / "golden" / "opencode"
+GOLDEN = resource_path("golden", "opencode")
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
 
@@ -51,6 +52,21 @@ def _oc_export(session_id: str) -> dict:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(6)}{secrets.token_urlsafe(12)[:14]}"
+
+
+def _export_from_capture(capture: dict) -> dict:
+    """把 golden 中的数据库行快照还原为官方 export 形状。"""
+    info = json.loads(capture["session"]["data"]) \
+        if "data" in capture["session"] else dict(capture["session"])
+    parts = {}
+    for row in capture.get("parts", []):
+        part = json.loads(row["data"])
+        parts.setdefault(row["message_id"], []).append(part)
+    messages = []
+    for row in capture.get("messages", []):
+        messages.append({"info": json.loads(row["data"]),
+                         "parts": parts.get(row["id"], [])})
+    return {"info": info, "messages": messages}
 
 
 # ---------- reader ----------
@@ -196,9 +212,13 @@ def _template():
     versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
     if not versions:
         raise RuntimeError("缺少 golden/opencode 样本")
-    manifest = json.loads(
-        (versions[-1] / "case-02-tools" / "manifest.json").read_text())
-    data = _oc_export(manifest["session_id"])
+    sample = versions[-1] / "case-02-tools"
+    captured = sample / "session.json"
+    if captured.exists():
+        data = _export_from_capture(json.loads(captured.read_text()))
+    else:
+        manifest = json.loads((sample / "manifest.json").read_text())
+        data = _oc_export(manifest["session_id"])
     tpl = {"info": data["info"]}
     for m in data["messages"]:
         role = m["info"].get("role")

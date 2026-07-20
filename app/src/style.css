@@ -334,3 +334,44 @@ input { user-select: text; }
   transition-duration: .001s !important;
   scroll-behavior: auto !important;
 }
+/* 应用内更新沿用 Ferry 的中性色与细线层级。 */
+.update-progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill4);
+}
+.update-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .18s ease;
+}
+.update-progress.indeterminate > span {
+  width: 42%;
+  animation: update-scan 1.15s ease-in-out infinite;
+}
+@keyframes update-scan {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(260%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-progress > span { transition: none; }
+  .update-progress.indeterminate > span { animation-duration: 2.4s; }
+}
+html[data-reduce="1"] .update-progress > span { transition: none; }
+html[data-reduce="1"] .update-progress.indeterminate > span { animation: none; width: 100%; opacity: .45; }
+@media (max-width: 700px) {
+  .settings-sheet { flex-direction: column; }
+  .settings-sheet > div:first-child {
+    width: auto !important;
+    padding: 10px 12px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-sheet > div:first-child > div:nth-child(2) { flex-direction: row !important; overflow-x: auto; }
+  .settings-sheet > div:first-child button { flex: none; }
+  .update-actions { width: 100%; }
+}

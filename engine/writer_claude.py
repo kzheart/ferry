@@ -6,8 +6,9 @@ import uuid
 from pathlib import Path
 
 from .model import AgentEdge, Session, ToolCall
+from .resources import resource_path
 
-GOLDEN = Path(__file__).resolve().parent.parent / "golden" / "claude"
+GOLDEN = resource_path("golden", "claude")
 
 _OP_TOOLS = {
     "shell.exec": ("Bash", lambda i: {"command": i.get("command", "")}),
