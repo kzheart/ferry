@@ -90,7 +90,7 @@ export function LibraryList({ groups, empty, onClear }) {
       {g.expanded && (
         <div style={{ animation: "fslide .16s ease" }}>
           {g.rows.map(r => (
-            <div key={r.id} onClick={r.onClick} title={r.dir}
+            <div key={r.id} onClick={r.onClick} onContextMenu={r.onContext} title={r.dir}
               className={r.selected ? undefined : "hov-item"}
               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
                 borderRadius: 8, cursor: "pointer", transition: "background .12s ease,box-shadow .12s ease",

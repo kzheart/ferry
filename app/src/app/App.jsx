@@ -1,8 +1,8 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
-import { rpc } from "../api/transport/rpc.js";
+import { canReveal, openTerminal, revealPath, rpc } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
-import { ACCENT } from "../domain/tools/toolDisplay.js";
+import { ACCENT, resumeCommand } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { histStatus } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
@@ -13,8 +13,9 @@ import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
 import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
-import { DiffSheet, Guide, HistoryFilter, InplaceConfirm,
-  LibraryFilter, SnapFilter, SnapRestoreConfirm, Toast } from "../components/ui/Overlays.jsx";
+import { ContextMenu, DiffSheet, Guide, HistoryFilter, InplaceConfirm,
+  LibraryFilter, SessionDeleteConfirm, SnapFilter, SnapRestoreConfirm,
+  Toast } from "../components/ui/Overlays.jsx";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
@@ -52,6 +53,9 @@ export default function App() {
   const [snapF, setSnapF] = useState(
     { src: [...TOOLS], reason: "all", session: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'|'snap'
+  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id}
+  const [delConfirm, setDelConfirm] = useState(null);
+  const pendingEdit = useRef(null);             // 右键"会话编辑"等数据加载完再进入
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
@@ -84,6 +88,7 @@ export default function App() {
 
   const select = id => {
     setSelId(id); resetSelection();
+    pendingEdit.current = null;
     const s = byId[id] || sessions.find(x => x.id === id);
     if (!s) return;
     setDetail({ id, data: null });
@@ -93,6 +98,69 @@ export default function App() {
     loadCapabilities(s.tool);
   };
 
+  // 右键"会话编辑":先选中,数据到位后自动进入编辑模式
+  const enterEditFor = id => {
+    if (id === selId && detail?.data) { setMode("edit"); return; }
+    select(id);
+    pendingEdit.current = id;
+  };
+  useEffect(() => {
+    if (pendingEdit.current && detail?.data && detail.id === pendingEdit.current) {
+      pendingEdit.current = null;
+      setMode("edit");
+    }
+  }, [detail]);
+
+  // ----- 会话删除(回收站语义:先快照,可撤销) -----
+  const undoDelete = async snapshot => {
+    setToast({ kind: "run", title: "正在恢复…", desc: "从快照写回会话文件" });
+    try {
+      await rpc("session_undelete", { snapshot });
+      doScan(); loadSnaps();
+      setToast({ kind: "ok", title: "已恢复会话", desc: "会话已从快照恢复到原位置。" });
+    } catch (e) {
+      setToast({ kind: "fail", title: "撤销失败", desc: e.message });
+    }
+  };
+  const deleteSession = async s => {
+    setDelConfirm(null);
+    setToast({ kind: "run", title: "正在删除…", desc: "创建快照 → 移除会话文件" });
+    try {
+      const r = await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+      if (selId === s.id) { setSelId(null); setDetail(null); }
+      doScan(); loadSnaps();
+      setToast({ kind: "ok", title: "已删除会话",
+        desc: `「${s.title || s.id}」已移除,快照保存在「快照与还原」。`,
+        action: r.undoable
+          ? { label: "撤销", onClick: () => undoDelete(r.snapshot) } : undefined });
+    } catch (e) {
+      setToast({ kind: "fail", title: "删除失败", desc: e.message });
+    }
+  };
+  const askDelete = s => {
+    if (s.tool === "opencode" || (s.tree_count || 1) > 1) setDelConfirm(s);
+    else deleteSession(s);
+  };
+
+  const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
+  const ctxItems = ctxSess ? [
+    { label: "在终端恢复会话", onClick: () => openTerminal(
+        { tool: ctxSess.tool, session_id: ctxSess.id, cwd: ctxSess.dir || "." }) },
+    { label: "会话编辑", onClick: () => enterEditFor(ctxSess.id) },
+    { label: "迁移到…", onClick: () => {
+        if (ctxSess.id !== selId) select(ctxSess.id);
+        setMig({ scope: null }); } },
+    { sep: true },
+    { label: "复制会话 ID", onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
+    { label: "复制接续命令", onClick: () => navigator.clipboard?.writeText(
+        resumeCommand(ctxSess.tool, ctxSess.id, ctxSess.dir)) },
+    { label: "在 Finder 中显示", disabled: !ctxSess.path || !canReveal(),
+      disabledHint: ctxSess.path ? "仅桌面版可用" : "该来源没有独立会话文件",
+      onClick: () => revealPath(ctxSess.path).catch(() => {}) },
+    { sep: true },
+    { label: "删除会话…", danger: true, onClick: () => askDelete(ctxSess) },
+  ] : null;
+
   // ----- 键盘 -----
   useEffect(() => {
     const onKey = e => {
@@ -100,7 +168,9 @@ export default function App() {
         e.preventDefault(); setCollapsed(v => !v); return;
       }
       if (e.key === "Escape") {
-        if (settingsOpen) setSettingsOpen(false);
+        if (ctxMenu) setCtxMenu(null);
+        else if (delConfirm) setDelConfirm(null);
+        else if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
         else if (snapConfirm) setSnapConfirm(null);
         else if (confirmInplace) setConfirmInplace(false);
@@ -195,7 +265,12 @@ export default function App() {
           dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
           hasSub: (s.tree_count || 1) > 1, subLabel: `含 ${(s.tree_count || 1) - 1} 个子会话`,
           hasMig: migratedIds.has(s.id), selected: s.id === selId,
-          onClick: () => select(s.id) })) };
+          onClick: () => select(s.id),
+          onContext: e => {
+            e.preventDefault();
+            if (s.id !== selId) select(s.id);
+            setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id });
+          } })) };
     }).filter(g => g.rows.length > 0);
     return groups;
   }, [sessions, libF, ql, collapsedGroups, selId, migratedIds]);
@@ -446,6 +521,13 @@ export default function App() {
         onConfirm={applyEdit} />}
       {snapConfirm && <SnapRestoreConfirm snap={snapConfirm}
         onCancel={() => setSnapConfirm(null)} onConfirm={confirmRestore} />}
+      {ctxMenu && ctxItems && (
+        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxItems}
+          onClose={() => setCtxMenu(null)} />)}
+      {delConfirm && (
+        <SessionDeleteConfirm sess={delConfirm}
+          onCancel={() => setDelConfirm(null)}
+          onConfirm={() => deleteSession(delConfirm)} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {railTip && (
         <div style={{ position: "absolute", left: 62, top: railTip.top,

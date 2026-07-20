@@ -15,3 +15,8 @@ export async function rpc(method, params) {
 // The desktop command currently accepts the existing launch DTO as-is.
 export const openTerminal = launch =>
   inTauri() ? invoke("open_terminal", { launch }) : Promise.resolve();
+
+export const revealPath = path =>
+  inTauri() ? invoke("reveal_path", { path }) : Promise.resolve();
+
+export const canReveal = () => inTauri();

@@ -3,8 +3,9 @@
 
 from .application.services import (
     edit_apply, edit_capabilities, edit_preview, env, handoff, health, history,
-    list_models, migrate, resume_command, scan, show, snapshot_delete,
-    snapshot_restore, snapshots, version,
+    list_models, migrate, resume_command, scan, session_delete,
+    session_undelete, show, snapshot_delete, snapshot_restore, snapshots,
+    version,
 )
 from .interfaces.cli import main
 from .interfaces.rpc import RPC_METHODS, rpc
@@ -12,8 +13,8 @@ from .interfaces.rpc import RPC_METHODS, rpc
 __all__ = [
     "RPC_METHODS", "edit_apply", "edit_capabilities", "edit_preview", "env",
     "handoff", "health", "history", "list_models", "main", "migrate", "rpc",
-    "scan", "show", "snapshot_delete", "snapshot_restore", "snapshots",
-    "version",
+    "scan", "session_delete", "session_undelete", "show", "snapshot_delete",
+    "snapshot_restore", "snapshots", "version",
 ]
 
 if __name__ == "__main__":

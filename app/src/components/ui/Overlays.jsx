@@ -117,6 +117,72 @@ export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
   );
 }
 
+// ---------- 会话右键菜单 ----------
+export function ContextMenu({ x, y, items, onClose }) {
+  const width = 208;
+  const height = items.reduce((a, it) => a + (it.sep ? 9 : 30), 12);
+  const left = Math.max(8, Math.min(x, window.innerWidth - width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - height - 8));
+  return (
+    <>
+      <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }}
+        style={{ position: "absolute", inset: 0, zIndex: 55 }} />
+      <div style={{ position: "absolute", left, top, width, zIndex: 56, padding: 6,
+        background: "var(--bg)", borderRadius: 10,
+        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
+        animation: "fpop .12s ease" }}>
+        {items.map((it, i) => it.sep
+          ? <div key={i} style={{ height: 1, background: "var(--line3)", margin: "4px 8px" }} />
+          : (
+            <div key={i} className={it.disabled ? undefined : "hov-item"}
+              onClick={() => { if (it.disabled) return; onClose(); it.onClick?.(); }}
+              title={it.disabled ? it.disabledHint : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 8, height: 30,
+                padding: "0 9px", borderRadius: 7, fontSize: 12.5,
+                color: it.disabled ? "var(--tx5)" : it.danger ? "var(--err-text)" : "var(--tx2)",
+                cursor: it.disabled ? "default" : "pointer", whiteSpace: "nowrap" }}>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
+              {it.hint && <span style={{ fontSize: 11, color: "var(--tx5)", flex: "none" }}>{it.hint}</span>}
+            </div>
+          ))}
+      </div>
+    </>
+  );
+}
+
+// ---------- 删除会话确认 ----------
+export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
+  const subCount = (sess.tree_count || 1) - 1;
+  const oc = sess.tool === "opencode";
+  const bullets = [
+    subCount > 0 && ["var(--warn)", `该会话含 ${subCount} 个子会话,将一并删除。`],
+    ["var(--ok)", "删除前会自动保存一份快照到「快照与还原」。"],
+    oc
+      ? ["var(--err)", "OpenCode 会话删除后无法一键撤销,只保留导出快照。"]
+      : ["var(--accent)", "删除后可通过 Toast 或快照页撤销恢复。"],
+  ].filter(Boolean);
+  return (
+    <ConfirmBox width={430} title="删除此会话?" actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
+        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+        onClick={onConfirm}>{oc ? "仍然删除" : "创建快照并删除"}</button>
+    </>}>
+      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
+        会话「{sess.title || sess.id}」({TOOL_NAME[sess.tool]})将从本机移除。</div>
+      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
+        display: "flex", flexDirection: "column", gap: 9 }}>
+        {bullets.map(([c, t], i) => (
+          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
+              marginTop: 6 }} />{t}
+          </div>
+        ))}
+      </div>
+    </ConfirmBox>
+  );
+}
+
 // ---------- 结果 toast ----------
 export function Toast({ toast, onDismiss }) {
   const kind = toast.kind;
@@ -137,6 +203,10 @@ export function Toast({ toast, onDismiss }) {
         <div style={{ fontSize: 13, fontWeight: 600, color }}>{toast.title}</div>
         <div style={{ fontSize: 11.5, color: "var(--tx3b)", marginTop: 2 }}>{toast.desc}</div>
       </div>
+      {toast.action && (
+        <button className="fbtn" style={{ height: 28, padding: "0 12px", fontSize: 12,
+          flex: "none", fontWeight: 600 }}
+          onClick={toast.action.onClick}>{toast.action.label}</button>)}
       <a onClick={onDismiss} style={{ color: "var(--tx5)", fontSize: 16, marginLeft: 6 }}>×</a>
     </div>
   );

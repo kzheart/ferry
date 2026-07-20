@@ -28,6 +28,8 @@ RPC_METHODS = {
     "snapshot_restore": lambda p: services.snapshot_restore(p["session"],
         run_probe_after=p.get("probe", False), tool=p.get("tool", "claude")),
     "snapshot_delete": lambda p: services.snapshot_delete(p["path"]),
+    "session_delete": lambda p: services.session_delete(p["tool"], p["ref"]),
+    "session_undelete": lambda p: services.session_undelete(p["snapshot"]),
 }
 
 

@@ -1,5 +1,6 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
+mod reveal;
 mod sidecar;
 mod terminal;
 mod window;
@@ -10,7 +11,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
-            terminal::open_terminal
+            terminal::open_terminal,
+            reveal::reveal_path
         ])
         .on_window_event(window::handle_window_event)
         .run(tauri::generate_context!())

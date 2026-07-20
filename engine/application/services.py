@@ -253,6 +253,81 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
                         "handoff_doc": str(doc)}}
 
 
+# ---------- 会话生命周期 ----------
+
+def _backup_file(path: Path, tool: str, reason: str, extra: dict | None = None) -> Path:
+    d = snapshot_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    import shutil
+    dest = d / f"{path.stem}-{time.time_ns()}.jsonl"
+    shutil.copy(path, dest)
+    dest.with_suffix(".meta.json").write_text(json.dumps(
+        {"reason": reason, "tool": tool, "source": str(path), **(extra or {})},
+        ensure_ascii=False))
+    return dest
+
+
+def session_delete(tool: str, ref: str) -> dict:
+    """删除会话前先落快照(回收站语义);文件型工具可通过 session_undelete 撤销。"""
+    import shutil
+    impl = adapter(tool)
+    doc = impl.editor.load(ref)
+    if tool == "opencode":
+        snap = impl.editor.snapshot(doc, reason="删除前自动")
+        impl.cleanup(ref, None)
+        return {"ok": True, "snapshot": str(snap), "undoable": False}
+
+    path = doc.handle if isinstance(doc.handle, Path) else Path(impl.resolve_ref(ref))
+    children = []
+    closure = getattr(doc, "context", None)
+    if closure is not None and hasattr(closure, "nodes"):
+        for node in closure.nodes.values():
+            child = Path(node.path)
+            if child != path and child.exists():
+                child_snap = _backup_file(child, tool, "删除前自动")
+                children.append({"snapshot": str(child_snap), "source": str(child)})
+                child.unlink()
+    snap = _backup_file(path, tool, "删除前自动",
+                        {"children": children} if children else None)
+    sidecar = path.with_suffix("")
+    if tool == "claude" and sidecar.is_dir():
+        shutil.move(str(sidecar), str(snap.with_suffix("")))
+    path.unlink()
+    return {"ok": True, "snapshot": str(snap), "undoable": True,
+            "children": len(children)}
+
+
+def session_undelete(snapshot: str) -> dict:
+    """把「删除前自动」快照写回原路径,恢复整棵会话。"""
+    import shutil
+    snap = Path(snapshot)
+    if snap.parent != snapshot_dir():
+        return {"ok": False, "error": "只允许从快照目录恢复"}
+    try:
+        meta = json.loads(snap.with_suffix(".meta.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "error": "快照缺少元数据,无法撤销"}
+    source = meta.get("source")
+    if not source or not str(source).startswith("/"):
+        return {"ok": False, "error": "该快照没有可恢复的源路径"}
+    target = Path(source)
+    if target.exists():
+        return {"ok": False, "error": "源会话仍存在,未覆盖"}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(snap, target)
+    sidecar = snap.with_suffix("")
+    if sidecar.is_dir():
+        shutil.move(str(sidecar), str(target.with_suffix("")))
+    restored = 1
+    for child in meta.get("children", []):
+        child_snap, child_src = Path(child["snapshot"]), Path(child["source"])
+        if child_snap.exists() and not child_src.exists():
+            child_src.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(child_snap, child_src)
+            restored += 1
+    return {"ok": True, "restored": restored, "target": str(target)}
+
+
 # ---------- 迁移历史 / 快照 ----------
 
 def snapshots() -> list[dict]:
@@ -282,7 +357,15 @@ def snapshots() -> list[dict]:
 def snapshot_restore(session_id: str, run_probe_after: bool = False,
                      tool: str = "claude") -> dict:
     impl = adapter(tool).editor
-    doc = impl.load(session_id)
+    try:
+        doc = impl.load(session_id)
+    except (SystemExit, Exception):
+        # 源会话文件已不存在(多半是被删除):直接把最新快照写回原路径
+        stem = Path(session_id).stem
+        cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
+        if cands:
+            return session_undelete(str(cands[-1]))
+        raise
     path = doc.handle if isinstance(doc.handle, Path) else None
     stem = path.stem if path else str(doc.ref)
     cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
