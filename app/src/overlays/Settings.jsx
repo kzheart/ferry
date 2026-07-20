@@ -2,9 +2,6 @@
 import { useState } from "react";
 import { TOOL_NAME, TOOLS } from "../api.js";
 import { SetGlyph, ToolIcon } from "../icons.jsx";
-import appIcon from "../assets/app-icon.png";
-
-const VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 
 const SECTIONS = [["prefs", "偏好设置"], ["sources", "数据来源"]];
 
@@ -186,16 +183,6 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                 </button>
               );
             })}
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px",
-            borderRadius: 10, background: "var(--badge)" }}>
-            <img className="noinvert" src={appIcon} alt="Ferry" width={28} height={28}
-              style={{ borderRadius: 7, flex: "none", display: "block" }} />
-            <div style={{ lineHeight: 1.3 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>Ferry</div>
-              <div className="mono" style={{ fontSize: 10.5, color: "var(--tx5)" }}>v{VERSION}</div>
-            </div>
           </div>
         </div>
 
