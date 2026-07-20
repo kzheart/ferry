@@ -71,6 +71,83 @@ def _export_from_capture(capture: dict) -> dict:
 
 # ---------- reader ----------
 
+def _db_conn():
+    """只读打开当前库;库缺失或 schema 不兼容时返回 None,由 CLI export 兜底。"""
+    if not OPENCODE_DB.exists():
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{OPENCODE_DB.resolve()}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("SELECT id FROM session LIMIT 1")
+        conn.execute("SELECT id, session_id, data FROM message LIMIT 1")
+        conn.execute("SELECT id, message_id, session_id, data FROM part LIMIT 1")
+        return conn
+    except (OSError, sqlite3.Error):
+        return None
+
+
+def _db_info(row) -> dict:
+    """由 session 行构造官方 export 的 info 形状(已与 `opencode export` 对拍)。"""
+    cost = row["cost"]
+    if isinstance(cost, float) and cost.is_integer():
+        cost = int(cost)
+    info = {"id": row["id"], "slug": row["slug"], "projectID": row["project_id"],
+            "directory": row["directory"], "path": row["path"] or "",
+            "title": row["title"], "version": row["version"],
+            "summary": {"additions": row["summary_additions"] or 0,
+                        "deletions": row["summary_deletions"] or 0,
+                        "files": row["summary_files"] or 0},
+            "cost": cost,
+            "tokens": {"input": row["tokens_input"], "output": row["tokens_output"],
+                       "reasoning": row["tokens_reasoning"],
+                       "cache": {"read": row["tokens_cache_read"],
+                                 "write": row["tokens_cache_write"]}},
+            "time": {"created": row["time_created"], "updated": row["time_updated"]}}
+    if row["parent_id"]:
+        info["parentID"] = row["parent_id"]
+    if row["agent"]:
+        info["agent"] = row["agent"]
+    if row["model"]:
+        info["model"] = json.loads(row["model"])
+    if row["permission"]:
+        info["permission"] = json.loads(row["permission"])
+    if row["share_url"]:
+        info["share"] = {"url": row["share_url"]}
+    if row["revert"]:
+        info["revert"] = json.loads(row["revert"])
+    if row["time_archived"]:
+        info["time"]["archived"] = row["time_archived"]
+    if row["time_compacting"]:
+        info["time"]["compacting"] = row["time_compacting"]
+    return info
+
+
+def _db_export(conn, session_id: str) -> dict | None:
+    """直读 SQLite 构造 export 形状,免去每会话一次 `opencode export` 子进程。"""
+    try:
+        row = conn.execute("SELECT * FROM session WHERE id = ?", (session_id,)).fetchone()
+        if row is None:
+            return None
+        parts_by_mid: dict[str, list] = {}
+        for part in conn.execute(
+                "SELECT id, message_id, session_id, data FROM part "
+                "WHERE session_id = ? ORDER BY time_created, id", (session_id,)):
+            data = json.loads(part["data"])
+            data.update(id=part["id"], sessionID=part["session_id"],
+                        messageID=part["message_id"])
+            parts_by_mid.setdefault(part["message_id"], []).append(data)
+        messages = []
+        for message in conn.execute(
+                "SELECT id, session_id, data FROM message "
+                "WHERE session_id = ? ORDER BY time_created, id", (session_id,)):
+            data = json.loads(message["data"])
+            data.update(id=message["id"], sessionID=message["session_id"])
+            messages.append({"info": data, "parts": parts_by_mid.get(message["id"], [])})
+        return {"info": _db_info(row), "messages": messages}
+    except (sqlite3.Error, json.JSONDecodeError, KeyError, IndexError):
+        return None
+
+
 def _db_child_ids(session_id: str) -> list[str]:
     """只读查询当前库；库不存在/版本不兼容时由 export 中的 task 关系兜底。"""
     try:
@@ -167,17 +244,35 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
 
 def read(session_id: str) -> Session:
     seen: dict[str, Session] = {}
+    conn = _db_conn()
+
+    def export(sid: str) -> dict:
+        if conn is not None:
+            data = _db_export(conn, sid)
+            if data is not None:
+                return data
+        return _oc_export(sid)
+
+    def child_ids_of(sid: str) -> list[str]:
+        if conn is not None:
+            try:
+                return [row[0] for row in conn.execute(
+                    "SELECT id FROM session WHERE parent_id = ? "
+                    "ORDER BY time_created, id", (sid,))]
+            except sqlite3.Error:
+                pass
+        return _db_child_ids(sid)
 
     def visit(sid: str, root_id: str) -> Session:
         if sid in seen:
             return seen[sid]
-        sess, task_edges = _parse_session(_oc_export(sid))
+        sess, task_edges = _parse_session(export(sid))
         seen[sid] = sess
         sess.root_id = root_id
 
         task_by_child = {edge.child_session_id: edge for edge in task_edges}
-        db_child_ids = set(_db_child_ids(sid))
-        child_ids = list(db_child_ids)
+        child_ids = child_ids_of(sid)
+        db_child_ids = set(child_ids)
         for child_id in task_by_child:
             if child_id not in child_ids:
                 child_ids.append(child_id)
@@ -202,7 +297,11 @@ def read(session_id: str) -> Session:
             sess.agent_edges.append(edge)
         return sess
 
-    return visit(session_id, session_id)
+    try:
+        return visit(session_id, session_id)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # ---------- writer ----------

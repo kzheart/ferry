@@ -288,6 +288,8 @@ input { user-select: text; }
 .ficon-btn.accent:hover { color: var(--accent); }
 
 /* 悬停某一轮才浮现的操作(复制、迁移到此为止) */
+/* 长会话:视口外的轮次跳过渲染与布局,首屏秒开 */
+.fround { content-visibility: auto; contain-intrinsic-size: auto 160px; }
 .fround .fhact { opacity: 0; transition: opacity .15s ease; }
 .fround:hover .fhact, .fround .fhact:focus-within { opacity: 1; }
 

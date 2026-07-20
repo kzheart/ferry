@@ -1,10 +1,80 @@
 use serde_json::Value;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 
 const ENGINE_PROTOCOL: u64 = 1;
 static ENGINE_HANDSHAKE: OnceLock<Result<(), String>> = OnceLock::new();
+
+/// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
+struct EngineProcess {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl Drop for EngineProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+static ENGINE: OnceLock<Mutex<Option<EngineProcess>>> = OnceLock::new();
+
+fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
+    let mut command = engine_command(resource_dir)?;
+    command.arg("serve");
+    hide_console(&mut command);
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("启动引擎失败: {error}"))?;
+    let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
+    let stdout = BufReader::new(child.stdout.take().ok_or("引擎 stdout 不可用")?);
+    Ok(EngineProcess {
+        child,
+        stdin,
+        stdout,
+    })
+}
+
+fn engine_request(resource_dir: &Path, request: &str) -> Result<String, String> {
+    let slot = ENGINE.get_or_init(|| Mutex::new(None));
+    let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
+    let mut last_error = String::new();
+    for _attempt in 0..2 {
+        if guard.is_none() {
+            *guard = Some(spawn_engine(resource_dir)?);
+        }
+        let engine = guard.as_mut().expect("engine just ensured");
+        let exchange = (|| -> std::io::Result<String> {
+            engine.stdin.write_all(request.as_bytes())?;
+            engine.stdin.write_all(b"\n")?;
+            engine.stdin.flush()?;
+            let mut line = String::new();
+            if engine.stdout.read_line(&mut line)? == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "引擎进程已退出",
+                ));
+            }
+            Ok(line)
+        })();
+        match exchange {
+            Ok(line) => return Ok(line.trim_end().to_owned()),
+            Err(error) => {
+                last_error = error.to_string();
+                *guard = None; // Drop 会回收进程,下一轮重启
+            }
+        }
+    }
+    Err(format!("引擎通信失败: {last_error}"))
+}
 
 /// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
 /// 否则取本 crate 上两级(app/src-tauri → 仓库根,开发形态)。
@@ -100,11 +170,7 @@ pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result
         ENGINE_HANDSHAKE
             .get_or_init(|| check_engine(&resource_dir))
             .clone()?;
-        let output = run_engine(&resource_dir, &["rpc", &request])?;
-        if !output.status.success() && output.stdout.is_empty() {
-            return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
-        }
-        String::from_utf8(output.stdout).map_err(|error| format!("引擎输出不是 UTF-8: {error}"))
+        engine_request(&resource_dir, &request)
     })
     .await
     .map_err(|e| e.to_string())?

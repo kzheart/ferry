@@ -15,6 +15,14 @@ def main(argv=None):
     if cmd == "rpc":
         print(json.dumps(rpc(rest[0] if rest else sys.stdin.read()), ensure_ascii=False))
         return
+    if cmd == "serve":
+        # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            print(json.dumps(rpc(line), ensure_ascii=False), flush=True)
+        return
     if cmd == "health":
         result = services.health()
     elif cmd in ("version", "--version"):

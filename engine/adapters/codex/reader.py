@@ -9,6 +9,9 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import codex_summary_text
+from ...infrastructure.scan_cache import ScanCache
+
+_META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
 
 _EXEC_RE = re.compile(r"tools\.exec_command\((\{.*?\})\)", re.S)
 _PATCH_RE = re.compile(r"tools\.apply_patch\((.*?)\)\s*;?", re.S)
@@ -151,13 +154,28 @@ def _rollout_index(path: Path, sessions_dir: str | Path | None) -> dict[str, tup
     candidates = list(root.rglob("rollout*.jsonl")) if root.exists() else []
     if path not in candidates:
         candidates.append(path)
+    cache = ScanCache(_META_CACHE_PATH, version=2)
+    dirty = False
     index = {}
     for candidate in candidates:
-        meta = _first_meta(candidate)
-        if not meta:
+        try:
+            stat = candidate.stat()
+        except OSError:
             continue
-        ident = _identity(meta, candidate.stem)
-        index[ident["id"]] = (candidate, meta, ident)
+        ident = cache.get(candidate, stat)
+        if ident is None:
+            meta = _first_meta(candidate)
+            ident = _identity(meta, candidate.stem) if meta else {}
+            cache.put(candidate, stat, ident)
+            dirty = True
+        if not ident:
+            continue
+        index[ident["id"]] = (candidate, ident)
+    if dirty:
+        try:
+            cache.flush()
+        except OSError:
+            pass
     return index
 
 
@@ -345,19 +363,16 @@ def read(path: str, sessions_dir: str | Path | None = None) -> Session:
     """Read one rollout and recursively load its descendants from the same root."""
     rollout = Path(path).expanduser().resolve()
     index = _rollout_index(rollout, sessions_dir)
-    entry = next((value for value in index.values()
-                  if value[0].resolve() == rollout), None)
-    meta = entry[1] if entry else _first_meta(rollout)
-    root = _read_one(rollout, meta)
+    root = _read_one(rollout)
     sessions = {root.source_id: root}
     reachable = {root.source_id}
     while True:
         added = False
-        for current_id, (candidate, candidate_meta, ident) in index.items():
+        for current_id, (candidate, ident) in index.items():
             if current_id in reachable or ident["parent_id"] not in reachable:
                 continue
             reachable.add(current_id)
-            sessions[current_id] = _read_one(candidate, candidate_meta)
+            sessions[current_id] = _read_one(candidate)
             added = True
         if not added:
             break
