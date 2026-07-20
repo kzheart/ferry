@@ -1,6 +1,6 @@
 """Codex reader:rollout JSONL → 规范化中间格式。
 
-格式规格见 spec/formats/codex.md。
+读取 Codex 原生 JSONL 会话记录。
 支持 0.144 的 custom_tool_call(exec/apply_patch,JS 源码 input)与旧版 function_call。
 """
 import json

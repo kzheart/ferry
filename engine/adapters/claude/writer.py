@@ -28,7 +28,7 @@ def _slug(path: str) -> str:
 def _load_templates():
     versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
     if not versions:
-        raise RuntimeError("缺少 golden/claude 样本,先运行 harness/gen_golden.py")
+        raise RuntimeError("缺少生产依赖 golden/claude 样本")
     sample = versions[-1] / "case-02-tools" / "session.jsonl"
     templates = {}
     for line in sample.read_text().splitlines():

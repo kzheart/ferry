@@ -1,6 +1,6 @@
 """OpenCode reader/writer:走官方 `opencode export` / `opencode import`,不直接碰 SQLite。
 
-格式规格见 spec/formats/opencode.md。export 形状:
+处理 OpenCode 会话存储。export 形状:
     {"info": <session 行>, "messages": [{"info": <message.data>, "parts": [<part.data>...]}]}
 """
 import json
@@ -292,7 +292,7 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             elif b.kind == "tool":
                 t = b.tool
                 i = t.input if isinstance(t.input, dict) else {}
-                # 常用工具原生映射(spec/mapping/tools.yaml)
+                # 常用工具原生映射
                 if t.op == "shell.exec" and i.get("command"):
                     add_tool_part("bash", {"command": i["command"]},
                                   t.output, i["command"],

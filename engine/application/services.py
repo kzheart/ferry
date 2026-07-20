@@ -33,7 +33,7 @@ def snapshot_dir():
 
 from .history import append as _append_history, list_entries as history
 
-# 各目标已实现原生映射的规范操作(与 spec/mapping/tools.yaml 一致)
+# 各目标已实现原生映射的规范操作
 NATIVE_OPS = {"claude", "codex", "opencode"}
 
 

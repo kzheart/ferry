@@ -1,6 +1,6 @@
 """Codex writer:规范化中间格式 → rollout JSONL(可被 codex exec resume 加载)。
 
-格式规格见 spec/formats/codex.md。核心策略:
+写入 Codex 原生 JSONL 会话记录。核心策略:
 - 结构模板取自黄金样本原文(session_meta / turn_context / 各类 response_item),
   只替换内容字段,不手写结构 —— 版本漂移时重新生成黄金样本即可跟上。
 - shell.exec 原生映射为 exec_command;fs.write 映射为 apply_patch(Add File);
@@ -36,7 +36,7 @@ def _load_templates():
     """从最新版本的黄金样本中取各类记录的原文模板。"""
     versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
     if not versions:
-        raise RuntimeError("缺少 golden/codex 样本,先运行 harness/gen_golden.py")
+        raise RuntimeError("缺少生产依赖 golden/codex 样本")
     sample = versions[-1] / "case-02-tools" / "session.jsonl"
     tpl = {}
     for line in sample.read_text().splitlines():
