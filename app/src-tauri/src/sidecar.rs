@@ -89,8 +89,19 @@ fn repo_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn bundled_engine(resource_dir: &Path) -> PathBuf {
-    resource_dir.join(bundled_engine_name(cfg!(target_os = "windows")))
+/// externalBin 在 macOS 上被放进 Contents/MacOS(主程序旁),Windows 上在安装根目录;
+/// 依次尝试可执行文件所在目录与 resource_dir,取第一个存在的。
+fn bundled_engine_candidates(resource_dir: &Path) -> Vec<PathBuf> {
+    let name = bundled_engine_name(cfg!(target_os = "windows"));
+    let mut candidates = Vec::new();
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        candidates.push(exe_dir.join(name));
+    }
+    candidates.push(resource_dir.join(name));
+    candidates
 }
 
 fn bundled_engine_name(is_windows: bool) -> &'static str {
@@ -102,8 +113,8 @@ fn bundled_engine_name(is_windows: bool) -> &'static str {
 }
 
 fn engine_command(resource_dir: &Path) -> Result<Command, String> {
-    let sidecar = bundled_engine(resource_dir);
-    if sidecar.is_file() {
+    let candidates = bundled_engine_candidates(resource_dir);
+    if let Some(sidecar) = candidates.iter().find(|path| path.is_file()) {
         return Ok(Command::new(sidecar));
     }
 
@@ -120,7 +131,14 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
     }
 
     #[cfg(not(debug_assertions))]
-    Err(format!("正式包缺少引擎 sidecar: {}", sidecar.display()))
+    Err(format!(
+        "正式包缺少引擎 sidecar,已尝试: {}",
+        candidates
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join("; ")
+    ))
 }
 
 #[cfg(target_os = "windows")]
