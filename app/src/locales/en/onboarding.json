@@ -1,0 +1,25 @@
+{
+  "welcome": {
+    "title": "Welcome to Ferry",
+    "desc": "Ferry runs locally, scanning your AI coding tool sessions and unifying them in one view. No login required, no data uploaded.",
+    "detectedTools": "Detected tools",
+    "detectWithSessions": "{{path}} · {{count}} sessions",
+    "detectInstalled": "v{{version}}",
+    "detectNotFound": "Not detected",
+    "badgeInstalled": "Detected",
+    "badgeNotInstalled": "Not installed",
+    "start": "Start scanning local sessions"
+  },
+  "guide": {
+    "step1Title": "Switch modules via the navigation rail",
+    "step1Body": "The fixed rail on the far left switches between Sessions, Migrations, and Snapshots. The rail position and width stay constant; only the middle resource pane and right detail change.",
+    "step2Title": "Search and filter in the resource pane",
+    "step2Body": "The pane's title, count, search box, and filter position are consistent across the three modules. Use them to quickly locate by source, time, and directory.",
+    "step3Title": "Migrate up to here and deliver",
+    "step3Body": "Long sessions can be truncated at a turn with \"Migrate up to here\"; preview migration losses before delivering. If verification fails, it rolls back automatically and leaves nothing behind.",
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "start": "Get started"
+  }
+}

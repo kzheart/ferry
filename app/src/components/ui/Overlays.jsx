@@ -507,16 +507,14 @@ export function SnapFilter({ f, setF, sessions, reasons, onClose, onClear }) {
 
 // ---------- 快速上手引导(coach marks) ----------
 const GUIDE_STEPS = [
-  { target: "rail", side: "right", title: "用导航轨道切换模块",
-    body: "最左侧固定轨道在会话、迁移、快照之间切换。切换时轨道位置与宽度始终不变,只更换中间资源栏与右侧详情。" },
-  { target: "search", side: "right", title: "在资源栏搜索与筛选",
-    body: "资源栏的标题、数量、搜索框与筛选位置在三种模块中保持一致。用它们按来源、时间与目录快速定位。" },
-  { target: "scope", side: "top", scroll: true, title: "迁移到此为止并交付",
-    body: "长会话可在某一轮「迁移到此为止」截断,预览迁移损耗后再交付;若验收失败会自动回滚,不留残留。" },
+  { target: "rail", side: "right", titleKey: "onboarding:guide.step1Title", bodyKey: "onboarding:guide.step1Body" },
+  { target: "search", side: "right", titleKey: "onboarding:guide.step2Title", bodyKey: "onboarding:guide.step2Body" },
+  { target: "scope", side: "top", scroll: true, titleKey: "onboarding:guide.step3Title", bodyKey: "onboarding:guide.step3Body" },
 ];
 const GUIDE_TOTAL = GUIDE_STEPS.length;
 
 export function Guide({ step, onGo, onFinish }) {
+  const { t } = useTranslation();
   const [box, setBox] = useState(null);
   const [card, setCard] = useState(null);
   const cfg = GUIDE_STEPS[step - 1];
@@ -590,18 +588,18 @@ export function Guide({ step, onGo, onFinish }) {
                 background: i <= step ? ACCENT : "var(--dots)" }} />))}
           </div>
           <span style={{ flex: 1 }} />
-          <a onClick={onFinish} style={{ fontSize: 11.5, color: "var(--tx5)" }}>跳过</a>
+          <a onClick={onFinish} style={{ fontSize: 11.5, color: "var(--tx5)" }}>{t("onboarding:guide.skip")}</a>
         </div>
-        <div style={{ fontSize: 14.5, fontWeight: 650, marginTop: 11, letterSpacing: "-.01em" }}>{cfg.title}</div>
-        <div style={{ fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.55, marginTop: 6 }}>{cfg.body}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 650, marginTop: 11, letterSpacing: "-.01em" }}>{t(cfg.titleKey)}</div>
+        <div style={{ fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.55, marginTop: 6 }}>{t(cfg.bodyKey)}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 15 }}>
           {step > 1 && (
             <button className="fbtn" style={{ height: 31, fontSize: 12.5 }}
-              onClick={() => onGo(step - 1)}>上一步</button>)}
+              onClick={() => onGo(step - 1)}>{t("onboarding:guide.back")}</button>)}
           <span style={{ flex: 1 }} />
           <button className="fbtn-primary" style={{ height: 31, padding: "0 16px", fontSize: 12.5 }}
             onClick={() => step >= GUIDE_TOTAL ? onFinish() : onGo(step + 1)}>
-            {step >= GUIDE_TOTAL ? "开始使用" : "下一步"}</button>
+            {step >= GUIDE_TOTAL ? t("onboarding:guide.start") : t("onboarding:guide.next")}</button>
         </div>
       </div>
     </div>

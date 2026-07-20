@@ -1,0 +1,25 @@
+{
+  "welcome": {
+    "title": "欢迎使用 Ferry",
+    "desc": "Ferry 在本机运行,扫描你的 AI 编码工具会话并统一浏览。无需登录,不上传任何数据。",
+    "detectedTools": "检测到的工具",
+    "detectWithSessions": "{{path}} · {{count}} 会话",
+    "detectInstalled": "v{{version}}",
+    "detectNotFound": "未检测到安装",
+    "badgeInstalled": "已检测",
+    "badgeNotInstalled": "未安装",
+    "start": "开始扫描本机会话"
+  },
+  "guide": {
+    "step1Title": "用导航轨道切换模块",
+    "step1Body": "最左侧固定轨道在会话、迁移、快照之间切换。切换时轨道位置与宽度始终不变,只更换中间资源栏与右侧详情。",
+    "step2Title": "在资源栏搜索与筛选",
+    "step2Body": "资源栏的标题、数量、搜索框与筛选位置在三种模块中保持一致。用它们按来源、时间与目录快速定位。",
+    "step3Title": "迁移到此为止并交付",
+    "step3Body": "长会话可在某一轮「迁移到此为止」截断,预览迁移损耗后再交付;若验收失败会自动回滚,不留残留。",
+    "skip": "跳过",
+    "back": "上一步",
+    "next": "下一步",
+    "start": "开始使用"
+  }
+}

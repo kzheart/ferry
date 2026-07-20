@@ -1,9 +1,11 @@
 // 首次启动:检测到的工具 + 开始扫描
+import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ToolIcon } from "../../components/ui/icons.jsx";
 import appIcon from "../../assets/app-icon.png";
 
 export default function FirstRun({ env, scan, onStart }) {
+  const { t } = useTranslation();
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
       minHeight: 0, background: "var(--inset)" }}>
@@ -12,38 +14,39 @@ export default function FirstRun({ env, scan, onStart }) {
         animation: "ffade .3s ease" }}>
         <img className="noinvert" src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
         <div style={{ fontSize: 20, fontWeight: 650, marginTop: 16, letterSpacing: "-.01em" }}>
-          欢迎使用 Ferry</div>
+          {t("onboarding:welcome.title")}</div>
         <div style={{ fontSize: 13, color: "var(--tx3b)", marginTop: 6, lineHeight: 1.55 }}>
-          Ferry 在本机运行,扫描你的 AI 编码工具会话并统一浏览。无需登录,不上传任何数据。</div>
+          {t("onboarding:welcome.desc")}</div>
         <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".04em",
-          margin: "20px 0 8px" }}>检测到的工具</div>
-        {TOOLS.map(t => {
-          const info = env?.[t] || {};
-          const tool = scan?.tools?.[t];
+          margin: "20px 0 8px" }}>{t("onboarding:welcome.detectedTools")}</div>
+        {TOOLS.map(t2 => {
+          const info = env?.[t2] || {};
+          const tool = scan?.tools?.[t2];
           const installed = info.installed;
           const detect = tool?.ok
-            ? `${tool.path} · ${tool.count} 会话`
-            : installed ? `v${info.version || "?"}` : "未检测到安装";
+            ? t("onboarding:welcome.detectWithSessions", { path: tool.path, count: tool.count })
+            : installed ? t("onboarding:welcome.detectInstalled", { version: info.version || "?" })
+              : t("onboarding:welcome.detectNotFound");
           return (
-            <div key={t} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
+            <div key={t2} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
               border: "1px solid var(--line5)", borderRadius: 9, marginBottom: 8 }}>
-              <ToolIcon tool={t} size={26} dot={installed ? "var(--ok)" : "var(--line-strong)"} />
+              <ToolIcon tool={t2} size={26} dot={installed ? "var(--ok)" : "var(--line-strong)"} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[t]}</div>
+                <div style={{ fontSize: 13, color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[t2]}</div>
                 <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>{detect}</div>
               </div>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5,
                 color: installed ? "var(--ok-deep)" : "var(--tx5)", fontWeight: 600 }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%",
                   background: installed ? "var(--ok)" : "var(--line-strong)" }} />
-                {installed ? "已检测" : "未安装"}
+                {installed ? t("onboarding:welcome.badgeInstalled") : t("onboarding:welcome.badgeNotInstalled")}
               </span>
             </div>
           );
         })}
         <button className="fbtn-primary" onClick={onStart}
           style={{ width: "100%", height: 40, marginTop: 12, borderRadius: 9, fontSize: 14 }}>
-          开始扫描本机会话</button>
+          {t("onboarding:welcome.start")}</button>
       </div>
     </div>
   );
