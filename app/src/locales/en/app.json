@@ -1,0 +1,124 @@
+{
+  "titlebar": {
+    "expand": "Expand sidebar ⌘B",
+    "collapse": "Collapse sidebar ⌘B",
+    "scanning": "Scanning…",
+    "rescan": "Rescan"
+  },
+  "rail": {
+    "library": "Sessions",
+    "history": "Migrations",
+    "snapshots": "Snapshots",
+    "settings": "Settings"
+  },
+  "detail": {
+    "scanningSessions": "Scanning local sessions…",
+    "noSessionToDisplay": "No session to display — click \"Rescan\" in the top right"
+  },
+  "toast": {
+    "metaSaveFail": "Failed to save metadata",
+    "metaUpdated": "Updated",
+    "metaUpdatedDesc": "Applied to {{n}} sessions.",
+    "snapshotCreating": "Creating snapshot…",
+    "snapshotCreated": "Snapshot created",
+    "snapshotCreatedDesc": "View and restore it in \"Snapshots & Restore\".",
+    "snapshotCreateFail": "Failed to create snapshot",
+    "restoring": "Restoring…",
+    "restoringDesc": "Writing snapshot back to session file",
+    "restoreDone": "Session restored",
+    "restoreDoneDesc": "Session has been restored from the snapshot to its original location.",
+    "restoreFail": "Undo failed",
+    "deleting": "Deleting…",
+    "deletingDesc": "Create snapshot → remove session file",
+    "deleteDone": "Session deleted",
+    "deleteDoneDesc": "\"{{title}}\" removed; snapshot kept in \"Snapshots & Restore\".",
+    "undo": "Undo",
+    "deleteFail": "Failed to delete",
+    "batchDeleting": "Batch deleting…",
+    "batchProgress": "{{done}} / {{total}}",
+    "batchPartialFail": "Batch delete partially failed",
+    "batchPartialFailDesc": "{{done}} succeeded, {{fail}} failed.",
+    "batchDone": "Sessions deleted",
+    "batchDoneDesc": "Deleted {{done}} sessions; snapshots kept in \"Snapshots & Restore\"."
+  },
+  "ctx": {
+    "batchArchive": "Archive all",
+    "batchUnarchive": "Unarchive all",
+    "addTags": "Add tags…",
+    "deleteN": "Delete {{n}} sessions…",
+    "cancelMulti": "Cancel multi-select",
+    "resumeTerminal": "Resume in terminal",
+    "migrateTo": "Migrate to…",
+    "rename": "Rename…",
+    "unpin": "Unpin",
+    "pin": "Pin",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "tags": "Tags…",
+    "snapshot": "Create snapshot",
+    "copyId": "Copy session ID",
+    "copyResume": "Copy resume command",
+    "revealInFinder": "Reveal in Finder",
+    "deleteSession": "Delete session…",
+    "onlyDesktop": "Desktop only",
+    "noSessionFile": "This source has no standalone session file"
+  },
+  "drag": {
+    "hint": "Drag to adjust width · double-click to reset"
+  },
+  "library": {
+    "pinned": "Pinned",
+    "subLabel": "Contains {{n}} sub-sessions",
+    "untitled": "(Untitled session)",
+    "tokenDir": "Dir {{dir}}",
+    "tokenOnlyMigrated": "Only migrated",
+    "tokenOnlySub": "Only with sub-sessions",
+    "tokenIncludeArchived": "Include archived",
+    "tokenTag": "Tag {{tag}}"
+  },
+  "historyToken": {
+    "target": "Target {{tool}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "earlier": "Earlier"
+  },
+  "snapshotsToken": {
+    "session": "Session {{session}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "earlier": "Earlier"
+  },
+  "snapStatus": {
+    "restored": "Restored",
+    "restoring": "Restoring",
+    "restorable": "Restorable"
+  },
+  "pane": {
+    "libraryTitle": "Sessions",
+    "libraryPlaceholder": "Search sessions, dirs, commands…",
+    "librarySort": "Recently active",
+    "libraryFooterError": "Scan error: {{error}}",
+    "libraryFooterMulti": "{{n}} sessions selected · right-click for batch actions, Esc to cancel",
+    "libraryFooterBrowsing": "Browsing {{n}} sessions{{lastScan}}",
+    "libraryFooterLastScan": " · last scan {{time}}",
+    "historyTitle": "Migration history",
+    "historyPlaceholder": "Search migration records…",
+    "historySort": "By time",
+    "historyFooter": "{{n}} migration records",
+    "snapshotsTitle": "Snapshots & Restore",
+    "snapshotsPlaceholder": "Search snapshots…",
+    "snapshotsSort": "By time",
+    "snapshotsFooter": "{{n}} snapshots · source sessions read-only"
+  },
+  "prompt": {
+    "renameTitle": "Rename session",
+    "renameDesc": "Set a display name for \"{{title}}\"; leave empty to restore the original title. Renaming is stored on the Ferry side only and does not modify the session file.",
+    "renamePlaceholder": "New session name",
+    "save": "Save",
+    "tagsBatchTitle": "Add tags to {{n}} sessions",
+    "tagsTitle": "Edit tags",
+    "tagsBatchDesc": "Tags entered will be appended to each selected session; separate multiple with commas.",
+    "tagsDesc": "Separate multiple tags with commas; leave empty to clear all tags.",
+    "tagsPlaceholder": "e.g. important, experiment"
+  }
+}

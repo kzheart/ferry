@@ -110,21 +110,21 @@ export default function App() {
         return next;
       });
     } catch (e) {
-      setToast({ kind: "fail", title: "保存元数据失败", desc: e.message });
+      setToast({ kind: "fail", title: t("app:toast.metaSaveFail"), desc: e.message });
     }
   };
   const batchMeta = async patch => {
     for (const id of multiSel) await setMetaFor(id, patch);
-    setToast({ kind: "ok", title: "已更新", desc: `已对 ${multiSel.length} 个会话生效。` });
+    setToast({ kind: "ok", title: t("app:toast.metaUpdated"), desc: t("app:toast.metaUpdatedDesc", { n: multiSel.length }) });
   };
   const manualSnapshot = async s => {
-    setToast({ kind: "run", title: "正在创建快照…", desc: s.title || s.id });
+    setToast({ kind: "run", title: t("app:toast.snapshotCreating"), desc: s.title || s.id });
     try {
       await rpc("session_snapshot", { tool: s.tool, ref: sessionRef(s) });
       loadSnaps();
-      setToast({ kind: "ok", title: "已创建快照", desc: "可在「快照与还原」中查看与还原。" });
+      setToast({ kind: "ok", title: t("app:toast.snapshotCreated"), desc: t("app:toast.snapshotCreatedDesc") });
     } catch (e) {
-      setToast({ kind: "fail", title: "创建快照失败", desc: e.message });
+      setToast({ kind: "fail", title: t("app:toast.snapshotCreateFail"), desc: e.message });
     }
   };
 
@@ -153,28 +153,28 @@ export default function App() {
 
   // ----- 会话删除(回收站语义:先快照,可撤销) -----
   const undoDelete = async snapshot => {
-    setToast({ kind: "run", title: "正在恢复…", desc: "从快照写回会话文件" });
+    setToast({ kind: "run", title: t("app:toast.restoring"), desc: t("app:toast.restoringDesc") });
     try {
       await rpc("session_undelete", { snapshot });
       doScan(); loadSnaps();
-      setToast({ kind: "ok", title: "已恢复会话", desc: "会话已从快照恢复到原位置。" });
+      setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
     } catch (e) {
-      setToast({ kind: "fail", title: "撤销失败", desc: e.message });
+      setToast({ kind: "fail", title: t("app:toast.restoreFail"), desc: e.message });
     }
   };
   const deleteSession = async s => {
     setDelConfirm(null);
-    setToast({ kind: "run", title: "正在删除…", desc: "创建快照 → 移除会话文件" });
+    setToast({ kind: "run", title: t("app:toast.deleting"), desc: t("app:toast.deletingDesc") });
     try {
       const r = await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
       if (selId === s.id) { setSelId(null); setDetail(null); }
       doScan(); loadSnaps();
-      setToast({ kind: "ok", title: "已删除会话",
-        desc: `「${s.title || s.id}」已移除,快照保存在「快照与还原」。`,
+      setToast({ kind: "ok", title: t("app:toast.deleteDone"),
+        desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
         action: r.undoable
-          ? { label: "撤销", onClick: () => undoDelete(r.snapshot) } : undefined });
+          ? { label: t("app:toast.undo"), onClick: () => undoDelete(r.snapshot) } : undefined });
     } catch (e) {
-      setToast({ kind: "fail", title: "删除失败", desc: e.message });
+      setToast({ kind: "fail", title: t("app:toast.deleteFail"), desc: e.message });
     }
   };
   const askDelete = s => {
@@ -186,8 +186,8 @@ export default function App() {
     setBatchDel(null);
     let done = 0, fail = 0;
     for (const s of targets) {
-      setToast({ kind: "run", title: "正在批量删除…",
-        desc: `${done + fail} / ${targets.length}` });
+      setToast({ kind: "run", title: t("app:toast.batchDeleting"),
+        desc: t("app:toast.batchProgress", { done: done + fail, total: targets.length }) });
       try {
         await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
         done++;
@@ -196,48 +196,48 @@ export default function App() {
     if (targets.some(s => s.id === selId)) { setSelId(null); setDetail(null); }
     setMultiSel([]); doScan(); loadSnaps();
     setToast(fail
-      ? { kind: "fail", title: "批量删除部分失败", desc: `成功 ${done} 个,失败 ${fail} 个。` }
-      : { kind: "ok", title: "已删除会话",
-          desc: `已删除 ${done} 个会话,快照保存在「快照与还原」。` });
+      ? { kind: "fail", title: t("app:toast.batchPartialFail"), desc: t("app:toast.batchPartialFailDesc", { done, fail }) }
+      : { kind: "ok", title: t("app:toast.batchDone"),
+          desc: t("app:toast.batchDoneDesc", { done }) });
   };
 
   const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
   const ctxMeta = ctxSess ? metaMap[ctxSess.id] || {} : {};
   const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
   const ctxItems = ctxMenu?.multi ? [
-    { label: "批量归档", onClick: () => batchMeta({ archived: true }) },
-    { label: "取消归档", onClick: () => batchMeta({ archived: false }) },
-    { label: "添加标签…", onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
+    { label: t("app:ctx.batchArchive"), onClick: () => batchMeta({ archived: true }) },
+    { label: t("app:ctx.batchUnarchive"), onClick: () => batchMeta({ archived: false }) },
+    { label: t("app:ctx.addTags"), onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
     { sep: true },
-    { label: `删除 ${multiSess.length} 个会话…`, danger: true,
+    { label: t("app:ctx.deleteN", { n: multiSess.length }), danger: true,
       onClick: () => setBatchDel(multiSess) },
     { sep: true },
-    { label: "取消多选", onClick: () => setMultiSel([]) },
+    { label: t("app:ctx.cancelMulti"), onClick: () => setMultiSel([]) },
   ] : ctxSess ? [
-    { label: "在终端恢复会话", hint: "↩", onClick: () => resumeDescriptor(
+    { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir).then(openTerminal).catch(() => {}) },
-    { label: "迁移到…", onClick: () => {
+    { label: t("app:ctx.migrateTo"), onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
         setMig({ scope: null }); } },
     { sep: true },
-    { label: "重命名…", hint: "F2", onClick: () => setRenameFor(ctxSess) },
-    { label: ctxMeta.pinned ? "取消置顶" : "置顶",
+    { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
+    { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
       onClick: () => setMetaFor(ctxSess.id, { pinned: !ctxMeta.pinned }) },
-    { label: ctxMeta.archived ? "取消归档" : "归档",
+    { label: ctxMeta.archived ? t("app:ctx.unarchive") : t("app:ctx.archive"),
       onClick: () => setMetaFor(ctxSess.id, { archived: !ctxMeta.archived }) },
-    { label: "标签…", onClick: () => setTagFor({ ids: [ctxSess.id] }) },
-    { label: "创建快照", onClick: () => manualSnapshot(ctxSess) },
+    { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
+    { label: t("app:ctx.snapshot"), onClick: () => manualSnapshot(ctxSess) },
     { sep: true },
-    { label: "复制会话 ID", onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
-    { label: "复制接续命令", onClick: () => resumeDescriptor(
+    { label: t("app:ctx.copyId"), onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
+    { label: t("app:ctx.copyResume"), onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir)
         .then(d => navigator.clipboard?.writeText(d.display_command))
         .catch(() => {}) },
-    { label: "在 Finder 中显示", disabled: !ctxSess.path || !canReveal(),
-      disabledHint: ctxSess.path ? "仅桌面版可用" : "该来源没有独立会话文件",
+    { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path || !canReveal(),
+      disabledHint: ctxSess.path ? t("app:ctx.onlyDesktop") : t("app:ctx.noSessionFile"),
       onClick: () => revealPath(ctxSess.path).catch(() => {}) },
     { sep: true },
-    { label: "删除会话…", hint: "⌫", danger: true, onClick: () => askDelete(ctxSess) },
+    { label: t("app:ctx.deleteSession"), hint: "⌫", danger: true, onClick: () => askDelete(ctxSess) },
   ] : null;
 
   // ----- 键盘 -----
@@ -366,10 +366,10 @@ export default function App() {
   const libGroups = useMemo(() => {
     const rowOf = s => {
       const m = metaMap[s.id] || {};
-      return { id: s.id, title: m.name || s.title || "(无标题会话)", repo: repoOf(s.dir),
+      return { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
         dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
         pinned: !!m.pinned, archived: !!m.archived, tags: m.tags,
-        hasSub: (s.tree_count || 1) > 1, subLabel: `含 ${(s.tree_count || 1) - 1} 个子会话`,
+        hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
         hasMig: migratedIds.has(s.id), selected: s.id === selId,
         multi: multiSel.includes(s.id),
         onClick: e => {
@@ -406,16 +406,16 @@ export default function App() {
     const groups = [];
     const pinnedRows = sessions.filter(s => isPinned(s) && matchLib(s));
     if (pinnedRows.length) {
-      groups.push({ key: "pinned", label: "置顶", count: pinnedRows.length,
+      groups.push({ key: "pinned", label: t("app:library.pinned"), count: pinnedRows.length,
         expanded: !(collapsedGroups.pinned ?? false),
         onToggle: () => setCollapsedGroups(g => ({ ...g, pinned: !(g.pinned ?? false) })),
         rows: pinnedRows.map(rowOf) });
     }
-    BUCKETS.filter(([k]) => timeBuckets.includes(k)).forEach(([key, label]) => {
+    BUCKETS.filter(([k]) => timeBuckets.includes(k)).forEach(([key]) => {
       const rows = sessions.filter(s =>
         !isPinned(s) && bucketOf(s.updated) === key && matchLib(s));
       if (!rows.length) return;
-      groups.push({ key, label, count: rows.length,
+      groups.push({ key, label: t(`common:bucket.${key}`), count: rows.length,
         expanded: !(collapsedGroups[key] ?? false),
         onToggle: () => setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })),
         rows: rows.map(rowOf) });
@@ -426,21 +426,21 @@ export default function App() {
     .flatMap(g => g.rows.map(r => r.id));
 
   const libTokens = [];
-  if (libF.src.length < TOOLS.length) libF.src.forEach(t => libTokens.push({ label: TOOL_NAME[t],
-    onRemove: () => setLibF(v => ({ ...v, src: v.src.filter(x => x !== t).length
-      ? v.src.filter(x => x !== t) : [...TOOLS] })) }));
+  if (libF.src.length < TOOLS.length) libF.src.forEach(tool => libTokens.push({ label: TOOL_NAME[tool],
+    onRemove: () => setLibF(v => ({ ...v, src: v.src.filter(x => x !== tool).length
+      ? v.src.filter(x => x !== tool) : [...TOOLS] })) }));
   if (libF.time !== "all") libTokens.push({
-    label: { today: "今天", last7: "最近 7 天", last30: "最近 30 天" }[libF.time],
+    label: t(`common:bucket.${libF.time === "last7" ? "last7" : libF.time === "last30" ? "last30" : libF.time}`),
     onRemove: () => setLibF(v => ({ ...v, time: "all" })) });
-  if (libF.dir) libTokens.push({ label: `目录 ${libF.dir}`,
+  if (libF.dir) libTokens.push({ label: t("app:library.tokenDir", { dir: libF.dir }),
     onRemove: () => setLibF(v => ({ ...v, dir: null })) });
-  if (libF.mig) libTokens.push({ label: "仅含迁移",
+  if (libF.mig) libTokens.push({ label: t("app:library.tokenOnlyMigrated"),
     onRemove: () => setLibF(v => ({ ...v, mig: false })) });
-  if (libF.sub) libTokens.push({ label: "仅含子会话",
+  if (libF.sub) libTokens.push({ label: t("app:library.tokenOnlySub"),
     onRemove: () => setLibF(v => ({ ...v, sub: false })) });
-  if (libF.arch) libTokens.push({ label: "含已归档",
+  if (libF.arch) libTokens.push({ label: t("app:library.tokenIncludeArchived"),
     onRemove: () => setLibF(v => ({ ...v, arch: false })) });
-  if (libF.tag) libTokens.push({ label: `标签 ${libF.tag}`,
+  if (libF.tag) libTokens.push({ label: t("app:library.tokenTag", { tag: libF.tag }),
     onRemove: () => setLibF(v => ({ ...v, tag: null })) });
 
   const allTags = useMemo(
@@ -461,7 +461,7 @@ export default function App() {
       (h.session_id || "").toLowerCase().includes(hql));
   const histFiltered = histItems.filter(matchHist);
   visibleIds.current.history = histFiltered.map(h => h._id);
-  const histGroups = [["today", "今天"], ["yesterday", "昨天"], ["earlier", "更早"]].map(([k, label]) => ({
+  const histGroups = [["today", t("app:historyToken.today")], ["yesterday", t("app:historyToken.yesterday")], ["earlier", t("app:historyToken.earlier")]].map(([k, label]) => ({
     label,
     rows: histFiltered.filter(h => k === "earlier"
       ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
@@ -475,12 +475,12 @@ export default function App() {
   })).filter(g => g.rows.length);
   const histSel = histItems.find(h => h._id === selHist) || histFiltered[0] || null;
   const histTokens = [];
-  if (histF.target !== "all") histTokens.push({ label: `目标 ${TOOL_NAME[histF.target]}`,
+  if (histF.target !== "all") histTokens.push({ label: t("app:historyToken.target", { tool: TOOL_NAME[histF.target] }),
     onRemove: () => setHistF(v => ({ ...v, target: "all" })) });
   if (histF.status !== "all") histTokens.push({ label: t(`common:${histF.status}`),
     onRemove: () => setHistF(v => ({ ...v, status: "all" })) });
   if (histF.time !== "all") histTokens.push({
-    label: { today: "今天", yesterday: "昨天", earlier: "更早" }[histF.time],
+    label: t(`app:historyToken.${histF.time}`),
     onRemove: () => setHistF(v => ({ ...v, time: "all" })) });
 
   // ----- 资源栏数据:快照 -----
@@ -498,7 +498,8 @@ export default function App() {
   const snapSel = snapItems.find(s => s.id === selSnap) || snapFiltered[0] || null;
   const snapListRows = snapFiltered.map(s => {
     const rst = snapRestoring[s.id];
-    const status = rst === "done" ? "已还原" : rst ? "还原中" : "可还原";
+    const status = rst === "done" ? t("app:snapStatus.restored")
+      : rst ? t("app:snapStatus.restoring") : t("app:snapStatus.restorable");
     return { id: s.id, title: s.title, short: fmtTime(s.time), trigger: s.trigger, status,
       stColor: rst && rst !== "done" ? "var(--warn)" : "var(--ok)", tool: s.tool,
       selected: s.id === (selSnap ?? snapFiltered[0]?.id), onClick: () => setSelSnap(s.id) };
@@ -506,33 +507,33 @@ export default function App() {
   const snapTokens = [];
   if (snapF.reason !== "all") snapTokens.push({ label: snapF.reason,
     onRemove: () => setSnapF(v => ({ ...v, reason: "all" })) });
-  if (snapF.session !== "all") snapTokens.push({ label: `会话 ${snapF.session}`,
+  if (snapF.session !== "all") snapTokens.push({ label: t("app:snapshotsToken.session", { session: snapF.session }),
     onRemove: () => setSnapF(v => ({ ...v, session: "all" })) });
   if (snapF.time !== "all") snapTokens.push({
-    label: { today: "今天", yesterday: "昨天", earlier: "更早" }[snapF.time],
+    label: t(`app:snapshotsToken.${snapF.time}`),
     onRemove: () => setSnapF(v => ({ ...v, time: "all" })) });
 
   // ----- 资源栏骨架配置 -----
   const paneCfg = {
-    library: { title: "会话", count: String(sessions.length), placeholder: "搜索会话、目录、命令…",
-      query: q, onQuery: e => setQ(e.target.value), sortLabel: "最近活跃",
+    library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
+      query: q, onQuery: e => setQ(e.target.value), sortLabel: t("app:pane.librarySort"),
       filterCount: (libF.src.length < 3 ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
         (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
         (libF.arch ? 1 : 0) + (libF.tag ? 1 : 0),
       tokens: libTokens,
-      footer: scan?.error ? `扫描出错:${scan.error}`
-        : multiSel.length > 1 ? `已多选 ${multiSel.length} 个会话 · 右键批量操作,Esc 取消`
-        : `正在浏览 ${sessions.length} 个会话${lastScan ? ` · 上次扫描 ${fmtTime(lastScan)}` : ""}` },
-    history: { title: "迁移历史", count: String(histItems.length), placeholder: "搜索迁移记录…",
-      query: hq, onQuery: e => setHq(e.target.value), sortLabel: "按时间",
+      footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
+        : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
+        : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan) }) : "" }) },
+    history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
+      query: hq, onQuery: e => setHq(e.target.value), sortLabel: t("app:pane.historySort"),
       filterCount: (histF.src.length < 3 ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
         (histF.status !== "all" ? 1 : 0) + (histF.time !== "all" ? 1 : 0),
-      tokens: histTokens, footer: `${histItems.length} 条迁移记录` },
-    snapshots: { title: "快照与还原", count: String(snapItems.length), placeholder: "搜索快照…",
-      query: sq, onQuery: e => setSq(e.target.value), sortLabel: "按时间",
+      tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
+    snapshots: { title: t("app:pane.snapshotsTitle"), count: String(snapItems.length), placeholder: t("app:pane.snapshotsPlaceholder"),
+      query: sq, onQuery: e => setSq(e.target.value), sortLabel: t("app:pane.snapshotsSort"),
       filterCount: (snapF.src.length < TOOLS.length ? 1 : 0) + (snapF.reason !== "all" ? 1 : 0) +
         (snapF.session !== "all" ? 1 : 0) + (snapF.time !== "all" ? 1 : 0),
-      tokens: snapTokens, footer: `${snapItems.length} 个快照 · 源会话只读` },
+      tokens: snapTokens, footer: t("app:pane.snapshotsFooter", { n: snapItems.length }) },
   }[view] || null;
 
   const clearLibF = () => {
@@ -541,7 +542,9 @@ export default function App() {
     setQ("");
   };
   const railItems = [
-    { k: "library", label: "会话" }, { k: "history", label: "迁移" }, { k: "snapshots", label: "快照" }];
+    { k: "library", label: t("app:rail.library") },
+    { k: "history", label: t("app:rail.history") },
+    { k: "snapshots", label: t("app:rail.snapshots") }];
 
   const firstDone = () => {
     localStorage.setItem("ferry-first-done", "1");
@@ -557,7 +560,7 @@ export default function App() {
         display: "flex", alignItems: "center", gap: 12, padding: "0 12px 0 78px",
         background: "var(--titlebar)", borderBottom: "1px solid var(--line)" }}>
         <button className="hov" onClick={() => setCollapsed(v => !v)}
-          title={collapsed ? "展开侧边栏 ⌘B" : "收起侧边栏 ⌘B"}
+          title={collapsed ? t("app:titlebar.expand") : t("app:titlebar.collapse")}
           style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
             justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
             cursor: "pointer", color: "var(--tx3b)" }}>
@@ -569,7 +572,7 @@ export default function App() {
             gap: 7, padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
             borderRadius: 7, fontSize: 12.5, color: "var(--tx2)", cursor: "pointer" }}>
             {scanning ? <Spinner /> : <RescanIcon />}
-            {scanning ? "扫描中…" : "重新扫描"}
+            {scanning ? t("app:titlebar.scanning") : t("app:titlebar.rescan")}
           </button>
         )}
       </div>
@@ -596,7 +599,7 @@ export default function App() {
           })}
           <div style={{ flex: 1 }} />
           <button className="hov-rail"
-            onMouseEnter={e => railEnter("设置", e)} onMouseLeave={railLeave}
+            onMouseEnter={e => railEnter(t("app:rail.settings"), e)} onMouseLeave={railLeave}
             onClick={() => { setSettingsOpen(v => !v); railLeave(); }}
             style={{ width: 40, height: 40, border: "none", borderRadius: 9,
               background: settingsOpen ? "var(--acc-soft2)" : "transparent", display: "flex",
@@ -624,7 +627,7 @@ export default function App() {
               scanning && !sessions.length
                 ? <div style={{ padding: "34px 12px", textAlign: "center", color: "var(--tx5)",
                     fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center",
-                    gap: 8 }}><Spinner /> 正在扫描本机会话…</div>
+                    gap: 8 }}><Spinner /> {t("app:detail.scanningSessions")}</div>
                 : <LibraryList groups={libGroups}
                     empty={libGroups.length === 0} onClear={clearLibF} />)}
             {view === "history" && (
@@ -639,7 +642,7 @@ export default function App() {
         {/* 拖拽分隔条 */}
         {paneCfg && !collapsed && (
           <div onMouseDown={startDrag} onDoubleClick={() => setPaneW(328)}
-            title="拖动调整宽度 · 双击复位"
+            title={t("app:drag.hint")}
             style={{ width: 9, flex: "none", cursor: "col-resize", position: "relative",
               background: dragging ? "var(--acc-soft2)" : "transparent", zIndex: 6 }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 1,
@@ -662,7 +665,7 @@ export default function App() {
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--tx5)", fontSize: 13 }}>
-            {scanning ? "正在扫描本机会话…" : "没有可显示的会话 —— 点右上角「重新扫描」"}</div>
+            {scanning ? t("app:detail.scanningSessions") : t("app:detail.noSessionToDisplay")}</div>
         ))}
         {view === "history" && <HistoryDetail h={histSel} />}
         {view === "snapshots" && (
@@ -695,18 +698,18 @@ export default function App() {
         <BatchDeleteConfirm sessions={batchDel}
           onCancel={() => setBatchDel(null)} onConfirm={doBatchDelete} />)}
       {renameFor && (
-        <PromptBox title="重命名会话"
-          desc={`为「${renameFor.title || renameFor.id}」设置显示名称;留空则恢复原始标题。重命名只存在 Ferry 侧,不改动会话文件。`}
-          placeholder="新的会话名称" confirmLabel="保存"
+        <PromptBox title={t("app:prompt.renameTitle")}
+          desc={t("app:prompt.renameDesc", { title: renameFor.title || renameFor.id })}
+          placeholder={t("app:prompt.renamePlaceholder")} confirmLabel={t("app:prompt.save")}
           initial={metaMap[renameFor.id]?.name || renameFor.title || ""}
           onCancel={() => setRenameFor(null)}
           onConfirm={v => { setRenameFor(null); setMetaFor(renameFor.id, { name: v }); }} />)}
       {tagFor && (
         <PromptBox
-          title={tagFor.batch ? `为 ${tagFor.ids.length} 个会话添加标签` : "编辑标签"}
-          desc={tagFor.batch ? "输入的标签会追加到每个选中会话上,用逗号分隔多个。"
-            : "用逗号分隔多个标签;留空清除全部标签。"}
-          placeholder="如: 重要, 实验" confirmLabel="保存"
+          title={tagFor.batch ? t("app:prompt.tagsBatchTitle", { n: tagFor.ids.length }) : t("app:prompt.tagsTitle")}
+          desc={tagFor.batch ? t("app:prompt.tagsBatchDesc")
+            : t("app:prompt.tagsDesc")}
+          placeholder={t("app:prompt.tagsPlaceholder")} confirmLabel={t("app:prompt.save")}
           initial={tagFor.batch ? "" : (metaMap[tagFor.ids[0]]?.tags || []).join(", ")}
           onCancel={() => setTagFor(null)}
           onConfirm={async v => {

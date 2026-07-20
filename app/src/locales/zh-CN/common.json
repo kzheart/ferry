@@ -17,5 +17,12 @@
     "history": "没有匹配迁移记录",
     "snapshots": "没有匹配快照",
     "clearFilter": "清除筛选"
+  },
+  "bucket": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "last7": "最近 7 天",
+    "last30": "最近 30 天",
+    "earlier": "更早"
   }
 }
