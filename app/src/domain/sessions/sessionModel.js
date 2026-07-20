@@ -39,7 +39,24 @@ export function repoOf(dir) {
 export const sessionRef = session =>
   session.tool === "opencode" ? session.id : (session.path || session.id);
 
-export function toRounds(messages) {
+export function toRounds(messages, authoredTurns) {
+  if (authoredTurns?.length) {
+    return authoredTurns.map(turn => {
+      const userBlocks = turn.user?.blocks || [];
+      const user = userBlocks.filter(block => block.kind === "text")
+        .map(block => block.text).join("\n");
+      const seq = (turn.assistant_reply?.items || []).map(item => item.kind === "tool"
+        ? { kind: "tool", tool: { ...item, size: item.output?.length || 0 } }
+        : { kind: "text", text: item.text });
+      const ai = seq.filter(item => item.kind === "text").map(item => item.text);
+      const tools = seq.filter(item => item.kind === "tool").map(item => item.tool);
+      let last = -1;
+      seq.forEach((item, index) => { if (item.kind === "text") last = index; });
+      return { n: turn.turn, user, locator: turn.turn_locator, index: turn.user?.index,
+        ai, tools, seq, final: last >= 0 ? seq[last].text : "",
+        steps: seq.filter((_, index) => index !== last), authoring: turn };
+    });
+  }
   const rounds = [];
   let current = null;
   for (const message of messages || []) {

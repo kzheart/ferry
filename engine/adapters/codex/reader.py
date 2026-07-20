@@ -238,6 +238,11 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             text = "\n".join(t for t in texts if t)
             if p["role"] == "user" and text.strip().startswith(_SKIP_USER_PREFIX):
                 continue
+            if p["role"] == "user" and (cur_tools or cur_reasoning):
+                pending_blocks = []
+                flush_pending_into(pending_blocks)
+                sess.messages.append(Message(role="assistant", blocks=pending_blocks,
+                                             raw=[]))
             if not text.strip() and not cur_tools and not cur_reasoning:
                 continue
             blocks = [Block("text", text)] if text.strip() else []
@@ -267,7 +272,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                                       source_call_id=p.get("call_id"))
                     else:
                         tc = ToolCall(name=p.get("name", "?"), op=None,
-                                      input=p.get("arguments", ""), output="",
+                                      input=_json_args(p.get("arguments", "")), output="",
                                       source_call_id=p.get("call_id"))
             else:
                 if p.get("name") == "spawn_agent":

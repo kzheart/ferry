@@ -14,7 +14,7 @@ import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
-  InplaceConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm, SnapFilter,
+  ApplyConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm, SnapFilter,
   SnapRestoreConfirm, Toast } from "../components/ui/Overlays.jsx";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
@@ -61,7 +61,6 @@ export default function App() {
   const [tagFor, setTagFor] = useState(null);       // {ids} 待编辑标签的会话
   const [multiSel, setMultiSel] = useState([]);     // 多选中的会话 id
   const [metaMap, setMetaMap] = useState({});       // 会话元数据 sidecar
-  const pendingEdit = useRef(null);             // 右键"会话编辑"等数据加载完再进入
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
@@ -76,12 +75,15 @@ export default function App() {
   const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
   const migratedIds = useMemo(() => new Set(historyRows.map(h => h.source_id)), [historyRows]);
   const cur = selId ? byId[selId] : null;
+  const savedAsRef = useRef(null);
   const editing = useSessionEditing({ current: cur,
     runtimeProbe: !!settings.runtimeProbe, doScan, loadSnaps,
-    onInplaceApplied: () => select(selId) });
-  const { mode, setMode, ops, setOps, saveMode, setSaveMode, diff, setDiff,
-    confirmInplace, setConfirmInplace, toast, setToast, applying, scope, setScope,
-    editCaps, resetSelection, loadCapabilities, addOp, removeOp, updateOp, openDiff, applyEdit } = editing;
+    onInplaceApplied: () => select(selId),
+    onSavedAs: result => savedAsRef.current?.(result) });
+  const { ops, setOps, saveMode, setSaveMode, diff, setDiff,
+    confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
+    editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
+    removeOp, updateOp, authoringError, openDiff, applyEdit } = editing;
   const snapshots = useSnapshotState({ snapRows, sessionsById: byId,
     runtimeProbe: settings.runtimeProbe, loadSnaps, doScan, setToast });
   const { items: snapItems, confirm: snapConfirm, setConfirm: setSnapConfirm,
@@ -126,7 +128,6 @@ export default function App() {
 
   const select = id => {
     setSelId(id); resetSelection();
-    pendingEdit.current = null;
     const s = byId[id] || sessions.find(x => x.id === id);
     if (!s) return;
     setDetail({ id, data: null });
@@ -136,18 +137,17 @@ export default function App() {
     loadCapabilities(s.tool);
   };
 
-  // 右键"会话编辑":先选中,数据到位后自动进入编辑模式
-  const enterEditFor = id => {
-    if (id === selId && detail?.data) { setMode("edit"); return; }
-    select(id);
-    pendingEdit.current = id;
+  // 另存为新会话后从 toast 打开:扫描结果已含新会话则正常选中,否则按返回的路径直接读
+  savedAsRef.current = result => {
+    const id = result.session_id;
+    if (byId[id]) { select(id); return; }
+    setSelId(id); resetSelection();
+    setDetail({ id, data: null });
+    rpc("show", { tool: result.tool, ref: result.saved_as || id })
+      .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
+      .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
+    doScan();
   };
-  useEffect(() => {
-    if (pendingEdit.current && detail?.data && detail.id === pendingEdit.current) {
-      pendingEdit.current = null;
-      setMode("edit");
-    }
-  }, [detail]);
 
   // ----- 会话删除(回收站语义:先快照,可撤销) -----
   const undoDelete = async snapshot => {
@@ -214,7 +214,6 @@ export default function App() {
   ] : ctxSess ? [
     { label: "在终端恢复会话", hint: "↩", onClick: () => openTerminal(
         { tool: ctxSess.tool, session_id: ctxSess.id, cwd: ctxSess.dir || "." }) },
-    { label: "会话编辑", hint: "⌘E", onClick: () => enterEditFor(ctxSess.id) },
     { label: "迁移到…", onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
         setMig({ scope: null }); } },
@@ -252,7 +251,7 @@ export default function App() {
         else if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
         else if (snapConfirm) setSnapConfirm(null);
-        else if (confirmInplace) setConfirmInplace(false);
+        else if (confirmApply) setConfirmApply(false);
         else if (diff) setDiff(null);
         else if (mig) setMig(null);
         else if (multiSel.length) setMultiSel([]);
@@ -263,19 +262,16 @@ export default function App() {
           ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       // 会话库快捷键:仅在没有弹层时生效
       const overlayOpen = ctxMenu || delConfirm || batchDel || renameFor || tagFor ||
-        settingsOpen || popover || snapConfirm || confirmInplace || diff || mig || guideStep;
+        settingsOpen || popover || snapConfirm || confirmApply || diff || mig || guideStep;
       if (!overlayOpen && view === "library" && cur) {
-        if ((e.metaKey || e.ctrlKey) && (e.key === "e" || e.key === "E")) {
-          e.preventDefault(); enterEditFor(cur.id); return;
-        }
         if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
-        if ((e.key === "Backspace" || e.key === "Delete") && mode !== "edit") {
+        if (e.key === "Backspace" || e.key === "Delete") {
           e.preventDefault();
           if (multiSel.length > 1) setBatchDel(multiSel.map(id => byId[id]).filter(Boolean));
           else askDelete(cur);
           return;
         }
-        if (e.key === "Enter" && mode !== "edit") {
+        if (e.key === "Enter") {
           e.preventDefault();
           openTerminal({ tool: cur.tool, session_id: cur.id, cwd: cur.dir || "." });
           return;
@@ -314,7 +310,7 @@ export default function App() {
 
   // ----- 引导 -----
   const openGuide = () => {
-    setView("library"); setMode("view"); setSettingsOpen(false);
+    setView("library"); setSettingsOpen(false);
     setMig(null); setGuideStep(1);
   };
 
@@ -649,13 +645,12 @@ export default function App() {
           <SessionDetail key={selId}
             meta={metaMap[cur.id]?.name ? { ...cur, title: metaMap[cur.id].name } : cur}
             data={detail?.data} error={detail?.error}
-            mode={mode} onEnterEdit={() => setMode("edit")}
-            onExitEdit={() => { setMode("view"); setOps([]); }}
+            onDiscardAll={() => setOps([])}
             scope={scope} setScope={setScope}
             ops={ops} addOp={addOp} removeOp={removeOp} updateOp={updateOp}
-            saveMode={saveMode} setSaveMode={setSaveMode}
-            editCaps={editCaps}
-            onOpenDiff={openDiff} onApply={applyEdit} applying={applying}
+            editCaps={editCaps} authoringCaps={authoringCaps}
+            startReplyEdit={startReplyEdit} authoringError={authoringError}
+            onOpenDiff={openDiff} onApply={() => setConfirmApply(true)} applying={applying}
             onOpenMigrate={sc => setMig({ scope: sc ?? scope })} />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -676,10 +671,10 @@ export default function App() {
           defaultProbe={!!settings.runtimeProbe}
           onClose={() => setMig(null)}
           onDone={() => { loadHistory(); loadSnaps(); }} />)}
-      {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading}
+      {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading} error={diff.error}
         onClose={() => setDiff(null)} />}
-      {confirmInplace && <InplaceConfirm onCancel={() => setConfirmInplace(false)}
-        onConfirm={applyEdit} />}
+      {confirmApply && <ApplyConfirm ops={ops} saveMode={saveMode} setSaveMode={setSaveMode}
+        editCaps={editCaps} onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
       {snapConfirm && <SnapRestoreConfirm snap={snapConfirm}
         onCancel={() => setSnapConfirm(null)} onConfirm={confirmRestore} />}
       {ctxMenu && ctxItems && (

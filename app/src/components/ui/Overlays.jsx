@@ -8,7 +8,20 @@ import { Spinner, ToolIcon } from "./icons.jsx";
 import { CheckSquare, RadioDot, Sheet } from "./primitives.jsx";
 
 // ---------- 差异预览 ----------
-export function DiffSheet({ ops, preview, loading, onClose }) {
+export function DiffSheet({ ops, preview, loading, error, onClose }) {
+  const replyText = items => {
+    const limit = 8000;
+    let text = "";
+    for (const item of items || []) {
+      const input = typeof item.input === "string" ? item.input : JSON.stringify(item.input, null, 2);
+      const part = item.kind === "text" ? `文本\n${item.text}`
+        : `工具 ${item.name}\n参数 ${input}\n输出\n${item.output}`;
+      const room = limit - text.length;
+      if (room <= 0) break;
+      text += (text ? "\n\n" : "") + part.slice(0, room);
+    }
+    return text.length >= limit ? `${text.slice(0, limit)}\n…预览已截断` : text;
+  };
   return (
     <Sheet width={760} maxHeight={780} onClose={onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
@@ -28,6 +41,9 @@ export function DiffSheet({ ops, preview, loading, onClose }) {
         {loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--tx4)",
             fontSize: 12.5, marginBottom: 14 }}><Spinner size={14} /> 正在计算前后差异…</div>)}
+        {error && (
+          <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--err-bg2)",
+            color: "var(--err-text)", fontSize: 12, marginBottom: 12 }}>{error}</div>)}
         {ops.map(o => (
           <div key={o.id} style={{ border: "1px solid var(--line3)", borderRadius: 10, overflow: "hidden",
             marginBottom: 12 }}>
@@ -35,15 +51,26 @@ export function DiffSheet({ ops, preview, loading, onClose }) {
               display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: o.dot }} />
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.label}</span>
-              <span style={{ fontSize: 11, color: "var(--tx5)", marginLeft: "auto" }}>{o.delta}</span>
+              {o.type === "rewrite" && o.text === o.orig && (
+                <span style={{ fontSize: 11, color: "var(--warn-deep)", marginLeft: "auto" }}>内容未改动</span>)}
             </div>
-            <div className="mono" style={{ padding: "11px 13px", fontSize: 11.5, lineHeight: 1.7 }}>
-              <div style={{ background: "var(--err-bg2)", color: "var(--err-text)", padding: "2px 8px", borderRadius: 5,
-                marginBottom: 4, textDecoration: o.type === "delete" ? "line-through" : "none",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>− {o.before}</div>
-              {o.after && (
-                <div style={{ background: "var(--ok-bg2)", color: "var(--ok-body2)", padding: "2px 8px", borderRadius: 5,
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>+ {o.after}</div>)}
+            <div className="mono selectable" style={{ padding: "11px 13px", fontSize: 11.5, lineHeight: 1.7 }}>
+              <div className="fscroll" style={{ background: "var(--err-bg2)", color: "var(--err-text)",
+                 padding: "6px 10px", borderRadius: 5, whiteSpace: "pre-wrap", overflowWrap: "break-word",
+                 maxHeight: 180, overflowY: "auto" }}>− {o.type === "assistant-reply"
+                  ? replyText(o.origItems).slice(0, 8000)
+                  : (o.orig || "(无用户消息)").slice(0, 4000)}</div>
+              {o.type === "delete" ? (
+                <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 6 }}>{o.summary}</div>
+              ) : (
+                <div className="fscroll" style={{ background: "var(--ok-bg2)", color: "var(--ok-body2)",
+                  padding: "6px 10px", borderRadius: 5, marginTop: 5, whiteSpace: "pre-wrap",
+                  overflowWrap: "break-word", maxHeight: 180, overflowY: "auto" }}>
+                  + {o.type === "assistant-reply"
+                    ? replyText(o.items.map(item => item.kind === "tool"
+                      ? { ...item, input: item.inputText } : item)).slice(0, 8000)
+                    : (o.text || "").slice(0, 4000)}</div>
+              )}
             </div>
           </div>
         ))}
@@ -74,17 +101,49 @@ function ConfirmBox({ width = 400, title, children, actions }) {
   );
 }
 
-export function InplaceConfirm({ onCancel, onConfirm }) {
+export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, onConfirm }) {
+  const modes = [
+    ["saveas", "另存为新会话", "保留原会话不变(默认)"],
+    ["inplace", "原地修改", "直接改写原始会话文件"],
+  ].filter(([mode]) => {
+    return ops.every(op => op.modes?.includes(mode) ||
+      editCaps?.operation_modes?.[op.backendOp || (op.type === "delete" ? "delete-turn" : "rewrite")]?.includes(mode));
+  });
+  const inplace = saveMode === "inplace";
   return (
-    <ConfirmBox title="原地修改原会话?" actions={<>
+    <ConfirmBox width={440} title={`应用 ${ops.length} 项更改?`} actions={<>
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
-      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
-        onClick={onConfirm}>确认原地修改</button>
+      {inplace ? (
+        <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
+          borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          onClick={onConfirm}>确认原地修改</button>
+      ) : (
+        <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
+          onClick={onConfirm}>另存为新会话</button>
+      )}
     </>}>
-      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 8, lineHeight: 1.55 }}>
-        这会直接改写原始会话文件。Ferry 会先自动创建快照;若应用后验收未通过将自动还原。
-        验收默认只做结构验证;可在设置中开启运行时探针,探针只在临时影子会话上执行,不会向原会话追加消息。此操作可通过快照撤销。</div>
+      <div style={{ marginTop: 12 }}>
+        {modes.map(([k, l, d]) => {
+          const on = saveMode === k;
+          return (
+            <label key={k} onClick={() => setSaveMode(k)}
+              style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 11px",
+                border: `1px solid ${on ? ACCENT : "var(--line3)"}`,
+                background: on ? "var(--acc-soft4)" : "var(--surface)",
+                borderRadius: 9, marginTop: 7, cursor: "pointer" }}>
+              <span style={{ marginTop: 1, display: "inline-flex" }}><RadioDot on={on} /></span>
+              <span>
+                <span style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
+                <span style={{ fontSize: 11, color: "var(--tx5)" }}>{d}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 12, lineHeight: 1.55 }}>
+        {inplace
+          ? "应用前自动创建快照,可随时还原;若验收未通过将自动还原,不留改动。"
+          : "原会话保持不变,结果保存为一个新会话。"}</div>
     </ConfirmBox>
   );
 }

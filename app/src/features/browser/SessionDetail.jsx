@@ -1,12 +1,12 @@
-// 会话详情:头部 + 会话树 chips + 按轮时间线;编辑模式附 Inspector
+// 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { useMemo, useRef, useState } from "react";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize, resumeCommand } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
   PencilIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
-import { RadioDot } from "../../components/ui/primitives.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
+import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
 const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」
 
@@ -60,6 +60,7 @@ function ToolCard({ t, open, onToggle }) {
 
 function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
+  replyOp, canAuthor, authoringBlocked, onStartReply, onUpdateReply, onCancelReply,
   scopeOn, onScope, onClearScope, onMigrateScope, scopeStats }) {
   const [open, setOpen] = useState({});
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -67,11 +68,12 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   const [copied, setCopied] = useState(false);
   const taRef = useRef(null);
   const { text: userText, imgs } = useMemo(() => splitImages(r.user), [r.user]);
-  const aiText = (r.final || "").slice(0, 8000);
+  const fullAiText = r.final || "";
+  const aiText = fullAiText.slice(0, 8000);
   const deleted = !!delOp;
 
   const copyAi = () => {
-    try { navigator.clipboard?.writeText(aiText); } catch {}
+    try { navigator.clipboard?.writeText(fullAiText); } catch {}
     setCopied(true); setTimeout(() => setCopied(false), 1400);
   };
   const fitTa = el => {
@@ -86,9 +88,10 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   };
 
   return (
-    <div className="fround" style={{ marginBottom: editable ? 10 : 30 }}>
+    <div className="fround" data-round={r.n} style={{ marginBottom: editable ? 10 : 30 }}>
       {editable && (
-        <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0 8px" }}>
+        <div className={deleted || rewOp ? undefined : "fhact"}
+          style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0 8px" }}>
           <span style={{ width: 20, height: 20, flex: "none", borderRadius: "50%",
             border: "1.5px solid var(--line2)", display: "inline-flex", alignItems: "center",
             justifyContent: "center", fontSize: 10.5, fontWeight: 700, color: "var(--tx4b)" }}>{r.n}</span>
@@ -155,7 +158,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
             )}
           </div>
         )}
-        {r.steps.length > 0 && (
+        {!replyOp && r.steps.length > 0 && (
           <div style={{ margin: "8px 0" }}>
             <div onClick={() => setToolsOpen(v => !v)} style={{ display: "inline-flex",
               alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 7,
@@ -178,15 +181,20 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
             )}
           </div>
         )}
-        {aiText && (
+        {!replyOp && aiText && (
           <div style={{ margin: "10px 0 0" }}>
             <div className="fdel-text"><Markdown text={aiText} /></div>
-            {!editable && (
-              <div className="fhact" style={{ marginTop: 4 }}>
-                <IconBtn title={copied ? "已复制" : "复制回复"} onClick={copyAi}>
-                  {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
-              </div>
-            )}
+            <div className="fhact" style={{ marginTop: 4 }}>
+              <IconBtn title={copied ? "已复制" : "复制回复"} onClick={copyAi}>
+                {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
+            </div>
+          </div>
+        )}
+        {!deleted && (
+          <div style={{ marginTop: 7 }}>
+            <AssistantReplyEditor op={replyOp} canAuthor={canAuthor}
+              blocked={authoringBlocked} onStart={onStartReply}
+              onChange={onUpdateReply} onCancel={onCancelReply} />
           </div>
         )}
       </div>
@@ -221,112 +229,61 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   );
 }
 
-function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
-  onOpenDiff, onApply, applying, canEdit, editCaps }) {
-  const hasOps = ops.length > 0;
-  const modes = [
-    ["saveas", "另存为新会话", "保留原会话不变(默认)"],
-    ["inplace", "原地修改", "改写原始会话文件 · 需二次确认"],
-  ].filter(([mode]) => {
-    if (!ops.length) return mode === "saveas" ? editCaps?.save_as : editCaps?.inplace;
-    const names = ops.map(op => op.type === "delete" ? "delete-turn" : "rewrite");
-    return names.every(name => editCaps?.operation_modes?.[name]?.includes(mode));
-  });
+function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onDiscardAll }) {
+  const [listOpen, setListOpen] = useState(false);
+  const jump = n => document.querySelector(`[data-round="${n}"]`)
+    ?.scrollIntoView({ behavior: "smooth", block: "center" });
   return (
-    <div style={{ width: 300, flex: "none", borderLeft: "1px solid var(--line)", background: "var(--inset)",
-      display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div style={{ padding: "14px 16px 12px", borderBottom: "1px solid var(--line5)" }}>
-        <div style={{ fontSize: 13, fontWeight: 650 }}>编辑 Inspector</div>
-        <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 3 }}>暂存的操作在应用前不会改动原会话</div>
-      </div>
-      <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
-        {!hasOps && (
-          <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--tx5)", fontSize: 12,
-            border: "1px dashed var(--line2)", borderRadius: 9 }}>
-            在左侧时间线对某一轮点击<br />删除 / 改写以暂存操作</div>
-        )}
-        {ops.map(o => (
-          <div key={o.id} style={{ padding: "9px 10px", border: "1px solid var(--line3)", borderRadius: 8,
-            background: "var(--surface)", marginBottom: 7 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+    <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+      zIndex: 5, animation: "ffade .16s ease" }}>
+      {listOpen && (
+        <div className="fscroll" style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0,
+          minWidth: 250, maxHeight: 262, overflowY: "auto", background: "var(--bg)",
+          border: "1px solid var(--line3)", borderRadius: 11,
+          boxShadow: "0 14px 36px -14px rgba(20,28,38,.45)", padding: 5 }}>
+          {ops.map(o => (
+            <div key={o.id} className="hov-ghost" style={{ display: "flex", alignItems: "center",
+              gap: 8, padding: "5px 4px 5px 9px", borderRadius: 7 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{o.label}</div>
-                <div style={{ fontSize: 11, color: "var(--tx5)" }}>{o.delta}</div>
-              </div>
+              <a onClick={() => jump(o.n)} style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
+                cursor: "pointer", whiteSpace: "nowrap" }}>{o.label}</a>
               <IconBtn title="撤销此操作" onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
             </div>
-            {o.type === "rewrite" && (
-              <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 6 }}>
-                在左侧时间线的气泡里直接编辑内容</div>
-            )}
-          </div>
-        ))}
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: 7,
+        background: "var(--bg)", border: "1px solid var(--line3)", borderRadius: 24,
+        boxShadow: "0 14px 40px -14px rgba(20,28,38,.5)" }}>
+        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18, fontWeight: 600 }}
+          onClick={() => setListOpen(v => !v)}>
+          {ops.length} 项待应用 <Caret open={listOpen} size={9} /></button>
+        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18 }}
+          disabled={!!invalid} title={invalid || undefined} onClick={onOpenDiff}>预览差异</button>
+        <button className="fbtn-primary" style={{ height: 28, fontSize: 12, padding: "0 14px",
+          borderRadius: 18 }} disabled={applying || !!invalid} title={invalid || undefined} onClick={onApply}>
+          {applying ? "应用中…" : "应用更改…"}</button>
+        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18,
+          color: "var(--tx4)" }} onClick={onDiscardAll}>放弃</button>
       </div>
-      <div style={{ flex: "none", borderTop: "1px solid var(--line5)", padding: "13px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12,
-          color: "var(--tx3b)", marginBottom: 4 }}>
-          <span>体积变化</span>
-          <span style={{ color: "var(--ok-deep)", fontWeight: 600 }}>{sizeInfo.delta}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--tx4)" }}>
-          <span>{sizeInfo.before}</span><span>→</span>
-          <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{sizeInfo.after}</span>
-        </div>
-        <div style={{ height: 6, borderRadius: 4, background: "var(--track)", marginTop: 8, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: sizeInfo.barW, background: "var(--ok-deep)",
-            transition: "width .3s ease" }} />
-        </div>
-        <div style={{ marginTop: 14, fontSize: 11.5, fontWeight: 600, color: "var(--tx3b)" }}>保存方式</div>
-        {modes.map(([k, l, d]) => {
-          const on = saveMode === k;
-          return (
-            <label key={k} onClick={() => setSaveMode(k)}
-              style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "8px 9px",
-                border: `1px solid ${on ? ACCENT : "var(--line3)"}`, background: on ? "var(--acc-soft4)" : "var(--surface)",
-                borderRadius: 8, marginTop: 7, cursor: "pointer" }}>
-              <span style={{ marginTop: 1, display: "inline-flex" }}><RadioDot on={on} /></span>
-              <span>
-                <span style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
-                <span style={{ fontSize: 11, color: "var(--tx5)" }}>{d}</span>
-              </span>
-            </label>
-          );
-        })}
-        <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.5 }}>
-          应用前自动创建快照;验收未通过将自动还原到应用前状态。</div>
-        <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
-          <button className="fbtn" style={{ flex: 1, height: 32, fontSize: 12.5 }}
-            onClick={onOpenDiff}>预览差异</button>
-          <button className="fbtn-primary" style={{ flex: 1, height: 32 }}
-            disabled={!hasOps || applying || !canEdit} onClick={onApply}>
-            {applying ? "应用中…" : hasOps ? "应用更改" : "无待应用"}</button>
-        </div>
-        {!canEdit && <div style={{ fontSize: 11, color: "var(--warn-deep)", marginTop: 8 }}>
-          当前 Agent 尚未实现可用的编辑后端</div>}
-      </div>
+      {invalid && <div style={{ position: "absolute", right: 14, bottom: "calc(100% + 5px)",
+        maxWidth: 360, padding: "5px 9px", borderRadius: 7, background: "var(--err-bg2)",
+        color: "var(--err-text)", fontSize: 11.5 }}>{invalid}</div>}
     </div>
   );
 }
 
-export default function SessionDetail({ meta, data, error, mode, onEnterEdit, onExitEdit,
-  scope, setScope, ops, addOp, removeOp, updateOp, saveMode, setSaveMode,
-  onOpenDiff, onApply, applying, onOpenMigrate, editCaps }) {
-  const rounds = useMemo(() => toRounds(data?.messages), [data]);
-  const isEdit = mode === "edit";
+export default function SessionDetail({ meta, data, error,
+  scope, setScope, ops, addOp, removeOp, updateOp,
+  startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
+  onOpenMigrate, editCaps, authoringCaps }) {
+  const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
+  const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
   const [copied, setCopied] = useState(false);
 
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
-  const totalSize = meta.size || rounds.reduce((a, r) => a + roundSize(r), 0);
-  const delta = ops.reduce((a, o) => a + (o.bytes || 0), 0);
-  const after = Math.max(0, totalSize - delta);
-  const sizeInfo = {
-    before: fmtSize(totalSize), after: fmtSize(after),
-    delta: delta > 0 ? `−${fmtSize(delta)}` : "0 B",
-    barW: totalSize ? `${Math.round(after * 100 / totalSize)}%` : "100%",
-  };
 
   const resume = resumeCommand(meta.tool, meta.id, meta.dir);
   const copyResume = () => {
@@ -347,7 +304,7 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
   const subCount = data ? data.tree_count - 1 : 0;
 
   return (
-    <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0 }}>
+    <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0, position: "relative" }}>
       <div className="fscroll" data-guide-scroll="1"
         style={{ flex: 1, overflowY: "auto", minWidth: 0, animation: "ffade .16s ease" }}>
         <div style={{ padding: "18px 26px 14px", borderBottom: "1px solid var(--line5)", position: "sticky",
@@ -366,25 +323,13 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
                 <span>活跃 {fmtTime(meta.updated)}</span>
               </div>
             </div>
-            {!isEdit ? (
-              <div style={{ display: "flex", gap: 8, flex: "none" }}>
-                <button className="fbtn" style={{ height: 30, fontSize: 12.5 }} onClick={copyResume}>
-                  {copied ? "已复制接续命令" : "复制接续命令"}</button>
-                <button className="fbtn" style={{ height: 30, fontSize: 12.5 }}
-                  onClick={onEnterEdit} disabled={!data}>会话编辑</button>
-                <button data-guide="migrate" className="fbtn-primary"
-                  style={{ height: 30, padding: "0 14px" }}
-                  onClick={() => onOpenMigrate(null)}>迁移…</button>
-              </div>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
-                <span style={{ fontSize: 12, color: "var(--warn-deep)", background: "var(--warn-bg)",
-                  border: "1px solid var(--warn-line)", padding: "3px 9px", borderRadius: 20,
-                  fontWeight: 600 }}>编辑模式</span>
-                <button className="fbtn" style={{ height: 30, fontSize: 12.5 }}
-                  onClick={onExitEdit}>退出编辑</button>
-              </div>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+              <button className="fbtn" style={{ height: 30, fontSize: 12.5 }} onClick={copyResume}>
+                {copied ? "已复制接续命令" : "复制接续命令"}</button>
+              <button data-guide="migrate" className="fbtn-primary"
+                style={{ height: 30, padding: "0 14px" }}
+                onClick={() => onOpenMigrate(null)}>迁移…</button>
+            </div>
           </div>
           {subCount > 0 && (
             <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
@@ -397,21 +342,27 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
             </div>
           )}
         </div>
-        <div style={{ padding: "20px 26px 48px", maxWidth: 720, margin: "0 auto" }}>
+        <div style={{ padding: `20px 26px ${ops.length ? 110 : 48}px`, maxWidth: 720, margin: "0 auto" }}>
           {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>读取失败:{error}</div>}
           {!data && !error && (
             <div style={{ padding: 40, display: "flex", alignItems: "center", gap: 10,
               color: "var(--tx4)", fontSize: 13 }}><Spinner size={16} /> 解析会话中…</div>
           )}
           {data && rounds.map(r => (
-            <Round key={r.n} r={r} editable={isEdit && canEdit}
+            <Round key={r.n} r={r} editable={canEdit}
               delOp={opFor(r.n, "delete")} rewOp={opFor(r.n, "rewrite")}
+              replyOp={opFor(r.n, "assistant-reply")} canAuthor={canAuthor && !!r.authoring}
+              authoringBlocked={ops.length > 0 && !opFor(r.n, "assistant-reply")}
               onDelete={() => addOp("delete", r)}
               onUndoDelete={() => { const o = opFor(r.n, "delete"); if (o) removeOp(o.id); }}
               onRewrite={() => addOp("rewrite", r)}
               onUpdateRewrite={text => { const o = opFor(r.n, "rewrite"); if (o) updateOp(o.id, { text }); }}
               onCancelRewrite={() => { const o = opFor(r.n, "rewrite"); if (o) removeOp(o.id); }}
-              migratable={!isEdit && r.n < rounds.length}
+              onStartReply={() => startReplyEdit(r.authoring)}
+              onUpdateReply={items => { const o = opFor(r.n, "assistant-reply");
+                if (o) updateOp(o.id, { items }); }}
+              onCancelReply={() => { const o = opFor(r.n, "assistant-reply"); if (o) removeOp(o.id); }}
+              migratable={r.n < rounds.length}
               scopeOn={scope === r.n}
               onScope={() => setScope(r.n)}
               onClearScope={() => setScope(null)}
@@ -423,11 +374,11 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
           )}
         </div>
       </div>
-      {isEdit && (
-        <Inspector ops={ops} removeOp={removeOp} updateOp={updateOp}
-          saveMode={saveMode} setSaveMode={setSaveMode} sizeInfo={sizeInfo}
+      {ops.length > 0 && (
+        <PendingBar ops={ops} removeOp={removeOp}
           onOpenDiff={onOpenDiff} onApply={onApply} applying={applying}
-          canEdit={canEdit} editCaps={editCaps} />
+          invalid={authoringError(ops.find(op => op.type === "assistant-reply"))}
+          onDiscardAll={onDiscardAll} />
       )}
     </div>
   );

@@ -72,13 +72,31 @@ def session_json(session):
         "spawn_message_id", "result_message_id", "agent_id", "agent_path",
         "agent_type", "prompt", "status", "meta")} for edge in session.agent_edges]
     messages = _messages(session.messages)
+    turns = []
+    current = None
+    for message in messages:
+        if message["role"] == "user":
+            current = {"turn": len(turns) + 1, "user": message,
+                       "turn_locator": message["locator"],
+                       "assistant_reply": {"items": []}}
+            turns.append(current)
+        elif message["role"] == "assistant" and current is not None:
+            for block in message["blocks"]:
+                if block["kind"] == "text":
+                    current["assistant_reply"]["items"].append(
+                        {"kind": "text", "text": block["text"]})
+                elif block["kind"] == "tool":
+                    current["assistant_reply"]["items"].append({
+                        "kind": "tool", "name": block["name"],
+                        "input": block["input"], "output": block["output"]})
     return {"tool": session.source_tool, "id": session.source_id,
         "title": session.title, "dir": session.cwd,
         "root_id": session.root_id or session.source_id, "parent_id": session.parent_id,
         "agent_id": session.agent_id, "agent_path": session.agent_path,
         "agent_type": session.agent_type, "count": len(messages),
         "child_count": len(children), "tree_count": 1 + sum(child["tree_count"] for child in children),
-        "loss": list(session.loss), "messages": messages, "children": children,
+        "loss": list(session.loss), "messages": messages, "turns": turns,
+        "children": children,
         "agent_edges": edges}
 
 

@@ -199,13 +199,16 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                     sess.lose("reasoning 无可见正文,丢弃")
             elif pt == "tool":
                 st = p.get("state", {})
-                inp = dict(st.get("input") or {})
-                if "filePath" in inp:          # 归一化为规范参数名
-                    inp["file_path"] = inp.pop("filePath")
-                if "oldString" in inp:
-                    inp["old"] = inp.pop("oldString")
-                if "newString" in inp:
-                    inp["new"] = inp.pop("newString")
+                source_input = st.get("input")
+                inp = dict(source_input or {}) if isinstance(source_input, dict) \
+                    else (source_input or "")
+                if isinstance(inp, dict):
+                    if "filePath" in inp:      # 归一化为规范参数名
+                        inp["file_path"] = inp.pop("filePath")
+                    if "oldString" in inp:
+                        inp["old"] = inp.pop("oldString")
+                    if "newString" in inp:
+                        inp["new"] = inp.pop("newString")
                 blocks.append(Block("tool", tool=ToolCall(
                     name=p.get("tool", "?"),
                     op=("agent.spawn" if p.get("tool") == "task" else

@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..domain.errors import ConcurrentModificationError
 from .codex import native as codex_native
 from .claude import editing as claude_edit
 from .opencode import api as opencode_api
@@ -80,6 +81,12 @@ class EditBackend(ABC):
     def discard(self, result: dict) -> None:
         pass
 
+    def saved_revision(self, result: dict, doc: EditDocument) -> str:
+        path = Path(result.get("saved_as", ""))
+        if path.is_file():
+            return _hash_bytes(path.read_bytes())
+        raise RuntimeError(f"{self.name} 无法读取已保存会话 revision")
+
 
 def _hash_bytes(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
@@ -136,7 +143,7 @@ class ClaudeBackend(EditBackend):
 
     def commit(self, doc):
         if _hash_bytes(doc.handle.read_bytes()) != doc.revision:
-            raise RuntimeError("源会话在预览后已变化，请重新预览")
+            raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
         claude_edit.save(doc.handle, doc.data)
         cwd = next((r.get("cwd") for r in doc.data if r.get("cwd")), ".")
         return {"session_id": doc.handle.stem, "saved_as": str(doc.handle),
@@ -287,7 +294,7 @@ class CodexBackend(EditBackend):
         if isinstance(doc.context, codex_native.CodexClosure) and doc.context.pruned_ids:
             raise ValueError("该轮包含 Codex 子 Agent，会话树编辑必须使用另存为")
         if _hash_bytes(doc.handle.read_bytes()) != doc.revision:
-            raise RuntimeError("源会话在预览后已变化，请重新预览")
+            raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
         _write_jsonl(doc.handle, doc.data)
         meta = next(record.get("payload", {}) for record in doc.data
                     if record.get("type") == "session_meta")
@@ -464,7 +471,7 @@ class OpenCodeBackend(EditBackend):
         fresh = rw_opencode._oc_export(doc.ref)
         fresh_raw = json.dumps(fresh, ensure_ascii=False, sort_keys=True).encode()
         if _hash_bytes(fresh_raw) != doc.revision:
-            raise RuntimeError("源会话在预览后已变化，请重新预览")
+            raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
         original = (doc.context or {}).get("original") or fresh
         before = self._part_map(original)
         after = self._part_map(doc.data)
@@ -511,6 +518,11 @@ class OpenCodeBackend(EditBackend):
         return {"session_id": new_sid, "saved_as": str(dest),
                 "tree_count": sum(1 for _ in tree.walk()),
                 "resume": f"cd {cwd} && opencode -s {new_sid}"}
+
+    def saved_revision(self, result, doc):
+        payload = rw_opencode._oc_export(result["session_id"])
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+        return _hash_bytes(raw)
 
     def discard(self, result):
         try:

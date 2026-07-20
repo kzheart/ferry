@@ -58,7 +58,7 @@ def probe_claude_edit(editor, _doc, result, model=None):
     if sidecar.is_dir():
         shutil.copytree(sidecar, shadow_sidecar, dirs_exist_ok=True)
     try:
-        ok, detail = probes.run_probe("claude", shadow_id, cwd, model)
+        ok, detail = probes.probe_claude(shadow_id, cwd, model)
         return ok, f"(影子副本 {shadow_id} 已探测并清理)\n{detail}"
     finally:
         shadow.unlink(missing_ok=True)
@@ -82,11 +82,12 @@ def probe_codex_edit(_editor, _doc, result, model=None):
         return ok, f"(临时 CODEX_HOME 完整树探测 {result['session_id']}，已清理)\n{detail}"
 
 
-def probe_opencode_edit(editor, doc, _result, model=None):
-    shadow = editor.save_copy(editor.load(doc.ref))
+def probe_opencode_edit(editor, doc, result, model=None):
+    authored = editor.load(result["session_id"])
+    shadow = editor.save_copy(authored)
     try:
         cwd = doc.data.get("info", {}).get("directory") or "."
-        ok, detail = probes.run_probe("opencode", shadow["session_id"], cwd, model)
+        ok, detail = probes.probe_opencode(shadow["session_id"], cwd, model)
         return ok, f"(影子副本 {shadow['session_id']} 已探测并清理)\n{detail}"
     finally:
         editor.discard(shadow)

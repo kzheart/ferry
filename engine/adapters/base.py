@@ -8,6 +8,10 @@ class Editor(Protocol):
     name: str
 
 
+class AuthoringCompiler(Protocol):
+    name: str
+
+
 @dataclass
 class ToolAdapter:
     identity: str
@@ -16,6 +20,7 @@ class ToolAdapter:
     reader: Callable
     writer: Callable
     editor: Editor
+    authoring: AuthoringCompiler
     verifier: Callable
     model_provider: Callable
     fallback_models: Callable[[], list[dict]]

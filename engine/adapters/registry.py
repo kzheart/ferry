@@ -5,6 +5,9 @@ import os
 import sys
 
 from .base import ToolAdapter
+from .authoring import (
+    ClaudeAuthoringCompiler, CodexAuthoringCompiler, OpenCodeAuthoringCompiler,
+)
 from .claude.editor import ClaudeBackend
 from .claude.models import discover as claude_models, fallback as claude_fallback
 from .claude.reader import read as read_claude
@@ -42,19 +45,19 @@ def _resume(tool):
 
 _ADAPTERS = {
     "claude": ToolAdapter("claude", "~/.claude/projects", scan_claude,
-        read_claude, write_claude, ClaudeBackend(), probe_claude,
+        read_claude, write_claude, ClaudeBackend(), ClaudeAuthoringCompiler(), probe_claude,
         claude_models, claude_fallback,
         lambda ref: _resolve_file("claude", "~/.claude/projects/*/{ref}.jsonl", ref),
         _resume("claude"), cleanup_claude, probe_claude_edit,
         lambda _sid, dest: str(dest)),
     "codex": ToolAdapter("codex", "~/.codex/sessions", scan_codex,
-        read_codex, write_codex, CodexBackend(), probe_codex,
+        read_codex, write_codex, CodexBackend(), CodexAuthoringCompiler(), probe_codex,
         codex_models, codex_fallback,
         lambda ref: _resolve_file("codex", "~/.codex/sessions/*/*/*/rollout-*-{ref}.jsonl", ref),
         _resume("codex"), cleanup_codex, probe_codex_edit,
         lambda _sid, dest: str(dest)),
     "opencode": ToolAdapter("opencode", "~/.local/share/opencode", scan_opencode,
-        read_opencode, write_opencode, OpenCodeBackend(), probe_opencode,
+        read_opencode, write_opencode, OpenCodeBackend(), OpenCodeAuthoringCompiler(), probe_opencode,
         opencode_models, opencode_fallback, lambda ref: ref, _resume("opencode"),
         cleanup_opencode, probe_opencode_edit, lambda sid, _dest: sid),
 }

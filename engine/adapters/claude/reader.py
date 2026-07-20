@@ -9,7 +9,9 @@ TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
             "Write": "fs.write", "Edit": "fs.edit"}
 
 
-def _norm_input(name: str, inp: dict) -> dict:
+def _norm_input(name: str, inp: dict | str) -> dict | str:
+    if not isinstance(inp, dict):
+        return inp
     if name == "Edit":
         return {"file_path": inp.get("file_path", ""),
                 "old": inp.get("old_string", ""),

@@ -439,6 +439,44 @@ def snapshot_delete(path: str) -> dict:
 
 # ---------- 会话编辑(可扩展原生后端) ----------
 
+def _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as):
+    if not probe:
+        return result
+    ok, detail = _probe_edited(tool, impl, doc, result)
+    result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
+    if ok:
+        return result
+    if save_as:
+        impl.discard(result)
+        result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
+    elif snapshot:
+        impl.restore_snapshot(snapshot, doc)
+        result.update(ok=False, error="隔离探针未通过,已自动还原快照")
+    return result
+
+
+def authoring_capabilities(tool: str) -> dict:
+    from .authoring import capabilities
+    return capabilities(adapter(tool).authoring)
+
+
+def authoring_preview(ref: str, turn: int | str, reply: dict,
+                      tool: str = "claude") -> dict:
+    from .authoring import preview
+    impl = adapter(tool)
+    return preview(impl.editor, impl.authoring, ref, turn, reply)
+
+
+def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
+                    save_as: bool = False, tool: str = "claude",
+                    revision: str | None = None) -> dict:
+    from .authoring import apply
+    impl = adapter(tool)
+    result, doc, snapshot = apply(
+        impl.editor, impl.authoring, ref, turn, reply, save_as, revision)
+    return _finish_mutation(
+        tool, impl.editor, result, doc, snapshot, probe, save_as)
+
 def edit_capabilities(tool: str) -> dict:
     return adapter(tool).editor.capabilities()
 
@@ -454,19 +492,7 @@ def edit_apply(ref: str, ops: list[dict], probe: bool = False,
     from .editing import apply
     impl = adapter(tool).editor
     result, doc, snapshot = apply(impl, ref, ops, save_as=save_as)
-    if not probe:
-        return result
-    ok, detail = _probe_edited(tool, impl, doc, result)
-    result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-    if ok:
-        return result
-    if save_as:
-        impl.discard(result)
-        result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
-    elif snapshot:
-        impl.restore_snapshot(snapshot, doc)
-        result.update(ok=False, error="隔离探针未通过,已自动还原快照")
-    return result
+    return _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as)
 
 
 def _probe_edited(tool: str, impl, doc, result: dict) -> tuple[bool, str]:
