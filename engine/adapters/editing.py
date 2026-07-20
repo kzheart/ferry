@@ -40,7 +40,7 @@ class EditBackend(ABC):
     probe = True
 
     def capabilities(self) -> dict:
-        operations = ["delete-turn", "truncate", "rewrite"]
+        operations = ["delete-turn", "rewrite"]
         return {"tool": self.name, "operations": operations,
             "inplace": self.inplace, "save_as": self.save_as,
             "probe": self.probe,
@@ -89,14 +89,6 @@ def _json_size(value) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode())
 
 
-def _shorten(text: str, threshold: int) -> str:
-    if len(text) <= threshold:
-        return text
-    keep = max(1, threshold // 2)
-    removed = max(0, len(text) - keep * 2)
-    return text[:keep] + f"\n\n[...已裁剪 {removed} 字符...]\n\n" + text[-keep:]
-
-
 def _write_jsonl(path: Path, records: list[dict]) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n")
@@ -121,10 +113,6 @@ class ClaudeBackend(EditBackend):
                 a = args(); a.turn = op["turn"]
                 doc.data = claude_edit.op_delete_turn(doc.data, a)
                 notes.append(f"删除第 {a.turn} 轮")
-            elif kind == "truncate":
-                a = args(); a.threshold = op.get("threshold", 4096)
-                doc.data = claude_edit.op_truncate(doc.data, a)
-                notes.append(f"裁剪超过 {a.threshold} 字符的工具输出")
             elif kind == "rewrite":
                 a = args(); a.uuid = op.get("locator") or op.get("uuid")
                 a.text = op["text"]
@@ -235,19 +223,6 @@ class CodexBackend(EditBackend):
                     pruned = codex_native.prune_referenced_subtrees(doc.context, removed)
                 detail = f"，同时移除 {len(pruned)} 个子会话" if pruned else ""
                 notes.append(f"删除第 {turn} 轮{detail}")
-            elif kind == "truncate":
-                threshold = int(op.get("threshold", 4096))
-                changed = 0
-                for record in doc.data:
-                    payload = record.get("payload") or {}
-                    if payload.get("type") not in ("custom_tool_call_output",
-                                                    "function_call_output"):
-                        continue
-                    output = payload.get("output")
-                    if isinstance(output, str) and len(output) > threshold:
-                        payload["output"] = _shorten(output, threshold)
-                        changed += 1
-                notes.append(f"裁剪了 {changed} 条超长工具输出")
             elif kind == "rewrite":
                 locator = op.get("locator") or op.get("uuid") or ""
                 record = None
@@ -342,7 +317,6 @@ class OpenCodeBackend(EditBackend):
         result = super().capabilities()
         result["operation_modes"] = {
             "rewrite": ["inplace", "saveas"],
-            "truncate": ["inplace", "saveas"],
             # OpenCode 1.18.3 没有批量事务 API，整轮删除只能另存。
             "delete-turn": ["saveas"],
         }
@@ -391,25 +365,6 @@ class OpenCodeBackend(EditBackend):
                     tree.agent_edges = [edge for edge in tree.agent_edges
                                         if edge.child_session_id not in removed_children]
                 notes.append(f"删除第 {turn} 轮")
-            elif kind == "truncate":
-                threshold = int(op.get("threshold", 4096))
-                changed = 0
-                for message in doc.data.get("messages", []):
-                    for part in message.get("parts", []):
-                        if part.get("type") != "tool":
-                            continue
-                        state = part.get("state") or {}
-                        output = state.get("output")
-                        if isinstance(output, str) and len(output) > threshold:
-                            clipped = _shorten(output, threshold)
-                            state["output"] = clipped
-                            metadata = state.get("metadata") or {}
-                            if isinstance(metadata.get("output"), str):
-                                metadata["output"] = clipped
-                            metadata["truncated"] = True
-                            state["metadata"] = metadata
-                            changed += 1
-                notes.append(f"裁剪了 {changed} 条超长工具输出")
             elif kind == "rewrite":
                 locator = op.get("locator") or op.get("uuid") or ""
                 message = next((m for m in messages

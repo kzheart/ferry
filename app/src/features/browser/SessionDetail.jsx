@@ -4,11 +4,11 @@ import { TOOL_NAME } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize, resumeCommand } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
-  PencilIcon, ScissorsIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
+  PencilIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import { RadioDot } from "../../components/ui/primitives.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
 
-const BIG_OUT = 4096;   // 与后端 truncate 默认阈值一致
+const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」
 
 // 用户消息里的图片占位(粘贴图片的缓存路径)不直出,收成计数
 const IMG_RE = /\[Image:\s*source:[^\]]*\]|\[Image #\d+\]/g;
@@ -25,14 +25,13 @@ function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
   );
 }
 
-function ToolCard({ t, open, onToggle, trimStaged }) {
+function ToolCard({ t, open, onToggle }) {
   const big = (t.size || 0) > BIG_OUT;
   const cmd = typeof t.input === "object"
     ? (t.input.command || t.input.file_path || t.input.pattern ||
        JSON.stringify(t.input).slice(0, 80))
     : String(t.input || "").slice(0, 80);
   const out = t.output || "(无输出)";
-  const cut = trimStaged && big;   // 已暂存裁剪:超阈值部分变淡+划线,所见即所裁
   return (
     <div style={{ margin: "5px 0", border: "1px solid var(--line3)", borderRadius: 8,
       overflow: "hidden", background: "var(--fill)" }}>
@@ -42,13 +41,7 @@ function ToolCard({ t, open, onToggle, trimStaged }) {
         <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
         <span className="mono" style={{ fontSize: 11.5, color: "var(--tx4)", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
-        {cut ? (
-          <span title={`裁剪后保留前 ${BIG_OUT} 字符 · 原始 ${fmtSize(t.size)}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5,
-              color: "var(--warn-deep)", background: "var(--warn-bg)", padding: "1px 7px",
-              borderRadius: 20, flex: "none" }}>
-            <ScissorsIcon size={10} /> {fmtSize(t.size)} → {fmtSize(BIG_OUT)}</span>
-        ) : big && (
+        {big && (
           <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
             padding: "1px 7px", borderRadius: 20, flex: "none" }}>大输出 {fmtSize(t.size)}</span>
         )}
@@ -58,17 +51,14 @@ function ToolCard({ t, open, onToggle, trimStaged }) {
           fontSize: 11.5, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
           maxHeight: 200, overflow: "auto", background: "var(--surface)",
           borderTop: "1px solid var(--line5)" }}>
-          {cut ? (<>
-            {out.slice(0, BIG_OUT)}
-            <span className="ftrim-cut">{out.slice(BIG_OUT, 200000)}</span>
-          </>) : out.slice(0, 200000)}
+          {out.slice(0, 200000)}
         </pre>
       )}
     </div>
   );
 }
 
-function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTrim,
+function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
   scopeOn, onScope, onClearScope, onMigrateScope, scopeStats }) {
   const [open, setOpen] = useState({});
@@ -76,7 +66,6 @@ function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTr
   const [rewEditing, setRewEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const taRef = useRef(null);
-  const hasBigOut = r.tools.some(t => (t.size || 0) > BIG_OUT);
   const { text: userText, imgs } = useMemo(() => splitImages(r.user), [r.user]);
   const aiText = (r.final || "").slice(0, 8000);
   const deleted = !!delOp;
@@ -105,8 +94,6 @@ function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTr
             ) : (
               <IconBtn title={`删除第 ${r.n} 轮`} danger onClick={onDelete}><TrashIcon /></IconBtn>
             )}
-            {hasBigOut && !trimOn && !deleted &&
-              <IconBtn title="裁剪超长工具输出" onClick={onTrim}><ScissorsIcon /></IconBtn>}
             {r.uuid && !deleted &&
               <IconBtn title="改写用户消息" onClick={startRewrite}><PencilIcon /></IconBtn>}
           </div>
@@ -172,8 +159,7 @@ function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTr
                     overflowWrap: "break-word" }}>{s.text.slice(0, 4000)}</div>
                 ) : (
                   <ToolCard key={i} t={s.tool} open={open[i] ?? false}
-                    onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))}
-                    trimStaged={trimOn} />
+                    onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))} />
                 ))}
               </div>
             )}
@@ -230,8 +216,7 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
     ["inplace", "原地修改", "改写原始会话文件 · 需二次确认"],
   ].filter(([mode]) => {
     if (!ops.length) return mode === "saveas" ? editCaps?.save_as : editCaps?.inplace;
-    const names = ops.map(op => op.type === "delete" ? "delete-turn" :
-      op.type === "trim" ? "truncate" : "rewrite");
+    const names = ops.map(op => op.type === "delete" ? "delete-turn" : "rewrite");
     return names.every(name => editCaps?.operation_modes?.[name]?.includes(mode));
   });
   return (
@@ -245,7 +230,7 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
         {!hasOps && (
           <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--tx5)", fontSize: 12,
             border: "1px dashed var(--line2)", borderRadius: 9 }}>
-            在左侧时间线对某一轮点击<br />删除 / 裁剪 / 改写以暂存操作</div>
+            在左侧时间线对某一轮点击<br />删除 / 改写以暂存操作</div>
         )}
         {ops.map(o => (
           <div key={o.id} style={{ padding: "9px 10px", border: "1px solid var(--line3)", borderRadius: 8,
@@ -345,7 +330,6 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
     : "";
 
   const opFor = (n, type) => ops.find(o => o.type === type && o.n === n);
-  const trimOn = ops.some(o => o.type === "trim");
 
   const subCount = data ? data.tree_count - 1 : 0;
 
@@ -408,10 +392,9 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
           )}
           {data && rounds.map(r => (
             <Round key={r.n} r={r} editable={isEdit && canEdit}
-              delOp={opFor(r.n, "delete")} trimOn={trimOn} rewOp={opFor(r.n, "rewrite")}
+              delOp={opFor(r.n, "delete")} rewOp={opFor(r.n, "rewrite")}
               onDelete={() => addOp("delete", r)}
               onUndoDelete={() => { const o = opFor(r.n, "delete"); if (o) removeOp(o.id); }}
-              onTrim={() => addOp("trim", r)}
               onRewrite={() => addOp("rewrite", r)}
               onUpdateRewrite={text => { const o = opFor(r.n, "rewrite"); if (o) updateOp(o.id, { text }); }}
               onCancelRewrite={() => { const o = opFor(r.n, "rewrite"); if (o) removeOp(o.id); }}

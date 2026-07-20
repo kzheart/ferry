@@ -140,10 +140,6 @@ export const TrashIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M2.5 4.2h11M6.4 4.2V3a.9.9 0 0 1 .9-.9h1.4a.9.9 0 0 1 .9.9v1.2M4.1 4.2l.6 8.7a1.2 1.2 0 0 0 1.2 1.1h4.2a1.2 1.2 0 0 0 1.2-1.1l.6-8.7" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.7 7v4M9.3 7v4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>',
   { flex: "none" });
 
-export const ScissorsIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
-  '<circle cx="4" cy="4.4" r="1.9" fill="none" stroke="currentColor" stroke-width="1.35"/><circle cx="4" cy="11.6" r="1.9" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M5.6 5.6L13.5 12M5.6 10.4L13.5 4" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>',
-  { flex: "none" });
-
 export const UndoIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M3.5 6.5h6a3.6 3.6 0 1 1 0 7.2H6" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"/><path d="M6.3 3.7L3.5 6.5l2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });

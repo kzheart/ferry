@@ -3,7 +3,6 @@ import { rpc } from "../../api/transport/rpc.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
-const TRIM_THRESHOLD = 4096;
 const roundBytes = round => (round.user?.length || 0) + round.ai.join("").length +
   round.tools.reduce((sum, tool) => sum + (tool.size || 0), 0);
 
@@ -27,23 +26,18 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps, on
     }).catch(() => setEditCaps({ operations: [], inplace: false, save_as: false }));
   };
   const addOp = (type, round) => {
-    if (ops.some(op => op.type === type && (type === "trim" || op.n === round.n))) return;
+    if (ops.some(op => op.type === type && op.n === round.n)) return;
     let op;
     if (type === "delete") {
       op = { type, n: round.n, label: `删除 第 ${round.n} 轮`, dot: "var(--err)", bytes: roundBytes(round),
         before: `第 ${round.n} 轮 用户与 AI 消息、工具调用`, after: "",
         rpc: { op: "delete-turn", turn: round.n } };
-    } else if (type === "trim") {
-      const bytes = round.tools.reduce((sum, tool) => sum + Math.max(0, (tool.size || 0) - TRIM_THRESHOLD), 0);
-      op = { type, n: round.n, label: "裁剪超长工具输出", dot: "var(--warn)", bytes,
-        before: `完整工具输出(超过 ${TRIM_THRESHOLD} 字符的部分)`, after: "保留前段 + 截断标记",
-        rpc: { op: "truncate", threshold: TRIM_THRESHOLD } };
     } else {
       op = { type, n: round.n, label: `改写 第 ${round.n} 轮`, dot: ACCENT, bytes: 0,
         before: "原始用户措辞", after: "改写后的等价指令(可在下方编辑)",
         text: round.user, locator: round.locator };
     }
-    const backendOp = type === "delete" ? "delete-turn" : type === "trim" ? "truncate" : "rewrite";
+    const backendOp = type === "delete" ? "delete-turn" : "rewrite";
     const allowed = editCaps?.operation_modes?.[backendOp] || [];
     if (allowed.length && !allowed.includes(saveMode)) setSaveMode(allowed[0]);
     setOps(currentOps => [...currentOps, { id: `${type}-${round.n}-${Date.now()}`, ...op }]);

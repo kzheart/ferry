@@ -297,9 +297,6 @@ input { user-select: text; }
 .fdel { opacity: .45; }
 .fdel .fdel-text { text-decoration: line-through; }
 
-/* 已暂存裁剪:超阈值输出变淡划线 */
-.ftrim-cut { opacity: .4; text-decoration: line-through; }
-
 /* AI 回复正文排版(marked 渲染输出) */
 .fmd { font-size: 13.5px; line-height: 1.75; color: var(--tx1b); overflow-wrap: break-word; }
 .fmd > :first-child { margin-top: 0; }

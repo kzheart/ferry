@@ -77,29 +77,6 @@ def _walk_strings(obj, fn):
 
 # ---------- 操作 ----------
 
-def op_truncate(records, args):
-    n = 0
-    keep = args.threshold // 2
-    for r in records:
-        content = (r.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        for b in content:
-            if b.get("type") == "tool_result" and \
-                    isinstance(b.get("content"), str) and \
-                    len(b["content"]) > args.threshold:
-                s = b["content"]
-                b["content"] = (s[:keep] + f"\n\n[...已裁剪 {len(s)-2*keep} 字符...]\n\n"
-                                + s[-keep:])
-                n += 1
-        tur = r.get("toolUseResult")
-        if isinstance(tur, dict) and isinstance(tur.get("stdout"), str) \
-                and len(tur["stdout"]) > args.threshold:
-            tur["stdout"] = tur["stdout"][:keep] + "...[truncated]"
-    print(f"裁剪了 {n} 条超过 {args.threshold} 字符的工具输出")
-    return records
-
-
 def op_redact(records, args):
     count = 0
     def fn(s):
@@ -192,10 +169,9 @@ def check_invariants(records):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("op", choices=["truncate", "redact", "delete-turn",
+    ap.add_argument("op", choices=["redact", "delete-turn",
                                    "rewrite", "restore"])
     ap.add_argument("ref")
-    ap.add_argument("--threshold", type=int, default=4096)
     ap.add_argument("--find")
     ap.add_argument("--replace", default=REDACTED)
     ap.add_argument("--turn", type=int)
@@ -216,7 +192,7 @@ def main():
 
     bak = backup(path)
     records = load(path)
-    fn = {"truncate": op_truncate, "redact": op_redact,
+    fn = {"redact": op_redact,
           "delete-turn": op_delete_turn, "rewrite": op_rewrite}[args.op]
     records = fn(records, args)
     check_invariants(records)

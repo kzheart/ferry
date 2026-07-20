@@ -9,7 +9,7 @@ Ferry is a desktop session manager for Claude Code, Codex CLI, and OpenCode. It 
 - Browse and search local sessions across Claude Code, Codex CLI, and OpenCode.
 - Inspect conversations, tool calls, reasoning summaries, metadata, and session structure in a unified interface.
 - Migrate a session to another coding agent while preserving the context needed to continue working.
-- Delete turns, rewrite messages, and trim oversized tool output.
+- Delete turns and rewrite messages.
 - Preview changes before applying them and create backups for safer editing and recovery.
 - Resume a migrated or edited session directly in the matching agent.
 - Detect installed agents, available models, and local session data.
