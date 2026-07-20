@@ -12,11 +12,12 @@ class Editor(Protocol):
 class ToolAdapter:
     identity: str
     source_path: str
-    scanner: Callable[[], list[dict]]
+    scanner: Callable[[object], list[dict]]
     reader: Callable
     writer: Callable
     editor: Editor
     verifier: Callable
     model_provider: Callable
+    fallback_models: Callable[[], list[dict]]
     resolve_ref: Callable[[str], str]
     resume_descriptor: Callable[[str, str], dict]
