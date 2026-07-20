@@ -1,0 +1,45 @@
+{
+  "empty": "No snapshots yet — one is created automatically before session edits or migrations",
+  "state": {
+    "restored": "Restored",
+    "restoring": "Restoring",
+    "restorable": "Restorable"
+  },
+  "btn": {
+    "restoring": "Restoring…",
+    "restored": "Restored",
+    "restore": "Restore to this snapshot"
+  },
+  "field": {
+    "status": "Status",
+    "size": "Snapshot size",
+    "reason": "Creation reason",
+    "reasonMeta": "{{trigger}} · {{time}}",
+    "reasonDefault": "Auto-created restore point; can be restored to this point at any time.",
+    "relatedSession": "Related session"
+  },
+  "reasonText": {
+    "beforeEdit": "Auto-created before applying a session edit; can be restored to the pre-edit state.",
+    "beforeRestoreGuard": "Protective snapshot auto-created before restoring to another snapshot, used to undo that restore.",
+    "beforeMigrate": "Protective snapshot auto-created before migrating to a target tool, used for rollback on failure."
+  },
+  "summary": {
+    "title": "Change summary",
+    "fullState": "Full session state: messages, tool calls, and file references",
+    "fileMeta": "Snapshot file {{name}} · {{size}}"
+  },
+  "diff": {
+    "title": "Diff preview",
+    "currentMinus": "− Current session (changes after the snapshot will be overwritten)",
+    "snapshotPlus": "+ Snapshot {{id}} recorded state · {{time}}"
+  },
+  "lastRestore": "Last restore result",
+  "epilogue": "Restore first auto-creates a protective snapshot of the current state, then reverts to this snapshot. If verification fails after restore, Ferry keeps the current state and marks it in history; incomplete artifacts are not written.",
+  "toast": {
+    "ok": "Restored to snapshot",
+    "okDesc": "Pre-restore state has been saved as a protective snapshot.",
+    "fail": "Restore did not take effect",
+    "failDesc": "Verification failed, current state kept",
+    "error": "Restore failed"
+  }
+}

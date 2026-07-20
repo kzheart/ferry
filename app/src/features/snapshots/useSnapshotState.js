@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { renderSnapshotReason } from "../../api/contract/events.js";
 import { rpc } from "../../api/transport/rpc.js";
 
 export function useSnapshotState({ snapRows, sessionsById, runtimeProbe, loadSnaps, doScan, setToast }) {
+  const { t } = useTranslation();
   const [confirm, setConfirm] = useState(null);
   const [restoring, setRestoring] = useState({});
   const [results, setResults] = useState({});
@@ -31,13 +33,13 @@ export function useSnapshotState({ snapRows, sessionsById, runtimeProbe, loadSna
       setResults(value => ({ ...value, [snapshot.id]: result }));
       setRestoring(value => ({ ...value, [snapshot.id]: result.ok ? "done" : false }));
       setToast(result.ok
-        ? { kind: "ok", title: "已还原到快照", desc: "还原前状态已另存为保护快照。" }
-        : { kind: "fail", title: "还原未生效", desc: result.error || "验收未通过,已保持当前状态" });
+        ? { kind: "ok", title: t("snapshots:toast.ok"), desc: t("snapshots:toast.okDesc") }
+        : { kind: "fail", title: t("snapshots:toast.fail"), desc: result.error || t("snapshots:toast.failDesc") });
       loadSnaps();
       doScan();
     } catch (error) {
       setRestoring(value => ({ ...value, [snapshot.id]: false }));
-      setToast({ kind: "fail", title: "还原失败", desc: error.message });
+      setToast({ kind: "fail", title: t("snapshots:toast.error"), desc: error.message });
     }
   };
 

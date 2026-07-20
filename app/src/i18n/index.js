@@ -11,14 +11,16 @@ import zhCNBrowser from "../locales/zh-CN/browser.json";
 import enBrowser from "../locales/en/browser.json";
 import zhCNMigration from "../locales/zh-CN/migration.json";
 import enMigration from "../locales/en/migration.json";
+import zhCNSnapshots from "../locales/zh-CN/snapshots.json";
+import enSnapshots from "../locales/en/snapshots.json";
 
 export const SUPPORTED_LOCALES = ["zh-CN", "en"];
 export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration },
-  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, snapshots: zhCNSnapshots },
+  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, snapshots: enSnapshots },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -63,7 +65,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common", "errors", "events", "browser", "migration"],
+      ns: ["common", "errors", "events", "browser", "migration", "snapshots"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,
