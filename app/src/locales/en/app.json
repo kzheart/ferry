@@ -70,6 +70,8 @@
     "pinned": "Pinned",
     "subLabel": "Contains {{n}} sub-sessions",
     "untitled": "(Untitled session)",
+    "archived": "Archived",
+    "hasMig": "Has migration record",
     "tokenDir": "Dir {{dir}}",
     "tokenOnlyMigrated": "Only migrated",
     "tokenOnlySub": "Only with sub-sessions",
@@ -94,6 +96,7 @@
     "restorable": "Restorable"
   },
   "pane": {
+    "filterButton": "Filter",
     "libraryTitle": "Sessions",
     "libraryPlaceholder": "Search sessions, dirs, commands…",
     "librarySort": "Recently active",

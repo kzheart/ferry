@@ -6,6 +6,7 @@ import { Caret, FilterIcon, SearchIcon, SortCaret, ToolIcon } from "../ui/icons.
 export function Pane({ collapsed, width, dragging, title, count, placeholder,
   query, onQuery, filterCount, filterOn, onFilter, sortLabel, footer,
   tokens, listKey, children }) {
+  const { t } = useTranslation();
   const w = collapsed ? 0 : width;
   return (
     <div style={{ width: w, flex: "none", overflow: "hidden", background: "var(--pane)",
@@ -30,7 +31,7 @@ export function Pane({ collapsed, width, dragging, title, count, placeholder,
               gap: 6, padding: "0 10px", background: filterOn ? "var(--acc-soft)" : "var(--surface)",
               border: `1px solid ${filterOn ? ACCENT : "var(--line)"}`, borderRadius: 7,
               fontSize: 12, color: "var(--tx2)", cursor: "pointer" }}>
-              <FilterIcon />筛选{filterCount > 0 ? ` · ${filterCount}` : ""}
+              <FilterIcon />{t("app:pane.filterButton")}{filterCount > 0 ? ` · ${filterCount}` : ""}
             </button>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11.5, color: "var(--tx4)", display: "flex", alignItems: "center", gap: 4 }}>
@@ -122,10 +123,10 @@ export function LibraryList({ groups, empty, onClear }) {
                       background: "var(--acc-soft3)", border: "1px solid var(--acc-line)",
                       borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t}</span>))}
                   {r.archived && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
-                    borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>已归档</span>}
+                    borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t("app:library.archived")}</span>}
                   {r.hasSub && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
                     borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{r.subLabel}</span>}
-                  {r.hasMig && <span title="含迁移记录" style={{ width: 5, height: 5, borderRadius: "50%",
+                  {r.hasMig && <span title={t("app:library.hasMig")} style={{ width: 5, height: 5, borderRadius: "50%",
                     background: "var(--info-dot)", flex: "none" }} />}
                 </div>
               </div>

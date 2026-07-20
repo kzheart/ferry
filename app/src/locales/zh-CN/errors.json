@@ -42,5 +42,6 @@
   "internal": {
     "unexpected": "引擎内部错误"
   },
-  "fallback": "引擎错误: {{code}}"
+  "fallback": "引擎错误: {{code}}",
+  "engineCallFail": "引擎调用失败"
 }

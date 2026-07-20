@@ -32,6 +32,7 @@
     "copyAi": "Copy reply",
     "scopeHere": "Migrate up to here",
     "scopeOnly": "Migrate only up to turn {{n}}",
+    "scopeStats": "Approx. {{msgs}} messages · {{size}}",
     "cancel": "Cancel",
     "migrateWithScope": "Start migration with this scope"
   },
@@ -41,10 +42,36 @@
     "applying": "Applying…",
     "applyChanges": "Apply changes…",
     "discard": "Discard",
-    "undoOp": "Undo this operation"
+    "undoOp": "Undo this operation",
+    "labelDelete": "Delete turn {{n}}",
+    "labelRewrite": "Rewrite turn {{n}}",
+    "labelAuthor": "Author turn {{n}} assistant reply"
   },
   "diff": {
     "contentUnchanged": "Content unchanged"
+  },
+  "edit": {
+    "summaryDelete": "Whole turn removed: user and AI messages",
+    "summaryDeleteWithTools": "Whole turn removed: user and AI messages · {{n}} tool calls",
+    "toastApplying": "Applying…",
+    "toastApplyingDescProbe": "Create snapshot → apply operations → structure validation + isolated probe",
+    "toastApplyingDescStructure": "Create snapshot → apply operations → structure validation",
+    "toastSavedAs": "Saved as new session · {{verdict}}",
+    "toastInplace": "Applied in place · {{verdict}}",
+    "toastSavedAsDesc": "Original session unchanged.",
+    "toastInplaceDesc": "Original session updated; snapshot saved to \"Snapshots & Restore\".",
+    "toastOpenNew": "Open new session",
+    "toastVerifyFail": "Verification failed · auto-reverted",
+    "toastVerifyFailDesc": "Post-apply verification failed; auto-reverted, no changes kept.",
+    "toastApplyFail": "Apply failed",
+    "verdictProbe": "Isolated probe passed",
+    "verdictStructure": "Structure validation passed",
+    "errNoItems": "Assistant reply needs at least one item",
+    "errEmptyText": "Text content cannot be empty",
+    "errNoToolName": "Tool name cannot be empty",
+    "errToolJsonNotObject": "Tool {{name}} JSON parameters must be an object",
+    "errToolJsonInvalid": "Tool {{name}} parameters are not valid JSON",
+    "errToolUnnamed": "(unnamed)"
   },
   "replyEditor": {
     "toolNamed": "Tool · {{name}}",

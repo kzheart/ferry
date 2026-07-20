@@ -46,6 +46,6 @@ export class EngineError extends Error {
 }
 
 export function throwEngineError(error) {
-  if (typeof error === "string") throw new Error(error || "引擎调用失败");
+  if (typeof error === "string") throw new Error(error || i18n.t("errors:engineCallFail"));
   throw new EngineError(error);
 }

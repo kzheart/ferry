@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { rpc } from "../../api/transport/rpc.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
 export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
   onInplaceApplied, onSavedAs }) {
+  const { t } = useTranslation();
   const [ops, setOps] = useState([]);
   const [saveMode, setSaveMode] = useState("saveas");
   const [diff, setDiff] = useState(null);
@@ -39,12 +41,18 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
   const addOp = (type, round) => {
     let op;
     if (type === "delete") {
-      op = { type, n: round.n, label: `删除 第 ${round.n} 轮`, dot: "var(--err)",
+      op = { type, n: round.n,
+        labelKey: "browser:pendingBar.labelDelete", labelParams: { n: round.n },
+        label: `删除 第 ${round.n} 轮`, dot: "var(--err)",
         orig: round.user,
-        summary: `整轮移除:用户与 AI 消息${round.tools.length ? ` · ${round.tools.length} 次工具调用` : ""}`,
+        summary: round.tools.length
+          ? t("browser:edit.summaryDeleteWithTools", { n: round.tools.length })
+          : t("browser:edit.summaryDelete"),
         rpc: { op: "delete-turn", turn: round.n } };
     } else {
-      op = { type, n: round.n, label: `改写 第 ${round.n} 轮`, dot: ACCENT,
+      op = { type, n: round.n,
+        labelKey: "browser:pendingBar.labelRewrite", labelParams: { n: round.n },
+        label: `改写 第 ${round.n} 轮`, dot: ACCENT,
         orig: round.user, text: round.user, locator: round.locator };
     }
     const backendOp = type === "delete" ? "delete-turn" : "rewrite";
@@ -73,6 +81,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
     setOps([{ id: `assistant-reply-${turn.turn}-${Date.now()}`, type: "assistant-reply",
       backendOp: "replace-assistant-reply", modes: allowed, n: turn.turn,
       turn: turn.turn_locator || turn.turn,
+      labelKey: "browser:pendingBar.labelAuthor", labelParams: { n: turn.turn },
       label: `编排 第 ${turn.turn} 轮 AI 回复`, dot: ACCENT,
       origItems: source, items }]);
   };
@@ -90,16 +99,16 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
         output: item.output }) });
   const authoringError = op => {
     if (!op) return null;
-    if (!op.items?.length) return "AI 回复至少需要一个内容块";
+    if (!op.items?.length) return t("browser:edit.errNoItems");
     for (const item of op.items) {
-      if (item.kind === "text" && !item.text) return "文本内容不能为空";
-      if (item.kind === "tool" && !item.name) return "工具名称不能为空";
+      if (item.kind === "text" && !item.text) return t("browser:edit.errEmptyText");
+      if (item.kind === "tool" && !item.name) return t("browser:edit.errNoToolName");
       if (item.kind === "tool" && item.inputFormat === "json") {
         try {
           const value = JSON.parse(item.inputText);
           if (!value || Array.isArray(value) || typeof value !== "object")
-            return `工具 ${item.name || "(未命名)"} 的 JSON 参数必须是对象`;
-        } catch { return `工具 ${item.name || "(未命名)"} 的参数不是有效 JSON`; }
+            return t("browser:edit.errToolJsonNotObject", { name: item.name || t("browser:edit.errToolUnnamed") });
+        } catch { return t("browser:edit.errToolJsonInvalid", { name: item.name || t("browser:edit.errToolUnnamed") }); }
       }
     }
     return null;
@@ -126,8 +135,8 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
   const applyEdit = async () => {
     if (!ops.length) return;
     setConfirmApply(false); setApplying(true);
-    setToast({ kind: "run", title: "正在应用…",
-      desc: `创建快照 → 应用操作 → ${runtimeProbe ? "结构验证 + 隔离探针" : "结构验证"}` });
+    setToast({ kind: "run", title: t("browser:edit.toastApplying"),
+      desc: runtimeProbe ? t("browser:edit.toastApplyingDescProbe") : t("browser:edit.toastApplyingDescStructure") });
     try {
       const authored = ops.find(op => op.type === "assistant-reply");
       const invalid = authored ? authoringError(authored) : null;
@@ -142,17 +151,18 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
         : await rpc("edit_apply", { tool: current.tool, ref: sessionRef(current), ops: rpcOps(),
             probe: runtimeProbe, save_as: saveMode === "saveas" });
       if (result.ok) {
-        const verdict = runtimeProbe ? "隔离探针通过" : "结构验证通过";
+        const verdict = runtimeProbe ? t("browser:edit.verdictProbe") : t("browser:edit.verdictStructure");
         const savedAs = saveMode === "saveas" && result.session_id
           ? { ...result, tool: current.tool } : null;
-        setToast({ kind: "ok", title: (saveMode === "saveas" ? "已另存为新会话 · " : "已原地应用 · ") + verdict,
-          desc: saveMode === "saveas" ? "原会话保持不变。" : "原会话已更新，快照已保存到「快照与还原」。",
-          action: savedAs ? { label: "打开新会话", onClick: () => onSavedAs(savedAs) } : undefined });
+        setToast({ kind: "ok",
+          title: (saveMode === "saveas" ? t("browser:edit.toastSavedAs", { verdict }) : t("browser:edit.toastInplace", { verdict })),
+          desc: saveMode === "saveas" ? t("browser:edit.toastSavedAsDesc") : t("browser:edit.toastInplaceDesc"),
+          action: savedAs ? { label: t("browser:edit.toastOpenNew"), onClick: () => onSavedAs(savedAs) } : undefined });
         setOps([]); doScan(); loadSnaps();
         if (saveMode === "inplace") onInplaceApplied();
-      } else setToast({ kind: "fail", title: "验收未通过 · 已自动还原",
-        desc: result.error || "应用后验收未通过,已自动还原,未保留改动。" });
-    } catch (error) { setToast({ kind: "fail", title: "应用失败", desc: error.message }); }
+      } else setToast({ kind: "fail", title: t("browser:edit.toastVerifyFail"),
+        desc: result.error || t("browser:edit.toastVerifyFailDesc") });
+    } catch (error) { setToast({ kind: "fail", title: t("browser:edit.toastApplyFail"), desc: error.message }); }
     setApplying(false);
   };
 

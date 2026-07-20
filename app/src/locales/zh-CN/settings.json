@@ -4,7 +4,8 @@
     "sources": "数据来源",
     "updates": "软件更新",
     "railTitle": "设置",
-    "close": "关闭设置 (Esc)"
+    "close": "关闭设置 (Esc)",
+    "followSystemDesc": "按系统语言自动选择"
   },
   "theme": {
     "light": "浅色",
@@ -54,6 +55,7 @@
     "versionNotes": "版本说明",
     "footnote": "Ferry 会分别请求你的下载与安装确认。只有下载完成后才可安装并重新启动。",
     "sizeUnknown": "大小未知",
+    "downloadProgress": "更新下载进度",
     "check": "检查更新",
     "retryCheck": "重试检查",
     "download": "下载更新",

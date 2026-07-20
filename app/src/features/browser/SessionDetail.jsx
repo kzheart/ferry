@@ -250,7 +250,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
               gap: 8, padding: "5px 4px 5px 9px", borderRadius: 7 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
               <a onClick={() => jump(o.n)} style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
-                cursor: "pointer", whiteSpace: "nowrap" }}>{o.label}</a>
+                cursor: "pointer", whiteSpace: "nowrap" }}>{o.labelKey ? tt(o.labelKey, o.labelParams) : o.label}</a>
               <IconBtn title={tt("browser:pendingBar.undoOp")} onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
             </div>
           ))}
@@ -302,7 +302,7 @@ export default function SessionDetail({ meta, data, error,
        rounds.slice(0, scope).reduce((a, r) => a + r.tools.length, 0))
     : 0;
   const scopeStats = scope
-    ? `约 ${scopeMsgs} 条消息 · ${fmtSize(rounds.slice(0, scope).reduce((a, r) => a + roundSize(r), 0))}`
+    ? tt("browser:round.scopeStats", { msgs: scopeMsgs, size: fmtSize(rounds.slice(0, scope).reduce((a, r) => a + roundSize(r), 0)) })
     : "";
 
   const opFor = (n, type) => ops.find(o => o.type === type && o.n === n);

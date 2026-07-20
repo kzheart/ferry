@@ -55,7 +55,7 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
             <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
               display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: o.dot }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.label}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.labelKey ? t(o.labelKey, o.labelParams) : o.label}</span>
               {o.type === "rewrite" && o.text === o.orig && (
                 <span style={{ fontSize: 11, color: "var(--warn-deep)", marginLeft: "auto" }}>{t("overlays:diff.contentUnchanged")}</span>)}
             </div>

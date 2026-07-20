@@ -55,7 +55,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
     ["system", t("settings:theme.system"), "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
   ];
   const locales = [
-    [null, t("language.followSystem"), "按系统语言自动选择"],
+    [null, t("language.followSystem"), t("settings:sections.followSystemDesc")],
     ["zh-CN", "简体中文", "Simplified Chinese"],
     ["en", "English", "English"],
   ];
@@ -251,7 +251,7 @@ function Updates({ s, set, updater }) {
 
           {downloading && <div style={{ marginTop: 14 }}>
             <div className={`update-progress ${progress == null ? "indeterminate" : ""}`}
-              role="progressbar" aria-label="更新下载进度" aria-valuemin={0} aria-valuemax={100}
+              role="progressbar" aria-label={t("settings:updates.downloadProgress")} aria-valuemin={0} aria-valuemax={100}
               {...(progress == null ? {} : { "aria-valuenow": Math.round(progress) })}>
               <span style={progress == null ? undefined : { width: `${progress}%` }} />
             </div>

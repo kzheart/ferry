@@ -42,5 +42,6 @@
   "internal": {
     "unexpected": "Internal engine error"
   },
-  "fallback": "Engine error: {{code}}"
+  "fallback": "Engine error: {{code}}",
+  "engineCallFail": "Engine call failed"
 }

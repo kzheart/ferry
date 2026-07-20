@@ -4,7 +4,8 @@
     "sources": "Data sources",
     "updates": "Updates",
     "railTitle": "Settings",
-    "close": "Close settings (Esc)"
+    "close": "Close settings (Esc)",
+    "followSystemDesc": "Auto-select based on system language"
   },
   "theme": {
     "light": "Light",
@@ -54,6 +55,7 @@
     "versionNotes": "Release notes",
     "footnote": "Ferry will ask for your download and install confirmation separately. You can only install and restart after the download completes.",
     "sizeUnknown": "Size unknown",
+    "downloadProgress": "Update download progress",
     "check": "Check for updates",
     "retryCheck": "Retry check",
     "download": "Download update",

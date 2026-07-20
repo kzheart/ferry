@@ -70,6 +70,8 @@
     "pinned": "置顶",
     "subLabel": "含 {{n}} 个子会话",
     "untitled": "(无标题会话)",
+    "archived": "已归档",
+    "hasMig": "含迁移记录",
     "tokenDir": "目录 {{dir}}",
     "tokenOnlyMigrated": "仅含迁移",
     "tokenOnlySub": "仅含子会话",
@@ -94,6 +96,7 @@
     "restorable": "可还原"
   },
   "pane": {
+    "filterButton": "筛选",
     "libraryTitle": "会话",
     "libraryPlaceholder": "搜索会话、目录、命令…",
     "librarySort": "最近活跃",

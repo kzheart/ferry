@@ -32,6 +32,7 @@
     "copyAi": "复制回复",
     "scopeHere": "迁移到此为止",
     "scopeOnly": "仅迁移到第 {{n}} 轮",
+    "scopeStats": "约 {{msgs}} 条消息 · {{size}}",
     "cancel": "取消",
     "migrateWithScope": "用此范围开始迁移"
   },
@@ -41,10 +42,36 @@
     "applying": "应用中…",
     "applyChanges": "应用更改…",
     "discard": "放弃",
-    "undoOp": "撤销此操作"
+    "undoOp": "撤销此操作",
+    "labelDelete": "删除 第 {{n}} 轮",
+    "labelRewrite": "改写 第 {{n}} 轮",
+    "labelAuthor": "编排 第 {{n}} 轮 AI 回复"
   },
   "diff": {
     "contentUnchanged": "内容未改动"
+  },
+  "edit": {
+    "summaryDelete": "整轮移除:用户与 AI 消息",
+    "summaryDeleteWithTools": "整轮移除:用户与 AI 消息 · {{n}} 次工具调用",
+    "toastApplying": "正在应用…",
+    "toastApplyingDescProbe": "创建快照 → 应用操作 → 结构验证 + 隔离探针",
+    "toastApplyingDescStructure": "创建快照 → 应用操作 → 结构验证",
+    "toastSavedAs": "已另存为新会话 · {{verdict}}",
+    "toastInplace": "已原地应用 · {{verdict}}",
+    "toastSavedAsDesc": "原会话保持不变。",
+    "toastInplaceDesc": "原会话已更新，快照已保存到「快照与还原」。",
+    "toastOpenNew": "打开新会话",
+    "toastVerifyFail": "验收未通过 · 已自动还原",
+    "toastVerifyFailDesc": "应用后验收未通过,已自动还原,未保留改动。",
+    "toastApplyFail": "应用失败",
+    "verdictProbe": "隔离探针通过",
+    "verdictStructure": "结构验证通过",
+    "errNoItems": "AI 回复至少需要一个内容块",
+    "errEmptyText": "文本内容不能为空",
+    "errNoToolName": "工具名称不能为空",
+    "errToolJsonNotObject": "工具 {{name}} 的 JSON 参数必须是对象",
+    "errToolJsonInvalid": "工具 {{name}} 的参数不是有效 JSON",
+    "errToolUnnamed": "(未命名)"
   },
   "replyEditor": {
     "toolNamed": "工具 · {{name}}",
