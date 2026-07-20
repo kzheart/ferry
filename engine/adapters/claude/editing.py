@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code 会话编辑原语；跨工具编排见 engine.edit_backend。
-
-用法:
-    python3 -m engine.edit truncate <会话ref> [--threshold 4096]   裁剪超大工具输出
-    python3 -m engine.edit redact   <会话ref> --find X [--replace 文本]  全会话脱敏
-    python3 -m engine.edit delete-turn <会话ref> --turn N          删除第 N 轮(从 1 数)
-    python3 -m engine.edit rewrite  <会话ref> --uuid U --text 新文本   改写单条消息
-    python3 -m engine.edit restore  <会话ref>                      还原最近一次快照
+"""Claude Code 会话编辑原语；跨工具编排见 engine.adapters.editing。
 
 安全约定(见 README「关键决策」):
 - 编辑前自动快照到 ~/.resume-harness/backups/,restore 可还原;
@@ -22,7 +15,8 @@ import sys
 import time
 from pathlib import Path
 
-BACKUP_DIR = Path.home() / ".resume-harness" / "backups"
+from ...infrastructure.snapshots import BACKUP_DIR
+
 REDACTED = "[REDACTED]"
 
 

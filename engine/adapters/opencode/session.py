@@ -12,9 +12,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from ...model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
-from ...reasoning import visible_text
-from ...resources import resource_path
+from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from ...domain.reasoning import visible_text
+from ...infrastructure.resources import resource_path
 
 TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
             "write": "fs.write", "edit": "fs.edit"}

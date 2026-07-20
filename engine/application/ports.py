@@ -10,6 +10,7 @@ class ApplicationPorts:
     adapters: Callable
     cache_factory: Callable
     resource_path: Callable
+    snapshot_dir: object
     version: str
 
 

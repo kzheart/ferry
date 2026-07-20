@@ -5,8 +5,8 @@ import time
 import uuid
 from pathlib import Path
 
-from ...model import AgentEdge, Session, ToolCall
-from ...resources import resource_path
+from ...domain.model import AgentEdge, Session, ToolCall
+from ...infrastructure.resources import resource_path
 
 GOLDEN = resource_path("golden", "claude")
 

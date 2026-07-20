@@ -2,8 +2,8 @@
 import json
 from pathlib import Path
 
-from ...model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
-from ...reasoning import visible_text
+from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from ...domain.reasoning import visible_text
 
 TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
             "Write": "fs.write", "Edit": "fs.edit"}

@@ -9,11 +9,9 @@
 """
 import json
 import re
-import shutil
 import time
 from pathlib import Path
 
-from .. import edit as edit_mod
 from . import verification as probe_mod
 from .ports import current
 
@@ -28,6 +26,10 @@ def adapters():
 
 def resource_path(*parts):
     return current().resource_path(*parts)
+
+
+def snapshot_dir():
+    return current().snapshot_dir
 
 from .history import append as _append_history, list_entries as history
 
@@ -177,32 +179,6 @@ def run_probe(tool: str, sid: str, cwd: str,
     return ok, detail
 
 
-def _isolated_claude_probe(path: Path, cwd: str,
-                           model: str | None = None) -> tuple[bool, str]:
-    """在同目录生成临时影子会话(全新 session id)并对其 resume 探测。
-
-    原会话文件从不被 resume,探针产生的追加/派生只落在影子上,结束即清理。
-    """
-    import uuid
-    tmp_id = str(uuid.uuid4())
-    records = edit_mod.load(path)
-    for r in records:
-        if "sessionId" in r:
-            r["sessionId"] = tmp_id
-    tmp_path = path.with_name(f"{tmp_id}.jsonl")
-    side_dir = path.with_suffix("")           # 子会话 sidecar 目录(若有)
-    tmp_dir = tmp_path.with_suffix("")
-    edit_mod.save(tmp_path, records)
-    if side_dir.is_dir():
-        shutil.copytree(side_dir, tmp_dir, dirs_exist_ok=True)
-    try:
-        ok, detail = run_probe("claude", tmp_id, cwd, model=model)
-        return ok, f"(影子副本 {tmp_id} 已探测并清理)\n{detail}"
-    finally:
-        tmp_path.unlink(missing_ok=True)
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
 def _tree_shape(sess) -> tuple:
     return tuple(sorted((_tree_shape(child) for child in sess.children),
                         key=repr))
@@ -280,7 +256,7 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
 # ---------- 迁移历史 / 快照 ----------
 
 def snapshots() -> list[dict]:
-    d = edit_mod.BACKUP_DIR
+    d = snapshot_dir()
     if not d.exists():
         return []
     out = []
@@ -309,7 +285,7 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
     doc = impl.load(session_id)
     path = doc.handle if isinstance(doc.handle, Path) else None
     stem = path.stem if path else str(doc.ref)
-    cands = sorted(edit_mod.BACKUP_DIR.glob(f"{stem}-*.jsonl"))
+    cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
     if not cands:
         return {"ok": False, "error": "没有该会话的快照"}
     if path is None:
@@ -351,7 +327,7 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
 
 def snapshot_delete(path: str) -> dict:
     p = Path(path)
-    if p.parent != edit_mod.BACKUP_DIR:
+    if p.parent != snapshot_dir():
         return {"ok": False, "error": "只允许删除快照目录内的文件"}
     p.unlink(missing_ok=True)
     p.with_suffix(".meta.json").unlink(missing_ok=True)
@@ -359,11 +335,6 @@ def snapshot_delete(path: str) -> dict:
 
 
 # ---------- 会话编辑(可扩展原生后端) ----------
-
-class _Args:
-    def __init__(self, **kw):
-        self.__dict__.update(kw)
-
 
 def edit_capabilities(tool: str) -> dict:
     return adapter(tool).editor.capabilities()
@@ -401,54 +372,6 @@ def _probe_edited(tool: str, impl, doc, result: dict) -> tuple[bool, str]:
         return adapter(tool).probe_edited(impl, doc, result)
     except probe_mod.ProbeTimeout as error:
         return False, str(error)
-
-
-def _edit_save_as(ref: str, ops: list[dict], probe: bool = False) -> dict:
-    """另存为新会话:原会话保持不变,操作施加在同目录的新副本上。"""
-    import uuid
-    path = edit_mod.resolve(ref)
-    records = edit_mod.load(path)
-    records, notes = _apply_ops(records, ops)
-    edit_mod.check_invariants(records)
-    new_id = str(uuid.uuid4())
-    for r in records:
-        if "sessionId" in r:
-            r["sessionId"] = new_id
-    new_path = path.with_name(f"{new_id}.jsonl")
-    edit_mod.save(new_path, records)
-    edit_mod.check_invariants(edit_mod.load(new_path))   # 静态验证落盘结果
-    cwd = next((r.get("cwd") for r in records if r.get("cwd")), ".")
-    result = {"ok": True, "session_id": new_id, "saved_as": str(new_path),
-              "notes": notes,
-              "resume": resume_command("claude", new_id, cwd)}
-    if probe:
-        # 对新副本的影子再探测,交付副本本身也不被污染
-        ok, detail = _isolated_claude_probe(new_path, cwd)
-        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-        if not ok:                       # 副本验收失败:删除,不留半成品
-            new_path.unlink(missing_ok=True)
-            result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
-    return result
-
-
-def _apply_ops(records, ops):
-    notes = []
-    for op in ops:
-        kind = op["op"]
-        if kind == "delete-turn":
-            records = edit_mod.op_delete_turn(records, _Args(turn=op["turn"]))
-            notes.append(f"删除第 {op['turn']} 轮")
-        elif kind == "truncate":
-            records = edit_mod.op_truncate(
-                records, _Args(threshold=op.get("threshold", 4096)))
-            notes.append(f"裁剪超过 {op.get('threshold', 4096)} 字符的工具输出")
-        elif kind == "rewrite":
-            records = edit_mod.op_rewrite(
-                records, _Args(uuid=op["uuid"], text=op["text"]))
-            notes.append("改写 1 条消息")
-        else:
-            raise ValueError(f"未知操作: {kind}")
-    return records, notes
 
 
 # ---------- 环境 / 模型列表 ----------
