@@ -427,7 +427,7 @@ export default function App() {
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex", flexDirection: "column",
       background: "var(--bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
       {/* 标题栏:红绿灯旁只放伸缩按钮,其余留白可拖拽窗口 */}
-      <div className="drag-region" data-tauri-drag-region style={{ height: 44, flex: "none",
+      <div data-tauri-drag-region style={{ height: 44, flex: "none",
         display: "flex", alignItems: "center", gap: 12, padding: "0 12px 0 78px",
         background: "var(--titlebar)", borderBottom: "1px solid var(--line)" }}>
         <button className="hov" onClick={() => setCollapsed(v => !v)}

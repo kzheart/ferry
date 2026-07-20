@@ -282,7 +282,3 @@ input { user-select: text; }
   transition-duration: .001s !important;
   scroll-behavior: auto !important;
 }
-
-/* 标题栏可拖拽窗口 */
-.drag-region { -webkit-app-region: drag; }
-.drag-region button, .drag-region input, .drag-region a { -webkit-app-region: no-drag; }
