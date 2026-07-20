@@ -1,4 +1,5 @@
 use serde::Deserialize;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 #[derive(Deserialize)]
@@ -11,12 +12,16 @@ enum TerminalTool {
 
 #[derive(Deserialize)]
 pub(crate) struct TerminalLaunch {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     tool: TerminalTool,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     session_id: Option<String>,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     cwd: Option<String>,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     handoff_doc: Option<String>,
 }
 
