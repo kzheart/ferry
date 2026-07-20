@@ -1,0 +1,53 @@
+{
+  "migration": {
+    "reasoning_metadata_dropped": "Reasoning downgraded to plain text (dropped {{metadata_kind_label}})",
+    "reasoning_dropped": "Reasoning had no visible content, dropped",
+    "unknown_block_dropped": "Unknown content block type dropped: {{kind}}",
+    "apply_patch_unparsed": "apply_patch could not be parsed into file changes, degraded",
+    "tool_degraded": "Tool {{tool_name}} degraded to narration text",
+    "tool_dropped": "Tool {{tool_name}} will be dropped",
+    "fork_parent_fallback": "Fork parent node could not be mapped precisely, fell back to end of main conversation",
+    "truncated": "Truncated by migration range: dropped {{dropped}} messages after turn {{max_turn}}",
+    "children_not_migrated": "{{count}} sub-sessions outside the truncation range were not migrated",
+    "metadata_kind_default": "metadata"
+  },
+  "session": {
+    "orphan_tool_result": "Orphan tool result: {{call_id}}",
+    "unpaired_tool_use": "Unpaired tool call {{tool_name}}, treated as no output",
+    "subagent_unlinked": "Sub-agent {{child_id}} could not be linked precisely, kept as root child",
+    "child_foreign_ignored": "Sub-session {{child_id}} does not belong to the current parent, ignored",
+    "child_parent_conflict": "Sub-session {{child_id}} has conflicting parent pointer, ignored"
+  },
+  "codex": {
+    "thread_unregistered": "Thread {{session_id}} has no registration row, copy will be discovered by Codex scan",
+    "thread_edge_unregistered": "Thread edge {{parent}}→{{child}} not registered, endpoints missing registration rows"
+  },
+  "edit": {
+    "reply_replaced": "Replaced turn {{turn}} assistant reply, {{items}} items",
+    "turn_deleted_with_children": "Deleted turn {{turn}}, also removed {{pruned_children}} sub-sessions",
+    "turn_deleted": "Deleted turn {{turn}}",
+    "message_rewritten": "Rewrote 1 message"
+  },
+  "snapshot": {
+    "manual": "Manual snapshot",
+    "before_delete": "Auto snapshot before delete",
+    "before_edit": "Auto snapshot before edit",
+    "before_restore_guard": "Pre-restore guard",
+    "default_reason": "Auto snapshot before edit"
+  },
+  "probe": {
+    "isolation_cleanup": "({{kind}} {{id}} probed and cleaned up)",
+    "timeout": "Probe timed out",
+    "non_json_output": "Probe output could not be parsed",
+    "process_failed": "Probe process failed{{exit_code}}",
+    "process_failed_with_code": "Probe process failed (exit code {{exit_code}})",
+    "structure_invalid": "Structure validation failed",
+    "truncated_suffix": "…(output truncated)"
+  },
+  "isolation": {
+    "shadow_session": "Shadow session",
+    "shadow_copy": "Shadow copy",
+    "temp_home": "Temporary home"
+  },
+  "unknown_event_code": "{{code}}"
+}

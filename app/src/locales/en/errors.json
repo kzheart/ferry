@@ -1,0 +1,46 @@
+{
+  "rpc": {
+    "invalid_json": "Invalid request format",
+    "unknown_method": "Unknown method: {{method}}",
+    "missing_param": "Missing parameter: {{param}}"
+  },
+  "tool": {
+    "unknown": "Unknown tool: {{tool}}",
+    "not_installed": "{{tool}} is not installed"
+  },
+  "session": {
+    "not_found": "{{tool}} session {{ref}} not found",
+    "concurrent_modification": "Session changed after preview, please preview again",
+    "locator_stale": "Locator is stale, please refresh the session"
+  },
+  "edit": {
+    "operation_unsupported_with_capability": "{{tool}} does not support {{capability}}",
+    "operation_unsupported_with_operation": "{{tool}} does not support operation {{operation}}{{mode}}",
+    "turn_out_of_range_with_count": "Turn out of range: requested turn {{requested_turn}}, total {{turn_count}}",
+    "turn_out_of_range_invalid": "Turn must be a positive integer"
+  },
+  "authoring": {
+    "invalid_reply": "Reply content is structurally invalid",
+    "subagent_not_supported": "Contains sub-agent spawn/task, authoring rejected"
+  },
+  "snapshot": {
+    "not_found": "No snapshot available",
+    "invalid_source": "Snapshot source is invalid, cannot proceed"
+  },
+  "migration": {
+    "tool_degraded": "Tool {{tool_name}} degraded to narration text",
+    "content_dropped": "Some content was dropped during migration",
+    "topology_mismatch": "Migrated session topology is inconsistent"
+  },
+  "probe": {
+    "timeout": "Probe timed out",
+    "non_json_output": "Probe output could not be parsed",
+    "process_failed": "Probe process failed{{exit_code}}",
+    "process_failed_with_code": "Probe process failed (exit code {{exit_code}})",
+    "structure_invalid": "Structure validation failed"
+  },
+  "internal": {
+    "unexpected": "Internal engine error"
+  },
+  "fallback": "Engine error: {{code}}"
+}

@@ -1,8 +1,10 @@
 // 其余弹层:差异预览 / 原地修改确认 / 快照还原确认 / 结果 toast /
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { renderEvents } from "../../api/contract/events.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { STATUS_CODE } from "../../features/migration/migrationModel.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
 import { Spinner, ToolIcon } from "./icons.jsx";
@@ -437,23 +439,31 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
 
 // 迁移历史筛选:来源 / 目标 / 状态 / 时间
 export function HistoryFilter({ f, setF, onClose, onClear }) {
+  const { t } = useTranslation();
+  const statusOptions = [
+    [STATUS_CODE.success, t(`common:${STATUS_CODE.success}`)],
+    [STATUS_CODE.failed, t(`common:${STATUS_CODE.failed}`)],
+    [STATUS_CODE.rolledBack, t(`common:${STATUS_CODE.rolledBack}`)],
+  ];
   return (
     <PopShell onClose={onClose} onClear={onClear}>
       <SectionTitle first>来源工具</SectionTitle>
-      {TOOLS.map(t => (
-        <CheckRow key={t} on={f.src.includes(t)} icon={<ToolIcon tool={t} size={24} />}
-          label={TOOL_NAME[t]}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t)
-            ? v.src.filter(x => x !== t) : [...v.src, t] }))} />
+      {TOOLS.map(t2 => (
+        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
+          label={TOOL_NAME[t2]}
+          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
+            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
       <SectionTitle>目标工具</SectionTitle>
-      {[["all", "全部目标"], ...TOOLS.map(t => [t, TOOL_NAME[t]])].map(([k, l]) => (
+      {[["all", "全部目标"], ...TOOLS.map(t2 => [t2, TOOL_NAME[t2]])].map(([k, l]) => (
         <RadioRow key={k} on={f.target === k} label={l}
           onClick={() => setF(v => ({ ...v, target: k }))} />
       ))}
       <SectionTitle>状态</SectionTitle>
-      {["all", "成功", "失败", "已回滚"].map(k => (
-        <RadioRow key={k} on={f.status === k} label={k === "all" ? "全部状态" : k}
+      <RadioRow key="all" on={f.status === "all"} label={t("common:status.all")}
+        onClick={() => setF(v => ({ ...v, status: "all" }))} />
+      {statusOptions.map(([k, l]) => (
+        <RadioRow key={k} on={f.status === k} label={l}
           onClick={() => setF(v => ({ ...v, status: k }))} />
       ))}
       <SectionTitle>时间范围</SectionTitle>

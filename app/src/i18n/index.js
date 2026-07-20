@@ -3,14 +3,18 @@ import { initReactI18next } from "react-i18next";
 
 import zhCNCommon from "../locales/zh-CN/common.json";
 import enCommon from "../locales/en/common.json";
+import zhCNErrors from "../locales/zh-CN/errors.json";
+import enErrors from "../locales/en/errors.json";
+import zhCNEvents from "../locales/zh-CN/events.json";
+import enEvents from "../locales/en/events.json";
 
 export const SUPPORTED_LOCALES = ["zh-CN", "en"];
 export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon },
-  "en": { common: enCommon },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents },
+  "en": { common: enCommon, errors: enErrors, events: enEvents },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -55,7 +59,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common"],
+      ns: ["common", "errors", "events"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,

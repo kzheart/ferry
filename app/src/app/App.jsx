@@ -1,10 +1,11 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { canReveal, openTerminal, revealPath, rpc } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
-import { histStatus } from "../features/migration/migrationModel.js";
+import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { HistoryList, LibraryList, Pane, SnapList } from "../components/layout/ResourcePane.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
@@ -23,6 +24,7 @@ import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import { useSnapshotState } from "../features/snapshots/useSnapshotState.js";
 
 export default function App() {
+  const { t } = useTranslation();
   // ----- 数据 -----
   const { env, scan, scanning, lastScan, historyRows, snapRows,
     doScan, loadHistory, loadSnaps } = useBrowserData();
@@ -465,7 +467,9 @@ export default function App() {
       ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
       .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time),
         from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
-        stColor: { "成功": "var(--ok)", "失败": "var(--err)", "已回滚": "var(--tx3b)", "预演": "var(--warn)" }[h.status],
+        statusLabel: t(`common:${h.status}`),
+        stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
+          [STATUS_CODE.rolledBack]: "var(--tx3b)", [STATUS_CODE.dryRun]: "var(--warn)" }[h.status],
         tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
         onClick: () => setSelHist(h._id) })),
   })).filter(g => g.rows.length);
@@ -473,7 +477,7 @@ export default function App() {
   const histTokens = [];
   if (histF.target !== "all") histTokens.push({ label: `目标 ${TOOL_NAME[histF.target]}`,
     onRemove: () => setHistF(v => ({ ...v, target: "all" })) });
-  if (histF.status !== "all") histTokens.push({ label: histF.status,
+  if (histF.status !== "all") histTokens.push({ label: t(`common:${histF.status}`),
     onRemove: () => setHistF(v => ({ ...v, status: "all" })) });
   if (histF.time !== "all") histTokens.push({
     label: { today: "今天", yesterday: "昨天", earlier: "更早" }[histF.time],

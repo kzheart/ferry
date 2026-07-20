@@ -1,0 +1,46 @@
+{
+  "rpc": {
+    "invalid_json": "请求格式错误",
+    "unknown_method": "未知接口: {{method}}",
+    "missing_param": "缺少参数: {{param}}"
+  },
+  "tool": {
+    "unknown": "未知工具: {{tool}}",
+    "not_installed": "{{tool}} 未安装"
+  },
+  "session": {
+    "not_found": "找不到 {{tool}} 会话 {{ref}}",
+    "concurrent_modification": "会话在预览后已变化，请重新预览",
+    "locator_stale": "定位符已失效，请刷新会话"
+  },
+  "edit": {
+    "operation_unsupported_with_capability": "{{tool}} 不支持 {{capability}}",
+    "operation_unsupported_with_operation": "{{tool}} 不支持操作 {{operation}}{{mode}}",
+    "turn_out_of_range_with_count": "轮次超界: 请求第 {{requested_turn}} 轮，共 {{turn_count}} 轮",
+    "turn_out_of_range_invalid": "轮次必须是正整数"
+  },
+  "authoring": {
+    "invalid_reply": "回复内容结构非法",
+    "subagent_not_supported": "包含子 Agent spawn/task，authoring 已拒绝"
+  },
+  "snapshot": {
+    "not_found": "没有可用的快照",
+    "invalid_source": "快照来源非法，无法执行"
+  },
+  "migration": {
+    "tool_degraded": "工具 {{tool_name}} 已降级为叙述文本",
+    "content_dropped": "部分内容在迁移中被丢弃",
+    "topology_mismatch": "迁移后的会话拓扑不一致"
+  },
+  "probe": {
+    "timeout": "探针超时",
+    "non_json_output": "探针输出无法解析",
+    "process_failed": "探针进程失败{{exit_code}}",
+    "process_failed_with_code": "探针进程失败（退出码 {{exit_code}}）",
+    "structure_invalid": "结构验证未通过"
+  },
+  "internal": {
+    "unexpected": "引擎内部错误"
+  },
+  "fallback": "引擎错误: {{code}}"
+}

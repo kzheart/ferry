@@ -1,0 +1,53 @@
+{
+  "migration": {
+    "reasoning_metadata_dropped": "思考过程降级为纯文本（丢弃 {{metadata_kind_label}}）",
+    "reasoning_dropped": "思考过程无可见正文，已丢弃",
+    "unknown_block_dropped": "未知内容块类型丢弃: {{kind}}",
+    "apply_patch_unparsed": "apply_patch 无法解析出文件变更，已降级",
+    "tool_degraded": "工具 {{tool_name}} 降级为叙述文本",
+    "tool_dropped": "工具 {{tool_name}} 将被丢弃",
+    "fork_parent_fallback": "分支父节点无法精确映射，回退到主对话末尾",
+    "truncated": "按迁移范围截断: 丢弃第 {{max_turn}} 轮之后的 {{dropped}} 条消息",
+    "children_not_migrated": "截断范围外的 {{count}} 个子会话未迁移",
+    "metadata_kind_default": "元数据"
+  },
+  "session": {
+    "orphan_tool_result": "孤儿工具结果: {{call_id}}",
+    "unpaired_tool_use": "未配对工具调用 {{tool_name}}，按无输出处理",
+    "subagent_unlinked": "子代理 {{child_id}} 无法精确关联，按根子节点保留",
+    "child_foreign_ignored": "子会话 {{child_id}} 不属于当前父会话，已忽略",
+    "child_parent_conflict": "子会话 {{child_id}} 的父指向冲突，已忽略"
+  },
+  "codex": {
+    "thread_unregistered": "线程 {{session_id}} 无注册行，副本将由 Codex 扫描发现",
+    "thread_edge_unregistered": "线程边 {{parent}}→{{child}} 未注册，端点缺少注册行"
+  },
+  "edit": {
+    "reply_replaced": "替换第 {{turn}} 轮 AI 回复，共 {{items}} 个 item",
+    "turn_deleted_with_children": "删除第 {{turn}} 轮，同时移除 {{pruned_children}} 个子会话",
+    "turn_deleted": "删除第 {{turn}} 轮",
+    "message_rewritten": "改写 1 条消息"
+  },
+  "snapshot": {
+    "manual": "手动快照",
+    "before_delete": "删除前自动",
+    "before_edit": "会话编辑前自动",
+    "before_restore_guard": "还原前保护",
+    "default_reason": "会话编辑前自动"
+  },
+  "probe": {
+    "isolation_cleanup": "（{{kind}} {{id}} 已探测并清理）",
+    "timeout": "探针超时",
+    "non_json_output": "探针输出无法解析",
+    "process_failed": "探针进程失败{{exit_code}}",
+    "process_failed_with_code": "探针进程失败（退出码 {{exit_code}}）",
+    "structure_invalid": "结构验证未通过",
+    "truncated_suffix": "…(输出已截断)"
+  },
+  "isolation": {
+    "shadow_session": "影子会话",
+    "shadow_copy": "影子副本",
+    "temp_home": "临时环境"
+  },
+  "unknown_event_code": "{{code}}"
+}

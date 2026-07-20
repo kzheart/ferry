@@ -1,28 +1,30 @@
 // 迁移历史详情:范围/损耗报告/上下文水位/验收结果/回滚信息/接续命令
+import { useTranslation } from "react-i18next";
 import { probeText } from "../../api/contract/events.js";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
-import { histStatus } from "./migrationModel.js";
+import { histStatus, STATUS_CODE } from "./migrationModel.js";
 import { ToolIcon } from "../../components/ui/icons.jsx";
 import { CmdRow, LossCols, StatusPill } from "../../components/ui/primitives.jsx";
 
 const ST_STYLE = {
-  "成功": ["var(--ok-bg)", "var(--ok)"],
-  "失败": ["var(--err-bg2)", "var(--err)"],
-  "已回滚": ["var(--chip)", "var(--tx3b)"],
-  "预演": ["var(--warn-bg)", "var(--warn)"],
+  [STATUS_CODE.success]: ["var(--ok-bg)", "var(--ok)"],
+  [STATUS_CODE.failed]: ["var(--err-bg2)", "var(--err)"],
+  [STATUS_CODE.rolledBack]: ["var(--chip)", "var(--tx3b)"],
+  [STATUS_CODE.dryRun]: ["var(--warn-bg)", "var(--warn)"],
 };
 
 export default function HistoryDetail({ h }) {
+  const { t } = useTranslation();
   if (!h) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
       color: "var(--tx5)", fontSize: 13 }}>还没有迁移记录 —— 在会话详情里点「迁移…」试试</div>
   );
   const status = histStatus(h);
-  const [stBg, stColor] = ST_STYLE[status] || ST_STYLE["失败"];
-  const ok = status === "成功";
-  const fail = status === "失败";
+  const [stBg, stColor] = ST_STYLE[status] || ST_STYLE[STATUS_CODE.failed];
+  const ok = status === STATUS_CODE.success;
+  const fail = status === STATUS_CODE.failed;
   const rolled = h.rolled_back;
   const range = h.max_turn ? `到第 ${h.max_turn} 轮` : "完整会话";
   const probeDetail = probeText(h.probe);
@@ -51,7 +53,7 @@ export default function HistoryDetail({ h }) {
               <span>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
             </div>
           </div>
-          <StatusPill label={status} color={stColor} bg={stBg} />
+          <StatusPill label={t(`common:${status}`)} color={stColor} bg={stBg} />
         </div>
       </div>
       <div style={{ padding: "20px 26px 44px", maxWidth: 760 }}>

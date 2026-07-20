@@ -159,7 +159,7 @@ export function HistoryList({ groups, empty, onClear }) {
               <span style={{ fontSize: 10.5, color: "var(--tx4)", whiteSpace: "nowrap", overflow: "hidden",
                 textOverflow: "ellipsis" }}>{h.from} → {h.to}</span>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: h.stColor, flex: "none" }} />
-              <span style={{ fontSize: 10.5, color: h.stColor, flex: "none" }}>{h.status}</span>
+              <span style={{ fontSize: 10.5, color: h.stColor, flex: "none" }}>{h.statusLabel ?? h.status}</span>
             </div>
           </div>
         </div>
