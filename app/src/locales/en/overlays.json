@@ -1,0 +1,101 @@
+{
+  "diff": {
+    "title": "Diff preview",
+    "metaOps": "{{n}} pending operations",
+    "metaSize": " · {{before}} → {{after}}",
+    "metaCount": " · {{before}} → {{after}} records",
+    "empty": "No pending operations",
+    "loading": "Computing before/after diff…",
+    "engineConfirm": "Engine confirmed: {{changes}}",
+    "contentUnchanged": "Content unchanged",
+    "noUserMessage": "(no user message)",
+    "previewTruncated": "…preview truncated",
+    "close": "Close",
+    "replyTextLabel": "Text",
+    "replyToolLabel": "Tool {{name}}",
+    "replyParamsLabel": "Parameters",
+    "replyOutputLabel": "Output"
+  },
+  "apply": {
+    "title": "Apply {{n}} changes?",
+    "cancel": "Cancel",
+    "saveas": "Save as new session",
+    "saveasDesc": "Keep original session unchanged (default)",
+    "inplace": "Edit in place",
+    "inplaceDesc": "Directly overwrite the original session file",
+    "confirmInplace": "Confirm in-place edit",
+    "confirmSaveas": "Save as new session",
+    "inplaceFootnote": "A snapshot is auto-created before applying and can be restored at any time; if verification fails it auto-reverts, leaving no changes.",
+    "saveasFootnote": "The original session stays unchanged; the result is saved as a new session."
+  },
+  "snapRestore": {
+    "title": "Restore to this snapshot?",
+    "cancel": "Cancel",
+    "confirm": "Create protective snapshot and restore",
+    "desc": "Session \"{{title}}\" will be restored to the state at {{time}}.",
+    "bullet1": "Changes to the current session after this snapshot will be overwritten.",
+    "bullet2": "Ferry will auto-create a protective snapshot of the current state before restoring.",
+    "bullet3": "After restore, you can undo this operation via that protective snapshot.",
+    "bullet4": "Other sessions in the source tool are not affected."
+  },
+  "delete": {
+    "title": "Delete this session?",
+    "batchTitle": "Delete {{n}} selected sessions?",
+    "cancel": "Cancel",
+    "confirmOpenCode": "Delete anyway",
+    "confirmOther": "Create snapshot and delete",
+    "desc": "Session \"{{title}}\" ({{tool}}) will be removed from this machine.",
+    "bulletSub": "This session contains {{n}} sub-sessions, which will also be deleted.",
+    "bulletSnapshot": "A snapshot is auto-saved to \"Snapshots & Restore\" before deletion.",
+    "bulletOpenCode": "OpenCode sessions cannot be undone after deletion; only the exported snapshot is kept.",
+    "bulletUndoable": "After deletion, you can undo via the toast or the snapshots page.",
+    "bulletBatchSnapshot": "Each session is auto-snapshotted to \"Snapshots & Restore\" before deletion.",
+    "bulletBatchOpenCode": "{{n}} of them are OpenCode sessions that cannot be undone after deletion.",
+    "bulletBatchRest": "Other sessions can be restored one by one on the snapshots page."
+  },
+  "prompt": {
+    "confirm": "OK",
+    "cancel": "Cancel"
+  },
+  "filter": {
+    "clear": "Clear filters",
+    "done": "Done",
+    "source": "Source",
+    "sourceTools": "Source tools",
+    "timeRange": "Time range",
+    "allTime": "All time",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "last7": "Last 7 days",
+    "last30": "Last 30 days",
+    "earlier": "Earlier",
+    "projectDir": "Project directory",
+    "noDirs": "No directories",
+    "tags": "Tags",
+    "content": "Content",
+    "onlyMigrated": "Only migrated",
+    "onlySubSessions": "Only with sub-sessions",
+    "showArchived": "Show archived",
+    "targetTool": "Target tool",
+    "allTargets": "All targets",
+    "status": "Status",
+    "createReason": "Creation reason",
+    "allReasons": "All reasons",
+    "relatedSession": "Related session",
+    "allSessions": "All sessions"
+  },
+  "loss": {
+    "keepTitle": "Kept natively",
+    "downTitle": "Downgraded",
+    "dropTitle": "Cannot migrate",
+    "emptyItem": "None",
+    "moreItems": "… {{n}} more",
+    "keepNative": "{{n}} content blocks mapped natively",
+    "keepRoles": "Message roles and order",
+    "keepRefs": "File references and code blocks"
+  },
+  "cmd": {
+    "copied": "Copied",
+    "copy": "Copy"
+  }
+}

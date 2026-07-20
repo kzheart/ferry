@@ -1,5 +1,6 @@
 // 共享 UI 构件:弹层容器 / 损耗三栏 / 水位条 / 复制按钮等
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { renderEvents } from "../../api/contract/events.js";
 
@@ -21,49 +22,51 @@ export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 
   );
 }
 
-const COLS = {
-  keep: { border: "var(--ok-line)", bg: "var(--ok-bg)", head: "var(--ok-deep)", dot: "var(--ok)", body: "var(--ok-body)", title: "原生保留" },
-  down: { border: "var(--warn-line)", bg: "var(--warn-bg)", head: "var(--warn-deep)", dot: "var(--warn)", body: "var(--warn-text)", title: "降级转换" },
-  drop: { border: "var(--err-line)", bg: "var(--err-bg)", head: "var(--err-deep)", dot: "var(--err)", body: "var(--err-text)", title: "无法迁移" },
+const COLS_KEY = {
+  keep: { border: "var(--ok-line)", bg: "var(--ok-bg)", head: "var(--ok-deep)", dot: "var(--ok)", body: "var(--ok-body)", titleKey: "overlays:loss.keepTitle" },
+  down: { border: "var(--warn-line)", bg: "var(--warn-bg)", head: "var(--warn-deep)", dot: "var(--warn)", body: "var(--warn-text)", titleKey: "overlays:loss.downTitle" },
+  drop: { border: "var(--err-line)", bg: "var(--err-bg)", head: "var(--err-deep)", dot: "var(--err)", body: "var(--err-text)", titleKey: "overlays:loss.dropTitle" },
 };
 
-function LossCol({ kind, items }) {
-  const c = COLS[kind];
+function LossCol({ kind, items, t }) {
+  const c = COLS_KEY[kind];
   return (
     <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 10, padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: c.head }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />{c.title}
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />{t(c.titleKey)}
       </div>
-      {(items.length ? items : ["无"]).map((t, i) => (
-        <div key={i} style={{ fontSize: 11.5, color: c.body, marginTop: 7, lineHeight: 1.4 }}>{t}</div>
+      {(items.length ? items : [t("overlays:loss.emptyItem")]).map((txt, i) => (
+        <div key={i} style={{ fontSize: 11.5, color: c.body, marginTop: 7, lineHeight: 1.4 }}>{txt}</div>
       ))}
     </div>
   );
 }
 
-const clipList = (arr, max = 3) => {
+const clipList = (arr, max, t) => {
   const uniq = [...new Set(arr || [])];
   if (uniq.length <= max) return uniq;
-  return [...uniq.slice(0, max), `… 等共 ${uniq.length} 项`];
+  return [...uniq.slice(0, max), t("overlays:loss.moreItems", { n: uniq.length })];
 };
 
 // 损耗报告三栏(迁移预演 / 迁移历史共用)
 export function LossCols({ loss }) {
+  const { t } = useTranslation();
   if (!loss) return null;
-  const keep = [`${loss.native} 个内容块原生映射`, "消息角色与顺序", "文件引用与代码块"];
-  const down = loss.degrade ? clipList(renderEvents(loss.degrade_details)) : [];
-  const drop = loss.drop ? clipList(renderEvents(loss.drop_details)) : [];
+  const keep = [t("overlays:loss.keepNative", { n: loss.native }), t("overlays:loss.keepRoles"), t("overlays:loss.keepRefs")];
+  const down = loss.degrade ? clipList(renderEvents(loss.degrade_details), 3, t) : [];
+  const drop = loss.drop ? clipList(renderEvents(loss.drop_details), 3, t) : [];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-      <LossCol kind="keep" items={keep} />
-      <LossCol kind="down" items={down} />
-      <LossCol kind="drop" items={drop} />
+      <LossCol kind="keep" items={keep} t={t} />
+      <LossCol kind="down" items={down} t={t} />
+      <LossCol kind="drop" items={drop} t={t} />
     </div>
   );
 }
 
 // 命令 + 复制按钮行(卡片内)
 export function CmdRow({ cmd, head }) {
+  const { t } = useTranslation();
   const text = typeof cmd === "string" ? cmd : cmd?.display_command || "";
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -78,7 +81,7 @@ export function CmdRow({ cmd, head }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
         <code className="mono selectable" style={{ flex: 1, fontSize: 12.5, color: "var(--tx2)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</code>
-        <button className="fbtn" onClick={copy}>{copied ? "已复制" : "复制"}</button>
+        <button className="fbtn" onClick={copy}>{copied ? t("overlays:cmd.copied") : t("overlays:cmd.copy")}</button>
       </div>
     </div>
   );

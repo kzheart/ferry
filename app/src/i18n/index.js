@@ -17,14 +17,16 @@ import zhCNOnboarding from "../locales/zh-CN/onboarding.json";
 import enOnboarding from "../locales/en/onboarding.json";
 import zhCNSettings from "../locales/zh-CN/settings.json";
 import enSettings from "../locales/en/settings.json";
+import zhCNOverlays from "../locales/zh-CN/overlays.json";
+import enOverlays from "../locales/en/overlays.json";
 
 export const SUPPORTED_LOCALES = ["zh-CN", "en"];
 export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, snapshots: zhCNSnapshots, onboarding: zhCNOnboarding, settings: zhCNSettings },
-  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, snapshots: enSnapshots, onboarding: enOnboarding, settings: enSettings },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, snapshots: zhCNSnapshots, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays },
+  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, snapshots: enSnapshots, onboarding: enOnboarding, settings: enSettings, overlays: enOverlays },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -69,7 +71,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common", "errors", "events", "browser", "migration", "snapshots", "onboarding", "settings"],
+      ns: ["common", "errors", "events", "browser", "migration", "snapshots", "onboarding", "settings", "overlays"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,

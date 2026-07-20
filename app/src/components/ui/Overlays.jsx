@@ -12,38 +12,40 @@ import { CheckSquare, RadioDot, Sheet } from "./primitives.jsx";
 
 // ---------- 差异预览 ----------
 export function DiffSheet({ ops, preview, loading, error, onClose }) {
+  const { t } = useTranslation();
   const replyText = items => {
     const limit = 8000;
     let text = "";
     for (const item of items || []) {
       const input = typeof item.input === "string" ? item.input : JSON.stringify(item.input, null, 2);
-      const part = item.kind === "text" ? `文本\n${item.text}`
-        : `工具 ${item.name}\n参数 ${input}\n输出\n${item.output}`;
+      const part = item.kind === "text"
+        ? `${t("overlays:diff.replyTextLabel")}\n${item.text}`
+        : `${t("overlays:diff.replyToolLabel", { name: item.name })}\n${t("overlays:diff.replyParamsLabel")} ${input}\n${t("overlays:diff.replyOutputLabel")}\n${item.output}`;
       const room = limit - text.length;
       if (room <= 0) break;
       text += (text ? "\n\n" : "") + part.slice(0, room);
     }
-    return text.length >= limit ? `${text.slice(0, limit)}\n…预览已截断` : text;
+    return text.length >= limit ? `${text.slice(0, limit)}\n${t("overlays:diff.previewTruncated")}` : text;
   };
   return (
     <Sheet width={760} maxHeight={780} onClose={onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center" }}>
-        <div style={{ fontSize: 14.5, fontWeight: 650 }}>差异预览</div>
+        <div style={{ fontSize: 14.5, fontWeight: 650 }}>{t("overlays:diff.title")}</div>
         <div style={{ fontSize: 12, color: "var(--tx4)", marginLeft: 12 }}>
-          {ops.length} 项暂存操作
-          {preview && ` · ${fmtSize(preview.before.size)} → ${fmtSize(preview.after.size)}
-            · ${preview.before.count} → ${preview.after.count} 条记录`}
+          {t("overlays:diff.metaOps", { n: ops.length })}
+          {preview && `${t("overlays:diff.metaSize", { before: fmtSize(preview.before.size), after: fmtSize(preview.after.size) })}
+            ${t("overlays:diff.metaCount", { before: preview.before.count, after: preview.after.count })}`}
         </div>
         <div style={{ flex: 1 }} />
         <a onClick={onClose} style={{ color: "var(--tx5)", fontSize: 18 }}>×</a>
       </div>
       <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
         {ops.length === 0 && (
-          <div style={{ textAlign: "center", color: "var(--tx5)", fontSize: 13, padding: 40 }}>尚无暂存操作</div>)}
+          <div style={{ textAlign: "center", color: "var(--tx5)", fontSize: 13, padding: 40 }}>{t("overlays:diff.empty")}</div>)}
         {loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--tx4)",
-            fontSize: 12.5, marginBottom: 14 }}><Spinner size={14} /> 正在计算前后差异…</div>)}
+            fontSize: 12.5, marginBottom: 14 }}><Spinner size={14} /> {t("overlays:diff.loading")}</div>)}
         {error && (
           <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--err-bg2)",
             color: "var(--err-text)", fontSize: 12, marginBottom: 12 }}>{error}</div>)}
@@ -55,14 +57,14 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: o.dot }} />
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.label}</span>
               {o.type === "rewrite" && o.text === o.orig && (
-                <span style={{ fontSize: 11, color: "var(--warn-deep)", marginLeft: "auto" }}>内容未改动</span>)}
+                <span style={{ fontSize: 11, color: "var(--warn-deep)", marginLeft: "auto" }}>{t("overlays:diff.contentUnchanged")}</span>)}
             </div>
             <div className="mono selectable" style={{ padding: "11px 13px", fontSize: 11.5, lineHeight: 1.7 }}>
               <div className="fscroll" style={{ background: "var(--err-bg2)", color: "var(--err-text)",
                  padding: "6px 10px", borderRadius: 5, whiteSpace: "pre-wrap", overflowWrap: "break-word",
                  maxHeight: 180, overflowY: "auto" }}>− {o.type === "assistant-reply"
                   ? replyText(o.origItems).slice(0, 8000)
-                  : (o.orig || "(无用户消息)").slice(0, 4000)}</div>
+                  : (o.orig || t("overlays:diff.noUserMessage")).slice(0, 4000)}</div>
               {o.type === "delete" ? (
                 <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 6 }}>{o.summary}</div>
               ) : (
@@ -79,11 +81,11 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
         ))}
         {preview?.changes?.length > 0 && (
           <div style={{ fontSize: 12, color: "var(--tx3b)", lineHeight: 1.6 }}>
-            引擎确认:{renderEvents(preview.changes).join(";")}</div>)}
+            {t("overlays:diff.engineConfirm", { changes: renderEvents(preview.changes).join(";") })}</div>)}
       </div>
       <div style={{ flex: "none", padding: "13px 20px", borderTop: "1px solid var(--line5)",
         display: "flex", justifyContent: "flex-end" }}>
-        <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onClose}>关闭</button>
+        <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onClose}>{t("overlays:diff.close")}</button>
       </div>
     </Sheet>
   );
@@ -105,24 +107,25 @@ function ConfirmBox({ width = 400, title, children, actions }) {
 }
 
 export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, onConfirm }) {
+  const { t } = useTranslation();
   const modes = [
-    ["saveas", "另存为新会话", "保留原会话不变(默认)"],
-    ["inplace", "原地修改", "直接改写原始会话文件"],
+    ["saveas", t("overlays:apply.saveas"), t("overlays:apply.saveasDesc")],
+    ["inplace", t("overlays:apply.inplace"), t("overlays:apply.inplaceDesc")],
   ].filter(([mode]) => {
     return ops.every(op => op.modes?.includes(mode) ||
       editCaps?.operation_modes?.[op.backendOp || (op.type === "delete" ? "delete-turn" : "rewrite")]?.includes(mode));
   });
   const inplace = saveMode === "inplace";
   return (
-    <ConfirmBox width={440} title={`应用 ${ops.length} 项更改?`} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+    <ConfirmBox width={440} title={t("overlays:apply.title", { n: ops.length })} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:apply.cancel")}</button>
       {inplace ? (
         <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
           borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
-          onClick={onConfirm}>确认原地修改</button>
+          onClick={onConfirm}>{t("overlays:apply.confirmInplace")}</button>
       ) : (
         <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
-          onClick={onConfirm}>另存为新会话</button>
+          onClick={onConfirm}>{t("overlays:apply.confirmSaveas")}</button>
       )}
     </>}>
       <div style={{ marginTop: 12 }}>
@@ -144,34 +147,33 @@ export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, o
         })}
       </div>
       <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 12, lineHeight: 1.55 }}>
-        {inplace
-          ? "应用前自动创建快照,可随时还原;若验收未通过将自动还原,不留改动。"
-          : "原会话保持不变,结果保存为一个新会话。"}</div>
+        {inplace ? t("overlays:apply.inplaceFootnote") : t("overlays:apply.saveasFootnote")}</div>
     </ConfirmBox>
   );
 }
 
 export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
+  const { t } = useTranslation();
   const bullets = [
-    ["var(--warn)", "当前会话在此快照之后的改动将被覆盖。"],
-    ["var(--ok)", "Ferry 会在还原前自动创建一个当前状态的保护快照。"],
-    ["var(--accent)", "还原完成后可通过该保护快照撤销本次操作。"],
-    ["var(--info-dot)", "源工具中的其他会话不受影响。"],
+    ["var(--warn)", t("overlays:snapRestore.bullet1")],
+    ["var(--ok)", t("overlays:snapRestore.bullet2")],
+    ["var(--accent)", t("overlays:snapRestore.bullet3")],
+    ["var(--info-dot)", t("overlays:snapRestore.bullet4")],
   ];
   return (
-    <ConfirmBox width={440} title="还原到此快照?" actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+    <ConfirmBox width={440} title={t("overlays:snapRestore.title")} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:snapRestore.cancel")}</button>
       <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
-        onClick={onConfirm}>创建保护快照并还原</button>
+        onClick={onConfirm}>{t("overlays:snapRestore.confirm")}</button>
     </>}>
       <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        会话「{snap.title}」将恢复到 {fmtTime(snap.time)} 的状态。</div>
+        {t("overlays:snapRestore.desc", { title: snap.title, time: fmtTime(snap.time) })}</div>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
         display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, t], i) => (
+        {bullets.map(([c, txt], i) => (
           <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{t}
+              marginTop: 6 }} />{txt}
           </div>
         ))}
       </div>
@@ -214,30 +216,31 @@ export function ContextMenu({ x, y, items, onClose }) {
 
 // ---------- 删除会话确认 ----------
 export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
+  const { t } = useTranslation();
   const subCount = (sess.tree_count || 1) - 1;
   const oc = sess.tool === "opencode";
   const bullets = [
-    subCount > 0 && ["var(--warn)", `该会话含 ${subCount} 个子会话,将一并删除。`],
-    ["var(--ok)", "删除前会自动保存一份快照到「快照与还原」。"],
+    subCount > 0 && ["var(--warn)", t("overlays:delete.bulletSub", { n: subCount })],
+    ["var(--ok)", t("overlays:delete.bulletSnapshot")],
     oc
-      ? ["var(--err)", "OpenCode 会话删除后无法一键撤销,只保留导出快照。"]
-      : ["var(--accent)", "删除后可通过 Toast 或快照页撤销恢复。"],
+      ? ["var(--err)", t("overlays:delete.bulletOpenCode")]
+      : ["var(--accent)", t("overlays:delete.bulletUndoable")],
   ].filter(Boolean);
   return (
-    <ConfirmBox width={430} title="删除此会话?" actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+    <ConfirmBox width={430} title={t("overlays:delete.title")} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
       <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
         borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
-        onClick={onConfirm}>{oc ? "仍然删除" : "创建快照并删除"}</button>
+        onClick={onConfirm}>{oc ? t("overlays:delete.confirmOpenCode") : t("overlays:delete.confirmOther")}</button>
     </>}>
       <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        会话「{sess.title || sess.id}」({TOOL_NAME[sess.tool]})将从本机移除。</div>
+        {t("overlays:delete.desc", { title: sess.title || sess.id, tool: TOOL_NAME[sess.tool] })}</div>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
         display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, t], i) => (
+        {bullets.map(([c, txt], i) => (
           <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{t}
+              marginTop: 6 }} />{txt}
           </div>
         ))}
       </div>
@@ -246,15 +249,16 @@ export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
 }
 
 // ---------- 输入弹框(重命名 / 标签) ----------
-export function PromptBox({ title, desc, placeholder, initial, confirmLabel = "确定",
+export function PromptBox({ title, desc, placeholder, initial, confirmLabel,
   onCancel, onConfirm }) {
+  const { t } = useTranslation();
   const [val, setVal] = useState(initial || "");
   const submit = () => onConfirm(val.trim());
   return (
     <ConfirmBox width={420} title={title} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:prompt.cancel")}</button>
       <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
-        onClick={submit}>{confirmLabel}</button>
+        onClick={submit}>{confirmLabel || t("overlays:prompt.confirm")}</button>
     </>}>
       {desc && <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7,
         lineHeight: 1.5 }}>{desc}</div>}
@@ -270,26 +274,27 @@ export function PromptBox({ title, desc, placeholder, initial, confirmLabel = "�
 
 // ---------- 批量删除确认 ----------
 export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
+  const { t } = useTranslation();
   const ocCount = sessions.filter(s => s.tool === "opencode").length;
   const bullets = [
-    ["var(--ok)", "每个会话删除前都会自动保存一份快照到「快照与还原」。"],
-    ocCount > 0 && ["var(--err)", `其中 ${ocCount} 个 OpenCode 会话删除后无法一键撤销。`],
-    ["var(--accent)", "其余会话可在快照页逐个恢复。"],
+    ["var(--ok)", t("overlays:delete.bulletBatchSnapshot")],
+    ocCount > 0 && ["var(--err)", t("overlays:delete.bulletBatchOpenCode", { n: ocCount })],
+    ["var(--accent)", t("overlays:delete.bulletBatchRest")],
   ].filter(Boolean);
   return (
-    <ConfirmBox width={430} title={`删除选中的 ${sessions.length} 个会话?`} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+    <ConfirmBox width={430} title={t("overlays:delete.batchTitle", { n: sessions.length })} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
       <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
         borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
-        onClick={onConfirm}>创建快照并删除</button>
+        onClick={onConfirm}>{t("overlays:delete.confirmOther")}</button>
     </>}>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
         padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, t], i) => (
+        {bullets.map(([c, txt], i) => (
           <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)",
             lineHeight: 1.45 }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{t}
+              marginTop: 6 }} />{txt}
           </div>
         ))}
       </div>
@@ -327,7 +332,7 @@ export function Toast({ toast, onDismiss }) {
 }
 
 // ---------- 筛选弹层(共用外壳) ----------
-function PopShell({ onClose, onClear, children }) {
+function PopShell({ onClose, onClear, children, t }) {
   return (
     <>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 35 }} />
@@ -340,10 +345,10 @@ function PopShell({ onClose, onClear, children }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", padding: "9px 13px",
           borderTop: "1px solid var(--line5)" }}>
-          <a onClick={onClear} style={{ fontSize: 11.5, color: "var(--tx3b)" }}>清除筛选</a>
+          <a onClick={onClear} style={{ fontSize: 11.5, color: "var(--tx3b)" }}>{t("overlays:filter.clear")}</a>
           <span style={{ flex: 1 }} />
           <button className="fbtn-primary" style={{ height: 28, padding: "0 14px", fontSize: 12 }}
-            onClick={onClose}>完成</button>
+            onClick={onClose}>{t("overlays:filter.done")}</button>
         </div>
       </div>
     </>
@@ -383,22 +388,24 @@ function RadioRow({ on, onClick, label }) {
 
 // 会话库筛选:来源 / 时间 / 目录
 export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onClear }) {
-  const times = [["all", "全部时间"], ["today", "今天"], ["last7", "最近 7 天"], ["last30", "最近 30 天"]];
+  const { t } = useTranslation();
+  const times = [["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
+    ["last7", t("overlays:filter.last7")], ["last30", t("overlays:filter.last30")]];
   return (
-    <PopShell onClose={onClose} onClear={onClear}>
-      <SectionTitle first>来源</SectionTitle>
-      {TOOLS.map(t => (
-        <CheckRow key={t} on={f.src.includes(t)} icon={<ToolIcon tool={t} size={24} />}
-          label={TOOL_NAME[t]} extra={counts[t] || 0}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t)
-            ? v.src.filter(x => x !== t) : [...v.src, t] }))} />
+    <PopShell onClose={onClose} onClear={onClear} t={t}>
+      <SectionTitle first>{t("overlays:filter.source")}</SectionTitle>
+      {TOOLS.map(t2 => (
+        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
+          label={TOOL_NAME[t2]} extra={counts[t2] || 0}
+          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
+            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
-      <SectionTitle>时间范围</SectionTitle>
+      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
       {times.map(([k, l]) => (
         <RadioRow key={k} on={f.time === k} label={l}
           onClick={() => setF(v => ({ ...v, time: k }))} />
       ))}
-      <SectionTitle>项目目录</SectionTitle>
+      <SectionTitle>{t("overlays:filter.projectDir")}</SectionTitle>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {dirs.map(d => {
           const on = f.dir === d;
@@ -409,29 +416,29 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
                 color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{d}</button>
           );
         })}
-        {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>暂无目录</span>}
+        {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>{t("overlays:filter.noDirs")}</span>}
       </div>
       {tags.length > 0 && (<>
-        <SectionTitle>标签</SectionTitle>
+        <SectionTitle>{t("overlays:filter.tags")}</SectionTitle>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-          {tags.map(t => {
-            const on = f.tag === t;
+          {tags.map(t2 => {
+            const on = f.tag === t2;
             return (
-              <button key={t} onClick={() => setF(v => ({ ...v, tag: on ? null : t }))}
+              <button key={t2} onClick={() => setF(v => ({ ...v, tag: on ? null : t2 }))}
                 style={{ height: 24, padding: "0 9px", borderRadius: 20,
                   border: `1px solid ${on ? ACCENT : "var(--line)"}`,
                   background: on ? "var(--acc-soft)" : "var(--surface)",
-                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{t}</button>
+                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{t2}</button>
             );
           })}
         </div>
       </>)}
-      <SectionTitle>内容</SectionTitle>
-      <CheckRow on={f.mig} label="仅含迁移记录"
+      <SectionTitle>{t("overlays:filter.content")}</SectionTitle>
+      <CheckRow on={f.mig} label={t("overlays:filter.onlyMigrated")}
         onClick={() => setF(v => ({ ...v, mig: !v.mig }))} />
-      <CheckRow on={f.sub} label="仅含子会话"
+      <CheckRow on={f.sub} label={t("overlays:filter.onlySubSessions")}
         onClick={() => setF(v => ({ ...v, sub: !v.sub }))} />
-      <CheckRow on={f.arch} label="显示已归档"
+      <CheckRow on={f.arch} label={t("overlays:filter.showArchived")}
         onClick={() => setF(v => ({ ...v, arch: !v.arch }))} />
     </PopShell>
   );
@@ -446,28 +453,29 @@ export function HistoryFilter({ f, setF, onClose, onClear }) {
     [STATUS_CODE.rolledBack, t(`common:${STATUS_CODE.rolledBack}`)],
   ];
   return (
-    <PopShell onClose={onClose} onClear={onClear}>
-      <SectionTitle first>来源工具</SectionTitle>
+    <PopShell onClose={onClose} onClear={onClear} t={t}>
+      <SectionTitle first>{t("overlays:filter.sourceTools")}</SectionTitle>
       {TOOLS.map(t2 => (
         <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
           label={TOOL_NAME[t2]}
           onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
             ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
-      <SectionTitle>目标工具</SectionTitle>
-      {[["all", "全部目标"], ...TOOLS.map(t2 => [t2, TOOL_NAME[t2]])].map(([k, l]) => (
+      <SectionTitle>{t("overlays:filter.targetTool")}</SectionTitle>
+      {[["all", t("overlays:filter.allTargets")], ...TOOLS.map(t2 => [t2, TOOL_NAME[t2]])].map(([k, l]) => (
         <RadioRow key={k} on={f.target === k} label={l}
           onClick={() => setF(v => ({ ...v, target: k }))} />
       ))}
-      <SectionTitle>状态</SectionTitle>
+      <SectionTitle>{t("overlays:filter.status")}</SectionTitle>
       <RadioRow key="all" on={f.status === "all"} label={t("common:status.all")}
         onClick={() => setF(v => ({ ...v, status: "all" }))} />
       {statusOptions.map(([k, l]) => (
         <RadioRow key={k} on={f.status === k} label={l}
           onClick={() => setF(v => ({ ...v, status: k }))} />
       ))}
-      <SectionTitle>时间范围</SectionTitle>
-      {[["all", "全部时间"], ["today", "今天"], ["yesterday", "昨天"], ["earlier", "更早"]].map(([k, l]) => (
+      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
+      {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
+        ["yesterday", t("overlays:filter.yesterday")], ["earlier", t("overlays:filter.earlier")]].map(([k, l]) => (
         <RadioRow key={k} on={f.time === k} label={l}
           onClick={() => setF(v => ({ ...v, time: k }))} />
       ))}
@@ -477,27 +485,29 @@ export function HistoryFilter({ f, setF, onClose, onClear }) {
 
 // 快照筛选:来源工具 / 创建原因 / 关联会话 / 时间
 export function SnapFilter({ f, setF, sessions, reasons, onClose, onClear }) {
+  const { t } = useTranslation();
   return (
-    <PopShell onClose={onClose} onClear={onClear}>
-      <SectionTitle first>来源工具</SectionTitle>
-      {TOOLS.map(t => (
-        <CheckRow key={t} on={f.src.includes(t)} icon={<ToolIcon tool={t} size={24} />}
-          label={TOOL_NAME[t]}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t)
-            ? v.src.filter(x => x !== t) : [...v.src, t] }))} />
+    <PopShell onClose={onClose} onClear={onClear} t={t}>
+      <SectionTitle first>{t("overlays:filter.sourceTools")}</SectionTitle>
+      {TOOLS.map(t2 => (
+        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
+          label={TOOL_NAME[t2]}
+          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
+            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
-      <SectionTitle>创建原因</SectionTitle>
-      {[["all", "全部原因"], ...reasons.map(r => [r, r])].map(([k, l]) => (
+      <SectionTitle>{t("overlays:filter.createReason")}</SectionTitle>
+      {[["all", t("overlays:filter.allReasons")], ...reasons.map(r => [r, r])].map(([k, l]) => (
         <RadioRow key={k} on={f.reason === k} label={l}
           onClick={() => setF(v => ({ ...v, reason: k }))} />
       ))}
-      <SectionTitle>关联会话</SectionTitle>
-      {[["all", "全部会话"], ...sessions.map(s => [s, s])].map(([k, l]) => (
+      <SectionTitle>{t("overlays:filter.relatedSession")}</SectionTitle>
+      {[["all", t("overlays:filter.allSessions")], ...sessions.map(s => [s, s])].map(([k, l]) => (
         <RadioRow key={k} on={f.session === k} label={l}
           onClick={() => setF(v => ({ ...v, session: k }))} />
       ))}
-      <SectionTitle>时间范围</SectionTitle>
-      {[["all", "全部时间"], ["today", "今天"], ["yesterday", "昨天"], ["earlier", "更早"]].map(([k, l]) => (
+      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
+      {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
+        ["yesterday", t("overlays:filter.yesterday")], ["earlier", t("overlays:filter.earlier")]].map(([k, l]) => (
         <RadioRow key={k} on={f.time === k} label={l}
           onClick={() => setF(v => ({ ...v, time: k }))} />
       ))}
