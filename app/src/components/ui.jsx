@@ -82,12 +82,12 @@ export function CmdRow({ cmd, head }) {
 }
 
 // 复选框样子的小方块
-export function CheckSquare({ on, accent = "var(--accent)", size = 15 }) {
+export function CheckSquare({ on, accent = "var(--accent)", fg = "var(--accent-fg)", size = 15 }) {
   return (
     <span style={{ width: size, height: size, flex: "none", borderRadius: 4,
       border: `1.5px solid ${on ? accent : "var(--check)"}`, background: on ? accent : "transparent",
       display: "inline-flex", alignItems: "center", justifyContent: "center",
-      color: "#fff", fontSize: 10 }}>{on ? "✓" : ""}</span>
+      color: fg, fontSize: 10 }}>{on ? "✓" : ""}</span>
   );
 }
 

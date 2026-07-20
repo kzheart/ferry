@@ -74,7 +74,7 @@ function Round({ r, editable, staged, onDelete, onTrim, onRewrite, migratable,
       )}
       {r.user && (
         <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
-          <div className="selectable" style={{ maxWidth: "82%", background: ACCENT, color: "#fff",
+          <div className="selectable" style={{ maxWidth: "82%", background: ACCENT, color: "var(--accent-fg)",
             padding: "9px 13px", borderRadius: "12px 12px 3px 12px", fontSize: 13,
             whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
             {r.user.slice(0, 4000)}</div>

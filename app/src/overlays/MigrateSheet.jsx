@@ -244,7 +244,7 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
             </div>
             <label onClick={() => setRedact(v => !v)}
               style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", flex: "none" }}>
-              <CheckSquare on={redact} accent="var(--err2)" />
+              <CheckSquare on={redact} accent="var(--err2)" fg="#fff" />
               <span style={{ fontSize: 11.5, color: "var(--err-text)" }}>迁移前脱敏</span>
             </label>
           </div>

@@ -3,7 +3,8 @@
 html, body, #root { height: 100%; }
 
 :root {
-  --accent: #0B67F5;
+  --accent: #1C2530;
+  --accent-fg: #FFFFFF;
   --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
   --font-size: 13px;
   color-scheme: light;
@@ -62,17 +63,17 @@ html, body, #root { height: 100%; }
   --ring: rgba(20,28,38,.08);
   --dot-ring: #FFFFFF;
 
-  /* 强调色衍生(浅底/描边/文字) */
-  --acc-soft: #EAF0FB;
-  --acc-soft2: #E4EDFB;
-  --acc-soft3: #E7F0FE;
-  --acc-soft4: #F1F6FE;
-  --acc-soft5: #EEF4FE;
-  --acc-soft6: #F3F7FE;
-  --acc-line: #CBDDF8;
-  --acc-line2: #C3D6F2;
-  --acc-text: #0B4FBE;
-  --acc-mut: #6E8FC4;
+  /* 强调色衍生(浅底/描边/文字)—— 黑白中性色 */
+  --acc-soft: #EDF0F3;
+  --acc-soft2: #E7EBEF;
+  --acc-soft3: #ECEFF2;
+  --acc-soft4: #F3F5F8;
+  --acc-soft5: #F0F3F6;
+  --acc-soft6: #F5F7F9;
+  --acc-line: #D5DBE1;
+  --acc-line2: #C9D0D7;
+  --acc-text: #2A3440;
+  --acc-mut: #7A8591;
 
   /* 状态:绿 / 红 / 橙 */
   --ok: #1C9E5A;
@@ -114,6 +115,9 @@ html, body, #root { height: 100%; }
 /* 暗色主题:中性深灰色板(参考 Linear 风格),不再使用整窗反相 */
 [data-theme="dark"] {
   color-scheme: dark;
+
+  --accent: #E8E9EB;
+  --accent-fg: #1A1A1D;
 
   --bg: #17171A;
   --surface: #1E1E21;
@@ -165,16 +169,16 @@ html, body, #root { height: 100%; }
   --ring: rgba(255,255,255,.08);
   --dot-ring: #19191C;
 
-  --acc-soft: #1E2A42;
-  --acc-soft2: #212E4A;
-  --acc-soft3: #1E2B48;
-  --acc-soft4: #1A2438;
-  --acc-soft5: #1B2740;
-  --acc-soft6: #1A2438;
-  --acc-line: #2E4066;
-  --acc-line2: #2E4066;
-  --acc-text: #82A9F0;
-  --acc-mut: #6C86B4;
+  --acc-soft: #26262B;
+  --acc-soft2: #2A2A30;
+  --acc-soft3: #28282D;
+  --acc-soft4: #222226;
+  --acc-soft5: #242429;
+  --acc-soft6: #222226;
+  --acc-line: #3A3B42;
+  --acc-line2: #3A3B42;
+  --acc-text: #D5D6DA;
+  --acc-mut: #8D8E96;
 
   --ok: #37B575;
   --ok-deep: #58C088;
@@ -266,11 +270,11 @@ input { user-select: text; }
 }
 .fbtn:hover { background: var(--btn-hov); }
 .fbtn-primary {
-  border: none; background: var(--accent); color: #fff; font-weight: 600;
+  border: none; background: var(--accent); color: var(--accent-fg); font-weight: 600;
   border-radius: 7px; cursor: pointer; font-size: 12.5px;
 }
 .fbtn-primary:hover { filter: brightness(1.05); }
-.fbtn-primary:disabled { background: var(--btn-disabled); cursor: default; opacity: .7; }
+.fbtn-primary:disabled { background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7; }
 
 /* 设置里的「减少动效」(与系统偏好等效,但由用户显式开关) */
 [data-reduce="1"] * {

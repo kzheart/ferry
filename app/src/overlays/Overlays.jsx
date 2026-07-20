@@ -360,7 +360,7 @@ export function Guide({ step, onGo, onFinish }) {
             width: Math.max(0, b.W - b.l - b.w), height: b.h, background: dim }} />
           <div style={{ position: "absolute", left: b.l, top: b.t, width: b.w, height: b.h,
             borderRadius: 9, outline: `2px solid ${ACCENT}`,
-            boxShadow: "0 0 0 4px rgba(11,103,245,.2)", pointerEvents: "none",
+            boxShadow: "0 0 0 4px var(--ring)", pointerEvents: "none",
             transition: "all .26s cubic-bezier(.2,.7,.3,1)" }} />
         </>
       )}

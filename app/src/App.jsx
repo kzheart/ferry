@@ -411,13 +411,6 @@ export default function App() {
       tokens: snapTokens, footer: `${snapItems.length} 个快照 · 源会话只读` },
   }[view] || null;
 
-  const crumb = {
-    library: cur ? `会话 / ${cur.title || cur.id}` : "会话",
-    history: histSel ? `迁移 / ${histSel.session_id || histSel.source_id}` : "迁移历史",
-    snapshots: snapSel ? `快照 / ${snapSel.id}` : "快照与还原",
-    firstrun: "首次启动",
-  }[view];
-
   const clearLibF = () => {
     setLibF({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false }); setQ("");
   };
@@ -433,24 +426,18 @@ export default function App() {
   return (
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex", flexDirection: "column",
       background: "var(--bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
-      {/* 标题栏 */}
-      <div className="drag-region" style={{ height: 44, flex: "none", display: "flex",
-        alignItems: "center", gap: 12, padding: "0 12px 0 86px", background: "var(--titlebar)",
-        borderBottom: "1px solid var(--line)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <b style={{ fontSize: 13, fontWeight: 600 }}>Ferry</b>
-          <span style={{ color: "var(--tx5)" }}>/</span>
-          <span style={{ color: "var(--tx3b)", fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden",
-            textOverflow: "ellipsis", maxWidth: 420 }}>{crumb}</span>
-        </div>
+      {/* 标题栏:红绿灯旁只放伸缩按钮,其余留白可拖拽窗口 */}
+      <div className="drag-region" data-tauri-drag-region style={{ height: 44, flex: "none",
+        display: "flex", alignItems: "center", gap: 12, padding: "0 12px 0 78px",
+        background: "var(--titlebar)", borderBottom: "1px solid var(--line)" }}>
         <button className="hov" onClick={() => setCollapsed(v => !v)}
           title={collapsed ? "展开侧边栏 ⌘B" : "收起侧边栏 ⌘B"}
           style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
             justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
-            cursor: "pointer", color: "var(--tx3b)", marginLeft: 2 }}>
+            cursor: "pointer", color: "var(--tx3b)" }}>
           <SidebarIcon />
         </button>
-        <div style={{ flex: 1 }} />
+        <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
         {view === "library" && (
           <button onClick={doScan} style={{ height: 26, display: "flex", alignItems: "center",
             gap: 7, padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
@@ -528,7 +515,7 @@ export default function App() {
           <div onMouseDown={startDrag} onDoubleClick={() => setPaneW(328)}
             title="拖动调整宽度 · 双击复位"
             style={{ width: 9, flex: "none", cursor: "col-resize", position: "relative",
-              background: dragging ? "rgba(11,103,245,.10)" : "transparent", zIndex: 6 }}>
+              background: dragging ? "var(--acc-soft2)" : "transparent", zIndex: 6 }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 1,
               background: dragging ? ACCENT : "var(--line)" }} />
           </div>
