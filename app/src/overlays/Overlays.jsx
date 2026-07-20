@@ -81,7 +81,8 @@ export function InplaceConfirm({ onCancel, onConfirm }) {
         onClick={onConfirm}>确认原地修改</button>
     </>}>
       <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 8, lineHeight: 1.55 }}>
-        这会直接改写原始会话文件。Ferry 会先自动创建快照;若应用后探针失败将自动还原。此操作可通过快照撤销。</div>
+        这会直接改写原始会话文件。Ferry 会先自动创建快照;若应用后验收未通过将自动还原。
+        验收默认只做结构验证;可在设置中开启运行时探针,探针只在临时影子会话上执行,不会向原会话追加消息。此操作可通过快照撤销。</div>
     </ConfirmBox>
   );
 }
@@ -300,7 +301,7 @@ const GUIDE_STEPS = [
   { target: "search", side: "right", title: "在资源栏搜索与筛选",
     body: "资源栏的标题、数量、搜索框与筛选位置在三种模块中保持一致。用它们按来源、时间与目录快速定位。" },
   { target: "scope", side: "top", scroll: true, title: "迁移到此为止并交付",
-    body: "长会话可在某一轮「迁移到此为止」截断,预览迁移损耗后再交付;若探针失败会自动回滚,不留残留。" },
+    body: "长会话可在某一轮「迁移到此为止」截断,预览迁移损耗后再交付;若验收失败会自动回滚,不留残留。" },
 ];
 const GUIDE_TOTAL = GUIDE_STEPS.length;
 

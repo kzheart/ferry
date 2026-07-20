@@ -9,8 +9,9 @@
     python3 harness/probe.py opencode <session_id> --dir <会话目录> [--model M]
 
 退出码 0 = 可 resume;非 0 = 不可(stderr 带原因)。
-注意:探针会真实发送一条极小提示词(消耗一次模型调用),并可能在目标工具中
-产生一个派生会话;它不修改被探测的原会话内容本身。
+注意:探针会对传入的 session 真实 resume 并发送一条极小提示词(消耗一次
+模型调用),会向该会话追加消息/产生派生会话。因此调用方必须传入可丢弃的
+临时影子副本(见 engine/api.py 的隔离探针),不要直接传正式会话 id。
 """
 import argparse
 import json

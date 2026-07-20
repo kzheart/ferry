@@ -289,7 +289,7 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
           );
         })}
         <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.5 }}>
-          应用前自动创建快照;探针失败将自动还原到应用前状态。</div>
+          应用前自动创建快照;验收未通过将自动还原到应用前状态。</div>
         <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
           <button className="fbtn" style={{ flex: 1, height: 32, fontSize: 12.5 }}
             onClick={onOpenDiff}>预览差异</button>

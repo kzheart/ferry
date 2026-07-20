@@ -101,7 +101,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
         )}
 
         <div style={{ fontSize: 11.5, color: "var(--tx5)", marginTop: 14, lineHeight: 1.6 }}>
-          还原会先自动创建当前状态的保护快照,再恢复到此快照。若还原后探针未通过,Ferry
+          还原会先自动创建当前状态的保护快照,再恢复到此快照。若还原后验收未通过,Ferry
           会保持当前状态并在历史中标注,不会写入不完整的产物。</div>
       </div>
     </div>

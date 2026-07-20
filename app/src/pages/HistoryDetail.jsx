@@ -1,4 +1,4 @@
-// 迁移历史详情:范围/损耗报告/脱敏/上下文水位/探针结果/回滚信息/接续命令
+// 迁移历史详情:范围/损耗报告/上下文水位/验收结果/回滚信息/接续命令
 import { TOOL_NAME, fmtSize, fmtTime, histStatus } from "../api.js";
 import { ToolIcon } from "../icons.jsx";
 import { CmdRow, LossCols, StatusPill } from "../components/ui.jsx";
@@ -20,16 +20,14 @@ export default function HistoryDetail({ h }) {
   const ok = status === "成功";
   const fail = status === "失败";
   const rolled = h.rolled_back;
-  const redactText = h.redacted && Object.keys(h.redacted).length
-    ? "已脱敏 " + Object.entries(h.redacted).map(([k, v]) =>
-        `${v} 处${{ api_key: "密钥", bearer: "令牌", email: "邮箱" }[k] || k}`).join("、")
-    : "未脱敏(可在迁移预演时勾选)";
   const range = h.max_turn ? `到第 ${h.max_turn} 轮` : "完整会话";
   const probeDetail = h.probe?.detail || "";
   const probeLines = h.probe
     ? (ok ? probeDetail.split("\n").filter(Boolean).slice(0, 4)
       : probeDetail.split("\n").filter(Boolean))
-    : ["未运行探针验收"];
+    : h.validation?.structure
+      ? [h.validation.structure.detail, "运行时探针未执行(默认关闭,可在设置中开启)"]
+      : ["未运行探针验收"];
   const probeColor = ok ? "var(--ok-deep)" : fail ? "var(--err-deep)" : "var(--tx3b)";
   const probeBg = ok ? "var(--ok-bg)" : fail ? "var(--err-bg)" : "var(--fill3)";
   const probeBorder = ok ? "var(--ok-line)" : fail ? "var(--err-line)" : "var(--line3)";
@@ -74,15 +72,10 @@ export default function HistoryDetail({ h }) {
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "18px 0 8px" }}>损耗报告</div>
         <LossCols loss={h.loss} />
 
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px", marginTop: 14 }}>
-          <div style={{ fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>敏感信息处理</div>
-          <div style={{ fontSize: 12.5, color: "var(--tx2)", marginTop: 7, lineHeight: 1.5 }}>{redactText}</div>
-        </div>
-
         <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,
           borderRadius: 10, padding: "13px 15px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>探针验收结果</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>验收结果</div>
             {probeModel && (
               <div className="mono" style={{ fontSize: 11, color: "var(--tx3b)" }}>{probeModel}</div>
             )}

@@ -4,7 +4,7 @@
 既可 import(gui/server.py 直接调用),也可命令行调试:
     python3 -m engine.api scan
     python3 -m engine.api show claude <sid>
-    python3 -m engine.api migrate claude codex <ref> [--dry-run] [--cwd DIR]
+    python3 -m engine.api migrate claude codex <ref> [--dry-run] [--probe] [--cwd DIR]
     python3 -m engine.api history / snapshots / env
 """
 import glob
@@ -409,80 +409,6 @@ def _loss_stats(sess, dst: str) -> dict:
             "degrade_details": details, "drop_details": dropped}
 
 
-# ---------- 敏感信息检测 / 脱敏 ----------
-
-SENSITIVE_PATTERNS = [
-    ("api_key", "疑似 API Key", re.compile(
-        r"(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}"
-        r"|xox[bapors]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}"
-        r"|AIza[0-9A-Za-z_-]{30,})")),
-    ("bearer", "Bearer Token", re.compile(
-        r"Bearer\s+[A-Za-z0-9._~+/-]{20,}=*")),
-    ("email", "邮箱地址", re.compile(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}\b")),
-]
-
-
-def _mask_secret(kind: str, text: str) -> str:
-    if kind == "email":
-        name, _, domain = text.partition("@")
-        return f"{name[:1]}***@{domain}"
-    return f"{text[:6]}…[已脱敏]"
-
-
-def _session_strings(sess):
-    """产出树内所有可含敏感信息的字符串及其写回函数。"""
-    for node in sess.walk():
-        for m in node.messages:
-            for b in m.blocks:
-                if b.kind in ("text", "thinking") and b.text:
-                    yield b.text, (lambda blk: (lambda v: setattr(blk, "text", v)))(b)
-                elif b.kind == "tool" and b.tool:
-                    t = b.tool
-                    if t.output:
-                        yield t.output, (lambda tc: (lambda v: setattr(tc, "output", v)))(t)
-                    if isinstance(t.input, str) and t.input:
-                        yield t.input, (lambda tc: (lambda v: setattr(tc, "input", v)))(t)
-                    elif isinstance(t.input, dict):
-                        for key, val in t.input.items():
-                            if isinstance(val, str) and val:
-                                yield val, (lambda d, k: (lambda v: d.__setitem__(k, v)))(t.input, key)
-
-
-def _scan_sensitive(sess) -> dict:
-    findings = {}
-    for text, _setter in _session_strings(sess):
-        for kind, label, pat in SENSITIVE_PATTERNS:
-            for m in pat.finditer(text):
-                f = findings.setdefault(kind, {"kind": kind, "label": label,
-                                               "count": 0, "samples": []})
-                f["count"] += 1
-                masked = _mask_secret(kind, m.group(0))
-                if masked not in f["samples"] and len(f["samples"]) < 3:
-                    f["samples"].append(masked)
-    out = sorted(findings.values(), key=lambda f: -f["count"])
-    return {"findings": out, "total": sum(f["count"] for f in out)}
-
-
-def _redact_session(sess) -> dict:
-    """就地把树内敏感片段替换为脱敏占位,返回各类命中数。"""
-    counts: dict[str, int] = {}
-    for text, setter in _session_strings(sess):
-        new = text
-        for kind, _label, pat in SENSITIVE_PATTERNS:
-            def repl(m, kind=kind):
-                counts[kind] = counts.get(kind, 0) + 1
-                return _mask_secret(kind, m.group(0))
-            new = pat.sub(repl, new)
-        if new != text:
-            setter(new)
-    return counts
-
-
-def redact_scan(tool: str, ref: str) -> dict:
-    return _scan_sensitive(_read_tree(tool, ref))
-
-
 # ---------- 范围截断 ----------
 
 def _truncate_rounds(sess, max_turn: int):
@@ -518,8 +444,8 @@ def _append_history(entry: dict):
 
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
-            dry_run: bool = False, probe: bool = True,
-            redact: bool = False, max_turn: int | None = None,
+            dry_run: bool = False, probe: bool = False,
+            max_turn: int | None = None,
             probe_model: str | None = None) -> dict:
     sess = _read_tree(src, ref)
     if max_turn:
@@ -541,33 +467,54 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "max_turn": max_turn, "msg_count": len(sess.messages),
             "probe_model": probe_model or None}
     if dry_run:
-        return {**base, "dry_run": True,
-                "sensitive": _scan_sensitive(sess)}
+        return {**base, "dry_run": True}
 
-    if redact:
-        base["redacted"] = _redact_session(sess)
     sid, dest = convert.WRITERS[dst](sess, cwd=target_cwd)
     # 写回阶段可能追加新的损耗(writer 分发时才知道)
     base["loss"] = _loss_stats(sess, dst)
     result = {**base, "session_id": sid, "dest": str(dest),
               "resume": resume_command(dst, sid, target_cwd)}
 
-    if probe:
-        ok, tree_detail = validate_written_tree(
-            dst, sid, dest, _tree_shape(sess))
-        if ok:
-            ok, runtime_detail = run_probe(
-                dst, sid, target_cwd, model=probe_model)
-            detail = f"{tree_detail}\n{runtime_detail}"
-        else:
-            detail = tree_detail
+    # 静态结构验证始终执行:重读产物,校验节点数 / 父子边 / 拓扑,不调用模型
+    ok, tree_detail = validate_written_tree(dst, sid, dest, _tree_shape(sess))
+    validation = {"structure": {"ok": ok, "detail": tree_detail},
+                  "runtime": {"status": "skipped"}}
+    detail = tree_detail
+    if ok and probe:
+        # 运行时探针只打在临时影子副本上,正式产物不接收探针消息
+        ok, runtime_detail = _isolated_migrate_probe(
+            dst, sess, target_cwd, model=probe_model)
+        validation["runtime"] = {"status": "passed" if ok else "failed",
+                                 "detail": runtime_detail,
+                                 "model": probe_model or None}
+        detail = f"{tree_detail}\n{runtime_detail}"
+    result["validation"] = validation
+    if probe or not ok:                 # 兼容历史记录/UI 的 probe 字段
         result["probe"] = {"ok": ok, "detail": detail,
-                           "model": probe_model or None}
-        if not ok:                      # 验收失败:删除产物,不留半成品
-            _cleanup_artifact(dst, sid, dest)
-            result["rolled_back"] = True
+                           "model": (probe_model or None) if probe else None}
+    if not ok:                          # 验收失败:删除产物,不留半成品
+        _cleanup_artifact(dst, sid, dest)
+        result["rolled_back"] = True
     _append_history({**result, "time": int(time.time() * 1000)})
     return result
+
+
+def _isolated_migrate_probe(dst: str, sess, cwd: str,
+                            model: str | None = None) -> tuple[bool, str]:
+    """把同一棵会话树再写一份影子副本,对影子 resume 探测,结束后清理。
+
+    writer 每次生成全新随机 session id,影子与正式产物互不冲突;
+    写入过程可能追加损耗记录,探测前保存、结束后还原。
+    """
+    saved_loss = [(node, list(node.loss)) for node in sess.walk()]
+    shadow_sid, shadow_dest = convert.WRITERS[dst](sess, cwd=cwd)
+    for node, loss in saved_loss:
+        node.loss = loss
+    try:
+        ok, detail = run_probe(dst, shadow_sid, cwd, model=model)
+        return ok, f"(影子副本 {shadow_sid} 已探测并清理)\n{detail}"
+    finally:
+        _cleanup_artifact(dst, shadow_sid, shadow_dest)
 
 
 def run_probe(tool: str, sid: str, cwd: str,
@@ -582,6 +529,32 @@ def run_probe(tool: str, sid: str, cwd: str,
     if len(detail) > 12000:
         detail = detail[:12000] + f"\n…(截断,共 {len(detail)} 字符)"
     return r.returncode == 0, detail
+
+
+def _isolated_claude_probe(path: Path, cwd: str,
+                           model: str | None = None) -> tuple[bool, str]:
+    """在同目录生成临时影子会话(全新 session id)并对其 resume 探测。
+
+    原会话文件从不被 resume,探针产生的追加/派生只落在影子上,结束即清理。
+    """
+    import uuid
+    tmp_id = str(uuid.uuid4())
+    records = edit_mod.load(path)
+    for r in records:
+        if "sessionId" in r:
+            r["sessionId"] = tmp_id
+    tmp_path = path.with_name(f"{tmp_id}.jsonl")
+    side_dir = path.with_suffix("")           # 子会话 sidecar 目录(若有)
+    tmp_dir = tmp_path.with_suffix("")
+    edit_mod.save(tmp_path, records)
+    if side_dir.is_dir():
+        shutil.copytree(side_dir, tmp_dir, dirs_exist_ok=True)
+    try:
+        ok, detail = run_probe("claude", tmp_id, cwd, model=model)
+        return ok, f"(影子副本 {tmp_id} 已探测并清理)\n{detail}"
+    finally:
+        tmp_path.unlink(missing_ok=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _tree_shape(sess) -> tuple:
@@ -718,7 +691,7 @@ def snapshots() -> list[dict]:
     return out
 
 
-def snapshot_restore(session_id: str, run_probe_after: bool = True) -> dict:
+def snapshot_restore(session_id: str, run_probe_after: bool = False) -> dict:
     path = edit_mod.resolve(session_id)
     cands = sorted(edit_mod.BACKUP_DIR.glob(f"{path.stem}-*.jsonl"))
     if not cands:
@@ -731,11 +704,11 @@ def snapshot_restore(session_id: str, run_probe_after: bool = True) -> dict:
     if run_probe_after:
         cwd = next((json.loads(l).get("cwd") for l in
                     path.read_text().splitlines() if l.strip()), None)
-        ok, detail = run_probe("claude", path.stem, cwd or ".")
-        result["probe"] = {"ok": ok, "detail": detail}
+        ok, detail = _isolated_claude_probe(path, cwd or ".")
+        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
         if not ok:
             path.write_bytes(cur)
-            result.update(ok=False, error="还原后探针未通过,已保持现状")
+            result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
     return result
 
 
@@ -768,7 +741,7 @@ def edit_preview(ref: str, ops: list[dict]) -> dict:
     return {"before": before, "after": after, "notes": notes}
 
 
-def edit_apply(ref: str, ops: list[dict], probe: bool = True,
+def edit_apply(ref: str, ops: list[dict], probe: bool = False,
                save_as: bool = False) -> dict:
     if save_as:
         return _edit_save_as(ref, ops, probe)
@@ -778,20 +751,22 @@ def edit_apply(ref: str, ops: list[dict], probe: bool = True,
     records, notes = _apply_ops(records, ops)
     edit_mod.check_invariants(records)
     edit_mod.save(path, records)
+    # 静态验证:重读落盘结果,确认仍满足格式约束
+    edit_mod.check_invariants(edit_mod.load(path))
     cwd = next((r.get("cwd") for r in records if r.get("cwd")), ".")
     result = {"ok": True, "snapshot": str(bak), "notes": notes,
               "resume": resume_command("claude", path.stem, cwd)}
     if probe:
-        ok, detail = run_probe("claude", path.stem, cwd)
-        result["probe"] = {"ok": ok, "detail": detail}
+        # 探针只打影子副本,原会话 id 从不被 resume
+        ok, detail = _isolated_claude_probe(path, cwd)
+        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
         if not ok:                       # 自动还原快照
-            import shutil
             shutil.copy(bak, path)
-            result.update(ok=False, error="探针未通过,已自动还原快照")
+            result.update(ok=False, error="隔离探针未通过,已自动还原快照")
     return result
 
 
-def _edit_save_as(ref: str, ops: list[dict], probe: bool = True) -> dict:
+def _edit_save_as(ref: str, ops: list[dict], probe: bool = False) -> dict:
     """另存为新会话:原会话保持不变,操作施加在同目录的新副本上。"""
     import uuid
     path = edit_mod.resolve(ref)
@@ -804,16 +779,18 @@ def _edit_save_as(ref: str, ops: list[dict], probe: bool = True) -> dict:
             r["sessionId"] = new_id
     new_path = path.with_name(f"{new_id}.jsonl")
     edit_mod.save(new_path, records)
+    edit_mod.check_invariants(edit_mod.load(new_path))   # 静态验证落盘结果
     cwd = next((r.get("cwd") for r in records if r.get("cwd")), ".")
     result = {"ok": True, "session_id": new_id, "saved_as": str(new_path),
               "notes": notes,
               "resume": resume_command("claude", new_id, cwd)}
     if probe:
-        ok, detail = run_probe("claude", new_id, cwd)
-        result["probe"] = {"ok": ok, "detail": detail}
+        # 对新副本的影子再探测,交付副本本身也不被污染
+        ok, detail = _isolated_claude_probe(new_path, cwd)
+        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
         if not ok:                       # 副本验收失败:删除,不留半成品
             new_path.unlink(missing_ok=True)
-            result.update(ok=False, error="探针未通过,已删除新副本,原会话未受影响")
+            result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
     return result
 
 
@@ -1057,18 +1034,17 @@ RPC_METHODS = {
     "migrate": lambda p: migrate(p["src"], p["dst"], p["ref"],
                                  cwd=p.get("cwd"),
                                  dry_run=p.get("dry_run", False),
-                                 probe=p.get("probe", True),
-                                 redact=p.get("redact", False),
+                                 probe=p.get("probe", False),
                                  max_turn=p.get("max_turn"),
                                  probe_model=p.get("probe_model") or None),
-    "redact_scan": lambda p: redact_scan(p["tool"], p["ref"]),
     "handoff": lambda p: handoff(p["src"], p["ref"], p["dst"],
                                  cwd=p.get("cwd")),
     "edit_preview": lambda p: edit_preview(p["ref"], p["ops"]),
     "edit_apply": lambda p: edit_apply(p["ref"], p["ops"],
-                                       probe=p.get("probe", True),
+                                       probe=p.get("probe", False),
                                        save_as=p.get("save_as", False)),
-    "snapshot_restore": lambda p: snapshot_restore(p["session"]),
+    "snapshot_restore": lambda p: snapshot_restore(
+        p["session"], run_probe_after=p.get("probe", False)),
     "snapshot_delete": lambda p: snapshot_delete(p["path"]),
 }
 
@@ -1112,7 +1088,7 @@ def main():
                     cwd=(rest[rest.index("--cwd") + 1]
                          if "--cwd" in rest else None),
                     dry_run="--dry-run" in rest,
-                    probe="--no-probe" not in rest)
+                    probe="--probe" in rest)
     elif cmd == "history":
         r = history()
     elif cmd == "snapshots":

@@ -75,6 +75,14 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         })}
       </div>
 
+      <GroupTitle>写入验收</GroupTitle>
+      <Card>
+        <Row first title="运行时探针"
+          desc="写入后在临时影子会话上真实 resume 验证,消耗一次模型调用,完成后自动清理,不向正式会话追加消息;关闭时仅做结构验证(默认)">
+          <Toggle on={s.runtimeProbe} onChange={v => set({ runtimeProbe: v })} />
+        </Row>
+      </Card>
+
       <GroupTitle>动效</GroupTitle>
       <Card>
         <Row first title="减少动效" desc="减弱过渡与位移动画,降低视觉干扰">

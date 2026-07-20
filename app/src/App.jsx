@@ -228,21 +228,24 @@ export default function App() {
     if (!ops.length) return;
     if (saveMode === "inplace" && !confirmInplace) { setConfirmInplace(true); return; }
     setConfirmInplace(false); setApplying(true);
-    setToast({ kind: "run", title: "正在应用…", desc: "创建快照 → 应用操作 → 探针验收" });
+    const probeOn = !!settings.runtimeProbe;
+    setToast({ kind: "run", title: "正在应用…",
+      desc: `创建快照 → 应用操作 → ${probeOn ? "结构验证 + 隔离探针" : "结构验证"}` });
     try {
       const r = await rpc("edit_apply", { ref: detailRef, ops: rpcOps(),
-        save_as: saveMode === "saveas" });
+        probe: probeOn, save_as: saveMode === "saveas" });
       if (r.ok) {
+        const verdict = probeOn ? "隔离探针通过" : "结构验证通过";
         setToast({ kind: "ok",
-          title: saveMode === "saveas" ? "已另存为新会话 · 探针通过" : "已原地应用 · 探针通过",
+          title: (saveMode === "saveas" ? "已另存为新会话 · " : "已原地应用 · ") + verdict,
           desc: (saveMode === "saveas" ? "原会话保持不变," : "原会话已更新,") +
             "快照已保存到「快照与还原」。" });
         setOps([]); setMode("view");
         doScan(); loadSnaps();
         if (saveMode === "inplace") select(selId);
       } else {
-        setToast({ kind: "fail", title: "探针失败 · 已自动还原",
-          desc: r.error || "应用后探针未通过,已自动还原,未保留改动。" });
+        setToast({ kind: "fail", title: "验收未通过 · 已自动还原",
+          desc: r.error || "应用后验收未通过,已自动还原,未保留改动。" });
       }
     } catch (e) {
       setToast({ kind: "fail", title: "应用失败", desc: e.message });
@@ -257,10 +260,11 @@ export default function App() {
     if (!snap) return;
     setSnapRestoring(v => ({ ...v, [snap.id]: true }));
     try {
-      const r = await rpc("snapshot_restore", { session: snap.session });
+      const r = await rpc("snapshot_restore",
+        { session: snap.session, probe: !!settings.runtimeProbe });
       setSnapResults(v => ({ ...v, [snap.id]: r }));
       setSnapRestoring(v => ({ ...v, [snap.id]: r.ok ? "done" : false }));
-      if (!r.ok) setToast({ kind: "fail", title: "还原未生效", desc: r.error || "探针未通过,已保持当前状态" });
+      if (!r.ok) setToast({ kind: "fail", title: "还原未生效", desc: r.error || "验收未通过,已保持当前状态" });
       else setToast({ kind: "ok", title: "已还原到快照", desc: "还原前状态已另存为保护快照。" });
       loadSnaps(); doScan();
     } catch (e) {
@@ -547,6 +551,7 @@ export default function App() {
       {/* 弹层 */}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
+          defaultProbe={!!settings.runtimeProbe}
           onClose={() => setMig(null)}
           onDone={() => { loadHistory(); loadSnaps(); }} />)}
       {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading}

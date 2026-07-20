@@ -1,7 +1,7 @@
 // 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
 import { ACCENT, TOOL_NAME, TOOLS, openTerminal, rpc, sessionRef } from "../api.js";
-import { CheckBadge, Spinner, ToolIcon, WarnTriangle } from "../icons.jsx";
+import { CheckBadge, Spinner, ToolIcon } from "../icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../components/ui.jsx";
 
 const ORDER = ["target", "preview", "confirm", "result"];
@@ -80,13 +80,13 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
   );
 }
 
-export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
+export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, onDone }) {
   const targets = TOOLS.filter(t => t !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0]);
+  const [probeOn, setProbeOn] = useState(!!defaultProbe);
   const [dry, setDry] = useState(null);        // { [target]: result }
   const [dryErr, setDryErr] = useState(null);
-  const [redact, setRedact] = useState(true);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [wroteFirst, setWroteFirst] = useState(false);
@@ -101,7 +101,6 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
   const ref = sessionRef(meta);
 
   const d = dry?.[target];
-  const sensitive = d?.sensitive;
   const scopeLabel = scope ? `仅迁移到第 ${scope} 轮` : "完整会话";
   const resolvedProbeModel = (probeCustom[target] || "").trim()
     || (probeModel[target] || "").trim()
@@ -149,9 +148,9 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
     setTimeout(() => setWroteFirst(true), 1500);
     try {
       const r = await rpc("migrate", { src: meta.tool, dst: target, ref,
-        redact: redact && (sensitive?.total || 0) > 0,
         max_turn: scope || undefined,
-        probe_model: resolvedProbeModel });
+        probe: probeOn,
+        probe_model: probeOn ? resolvedProbeModel : undefined });
       setResult(r);
     } catch (e) { setError(e.message); }
     setStep("result");
@@ -221,37 +220,16 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
           <span style={{ color: "var(--line-strong)" }}>→</span>
           <ToolIcon tool={target} size={26} />
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[target]}</span>
-          <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--tx3b)", background: "var(--chip)",
-            border: "1px solid var(--line)", padding: "3px 10px", borderRadius: 20 }}>只读源 · 不修改</span>
         </div>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", marginBottom: 8 }}>
           损耗预演 · {scopeLabel}</div>
         <div style={{ marginBottom: 16 }}><LossCols loss={d.loss} /></div>
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px", marginBottom: 12,
+        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
           <span style={{ color: "var(--tx2)", fontWeight: 600 }}>迁移规模</span>
           <span className="mono" style={{ color: "var(--tx2)" }}>
             {d.msg_count} 条消息 · {d.tree_count} 个树节点</span>
         </div>
-        {sensitive?.total > 0 ? (
-          <div style={{ border: "1px solid var(--err-line)", background: "var(--err-bg)", borderRadius: 10,
-            padding: "12px 14px", display: "flex", gap: 11, alignItems: "flex-start" }}>
-            <WarnTriangle />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--err-text)" }}>检测到疑似敏感信息</div>
-              <div style={{ fontSize: 11.5, color: "var(--err-mut)", marginTop: 3 }}>
-                {sensitive.findings.map(f => `${f.count} 处${f.label}`).join("、")}。建议脱敏后再迁移。</div>
-            </div>
-            <label onClick={() => setRedact(v => !v)}
-              style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", flex: "none" }}>
-              <CheckSquare on={redact} accent="var(--err2)" fg="#fff" />
-              <span style={{ fontSize: 11.5, color: "var(--err-text)" }}>迁移前脱敏</span>
-            </label>
-          </div>
-        ) : (
-          <div style={{ border: "1px solid var(--ok-line)", background: "var(--ok-bg)", borderRadius: 10,
-            padding: "12px 14px", fontSize: 12, color: "var(--ok-deep)" }}>未检测到敏感信息</div>
-        )}
       </>
     );
   } else if (step === "confirm") {
@@ -262,39 +240,50 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
             {[["目标", TOOL_NAME[target], true],
               ["范围", `${scopeLabel}${d ? ` · ${d.msg_count} 条` : ""}`],
-              ["脱敏", sensitive?.total > 0
-                ? (redact ? `迁移前脱敏 ${sensitive.findings.map(f => `${f.count} 处${f.label}`).join("、")}` : "不脱敏")
-                : "无需(未检测到敏感信息)"],
-              ["探针模型", resolvedProbeModel || "工具默认"],
+              ["结构验证", "始终执行 · 无模型调用"],
+              ["运行时探针", probeOn
+                ? `开启 · ${resolvedProbeModel || "工具默认模型"}(影子副本)` : "关闭"],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
                 <span style={{ color: "var(--tx4)", flex: "none" }}>{k}</span>
                 <span style={{ color: "var(--tx2)", fontWeight: bold ? 600 : 400, textAlign: "right" }}>{v}</span>
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--tx4)" }}>源会话</span>
-              <span style={{ color: "var(--ok-deep)", fontWeight: 600 }}>只读 · 不修改</span>
-            </div>
           </div>
         </div>
-        <ProbeModelPicker
-          catalog={modelCatalog[target]}
-          loading={!!modelLoad[target]}
-          err={modelErr[target]}
-          selected={probeModel[target] || ""}
-          custom={probeCustom[target] || ""}
-          onSelect={v => setProbeModel(prev => ({ ...prev, [target]: v }))}
-          onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
-        />
+        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
+          marginTop: 12, display: "flex", alignItems: "flex-start", gap: 11 }}>
+          <label onClick={() => setProbeOn(v => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "none",
+              marginTop: 1 }}>
+            <CheckSquare on={probeOn} accent={ACCENT} fg="#fff" />
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>运行时探针</span>
+          </label>
+          <div style={{ fontSize: 11.5, color: "var(--tx3b)", lineHeight: 1.5 }}>
+            在临时影子会话上真实 resume 验证(需数十秒并消耗一次极小的模型调用,
+            完成后自动清理,不向迁移产物追加任何消息)。关闭时仅做结构验证。</div>
+        </div>
+        {probeOn && (
+          <ProbeModelPicker
+            catalog={modelCatalog[target]}
+            loading={!!modelLoad[target]}
+            err={modelErr[target]}
+            selected={probeModel[target] || ""}
+            custom={probeCustom[target] || ""}
+            onSelect={v => setProbeModel(prev => ({ ...prev, [target]: v }))}
+            onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
+          />
+        )}
         <div style={{ fontSize: 12, color: "var(--tx3b)", margin: "14px 0 0", lineHeight: 1.55 }}>
-          Ferry 将写入目标工具,然后运行探针验收(校验消息完整性与可续接性,需数十秒并消耗一次极小的模型调用)。若探针失败,会自动回滚,不在目标保留任何产物。</div>
+          Ferry 将写入目标工具,并重读产物做结构验证(节点数、父子关系与层级拓扑)。
+          {probeOn ? "随后在影子副本上运行探针。" : ""}若验收失败,会自动回滚,不在目标保留任何产物。</div>
       </>
     );
   } else if (step === "writing") {
     const items = [
       { label: `写入 ${TOOL_NAME[target]} 会话存储`, state: wroteFirst ? "done" : "spin" },
-      { label: "探针验收(完整性 · 可续接性)", state: wroteFirst ? "spin" : "wait" },
+      { label: probeOn ? "结构验证 + 隔离探针(影子副本)" : "结构验证(节点 · 拓扑)",
+        state: wroteFirst ? "spin" : "wait" },
     ];
     body = (
       <div style={{ padding: "24px 6px" }}>
@@ -320,7 +309,9 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
               <path d="M5 10.5 8.5 14 15 6.5" fill="none" stroke="var(--ok)" strokeWidth="2.2"
                 strokeLinecap="round" strokeLinejoin="round" /></svg>
           </span>
-          <div style={{ fontSize: 15, fontWeight: 650, marginTop: 12 }}>迁移完成 · 探针验收通过</div>
+          <div style={{ fontSize: 15, fontWeight: 650, marginTop: 12 }}>
+            迁移完成 · {result.validation?.runtime?.status === "passed"
+              ? "结构验证与隔离探针通过" : "结构验证通过"}</div>
           <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 5 }}>
             {result.msg_count} 条消息已写入 {TOOL_NAME[target]},源会话保持不变。</div>
         </div>
@@ -343,7 +334,7 @@ export default function MigrateSheet({ meta, scope, env, onClose, onDone }) {
               <line x1="12" y1="4" x2="4" y2="12" stroke="var(--err2)" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>迁移失败 · 探针未通过</div>
+            <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>迁移失败 · 验收未通过</div>
             <div style={{ fontSize: 12.5, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
               已自动回滚,未在 {TOOL_NAME[target]} 保留任何产物。源会话完好,你可以改用上下文摘要继续。
               {(result?.probe?.model || result?.probe_model) && (
