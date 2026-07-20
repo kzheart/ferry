@@ -1,14 +1,14 @@
 """跨工具会话扫描用例。"""
 
-from ..adapters.registry import adapter, adapters
-from ..infrastructure.scan_cache import ScanCache
+from .ports import current
 
 
 def scan() -> dict:
     tools, sessions = {}, []
-    cache = ScanCache()
-    for name in adapters():
-        tool = adapter(name)
+    ports = current()
+    cache = ports.cache_factory()
+    for name in ports.adapters():
+        tool = ports.adapter(name)
         try:
             rows = tool.scanner(cache)
             sessions.extend(rows)

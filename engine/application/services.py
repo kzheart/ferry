@@ -7,22 +7,29 @@
     python3 -m engine.api migrate claude codex <ref> [--dry-run] [--probe] [--cwd DIR]
     python3 -m engine.api history / snapshots / env
 """
-import glob
 import json
-import os
 import re
 import shutil
-import subprocess
-import sys
 import time
 from pathlib import Path
 
-from .. import __version__, edit as edit_mod
-from ..adapters.registry import adapter, adapters
-from ..infrastructure.resources import resource_path
+from .. import edit as edit_mod
 from . import verification as probe_mod
+from .ports import current
 
-HISTORY = Path.home() / ".resume-harness" / "history.jsonl"
+
+def adapter(tool):
+    return current().adapter(tool)
+
+
+def adapters():
+    return current().adapters()
+
+
+def resource_path(*parts):
+    return current().resource_path(*parts)
+
+from .history import append as _append_history, list_entries as history
 
 # 各目标已实现原生映射的规范操作(与 spec/mapping/tools.yaml 一致)
 NATIVE_OPS = {"claude", "codex", "opencode"}
@@ -82,12 +89,6 @@ def _truncate_rounds(sess, max_turn: int):
         sess.children = [c for c in sess.children if c.source_id in kept_children]
         sess.agent_edges = edges
     return sess
-
-
-def _append_history(entry: dict):
-    HISTORY.parent.mkdir(parents=True, exist_ok=True)
-    with HISTORY.open("a") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
@@ -210,7 +211,7 @@ def _tree_shape(sess) -> tuple:
 def validate_written_tree(tool: str, sid: str, dest,
                           expected_shape: tuple) -> tuple[bool, str]:
     try:
-        ref = sid if tool == "opencode" else str(dest)
+        ref = adapter(tool).validation_ref(sid, dest)
         restored = adapter(tool).reader(ref)
         nodes = list(restored.walk())
         ids = [node.source_id for node in nodes]
@@ -234,35 +235,7 @@ def _shape_nodes(shape):
 
 
 def _cleanup_artifact(dst: str, sid: str, dest):
-    if dst == "claude":
-        try:
-            hits = glob.glob(os.path.expanduser(
-                f"~/.claude/projects/*/{sid}.jsonl"))
-            for h in hits:
-                os.unlink(h)
-                shutil.rmtree(Path(h).with_suffix(""), ignore_errors=True)
-        except OSError:
-            pass
-    elif dst == "codex":
-        for h in glob.glob(os.path.expanduser(
-                "~/.codex/sessions/*/*/*/rollout-*.jsonl")):
-            try:
-                with open(h) as stream:
-                    meta = next((json.loads(line).get("payload", {})
-                                 for line in stream if line.strip() and
-                                 json.loads(line).get("type") == "session_meta"), {})
-                if meta.get("id") == sid or meta.get("session_id") == sid:
-                    os.unlink(h)
-            except (OSError, json.JSONDecodeError):
-                continue
-    elif dst == "opencode":
-        try:
-            tree = adapter("opencode").reader(sid)
-            for node in reversed(list(tree.walk())):
-                subprocess.run(["opencode", "session", "delete", node.source_id],
-                               capture_output=True, text=True, timeout=30)
-        except Exception:
-            pass
+    adapter(dst).cleanup(sid, dest)
 
 
 def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
@@ -305,14 +278,6 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
 
 
 # ---------- 迁移历史 / 快照 ----------
-
-def history() -> list[dict]:
-    if not HISTORY.exists():
-        return []
-    rows = [json.loads(l) for l in HISTORY.read_text().splitlines()
-            if l.strip()]
-    return rows[::-1]
-
 
 def snapshots() -> list[dict]:
     d = edit_mod.BACKUP_DIR
@@ -371,19 +336,12 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
     result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
     if run_probe_after:
         restored = impl.load(str(path))
-        if tool == "claude":
-            cwd = next((r.get("cwd") for r in restored.data if r.get("cwd")), ".")
-            ok, detail = _isolated_claude_probe(path, cwd)
-        else:
-            meta = next((r.get("payload", {}) for r in restored.data
-                         if r.get("type") == "session_meta"), {})
-            saved = {"session_id": meta.get("id") or meta.get("session_id"),
-                     "saved_as": str(path)}
-            closure = getattr(restored, "context", None)
-            if closure is not None and hasattr(closure, "nodes"):
-                saved["published_paths"] = [str(node.path)
-                                            for node in closure.nodes.values()]
-            ok, detail = _probe_edited(tool, impl, restored, saved)
+        saved = {"session_id": session_id, "saved_as": str(path)}
+        closure = getattr(restored, "context", None)
+        if closure is not None and hasattr(closure, "nodes"):
+            saved["published_paths"] = [str(node.path)
+                                        for node in closure.nodes.values()]
+        ok, detail = _probe_edited(tool, impl, restored, saved)
         result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
         if not ok:
             path.write_bytes(cur)
@@ -439,41 +397,10 @@ def edit_apply(ref: str, ops: list[dict], probe: bool = False,
 
 def _probe_edited(tool: str, impl, doc, result: dict) -> tuple[bool, str]:
     """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
-    if tool == "claude":
-        path = Path(result["saved_as"])
-        cwd = next((r.get("cwd") for r in edit_mod.load(path) if r.get("cwd")), ".")
-        return _isolated_claude_probe(path, cwd)
-    if tool == "codex":
-        import tempfile
-        with tempfile.TemporaryDirectory(prefix="ferry-codex-probe-") as tmp:
-            codex_home = Path(tmp) / ".codex"
-            sessions = codex_home / "sessions" / "probe" / "01" / "01"
-            sessions.mkdir(parents=True)
-            for raw in result.get("published_paths", [result["saved_as"]]):
-                shutil.copy(raw, sessions / Path(raw).name)
-            source_home = Path.home() / ".codex"
-            for name in ("auth.json", "config.toml"):
-                source = source_home / name
-                if source.exists():
-                    shutil.copy(source, codex_home / name)
-            env = dict(os.environ)
-            env["CODEX_HOME"] = str(codex_home)
-            try:
-                ok, detail = probe_mod.probe_codex_in_env(
-                    result["session_id"], env=env)
-            except probe_mod.ProbeTimeout as error:
-                ok, detail = False, str(error)
-            return ok, (f"(临时 CODEX_HOME 完整树探测 {result['session_id']}，已清理)\n"
-                        f"{detail}")
-    # OpenCode 的交付副本保持不动，再 import 一份影子后探测并删除。
-    shadow_doc = impl.load(result["session_id"])
-    shadow = impl.save_copy(shadow_doc)
     try:
-        cwd = shadow_doc.data.get("info", {}).get("directory") or "."
-        ok, detail = run_probe("opencode", shadow["session_id"], cwd)
-        return ok, f"(影子副本 {shadow['session_id']} 已探测并清理)\n{detail}"
-    finally:
-        impl.discard(shadow)
+        return adapter(tool).probe_edited(impl, doc, result)
+    except probe_mod.ProbeTimeout as error:
+        return False, str(error)
 
 
 def _edit_save_as(ref: str, ops: list[dict], probe: bool = False) -> dict:
@@ -526,34 +453,14 @@ def _apply_ops(records, ops):
 
 # ---------- 环境 / 模型列表 ----------
 
-def env() -> dict:
-    out = {}
-    for tool in adapters():
-        info = {"installed": False, "version": None, "golden": None,
-                "verified": False}
-        try:
-            r = subprocess.run([tool, "--version"], capture_output=True,
-                               text=True, timeout=20)
-            m = re.search(r"\d+\.\d+\.\d+", r.stdout + r.stderr)
-            info["installed"] = r.returncode == 0
-            info["version"] = m.group(0) if m else None
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        gdir = resource_path("golden", tool)
-        if gdir.exists():
-            versions = sorted(p.name for p in gdir.iterdir() if p.is_dir())
-            info["golden"] = versions[-1] if versions else None
-        info["verified"] = (info["installed"] and info["golden"]
-                            and info["version"] == info["golden"])
-        out[tool] = info
-    return out
+from .environment import inspect as env
 
 
 # ---------- CLI ----------
 
 
 def version() -> dict:
-    return {"version": __version__, "protocol": 1}
+    return {"version": current().version, "protocol": 1}
 
 
 def health() -> dict:

@@ -1,1 +1,1 @@
-from ...edit_backend import OpenCodeBackend
+from ..editing import OpenCodeBackend

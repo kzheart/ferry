@@ -21,6 +21,10 @@ from .opencode.reader import read as read_opencode
 from .opencode.scanner import scan as scan_opencode
 from .opencode.writer import write as write_opencode
 from ..infrastructure.probes import probe_claude, probe_codex, probe_opencode
+from .capabilities import (
+    cleanup_claude, cleanup_codex, cleanup_opencode,
+    probe_claude_edit, probe_codex_edit, probe_opencode_edit,
+)
 
 
 def _resolve_file(tool, pattern, ref):
@@ -41,15 +45,18 @@ _ADAPTERS = {
         read_claude, write_claude, ClaudeBackend(), probe_claude,
         claude_models, claude_fallback,
         lambda ref: _resolve_file("claude", "~/.claude/projects/*/{ref}.jsonl", ref),
-        _resume("claude")),
+        _resume("claude"), cleanup_claude, probe_claude_edit,
+        lambda _sid, dest: str(dest)),
     "codex": ToolAdapter("codex", "~/.codex/sessions", scan_codex,
         read_codex, write_codex, CodexBackend(), probe_codex,
         codex_models, codex_fallback,
         lambda ref: _resolve_file("codex", "~/.codex/sessions/*/*/*/rollout-*-{ref}.jsonl", ref),
-        _resume("codex")),
+        _resume("codex"), cleanup_codex, probe_codex_edit,
+        lambda _sid, dest: str(dest)),
     "opencode": ToolAdapter("opencode", "~/.local/share/opencode", scan_opencode,
         read_opencode, write_opencode, OpenCodeBackend(), probe_opencode,
-        opencode_models, opencode_fallback, lambda ref: ref, _resume("opencode")),
+        opencode_models, opencode_fallback, lambda ref: ref, _resume("opencode"),
+        cleanup_opencode, probe_opencode_edit, lambda sid, _dest: sid),
 }
 
 

@@ -1,1 +1,1 @@
-from ...edit_backend import ClaudeBackend
+from ..editing import ClaudeBackend

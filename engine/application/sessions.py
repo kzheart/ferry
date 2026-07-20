@@ -1,7 +1,6 @@
 """规范会话读取、树装配与 RPC DTO。"""
 
-from ..adapters.registry import adapter
-from ..infrastructure.scan_cache import ScanCache
+from .ports import current
 
 
 def _walk_meta(nodes):
@@ -11,12 +10,13 @@ def _walk_meta(nodes):
 
 
 def read_tree(tool_name: str, ref: str):
-    tool = adapter(tool_name)
+    ports = current()
+    tool = ports.adapter(tool_name)
     path = tool.resolve_ref(ref)
     session = tool.reader(path)
     if session.children:
         return session
-    roots = tool.scanner(ScanCache())
+    roots = tool.scanner(ports.cache_factory())
     target = next((node for node in _walk_meta(roots)
         if node["id"] == session.source_id or (node.get("path") and node["path"] == str(path))), None)
     if target is None:

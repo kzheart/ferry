@@ -21,3 +21,6 @@ class ToolAdapter:
     fallback_models: Callable[[], list[dict]]
     resolve_ref: Callable[[str], str]
     resume_descriptor: Callable[[str, str], dict]
+    cleanup: Callable[[str, object], None]
+    probe_edited: Callable
+    validation_ref: Callable[[str, object], str]

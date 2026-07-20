@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from ..adapters.registry import adapter
+from .ports import current
 
 MODELS_CONFIG = Path.home() / ".resume-harness/models.json"
 
@@ -22,7 +22,7 @@ def _user_model_ids(tool):
 
 
 def list_models(tool_name):
-    tool = adapter(tool_name)
+    tool = current().adapter(tool_name)
     error = default = None
     try:
         rows, source, default = tool.model_provider()

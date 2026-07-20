@@ -1,1 +1,1 @@
-from ...edit_backend import CodexBackend
+from ..editing import CodexBackend
