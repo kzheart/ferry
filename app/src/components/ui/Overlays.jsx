@@ -1,6 +1,7 @@
 // 其余弹层:差异预览 / 原地修改确认 / 快照还原确认 / 结果 toast /
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
+import { renderEvents } from "../../api/contract/events.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
@@ -74,9 +75,9 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
             </div>
           </div>
         ))}
-        {preview?.notes?.length > 0 && (
+        {preview?.changes?.length > 0 && (
           <div style={{ fontSize: 12, color: "var(--tx3b)", lineHeight: 1.6 }}>
-            引擎确认:{preview.notes.join(";")}</div>)}
+            引擎确认:{renderEvents(preview.changes).join(";")}</div>)}
       </div>
       <div style={{ flex: "none", padding: "13px 20px", borderTop: "1px solid var(--line5)",
         display: "flex", justifyContent: "flex-end" }}>

@@ -1,7 +1,8 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { useMemo, useRef, useState } from "react";
 import { TOOL_NAME } from "../../api/contract/tools.js";
-import { ACCENT, fmtSize, resumeCommand } from "../../domain/tools/toolDisplay.js";
+import { resumeDescriptor } from "../../api/contract/tools.js";
+import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
   PencilIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
@@ -285,9 +286,10 @@ export default function SessionDetail({ meta, data, error,
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
 
-  const resume = resumeCommand(meta.tool, meta.id, meta.dir);
   const copyResume = () => {
-    try { navigator.clipboard?.writeText(resume); } catch {}
+    resumeDescriptor(meta.tool, meta.id, meta.dir)
+      .then(d => navigator.clipboard?.writeText(d.display_command))
+      .catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };
 

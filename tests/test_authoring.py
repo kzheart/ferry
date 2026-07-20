@@ -4,14 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from engine.adapters.authoring import (
-    ClaudeAuthoringCompiler, CodexAuthoringCompiler, OpenCodeAuthoringCompiler,
-)
+from engine.adapters.base.editing import EditDocument
+from engine.adapters.claude.authoring import ClaudeAuthoringCompiler
 from engine.adapters.claude.editing import check_invariants
 from engine.adapters.claude.reader import read as read_claude
+from engine.adapters.codex.authoring import CodexAuthoringCompiler
+from engine.adapters.codex.editor import CodexBackend
 from engine.adapters.codex.reader import read as read_codex
-from engine.adapters.capabilities import probe_opencode_edit
-from engine.adapters.editing import CodexBackend, EditDocument, OpenCodeBackend
+from engine.adapters.opencode.authoring import OpenCodeAuthoringCompiler
+from engine.adapters.opencode.editor import OpenCodeBackend
+from engine.adapters.opencode.probe import OpenCodeVerifier
 from engine.adapters.opencode.session import _parse_session
 from engine.application.editing import apply_mutation
 from engine.application.sessions import session_json
@@ -281,15 +283,18 @@ def test_opencode_probe_clones_authored_result(monkeypatch):
             discarded.append(result["session_id"])
 
     monkeypatch.setattr(
-        "engine.adapters.capabilities.probes.probe_opencode",
-        lambda sid, cwd, model: (True, "ok"))
+        "engine.adapters.opencode.probe.probes.probe_opencode",
+        lambda sid, cwd, model: {"status": "passed", "code": None,
+                                 "params": {}, "diagnostic": {}})
     doc = type("Doc", (), {"ref": "original",
                             "data": {"info": {"directory": "/work"}}})()
 
-    ok, _ = probe_opencode_edit(
+    report = OpenCodeVerifier().probe_edited(
         Editor(), doc, {"session_id": "authored-copy"})
 
-    assert ok is True
+    assert report["status"] == "passed"
+    assert report["isolation"] == {"kind": "shadow_session",
+                                   "id": "probe-shadow", "cleaned": True}
     assert loaded == ["authored-copy"]
     assert discarded == ["probe-shadow"]
 

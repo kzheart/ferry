@@ -71,7 +71,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
           <span style={{ fontSize: 12.5, color: "var(--tx2)", flex: 1, textAlign: "right",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</span>
           <span style={{ fontSize: 11.5, color: "var(--tx4)", flex: "none" }}>
-            {TOOL_NAME[s.tool] || TOOL_NAME.claude}</span>
+            {TOOL_NAME[s.tool] || s.tool}</span>
         </div>
 
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "18px 0 8px" }}>变更摘要</div>

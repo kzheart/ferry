@@ -1,9 +1,14 @@
-"""目标 CLI 的子进程探针实现。"""
+"""目标 CLI 的子进程探针实现。
+
+返回结构化报告：status/code/params 承载业务判定；
+stdout/stderr 是 opaque diagnostic，不翻译、不参与判定。
+"""
 
 import json
 import subprocess
 
 PROBE_PROMPT = "Reply with exactly: PROBE_OK"
+_DIAG_LIMIT = 8000
 
 
 class ProbeTimeout(RuntimeError):
@@ -18,25 +23,17 @@ def _run(cmd, cwd=None, timeout=180, env=None):
         raise ProbeTimeout(f"探针超时: {' '.join(cmd)}") from error
 
 
-def _clip(text, limit=8000):
-    text = text or ""
-    return text if len(text) <= limit else text[:limit] + f"\n…(截断,共 {len(text)} 字符)"
+def report(status, code=None, params=None, stdout="", stderr=""):
+    stdout, stderr = stdout or "", stderr or ""
+    truncated = len(stdout) > _DIAG_LIMIT or len(stderr) > _DIAG_LIMIT
+    return {"status": status, "code": code, "params": params or {},
+            "diagnostic": {"stdout": stdout[:_DIAG_LIMIT],
+                           "stderr": stderr[:_DIAG_LIMIT],
+                           "truncated": truncated}}
 
 
-def _format_claude_error(out):
-    parts = []
-    if out.get("result"):
-        parts.append(str(out["result"]).strip())
-    reason = out.get("terminal_reason") or out.get("stop_reason")
-    if reason:
-        parts.append(f"terminal_reason={reason}")
-    if out.get("api_error_status") is not None:
-        parts.append(f"api_error_status={out['api_error_status']}")
-    if out.get("session_id"):
-        parts.append(f"session_id={out['session_id']}")
-    if out.get("modelUsage"):
-        parts.append(f"modelUsage={json.dumps(out['modelUsage'], ensure_ascii=False)}")
-    return "\n".join(parts) or _clip(json.dumps(out, ensure_ascii=False, indent=2))
+def timeout_report(tool, error):
+    return report("failed", "probe.timeout", {"tool": tool}, stderr=str(error))
 
 
 def probe_claude(sid, dirpath, model=None):
@@ -48,14 +45,24 @@ def probe_claude(sid, dirpath, model=None):
     result = _run(cmd, cwd=dirpath)
     raw, error = (result.stdout or "").strip(), (result.stderr or "").strip()
     if result.returncode != 0 and not raw:
-        return False, _clip(error or f"claude 退出码 {result.returncode}")
+        return report("failed", "probe.process_failed",
+                      {"tool": "claude", "exit_code": result.returncode},
+                      stderr=error)
     try:
         out = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
-        return False, f"非 JSON 输出 (exit={result.returncode}):\n{_clip(raw or error)}"
+        return report("failed", "probe.non_json_output",
+                      {"tool": "claude", "exit_code": result.returncode},
+                      stdout=raw, stderr=error)
     if out.get("is_error") or result.returncode != 0:
-        return False, _format_claude_error(out)
-    return True, _clip(str(out.get("result", "")), 500)
+        params = {"tool": "claude", "exit_code": result.returncode}
+        for key in ("terminal_reason", "stop_reason", "api_error_status",
+                    "session_id"):
+            if out.get(key) is not None:
+                params[key] = out[key]
+        return report("failed", "probe.process_failed", params,
+                      stdout=raw, stderr=error)
+    return report("passed", stdout=str(out.get("result", "")))
 
 
 def probe_codex_in_env(sid, model=None, env=None):
@@ -63,9 +70,11 @@ def probe_codex_in_env(sid, model=None, env=None):
     if model:
         cmd += ["-m", model]
     result = _run(cmd + [PROBE_PROMPT], env=env)
-    ok = result.returncode == 0
-    detail = (result.stdout if ok else (result.stderr or result.stdout)) or ""
-    return ok, _clip(detail or f"codex 退出码 {result.returncode}")
+    if result.returncode != 0:
+        return report("failed", "probe.process_failed",
+                      {"tool": "codex", "exit_code": result.returncode},
+                      stdout=result.stdout, stderr=result.stderr)
+    return report("passed", stdout=result.stdout, stderr=result.stderr)
 
 
 def probe_codex(sid, _dirpath, model=None):
@@ -79,6 +88,8 @@ def probe_opencode(sid, dirpath, model=None):
     if dirpath:
         cmd[2:2] = ["--dir", dirpath]
     result = _run(cmd + [PROBE_PROMPT], cwd=dirpath, timeout=360)
-    ok = result.returncode == 0 and bool((result.stdout or "").strip())
-    detail = (result.stdout if ok else (result.stderr or result.stdout)) or ""
-    return ok, _clip(detail or f"opencode 退出码 {result.returncode}")
+    if result.returncode != 0 or not (result.stdout or "").strip():
+        return report("failed", "probe.process_failed",
+                      {"tool": "opencode", "exit_code": result.returncode},
+                      stdout=result.stdout, stderr=result.stderr)
+    return report("passed", stdout=result.stdout, stderr=result.stderr)

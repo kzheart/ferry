@@ -1,4 +1,5 @@
 // 迁移历史详情:范围/损耗报告/上下文水位/验收结果/回滚信息/接续命令
+import { probeText } from "../../api/contract/events.js";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
@@ -24,7 +25,7 @@ export default function HistoryDetail({ h }) {
   const fail = status === "失败";
   const rolled = h.rolled_back;
   const range = h.max_turn ? `到第 ${h.max_turn} 轮` : "完整会话";
-  const probeDetail = h.probe?.detail || "";
+  const probeDetail = probeText(h.probe);
   const probeLines = h.probe
     ? (ok ? probeDetail.split("\n").filter(Boolean).slice(0, 4)
       : probeDetail.split("\n").filter(Boolean))

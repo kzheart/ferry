@@ -15,6 +15,7 @@ from pathlib import Path
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
 from ...infrastructure.resources import resource_path
+from ..base.narration import narrate
 
 TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
             "write": "fs.write", "edit": "fs.edit"}
@@ -194,9 +195,9 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                 text = visible_text(p.get("text"))
                 if text is not None:
                     blocks.append(Block("text", text))
-                    sess.lose("reasoning 降级为 text(丢弃 metadata/加密字段)")
+                    sess.lose("migration.reasoning_metadata_dropped", metadata_kind="metadata")
                 else:
-                    sess.lose("reasoning 无可见正文,丢弃")
+                    sess.lose("migration.reasoning_dropped", metadata_kind="metadata")
             elif pt == "tool":
                 st = p.get("state", {})
                 source_input = st.get("input")
@@ -233,7 +234,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
             elif pt in ("step-start", "step-finish"):
                 continue
             else:
-                sess.lose(f"未知 part 类型丢弃: {pt}")
+                sess.lose("migration.unknown_block_dropped", kind=pt)
         if blocks:
             minfo = m["info"]
             parent_id = minfo.get("parentID")
@@ -285,10 +286,10 @@ def read(session_id: str) -> Session:
                 continue
             child = visit(child_id, root_id)
             if child_id not in db_child_ids and child.parent_id != sid:
-                sess.lose(f"task 引用的会话 {child_id} 不属于当前父会话,已忽略")
+                sess.lose("session.child_foreign_ignored", child_id=child_id)
                 continue
             if child.parent_id and child.parent_id != sid:
-                sess.lose(f"子会话 {child_id} 的 parentID 冲突,已忽略")
+                sess.lose("session.child_parent_conflict", child_id=child_id)
                 continue
             child.parent_id = sid
             sess.children.append(child)
@@ -420,12 +421,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                                   t.output or "Edited file.",
                                   i["file_path"], {"truncated": False})
                 else:
-                    sess.lose(f"工具 {t.name} 降级为叙述文本")
-                    inp = json.dumps(t.input, ensure_ascii=False)[:500] \
-                        if isinstance(t.input, dict) else str(t.input)[:500]
-                    add_part("text", {"text":
-                             f"[历史记录:此前通过工具 {t.name} 执行了操作]\n"
-                             f"参数: {inp}\n结果:\n{(t.output or '(无输出)')[:2000]}"})
+                    sess.lose("migration.tool_degraded", tool_name=t.name)
+                    add_part("text", {"text": narrate(t)})
         if parts:
             messages.append({"info": minfo, "parts": parts})
     return {"info": info, "messages": messages}

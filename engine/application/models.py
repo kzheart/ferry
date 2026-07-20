@@ -22,12 +22,12 @@ def _user_model_ids(tool):
 
 
 def list_models(tool_name):
-    tool = current().adapter(tool_name)
+    catalog = current().adapter(tool_name).require("models")
     error = default = None
     try:
-        rows, source, default = tool.model_provider()
+        rows, source, default = catalog.discover()
     except Exception as exc:
-        error, source, rows = str(exc)[:400], "fallback", tool.fallback_models()
+        error, source, rows = str(exc)[:400], "fallback", catalog.fallback()
     rows += [{"id": model, "label": model, "source": "user"} for model in _user_model_ids(tool_name)]
     seen, models = set(), []
     for row in rows:

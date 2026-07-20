@@ -9,6 +9,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from .events import event
+
 
 @dataclass
 class RawRecord:
@@ -75,7 +77,7 @@ class Session:
     cwd: str
     title: str = ""
     messages: list[Message] = field(default_factory=list)
-    loss: list[str] = field(default_factory=list)
+    loss: list[dict] = field(default_factory=list)
     root_id: str | None = None
     parent_id: str | None = None
     forked_from_id: str | None = None
@@ -87,8 +89,8 @@ class Session:
     raw_records: list[RawRecord] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
 
-    def lose(self, what: str):
-        self.loss.append(what)
+    def lose(self, code: str, **params):
+        self.loss.append(event(code, **params))
 
     def walk(self):
         stack = [self]

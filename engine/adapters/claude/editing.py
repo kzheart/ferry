@@ -1,23 +1,14 @@
-#!/usr/bin/env python3
-"""Claude Code 会话编辑原语；跨工具编排见 engine.adapters.editing。
+"""Claude Code 会话文件原语：解析、快照、原子写入与结构校验。
 
-安全约定(见 README「关键决策」):
-- 编辑前自动快照到 ~/.resume-harness/backups/,restore 可还原;
-- 原子写入(temp+rename);
-- 编辑后必须用 harness/probe.py 验收(本工具会打印验收命令)。
+轮次/编辑语义统一由 ``claude.codec`` 持有；跨工具编排见 application 层。
 """
-import argparse
 import glob
 import json
 import os
-import shutil
-import sys
-import time
 from pathlib import Path
 
-from ...infrastructure.snapshots import BACKUP_DIR
-
-REDACTED = "[REDACTED]"
+from ...domain.errors import SessionNotFoundError
+from ...infrastructure.snapshots import snapshot_file
 
 
 def resolve(ref: str) -> Path:
@@ -25,20 +16,13 @@ def resolve(ref: str) -> Path:
         return Path(ref)
     hits = glob.glob(os.path.expanduser(f"~/.claude/projects/*/{ref}.jsonl"))
     if not hits:
-        sys.exit(f"找不到 Claude 会话: {ref}")
+        raise SessionNotFoundError("claude", ref)
     return Path(hits[0])
 
 
-def backup(path: Path, reason: str = "会话编辑前自动", tool: str = "claude") -> Path:
-    """复制一份快照,并写同名 .meta.json 记录创建原因(供 UI 分组与筛选)。"""
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    # 纳秒级 ID 避免同一秒内“编辑前快照”和“还原前保护”互相覆盖。
-    dest = BACKUP_DIR / f"{path.stem}-{time.time_ns()}.jsonl"
-    shutil.copy(path, dest)
-    dest.with_suffix(".meta.json").write_text(json.dumps(
-        {"reason": reason, "tool": tool, "source": str(path)},
-        ensure_ascii=False))
-    return dest
+def backup(path: Path, reason_code: str = "snapshot.before_edit",
+           tool: str = "claude") -> Path:
+    return snapshot_file(path, reason_code, tool)
 
 
 def load(path: Path) -> list[dict]:
@@ -65,88 +49,6 @@ def relink(records: list[dict], removed_uuids: set[str]):
             r["parentUuid"] = nearest_alive(r["parentUuid"])
 
 
-def _walk_strings(obj, fn):
-    if isinstance(obj, dict):
-        return {k: _walk_strings(v, fn) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_walk_strings(v, fn) for v in obj]
-    if isinstance(obj, str):
-        return fn(obj)
-    return obj
-
-
-# ---------- 操作 ----------
-
-def op_redact(records, args):
-    count = 0
-    def fn(s):
-        nonlocal count
-        if args.find in s:
-            count += s.count(args.find)
-            return s.replace(args.find, args.replace)
-        return s
-    out = [_walk_strings(r, fn) for r in records]
-    print(f"替换了 {count} 处")
-    if count == 0:
-        sys.exit("未命中任何内容,不写入")
-    return out
-
-
-def _turns(records):
-    """轮 = 真实用户消息(非 tool_result 载体)到下一条真实用户消息之前。"""
-    starts = []
-    for i, r in enumerate(records):
-        if r.get("type") != "user" or r.get("isSidechain"):
-            continue
-        c = (r.get("message") or {}).get("content")
-        is_tool_carrier = isinstance(c, list) and any(
-            b.get("type") == "tool_result" for b in c)
-        if not is_tool_carrier:
-            starts.append(i)
-    return starts
-
-
-def op_delete_turn(records, args):
-    starts = _turns(records)
-    if not 1 <= args.turn <= len(starts):
-        sys.exit(f"轮次超界:共 {len(starts)} 轮")
-    lo = starts[args.turn - 1]
-    hi = starts[args.turn] if args.turn < len(starts) else len(records)
-    removed = records[lo:hi]
-    removed_uuids = {r["uuid"] for r in removed if "uuid" in r}
-    kept = records[:lo] + records[hi:]
-    relink(kept, removed_uuids)
-    print(f"删除第 {args.turn} 轮:{len(removed)} 条记录")
-    return kept
-
-
-def op_rewrite(records, args):
-    hit = False
-    for r in records:
-        if r.get("uuid") != args.uuid:
-            continue
-        m = r.get("message") or {}
-        if isinstance(m.get("content"), str):
-            m["content"] = args.text
-        elif isinstance(m.get("content"), list):
-            m["content"] = [{"type": "text", "text": args.text}]
-        hit = True
-    if not hit:
-        sys.exit(f"未找到 uuid={args.uuid}")
-    print("已改写 1 条消息")
-    return records
-
-
-def op_restore(path: Path):
-    cands = sorted(BACKUP_DIR.glob(f"{path.stem}-*.jsonl"))
-    if not cands:
-        sys.exit("没有该会话的快照")
-    shutil.copy(cands[-1], path)
-    print(f"已从 {cands[-1].name} 还原")
-
-
-# ---------- 校验 ----------
-
 def check_invariants(records):
     uuids = [r["uuid"] for r in records if "uuid" in r]
     assert len(uuids) == len(set(uuids)), "uuid 重复"
@@ -165,47 +67,3 @@ def check_invariants(records):
                     results.add(b["tool_use_id"])
     assert results <= uses, f"孤儿 tool_result: {results - uses}"
     assert uses <= results, f"未配对 tool_use: {uses - results}"
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("op", choices=["redact", "delete-turn",
-                                   "rewrite", "restore"])
-    ap.add_argument("ref")
-    ap.add_argument("--find")
-    ap.add_argument("--replace", default=REDACTED)
-    ap.add_argument("--turn", type=int)
-    ap.add_argument("--uuid")
-    ap.add_argument("--text")
-    args = ap.parse_args()
-    path = resolve(args.ref)
-
-    if args.op == "restore":
-        op_restore(path)
-        return
-    if args.op == "redact" and not args.find:
-        ap.error("redact 需要 --find")
-    if args.op == "delete-turn" and not args.turn:
-        ap.error("delete-turn 需要 --turn")
-    if args.op == "rewrite" and not (args.uuid and args.text):
-        ap.error("rewrite 需要 --uuid 和 --text")
-
-    bak = backup(path)
-    records = load(path)
-    fn = {"redact": op_redact,
-          "delete-turn": op_delete_turn, "rewrite": op_rewrite}[args.op]
-    records = fn(records, args)
-    check_invariants(records)
-    save(path, records)
-    sid = path.stem
-    proj = None
-    for r in records:
-        if r.get("cwd"):
-            proj = r["cwd"]
-            break
-    print(f"快照: {bak}")
-    print(f"验收: python3 harness/probe.py claude {sid} --dir {proj}")
-
-
-if __name__ == "__main__":
-    main()

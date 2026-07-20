@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canReveal, openTerminal, revealPath, rpc } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
-import { ACCENT, resumeCommand } from "../domain/tools/toolDisplay.js";
+import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { histStatus } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
@@ -212,8 +212,8 @@ export default function App() {
     { sep: true },
     { label: "取消多选", onClick: () => setMultiSel([]) },
   ] : ctxSess ? [
-    { label: "在终端恢复会话", hint: "↩", onClick: () => openTerminal(
-        { tool: ctxSess.tool, session_id: ctxSess.id, cwd: ctxSess.dir || "." }) },
+    { label: "在终端恢复会话", hint: "↩", onClick: () => resumeDescriptor(
+        ctxSess.tool, ctxSess.id, ctxSess.dir).then(openTerminal).catch(() => {}) },
     { label: "迁移到…", onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
         setMig({ scope: null }); } },
@@ -227,8 +227,10 @@ export default function App() {
     { label: "创建快照", onClick: () => manualSnapshot(ctxSess) },
     { sep: true },
     { label: "复制会话 ID", onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
-    { label: "复制接续命令", onClick: () => navigator.clipboard?.writeText(
-        resumeCommand(ctxSess.tool, ctxSess.id, ctxSess.dir)) },
+    { label: "复制接续命令", onClick: () => resumeDescriptor(
+        ctxSess.tool, ctxSess.id, ctxSess.dir)
+        .then(d => navigator.clipboard?.writeText(d.display_command))
+        .catch(() => {}) },
     { label: "在 Finder 中显示", disabled: !ctxSess.path || !canReveal(),
       disabledHint: ctxSess.path ? "仅桌面版可用" : "该来源没有独立会话文件",
       onClick: () => revealPath(ctxSess.path).catch(() => {}) },
@@ -273,7 +275,8 @@ export default function App() {
         }
         if (e.key === "Enter") {
           e.preventDefault();
-          openTerminal({ tool: cur.tool, session_id: cur.id, cwd: cur.dir || "." });
+          resumeDescriptor(cur.tool, cur.id, cur.dir)
+            .then(openTerminal).catch(() => {});
           return;
         }
       }
@@ -421,7 +424,7 @@ export default function App() {
     .flatMap(g => g.rows.map(r => r.id));
 
   const libTokens = [];
-  if (libF.src.length < 3) libF.src.forEach(t => libTokens.push({ label: TOOL_NAME[t],
+  if (libF.src.length < TOOLS.length) libF.src.forEach(t => libTokens.push({ label: TOOL_NAME[t],
     onRemove: () => setLibF(v => ({ ...v, src: v.src.filter(x => x !== t).length
       ? v.src.filter(x => x !== t) : [...TOOLS] })) }));
   if (libF.time !== "all") libTokens.push({

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..domain.authoring import AssistantReply
+from ..domain.errors import OperationUnsupportedError
 from .editing import apply_mutation, preview_mutation
 
 
@@ -21,8 +22,9 @@ def preview(editor, compiler, ref: str, turn: int | str, reply_value: dict) -> d
 def apply(editor, compiler, ref: str, turn: int | str, reply_value: dict,
           save_as: bool, revision: str | None = None):
     if not compiler.supports_mode(save_as):
-        mode = "另存为" if save_as else "原地编辑"
-        raise ValueError(f"{compiler.name} authoring 不支持{mode}")
+        raise OperationUnsupportedError(
+            compiler.name, "replace-assistant-reply",
+            "saveas" if save_as else "inplace")
     reply = AssistantReply.from_dict(reply_value)
     return apply_mutation(
         editor, ref, lambda doc: compiler.replace(doc, turn, reply),

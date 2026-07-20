@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+
+import { renderSnapshotReason } from "../../api/contract/events.js";
 import { rpc } from "../../api/transport/rpc.js";
 
 export function useSnapshotState({ snapRows, sessionsById, runtimeProbe, loadSnaps, doScan, setToast }) {
@@ -12,7 +14,7 @@ export function useSnapshotState({ snapRows, sessionsById, runtimeProbe, loadSna
     const meta = sessionsById[snapshot.session];
     return { ...snapshot, id, title: meta?.title || snapshot.session,
       tool: snapshot.tool || meta?.tool || "claude",
-      trigger: snapshot.reason || "会话编辑前自动" };
+      trigger: renderSnapshotReason(snapshot) };
   }), [snapRows, sessionsById]);
 
   const confirmRestore = async () => {

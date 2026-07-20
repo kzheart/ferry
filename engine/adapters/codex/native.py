@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ...domain.events import event
+
 
 class CodexCloneError(RuntimeError):
     pass
@@ -466,7 +468,7 @@ def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
             for sid in _postorder(closure)[::-1]:
                 row = source_rows.get(sid)
                 if not row:
-                    warnings.append(f"线程 {sid} 无注册行，副本将由 Codex 扫描发现")
+                    warnings.append(event("codex.thread_unregistered", session_id=sid))
                     continue
                 row["id"] = id_map[sid]
                 row["rollout_path"] = str(finals[sid])
@@ -482,7 +484,8 @@ def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
             if _table_columns(db, "thread_spawn_edges"):
                 for child, parent in closure.parents.items():
                     if id_map[parent] not in registered or id_map[child] not in registered:
-                        warnings.append(f"线程边 {parent}->{child} 未注册，因为端点缺少 threads 源行")
+                        warnings.append(event("codex.thread_edge_unregistered",
+                                              parent=parent, child=child))
                         continue
                     source = db.execute(
                         "SELECT status FROM thread_spawn_edges WHERE child_thread_id=?",
@@ -542,7 +545,7 @@ def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
         "registered_ids": registered,
         "id_map": id_map,
         "tree_count": len(closure.nodes),
-        "warnings": warnings,
+        "events": warnings,
         "resume": f"codex resume {id_map[closure.anchor_id]}",
     }
 

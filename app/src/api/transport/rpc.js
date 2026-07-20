@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { throwEngineError } from "./errors.js";
+
 const inTauri = () => !!window.__TAURI_INTERNALS__;
 
 export async function rpc(method, params) {
@@ -8,7 +10,7 @@ export async function rpc(method, params) {
     ? await invoke("engine_rpc", { request })
     : await (await fetch("/api/rpc", { method: "POST", body: request })).text();
   const response = JSON.parse(raw);
-  if (!response.ok) throw new Error(response.error || "引擎调用失败");
+  if (!response.ok) throwEngineError(response.error);
   return response.result;
 }
 

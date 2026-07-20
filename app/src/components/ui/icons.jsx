@@ -34,9 +34,20 @@ const TOOL_ICON = {
   },
 };
 
+// 未识别的 icon id 用首字母占位,保证新增 Agent 不改前端也有图标
+const fallbackIcon = tool => ({
+  viewBox: "0 0 24 24",
+  bg: "var(--fill3)",
+  innerRatio: 1.0,
+  children: (
+    <text x="12" y="16.5" textAnchor="middle" fontSize="13" fontWeight="700"
+      fill="var(--tx3b)">{String(tool || "?")[0].toUpperCase()}</text>
+  ),
+});
+
 // 工具图标:圆角方底 + 品牌形 + 可选状态点
 export function ToolIcon({ tool, size = 26, dot = null }) {
-  const icon = TOOL_ICON[tool] || TOOL_ICON.claude;
+  const icon = TOOL_ICON[tool] || fallbackIcon(tool);
   const inner = Math.round(size * icon.innerRatio);
   return (
     <span className="noinvert" style={{ position: "relative", display: "inline-flex",

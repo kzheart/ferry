@@ -1,45 +1,13 @@
 """规范会话读取、树装配与 RPC DTO。"""
 
+from ..adapters.base.migration import assemble_tree
 from .ports import current
-
-
-def _walk_meta(nodes):
-    for node in nodes:
-        yield node
-        yield from _walk_meta(node.get("children", []))
 
 
 def read_tree(tool_name: str, ref: str):
     ports = current()
     tool = ports.adapter(tool_name)
-    path = tool.resolve_ref(ref)
-    session = tool.reader(path)
-    if session.children:
-        return session
-    roots = tool.scanner(ports.cache_factory())
-    target = next((node for node in _walk_meta(roots)
-        if node["id"] == session.source_id or (node.get("path") and node["path"] == str(path))), None)
-    if target is None:
-        return session
-
-    def attach(current, meta, root_id):
-        current.source_id = meta["id"]
-        current.root_id = root_id
-        current.parent_id = meta.get("parent_id")
-        current.title = current.title or meta.get("title", "")
-        current.cwd = current.cwd or meta.get("dir", "")
-        existing = {child.source_id: child for child in current.children}
-        children = []
-        for child_meta in meta.get("children", []):
-            child = existing.get(child_meta["id"])
-            if child is None:
-                child = tool.reader(child_meta.get("path") or child_meta["id"])
-            attach(child, child_meta, root_id)
-            children.append(child)
-        current.children = children
-
-    attach(session, target, target.get("root_id") or target["id"])
-    return session
+    return assemble_tree(tool.browser, ref, ports.cache_factory())
 
 
 def _messages(messages):

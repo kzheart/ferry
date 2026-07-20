@@ -12,9 +12,10 @@ def inspect() -> dict:
     for tool in ports.adapters():
         info = {"installed": False, "version": None, "golden": None,
                 "verified": False}
+        executable = ports.adapter(tool).manifest.executables[0]
         try:
-            process = subprocess.run([tool, "--version"], capture_output=True,
-                                     text=True, timeout=20)
+            process = subprocess.run([executable, "--version"],
+                                     capture_output=True, text=True, timeout=20)
             match = re.search(r"\d+\.\d+\.\d+", process.stdout + process.stderr)
             info["installed"] = process.returncode == 0
             info["version"] = match.group(0) if match else None

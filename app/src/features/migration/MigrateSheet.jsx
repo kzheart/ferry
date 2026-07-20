@@ -5,7 +5,8 @@ import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
-import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
+import { CheckSquare, CmdRow, LossCols, RadioDot, Sheet } from "../../components/ui/primitives.jsx";
+import { probeFailed, probeText } from "../../api/contract/events.js";
 
 const ORDER = ["target", "preview", "confirm", "result"];
 
@@ -100,6 +101,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   const [modelErr, setModelErr] = useState({});
   const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
   const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
+  const [narrLocale, setNarrLocale] = useState("zh-CN"); // 降级叙述写入目标的语言
   const doneRef = useRef(false);
   const ref = sessionRef(meta);
 
@@ -153,7 +155,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
       const r = await rpc("migrate", { src: meta.tool, dst: target, ref,
         max_turn: scope || undefined,
         probe: probeOn,
-        probe_model: probeOn ? resolvedProbeModel : undefined });
+        probe_model: probeOn ? resolvedProbeModel : undefined,
+        content_locale: narrLocale });
       setResult(r);
     } catch (e) { setError(e.message); }
     setStep("result");
@@ -169,7 +172,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     setHandoffBusy(false);
   };
 
-  const ok = result && result.probe?.ok !== false && result.session_id;
+  const ok = result && !probeFailed(result.probe) && result.session_id;
   const fail = step === "result" && !ok;
   const installed = t => env?.[t]?.installed;
 
@@ -246,6 +249,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
               ["结构验证", "始终执行 · 无模型调用"],
               ["运行时探针", probeOn
                 ? `开启 · ${resolvedProbeModel || "工具默认模型"}(影子副本)` : "关闭"],
+              ["降级叙述语言", narrLocale === "en" ? "English" : "中文"],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
                 <span style={{ color: "var(--tx4)", flex: "none" }}>{k}</span>
@@ -277,6 +281,22 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
             onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
           />
         )}
+        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
+          marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)", flex: "none" }}>
+            降级叙述语言</span>
+          <div style={{ display: "flex", gap: 14 }}>
+            {[["zh-CN", "中文"], ["en", "English"]].map(([v, l]) => (
+              <label key={v} onClick={() => setNarrLocale(v)}
+                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <RadioDot on={narrLocale === v} accent={ACCENT} />
+                <span style={{ fontSize: 12.5, color: "var(--tx2)" }}>{l}</span>
+              </label>
+            ))}
+          </div>
+          <span style={{ fontSize: 11.5, color: "var(--tx3b)" }}>
+            无法原生迁移的工具调用,以该语言写入目标会话正文</span>
+        </div>
         <div style={{ fontSize: 12, color: "var(--tx3b)", margin: "14px 0 0", lineHeight: 1.55 }}>
           Ferry 将写入目标工具,并重读产物做结构验证(节点数、父子关系与层级拓扑)。
           {probeOn ? "随后在影子副本上运行探针。" : ""}若验收失败,会自动回滚,不在目标保留任何产物。</div>
@@ -344,12 +364,12 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
                 <> · 探针模型 <code className="mono">{result.probe?.model || result.probe_model}</code></>
               )}
             </div>
-            {(error || result?.probe?.detail) && (
+            {(error || probeText(result?.probe)) && (
               <pre className="mono selectable fscroll" style={{ margin: "10px 0 0", fontSize: 11,
                 color: "var(--err-pre)", whiteSpace: "pre-wrap", maxHeight: 280, overflow: "auto",
                 background: "var(--err-bg4)", border: "1px solid var(--err-line)", borderRadius: 8, padding: "10px 12px",
                 lineHeight: 1.5 }}>
-                {error || result.probe.detail}</pre>
+                {error || probeText(result.probe)}</pre>
             )}
           </div>
         </div>

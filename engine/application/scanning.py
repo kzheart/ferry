@@ -9,12 +9,13 @@ def scan() -> dict:
     cache = ports.cache_factory()
     for name in ports.adapters():
         tool = ports.adapter(name)
+        source_path = tool.manifest.source_path
         try:
-            rows = tool.scanner(cache)
+            rows = tool.browser.scan(cache)
             sessions.extend(rows)
-            tools[name] = {"ok": True, "count": len(rows), "path": tool.source_path}
+            tools[name] = {"ok": True, "count": len(rows), "path": source_path}
         except Exception as error:
-            tools[name] = {"ok": False, "error": str(error)[:200], "path": tool.source_path}
+            tools[name] = {"ok": False, "error": str(error)[:200], "path": source_path}
     cache.flush()
     sessions.sort(key=lambda session: session["updated"], reverse=True)
     return {"tools": tools, "sessions": sessions}

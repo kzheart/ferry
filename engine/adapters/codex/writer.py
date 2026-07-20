@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ...domain.model import Session
 from ...infrastructure.resources import resource_path
+from ..base.narration import narrate
 
 GOLDEN = resource_path("golden", "codex")
 
@@ -91,14 +92,6 @@ def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code) -> list:
         {"type": "input_text", "text": inner}])
     op.pop("internal_chat_message_metadata_passthrough", None)
     return [call, out]
-
-
-def _narration(tool) -> str:
-    inp = json.dumps(tool.input, ensure_ascii=False)[:500] \
-        if isinstance(tool.input, dict) else str(tool.input)[:500]
-    out = (tool.output or "(无输出)")[:2000]
-    return (f"[历史记录:此前通过工具 {tool.name} 执行了操作]\n"
-            f"参数: {inp}\n结果:\n{out}")
 
 
 def _apply_patch_pair(tpl, patch: str, output: str = "{}") -> list:
@@ -193,8 +186,8 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                         texts = []
                     out_lines += native
                 else:
-                    sess.lose(f"工具 {t.name} 降级为叙述文本")
-                    texts.append(_narration(t))
+                    sess.lose("migration.tool_degraded", tool_name=t.name)
+                    texts.append(narrate(t))
         if texts:
             out_lines.append(_msg(tpl, role, "\n\n".join(texts)))
     return out_lines

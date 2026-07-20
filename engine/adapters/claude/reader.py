@@ -101,9 +101,9 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 text = visible_text(item.get("thinking"))
                 if text is not None:
                     blocks.append(Block("text", text))
-                    session.lose("thinking 降级为 text(丢弃 signature)")
+                    session.lose("migration.reasoning_metadata_dropped", metadata_kind="signature")
                 else:
-                    session.lose("thinking 无可见正文,丢弃(含 signature)")
+                    session.lose("migration.reasoning_dropped", metadata_kind="signature")
             elif kind == "tool_use":
                 name = item.get("name", "")
                 op = "agent.spawn" if name == "Agent" else TOOL_OPS.get(name)
@@ -119,7 +119,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 result_carrier = True
                 tool = pending.pop(item.get("tool_use_id"), None)
                 if tool is None:
-                    session.lose(f"孤儿 tool_result: {item.get('tool_use_id')}")
+                    session.lose("session.orphan_tool_result", call_id=item.get("tool_use_id"))
                     continue
                 tool.output = _result_text(item)
                 tool.source_result_id = record.get("uuid")
@@ -128,7 +128,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                     tool.meta.update(result)
                     tool.status = result.get("status")
             else:
-                session.lose(f"未知内容块类型丢弃: {kind}")
+                session.lose("migration.unknown_block_dropped", kind=kind)
         if result_carrier and not any(
                 block.kind == "text" and block.text.strip()
                 for block in blocks):
@@ -137,7 +137,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
             session.messages.append(Message(role=role, blocks=blocks,
                                             **common))
     for tool in pending.values():
-        session.lose(f"未配对 tool_use({tool.name})按无输出处理")
+        session.lose("session.unpaired_tool_use", tool_name=tool.name)
     return session
 
 
@@ -239,5 +239,5 @@ def read(path: str) -> Session:
             child_session_id=child.source_id, agent_id=child.agent_id,
             agent_path=child.agent_path,
             meta={"association": "directory-fallback"}))
-        root.lose(f"子代理 {child.agent_id} 未找到 Agent 启动记录,按根子节点保留")
+        root.lose("session.subagent_unlinked", child_id=child.agent_id)
     return root

@@ -12,7 +12,9 @@ import re
 import time
 from pathlib import Path
 
+from ..domain.errors import SnapshotInvalidSourceError, SnapshotNotFoundError
 from . import verification as probe_mod
+from ..adapters.base import narration
 from .ports import current
 
 
@@ -33,36 +35,16 @@ def snapshot_dir():
 
 from .history import append as _append_history, list_entries as history
 
-# 各目标已实现原生映射的规范操作
-NATIVE_OPS = {"claude", "codex", "opencode"}
-
 
 # ---------- 迁移 ----------
 
 def resume_command(tool: str, sid: str, cwd: str) -> dict:
-    return adapter(tool).resume_descriptor(sid, cwd)
+    return adapter(tool).require("lifecycle").resume_descriptor(sid, cwd)
 
 
-def _loss_stats(sess, dst: str) -> dict:
-    """预演:统计原生映射/降级/丢弃(与 writer 的分发逻辑一致)。"""
-    native = degrade = 0
-    details = []
-    dropped = []
-    for node in sess.walk():
-        dropped.extend(node.loss)
-        for m in node.messages:
-            for b in m.blocks:
-                if b.kind == "text":
-                    native += 1
-                elif b.kind == "tool":
-                    if b.tool.op:
-                        native += 1
-                    else:
-                        degrade += 1
-                        details.append(
-                            f"工具 {b.tool.name} 将降级为叙述文本")
-    return {"native": native, "degrade": degrade, "drop": len(dropped),
-            "degrade_details": details, "drop_details": dropped}
+def tool_manifests() -> list[dict]:
+    """插件 manifest 列表：前端与 Rust 的 Agent 定义单一事实源。"""
+    return [adapter(name).describe() for name in adapters()]
 
 
 # ---------- 范围截断 ----------
@@ -78,7 +60,7 @@ def _truncate_rounds(sess, max_turn: int):
         kept.append(m)
     dropped = len(sess.messages) - len(kept)
     if dropped:
-        sess.loss.append(f"按迁移范围截断: 丢弃第 {max_turn} 轮之后的 {dropped} 条消息")
+        sess.lose("migration.truncated", max_turn=max_turn, dropped=dropped)
     sess.messages = kept
     kept_ids = {m.source_id for m in kept if m.source_id}
     edges = [e for e in sess.agent_edges
@@ -87,7 +69,7 @@ def _truncate_rounds(sess, max_turn: int):
     removed = [c for c in sess.children
                if sess.agent_edges and c.source_id not in kept_children]
     if removed:
-        sess.loss.append(f"截断范围外的 {len(removed)} 个子会话未迁移")
+        sess.lose("migration.children_not_migrated", count=len(removed))
         sess.children = [c for c in sess.children if c.source_id in kept_children]
         sess.agent_edges = edges
     return sess
@@ -96,12 +78,14 @@ def _truncate_rounds(sess, max_turn: int):
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             dry_run: bool = False, probe: bool = False,
             max_turn: int | None = None,
-            probe_model: str | None = None) -> dict:
+            probe_model: str | None = None,
+            content_locale: str | None = None) -> dict:
     sess = _read_tree(src, ref)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
+    target = adapter(dst).require("migration_target")
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
-    stats = _loss_stats(sess, dst)
+    stats = target.plan(sess)
     tree_count = sum(1 for _ in sess.walk())
     edge_count = sum(len(node.agent_edges) for node in sess.walk())
     topology = {"nodes": tree_count,
@@ -119,9 +103,10 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
     if dry_run:
         return {**base, "dry_run": True}
 
-    sid, dest = adapter(dst).writer(sess, cwd=target_cwd)
+    with narration.content_locale(content_locale):
+        sid, dest = target.write(sess, target_cwd)
     # 写回阶段可能追加新的损耗(writer 分发时才知道)
-    base["loss"] = _loss_stats(sess, dst)
+    base["loss"] = target.plan(sess)
     result = {**base, "session_id": sid, "dest": str(dest),
               "resume": resume_command(dst, sid, target_cwd)}
 
@@ -129,19 +114,25 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
     ok, tree_detail = validate_written_tree(dst, sid, dest, _tree_shape(sess))
     validation = {"structure": {"ok": ok, "detail": tree_detail},
                   "runtime": {"status": "skipped"}}
-    detail = tree_detail
+    runtime_report = None
     if ok and probe:
         # 运行时探针只打在临时影子副本上,正式产物不接收探针消息
-        ok, runtime_detail = _isolated_migrate_probe(
-            dst, sess, target_cwd, model=probe_model)
-        validation["runtime"] = {"status": "passed" if ok else "failed",
-                                 "detail": runtime_detail,
+        with narration.content_locale(content_locale):
+            runtime_report = _isolated_migrate_probe(
+                dst, sess, target_cwd, model=probe_model)
+        validation["runtime"] = {**runtime_report,
                                  "model": probe_model or None}
-        detail = f"{tree_detail}\n{runtime_detail}"
+        ok = runtime_report["status"] == "passed"
     result["validation"] = validation
-    if probe or not ok:                 # 兼容历史记录/UI 的 probe 字段
-        result["probe"] = {"ok": ok, "detail": detail,
-                           "model": (probe_model or None) if probe else None}
+    if probe or not ok:                 # 历史记录/UI 消费的 probe 字段
+        result["probe"] = runtime_report or {
+            "status": "passed" if ok else "failed",
+            "code": None if ok else "probe.structure_invalid",
+            "params": {},
+            "diagnostic": {"stdout": tree_detail, "stderr": "",
+                           "truncated": False}}
+        if probe:
+            result["probe"]["model"] = probe_model or None
     if not ok:                          # 验收失败:删除产物,不留半成品
         _cleanup_artifact(dst, sid, dest)
         result["rolled_back"] = True
@@ -150,33 +141,32 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
 
 
 def _isolated_migrate_probe(dst: str, sess, cwd: str,
-                            model: str | None = None) -> tuple[bool, str]:
+                            model: str | None = None) -> dict:
     """把同一棵会话树再写一份影子副本,对影子 resume 探测,结束后清理。
 
     writer 每次生成全新随机 session id,影子与正式产物互不冲突;
     写入过程可能追加损耗记录,探测前保存、结束后还原。
     """
     saved_loss = [(node, list(node.loss)) for node in sess.walk()]
-    shadow_sid, shadow_dest = adapter(dst).writer(sess, cwd=cwd)
+    shadow_sid, shadow_dest = adapter(dst).require("migration_target").write(sess, cwd)
     for node, loss in saved_loss:
         node.loss = loss
     try:
-        ok, detail = run_probe(dst, shadow_sid, cwd, model=model)
-        return ok, f"(影子副本 {shadow_sid} 已探测并清理)\n{detail}"
+        rep = run_probe(dst, shadow_sid, cwd, model=model)
+        rep.setdefault("isolation", {"kind": "shadow_copy", "id": shadow_sid,
+                                     "cleaned": True})
+        return rep
     finally:
         _cleanup_artifact(dst, shadow_sid, shadow_dest)
 
 
 def run_probe(tool: str, sid: str, cwd: str,
-              model: str | None = None) -> tuple[bool, str]:
+              model: str | None = None) -> dict:
     try:
-        ok, detail = probe_mod.run_probe(
-            tool, sid, cwd if tool != "codex" else None, model)
+        return probe_mod.run_probe(
+            tool, sid, adapter(tool).require("lifecycle").probe_cwd(cwd), model)
     except probe_mod.ProbeTimeout as error:
-        return False, str(error)
-    if len(detail) > 12000:
-        detail = detail[:12000] + f"\n…(截断,共 {len(detail)} 字符)"
-    return ok, detail
+        return probe_mod.timeout_report(tool, error)
 
 
 def _tree_shape(sess) -> tuple:
@@ -187,8 +177,8 @@ def _tree_shape(sess) -> tuple:
 def validate_written_tree(tool: str, sid: str, dest,
                           expected_shape: tuple) -> tuple[bool, str]:
     try:
-        ref = adapter(tool).validation_ref(sid, dest)
-        restored = adapter(tool).reader(ref)
+        ref = adapter(tool).require("lifecycle").validation_ref(sid, dest)
+        restored = adapter(tool).browser.read(ref)
         nodes = list(restored.walk())
         ids = [node.source_id for node in nodes]
         edge_count = sum(len(node.children) for node in nodes)
@@ -211,7 +201,7 @@ def _shape_nodes(shape):
 
 
 def _cleanup_artifact(dst: str, sid: str, dest):
-    adapter(dst).cleanup(sid, dest)
+    adapter(dst).require("lifecycle").cleanup(sid, dest)
 
 
 def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
@@ -220,8 +210,8 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
     原生迁移不可行时的兜底(F22)。摘要是确定性浓缩,不逐轮还原。
     """
     impl = adapter(src)
-    path = impl.resolve_ref(ref)
-    sess = impl.reader(path)
+    path = impl.browser.resolve_ref(ref)
+    sess = impl.browser.read(path)
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     lines = [f"# 会话接力摘要(来自 {src})",
              f"- 源会话: {sess.source_id}",
@@ -249,8 +239,8 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
     doc = doc_dir / f"{sess.source_id}.md"
     doc.write_text("\n".join(lines))
     return {"doc": str(doc), "preview": "\n".join(lines)[:3000],
-            "command": {"tool": dst, "cwd": target_cwd,
-                        "handoff_doc": str(doc)}}
+            "command": adapter(dst).require("lifecycle")
+                       .handoff_descriptor(target_cwd, str(doc))}
 
 
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------
@@ -267,54 +257,18 @@ def session_meta_set(sid: str, patch: dict) -> dict:
 
 # ---------- 会话生命周期 ----------
 
-def _backup_file(path: Path, tool: str, reason: str, extra: dict | None = None) -> Path:
-    d = snapshot_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    import shutil
-    dest = d / f"{path.stem}-{time.time_ns()}.jsonl"
-    shutil.copy(path, dest)
-    dest.with_suffix(".meta.json").write_text(json.dumps(
-        {"reason": reason, "tool": tool, "source": str(path), **(extra or {})},
-        ensure_ascii=False))
-    return dest
-
-
 def session_snapshot(tool: str, ref: str) -> dict:
     """手动为会话创建一份快照,不改动会话本身。"""
-    impl = adapter(tool).editor
+    impl = adapter(tool).require("editor")
     doc = impl.load(ref)
-    snap = impl.snapshot(doc, reason="手动快照")
+    snap = impl.snapshot(doc, reason_code="snapshot.manual")
     return {"ok": True, "snapshot": str(snap)}
 
 
 def session_delete(tool: str, ref: str) -> dict:
-    """删除会话前先落快照(回收站语义);文件型工具可通过 session_undelete 撤销。"""
-    import shutil
+    """删除会话前先落快照(回收站语义);具体策略由插件 lifecycle 决定。"""
     impl = adapter(tool)
-    doc = impl.editor.load(ref)
-    if tool == "opencode":
-        snap = impl.editor.snapshot(doc, reason="删除前自动")
-        impl.cleanup(ref, None)
-        return {"ok": True, "snapshot": str(snap), "undoable": False}
-
-    path = doc.handle if isinstance(doc.handle, Path) else Path(impl.resolve_ref(ref))
-    children = []
-    closure = getattr(doc, "context", None)
-    if closure is not None and hasattr(closure, "nodes"):
-        for node in closure.nodes.values():
-            child = Path(node.path)
-            if child != path and child.exists():
-                child_snap = _backup_file(child, tool, "删除前自动")
-                children.append({"snapshot": str(child_snap), "source": str(child)})
-                child.unlink()
-    snap = _backup_file(path, tool, "删除前自动",
-                        {"children": children} if children else None)
-    sidecar = path.with_suffix("")
-    if tool == "claude" and sidecar.is_dir():
-        shutil.move(str(sidecar), str(snap.with_suffix("")))
-    path.unlink()
-    return {"ok": True, "snapshot": str(snap), "undoable": True,
-            "children": len(children)}
+    return impl.require("lifecycle").delete(impl, ref)
 
 
 def session_undelete(snapshot: str) -> dict:
@@ -322,17 +276,20 @@ def session_undelete(snapshot: str) -> dict:
     import shutil
     snap = Path(snapshot)
     if snap.parent != snapshot_dir():
-        return {"ok": False, "error": "只允许从快照目录恢复"}
+        raise SnapshotInvalidSourceError("只允许从快照目录恢复", {"snapshot": snapshot})
     try:
         meta = json.loads(snap.with_suffix(".meta.json").read_text())
-    except (OSError, json.JSONDecodeError):
-        return {"ok": False, "error": "快照缺少元数据,无法撤销"}
+    except (OSError, json.JSONDecodeError) as error:
+        raise SnapshotInvalidSourceError("快照缺少元数据,无法撤销",
+                                         {"snapshot": snapshot}) from error
     source = meta.get("source")
     if not source or not str(source).startswith("/"):
-        return {"ok": False, "error": "该快照没有可恢复的源路径"}
+        raise SnapshotInvalidSourceError("该快照没有可恢复的源路径",
+                                         {"snapshot": snapshot})
     target = Path(source)
     if target.exists():
-        return {"ok": False, "error": "源会话仍存在,未覆盖"}
+        raise SnapshotInvalidSourceError("源会话仍存在,未覆盖",
+                                         {"target": str(target)})
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(snap, target)
     sidecar = snap.with_suffix("")
@@ -368,7 +325,8 @@ def snapshots() -> list[dict]:
         snapshot_time = raw_time // 1_000_000 if raw_time > 10**15 else raw_time * 1000
         out.append({"session": m.group(1), "time": snapshot_time,
                     "size": f.stat().st_size, "path": str(f),
-                    "reason": meta.get("reason") or "会话编辑前自动",
+                    "reason_code": meta.get("reason_code"),
+                    "legacy_reason": meta.get("reason"),
                     "tool": meta.get("tool") or "claude",
                     "source": meta.get("source") or m.group(1)})
     return out
@@ -376,7 +334,7 @@ def snapshots() -> list[dict]:
 
 def snapshot_restore(session_id: str, run_probe_after: bool = False,
                      tool: str = "claude") -> dict:
-    impl = adapter(tool).editor
+    impl = adapter(tool).require("editor")
     try:
         doc = impl.load(session_id)
     except (SystemExit, Exception):
@@ -390,9 +348,9 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
     stem = path.stem if path else str(doc.ref)
     cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
     if not cands:
-        return {"ok": False, "error": "没有该会话的快照"}
+        raise SnapshotNotFoundError("没有该会话的快照", {"session": session_id})
     if path is None:
-        guard = impl.snapshot(doc, reason="还原前保护")
+        guard = impl.snapshot(doc, reason_code="snapshot.before_restore_guard")
         impl.restore_snapshot(cands[-1], doc)
         result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
         if run_probe_after:
@@ -400,17 +358,21 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
             shadow = impl.save_copy(restored)
             try:
                 cwd = restored.data.get("info", {}).get("directory") or "."
-                ok, detail = run_probe(tool, shadow["session_id"], cwd)
+                rep = run_probe(tool, shadow["session_id"], cwd)
             finally:
                 impl.discard(shadow)
-            result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-            if not ok:
+            rep.setdefault("isolation", {"kind": "shadow_session",
+                                         "id": shadow["session_id"],
+                                         "cleaned": True})
+            result["probe"] = rep
+            if rep["status"] != "passed":
                 impl.restore_snapshot(guard, restored)
                 result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
         return result
     import shutil
     cur = path.read_bytes()               # 保住现状,探针失败时回退
-    guard = impl.snapshot(doc, reason="还原前保护")      # UI 承诺的保护快照
+    guard = impl.snapshot(doc,
+                          reason_code="snapshot.before_restore_guard")  # UI 承诺的保护快照
     shutil.copy(cands[-1], path)
     result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
     if run_probe_after:
@@ -420,9 +382,9 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
         if closure is not None and hasattr(closure, "nodes"):
             saved["published_paths"] = [str(node.path)
                                         for node in closure.nodes.values()]
-        ok, detail = _probe_edited(tool, impl, restored, saved)
-        result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-        if not ok:
+        rep = _probe_edited(tool, impl, restored, saved)
+        result["probe"] = rep
+        if rep["status"] != "passed":
             path.write_bytes(cur)
             result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
     return result
@@ -431,7 +393,7 @@ def snapshot_restore(session_id: str, run_probe_after: bool = False,
 def snapshot_delete(path: str) -> dict:
     p = Path(path)
     if p.parent != snapshot_dir():
-        return {"ok": False, "error": "只允许删除快照目录内的文件"}
+        raise SnapshotInvalidSourceError("只允许删除快照目录内的文件", {"path": path})
     p.unlink(missing_ok=True)
     p.with_suffix(".meta.json").unlink(missing_ok=True)
     return {"ok": True}
@@ -442,9 +404,9 @@ def snapshot_delete(path: str) -> dict:
 def _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as):
     if not probe:
         return result
-    ok, detail = _probe_edited(tool, impl, doc, result)
-    result["probe"] = {"ok": ok, "detail": detail, "isolated": True}
-    if ok:
+    rep = _probe_edited(tool, impl, doc, result)
+    result["probe"] = rep
+    if rep["status"] == "passed":
         return result
     if save_as:
         impl.discard(result)
@@ -457,14 +419,15 @@ def _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as):
 
 def authoring_capabilities(tool: str) -> dict:
     from .authoring import capabilities
-    return capabilities(adapter(tool).authoring)
+    return capabilities(adapter(tool).require("authoring"))
 
 
 def authoring_preview(ref: str, turn: int | str, reply: dict,
                       tool: str = "claude") -> dict:
     from .authoring import preview
     impl = adapter(tool)
-    return preview(impl.editor, impl.authoring, ref, turn, reply)
+    return preview(impl.require("editor"), impl.require("authoring"),
+                   ref, turn, reply)
 
 
 def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
@@ -472,35 +435,36 @@ def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
                     revision: str | None = None) -> dict:
     from .authoring import apply
     impl = adapter(tool)
+    editor = impl.require("editor")
     result, doc, snapshot = apply(
-        impl.editor, impl.authoring, ref, turn, reply, save_as, revision)
+        editor, impl.require("authoring"), ref, turn, reply, save_as, revision)
     return _finish_mutation(
-        tool, impl.editor, result, doc, snapshot, probe, save_as)
+        tool, editor, result, doc, snapshot, probe, save_as)
 
 def edit_capabilities(tool: str) -> dict:
-    return adapter(tool).editor.capabilities()
+    return adapter(tool).require("editor").capabilities()
 
 
 def edit_preview(ref: str, ops: list[dict], tool: str = "claude") -> dict:
     """在内存中施加操作,返回前后统计与摘要,不落盘。"""
     from .editing import preview
-    return preview(adapter(tool).editor, ref, ops)
+    return preview(adapter(tool).require("editor"), ref, ops)
 
 
 def edit_apply(ref: str, ops: list[dict], probe: bool = False,
                save_as: bool = False, tool: str = "claude") -> dict:
     from .editing import apply
-    impl = adapter(tool).editor
+    impl = adapter(tool).require("editor")
     result, doc, snapshot = apply(impl, ref, ops, save_as=save_as)
     return _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as)
 
 
-def _probe_edited(tool: str, impl, doc, result: dict) -> tuple[bool, str]:
+def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
     """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
     try:
-        return adapter(tool).probe_edited(impl, doc, result)
+        return adapter(tool).require("verifier").probe_edited(impl, doc, result)
     except probe_mod.ProbeTimeout as error:
-        return False, str(error)
+        return probe_mod.timeout_report(tool, error)
 
 
 # ---------- 环境 / 模型列表 ----------
@@ -512,7 +476,7 @@ from .environment import inspect as env
 
 
 def version() -> dict:
-    return {"version": current().version, "protocol": 1}
+    return {"version": current().version, "protocol": 2}
 
 
 def health() -> dict:

@@ -56,7 +56,7 @@ def _parse_call(payload, sess) -> ToolCall:
             return ToolCall(name="apply_patch", op="fs.edit",
                             input={"file_path": m3.group(1).strip(),
                                    "old": old, "new": new}, output="")
-        sess.lose("apply_patch 无法解析出 Add/Update File,降级")
+        sess.lose("migration.apply_patch_unparsed")
     return ToolCall(name=payload.get("name", "custom_tool"), op=None,
                     input=src, output="")
 
@@ -190,14 +190,6 @@ def _raw_record(record: dict, ordinal: int, path: Path) -> RawRecord:
                      timestamp=record.get("timestamp"), location=str(path))
 
 
-def _should_preserve(record: dict) -> bool:
-    top_type = record.get("type", "")
-    payload = record.get("payload") or {}
-    subtype = payload.get("type", "") if isinstance(payload, dict) else ""
-    return (top_type == "session_meta" or "event" in top_type or
-            subtype in {"agent_message", "sub_agent_activity"})
-
-
 def _read_one(path: Path, meta: dict | None = None) -> Session:
     lines = [json.loads(l) for l in Path(path).read_text().splitlines()
              if l.strip()]
@@ -291,16 +283,16 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 tc.output = _parse_output(p.get("output", ""))
                 tc.source_result_id = p.get("id")
             else:
-                sess.lose(f"孤儿 tool output: {p.get('call_id')}")
+                sess.lose("session.orphan_tool_result", call_id=p.get("call_id"))
         elif pt == "reasoning":
             text = codex_summary_text(p)
             if text is not None:
                 cur_reasoning.append(Block("text", text))
-                sess.lose("reasoning 降级为 text(丢弃 encrypted_content)")
+                sess.lose("migration.reasoning_metadata_dropped", metadata_kind="encrypted_content")
             else:
-                sess.lose("reasoning 无可见正文,丢弃(含 encrypted_content)")
+                sess.lose("migration.reasoning_dropped", metadata_kind="encrypted_content")
         else:
-            sess.lose(f"未知 response_item 丢弃: {pt}")
+            sess.lose("migration.unknown_block_dropped", kind=pt)
     if cur_tools or cur_reasoning:
         blocks = []
         flush_pending_into(blocks)
@@ -336,7 +328,7 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
         if matched:
             used_calls.add(id(matched))
         elif spawn_calls:
-            sess.lose(f"子代理 {child.source_id} 无法与 spawn_agent 精确关联")
+            sess.lose("session.subagent_unlinked", child_id=child.source_id)
         prompt = ""
         if matched and isinstance(matched.input, dict):
             prompt = str(matched.input.get("message") or

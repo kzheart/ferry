@@ -1,6 +1,8 @@
 // 共享 UI 构件:弹层容器 / 损耗三栏 / 水位条 / 复制按钮等
 import { useState } from "react";
 
+import { renderEvents } from "../../api/contract/events.js";
+
 // 居中模态(带遮罩)
 export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 }) {
   return (
@@ -49,8 +51,8 @@ const clipList = (arr, max = 3) => {
 export function LossCols({ loss }) {
   if (!loss) return null;
   const keep = [`${loss.native} 个内容块原生映射`, "消息角色与顺序", "文件引用与代码块"];
-  const down = loss.degrade ? clipList(loss.degrade_details) : [];
-  const drop = loss.drop ? clipList(loss.drop_details) : [];
+  const down = loss.degrade ? clipList(renderEvents(loss.degrade_details)) : [];
+  const drop = loss.drop ? clipList(renderEvents(loss.drop_details)) : [];
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
       <LossCol kind="keep" items={keep} />
@@ -62,9 +64,10 @@ export function LossCols({ loss }) {
 
 // 命令 + 复制按钮行(卡片内)
 export function CmdRow({ cmd, head }) {
+  const text = typeof cmd === "string" ? cmd : cmd?.display_command || "";
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    try { navigator.clipboard?.writeText(cmd); } catch {}
+    try { navigator.clipboard?.writeText(text); } catch {}
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   };
@@ -74,7 +77,7 @@ export function CmdRow({ cmd, head }) {
         fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>{head}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
         <code className="mono selectable" style={{ flex: 1, fontSize: 12.5, color: "var(--tx2)",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cmd}</code>
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</code>
         <button className="fbtn" onClick={copy}>{copied ? "已复制" : "复制"}</button>
       </div>
     </div>

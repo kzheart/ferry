@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Session, ToolCall
 from ...infrastructure.resources import resource_path
+from ..base.narration import narrate
 
 GOLDEN = resource_path("golden", "claude")
 
@@ -41,13 +42,6 @@ def _load_templates():
     if "user" not in templates or "assistant" not in templates:
         raise RuntimeError("黄金样本中未找到 user/assistant 模板记录")
     return templates
-
-
-def _narration(tool) -> str:
-    source = json.dumps(tool.input, ensure_ascii=False)[:500] \
-        if isinstance(tool.input, dict) else str(tool.input)[:500]
-    return (f"[历史记录:此前通过工具 {tool.name} 执行了操作]\n"
-            f"参数: {source}\n结果:\n{(tool.output or '(无输出)')[:2000]}")
 
 
 def _clone(value):
@@ -230,8 +224,8 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                         texts = []
                     add_tool(message, tool)
                 else:
-                    session.lose(f"工具 {tool.name} 降级为叙述文本")
-                    texts.append(_narration(tool))
+                    session.lose("migration.tool_degraded", tool_name=tool.name)
+                    texts.append(narrate(tool))
         if texts:
             add_text(message, "\n\n".join(texts))
 
@@ -315,7 +309,7 @@ def write(sess: Session, cwd: str | None = None,
             fork_parent = source_uuids.get(old_parent_uuid)
             if fork_parent is None and root_records:
                 fork_parent = root_records[-1].get("uuid")
-                child.lose("fork-context-ref 父 UUID 无法精确映射,回退到主 transcript 末节点")
+                child.lose("migration.fork_parent_fallback")
             records = _generated_lines(child, sid, child.cwd or cwd, templates,
                                        agent_map, source_uuids, fork_parent)
             new_agent = agent_map.get(child.source_id)

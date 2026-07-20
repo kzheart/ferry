@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
-const ENGINE_PROTOCOL: u64 = 1;
+const ENGINE_PROTOCOL: u64 = 2;
 static ENGINE_HANDSHAKE: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
@@ -178,6 +178,16 @@ fn check_engine(resource_dir: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+pub(crate) fn engine_request_blocking(
+    resource_dir: &Path,
+    request: &str,
+) -> Result<String, String> {
+    ENGINE_HANDSHAKE
+        .get_or_init(|| check_engine(resource_dir))
+        .clone()?;
+    engine_request(resource_dir, request)
 }
 
 #[tauri::command]
