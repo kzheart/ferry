@@ -4,10 +4,9 @@
 import argparse
 import sys
 
-from engine.application.verification import (
-    PROBES, ProbeTimeout, _clip, _format_claude_error, _run, probe_claude,
-    probe_codex, probe_codex_in_env, probe_opencode, run_probe,
-)
+from engine.application.verification import ProbeTimeout, run_probe
+
+PROBES = ("claude", "codex", "opencode")
 
 
 def main(argv=None):

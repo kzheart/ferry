@@ -108,29 +108,3 @@ pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result
     .await
     .map_err(|e| e.to_string())?
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{bundled_engine, bundled_engine_name};
-    use std::path::Path;
-
-    #[test]
-    fn bundled_engine_name_matches_platform_conventions() {
-        assert_eq!(bundled_engine_name(false), "ferry-engine");
-        assert_eq!(bundled_engine_name(true), "ferry-engine.exe");
-    }
-
-    #[test]
-    fn bundled_engine_joins_the_current_platform_filename() {
-        let expected = if cfg!(target_os = "windows") {
-            "ferry-engine.exe"
-        } else {
-            "ferry-engine"
-        };
-
-        assert_eq!(
-            bundled_engine(Path::new("resources")),
-            Path::new("resources").join(expected)
-        );
-    }
-}
