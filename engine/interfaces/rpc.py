@@ -30,6 +30,9 @@ RPC_METHODS = {
     "snapshot_delete": lambda p: services.snapshot_delete(p["path"]),
     "session_delete": lambda p: services.session_delete(p["tool"], p["ref"]),
     "session_undelete": lambda p: services.session_undelete(p["snapshot"]),
+    "session_snapshot": lambda p: services.session_snapshot(p["tool"], p["ref"]),
+    "session_meta_list": lambda p: services.session_meta_list(),
+    "session_meta_set": lambda p: services.session_meta_set(p["id"], p.get("patch") or {}),
 }
 
 

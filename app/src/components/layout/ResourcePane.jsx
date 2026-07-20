@@ -75,6 +75,13 @@ const rowSel = on => ({
   boxShadow: on ? `inset 0 0 0 1px ${ACCENT}` : "none",
 });
 
+const PinGlyph = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={ACCENT}
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }}>
+    <path d="M12 17v5M9 4h6l1 7 2 2H6l2-2 1-7z" />
+  </svg>
+);
+
 // 会话库分组列表
 export function LibraryList({ groups, empty, onClear }) {
   if (empty) return <PaneEmpty text="没有匹配会话" onClear={onClear} />;
@@ -91,13 +98,15 @@ export function LibraryList({ groups, empty, onClear }) {
         <div style={{ animation: "fslide .16s ease" }}>
           {g.rows.map(r => (
             <div key={r.id} onClick={r.onClick} onContextMenu={r.onContext} title={r.dir}
-              className={r.selected ? undefined : "hov-item"}
+              className={r.selected || r.multi ? undefined : "hov-item"}
               style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
                 borderRadius: 8, cursor: "pointer", transition: "background .12s ease,box-shadow .12s ease",
-                ...rowSel(r.selected) }}>
+                opacity: r.archived ? 0.55 : 1,
+                ...rowSel(r.selected || r.multi) }}>
               <ToolIcon tool={r.tool} size={22} dot={r.dot} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {r.pinned && <PinGlyph />}
                   <span style={{ fontSize: 12.5, fontWeight: 550, color: "var(--tx1)", whiteSpace: "nowrap",
                     overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{r.title}</span>
                   <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>{r.active}</span>
@@ -105,6 +114,12 @@ export function LibraryList({ groups, empty, onClear }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
                   <span className="mono" style={{ fontSize: 10.5, color: "var(--tx5)", whiteSpace: "nowrap",
                     overflow: "hidden", textOverflow: "ellipsis" }}>{r.repo}</span>
+                  {(r.tags || []).slice(0, 3).map(t => (
+                    <span key={t} style={{ fontSize: 10, color: "var(--acc-text)",
+                      background: "var(--acc-soft3)", border: "1px solid var(--acc-line)",
+                      borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t}</span>))}
+                  {r.archived && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
+                    borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>已归档</span>}
                   {r.hasSub && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
                     borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{r.subLabel}</span>}
                   {r.hasMig && <span title="含迁移记录" style={{ width: 5, height: 5, borderRadius: "50%",

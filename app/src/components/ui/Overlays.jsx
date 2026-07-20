@@ -183,6 +183,58 @@ export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
   );
 }
 
+// ---------- 输入弹框(重命名 / 标签) ----------
+export function PromptBox({ title, desc, placeholder, initial, confirmLabel = "确定",
+  onCancel, onConfirm }) {
+  const [val, setVal] = useState(initial || "");
+  const submit = () => onConfirm(val.trim());
+  return (
+    <ConfirmBox width={420} title={title} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+      <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
+        onClick={submit}>{confirmLabel}</button>
+    </>}>
+      {desc && <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7,
+        lineHeight: 1.5 }}>{desc}</div>}
+      <input autoFocus value={val} placeholder={placeholder}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") submit(); }}
+        style={{ width: "100%", boxSizing: "border-box", height: 34, marginTop: 12,
+          padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
+          borderRadius: 8, fontSize: 13, color: "var(--tx1)", outline: "none" }} />
+    </ConfirmBox>
+  );
+}
+
+// ---------- 批量删除确认 ----------
+export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
+  const ocCount = sessions.filter(s => s.tool === "opencode").length;
+  const bullets = [
+    ["var(--ok)", "每个会话删除前都会自动保存一份快照到「快照与还原」。"],
+    ocCount > 0 && ["var(--err)", `其中 ${ocCount} 个 OpenCode 会话删除后无法一键撤销。`],
+    ["var(--accent)", "其余会话可在快照页逐个恢复。"],
+  ].filter(Boolean);
+  return (
+    <ConfirmBox width={430} title={`删除选中的 ${sessions.length} 个会话?`} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>取消</button>
+      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
+        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+        onClick={onConfirm}>创建快照并删除</button>
+    </>}>
+      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
+        padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+        {bullets.map(([c, t], i) => (
+          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)",
+            lineHeight: 1.45 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
+              marginTop: 6 }} />{t}
+          </div>
+        ))}
+      </div>
+    </ConfirmBox>
+  );
+}
+
 // ---------- 结果 toast ----------
 export function Toast({ toast, onDismiss }) {
   const kind = toast.kind;
@@ -268,7 +320,7 @@ function RadioRow({ on, onClick, label }) {
 }
 
 // 会话库筛选:来源 / 时间 / 目录
-export function LibraryFilter({ f, setF, counts, dirs, onClose, onClear }) {
+export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onClear }) {
   const times = [["all", "全部时间"], ["today", "今天"], ["last7", "最近 7 天"], ["last30", "最近 30 天"]];
   return (
     <PopShell onClose={onClose} onClear={onClear}>
@@ -297,11 +349,28 @@ export function LibraryFilter({ f, setF, counts, dirs, onClose, onClear }) {
         })}
         {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>暂无目录</span>}
       </div>
+      {tags.length > 0 && (<>
+        <SectionTitle>标签</SectionTitle>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {tags.map(t => {
+            const on = f.tag === t;
+            return (
+              <button key={t} onClick={() => setF(v => ({ ...v, tag: on ? null : t }))}
+                style={{ height: 24, padding: "0 9px", borderRadius: 20,
+                  border: `1px solid ${on ? ACCENT : "var(--line)"}`,
+                  background: on ? "var(--acc-soft)" : "var(--surface)",
+                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{t}</button>
+            );
+          })}
+        </div>
+      </>)}
       <SectionTitle>内容</SectionTitle>
       <CheckRow on={f.mig} label="仅含迁移记录"
         onClick={() => setF(v => ({ ...v, mig: !v.mig }))} />
       <CheckRow on={f.sub} label="仅含子会话"
         onClick={() => setF(v => ({ ...v, sub: !v.sub }))} />
+      <CheckRow on={f.arch} label="显示已归档"
+        onClick={() => setF(v => ({ ...v, arch: !v.arch }))} />
     </PopShell>
   );
 }

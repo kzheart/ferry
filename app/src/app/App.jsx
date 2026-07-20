@@ -13,9 +13,9 @@ import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
 import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
-import { ContextMenu, DiffSheet, Guide, HistoryFilter, InplaceConfirm,
-  LibraryFilter, SessionDeleteConfirm, SnapFilter, SnapRestoreConfirm,
-  Toast } from "../components/ui/Overlays.jsx";
+import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
+  InplaceConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm, SnapFilter,
+  SnapRestoreConfirm, Toast } from "../components/ui/Overlays.jsx";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
@@ -48,13 +48,19 @@ export default function App() {
   const [q, setQ] = useState("");
   const [hq, setHq] = useState("");
   const [sq, setSq] = useState("");
-  const [libF, setLibF] = useState({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false });
+  const [libF, setLibF] = useState(
+    { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, arch: false, tag: null });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
   const [snapF, setSnapF] = useState(
     { src: [...TOOLS], reason: "all", session: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'|'snap'
-  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id}
+  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
+  const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
+  const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
+  const [tagFor, setTagFor] = useState(null);       // {ids} 待编辑标签的会话
+  const [multiSel, setMultiSel] = useState([]);     // 多选中的会话 id
+  const [metaMap, setMetaMap] = useState({});       // 会话元数据 sidecar
   const pendingEdit = useRef(null);             // 右键"会话编辑"等数据加载完再进入
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
@@ -85,6 +91,38 @@ export default function App() {
   useEffect(() => {
     if (!selId && sessions.length) select(sessions[0].id);
   }, [sessions]);
+
+  // ----- 会话元数据(重命名/置顶/归档/标签,sidecar 存储) -----
+  useEffect(() => {
+    rpc("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
+  }, []);
+  const setMetaFor = async (id, patch) => {
+    try {
+      const entry = await rpc("session_meta_set", { id, patch });
+      setMetaMap(m => {
+        const next = { ...m };
+        if (entry && Object.keys(entry).length) next[id] = entry;
+        else delete next[id];
+        return next;
+      });
+    } catch (e) {
+      setToast({ kind: "fail", title: "保存元数据失败", desc: e.message });
+    }
+  };
+  const batchMeta = async patch => {
+    for (const id of multiSel) await setMetaFor(id, patch);
+    setToast({ kind: "ok", title: "已更新", desc: `已对 ${multiSel.length} 个会话生效。` });
+  };
+  const manualSnapshot = async s => {
+    setToast({ kind: "run", title: "正在创建快照…", desc: s.title || s.id });
+    try {
+      await rpc("session_snapshot", { tool: s.tool, ref: sessionRef(s) });
+      loadSnaps();
+      setToast({ kind: "ok", title: "已创建快照", desc: "可在「快照与还原」中查看与还原。" });
+    } catch (e) {
+      setToast({ kind: "fail", title: "创建快照失败", desc: e.message });
+    }
+  };
 
   const select = id => {
     setSelId(id); resetSelection();
@@ -141,15 +179,53 @@ export default function App() {
     if (s.tool === "opencode" || (s.tree_count || 1) > 1) setDelConfirm(s);
     else deleteSession(s);
   };
+  const doBatchDelete = async () => {
+    const targets = batchDel;
+    setBatchDel(null);
+    let done = 0, fail = 0;
+    for (const s of targets) {
+      setToast({ kind: "run", title: "正在批量删除…",
+        desc: `${done + fail} / ${targets.length}` });
+      try {
+        await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+        done++;
+      } catch { fail++; }
+    }
+    if (targets.some(s => s.id === selId)) { setSelId(null); setDetail(null); }
+    setMultiSel([]); doScan(); loadSnaps();
+    setToast(fail
+      ? { kind: "fail", title: "批量删除部分失败", desc: `成功 ${done} 个,失败 ${fail} 个。` }
+      : { kind: "ok", title: "已删除会话",
+          desc: `已删除 ${done} 个会话,快照保存在「快照与还原」。` });
+  };
 
   const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
-  const ctxItems = ctxSess ? [
-    { label: "在终端恢复会话", onClick: () => openTerminal(
+  const ctxMeta = ctxSess ? metaMap[ctxSess.id] || {} : {};
+  const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
+  const ctxItems = ctxMenu?.multi ? [
+    { label: "批量归档", onClick: () => batchMeta({ archived: true }) },
+    { label: "取消归档", onClick: () => batchMeta({ archived: false }) },
+    { label: "添加标签…", onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
+    { sep: true },
+    { label: `删除 ${multiSess.length} 个会话…`, danger: true,
+      onClick: () => setBatchDel(multiSess) },
+    { sep: true },
+    { label: "取消多选", onClick: () => setMultiSel([]) },
+  ] : ctxSess ? [
+    { label: "在终端恢复会话", hint: "↩", onClick: () => openTerminal(
         { tool: ctxSess.tool, session_id: ctxSess.id, cwd: ctxSess.dir || "." }) },
-    { label: "会话编辑", onClick: () => enterEditFor(ctxSess.id) },
+    { label: "会话编辑", hint: "⌘E", onClick: () => enterEditFor(ctxSess.id) },
     { label: "迁移到…", onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
         setMig({ scope: null }); } },
+    { sep: true },
+    { label: "重命名…", hint: "F2", onClick: () => setRenameFor(ctxSess) },
+    { label: ctxMeta.pinned ? "取消置顶" : "置顶",
+      onClick: () => setMetaFor(ctxSess.id, { pinned: !ctxMeta.pinned }) },
+    { label: ctxMeta.archived ? "取消归档" : "归档",
+      onClick: () => setMetaFor(ctxSess.id, { archived: !ctxMeta.archived }) },
+    { label: "标签…", onClick: () => setTagFor({ ids: [ctxSess.id] }) },
+    { label: "创建快照", onClick: () => manualSnapshot(ctxSess) },
     { sep: true },
     { label: "复制会话 ID", onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
     { label: "复制接续命令", onClick: () => navigator.clipboard?.writeText(
@@ -158,7 +234,7 @@ export default function App() {
       disabledHint: ctxSess.path ? "仅桌面版可用" : "该来源没有独立会话文件",
       onClick: () => revealPath(ctxSess.path).catch(() => {}) },
     { sep: true },
-    { label: "删除会话…", danger: true, onClick: () => askDelete(ctxSess) },
+    { label: "删除会话…", hint: "⌫", danger: true, onClick: () => askDelete(ctxSess) },
   ] : null;
 
   // ----- 键盘 -----
@@ -169,6 +245,9 @@ export default function App() {
       }
       if (e.key === "Escape") {
         if (ctxMenu) setCtxMenu(null);
+        else if (renameFor) setRenameFor(null);
+        else if (tagFor) setTagFor(null);
+        else if (batchDel) setBatchDel(null);
         else if (delConfirm) setDelConfirm(null);
         else if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
@@ -176,11 +255,32 @@ export default function App() {
         else if (confirmInplace) setConfirmInplace(false);
         else if (diff) setDiff(null);
         else if (mig) setMig(null);
+        else if (multiSel.length) setMultiSel([]);
         else if (guideStep) finishGuide();
         return;
       }
       if (document.activeElement &&
           ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      // 会话库快捷键:仅在没有弹层时生效
+      const overlayOpen = ctxMenu || delConfirm || batchDel || renameFor || tagFor ||
+        settingsOpen || popover || snapConfirm || confirmInplace || diff || mig || guideStep;
+      if (!overlayOpen && view === "library" && cur) {
+        if ((e.metaKey || e.ctrlKey) && (e.key === "e" || e.key === "E")) {
+          e.preventDefault(); enterEditFor(cur.id); return;
+        }
+        if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
+        if ((e.key === "Backspace" || e.key === "Delete") && mode !== "edit") {
+          e.preventDefault();
+          if (multiSel.length > 1) setBatchDel(multiSel.map(id => byId[id]).filter(Boolean));
+          else askDelete(cur);
+          return;
+        }
+        if (e.key === "Enter" && mode !== "edit") {
+          e.preventDefault();
+          openTerminal({ tool: cur.tool, session_id: cur.id, cwd: cur.dir || "." });
+          return;
+        }
+      }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         const ids = visibleIds.current[view] || [];
@@ -248,32 +348,79 @@ export default function App() {
   const timeBuckets = { all: BUCKETS.map(b => b[0]), today: ["today"],
     last7: ["today", "yesterday", "last7"],
     last30: ["today", "yesterday", "last7", "last30"] }[libF.time];
-  const matchLib = s => libF.src.includes(s.tool) &&
-    (!libF.dir || repoOf(s.dir) === libF.dir) &&
-    (!libF.mig || migratedIds.has(s.id)) &&
-    (!libF.sub || (s.tree_count || 1) > 1) &&
-    (!ql || (s.title || "").toLowerCase().includes(ql) ||
-      (s.dir || "").toLowerCase().includes(ql) || s.id.toLowerCase().includes(ql));
+  const matchLib = s => {
+    const m = metaMap[s.id] || {};
+    return libF.src.includes(s.tool) &&
+      (libF.arch || !m.archived) &&
+      (!libF.tag || (m.tags || []).includes(libF.tag)) &&
+      (!libF.dir || repoOf(s.dir) === libF.dir) &&
+      (!libF.mig || migratedIds.has(s.id)) &&
+      (!libF.sub || (s.tree_count || 1) > 1) &&
+      (!ql || (s.title || "").toLowerCase().includes(ql) ||
+        (m.name || "").toLowerCase().includes(ql) ||
+        (m.tags || []).some(t => t.toLowerCase().includes(ql)) ||
+        (s.dir || "").toLowerCase().includes(ql) || s.id.toLowerCase().includes(ql));
+  };
 
   const libGroups = useMemo(() => {
-    const groups = BUCKETS.filter(([k]) => timeBuckets.includes(k)).map(([key, label]) => {
-      const rows = sessions.filter(s => bucketOf(s.updated) === key && matchLib(s));
-      const isCollapsed = collapsedGroups[key] ?? false;
-      return { key, label, count: rows.length, expanded: !isCollapsed,
+    const rowOf = s => {
+      const m = metaMap[s.id] || {};
+      return { id: s.id, title: m.name || s.title || "(无标题会话)", repo: repoOf(s.dir),
+        dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
+        pinned: !!m.pinned, archived: !!m.archived, tags: m.tags,
+        hasSub: (s.tree_count || 1) > 1, subLabel: `含 ${(s.tree_count || 1) - 1} 个子会话`,
+        hasMig: migratedIds.has(s.id), selected: s.id === selId,
+        multi: multiSel.includes(s.id),
+        onClick: e => {
+          if (e.metaKey || e.ctrlKey) {           // ⌘点击:切换多选
+            setMultiSel(sel => {
+              const base = sel.length ? sel : (selId ? [selId] : []);
+              return base.includes(s.id)
+                ? base.filter(x => x !== s.id) : [...base, s.id];
+            });
+            return;
+          }
+          if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
+            const ids = visibleIds.current.library || [];
+            const a = ids.indexOf(selId), b = ids.indexOf(s.id);
+            if (a >= 0 && b >= 0) {
+              setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
+              return;
+            }
+          }
+          setMultiSel([]); select(s.id);
+        },
+        onContext: e => {
+          e.preventDefault();
+          if (multiSel.length > 1 && multiSel.includes(s.id)) {
+            setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id, multi: true });
+            return;
+          }
+          setMultiSel([]);
+          if (s.id !== selId) select(s.id);
+          setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id });
+        } };
+    };
+    const isPinned = s => !!(metaMap[s.id] || {}).pinned;
+    const groups = [];
+    const pinnedRows = sessions.filter(s => isPinned(s) && matchLib(s));
+    if (pinnedRows.length) {
+      groups.push({ key: "pinned", label: "置顶", count: pinnedRows.length,
+        expanded: !(collapsedGroups.pinned ?? false),
+        onToggle: () => setCollapsedGroups(g => ({ ...g, pinned: !(g.pinned ?? false) })),
+        rows: pinnedRows.map(rowOf) });
+    }
+    BUCKETS.filter(([k]) => timeBuckets.includes(k)).forEach(([key, label]) => {
+      const rows = sessions.filter(s =>
+        !isPinned(s) && bucketOf(s.updated) === key && matchLib(s));
+      if (!rows.length) return;
+      groups.push({ key, label, count: rows.length,
+        expanded: !(collapsedGroups[key] ?? false),
         onToggle: () => setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })),
-        rows: rows.map(s => ({ id: s.id, title: s.title || "(无标题会话)", repo: repoOf(s.dir),
-          dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
-          hasSub: (s.tree_count || 1) > 1, subLabel: `含 ${(s.tree_count || 1) - 1} 个子会话`,
-          hasMig: migratedIds.has(s.id), selected: s.id === selId,
-          onClick: () => select(s.id),
-          onContext: e => {
-            e.preventDefault();
-            if (s.id !== selId) select(s.id);
-            setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id });
-          } })) };
-    }).filter(g => g.rows.length > 0);
+        rows: rows.map(rowOf) });
+    });
     return groups;
-  }, [sessions, libF, ql, collapsedGroups, selId, migratedIds]);
+  }, [sessions, libF, ql, collapsedGroups, selId, migratedIds, metaMap, multiSel]);
   visibleIds.current.library = libGroups.filter(g => g.expanded)
     .flatMap(g => g.rows.map(r => r.id));
 
@@ -290,6 +437,14 @@ export default function App() {
     onRemove: () => setLibF(v => ({ ...v, mig: false })) });
   if (libF.sub) libTokens.push({ label: "仅含子会话",
     onRemove: () => setLibF(v => ({ ...v, sub: false })) });
+  if (libF.arch) libTokens.push({ label: "含已归档",
+    onRemove: () => setLibF(v => ({ ...v, arch: false })) });
+  if (libF.tag) libTokens.push({ label: `标签 ${libF.tag}`,
+    onRemove: () => setLibF(v => ({ ...v, tag: null })) });
+
+  const allTags = useMemo(
+    () => [...new Set(Object.values(metaMap).flatMap(m => m.tags || []))].slice(0, 12),
+    [metaMap]);
 
   // ----- 资源栏数据:迁移历史 -----
   const histItems = useMemo(() => historyRows.map((h, i) => ({
@@ -359,9 +514,11 @@ export default function App() {
     library: { title: "会话", count: String(sessions.length), placeholder: "搜索会话、目录、命令…",
       query: q, onQuery: e => setQ(e.target.value), sortLabel: "最近活跃",
       filterCount: (libF.src.length < 3 ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
-        (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0),
+        (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
+        (libF.arch ? 1 : 0) + (libF.tag ? 1 : 0),
       tokens: libTokens,
       footer: scan?.error ? `扫描出错:${scan.error}`
+        : multiSel.length > 1 ? `已多选 ${multiSel.length} 个会话 · 右键批量操作,Esc 取消`
         : `正在浏览 ${sessions.length} 个会话${lastScan ? ` · 上次扫描 ${fmtTime(lastScan)}` : ""}` },
     history: { title: "迁移历史", count: String(histItems.length), placeholder: "搜索迁移记录…",
       query: hq, onQuery: e => setHq(e.target.value), sortLabel: "按时间",
@@ -376,7 +533,9 @@ export default function App() {
   }[view] || null;
 
   const clearLibF = () => {
-    setLibF({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false }); setQ("");
+    setLibF({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false,
+      arch: false, tag: null });
+    setQ("");
   };
   const railItems = [
     { k: "library", label: "会话" }, { k: "history", label: "迁移" }, { k: "snapshots", label: "快照" }];
@@ -487,7 +646,9 @@ export default function App() {
 
         {/* 详情区 */}
         {view === "library" && (cur ? (
-          <SessionDetail key={selId} meta={cur} data={detail?.data} error={detail?.error}
+          <SessionDetail key={selId}
+            meta={metaMap[cur.id]?.name ? { ...cur, title: metaMap[cur.id].name } : cur}
+            data={detail?.data} error={detail?.error}
             mode={mode} onEnterEdit={() => setMode("edit")}
             onExitEdit={() => { setMode("view"); setOps([]); }}
             scope={scope} setScope={setScope}
@@ -528,6 +689,33 @@ export default function App() {
         <SessionDeleteConfirm sess={delConfirm}
           onCancel={() => setDelConfirm(null)}
           onConfirm={() => deleteSession(delConfirm)} />)}
+      {batchDel && (
+        <BatchDeleteConfirm sessions={batchDel}
+          onCancel={() => setBatchDel(null)} onConfirm={doBatchDelete} />)}
+      {renameFor && (
+        <PromptBox title="重命名会话"
+          desc={`为「${renameFor.title || renameFor.id}」设置显示名称;留空则恢复原始标题。重命名只存在 Ferry 侧,不改动会话文件。`}
+          placeholder="新的会话名称" confirmLabel="保存"
+          initial={metaMap[renameFor.id]?.name || renameFor.title || ""}
+          onCancel={() => setRenameFor(null)}
+          onConfirm={v => { setRenameFor(null); setMetaFor(renameFor.id, { name: v }); }} />)}
+      {tagFor && (
+        <PromptBox
+          title={tagFor.batch ? `为 ${tagFor.ids.length} 个会话添加标签` : "编辑标签"}
+          desc={tagFor.batch ? "输入的标签会追加到每个选中会话上,用逗号分隔多个。"
+            : "用逗号分隔多个标签;留空清除全部标签。"}
+          placeholder="如: 重要, 实验" confirmLabel="保存"
+          initial={tagFor.batch ? "" : (metaMap[tagFor.ids[0]]?.tags || []).join(", ")}
+          onCancel={() => setTagFor(null)}
+          onConfirm={async v => {
+            setTagFor(null);
+            const tags = v.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+            for (const id of tagFor.ids) {
+              const merged = tagFor.batch
+                ? [...new Set([...(metaMap[id]?.tags || []), ...tags])] : tags;
+              await setMetaFor(id, { tags: merged });
+            }
+          }} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {railTip && (
         <div style={{ position: "absolute", left: 62, top: railTip.top,
@@ -544,7 +732,7 @@ export default function App() {
           onFirstRun={() => { setSettingsOpen(false); setView("firstrun"); }}
           onClose={() => setSettingsOpen(false)} />)}
       {popover === "lib" && (
-        <LibraryFilter f={libF} setF={setLibF} counts={counts} dirs={dirs}
+        <LibraryFilter f={libF} setF={setLibF} counts={counts} dirs={dirs} tags={allTags}
           onClose={() => setPopover(null)} onClear={clearLibF} />)}
       {popover === "hist" && (
         <HistoryFilter f={histF} setF={setHistF} onClose={() => setPopover(null)}

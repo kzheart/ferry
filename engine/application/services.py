@@ -253,6 +253,18 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
                         "handoff_doc": str(doc)}}
 
 
+# ---------- 会话元数据(重命名/置顶/归档/标签) ----------
+
+from .session_meta import list_all as session_meta_list  # noqa: E402
+from .session_meta import set_entry as _meta_set
+
+META_FIELDS = {"name", "pinned", "archived", "tags"}
+
+
+def session_meta_set(sid: str, patch: dict) -> dict:
+    return _meta_set(sid, {k: v for k, v in patch.items() if k in META_FIELDS})
+
+
 # ---------- 会话生命周期 ----------
 
 def _backup_file(path: Path, tool: str, reason: str, extra: dict | None = None) -> Path:
@@ -265,6 +277,14 @@ def _backup_file(path: Path, tool: str, reason: str, extra: dict | None = None) 
         {"reason": reason, "tool": tool, "source": str(path), **(extra or {})},
         ensure_ascii=False))
     return dest
+
+
+def session_snapshot(tool: str, ref: str) -> dict:
+    """手动为会话创建一份快照,不改动会话本身。"""
+    impl = adapter(tool).editor
+    doc = impl.load(ref)
+    snap = impl.snapshot(doc, reason="手动快照")
+    return {"ok": True, "snapshot": str(snap)}
 
 
 def session_delete(tool: str, ref: str) -> dict:
