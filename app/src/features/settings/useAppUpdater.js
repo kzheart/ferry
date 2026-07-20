@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { checkAppUpdate, closeAppUpdate, downloadAppUpdate, getAppVersion,
+  installAppUpdate, isNativeApp, relaunchApp } from "../../api/platform/appUpdater.js";
 
 const INITIAL = {
   phase: "idle",
@@ -27,12 +29,11 @@ export function useAppUpdater(autoCheck, delay = 3500) {
   const [state, setState] = useState(INITIAL);
   const updateRef = useRef(null);
   const busyRef = useRef(false);
-  const native = typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
+  const native = isNativeApp();
 
   useEffect(() => {
     if (!native) return;
-    import("@tauri-apps/api/app")
-      .then(({ getVersion }) => getVersion())
+    getAppVersion()
       .then(currentVersion => setState(v => ({ ...v, currentVersion, supported: true })))
       .catch(error => setState(v => ({ ...v, error: messageOf(error) })));
   }, [native]);
@@ -43,9 +44,8 @@ export function useAppUpdater(autoCheck, delay = 3500) {
     setState(v => ({ ...v, phase: "checking", error: null, update: null,
       downloaded: 0, total: null, failedAction: null }));
     try {
-      if (updateRef.current) await updateRef.current.close().catch(() => {});
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const update = await check({ timeout: 15000 });
+      if (updateRef.current) await closeAppUpdate(updateRef.current).catch(() => {});
+      const update = await checkAppUpdate({ timeout: 15000 });
       updateRef.current = update;
       setState(v => ({ ...v, phase: update ? "available" : "upToDate", update: update ? {
         version: update.version, date: update.date, body: update.body || ""
@@ -63,7 +63,7 @@ export function useAppUpdater(autoCheck, delay = 3500) {
       failedAction: null }));
     let downloaded = 0;
     try {
-      await update.download(event => {
+      await downloadAppUpdate(update, event => {
         if (event.event === "Started") {
           setState(v => ({ ...v, total: event.data.contentLength ?? null }));
         } else if (event.event === "Progress") {
@@ -85,9 +85,8 @@ export function useAppUpdater(autoCheck, delay = 3500) {
     busyRef.current = true;
     setState(v => ({ ...v, phase: "installing", error: null, failedAction: null }));
     try {
-      await update.install();
-      const { relaunch } = await import("@tauri-apps/plugin-process");
-      await relaunch();
+      await installAppUpdate(update);
+      await relaunchApp();
     } catch (error) {
       busyRef.current = false;
       setState(v => ({ ...v, phase: "error", error: messageOf(error), failedAction: "install" }));
@@ -100,7 +99,7 @@ export function useAppUpdater(autoCheck, delay = 3500) {
     return () => window.clearTimeout(timer);
   }, [autoCheck, checkForUpdate, delay, native]);
 
-  useEffect(() => () => { updateRef.current?.close().catch(() => {}); }, []);
+  useEffect(() => () => { closeAppUpdate(updateRef.current).catch(() => {}); }, []);
 
   return { ...state, checkForUpdate, downloadUpdate, installAndRestart };
 }

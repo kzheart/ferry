@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./app/architectureBoundary.js";
 import App from "./app/App.jsx";
 import "./app/style.css";
 

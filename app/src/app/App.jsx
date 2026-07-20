@@ -7,7 +7,7 @@ import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessio
 import { histStatus } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { HistoryList, LibraryList, Pane, SnapList } from "../components/layout/ResourcePane.jsx";
-import SessionDetail from "../domain/sessions/SessionDetail.jsx";
+import SessionDetail from "../features/browser/SessionDetail.jsx";
 import HistoryDetail from "../features/migration/HistoryDetail.jsx";
 import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
 import FirstRun from "../features/onboarding/FirstRun.jsx";
@@ -19,6 +19,7 @@ import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
+import { useSnapshotState } from "../features/snapshots/useSnapshotState.js";
 
 export default function App() {
   // ----- 数据 -----
@@ -36,9 +37,6 @@ export default function App() {
   // ----- 编辑 -----
   // ----- 迁移 / 快照 -----
   const [mig, setMig] = useState(null);         // {scope}
-  const [snapConfirm, setSnapConfirm] = useState(null);
-  const [snapRestoring, setSnapRestoring] = useState({});
-  const [snapResults, setSnapResults] = useState({});
 
   // ----- 布局 -----
   const [collapsed, setCollapsed] = useState(false);
@@ -74,6 +72,10 @@ export default function App() {
   const { mode, setMode, ops, setOps, saveMode, setSaveMode, diff, setDiff,
     confirmInplace, setConfirmInplace, toast, setToast, applying, scope, setScope,
     editCaps, resetSelection, loadCapabilities, addOp, removeOp, updateOp, openDiff, applyEdit } = editing;
+  const snapshots = useSnapshotState({ snapRows, sessionsById: byId,
+    runtimeProbe: settings.runtimeProbe, loadSnaps, doScan, setToast });
+  const { items: snapItems, confirm: snapConfirm, setConfirm: setSnapConfirm,
+    restoring: snapRestoring, results: snapResults, confirmRestore } = snapshots;
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -160,27 +162,6 @@ export default function App() {
   const finishGuide = () => {
     setGuideStep(0); setGuideSeen(true);
     localStorage.setItem("ferry-guide-seen", "1");
-  };
-
-  // ----- 快照还原 -----
-  const confirmRestore = async () => {
-    const snap = snapConfirm;
-    setSnapConfirm(null);
-    if (!snap) return;
-    setSnapRestoring(v => ({ ...v, [snap.id]: true }));
-    try {
-      const r = await rpc("snapshot_restore",
-        { session: snap.source || snap.session, tool: snap.tool,
-          probe: !!settings.runtimeProbe });
-      setSnapResults(v => ({ ...v, [snap.id]: r }));
-      setSnapRestoring(v => ({ ...v, [snap.id]: r.ok ? "done" : false }));
-      if (!r.ok) setToast({ kind: "fail", title: "还原未生效", desc: r.error || "验收未通过,已保持当前状态" });
-      else setToast({ kind: "ok", title: "已还原到快照", desc: "还原前状态已另存为保护快照。" });
-      loadSnaps(); doScan();
-    } catch (e) {
-      setSnapRestoring(v => ({ ...v, [snap.id]: false }));
-      setToast({ kind: "fail", title: "还原失败", desc: e.message });
-    }
   };
 
   // ----- 资源栏数据:会话库 -----
@@ -270,12 +251,6 @@ export default function App() {
     onRemove: () => setHistF(v => ({ ...v, time: "all" })) });
 
   // ----- 资源栏数据:快照 -----
-  const snapItems = useMemo(() => snapRows.map(s => {
-    const id = (s.path || "").split("/").pop()?.replace(/\.jsonl$/, "") || `${s.session}-${s.time}`;
-    const meta = byId[s.session];
-    return { ...s, id, title: meta?.title || s.session,
-      tool: s.tool || meta?.tool || "claude", trigger: s.reason || "会话编辑前自动" };
-  }), [snapRows, byId]);
   const snapReasons = useMemo(
     () => [...new Set(snapItems.map(s => s.trigger))], [snapItems]);
   const sql = sq.trim().toLowerCase();

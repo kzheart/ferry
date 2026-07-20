@@ -1,8 +1,8 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;编辑模式附 Inspector
 import { useMemo, useRef, useState } from "react";
 import { TOOL_NAME } from "../../api/contract/tools.js";
-import { ACCENT, fmtSize, resumeCommand } from "../tools/toolDisplay.js";
-import { fmtTime, toRounds } from "./sessionModel.js";
+import { ACCENT, fmtSize, resumeCommand } from "../../domain/tools/toolDisplay.js";
+import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
   PencilIcon, ScissorsIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import { RadioDot } from "../../components/ui/primitives.jsx";
