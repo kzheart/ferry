@@ -1,0 +1,74 @@
+{
+  "sections": {
+    "prefs": "Preferences",
+    "sources": "Data sources",
+    "updates": "Updates",
+    "railTitle": "Settings",
+    "close": "Close settings (Esc)"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "Follow system",
+    "groupTitle": "Appearance"
+  },
+  "writeCheck": {
+    "groupTitle": "Write verification",
+    "runtimeProbe": "Runtime probe",
+    "runtimeProbeDesc": "After writing, performs a real resume on a temporary shadow session for verification (consumes one model call; cleaned up automatically, no messages appended to the live session). When off, only structure validation is performed (default)."
+  },
+  "motion": {
+    "groupTitle": "Motion",
+    "reduceMotion": "Reduce motion",
+    "reduceMotionDesc": "Reduce transitions and displacement animations to lower visual distraction"
+  },
+  "guideSection": {
+    "groupTitle": "Onboarding",
+    "guide": "Feature guide",
+    "guideDesc": "Replay the step-by-step walkthrough of navigation, resource pane, and migration delivery",
+    "reviewGuide": "Replay guide",
+    "quickStart": "Quick start",
+    "firstRun": "First-run detection",
+    "firstRunDesc": "Replay the installation and session detection results for local tools",
+    "open": "Open"
+  },
+  "sources": {
+    "connectedTools": "Connected tools",
+    "connectedMeta": "{{connected}} connected · {{total}} sessions",
+    "sessionsCount": "{{n}} sessions",
+    "unavailable": "Unavailable",
+    "scanFailed": "Scan failed",
+    "connected": "Connected",
+    "rescan": "Rescan",
+    "scanning": "Scanning…",
+    "footnote": "Ferry automatically discovers session directories of supported tools on this machine. Source sessions stay read-only and are not modified."
+  },
+  "updates": {
+    "groupVersion": "Version",
+    "currentVersion": "Current version",
+    "currentVersionDescDesktop": "Ferry desktop app",
+    "currentVersionDescWeb": "In-browser preview does not support in-app updates",
+    "autoCheck": "Automatically check for updates",
+    "autoCheckDesc": "Checks after launch with a delay; does not auto-download or install",
+    "groupStatus": "Update status",
+    "versionNotes": "Release notes",
+    "footnote": "Ferry will ask for your download and install confirmation separately. You can only install and restart after the download completes.",
+    "sizeUnknown": "Size unknown",
+    "check": "Check for updates",
+    "retryCheck": "Retry check",
+    "download": "Download update",
+    "retryDownload": "Retry download",
+    "installRestart": "Install and restart",
+    "retryInstall": "Retry install and restart",
+    "phase": {
+      "idle": "Not checked yet",
+      "checking": "Checking for updates…",
+      "upToDate": "You're on the latest version",
+      "available": "New version found, waiting for download confirmation",
+      "downloading": "Downloading update",
+      "downloaded": "Update downloaded, waiting for install confirmation",
+      "installing": "Installing, restarting soon…",
+      "error": "Update operation failed"
+    }
+  }
+}

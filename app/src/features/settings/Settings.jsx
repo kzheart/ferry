@@ -7,7 +7,7 @@ import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
 import { RadioDot } from "../../components/ui/primitives.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 
-const SECTIONS = [["prefs", "偏好设置"], ["sources", "数据来源"], ["updates", "软件更新"]];
+const SECTIONS = [["prefs", "settings:sections.prefs"], ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
 
 // ---------- 通用排版件 ----------
 const GroupTitle = ({ children, first }) => (
@@ -50,9 +50,9 @@ function Toggle({ on, onChange }) {
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   const { t } = useTranslation();
   const themes = [
-    ["light", "浅色", "#FBFCFD"],
-    ["dark", "深色", "#17171A"],
-    ["system", "跟随系统", "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
+    ["light", t("settings:theme.light"), "#FBFCFD"],
+    ["dark", t("settings:theme.dark"), "#17171A"],
+    ["system", t("settings:theme.system"), "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
   ];
   const locales = [
     [null, t("language.followSystem"), "按系统语言自动选择"],
@@ -61,7 +61,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   ];
   return (
     <div style={{ animation: "fslide .16s ease" }}>
-      <GroupTitle first>外观</GroupTitle>
+      <GroupTitle first>{t("settings:theme.groupTitle")}</GroupTitle>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         {themes.map(([k, label, sw]) => {
           const on = s.theme === k;
@@ -104,30 +104,30 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         })}
       </Card>
 
-      <GroupTitle>写入验收</GroupTitle>
+      <GroupTitle>{t("settings:writeCheck.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title="运行时探针"
-          desc="写入后在临时影子会话上真实 resume 验证,消耗一次模型调用,完成后自动清理,不向正式会话追加消息;关闭时仅做结构验证(默认)">
+        <Row first title={t("settings:writeCheck.runtimeProbe")}
+          desc={t("settings:writeCheck.runtimeProbeDesc")}>
           <Toggle on={s.runtimeProbe} onChange={v => set({ runtimeProbe: v })} />
         </Row>
       </Card>
 
-      <GroupTitle>动效</GroupTitle>
+      <GroupTitle>{t("settings:motion.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title="减少动效" desc="减弱过渡与位移动画,降低视觉干扰">
+        <Row first title={t("settings:motion.reduceMotion")} desc={t("settings:motion.reduceMotionDesc")}>
           <Toggle on={s.reduceMotion} onChange={v => set({ reduceMotion: v })} />
         </Row>
       </Card>
 
-      <GroupTitle>上手引导</GroupTitle>
+      <GroupTitle>{t("settings:guideSection.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title="功能引导" desc="重新观看导航、资源栏与迁移交付的分步讲解">
+        <Row first title={t("settings:guideSection.guide")} desc={t("settings:guideSection.guideDesc")}>
           <button className="fbtn-primary" style={{ height: 30, padding: "0 13px" }}
-            onClick={onOpenGuide}>{guideSeen ? "重新查看引导" : "快速上手"}</button>
+            onClick={onOpenGuide}>{guideSeen ? t("settings:guideSection.reviewGuide") : t("settings:guideSection.quickStart")}</button>
         </Row>
-        <Row title="首次启动检测" desc="重新查看本机各工具的安装与会话检测结果">
+        <Row title={t("settings:guideSection.firstRun")} desc={t("settings:guideSection.firstRunDesc")}>
           <button className="fbtn" style={{ height: 30, fontSize: 12.5 }}
-            onClick={onFirstRun}>打开</button>
+            onClick={onFirstRun}>{t("settings:guideSection.open")}</button>
         </Row>
       </Card>
     </div>
@@ -136,30 +136,31 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
 
 // ---------- 数据来源 ----------
 function Sources({ scan, env, scanning, onRescan }) {
+  const { t } = useTranslation();
   const tools = scan?.tools || {};
-  const connected = TOOLS.filter(t => tools[t]?.ok).length;
-  const total = TOOLS.reduce((a, t) => a + (tools[t]?.count || 0), 0);
+  const connected = TOOLS.filter(t2 => tools[t2]?.ok).length;
+  const total = TOOLS.reduce((a, t2) => a + (tools[t2]?.count || 0), 0);
   return (
     <div style={{ animation: "fslide .16s ease" }}>
       <div style={{ display: "flex", alignItems: "flex-end", margin: "0 0 9px 2px" }}>
         <div style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: "var(--tx5)",
-          letterSpacing: ".05em" }}>已连接的工具</div>
+          letterSpacing: ".05em" }}>{t("settings:sources.connectedTools")}</div>
         <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>
-          {connected} 个已连接 · {total} 个会话</div>
+          {t("settings:sources.connectedMeta", { connected, total })}</div>
       </div>
       <Card>
-        {TOOLS.map((t, i) => {
-          const info = tools[t] || {};
+        {TOOLS.map((t2, i) => {
+          const info = tools[t2] || {};
           const ok = info.ok;
           return (
-            <div key={t} style={{ display: "flex", alignItems: "center", gap: 13,
+            <div key={t2} style={{ display: "flex", alignItems: "center", gap: 13,
               padding: "14px 16px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
-              <ToolIcon tool={t} size={30} dot={ok ? "var(--ok)" : "var(--err)"} />
+              <ToolIcon tool={t2} size={30} dot={ok ? "var(--ok)" : "var(--err)"} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>
-                  {TOOL_NAME[t]}
-                  {env?.[t]?.version && <span style={{ fontWeight: 400, color: "var(--tx5)",
-                    fontSize: 11.5 }}> · v{env[t].version}</span>}
+                  {TOOL_NAME[t2]}
+                  {env?.[t2]?.version && <span style={{ fontWeight: 400, color: "var(--tx5)",
+                    fontSize: 11.5 }}> · v{env[t2].version}</span>}
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 2,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -167,38 +168,39 @@ function Sources({ scan, env, scanning, onRescan }) {
               </div>
               <div style={{ textAlign: "right", flex: "none", marginRight: 4 }}>
                 <div style={{ fontSize: 12, color: "var(--tx3b)" }}>
-                  {ok ? `${info.count} 个会话` : (info.error || "不可用")}</div>
+                  {ok ? t("settings:sources.sessionsCount", { n: info.count }) : (info.error || t("settings:sources.unavailable"))}</div>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5,
                   fontWeight: 600, color: ok ? "var(--ok-deep)" : "var(--err-deep)", marginTop: 2 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%",
-                    background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? "已连接" : "扫描失败"}</div>
+                    background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? t("settings:sources.connected") : t("settings:sources.scanFailed")}</div>
               </div>
               <button className="fbtn" style={{ height: 30, fontSize: 12, flex: "none" }}
                 onClick={onRescan} disabled={scanning}>
-                {scanning ? "扫描中…" : "重新扫描"}</button>
+                {scanning ? t("settings:sources.scanning") : t("settings:sources.rescan")}</button>
             </div>
           );
         })}
       </Card>
       <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55,
         paddingLeft: 2 }}>
-        Ferry 在本机自动发现受支持工具的会话目录。源会话保持只读,不会被修改。</div>
+        {t("settings:sources.footnote")}</div>
     </div>
   );
 }
 
-const UPDATE_COPY = {
-  idle: "尚未检查更新",
-  checking: "正在检查更新…",
-  upToDate: "当前已是最新版本",
-  available: "发现新版本，等待确认下载",
-  downloading: "正在下载更新",
-  downloaded: "更新已下载，等待确认安装",
-  installing: "正在安装，即将重新启动…",
-  error: "更新操作失败",
+const UPDATE_COPY_KEY = {
+  idle: "settings:updates.phase.idle",
+  checking: "settings:updates.phase.checking",
+  upToDate: "settings:updates.phase.upToDate",
+  available: "settings:updates.phase.available",
+  downloading: "settings:updates.phase.downloading",
+  downloaded: "settings:updates.phase.downloaded",
+  installing: "settings:updates.phase.installing",
+  error: "settings:updates.phase.error",
 };
 
 function Updates({ s, set, updater }) {
+  const { t } = useTranslation();
   const { phase, currentVersion, update, downloaded, total, error, failedAction, supported,
     checkForUpdate, downloadUpdate, installAndRestart } = updater;
   const checking = phase === "checking";
@@ -208,24 +210,25 @@ function Updates({ s, set, updater }) {
 
   return (
     <div style={{ animation: "fslide .16s ease" }}>
-      <GroupTitle first>版本</GroupTitle>
+      <GroupTitle first>{t("settings:updates.groupVersion")}</GroupTitle>
       <Card>
-        <Row first title="当前版本" desc={supported ? "Ferry 桌面应用" : "浏览器预览不支持应用内更新"}>
+        <Row first title={t("settings:updates.currentVersion")}
+          desc={supported ? t("settings:updates.currentVersionDescDesktop") : t("settings:updates.currentVersionDescWeb")}>
           <span className="mono" style={{ fontSize: 12, color: "var(--tx3b)" }}>v{currentVersion}</span>
         </Row>
-        <Row title="自动检查更新" desc="启动后延迟检查；不会自动下载或安装">
+        <Row title={t("settings:updates.autoCheck")} desc={t("settings:updates.autoCheckDesc")}>
           <Toggle on={s.autoCheckUpdates} onChange={v => set({ autoCheckUpdates: v })} />
         </Row>
       </Card>
 
-      <GroupTitle>更新状态</GroupTitle>
+      <GroupTitle>{t("settings:updates.groupStatus")}</GroupTitle>
       <Card>
         <div aria-live="polite" aria-busy={checking || downloading || phase === "installing"}
           style={{ padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 240px", minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 650, color: error ? "var(--err-deep)" : "var(--tx1)" }}>
-                {UPDATE_COPY[phase] || UPDATE_COPY.idle}
+                {t(UPDATE_COPY_KEY[phase] || UPDATE_COPY_KEY.idle)}
               </div>
               {update && <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 3 }}>
                 v{currentVersion} → v{update.version}{update.date ? ` · ${new Date(update.date).toLocaleDateString()}` : ""}
@@ -236,13 +239,13 @@ function Updates({ s, set, updater }) {
             <div className="update-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {(phase === "idle" || phase === "upToDate" || (phase === "error" && failedAction === "check")) &&
                 <button className="fbtn" onClick={checkForUpdate} disabled={!canCheck}
-                  style={{ height: 30, fontSize: 12 }}>{failedAction === "check" ? "重试检查" : "检查更新"}</button>}
+                  style={{ height: 30, fontSize: 12 }}>{failedAction === "check" ? t("settings:updates.retryCheck") : t("settings:updates.check")}</button>}
               {(phase === "available" || (phase === "error" && failedAction === "download")) &&
                 <button className="fbtn-primary" onClick={downloadUpdate}
-                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "download" ? "重试下载" : "下载更新"}</button>}
+                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "download" ? t("settings:updates.retryDownload") : t("settings:updates.download")}</button>}
               {(phase === "downloaded" || (phase === "error" && failedAction === "install")) &&
                 <button className="fbtn-primary" onClick={installAndRestart}
-                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "install" ? "重试安装并重启" : "安装并重启"}</button>}
+                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "install" ? t("settings:updates.retryInstall") : t("settings:updates.installRestart")}</button>}
             </div>
           </div>
 
@@ -253,20 +256,19 @@ function Updates({ s, set, updater }) {
               <span style={progress == null ? undefined : { width: `${progress}%` }} />
             </div>
             <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 7 }}>
-              {formatBytes(downloaded)} / {total == null ? "大小未知" : formatBytes(total)}
+              {formatBytes(downloaded)} / {total == null ? t("settings:updates.sizeUnknown") : formatBytes(total)}
               {progress != null ? ` · ${Math.round(progress)}%` : ""}
             </div>
           </div>}
         </div>
         {update?.body && <div style={{ borderTop: "1px solid var(--line6)", padding: "14px 16px" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx3b)", marginBottom: 7 }}>版本说明</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
           <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 180,
             overflowY: "auto", fontSize: 12, lineHeight: 1.6, color: "var(--tx3b)" }}>{update.body}</div>
         </div>}
       </Card>
       <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55, paddingLeft: 2 }}>
-        Ferry 会分别请求你的下载与安装确认。只有下载完成后才可安装并重新启动。
-      </div>
+        {t("settings:updates.footnote")}</div>
     </div>
   );
 }
@@ -274,6 +276,7 @@ function Updates({ s, set, updater }) {
 // ---------- 弹窗外壳 ----------
 export default function SettingsPage({ settings, setSettings, scan, env, scanning, onRescan,
   updater, guideSeen, onOpenGuide, onFirstRun, onClose }) {
+  const { t } = useTranslation();
   const [section, setSection] = useState("prefs");
   const title = Object.fromEntries(SECTIONS)[section];
 
@@ -290,9 +293,9 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column",
           padding: "16px 12px" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".08em",
-            padding: "2px 8px 12px" }}>设置</div>
+            padding: "2px 8px 12px" }}>{t("settings:sections.railTitle")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {SECTIONS.map(([k, label]) => {
+            {SECTIONS.map(([k, labelKey]) => {
               const on = section === k;
               return (
                 <button key={k} className={on ? undefined : "hov-item"} onClick={() => setSection(k)}
@@ -300,7 +303,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                     border: "none", borderRadius: 8, background: on ? "var(--seg-on)" : "transparent",
                     color: on ? "var(--tx1)" : "var(--tx2b)", fontSize: 13, fontWeight: on ? 650 : 500,
                     cursor: "pointer", textAlign: "left" }}>
-                  <SetGlyph name={k} color={on ? "var(--tx1)" : "var(--tx3b)"} />{label}
+                  <SetGlyph name={k} color={on ? "var(--tx1)" : "var(--tx3b)"} />{t(labelKey)}
                 </button>
               );
             })}
@@ -311,9 +314,9 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ height: 54, flex: "none", display: "flex", alignItems: "center", gap: 12,
             padding: "0 20px", borderBottom: "1px solid var(--line4)" }}>
-            <div style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{title}</div>
+            <div style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{t(title)}</div>
             <div style={{ flex: 1 }} />
-            <button className="hov" onClick={onClose} title="关闭设置 (Esc)"
+            <button className="hov" onClick={onClose} title={t("settings:sections.close")}
               style={{ width: 28, height: 28, borderRadius: "50%", border: "none",
                 background: "var(--fill4)", color: "var(--tx3b)", cursor: "pointer",
                 display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
