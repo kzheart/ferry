@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14-xlarge
+          - os: macos-14
             target: aarch64-apple-darwin
             binary: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
           - os: windows-2022
@@ -54,9 +54,11 @@ jobs:
           key: ${{ matrix.target }}
       - run: python -m pip install -r requirements-build.txt
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
+        shell: bash
         env:
           BUILD_TARGET: ${{ matrix.target }}
       - run: cargo check --locked --target "$BUILD_TARGET"
+        shell: bash
         env:
           BUILD_TARGET: ${{ matrix.target }}
         working-directory: app/src-tauri
