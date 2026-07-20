@@ -24,5 +24,15 @@
     "last7": "Last 7 days",
     "last30": "Last 30 days",
     "earlier": "Earlier"
+  },
+  "time": {
+    "dash": "—",
+    "justNow": "just now",
+    "minutesAgo": "{{n}} min ago",
+    "hoursAgo": "{{n}} hr ago",
+    "yesterdayAt": "yesterday {{time}}",
+    "daysAgo": "{{n}} days ago",
+    "weeksAgo": "{{n}} weeks ago",
+    "monthDay": "Month {{month}} day {{day}}"
   }
 }

@@ -346,7 +346,7 @@ export default function App() {
     [sessions]);
 
   const ql = q.trim().toLowerCase();
-  const timeBuckets = { all: BUCKETS.map(b => b[0]), today: ["today"],
+  const timeBuckets = { all: [...BUCKETS], today: ["today"],
     last7: ["today", "yesterday", "last7"],
     last30: ["today", "yesterday", "last7", "last30"] }[libF.time];
   const matchLib = s => {
@@ -367,7 +367,7 @@ export default function App() {
     const rowOf = s => {
       const m = metaMap[s.id] || {};
       return { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
-        dir: s.dir, active: fmtTime(s.updated), tool: s.tool, dot: "var(--ok)",
+        dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
         pinned: !!m.pinned, archived: !!m.archived, tags: m.tags,
         hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
         hasMig: migratedIds.has(s.id), selected: s.id === selId,
@@ -411,7 +411,7 @@ export default function App() {
         onToggle: () => setCollapsedGroups(g => ({ ...g, pinned: !(g.pinned ?? false) })),
         rows: pinnedRows.map(rowOf) });
     }
-    BUCKETS.filter(([k]) => timeBuckets.includes(k)).forEach(([key]) => {
+    BUCKETS.filter(k => timeBuckets.includes(k)).forEach(key => {
       const rows = sessions.filter(s =>
         !isPinned(s) && bucketOf(s.updated) === key && matchLib(s));
       if (!rows.length) return;
@@ -465,7 +465,7 @@ export default function App() {
     label,
     rows: histFiltered.filter(h => k === "earlier"
       ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
-      .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time),
+      .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time, t),
         from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
         statusLabel: t(`common:${h.status}`),
         stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
@@ -500,7 +500,7 @@ export default function App() {
     const rst = snapRestoring[s.id];
     const status = rst === "done" ? t("app:snapStatus.restored")
       : rst ? t("app:snapStatus.restoring") : t("app:snapStatus.restorable");
-    return { id: s.id, title: s.title, short: fmtTime(s.time), trigger: s.trigger, status,
+    return { id: s.id, title: s.title, short: fmtTime(s.time, t), trigger: s.trigger, status,
       stColor: rst && rst !== "done" ? "var(--warn)" : "var(--ok)", tool: s.tool,
       selected: s.id === (selSnap ?? snapFiltered[0]?.id), onClick: () => setSelSnap(s.id) };
   });
@@ -523,7 +523,7 @@ export default function App() {
       tokens: libTokens,
       footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
         : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
-        : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan) }) : "" }) },
+        : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan, t) }) : "" }) },
     history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
       query: hq, onQuery: e => setHq(e.target.value), sortLabel: t("app:pane.historySort"),
       filterCount: (histF.src.length < 3 ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +

@@ -326,7 +326,7 @@ export default function SessionDetail({ meta, data, error,
                 <span className="mono" style={{ color: "var(--tx4)" }}>{meta.dir}</span>
                 <span>{tt("browser:session.messages", { n: data ? data.count : meta.count })}</span>
                 <span>{fmtSize(meta.size)}</span>
-                <span>{tt("browser:session.active", { time: fmtTime(meta.updated) })}</span>
+                <span>{tt("browser:session.active", { time: fmtTime(meta.updated, tt) })}</span>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>

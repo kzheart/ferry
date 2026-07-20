@@ -49,7 +49,7 @@ export default function HistoryDetail({ h }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 6,
               fontSize: 12, color: "var(--tx3b)" }}>
               <span className="mono" style={{ color: "var(--tx4)" }}>{h.session_id || h.source_id}</span>
-              <span>{fmtTime(h.time)}</span>
+              <span>{fmtTime(h.time, t)}</span>
               <span>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
             </div>
           </div>

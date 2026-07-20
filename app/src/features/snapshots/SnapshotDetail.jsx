@@ -36,7 +36,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
               fontSize: 12, color: "var(--tx3b)" }}>
               <span className="mono" style={{ color: "var(--tx4)" }}>{s.id}</span>
               <span>{s.trigger}</span>
-              <span>{fmtTime(s.time)}</span>
+              <span>{fmtTime(s.time, t)}</span>
               <span>{fmtSize(s.size)}</span>
             </div>
           </div>
@@ -65,7 +65,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
         <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px" }}>
           <div style={{ fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>{t("snapshots:field.reason")}</div>
           <div style={{ fontSize: 13, color: "var(--tx2)", fontWeight: 600, marginTop: 6 }}>
-            {t("snapshots:field.reasonMeta", { trigger: s.trigger, time: fmtTime(s.time) })}</div>
+            {t("snapshots:field.reasonMeta", { trigger: s.trigger, time: fmtTime(s.time, t) })}</div>
           <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 4, lineHeight: 1.55 }}>
             {reasonTextKey ? t(reasonTextKey) : t("snapshots:field.reasonDefault")}</div>
         </div>
@@ -97,7 +97,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
           <div style={{ background: "var(--err-bg2)", color: "var(--err-text)", padding: "2px 8px", borderRadius: 5,
             marginBottom: 5 }}>{t("snapshots:diff.currentMinus")}</div>
           <div style={{ background: "var(--ok-bg2)", color: "var(--ok-body2)", padding: "2px 8px", borderRadius: 5 }}>
-            {t("snapshots:diff.snapshotPlus", { id: s.id, time: fmtTime(s.time) })}</div>
+            {t("snapshots:diff.snapshotPlus", { id: s.id, time: fmtTime(s.time, t) })}</div>
         </div>
 
         {s.result && !s.result.ok && (

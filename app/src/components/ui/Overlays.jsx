@@ -167,7 +167,7 @@ export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
         onClick={onConfirm}>{t("overlays:snapRestore.confirm")}</button>
     </>}>
       <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        {t("overlays:snapRestore.desc", { title: snap.title, time: fmtTime(snap.time) })}</div>
+        {t("overlays:snapRestore.desc", { title: snap.title, time: fmtTime(snap.time, t) })}</div>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
         display: "flex", flexDirection: "column", gap: 9 }}>
         {bullets.map(([c, txt], i) => (

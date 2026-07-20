@@ -1,22 +1,25 @@
-export const BUCKETS = [
-  ["today", "今天"], ["yesterday", "昨天"], ["last7", "最近 7 天"],
-  ["last30", "最近 30 天"], ["earlier", "更早"],
-];
+export const BUCKETS = ["today", "yesterday", "last7", "last30", "earlier"];
 
-export function fmtTime(ms) {
-  if (!ms) return "—";
+const pad2 = n => String(n).padStart(2, "0");
+
+// 相对时间格式化。t 为 i18n t 函数,由调用方注入(domain 层不依赖 React/i18next)。
+// 不传 t 时回退到 key 字符串,保证 domain 纯函数可独立测试。
+export function fmtTime(ms, t) {
+  if (!ms) return t ? t("common:time.dash") : "—";
   const d = Date.now() - ms;
-  if (d < 60e3) return "刚刚";
-  if (d < 3600e3) return Math.floor(d / 60e3) + " 分钟前";
-  if (d < 86400e3) return Math.floor(d / 3600e3) + " 小时前";
+  if (d < 60e3) return t ? t("common:time.justNow") : "justNow";
+  if (d < 3600e3) return t ? t("common:time.minutesAgo", { n: Math.floor(d / 60e3) }) : `${Math.floor(d / 60e3)}min`;
+  if (d < 86400e3) return t ? t("common:time.hoursAgo", { n: Math.floor(d / 3600e3) }) : `${Math.floor(d / 3600e3)}hr`;
   if (d < 172800e3) {
-    const t = new Date(ms);
-    return `昨天 ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+    const tm = new Date(ms);
+    const time = `${pad2(tm.getHours())}:${pad2(tm.getMinutes())}`;
+    return t ? t("common:time.yesterdayAt", { time }) : `yesterday ${time}`;
   }
-  if (d < 7 * 86400e3) return Math.floor(d / 86400e3) + " 天前";
-  if (d < 30 * 86400e3) return Math.floor(d / 7 / 86400e3) + " 周前";
-  const t = new Date(ms);
-  return `${t.getMonth() + 1} 月 ${t.getDate()} 日`;
+  if (d < 7 * 86400e3) return t ? t("common:time.daysAgo", { n: Math.floor(d / 86400e3) }) : `${Math.floor(d / 86400e3)}d`;
+  if (d < 30 * 86400e3) return t ? t("common:time.weeksAgo", { n: Math.floor(d / 7 / 86400e3) }) : `${Math.floor(d / 7 / 86400e3)}w`;
+  const tm = new Date(ms);
+  return t ? t("common:time.monthDay", { month: tm.getMonth() + 1, day: tm.getDate() })
+    : `${tm.getMonth() + 1}/${tm.getDate()}`;
 }
 
 export function bucketOf(ms) {
