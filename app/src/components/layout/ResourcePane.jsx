@@ -1,4 +1,5 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+数量/搜索/筛选/标签/列表/页脚)
+import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { Caret, FilterIcon, SearchIcon, SortCaret, ToolIcon } from "../ui/icons.jsx";
 
@@ -62,10 +63,11 @@ export function Pane({ collapsed, width, dragging, title, count, placeholder,
 }
 
 export function PaneEmpty({ text, onClear }) {
+  const { t } = useTranslation();
   return (
     <div style={{ textAlign: "center", padding: "34px 12px", color: "var(--tx5)" }}>
       <div style={{ fontSize: 12.5 }}>{text}</div>
-      <button className="fbtn" style={{ marginTop: 10 }} onClick={onClear}>清除筛选</button>
+      <button className="fbtn" style={{ marginTop: 10 }} onClick={onClear}>{t("common:empty.clearFilter")}</button>
     </div>
   );
 }
@@ -84,7 +86,8 @@ const PinGlyph = () => (
 
 // 会话库分组列表
 export function LibraryList({ groups, empty, onClear }) {
-  if (empty) return <PaneEmpty text="没有匹配会话" onClear={onClear} />;
+  const { t } = useTranslation();
+  if (empty) return <PaneEmpty text={t("common:empty.library")} onClear={onClear} />;
   return groups.map(g => (
     <div key={g.key} style={{ marginBottom: 3 }}>
       <div className="hov-row" onClick={g.onToggle}
@@ -136,7 +139,8 @@ export function LibraryList({ groups, empty, onClear }) {
 
 // 迁移历史分组列表
 export function HistoryList({ groups, empty, onClear }) {
-  if (empty) return <PaneEmpty text="没有匹配迁移记录" onClear={onClear} />;
+  const { t } = useTranslation();
+  if (empty) return <PaneEmpty text={t("common:empty.history")} onClear={onClear} />;
   return groups.map(g => (
     <div key={g.label} style={{ marginBottom: 5 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 4px" }}>
@@ -170,7 +174,8 @@ export function HistoryList({ groups, empty, onClear }) {
 
 // 快照列表
 export function SnapList({ rows, empty, onClear }) {
-  if (empty) return <PaneEmpty text="没有匹配快照" onClear={onClear} />;
+  const { t } = useTranslation();
+  if (empty) return <PaneEmpty text={t("common:empty.snapshots")} onClear={onClear} />;
   return rows.map(s => (
     <div key={s.id} onClick={s.onClick}
       className={s.selected ? undefined : "hov-item"}

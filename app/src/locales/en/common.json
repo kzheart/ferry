@@ -11,5 +11,11 @@
     "rolled_back": "Rolled back",
     "dry_run": "Dry run",
     "all": "All statuses"
+  },
+  "empty": {
+    "library": "No matching sessions",
+    "history": "No matching migration records",
+    "snapshots": "No matching snapshots",
+    "clearFilter": "Clear filters"
   }
 }
