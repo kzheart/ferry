@@ -74,10 +74,15 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
     try { navigator.clipboard?.writeText(aiText); } catch {}
     setCopied(true); setTimeout(() => setCopied(false), 1400);
   };
+  const fitTa = el => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 48)}px`;
+  };
   const startRewrite = () => {
     onRewrite();
     setRewEditing(true);
-    setTimeout(() => taRef.current?.focus(), 0);
+    setTimeout(() => { const el = taRef.current; if (el) { fitTa(el); el.focus(); } }, 0);
   };
 
   return (
@@ -94,7 +99,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
             ) : (
               <IconBtn title={`删除第 ${r.n} 轮`} danger onClick={onDelete}><TrashIcon /></IconBtn>
             )}
-            {r.uuid && !deleted &&
+            {r.locator && !deleted &&
               <IconBtn title="改写用户消息" onClick={startRewrite}><PencilIcon /></IconBtn>}
           </div>
         </div>
@@ -111,17 +116,25 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
         {r.user && (
           <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
             {rewOp && rewEditing && !deleted ? (
-              <div style={{ width: "82%" }}>
-                <textarea ref={taRef} className="fscroll selectable" value={rewOp.text}
-                  onChange={e => onUpdateRewrite(e.target.value)}
-                  style={{ width: "100%", minHeight: 72, resize: "vertical", boxSizing: "border-box",
-                    background: "var(--fill4)", color: "var(--tx1b)", border: `1.5px solid ${ACCENT}`,
-                    padding: "10px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
-                    outline: "none", userSelect: "text", fontFamily: "inherit" }} />
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 2 }}>
-                  <IconBtn title="取消改写" onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
+              <div style={{ maxWidth: "82%", width: "82%", position: "relative" }}>
+                <textarea ref={el => { taRef.current = el; if (el) fitTa(el); }}
+                  className="fscroll selectable" value={rewOp.text}
+                  onChange={e => { onUpdateRewrite(e.target.value); fitTa(e.target); }}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { e.preventDefault(); onCancelRewrite(); setRewEditing(false); }
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault(); setRewEditing(false);
+                    }
+                  }}
+                  style={{ width: "100%", display: "block", resize: "none", overflow: "hidden",
+                    boxSizing: "border-box", background: "var(--fill4)", color: "var(--tx1b)",
+                    border: `1.5px solid ${ACCENT}`, padding: "9px 14px", borderRadius: 16,
+                    fontSize: 13, lineHeight: 1.65, outline: "none", userSelect: "text",
+                    fontFamily: "inherit", whiteSpace: "pre-wrap", overflowWrap: "break-word" }} />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 6 }}>
+                  <IconBtn title="取消改写 Esc" onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
                     <CloseIcon /></IconBtn>
-                  <IconBtn title="确认改写" accent onClick={() => setRewEditing(false)}>
+                  <IconBtn title="确认改写 ⌘↵" accent onClick={() => setRewEditing(false)}>
                     <CheckIcon /></IconBtn>
                 </div>
               </div>
