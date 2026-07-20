@@ -91,18 +91,19 @@ export function LibraryList({ groups, empty, onClear }) {
         <div style={{ animation: "fslide .16s ease" }}>
           {g.rows.map(r => (
             <div key={r.id} onClick={r.onClick} title={r.dir}
-              style={{ display: "flex", gap: 9, alignItems: "center", padding: "7px 9px",
+              className={r.selected ? undefined : "hov-item"}
+              style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
                 borderRadius: 8, cursor: "pointer", transition: "background .12s ease,box-shadow .12s ease",
                 ...rowSel(r.selected) }}>
-              <ToolIcon tool={r.tool} size={26} dot={r.dot} />
+              <ToolIcon tool={r.tool} size={22} dot={r.dot} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", whiteSpace: "nowrap",
+                  <span style={{ fontSize: 12.5, fontWeight: 550, color: "var(--tx1)", whiteSpace: "nowrap",
                     overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{r.title}</span>
                   <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>{r.active}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2 }}>
-                  <span className="mono" style={{ fontSize: 10.5, color: "var(--tx4)", whiteSpace: "nowrap",
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: "var(--tx5)", whiteSpace: "nowrap",
                     overflow: "hidden", textOverflow: "ellipsis" }}>{r.repo}</span>
                   {r.hasSub && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
                     borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{r.subLabel}</span>}
@@ -129,9 +130,10 @@ export function HistoryList({ groups, empty, onClear }) {
       </div>
       {g.rows.map(h => (
         <div key={h.id} onClick={h.onClick}
-          style={{ display: "flex", gap: 9, alignItems: "center", padding: "7px 9px", borderRadius: 8,
+          className={h.selected ? undefined : "hov-item"}
+          style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8,
             cursor: "pointer", transition: "background .12s ease", ...rowSel(h.selected) }}>
-          <ToolIcon tool={h.tool} size={26} dot={h.stColor} />
+          <ToolIcon tool={h.tool} size={22} dot={h.stColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", whiteSpace: "nowrap",
@@ -156,9 +158,10 @@ export function SnapList({ rows, empty, onClear }) {
   if (empty) return <PaneEmpty text="没有匹配快照" onClear={onClear} />;
   return rows.map(s => (
     <div key={s.id} onClick={s.onClick}
-      style={{ display: "flex", gap: 9, alignItems: "center", padding: "8px 9px", borderRadius: 8,
+      className={s.selected ? undefined : "hov-item"}
+      style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8,
         cursor: "pointer", transition: "background .12s ease", ...rowSel(s.selected) }}>
-      <ToolIcon tool={s.tool} size={26} dot={s.stColor} />
+      <ToolIcon tool={s.tool} size={22} dot={s.stColor} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2)",

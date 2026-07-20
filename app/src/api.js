@@ -86,16 +86,31 @@ export function toRounds(messages) {
     const texts = m.blocks.filter(b => b.kind === "text" && b.text.trim());
     if (m.role === "user" && texts.length) {
       cur = { n: rounds.length + 1, user: texts.map(t => t.text).join("\n"),
-              uuid: m.uuid, index: m.index, ai: [], tools: [] };
+              uuid: m.uuid, index: m.index, ai: [], tools: [], seq: [] };
       rounds.push(cur);
       continue;
     }
     if (!cur) {
-      cur = { n: 1, user: "", uuid: null, index: m.index, ai: [], tools: [] };
+      cur = { n: 1, user: "", uuid: null, index: m.index, ai: [], tools: [], seq: [] };
       rounds.push(cur);
     }
-    if (m.role === "assistant") texts.forEach(t => cur.ai.push(t.text));
-    m.blocks.forEach(b => { if (b.kind === "tool") cur.tools.push(b); });
+    m.blocks.forEach(b => {
+      if (b.kind === "text" && m.role === "assistant" && b.text.trim()) {
+        cur.ai.push(b.text);
+        cur.seq.push({ kind: "text", text: b.text });
+      }
+      if (b.kind === "tool") {
+        cur.tools.push(b);
+        cur.seq.push({ kind: "tool", tool: b });
+      }
+    });
+  }
+  // 每轮最后一条 AI 文本是"最终回复",之前的过程叙述与工具调用按原始顺序折叠为步骤
+  for (const r of rounds) {
+    let last = -1;
+    r.seq.forEach((s, i) => { if (s.kind === "text") last = i; });
+    r.final = last >= 0 ? r.seq[last].text : "";
+    r.steps = r.seq.filter((_, i) => i !== last);
   }
   return rounds;
 }

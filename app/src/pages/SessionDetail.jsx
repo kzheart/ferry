@@ -1,20 +1,38 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;编辑模式附 Inspector
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ACCENT, TOOL_NAME, fmtSize, fmtTime, resumeCommand, toRounds } from "../api.js";
-import { Caret, Spinner, ToolIcon } from "../icons.jsx";
+import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
+  PencilIcon, ScissorsIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../icons.jsx";
 import { RadioDot } from "../components/ui.jsx";
+import Markdown from "../components/Markdown.jsx";
 
 const BIG_OUT = 4096;   // 与后端 truncate 默认阈值一致
 
-function ToolCard({ t, k, open, trimmed, onToggle, onTrim, trimStaged }) {
+// 用户消息里的图片占位(粘贴图片的缓存路径)不直出,收成计数
+const IMG_RE = /\[Image:\s*source:[^\]]*\]|\[Image #\d+\]/g;
+const splitImages = text => {
+  const imgs = (String(text || "").match(IMG_RE) || []).length;
+  return { text: String(text || "").replace(IMG_RE, "").replace(/\n{3,}/g, "\n\n").trim(), imgs };
+};
+
+function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
+  return (
+    <button title={title} onClick={onClick} {...rest}
+      className={`ficon-btn${danger ? " danger" : ""}${accent ? " accent" : ""}`}
+      style={style}>{children}</button>
+  );
+}
+
+function ToolCard({ t, open, onToggle, trimStaged }) {
   const big = (t.size || 0) > BIG_OUT;
   const cmd = typeof t.input === "object"
     ? (t.input.command || t.input.file_path || t.input.pattern ||
        JSON.stringify(t.input).slice(0, 80))
     : String(t.input || "").slice(0, 80);
-  const hideBody = trimmed && !open;
+  const out = t.output || "(无输出)";
+  const cut = trimStaged && big;   // 已暂存裁剪:超阈值部分变淡+划线,所见即所裁
   return (
-    <div style={{ margin: "6px 0 6px 31px", border: "1px solid var(--line3)", borderRadius: 8,
+    <div style={{ margin: "5px 0", border: "1px solid var(--line3)", borderRadius: 8,
       overflow: "hidden", background: "var(--fill)" }}>
       <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9,
         padding: "7px 11px", cursor: "pointer" }}>
@@ -22,93 +40,174 @@ function ToolCard({ t, k, open, trimmed, onToggle, onTrim, trimStaged }) {
         <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
         <span className="mono" style={{ fontSize: 11.5, color: "var(--tx4)", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
-        {big && <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
-          padding: "1px 7px", borderRadius: 20, flex: "none" }}>大输出 {fmtSize(t.size)}</span>}
+        {cut ? (
+          <span title={`裁剪后保留前 ${BIG_OUT} 字符 · 原始 ${fmtSize(t.size)}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5,
+              color: "var(--warn-deep)", background: "var(--warn-bg)", padding: "1px 7px",
+              borderRadius: 20, flex: "none" }}>
+            <ScissorsIcon size={10} /> {fmtSize(t.size)} → {fmtSize(BIG_OUT)}</span>
+        ) : big && (
+          <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
+            padding: "1px 7px", borderRadius: 20, flex: "none" }}>大输出 {fmtSize(t.size)}</span>
+        )}
       </div>
       {open && (
-        <div style={{ borderTop: "1px solid var(--line5)" }}>
-          {trimStaged && (
-            <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--tx4)",
-              display: "flex", alignItems: "center", gap: 10 }}>
-              <span>输出将被裁剪 · 保留前 {BIG_OUT} 字符 · 原始 {fmtSize(t.size)}</span>
-            </div>
-          )}
-          {!hideBody && (
-            <pre className="mono fscroll selectable" style={{ margin: 0, padding: "11px 13px",
-              fontSize: 11.5, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
-              maxHeight: 200, overflow: "auto", background: "var(--surface)" }}>
-              {(t.output || "(无输出)").slice(0, 200000)}
-            </pre>
-          )}
-        </div>
+        <pre className="mono fscroll selectable" style={{ margin: 0, padding: "11px 13px",
+          fontSize: 11.5, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
+          maxHeight: 200, overflow: "auto", background: "var(--surface)",
+          borderTop: "1px solid var(--line5)" }}>
+          {cut ? (<>
+            {out.slice(0, BIG_OUT)}
+            <span className="ftrim-cut">{out.slice(BIG_OUT, 200000)}</span>
+          </>) : out.slice(0, 200000)}
+        </pre>
       )}
     </div>
   );
 }
 
-function Round({ r, editable, staged, onDelete, onTrim, onRewrite, migratable,
+function Round({ r, editable, delOp, trimOn, rewOp, onDelete, onUndoDelete, onTrim,
+  onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
   scopeOn, onScope, onClearScope, onMigrateScope, scopeStats }) {
   const [open, setOpen] = useState({});
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [rewEditing, setRewEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const taRef = useRef(null);
   const hasBigOut = r.tools.some(t => (t.size || 0) > BIG_OUT);
+  const { text: userText, imgs } = useMemo(() => splitImages(r.user), [r.user]);
+  const aiText = (r.final || "").slice(0, 8000);
+  const deleted = !!delOp;
+
+  const copyAi = () => {
+    try { navigator.clipboard?.writeText(aiText); } catch {}
+    setCopied(true); setTimeout(() => setCopied(false), 1400);
+  };
+  const startRewrite = () => {
+    onRewrite();
+    setRewEditing(true);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+
   return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "14px 0 8px" }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".03em" }}>第 {r.n} 轮</span>
-        <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-        {editable && (
-          <div style={{ display: "flex", gap: 5 }}>
-            <button onClick={onDelete} style={{ height: 22, padding: "0 8px", border: "1px solid var(--err-line)",
-              background: "var(--surface)", color: "var(--err-deep)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>删除</button>
-            {hasBigOut && <button onClick={onTrim} style={{ height: 22, padding: "0 8px",
-              border: "1px solid var(--line2)", background: "var(--surface)", color: "var(--tx3)", borderRadius: 6,
-              fontSize: 11, cursor: "pointer" }}>裁剪</button>}
-            {r.uuid && <button onClick={onRewrite} style={{ height: 22, padding: "0 8px",
-              border: "1px solid var(--line2)", background: "var(--surface)", color: "var(--tx3)", borderRadius: 6,
-              fontSize: 11, cursor: "pointer" }}>改写</button>}
+    <div className="fround" style={{ marginBottom: editable ? 10 : 30 }}>
+      {editable && (
+        <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0 8px" }}>
+          <span style={{ width: 20, height: 20, flex: "none", borderRadius: "50%",
+            border: "1.5px solid var(--line2)", display: "inline-flex", alignItems: "center",
+            justifyContent: "center", fontSize: 10.5, fontWeight: 700, color: "var(--tx4b)" }}>{r.n}</span>
+          <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+          <div style={{ display: "flex", gap: 3 }}>
+            {deleted ? (
+              <IconBtn title="撤销删除" onClick={onUndoDelete}><UndoIcon /></IconBtn>
+            ) : (
+              <IconBtn title={`删除第 ${r.n} 轮`} danger onClick={onDelete}><TrashIcon /></IconBtn>
+            )}
+            {hasBigOut && !trimOn && !deleted &&
+              <IconBtn title="裁剪超长工具输出" onClick={onTrim}><ScissorsIcon /></IconBtn>}
+            {r.uuid && !deleted &&
+              <IconBtn title="改写用户消息" onClick={startRewrite}><PencilIcon /></IconBtn>}
+          </div>
+        </div>
+      )}
+      <div className={deleted ? "fdel" : undefined}>
+        {r.user && imgs > 0 && (
+          <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0 4px" }}>
+            <span title={`${imgs} 张图片`} style={{ display: "inline-flex", alignItems: "center",
+              gap: 5, padding: "2px 9px", borderRadius: 20, background: "var(--chip)",
+              color: "var(--tx4)", fontSize: 10.5 }}>
+              <ImageGlyph /> ×{imgs}</span>
+          </div>
+        )}
+        {r.user && (
+          <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
+            {rewOp && rewEditing && !deleted ? (
+              <div style={{ width: "82%" }}>
+                <textarea ref={taRef} className="fscroll selectable" value={rewOp.text}
+                  onChange={e => onUpdateRewrite(e.target.value)}
+                  style={{ width: "100%", minHeight: 72, resize: "vertical", boxSizing: "border-box",
+                    background: "var(--fill4)", color: "var(--tx1b)", border: `1.5px solid ${ACCENT}`,
+                    padding: "10px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
+                    outline: "none", userSelect: "text", fontFamily: "inherit" }} />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 2 }}>
+                  <IconBtn title="取消改写" onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
+                    <CloseIcon /></IconBtn>
+                  <IconBtn title="确认改写" accent onClick={() => setRewEditing(false)}>
+                    <CheckIcon /></IconBtn>
+                </div>
+              </div>
+            ) : (
+              <div className="fdel-text selectable" onClick={rewOp && !deleted ? startRewrite : undefined}
+                title={rewOp && !deleted ? "点击继续编辑" : undefined}
+                style={{ maxWidth: "82%", background: "var(--fill4)", color: "var(--tx1b)",
+                  padding: "9px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
+                  whiteSpace: "pre-wrap", overflowWrap: "break-word",
+                  cursor: rewOp && !deleted ? "text" : undefined }}>
+                {(rewOp ? rewOp.text : userText).slice(0, 4000)}
+                {rewOp && !deleted && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
+                    color: ACCENT, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <PencilIcon size={10} /> 已改写</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {r.steps.length > 0 && (
+          <div style={{ margin: "8px 0" }}>
+            <div onClick={() => setToolsOpen(v => !v)} style={{ display: "inline-flex",
+              alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 7,
+              cursor: "pointer", color: "var(--tx4)", fontSize: 12 }} className="hov-ghost">
+              <Caret open={toolsOpen} size={9} />
+              <span>{r.steps.length} 步</span>
+            </div>
+            {toolsOpen && (
+              <div style={{ marginLeft: 18, marginTop: 2, borderLeft: "2px solid var(--line5)",
+                paddingLeft: 13 }}>
+                {r.steps.map((s, i) => s.kind === "text" ? (
+                  <div key={i} className="selectable" style={{ margin: "7px 0", fontSize: 12.5,
+                    lineHeight: 1.65, color: "var(--tx3b)", whiteSpace: "pre-wrap",
+                    overflowWrap: "break-word" }}>{s.text.slice(0, 4000)}</div>
+                ) : (
+                  <ToolCard key={i} t={s.tool} open={open[i] ?? false}
+                    onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))}
+                    trimStaged={trimOn} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {aiText && (
+          <div style={{ margin: "10px 0 0" }}>
+            <div className="fdel-text"><Markdown text={aiText} /></div>
+            {!editable && (
+              <div className="fhact" style={{ marginTop: 4 }}>
+                <IconBtn title={copied ? "已复制" : "复制回复"} onClick={copyAi}>
+                  {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
+              </div>
+            )}
           </div>
         )}
       </div>
-      {staged && (
-        <div style={{ margin: "0 0 8px", padding: "6px 10px", borderRadius: 7, background: "var(--warn-bg)",
-          border: "1px solid var(--warn-line)", fontSize: 11.5, color: "var(--warn-text)" }}>已暂存:{staged}</div>
-      )}
-      {r.user && (
-        <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
-          <div className="selectable" style={{ maxWidth: "82%", background: ACCENT, color: "var(--accent-fg)",
-            padding: "9px 13px", borderRadius: "12px 12px 3px 12px", fontSize: 13,
-            whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
-            {r.user.slice(0, 4000)}</div>
-        </div>
-      )}
-      {r.ai.length > 0 && (
-        <div style={{ display: "flex", gap: 9, margin: "6px 0" }}>
-          <span style={{ width: 22, height: 22, flex: "none", borderRadius: 6, background: "var(--chip)",
-            border: "1px solid var(--line)", display: "inline-flex", alignItems: "center",
-            justifyContent: "center", fontSize: 10, color: "var(--tx3b)", fontWeight: 700 }}>AI</span>
-          <div className="selectable" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--line5)",
-            padding: "9px 13px", borderRadius: "3px 12px 12px 12px", fontSize: 13, color: "var(--tx1b)",
-            whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
-            {r.ai.join("\n\n").slice(0, 8000)}</div>
-        </div>
-      )}
-      {r.tools.map((t, i) => (
-        <ToolCard key={i} t={t} open={open[i] ?? false}
-          onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))}
-          trimStaged={staged && staged.includes("裁剪")} />
-      ))}
       {migratable && (
-        <div style={{ margin: "8px 0 4px 31px" }}>
+        <div style={{ margin: "10px 0 0" }}>
           {!scopeOn ? (
-            <button data-guide={r.n === 1 ? "scope" : undefined} onClick={onScope}
-              style={{ height: 26, padding: "0 11px", background: "var(--surface)",
-                border: "1px dashed var(--acc-line2)", color: ACCENT, borderRadius: 7, fontSize: 12,
-                cursor: "pointer", fontWeight: 500 }}>↧ 迁移到此为止</button>
+            <div className={r.n === 1 ? undefined : "fhact"}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+              <button data-guide={r.n === 1 ? "scope" : undefined}
+                className="ficon-btn accent" onClick={onScope}
+                style={{ width: "auto", padding: "0 11px", gap: 6, fontSize: 11.5, fontWeight: 500,
+                  border: "1px dashed var(--acc-line2)", borderRadius: 13 }}>
+                <BookmarkIcon /> 迁移到此为止</button>
+              <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+            </div>
           ) : (
             <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 9,
               padding: "11px 13px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12.5 }}>仅迁移到第 {r.n} 轮</span>
-                <a onClick={onClearScope} style={{ fontSize: 11.5, marginLeft: "auto", color: "var(--tx3b)" }}>取消</a>
+                <IconBtn title="取消" onClick={onClearScope} style={{ marginLeft: "auto" }}><CloseIcon /></IconBtn>
               </div>
               <div style={{ fontSize: 12, color: "var(--tx2b)", marginTop: 5 }}>{scopeStats}</div>
               <button className="fbtn-primary" onClick={onMigrateScope}
@@ -150,14 +249,11 @@ function Inspector({ ops, removeOp, updateOp, saveMode, setSaveMode, sizeInfo,
                 <div style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{o.label}</div>
                 <div style={{ fontSize: 11, color: "var(--tx5)" }}>{o.delta}</div>
               </div>
-              <a onClick={() => removeOp(o.id)} style={{ color: "var(--tx5)", fontSize: 14 }}>×</a>
+              <IconBtn title="撤销此操作" onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
             </div>
             {o.type === "rewrite" && (
-              <textarea className="fscroll" value={o.text}
-                onChange={e => updateOp(o.id, { text: e.target.value })}
-                style={{ width: "100%", marginTop: 8, minHeight: 64, resize: "vertical",
-                  border: "1px solid var(--line)", borderRadius: 6, padding: "6px 8px",
-                  fontSize: 12, color: "var(--tx2)", outline: "none", userSelect: "text" }} />
+              <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 6 }}>
+                在左侧时间线的气泡里直接编辑内容</div>
             )}
           </div>
         ))}
@@ -241,23 +337,16 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
     ? `约 ${scopeMsgs} 条消息 · ${fmtSize(rounds.slice(0, scope).reduce((a, r) => a + roundSize(r), 0))}`
     : "";
 
-  const stagedFor = n => {
-    const o = ops.find(o => o.n === n);
-    return o ? o.label : null;
-  };
+  const opFor = (n, type) => ops.find(o => o.type === type && o.n === n);
+  const trimOn = ops.some(o => o.type === "trim");
 
-  const treeChips = [
-    { label: `${TOOL_NAME[meta.tool]} 会话`, bg: "var(--chip)" },
-    ...(data && data.tree_count > 1
-      ? [{ label: `${data.tree_count - 1} 个子会话` }] : []),
-    { label: `${data ? data.count : meta.count} 条消息` },
-  ];
+  const subCount = data ? data.tree_count - 1 : 0;
 
   return (
     <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0 }}>
       <div className="fscroll" data-guide-scroll="1"
         style={{ flex: 1, overflowY: "auto", minWidth: 0, animation: "ffade .16s ease" }}>
-        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid var(--line5)", position: "sticky",
+        <div style={{ padding: "18px 26px 14px", borderBottom: "1px solid var(--line5)", position: "sticky",
           top: 0, background: "var(--veil)", backdropFilter: "blur(6px)", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
             <ToolIcon tool={meta.tool} size={40} dot="var(--ok)" />
@@ -293,18 +382,18 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
               </div>
             )}
           </div>
-          <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
-            fontSize: 11.5, color: "var(--tx4)" }}>
-            {treeChips.map((t, i) => (
-              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                <span style={{ padding: "2px 8px", borderRadius: 6, background: t.bg || "transparent",
-                  color: "var(--tx3b)" }}>{t.label}</span>
-                {i < treeChips.length - 1 && <span>→</span>}
-              </span>
-            ))}
-          </div>
+          {subCount > 0 && (
+            <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
+              fontSize: 11.5, color: "var(--tx4)" }}>
+              <span style={{ padding: "2px 8px", borderRadius: 6, background: "var(--chip)",
+                color: "var(--tx3b)" }}>{TOOL_NAME[meta.tool]} 会话</span>
+              <span>→</span>
+              <span style={{ padding: "2px 8px", borderRadius: 6, color: "var(--tx3b)" }}>
+                {subCount} 个子会话</span>
+            </div>
+          )}
         </div>
-        <div style={{ padding: "16px 22px 40px", maxWidth: 760 }}>
+        <div style={{ padding: "20px 26px 48px", maxWidth: 720, margin: "0 auto" }}>
           {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>读取失败:{error}</div>}
           {!data && !error && (
             <div style={{ padding: 40, display: "flex", alignItems: "center", gap: 10,
@@ -312,10 +401,13 @@ export default function SessionDetail({ meta, data, error, mode, onEnterEdit, on
           )}
           {data && rounds.map(r => (
             <Round key={r.n} r={r} editable={isEdit && canEdit}
-              staged={stagedFor(r.n)}
+              delOp={opFor(r.n, "delete")} trimOn={trimOn} rewOp={opFor(r.n, "rewrite")}
               onDelete={() => addOp("delete", r)}
+              onUndoDelete={() => { const o = opFor(r.n, "delete"); if (o) removeOp(o.id); }}
               onTrim={() => addOp("trim", r)}
               onRewrite={() => addOp("rewrite", r)}
+              onUpdateRewrite={text => { const o = opFor(r.n, "rewrite"); if (o) updateOp(o.id, { text }); }}
+              onCancelRewrite={() => { const o = opFor(r.n, "rewrite"); if (o) removeOp(o.id); }}
               migratable={!isEdit && r.n < rounds.length}
               scopeOn={scope === r.n}
               onScope={() => setScope(r.n)}

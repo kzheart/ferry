@@ -276,6 +276,58 @@ input { user-select: text; }
 .fbtn-primary:hover { filter: brightness(1.05); }
 .fbtn-primary:disabled { background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7; }
 
+/* 会话时间线:图标操作按钮 */
+.ficon-btn {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--tx4); border-radius: 7px;
+  cursor: pointer; padding: 0; flex: none;
+}
+.ficon-btn:hover { background: var(--hov); color: var(--tx2); }
+.ficon-btn.danger:hover { color: var(--err-deep); }
+.ficon-btn.accent { color: var(--accent); }
+.ficon-btn.accent:hover { color: var(--accent); }
+
+/* 悬停某一轮才浮现的操作(复制、迁移到此为止) */
+.fround .fhact { opacity: 0; transition: opacity .15s ease; }
+.fround:hover .fhact, .fround .fhact:focus-within { opacity: 1; }
+
+/* 已暂存删除:整轮变淡,文本划线,所见即所删 */
+.fdel { opacity: .45; }
+.fdel .fdel-text { text-decoration: line-through; }
+
+/* 已暂存裁剪:超阈值输出变淡划线 */
+.ftrim-cut { opacity: .4; text-decoration: line-through; }
+
+/* AI 回复正文排版(marked 渲染输出) */
+.fmd { font-size: 13.5px; line-height: 1.75; color: var(--tx1b); overflow-wrap: break-word; }
+.fmd > :first-child { margin-top: 0; }
+.fmd > :last-child { margin-bottom: 0; }
+.fmd p { margin: .55em 0; }
+.fmd h1, .fmd h2 { font-size: 15.5px; font-weight: 700; margin: 1em 0 .35em; letter-spacing: -.01em; }
+.fmd h3 { font-size: 14px; font-weight: 650; margin: .9em 0 .3em; }
+.fmd h4, .fmd h5, .fmd h6 { font-size: 13.5px; font-weight: 650; margin: .8em 0 .25em; }
+.fmd ul, .fmd ol { margin: .45em 0; padding-left: 1.5em; }
+.fmd li { margin: .28em 0; }
+.fmd li > p { margin: .2em 0; }
+.fmd code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size: 12px;
+}
+.fmd pre {
+  background: var(--fill); border: 1px solid var(--line5); border-radius: 9px;
+  padding: 10px 13px; margin: .6em 0; overflow-x: auto;
+}
+.fmd pre code { background: none; padding: 0; font-size: 11.5px; line-height: 1.6; }
+.fmd hr { border: none; height: 1px; background: var(--hairline); margin: 1.1em 0; }
+.fmd blockquote {
+  margin: .55em 0; padding: 1px 13px; border-left: 3px solid var(--line2); color: var(--tx3);
+}
+.fmd table { border-collapse: collapse; margin: .7em 0; font-size: 12.5px; }
+.fmd th, .fmd td { border: none; border-bottom: 1px solid var(--line5); padding: 6px 18px 6px 0; text-align: left; }
+.fmd th { font-weight: 650; color: var(--tx2); border-bottom: 1.5px solid var(--line2); }
+.fmd a { color: var(--accent); }
+.fmd img { max-width: 100%; }
+
 /* 设置里的「减少动效」(与系统偏好等效,但由用户显式开关) */
 [data-reduce="1"] * {
   animation-duration: .001s !important;
