@@ -19,7 +19,8 @@ export const openTerminal = (command) =>
 export const TOOL_NAME = { claude: "Claude Code", codex: "Codex CLI", opencode: "OpenCode" };
 export const TOOLS = ["claude", "codex", "opencode"];
 export const BIG = 100 * 1024;
-export const ACCENT = "#0B67F5";
+// 强调色由设置写入根节点的 CSS 变量(见 settings.js),这里始终引用变量
+export const ACCENT = "var(--accent)";
 
 export function fmtSize(n) {
   if (!n) return "—";

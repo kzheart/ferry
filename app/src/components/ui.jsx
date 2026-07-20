@@ -82,7 +82,7 @@ export function CmdRow({ cmd, head }) {
 }
 
 // 复选框样子的小方块
-export function CheckSquare({ on, accent = "#0B67F5", size = 15 }) {
+export function CheckSquare({ on, accent = "var(--accent)", size = 15 }) {
   return (
     <span style={{ width: size, height: size, flex: "none", borderRadius: 4,
       border: `1.5px solid ${on ? accent : "#CDD5DD"}`, background: on ? accent : "transparent",
@@ -92,7 +92,7 @@ export function CheckSquare({ on, accent = "#0B67F5", size = 15 }) {
 }
 
 // 单选圆点
-export function RadioDot({ on, accent = "#0B67F5", size = 15 }) {
+export function RadioDot({ on, accent = "var(--accent)", size = 15 }) {
   return (
     <span style={{ width: size, height: size, flex: "none", borderRadius: "50%",
       border: `1.5px solid ${on ? accent : "#CDD5DD"}`, display: "inline-flex",

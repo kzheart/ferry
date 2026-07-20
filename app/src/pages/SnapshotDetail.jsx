@@ -1,6 +1,12 @@
 // 快照详情:状态/大小/创建原因/关联会话/变更摘要/差异预览 + 还原入口
-import { fmtSize, fmtTime } from "../api.js";
+import { TOOL_NAME, fmtSize, fmtTime } from "../api.js";
 import { ToolIcon } from "../icons.jsx";
+
+const REASON_TEXT = {
+  "会话编辑前自动": "应用会话编辑前自动创建,可随时还原到编辑前状态。",
+  "还原前保护": "还原到其它快照前自动创建的保护快照,用来撤销那次还原。",
+  "迁移前自动": "迁移到目标工具前自动创建的保护快照,用于失败时回滚。",
+};
 
 export default function SnapshotDetail({ s, restoring, onRestore }) {
   if (!s) return (
@@ -16,7 +22,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
     <div className="fscroll" style={{ flex: 1, overflowY: "auto", minHeight: 0, animation: "ffade .16s ease" }}>
       <div style={{ padding: "20px 26px 16px", borderBottom: "1px solid #E8ECF0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
-          <ToolIcon tool="claude" size={40} dot={stColor} />
+          <ToolIcon tool={s.tool || "claude"} size={40} dot={stColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: "-.01em" }}>{s.title}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 6,
@@ -28,7 +34,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
             </div>
           </div>
           <button onClick={busy || done ? undefined : onRestore}
-            style={{ height: 32, padding: "0 15px", background: busy || done ? "#EEF1F4" : "#0B67F5",
+            style={{ height: 32, padding: "0 15px", background: busy || done ? "#EEF1F4" : "var(--accent)",
               border: "none", borderRadius: 8, fontSize: 12.5, color: busy || done ? "#9AA3AD" : "#fff",
               cursor: busy || done ? "default" : "pointer", fontWeight: 600, flex: "none" }}>
             {btnLabel}</button>
@@ -54,7 +60,7 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
           <div style={{ fontSize: 13, color: "#334155", fontWeight: 600, marginTop: 6 }}>
             {s.trigger} · {fmtTime(s.time)}</div>
           <div style={{ fontSize: 12, color: "#6B7682", marginTop: 4, lineHeight: 1.55 }}>
-            应用会话编辑或迁移前自动创建的保护快照,可随时还原到该时点状态。</div>
+            {REASON_TEXT[s.trigger] || "自动创建的还原点,可随时还原到该时点状态。"}</div>
         </div>
 
         <div style={{ marginTop: 14, border: "1px solid #E4E9EE", borderRadius: 10, padding: "13px 15px",
@@ -62,7 +68,8 @@ export default function SnapshotDetail({ s, restoring, onRestore }) {
           <div style={{ fontSize: 11.5, color: "#8A939D", fontWeight: 600, flex: "none" }}>关联会话</div>
           <span style={{ fontSize: 12.5, color: "#334155", flex: 1, textAlign: "right",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</span>
-          <span style={{ fontSize: 11.5, color: "#8A939D", flex: "none" }}>Claude Code</span>
+          <span style={{ fontSize: 11.5, color: "#8A939D", flex: "none" }}>
+            {TOOL_NAME[s.tool] || TOOL_NAME.claude}</span>
         </div>
 
         <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7682", margin: "18px 0 8px" }}>变更摘要</div>

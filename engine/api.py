@@ -706,8 +706,15 @@ def snapshots() -> list[dict]:
         m = re.match(r"(.+)-(\d+)$", f.stem)
         if not m:
             continue
+        meta = {}
+        try:
+            meta = json.loads(f.with_suffix(".meta.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            pass            # 旧快照没有 sidecar,用默认值
         out.append({"session": m.group(1), "time": int(m.group(2)) * 1000,
-                    "size": f.stat().st_size, "path": str(f)})
+                    "size": f.stat().st_size, "path": str(f),
+                    "reason": meta.get("reason") or "会话编辑前自动",
+                    "tool": meta.get("tool") or "claude"})
     return out
 
 
@@ -718,8 +725,9 @@ def snapshot_restore(session_id: str, run_probe_after: bool = True) -> dict:
         return {"ok": False, "error": "没有该会话的快照"}
     import shutil
     cur = path.read_bytes()               # 保住现状,探针失败时回退
+    guard = edit_mod.backup(path, reason="还原前保护")   # UI 承诺的保护快照
     shutil.copy(cands[-1], path)
-    result = {"ok": True, "from": str(cands[-1])}
+    result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
     if run_probe_after:
         cwd = next((json.loads(l).get("cwd") for l in
                     path.read_text().splitlines() if l.strip()), None)
@@ -736,6 +744,7 @@ def snapshot_delete(path: str) -> dict:
     if p.parent != edit_mod.BACKUP_DIR:
         return {"ok": False, "error": "只允许删除快照目录内的文件"}
     p.unlink(missing_ok=True)
+    p.with_suffix(".meta.json").unlink(missing_ok=True)
     return {"ok": True}
 
 

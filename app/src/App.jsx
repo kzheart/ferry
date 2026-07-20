@@ -9,8 +9,10 @@ import HistoryDetail from "./pages/HistoryDetail.jsx";
 import SnapshotDetail from "./pages/SnapshotDetail.jsx";
 import FirstRun from "./pages/FirstRun.jsx";
 import MigrateSheet from "./overlays/MigrateSheet.jsx";
-import { DataSourceSheet, DiffSheet, Guide, HistoryFilter, InplaceConfirm,
-  LibraryFilter, SettingsPopover, SnapFilter, SnapRestoreConfirm, Toast } from "./overlays/Overlays.jsx";
+import SettingsPage from "./overlays/Settings.jsx";
+import { DiffSheet, Guide, HistoryFilter, InplaceConfirm,
+  LibraryFilter, SnapFilter, SnapRestoreConfirm, Toast } from "./overlays/Overlays.jsx";
+import { useSettings } from "./settings.js";
 
 const TRIM_THRESHOLD = 4096;
 const roundBytes = r => (r.user?.length || 0) + r.ai.join("").length +
@@ -60,10 +62,13 @@ export default function App() {
   const [sq, setSq] = useState("");
   const [libF, setLibF] = useState({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
-  const [snapF, setSnapF] = useState({ session: "all", time: "all" });
+  const [snapF, setSnapF] = useState(
+    { src: [...TOOLS], reason: "all", session: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'|'snap'
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [dataSourceOpen, setDataSourceOpen] = useState(false);
+  const [settings, setSettings] = useSettings();
+  const [railTip, setRailTip] = useState(null);  // {label, top}
+  const tipTimer = useRef(null);
   const [guideStep, setGuideStep] = useState(0);
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
   const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
@@ -118,7 +123,6 @@ export default function App() {
       if (e.key === "Escape") {
         if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
-        else if (dataSourceOpen) setDataSourceOpen(false);
         else if (snapConfirm) setSnapConfirm(null);
         else if (confirmInplace) setConfirmInplace(false);
         else if (diff) setDiff(null);
@@ -162,8 +166,20 @@ export default function App() {
   // ----- 引导 -----
   const openGuide = () => {
     setView("library"); setMode("view"); setSettingsOpen(false);
-    setDataSourceOpen(false); setMig(null); setGuideStep(1);
+    setMig(null); setGuideStep(1);
   };
+
+  // ----- 导航轨悬停提示(延迟 450ms,与原型一致) -----
+  const railEnter = (label, e) => {
+    const el = e.currentTarget.getBoundingClientRect();
+    const root = document.querySelector("[data-ferry-win]");
+    if (!root) return;
+    const top = el.top - root.getBoundingClientRect().top + el.height / 2;
+    clearTimeout(tipTimer.current);
+    tipTimer.current = setTimeout(() => setRailTip({ label, top }), 450);
+  };
+  const railLeave = () => { clearTimeout(tipTimer.current); setRailTip(null); };
+  useEffect(() => () => clearTimeout(tipTimer.current), []);
   const finishGuide = () => {
     setGuideStep(0); setGuideSeen(true);
     localStorage.setItem("ferry-guide-seen", "1");
@@ -343,10 +359,15 @@ export default function App() {
   const snapItems = useMemo(() => snapRows.map(s => {
     const id = (s.path || "").split("/").pop()?.replace(/\.jsonl$/, "") || `${s.session}-${s.time}`;
     const meta = byId[s.session];
-    return { ...s, id, title: meta?.title || s.session, trigger: "编辑/迁移前自动" };
+    return { ...s, id, title: meta?.title || s.session,
+      tool: s.tool || meta?.tool || "claude", trigger: s.reason || "会话编辑前自动" };
   }), [snapRows, byId]);
+  const snapReasons = useMemo(
+    () => [...new Set(snapItems.map(s => s.trigger))], [snapItems]);
   const sql = sq.trim().toLowerCase();
-  const matchSnap = s => (snapF.session === "all" || s.title === snapF.session) &&
+  const matchSnap = s => snapF.src.includes(s.tool) &&
+    (snapF.reason === "all" || s.trigger === snapF.reason) &&
+    (snapF.session === "all" || s.title === snapF.session) &&
     (snapF.time === "all" || (snapF.time === "earlier"
       ? !["today", "yesterday"].includes(bucketOf(s.time)) : bucketOf(s.time) === snapF.time)) &&
     (!sql || s.id.toLowerCase().includes(sql) || s.title.toLowerCase().includes(sql));
@@ -357,10 +378,12 @@ export default function App() {
     const rst = snapRestoring[s.id];
     const status = rst === "done" ? "已还原" : rst ? "还原中" : "可还原";
     return { id: s.id, title: s.title, short: fmtTime(s.time), trigger: s.trigger, status,
-      stColor: rst && rst !== "done" ? "#E09112" : "#1C9E5A", tool: "claude",
+      stColor: rst && rst !== "done" ? "#E09112" : "#1C9E5A", tool: s.tool,
       selected: s.id === (selSnap ?? snapFiltered[0]?.id), onClick: () => setSelSnap(s.id) };
   });
   const snapTokens = [];
+  if (snapF.reason !== "all") snapTokens.push({ label: snapF.reason,
+    onRemove: () => setSnapF(v => ({ ...v, reason: "all" })) });
   if (snapF.session !== "all") snapTokens.push({ label: `会话 ${snapF.session}`,
     onRemove: () => setSnapF(v => ({ ...v, session: "all" })) });
   if (snapF.time !== "all") snapTokens.push({
@@ -383,7 +406,8 @@ export default function App() {
       tokens: histTokens, footer: `${histItems.length} 条迁移记录` },
     snapshots: { title: "快照与还原", count: String(snapItems.length), placeholder: "搜索快照…",
       query: sq, onQuery: e => setSq(e.target.value), sortLabel: "按时间",
-      filterCount: (snapF.session !== "all" ? 1 : 0) + (snapF.time !== "all" ? 1 : 0),
+      filterCount: (snapF.src.length < TOOLS.length ? 1 : 0) + (snapF.reason !== "all" ? 1 : 0) +
+        (snapF.session !== "all" ? 1 : 0) + (snapF.time !== "all" ? 1 : 0),
       tokens: snapTokens, footer: `${snapItems.length} 个快照 · 源会话只读` },
   }[view] || null;
 
@@ -446,9 +470,10 @@ export default function App() {
           {railItems.map(n => {
             const on = view === n.k;
             return (
-              <button key={n.k} className="hov-rail" title={n.label}
+              <button key={n.k} className="hov-rail"
                 data-guide={n.k === "library" ? "rail" : undefined}
-                onClick={() => { setView(n.k); setSettingsOpen(false); setPopover(null); }}
+                onMouseEnter={e => railEnter(n.label, e)} onMouseLeave={railLeave}
+                onClick={() => { setView(n.k); setSettingsOpen(false); setPopover(null); railLeave(); }}
                 style={{ width: 40, height: 40, border: "none", borderRadius: 9,
                   background: on ? "#E4EDFB" : "transparent", display: "flex", alignItems: "center",
                   justifyContent: "center", cursor: "pointer", transition: "background .12s ease" }}>
@@ -457,27 +482,14 @@ export default function App() {
             );
           })}
           <div style={{ flex: 1 }} />
-          <button className="hov-rail" data-guide="scan" title="数据来源"
-            onClick={() => setDataSourceOpen(true)}
-            style={{ width: 40, height: 40, border: "none", borderRadius: 9, background: "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              position: "relative" }}>
-            <span style={{ position: "relative", display: "inline-flex" }}>
-              <RailGlyph name="data" size={18} />
-              <span style={{ position: "absolute", right: -3, bottom: -2, width: 8, height: 8,
-                borderRadius: "50%", background: "#1C9E5A", boxShadow: "0 0 0 2px #E8ECF0" }} />
-            </span>
-          </button>
-          <button className="hov-rail" title={guideSeen ? "重新查看引导" : "快速上手"} onClick={openGuide}
-            style={{ width: 40, height: 40, border: "none", borderRadius: 9, background: "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <RailGlyph name="guide" />
-          </button>
-          <button className="hov-rail" title="设置" onClick={() => setSettingsOpen(v => !v)}
+          <button className="hov-rail"
+            onMouseEnter={e => railEnter("设置", e)} onMouseLeave={railLeave}
+            onClick={() => { setSettingsOpen(v => !v); railLeave(); }}
             style={{ width: 40, height: 40, border: "none", borderRadius: 9,
               background: settingsOpen ? "#E4EDFB" : "transparent", display: "flex",
-              alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <RailGlyph name="settings" />
+              alignItems: "center", justifyContent: "center", cursor: "pointer",
+              transition: "background .12s ease" }}>
+            <RailGlyph name="settings" color={settingsOpen ? ACCENT : "#7A8591"} />
           </button>
         </div>
 
@@ -507,7 +519,7 @@ export default function App() {
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
             {view === "snapshots" && (
               <SnapList rows={snapListRows} empty={snapFiltered.length === 0}
-                onClear={() => { setSnapF({ session: "all", time: "all" }); setSq(""); }} />)}
+                onClear={() => { setSnapF({ src: [...TOOLS], reason: "all", session: "all", time: "all" }); setSq(""); }} />)}
           </Pane>
         )}
 
@@ -557,17 +569,19 @@ export default function App() {
       {snapConfirm && <SnapRestoreConfirm snap={snapConfirm}
         onCancel={() => setSnapConfirm(null)} onConfirm={confirmRestore} />}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      {railTip && (
+        <div style={{ position: "absolute", left: 62, top: railTip.top,
+          transform: "translateY(-50%)", zIndex: 60, background: "#2B333C", color: "#fff",
+          fontSize: 11.5, padding: "5px 9px", borderRadius: 6,
+          boxShadow: "0 6px 16px -6px rgba(0,0,0,.4)", pointerEvents: "none",
+          whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}
       {settingsOpen && (
-        <SettingsPopover onClose={() => setSettingsOpen(false)}
+        <SettingsPage settings={settings} setSettings={setSettings}
+          scan={scan} env={env} scanning={scanning} onRescan={doScan}
+          guideSeen={guideSeen}
           onOpenGuide={() => { setSettingsOpen(false); openGuide(); }}
           onFirstRun={() => { setSettingsOpen(false); setView("firstrun"); }}
-          guideSeen={guideSeen} />)}
-      {dataSourceOpen && (
-        <DataSourceSheet scan={scan} env={env} scanning={scanning} onRescan={doScan}
-          onClose={() => setDataSourceOpen(false)}
-          onOpenGuide={() => { setDataSourceOpen(false); openGuide(); }}
-          onFirstRun={() => { setDataSourceOpen(false); setView("firstrun"); }}
-          guideSeen={guideSeen} />)}
+          onClose={() => setSettingsOpen(false)} />)}
       {popover === "lib" && (
         <LibraryFilter f={libF} setF={setLibF} counts={counts} dirs={dirs}
           onClose={() => setPopover(null)} onClear={clearLibF} />)}
@@ -575,10 +589,10 @@ export default function App() {
         <HistoryFilter f={histF} setF={setHistF} onClose={() => setPopover(null)}
           onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
       {popover === "snap" && (
-        <SnapFilter f={snapF} setF={setSnapF}
+        <SnapFilter f={snapF} setF={setSnapF} reasons={snapReasons}
           sessions={[...new Set(snapItems.map(s => s.title))].slice(0, 6)}
           onClose={() => setPopover(null)}
-          onClear={() => { setSnapF({ session: "all", time: "all" }); setSq(""); }} />)}
+          onClear={() => { setSnapF({ src: [...TOOLS], reason: "all", session: "all", time: "all" }); setSq(""); }} />)}
       {guideStep > 0 && (
         <Guide step={guideStep} onGo={setGuideStep} onFinish={finishGuide} />)}
     </div>

@@ -35,10 +35,14 @@ def resolve(ref: str) -> Path:
     return Path(hits[0])
 
 
-def backup(path: Path) -> Path:
+def backup(path: Path, reason: str = "会话编辑前自动", tool: str = "claude") -> Path:
+    """复制一份快照,并写同名 .meta.json 记录创建原因(供 UI 分组与筛选)。"""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     dest = BACKUP_DIR / f"{path.stem}-{int(time.time())}.jsonl"
     shutil.copy(path, dest)
+    dest.with_suffix(".meta.json").write_text(json.dumps(
+        {"reason": reason, "tool": tool, "source": str(path)},
+        ensure_ascii=False))
     return dest
 
 

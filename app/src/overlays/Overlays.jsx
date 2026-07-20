@@ -1,8 +1,8 @@
 // 其余弹层:差异预览 / 原地修改确认 / 快照还原确认 / 结果 toast /
-// 设置弹层 / 数据来源 sheet / 三个筛选弹层 / 快速上手引导
+// 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
 import { ACCENT, TOOL_NAME, TOOLS, fmtSize, fmtTime } from "../api.js";
-import { PlusIcon, Spinner, ToolIcon } from "../icons.jsx";
+import { Spinner, ToolIcon } from "../icons.jsx";
 import { CheckSquare, RadioDot, Sheet } from "../components/ui.jsx";
 
 // ---------- 差异预览 ----------
@@ -90,7 +90,7 @@ export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
   const bullets = [
     ["#E09112", "当前会话在此快照之后的改动将被覆盖。"],
     ["#1C9E5A", "Ferry 会在还原前自动创建一个当前状态的保护快照。"],
-    ["#0B67F5", "还原完成后可通过该保护快照撤销本次操作。"],
+    ["var(--accent)", "还原完成后可通过该保护快照撤销本次操作。"],
     ["#8AA0B6", "源工具中的其他会话不受影响。"],
   ];
   return (
@@ -136,98 +136,6 @@ export function Toast({ toast, onDismiss }) {
       </div>
       <a onClick={onDismiss} style={{ color: "#9AA3AD", fontSize: 16, marginLeft: 6 }}>×</a>
     </div>
-  );
-}
-
-// ---------- 设置弹层 ----------
-export function SettingsPopover({ onClose, onOpenGuide, onFirstRun, guideSeen }) {
-  return (
-    <>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 45 }} />
-      <div style={{ position: "absolute", left: 62, bottom: 14, width: 252, zIndex: 46,
-        background: "#FBFCFD", borderRadius: 11,
-        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px rgba(20,28,38,.08)",
-        padding: "13px 14px", animation: "fpop .14s ease" }}>
-        <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 10 }}>设置</div>
-        <button className="hov-item" onClick={onOpenGuide}
-          style={{ width: "100%", height: 32, textAlign: "left", padding: "0 10px",
-            background: "transparent", border: "none", borderRadius: 7, fontSize: 12.5,
-            color: "#334155", cursor: "pointer" }}>
-          {guideSeen ? "重新查看引导" : "快速上手"}</button>
-        <button className="hov-item" onClick={onFirstRun}
-          style={{ width: "100%", height: 32, textAlign: "left", padding: "0 10px",
-            background: "transparent", border: "none", borderRadius: 7, fontSize: 12.5,
-            color: "#334155", cursor: "pointer" }}>首次启动检测</button>
-        <div style={{ fontSize: 11, color: "#9AA3AD", marginTop: 8, lineHeight: 1.5 }}>
-          Ferry 在本机运行,不上传任何数据;已适配「减少动效」。</div>
-      </div>
-    </>
-  );
-}
-
-// ---------- 数据来源 sheet ----------
-export function DataSourceSheet({ scan, env, scanning, onRescan, onClose, onOpenGuide, onFirstRun, guideSeen }) {
-  const tools = scan?.tools || {};
-  const connected = TOOLS.filter(t => tools[t]?.ok).length;
-  const total = TOOLS.reduce((a, t) => a + (tools[t]?.count || 0), 0);
-  return (
-    <Sheet width={540} maxHeight={660} onClose={onClose} z={38}>
-      <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid #E8ECF0",
-        display: "flex", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 14.5, fontWeight: 650 }}>数据来源</div>
-          <div style={{ fontSize: 11.5, color: "#8A939D", marginTop: 2 }}>
-            {connected} 个已连接 · {total} 个会话 · 源会话保持只读</div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <a onClick={onClose} style={{ color: "#9AA3AD", fontSize: 18 }}>×</a>
-      </div>
-      <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
-        {TOOLS.map(t => {
-          const info = tools[t] || {};
-          const ok = info.ok;
-          return (
-            <div key={t} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 13px",
-              border: "1px solid #E4E9EE", borderRadius: 10, marginBottom: 9, background: "#fff" }}>
-              <ToolIcon tool={t} size={30} dot={ok ? "#1C9E5A" : "#D5544A"} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{TOOL_NAME[t]}
-                  {env?.[t]?.version && <span style={{ fontWeight: 400, color: "#9AA3AD",
-                    fontSize: 11.5 }}> · v{env[t].version}</span>}</div>
-                <div className="mono" style={{ fontSize: 11, color: "#9AA3AD", whiteSpace: "nowrap",
-                  overflow: "hidden", textOverflow: "ellipsis" }}>{info.path || "—"}</div>
-              </div>
-              <div style={{ textAlign: "right", flex: "none" }}>
-                <div style={{ fontSize: 11.5, color: "#6B7682" }}>
-                  {ok ? `${info.count} 个会话` : (info.error || "不可用")}</div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11,
-                  color: ok ? "#1C7C43" : "#B4433A", fontWeight: 600, marginTop: 2 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%",
-                    background: ok ? "#1C9E5A" : "#D5544A" }} />{ok ? "已连接" : "扫描失败"}</div>
-              </div>
-              <button className="fbtn" style={{ fontSize: 11.5, flex: "none" }}
-                onClick={onRescan} disabled={scanning}>
-                {scanning ? "扫描中…" : "重新扫描"}</button>
-            </div>
-          );
-        })}
-        <button className="hov-ghost" style={{ width: "100%", height: 40, border: "1px dashed #C3CBD3",
-          background: "transparent", borderRadius: 10, fontSize: 12.5, color: "#6B7682",
-          cursor: "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <PlusIcon />添加数据来源(规划中)
-        </button>
-        <div style={{ fontSize: 11, color: "#9AA3AD", marginTop: 8, lineHeight: 1.5 }}>
-          未来新增本地工具时在此接入,主界面不会增加固定标签。</div>
-      </div>
-      <div style={{ flex: "none", padding: "12px 16px", borderTop: "1px solid #E8ECF0",
-        display: "flex", alignItems: "center", gap: 9 }}>
-        <button className="fbtn" style={{ height: 32, fontSize: 12.5 }} onClick={onOpenGuide}>
-          {guideSeen ? "重新查看引导" : "快速上手"}</button>
-        <button className="fbtn" style={{ height: 32, fontSize: 12.5 }} onClick={onFirstRun}>首次启动检测</button>
-        <span style={{ flex: 1 }} />
-        <button className="fbtn-primary" style={{ height: 32, padding: "0 16px" }} onClick={onClose}>完成</button>
-      </div>
-    </Sheet>
   );
 }
 
@@ -355,11 +263,23 @@ export function HistoryFilter({ f, setF, onClose, onClear }) {
   );
 }
 
-// 快照筛选:关联会话 / 时间
-export function SnapFilter({ f, setF, sessions, onClose, onClear }) {
+// 快照筛选:来源工具 / 创建原因 / 关联会话 / 时间
+export function SnapFilter({ f, setF, sessions, reasons, onClose, onClear }) {
   return (
     <PopShell onClose={onClose} onClear={onClear}>
-      <SectionTitle first>关联会话</SectionTitle>
+      <SectionTitle first>来源工具</SectionTitle>
+      {TOOLS.map(t => (
+        <CheckRow key={t} on={f.src.includes(t)} icon={<ToolIcon tool={t} size={24} />}
+          label={TOOL_NAME[t]}
+          onClick={() => setF(v => ({ ...v, src: v.src.includes(t)
+            ? v.src.filter(x => x !== t) : [...v.src, t] }))} />
+      ))}
+      <SectionTitle>创建原因</SectionTitle>
+      {[["all", "全部原因"], ...reasons.map(r => [r, r])].map(([k, l]) => (
+        <RadioRow key={k} on={f.reason === k} label={l}
+          onClick={() => setF(v => ({ ...v, reason: k }))} />
+      ))}
+      <SectionTitle>关联会话</SectionTitle>
       {[["all", "全部会话"], ...sessions.map(s => [s, s])].map(([k, l]) => (
         <RadioRow key={k} on={f.session === k} label={l}
           onClick={() => setF(v => ({ ...v, session: k }))} />
@@ -375,15 +295,14 @@ export function SnapFilter({ f, setF, sessions, onClose, onClear }) {
 
 // ---------- 快速上手引导(coach marks) ----------
 const GUIDE_STEPS = [
-  { target: "scan", side: "right", title: "先扫描本机数据来源",
-    body: "左下角「数据来源」里查看已连接的 Claude Code、Codex CLI、OpenCode 及已扫描会话数。源会话保持只读,可随时重新扫描。" },
   { target: "rail", side: "right", title: "用导航轨道切换模块",
     body: "最左侧固定轨道在会话、迁移、快照之间切换。切换时轨道位置与宽度始终不变,只更换中间资源栏与右侧详情。" },
   { target: "search", side: "right", title: "在资源栏搜索与筛选",
     body: "资源栏的标题、数量、搜索框与筛选位置在三种模块中保持一致。用它们按来源、时间与目录快速定位。" },
-  { target: "migrate", side: "bottom", title: "迁移并交付",
-    body: "在会话详情里可整体迁移,或在某一轮「迁移到此为止」截断;预演损耗与上下文水位后再交付,探针失败会自动回滚,不留残留。" },
+  { target: "scope", side: "top", scroll: true, title: "迁移到此为止并交付",
+    body: "长会话可在某一轮「迁移到此为止」截断,预览迁移损耗后再交付;若探针失败会自动回滚,不留残留。" },
 ];
+const GUIDE_TOTAL = GUIDE_STEPS.length;
 
 export function Guide({ step, onGo, onFinish }) {
   const [box, setBox] = useState(null);
@@ -410,7 +329,18 @@ export function Guide({ step, onGo, onFinish }) {
       setBox({ l: bl, t: bt, w: bw, h: bh, W, H });
       setCard({ left: cl, top: ct });
     };
-    const t = setTimeout(run, 30);
+    // 目标在详情区滚动容器内时,先把它滚到视野中段再量位置
+    let delay = 30;
+    if (cfg.scroll) {
+      const sc = document.querySelector("[data-guide-scroll]");
+      const el = document.querySelector(`[data-guide="${cfg.target}"]`);
+      if (sc && el) {
+        const er = el.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+        sc.scrollTop += (er.top - sr.top) - 170;
+        delay = 80;
+      }
+    }
+    const t = setTimeout(run, delay);
     return () => clearTimeout(t);
   }, [step]);
 
@@ -441,9 +371,9 @@ export function Guide({ step, onGo, onFinish }) {
         animation: "fslide .16s ease" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, letterSpacing: ".03em" }}>
-            {step} / 4</span>
+            {step} / {GUIDE_TOTAL}</span>
           <div style={{ display: "flex", gap: 4, marginLeft: 2 }}>
-            {[1, 2, 3, 4].map(i => (
+            {GUIDE_STEPS.map((_, idx) => idx + 1).map(i => (
               <span key={i} style={{ width: 16, height: 3, borderRadius: 2,
                 background: i <= step ? ACCENT : "#D8DEE4" }} />))}
           </div>
@@ -458,8 +388,8 @@ export function Guide({ step, onGo, onFinish }) {
               onClick={() => onGo(step - 1)}>上一步</button>)}
           <span style={{ flex: 1 }} />
           <button className="fbtn-primary" style={{ height: 31, padding: "0 16px", fontSize: 12.5 }}
-            onClick={() => step >= 4 ? onFinish() : onGo(step + 1)}>
-            {step >= 4 ? "开始使用" : "下一步"}</button>
+            onClick={() => step >= GUIDE_TOTAL ? onFinish() : onGo(step + 1)}>
+            {step >= GUIDE_TOTAL ? "开始使用" : "下一步"}</button>
         </div>
       </div>
     </div>

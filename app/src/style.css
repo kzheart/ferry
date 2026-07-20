@@ -1,10 +1,15 @@
 /* Ferry 桌面端 —— 按 session-bridge-desktop 原型复刻的全局样式 */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+:root {
+  --accent: #0B67F5;
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
+  --font-size: 13px;
+}
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size);
   line-height: 1.45;
   color: #1C2530;
   background: #FBFCFD;
@@ -14,8 +19,8 @@ body {
   cursor: default;
   overflow: hidden;
 }
-a { color: #0B67F5; text-decoration: none; cursor: pointer; }
-a:hover { color: #0a58cf; }
+a { color: var(--accent); text-decoration: none; cursor: pointer; }
+a:hover { filter: brightness(.9); }
 .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
 .selectable { user-select: text; cursor: text; }
 input, button, textarea { font-family: inherit; }
@@ -55,11 +60,23 @@ input { user-select: text; }
 }
 .fbtn:hover { background: #F5F7F9; }
 .fbtn-primary {
-  border: none; background: #0B67F5; color: #fff; font-weight: 600;
+  border: none; background: var(--accent); color: #fff; font-weight: 600;
   border-radius: 7px; cursor: pointer; font-size: 12.5px;
 }
 .fbtn-primary:hover { filter: brightness(1.05); }
 .fbtn-primary:disabled { background: #B8C0C8; cursor: default; opacity: .7; }
+
+/* 设置里的「减少动效」(与系统偏好等效,但由用户显式开关) */
+[data-reduce="1"] * {
+  animation-duration: .001s !important;
+  transition-duration: .001s !important;
+  scroll-behavior: auto !important;
+}
+
+/* 暗色主题:整窗反相(同原型做法);品牌图标与位图二次反相还原本色。
+   invert(1) 与 hue-rotate(180deg) 各自成对抵消,所以还原是精确的。 */
+[data-theme="dark"] #root { filter: invert(1) hue-rotate(180deg); }
+[data-theme="dark"] .noinvert { filter: invert(1) hue-rotate(180deg); }
 
 /* 标题栏可拖拽窗口 */
 .drag-region { -webkit-app-region: drag; }

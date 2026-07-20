@@ -10,7 +10,7 @@ export default function FirstRun({ env, scan, onStart }) {
       <div style={{ width: 460, background: "#fff", border: "1px solid #E4E9EE", borderRadius: 14,
         boxShadow: "0 12px 34px -18px rgba(20,28,38,.28)", padding: "30px 30px 26px",
         animation: "ffade .3s ease" }}>
-        <img src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
+        <img className="noinvert" src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
         <div style={{ fontSize: 20, fontWeight: 650, marginTop: 16, letterSpacing: "-.01em" }}>
           欢迎使用 Ferry</div>
         <div style={{ fontSize: 13, color: "#6B7682", marginTop: 6, lineHeight: 1.55 }}>
