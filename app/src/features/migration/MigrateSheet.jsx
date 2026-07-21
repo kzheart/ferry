@@ -6,7 +6,7 @@ import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
-import { CheckSquare, CmdRow, LossCols, RadioDot, Sheet } from "../../components/ui/primitives.jsx";
+import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../api/contract/events.js";
 
 const ORDER = ["target", "preview", "confirm", "result"];
@@ -106,7 +106,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   const [modelErr, setModelErr] = useState({});
   const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
   const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
-  const [narrLocale, setNarrLocale] = useState("zh-CN"); // 降级叙述写入目标的语言
   const doneRef = useRef(false);
   const ref = sessionRef(meta);
 
@@ -160,8 +159,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
       const r = await rpc("migrate", { src: meta.tool, dst: target, ref,
         max_turn: scope || undefined,
         probe: probeOn,
-        probe_model: probeOn ? resolvedProbeModel : undefined,
-        content_locale: narrLocale });
+        probe_model: probeOn ? resolvedProbeModel : undefined });
       setResult(r);
     } catch (e) { setError(e.message); }
     setStep("result");
@@ -256,7 +254,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
               ["runtimeProbe", probeOn
                 ? t("migration:confirm.probeOn", { model: resolvedProbeModel || t("migration:confirm.probeOff") })
                 : t("migration:confirm.probeOff")],
-              ["narrLocale", narrLocale === "en" ? t("migration:narrLocale.en") : t("migration:narrLocale.zhCN")],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
                 <span style={{ color: "var(--tx4)", flex: "none" }}>{t(`migration:confirm.${k}`)}</span>
@@ -288,22 +285,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
             t={t}
           />
         )}
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
-          marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)", flex: "none" }}>
-            {t("migration:confirm.narrLocale")}</span>
-          <div style={{ display: "flex", gap: 14 }}>
-            {[["zh-CN", t("migration:narrLocale.zhCN")], ["en", t("migration:narrLocale.en")]].map(([v, l]) => (
-              <label key={v} onClick={() => setNarrLocale(v)}
-                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <RadioDot on={narrLocale === v} accent={ACCENT} />
-                <span style={{ fontSize: 12.5, color: "var(--tx2)" }}>{l}</span>
-              </label>
-            ))}
-          </div>
-          <span style={{ fontSize: 11.5, color: "var(--tx3b)" }}>
-            {t("migration:confirm.narrLocaleHint")}</span>
-        </div>
         <div style={{ fontSize: 12, color: "var(--tx3b)", margin: "14px 0 0", lineHeight: 1.55 }}>
           {t("migration:confirm.epilogue", { probe: probeOn ? t("migration:confirm.probeEpilogue") : "" })}</div>
       </>
