@@ -141,7 +141,7 @@ export default function App() {
     loadCapabilities(s.tool);
   };
 
-  // 刷新当前会话:重读正文,同时刷新扫描结果里的条数/大小等元信息
+  // 刷新当前会话:只重读这一个会话的正文,不触发全量扫描
   const refreshDetail = async () => {
     const s = selId && (byId[selId] || sessions.find(x => x.id === selId));
     if (!s || refreshing) return;
@@ -149,7 +149,6 @@ export default function App() {
     try {
       const data = await rpc("show", { tool: s.tool, ref: sessionRef(s) });
       setDetail(d => d?.id === selId ? { id: selId, data } : d);
-      doScan();
     } catch (e) {
       setDetail(d => d?.id === selId ? { ...d, error: e.message } : d);
     }
