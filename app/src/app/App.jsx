@@ -32,11 +32,12 @@ export default function App() {
 
   // ----- 导航与选中 -----
   const [view, setView] = useState(
-    () => localStorage.getItem("ferry-first-done") ? "library" : "firstrun");
+    () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
   const [selId, setSelId] = useState(null);
   const [selHist, setSelHist] = useState(null);
   const [selSnap, setSelSnap] = useState(null);
   const [detail, setDetail] = useState(null);   // {id, data, error}
+  const [refreshing, setRefreshing] = useState(false);
 
   // ----- 编辑 -----
   // ----- 迁移 / 快照 -----
@@ -138,6 +139,21 @@ export default function App() {
       .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
       .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
     loadCapabilities(s.tool);
+  };
+
+  // 刷新当前会话:重读正文,同时刷新扫描结果里的条数/大小等元信息
+  const refreshDetail = async () => {
+    const s = selId && (byId[selId] || sessions.find(x => x.id === selId));
+    if (!s || refreshing) return;
+    setRefreshing(true);
+    try {
+      const data = await rpc("show", { tool: s.tool, ref: sessionRef(s) });
+      setDetail(d => d?.id === selId ? { id: selId, data } : d);
+      doScan();
+    } catch (e) {
+      setDetail(d => d?.id === selId ? { ...d, error: e.message } : d);
+    }
+    setRefreshing(false);
   };
 
   // 另存为新会话后从 toast 打开:扫描结果已含新会话则正常选中,否则按返回的路径直接读
@@ -666,7 +682,8 @@ export default function App() {
             editCaps={editCaps} authoringCaps={authoringCaps}
             startReplyEdit={startReplyEdit} authoringError={authoringError}
             onOpenDiff={openDiff} onApply={() => setConfirmApply(true)} applying={applying}
-            onOpenMigrate={sc => setMig({ scope: sc ?? scope })} />
+            onOpenMigrate={sc => setMig({ scope: sc ?? scope })}
+            onRefresh={refreshDetail} refreshing={refreshing} />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--tx5)", fontSize: 13 }}>

@@ -6,7 +6,7 @@ import { resumeDescriptor } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
-  PencilIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
+  PencilIcon, RescanIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
@@ -280,7 +280,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 export default function SessionDetail({ meta, data, error,
   scope, setScope, ops, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
-  onOpenMigrate, editCaps, authoringCaps }) {
+  onOpenMigrate, onRefresh, refreshing, editCaps, authoringCaps }) {
   const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
@@ -330,6 +330,11 @@ export default function SessionDetail({ meta, data, error,
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+              <button className="fbtn" title={tt("browser:session.refresh")}
+                style={{ height: 30, width: 30, padding: 0, display: "flex",
+                  alignItems: "center", justifyContent: "center" }}
+                disabled={refreshing} onClick={onRefresh}>
+                {refreshing ? <Spinner size={13} /> : <RescanIcon />}</button>
               <button className="fbtn" style={{ height: 30, fontSize: 12.5 }} onClick={copyResume}>
                 {copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}</button>
               <button data-guide="migrate" className="fbtn-primary"
