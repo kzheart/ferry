@@ -1,7 +1,7 @@
 """Codex writer:规范化中间格式 → rollout JSONL(可被 codex exec resume 加载)。
 
 写入 Codex 原生 JSONL 会话记录。核心策略:
-- 结构模板取自黄金样本原文(session_meta / turn_context / 各类 response_item),
+- 结构模板取自黄金样本原文(session_meta / 各类 response_item),
   只替换内容字段,不手写结构 —— 版本漂移时重新生成黄金样本即可跟上。
 - shell.exec 原生映射为 exec_command;fs.write 映射为 apply_patch(Add File);
   其余工具降级为叙述文本(narration)。
@@ -144,6 +144,12 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
     mp["session_id"] = root_id
     mp["timestamp"] = now
     mp["cwd"] = cwd
+    mp["originator"] = "codex-tui"
+    mp["source"] = "cli"
+    mp["thread_source"] = "user"
+    mp["model_provider"] = "openai"
+    mp["memory_mode"] = "enabled"
+    mp["history_mode"] = "legacy"
     if parent_id:
         mp["parent_thread_id"] = parent_id
         mp["forked_from_id"] = parent_id
@@ -161,12 +167,9 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
         mp["thread_source"] = "subagent"
         mp["agent_path"] = agent_path
 
-    tc = _clone(tpl["turn_context"])
-    tc["timestamp"] = now
-    tc["payload"]["cwd"] = cwd
-    tc["payload"]["turn_id"] = _uuid7()
-
-    out_lines = [meta, tc]
+    # 缺省 turn_context 会由 Codex 按当前配置恢复；字段不全的记录会使
+    # 新版 TUI 严格反序列化失败。
+    out_lines = [meta]
     for m in sess.messages:
         texts = []
         role = m.role if m.role in ("user", "assistant") else "user"

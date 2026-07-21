@@ -343,8 +343,20 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
     now = int(time.time() * 1000)
     info = _clone(tpl["info"])
     info.update({"id": sid, "directory": cwd,
-                 "title": sess.title or f"migrated from {sess.source_tool}",
-                 "time": {"created": now, "updated": now}})
+                  "title": sess.title or f"migrated from {sess.source_tool}",
+                  "time": {"created": now, "updated": now}})
+    # `opencode import` 严格校验完整 Session.Info；黄金 fixture 的最小
+    # 快照可供内部 reader 使用，但不足以通过官方导入器。
+    info.setdefault("slug", f"ferry-{sid[-8:].lower()}")
+    info.setdefault("projectID", "global")
+    info.setdefault("path", "")
+    info.setdefault("agent", "build")
+    info.setdefault("summary", {"additions": 0, "deletions": 0, "files": 0})
+    info.setdefault("cost", 0)
+    info.setdefault("tokens", {
+        "input": 0, "output": 0, "reasoning": 0,
+        "cache": {"read": 0, "write": 0},
+    })
     if parent_sid:
         info["parentID"] = parent_sid
     else:
@@ -354,21 +366,53 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
 
     messages = []
     last_user_mid = None
+    provider_id = str(sess.meta.get("model_provider") or "openai")
+    model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
     for m in sess.messages:
         mid = _new_id("msg")
         minfo = _clone(tpl.get(f"msg.{m.role}", tpl["msg.user"]))
         minfo.update({"id": mid, "sessionID": sid})
         if m.role == "assistant":
+            if last_user_mid is None:
+                last_user_mid = _new_id("msg")
+                parent_info = _clone(tpl["msg.user"])
+                parent_info.update({
+                    "id": last_user_mid, "sessionID": sid, "role": "user",
+                    "time": {"created": now}, "agent": "build",
+                    "model": {"providerID": provider_id,
+                              "modelID": model_id},
+                    "summary": {"diffs": []},
+                })
+                parent_part = _clone(tpl["part.text"])
+                parent_part.update({
+                    "id": _new_id("prt"), "messageID": last_user_mid,
+                    "sessionID": sid, "type": "text",
+                    "text": "[Migrated subagent task]",
+                })
+                messages.append({"info": parent_info, "parts": [parent_part]})
             # completed + finish 缺失会让 runtime 认为该轮未结束而死循环
             minfo["time"] = {"created": now, "completed": now}
             minfo["finish"] = ("tool-calls" if any(
                 b.kind == "tool" for b in m.blocks) else "stop")
+            minfo.update({
+                "mode": "build", "agent": "build",
+                "path": {"cwd": cwd, "root": cwd}, "cost": 0,
+                "tokens": {"total": 0, "input": 0, "output": 0,
+                           "reasoning": 0,
+                           "cache": {"write": 0, "read": 0}},
+                "modelID": model_id, "providerID": provider_id,
+            })
             if last_user_mid:
                 minfo["parentID"] = last_user_mid
             else:
                 minfo.pop("parentID", None)
         else:
             minfo["time"] = {"created": now}
+            minfo.update({
+                "agent": "build",
+                "model": {"providerID": provider_id, "modelID": model_id},
+                "summary": {"diffs": []},
+            })
             last_user_mid = mid
         parts = []
 
@@ -537,9 +581,18 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
         edge = edges.get(child.source_id)
         mid = _new_id("msg")
         minfo = _clone(tpl["msg.assistant"])
+        cwd = payload["info"]["directory"]
+        provider_id = str(sess.meta.get("model_provider") or "openai")
+        model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
         minfo.update({"id": mid, "sessionID": sid,
                       "time": {"created": now, "completed": now},
-                      "finish": "tool-calls"})
+                      "finish": "tool-calls", "mode": "build",
+                      "agent": "build", "path": {"cwd": cwd, "root": cwd},
+                      "cost": 0,
+                      "tokens": {"total": 0, "input": 0, "output": 0,
+                                 "reasoning": 0,
+                                 "cache": {"write": 0, "read": 0}},
+                      "modelID": model_id, "providerID": provider_id})
         if last_user:
             minfo["parentID"] = last_user
         else:
@@ -616,8 +669,10 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
     imported = []
     try:
         for payload, sid, node_cwd in prepared:
-            _import_payload(payload, sid, node_cwd)
+            # import 可能先插入 session 再因消息 schema 失败；调用前登记，
+            # 确保半写入的当前会话也进入回滚。
             imported.append(sid)
+            _import_payload(payload, sid, node_cwd)
     except Exception:
         for imported_sid in reversed(imported):
             try:

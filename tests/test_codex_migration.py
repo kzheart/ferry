@@ -1,4 +1,7 @@
+import json
 import sqlite3
+
+import pytest
 
 from engine.adapters import registry
 from engine.adapters.claude.reader import read as read_claude
@@ -87,6 +90,37 @@ def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypat
     assert imported[1][0]["info"]["parentID"] == root_id
     assert all(payload["info"]["directory"] == str(tmp_path)
                for payload, _sid, _cwd in imported)
+    root = imported[0][0]
+    assert {"slug", "projectID", "path", "agent", "summary", "cost",
+            "tokens", "time"} <= root["info"].keys()
+    user, assistant = (message["info"] for message in root["messages"])
+    assert {"agent", "model", "summary", "time"} <= user.keys()
+    assert {"mode", "agent", "path", "cost", "tokens", "modelID",
+            "providerID", "time", "finish"} <= assistant.keys()
+    child_messages = imported[1][0]["messages"]
+    assert child_messages[0]["info"]["role"] == "user"
+    assert child_messages[1]["info"]["parentID"] == \
+        child_messages[0]["info"]["id"]
+
+
+def test_opencode_writer_rolls_back_partially_imported_session(tmp_path, monkeypatch):
+    deleted = []
+    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(
+        opencode_session, "_import_payload",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("invalid schema")),
+    )
+    monkeypatch.setattr(
+        opencode_session, "_oc",
+        lambda args, **_kwargs: deleted.append(args) or "",
+    )
+
+    with pytest.raises(RuntimeError, match="invalid schema"):
+        opencode_session.write(_tree(tmp_path), cwd=str(tmp_path))
+
+    assert len(deleted) == 1
+    assert deleted[0][:2] == ["session", "delete"]
+    assert deleted[0][2].startswith("ses_")
 
 
 def test_codex_writer_registers_rollout_tree(tmp_path):
@@ -106,6 +140,18 @@ def test_codex_writer_registers_rollout_tree(tmp_path):
     assert edge[0] == root_id
     assert edge[1] in {row[0] for row in rows}
     assert edge[2] == "closed"
+
+    records = [json.loads(line) for line in root_path.read_text().splitlines()]
+    meta = records[0]
+    assert meta["type"] == "session_meta"
+    required = {"timestamp", "originator", "source", "thread_source",
+                "model_provider"}
+    assert required <= meta["payload"].keys()
+    assert meta["payload"]["originator"] == "codex-tui"
+    assert meta["payload"]["source"] == "cli"
+    assert meta["payload"]["thread_source"] == "user"
+    assert meta["payload"]["model_provider"] == "openai"
+    assert not any(record["type"] == "turn_context" for record in records)
 
 
 def test_codex_cleanup_removes_files_and_registration(tmp_path):
