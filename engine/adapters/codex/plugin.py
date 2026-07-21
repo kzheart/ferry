@@ -1,7 +1,7 @@
 """Codex 插件装配：manifest + 各能力实现。"""
 from __future__ import annotations
 
-from ..base.migration import TreeMigrationSource
+from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
 from .authoring import CodexAuthoringCompiler
 from .editor import CodexBackend, resolve
@@ -22,37 +22,14 @@ MANIFEST = ToolManifest(
 )
 
 
-class CodexBrowser:
-    def scan(self, cache):
-        return scan(cache)
-
-    def read(self, ref):
-        return read(ref)
-
-    def resolve_ref(self, ref):
-        return str(resolve(ref))
-
-
-class CodexModels:
-    def discover(self):
-        return discover()
-
-    def fallback(self):
-        return fallback()
-
-
 def build() -> ToolPlugin:
-    lifecycle = CodexLifecycle()
-    lifecycle.executable = MANIFEST.executables[0]
-    browser = CodexBrowser()
-    return ToolPlugin(
-        manifest=MANIFEST,
-        browser=browser,
-        migration_source=TreeMigrationSource(browser),
+    return build_plugin(
+        MANIFEST,
+        BrowserAdapter(scan, read, lambda ref: str(resolve(ref))),
         migration_target=CodexMigrationTarget(),
         editor=CodexBackend(),
         authoring=CodexAuthoringCompiler(),
         verifier=CodexVerifier(),
-        lifecycle=lifecycle,
-        models=CodexModels(),
+        lifecycle=CodexLifecycle(),
+        models=ModelCatalogAdapter(discover, fallback),
     )

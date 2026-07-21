@@ -1,0 +1,61 @@
+"""Reusable assembly primitives for self-contained agent adapters."""
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from ...infrastructure import executables
+from .migration import TreeMigrationSource
+from .plugin import ToolManifest, ToolPlugin
+
+
+class BrowserAdapter:
+    """Turn three adapter functions into the SessionBrowser contract."""
+
+    def __init__(self, scan: Callable, read: Callable, resolve_ref: Callable):
+        self._scan = scan
+        self._read = read
+        self._resolve_ref = resolve_ref
+
+    def scan(self, cache):
+        return self._scan(cache)
+
+    def read(self, ref):
+        return self._read(ref)
+
+    def resolve_ref(self, ref):
+        return self._resolve_ref(ref)
+
+
+class ModelCatalogAdapter:
+    """Expose adapter model discovery through the shared ModelCatalog protocol."""
+
+    def __init__(self, discover: Callable, fallback: Callable):
+        self._discover = discover
+        self._fallback = fallback
+
+    def discover(self):
+        return self._discover()
+
+    def fallback(self):
+        return self._fallback()
+
+
+def build_plugin(manifest: ToolManifest, browser: BrowserAdapter, *,
+                 migration_target=None, editor=None, authoring=None,
+                 verifier=None, lifecycle=None, models=None) -> ToolPlugin:
+    """Assemble a plugin without duplicating lifecycle and binary wiring."""
+    executables.register_fallback_dirs(
+        manifest.executables, manifest.fallback_bin_dirs)
+    if lifecycle is not None and manifest.executables:
+        lifecycle.executable = manifest.executables[0]
+    return ToolPlugin(
+        manifest=manifest,
+        browser=browser,
+        migration_source=TreeMigrationSource(browser),
+        migration_target=migration_target,
+        editor=editor,
+        authoring=authoring,
+        verifier=verifier,
+        lifecycle=lifecycle,
+        models=models,
+    )
