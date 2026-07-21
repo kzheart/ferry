@@ -36,15 +36,17 @@ def test_every_writer_mapping_has_a_fidelity_verdict(writers, fidelity):
     assert set(writers) <= set(fidelity)
 
 
-@pytest.mark.parametrize(("target", "op", "expected"), [
-    (ClaudeMigrationTarget(), CanonicalOp.SHELL_EXEC, "native"),
-    (CodexMigrationTarget(), CanonicalOp.SHELL_EXEC, "native"),
-    (OpenCodeMigrationTarget(), CanonicalOp.SHELL_EXEC, "native"),
-    (ClaudeMigrationTarget(), CanonicalOp.FS_READ, "native"),
-    (CodexMigrationTarget(), CanonicalOp.FS_READ, "degrade"),
-    (OpenCodeMigrationTarget(), CanonicalOp.FS_READ, "native"),
-    (ClaudeMigrationTarget(), "web.fetch", "degrade"),
+@pytest.mark.parametrize(("target", "fidelity"), [
+    (ClaudeMigrationTarget(), CLAUDE_FIDELITY),
+    (CodexMigrationTarget(), CODEX_FIDELITY),
+    (OpenCodeMigrationTarget(), OPENCODE_FIDELITY),
 ])
-def test_migration_preview_uses_target_writer_fidelity(target, op, expected):
+@pytest.mark.parametrize("op", sorted(CANONICAL_OPS))
+def test_migration_preview_uses_the_full_target_mapping_matrix(target, fidelity, op):
     call = ToolCall(name="test", op=op, input={}, output="")
-    assert target.classify_tool_call(call) == expected
+    assert target.classify_tool_call(call) == fidelity[op]
+
+
+def test_unknown_operation_is_always_a_degradation():
+    call = ToolCall(name="test", op="web.fetch", input={}, output="")
+    assert ClaudeMigrationTarget().classify_tool_call(call) == "degrade"
