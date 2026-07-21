@@ -45,8 +45,12 @@ export function repoOf(dir) {
   return parts[parts.length - 1] || dir;
 }
 
+import { toolReferenceKind } from "../../api/contract/tools.js";
+
 export const sessionRef = session =>
-  session.tool === "opencode" ? session.id : (session.path || session.id);
+  toolReferenceKind(session.tool) === "id"
+    ? session.id
+    : (session.path || session.id);
 
 export function toRounds(messages, authoredTurns) {
   if (authoredTurns?.length) {

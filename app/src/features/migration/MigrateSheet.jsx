@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openTerminal, rpc } from "../../api/transport/rpc.js";
-import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { TOOL_NAME, toolsWithCapability } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
@@ -90,9 +90,10 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
 
 export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, onDone }) {
   const { t } = useTranslation();
-  const targets = TOOLS.filter(t2 => t2 !== meta.tool);
+  // Only agents that declare migrate-target are valid write destinations.
+  const targets = toolsWithCapability("migrate-target").filter(t2 => t2 !== meta.tool);
   const [step, setStep] = useState("target");
-  const [target, setTarget] = useState(targets[0]);
+  const [target, setTarget] = useState(targets[0] || "");
   const [probeOn, setProbeOn] = useState(!!defaultProbe);
   const [dry, setDry] = useState(null);        // { [target]: result }
   const [dryErr, setDryErr] = useState(null);
@@ -187,7 +188,12 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           {t("migration:target.sourceSession")} <b style={{ color: "var(--tx2)" }}>{meta.title || meta.id}</b> · {scopeLabel}</div>
         <div style={{ fontSize: 12, color: "var(--tx4)", marginBottom: 14 }}>
           {t("migration:target.chooseHint")}</div>
-        {targets.map(t2 => {
+        {!targets.length ? (
+          <div style={{ fontSize: 12, color: "var(--tx3b)", lineHeight: 1.55,
+            border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px" }}>
+            {t("migration:target.noTargets")}
+          </div>
+        ) : targets.map(t2 => {
           const on = target === t2;
           const inst = installed(t2);
           return (
@@ -384,7 +390,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   }
 
   const canBack = step === "preview" || step === "confirm";
-  const canNext = step === "target" ? !!target
+  const canNext = step === "target" ? !!target && installed(target)
     : step === "preview" ? !!d
     : step === "confirm";
 
