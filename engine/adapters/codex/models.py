@@ -4,9 +4,13 @@ import json
 import subprocess
 from pathlib import Path
 
+from ...infrastructure import executables
+
 
 def discover():
-    result = subprocess.run(["codex", "debug", "models"], capture_output=True, text=True, timeout=60)
+    result = subprocess.run(executables.argv("codex", "debug", "models"),
+                            capture_output=True, text=True, timeout=60,
+                            **executables.RUN_FLAGS)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout or "codex debug models 失败")[:300])
     data = json.loads(result.stdout)

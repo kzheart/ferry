@@ -14,6 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from ...infrastructure import executables
+
 
 class OpenCodeApiError(RuntimeError):
     pass
@@ -38,9 +40,11 @@ class OpenCodeApi:
             "OPENCODE_SERVER_PASSWORD": self.password,
         })
         self.process = subprocess.Popen(
-            ["opencode", "serve", "--pure", "--hostname", "127.0.0.1", "--port", "0"],
+            executables.argv("opencode", "serve", "--pure",
+                             "--hostname", "127.0.0.1", "--port", "0"),
             cwd=self.cwd, env=env, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, bufsize=1)
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+            **executables.RUN_FLAGS)
         lines = queue.Queue()
         def read_lines():
             for line in self.process.stdout:
