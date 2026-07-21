@@ -10,7 +10,7 @@
     "title": "Probe model",
     "loading": "Loading…",
     "sourceCli": "Live list from target CLI",
-    "sourceAlias": "Claude doc alias (no official models command)",
+    "sourceAlias": "CLI documentation alias (no official models command)",
     "sourceFallback": "Discovery failed, using built-in fallback",
     "sourceCache": "Local cache",
     "sourceUser": "User config",
@@ -26,6 +26,7 @@
     "scopeFull": "Full session",
     "scopeToTurn": "Migrate only up to turn {{n}}",
     "chooseHint": "Choose the migration target tool (source session stays read-only and is not modified)",
+    "noTargets": "No installed agents currently advertise migration write support.",
     "notInstalled": "Not detected, cannot be used as a target",
     "installedMeta": "v{{version}} · writes to {{tool}} local session store"
   },

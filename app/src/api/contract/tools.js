@@ -18,6 +18,27 @@ export function hydrateTools(list) {
 
 export const toolManifests = () => manifests;
 
+export function toolManifest(tool) {
+  return manifests.find(item => item.id === tool) || null;
+}
+
+export function toolCapabilities(tool) {
+  return toolManifest(tool)?.capabilities || [];
+}
+
+export function toolHasCapability(tool, capability) {
+  return toolCapabilities(tool).includes(capability);
+}
+
+export function toolsWithCapability(capability) {
+  return TOOLS.filter(tool => toolHasCapability(tool, capability));
+}
+
+// path: prefer local file path; id: prefer stable session id (e.g. database agents).
+export function toolReferenceKind(tool) {
+  return toolManifest(tool)?.reference_kind === "id" ? "id" : "path";
+}
+
 export async function loadTools() {
   try { hydrateTools(await rpc("tools")); } catch { /* 引擎不可用时保持空清单 */ }
 }

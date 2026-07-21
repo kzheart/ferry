@@ -10,7 +10,7 @@
     "title": "探针模型",
     "loading": "加载中…",
     "sourceCli": "来自目标 CLI 实时列表",
-    "sourceAlias": "Claude 文档 alias(无官方 models 命令)",
+    "sourceAlias": "CLI 文档 alias(无官方 models 命令)",
     "sourceFallback": "发现失败,使用内置回退",
     "sourceCache": "本地缓存",
     "sourceUser": "用户配置",
@@ -26,6 +26,7 @@
     "scopeFull": "完整会话",
     "scopeToTurn": "仅迁移到第 {{n}} 轮",
     "chooseHint": "选择迁移目标工具(源会话保持只读,不会被修改)",
+    "noTargets": "当前没有已声明支持迁移写入的 Agent。",
     "notInstalled": "未检测到安装,无法作为目标",
     "installedMeta": "v{{version}} · 写入 {{tool}} 的本地会话存储"
   },

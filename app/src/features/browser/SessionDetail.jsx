@@ -1,8 +1,7 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME } from "../../api/contract/tools.js";
-import { resumeDescriptor } from "../../api/contract/tools.js";
+import { TOOL_NAME, resumeDescriptor, toolHasCapability } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds } from "../../domain/sessions/sessionModel.js";
 import { rpc } from "../../api/transport/rpc.js";
@@ -395,6 +394,7 @@ export default memo(function SessionDetail({ meta, data, error,
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
   const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
+  const canMigrate = toolHasCapability(meta.tool, "migrate-source");
   const [copied, setCopied] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
 
@@ -448,9 +448,11 @@ export default memo(function SessionDetail({ meta, data, error,
                 title={copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}
                 style={copied ? { color: "var(--ok)" } : undefined}>
                 {copied ? <CheckIcon size={15} /> : <TerminalIcon />}</button>
-              <button data-guide="migrate" className="ftool-btn"
-                title={tt("browser:session.migrate")}
-                onClick={() => onOpenMigrate(null)}><MigrateIcon /></button>
+              {canMigrate && (
+                <button data-guide="migrate" className="ftool-btn"
+                  title={tt("browser:session.migrate")}
+                  onClick={() => onOpenMigrate(null)}><MigrateIcon /></button>
+              )}
             </div>
           </div>
           {subCount > 0 && (
@@ -484,7 +486,7 @@ export default memo(function SessionDetail({ meta, data, error,
               onUpdateReply={items => { const o = opFor(r.n, "assistant-reply");
                 if (o) updateOp(o.id, { items }); }}
               onCancelReply={() => { const o = opFor(r.n, "assistant-reply"); if (o) removeOp(o.id); }}
-              migratable={r.n < rounds.length}
+              migratable={canMigrate && r.n < rounds.length}
               scopeOn={scope === r.n}
               onScope={() => setScope(r.n)}
                onClearScope={() => setScope(null)}

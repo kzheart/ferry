@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { canReveal, onMenu, openTerminal, revealPath, rpc,
   preloadWindow, startWindowDrag, toggleWindowMaximize } from "../api/transport/rpc.js";
-import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
+import { TOOLS, TOOL_NAME, toolHasCapability } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
@@ -260,9 +260,11 @@ export default function App() {
   ] : ctxSess ? [
     { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir).then(openTerminal).catch(() => {}) },
-    { label: t("app:ctx.migrateTo"), onClick: () => {
+    ...(toolHasCapability(ctxSess.tool, "migrate-source") ? [{
+      label: t("app:ctx.migrateTo"), onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
-        setMig({ scope: null }); } },
+        setMig({ scope: null }); },
+    }] : []),
     { sep: true },
     { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
     { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
@@ -572,7 +574,7 @@ export default function App() {
   const paneCfg = {
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
       query: q, onQuery: e => setQ(e.target.value),
-      filterCount: (libF.src.length < 3 ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
+      filterCount: (libF.src.length < TOOLS.length ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
         (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
         (libF.tag ? 1 : 0),
       tokens: libTokens,
@@ -581,7 +583,7 @@ export default function App() {
         : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan, t) }) : "" }) },
     history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
       query: hq, onQuery: e => setHq(e.target.value),
-      filterCount: (histF.src.length < 3 ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
+      filterCount: (histF.src.length < TOOLS.length ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
         (histF.status !== "all" ? 1 : 0) + (histF.time !== "all" ? 1 : 0),
       tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
   }[view] || null;
