@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "ferry"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fix-path-env",
  "objc2-app-kit",
