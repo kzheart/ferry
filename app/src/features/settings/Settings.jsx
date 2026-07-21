@@ -200,7 +200,7 @@ const UPDATE_COPY_KEY = {
 };
 
 function Updates({ s, set, updater }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { phase, currentVersion, update, downloaded, total, error, failedAction, supported,
     checkForUpdate, downloadUpdate, installAndRestart } = updater;
   const checking = phase === "checking";
@@ -231,7 +231,7 @@ function Updates({ s, set, updater }) {
                 {t(UPDATE_COPY_KEY[phase] || UPDATE_COPY_KEY.idle)}
               </div>
               {update && <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 3 }}>
-                v{currentVersion} → v{update.version}{update.date ? ` · ${new Date(update.date).toLocaleDateString()}` : ""}
+                v{currentVersion} → v{update.version}{update.date ? ` · ${new Date(update.date).toLocaleDateString(i18n.language)}` : ""}
               </div>}
               {error && <div style={{ fontSize: 11.5, color: "var(--err-deep)", marginTop: 5,
                 overflowWrap: "anywhere" }}>{error}</div>}

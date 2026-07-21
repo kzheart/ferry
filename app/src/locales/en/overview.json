@@ -28,7 +28,8 @@
   },
   "bump": {
     "title": "Model rankings over time",
-    "sub": "Monthly rank · by token share"
+    "sub": "Monthly rank · by token share",
+    "aria": "How model rankings shifted month over month, by token usage"
   },
   "clock": {
     "title": "Rhythm",
@@ -37,7 +38,8 @@
     "night": "21:00 – 04:00",
     "day": "Daytime",
     "peakAt": "Peak at {{hour}}:00.",
-    "nightNote": "Late nights (after 21:00) make up {{pct}}% — go easy on yourself."
+    "nightNote": "Late nights (after 21:00) make up {{pct}}% — go easy on yourself.",
+    "aria": "Session start times across the 24-hour day"
   },
   "heat": {
     "title": "Activity heatmap",
@@ -45,7 +47,8 @@
     "streak": "Current {{cur}}d · longest {{max}}d",
     "less": "Less",
     "more": "More",
-    "total": "{{n}} sessions"
+    "total": "{{n}} sessions",
+    "aria": "Daily session activity heatmap"
   },
   "cost": {
     "title": "Estimated cost",

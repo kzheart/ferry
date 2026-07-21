@@ -87,6 +87,12 @@ export function initI18n() {
       },
       react: { useSuspense: false },
     });
+  // 日期按当前语言本地化,不手写月份/星期译文——新增语言时自动跟随。
+  // 注意:必须用 formatter API,i18next v21 起 interpolation.format 已不再生效。
+  i18n.services.formatter.add("monthDay", (value, lng) =>
+    value instanceof Date
+      ? value.toLocaleDateString(lng, { month: "short", day: "numeric" })
+      : value);
   return i18n;
 }
 

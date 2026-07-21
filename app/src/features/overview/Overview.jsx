@@ -21,6 +21,13 @@ function fmtTokens(n) {
 }
 const fmtCost = n => "$" + Math.round(n || 0).toLocaleString("en-US");
 
+// 月份/星期名按语言本地化。2024-01-01 是周一,用它推出 dow 0=周一 的顺序。
+const monthName = (index, locale) =>
+  new Date(2024, index, 1).toLocaleDateString(locale, { month: "short" });
+const weekdayNames = locale =>
+  Array.from({ length: 7 }, (_, d) =>
+    new Date(2024, 0, 1 + d).toLocaleDateString(locale, { weekday: "short" }));
+
 // Catmull-Rom → 三次贝塞尔平滑
 function smooth(pts) {
   if (pts.length < 2) return "";
@@ -80,7 +87,7 @@ function Spark({ values, w = 72, h = 24 }) {
   );
 }
 
-function Bump({ bump }) {
+function Bump({ bump, locale, label }) {
   const W = 720, H = 200, L = 60, R = 110, T = 22, B = 26;
   const { months, models, ranks } = bump;
   const n = months.length;
@@ -90,7 +97,7 @@ function Bump({ bump }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet"
       style={{ display: "block" }} role="img"
-      aria-label="各模型每月按 token 用量排名的变迁">
+      aria-label={label}>
       {Array.from({ length: ranks }, (_, i) => i + 1).map(r => (
         <g key={r}>
           <line x1={L} x2={W - R} y1={y(r)} y2={y(r)} stroke="var(--grid)" strokeWidth="1" />
@@ -98,7 +105,7 @@ function Bump({ bump }) {
         </g>
       ))}
       {months.map((m, i) => (
-        <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{m}月</text>
+        <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{monthName(m, locale)}</text>
       ))}
       {order.map(mi => {
         const m = models[mi];
@@ -136,7 +143,7 @@ function Clock({ clock, peakHour, t }) {
     return `M${A[0]} ${A[1]} A${R0} ${R0} 0 0 1 ${Bp[0]} ${Bp[1]} L${C[0]} ${C[1]} A${r} ${r} 0 0 0 ${D[0]} ${D[1]} Z`;
   };
   return (
-    <svg viewBox="0 0 260 232" width="100%" height="232" role="img" aria-label="24 小时会话开始时刻分布">
+    <svg viewBox="0 0 260 232" width="100%" height="232" role="img" aria-label={t("overview:clock.aria")}>
       {[0.5, 1].map(f => (
         <circle key={f} cx={CX} cy={CY} r={R0 + (R1 - R0) * f} fill="none" stroke="var(--grid)" strokeWidth="1" />
       ))}
@@ -162,7 +169,7 @@ function Clock({ clock, peakHour, t }) {
   );
 }
 
-function Heatmap({ heatmap }) {
+function Heatmap({ heatmap, locale, label }) {
   const { grid, max } = heatmap;
   const cell = 11, gap = 3, LX = 26, TY = 8;
   const level = c => {
@@ -171,11 +178,13 @@ function Heatmap({ heatmap }) {
     return r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1;
   };
   const width = LX + grid.length * (cell + gap);
-  const dow = ["一", "", "三", "", "五", "", "日"];
+  // 隔行显示(周一/三/五/日),避免标签挤在一起
+  const names = weekdayNames(locale);
+  const dow = names.map((s, d) => (d % 2 === 0 ? s : ""));
   return (
     <svg viewBox={`0 0 ${width} ${TY + 7 * (cell + gap)}`} width="100%"
       style={{ display: "block", minWidth: width }}
-      role="img" aria-label="按天的会话活跃热力图">
+      role="img" aria-label={label}>
       {dow.map((s, d) => s && (
         <text key={d} x={LX - 6} y={TY + d * (cell + gap) + 9} textAnchor="end" fill="var(--tx5)" fontSize="9" fontFamily="var(--font-ui)">{s}</text>
       ))}
@@ -274,7 +283,8 @@ function insightCopy(ins, t) {
 // ---------- 主组件 ----------
 export default function Overview({ sessions = [], historyRows = [], snapItems = [],
   prices = {} }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language;
   const [scope, setScope] = useState("30");
   const [tool, setTool] = useState("all");
   const data = useMemo(() => computeOverview({
@@ -368,7 +378,7 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
                 <div style={{ flex: "2 1 420px", minWidth: 0 }}>
                   <Card title={t("overview:bump.title")} sub={t("overview:bump.sub")} fill>
                     <div style={{ flex: 1, display: "flex", alignItems: "stretch", minHeight: 200 }}>
-                      <Bump bump={data.bump} />
+                      <Bump bump={data.bump} locale={locale} label={t("overview:bump.aria")} />
                     </div>
                   </Card>
                 </div>
@@ -390,7 +400,7 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
             <Card title={t("overview:heat.title")} sub={t("overview:heat.sub", { weeks: data.heatmap.weeks })}
               extra={<span style={{ fontSize: 11, color: "var(--tx4b)", ...num }}>{t("overview:heat.streak", { cur: data.kpis.streak.value, max: data.kpis.streak.longest })}</span>}>
               <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-                <Heatmap heatmap={data.heatmap} />
+                <Heatmap heatmap={data.heatmap} locale={locale} label={t("overview:heat.aria")} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 11, color: "var(--tx4b)" }}>
                 <span>{t("overview:heat.less")}</span>

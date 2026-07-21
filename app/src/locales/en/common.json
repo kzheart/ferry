@@ -31,8 +31,10 @@
     "minutesAgo": "{{n}} min ago",
     "hoursAgo": "{{n}} hr ago",
     "yesterdayAt": "yesterday {{time}}",
-    "daysAgo": "{{n}} days ago",
-    "weeksAgo": "{{n}} weeks ago",
-    "monthDay": "Month {{month}} day {{day}}"
+    "monthDay": "{{date, monthDay}}",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "weeksAgo_one": "{{count}} week ago",
+    "weeksAgo_other": "{{count}} weeks ago"
   }
 }

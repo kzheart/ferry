@@ -15,10 +15,16 @@ export function fmtTime(ms, t) {
     const time = `${pad2(tm.getHours())}:${pad2(tm.getMinutes())}`;
     return t ? t("common:time.yesterdayAt", { time }) : `yesterday ${time}`;
   }
-  if (d < 7 * 86400e3) return t ? t("common:time.daysAgo", { n: Math.floor(d / 86400e3) }) : `${Math.floor(d / 86400e3)}d`;
-  if (d < 30 * 86400e3) return t ? t("common:time.weeksAgo", { n: Math.floor(d / 7 / 86400e3) }) : `${Math.floor(d / 7 / 86400e3)}w`;
+  if (d < 7 * 86400e3) {
+    const n = Math.floor(d / 86400e3);
+    return t ? t("common:time.daysAgo", { count: n }) : `${n}d`;
+  }
+  if (d < 30 * 86400e3) {
+    const n = Math.floor(d / 7 / 86400e3);
+    return t ? t("common:time.weeksAgo", { count: n }) : `${n}w`;
+  }
   const tm = new Date(ms);
-  return t ? t("common:time.monthDay", { month: tm.getMonth() + 1, day: tm.getDate() })
+  return t ? t("common:time.monthDay", { date: tm })
     : `${tm.getMonth() + 1}/${tm.getDate()}`;
 }
 
