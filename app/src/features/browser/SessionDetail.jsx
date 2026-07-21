@@ -1,5 +1,5 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { resumeDescriptor } from "../../api/contract/tools.js";
@@ -277,7 +277,8 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
   );
 }
 
-export default function SessionDetail({ meta, data, error,
+// memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
+export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
   onOpenMigrate, onRefresh, refreshing, editCaps, authoringCaps }) {
@@ -393,4 +394,4 @@ export default function SessionDetail({ meta, data, error,
       )}
     </div>
   );
-}
+});

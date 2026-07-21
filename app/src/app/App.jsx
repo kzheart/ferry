@@ -446,6 +446,32 @@ export default function App() {
   const onRowPin = useCallback(id => rowHandlers.current.pin(id), []);
   const onRowDelete = useCallback(id => rowHandlers.current.delete(id), []);
 
+  // 详情区回调:同样经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会
+  // 因侧边栏交互(展开分组/多选/悬停)产生的新闭包全量重渲染整条时间线
+  const detailFns = useRef({});
+  detailFns.current = {
+    discardAll: () => setOps([]),
+    setScope, addOp, removeOp, updateOp, startReplyEdit, authoringError,
+    openDiff, apply: () => setConfirmApply(true),
+    openMigrate: sc => setMig({ scope: sc ?? scope }),
+    refresh: refreshDetail,
+  };
+  const detailActs = useMemo(() => ({
+    onDiscardAll: () => detailFns.current.discardAll(),
+    setScope: v => detailFns.current.setScope(v),
+    addOp: (...a) => detailFns.current.addOp(...a),
+    removeOp: (...a) => detailFns.current.removeOp(...a),
+    updateOp: (...a) => detailFns.current.updateOp(...a),
+    startReplyEdit: (...a) => detailFns.current.startReplyEdit(...a),
+    authoringError: (...a) => detailFns.current.authoringError(...a),
+    onOpenDiff: () => detailFns.current.openDiff(),
+    onApply: () => detailFns.current.apply(),
+    onOpenMigrate: sc => detailFns.current.openMigrate(sc),
+    onRefresh: () => detailFns.current.refresh(),
+  }), []);
+  const detailMeta = useMemo(() => cur && metaMap[cur.id]?.name
+    ? { ...cur, title: metaMap[cur.id].name } : cur, [cur, metaMap]);
+
   const libGroups = useMemo(() => {
     const rowOf = s => {
       const m = metaMap[s.id] || {};
@@ -460,8 +486,6 @@ export default function App() {
     const pinnedRows = sessions.filter(s => isPinned(s) && matchLib(s));
     if (pinnedRows.length) {
       groups.push({ key: "pinned", label: t("app:library.pinned"), count: pinnedRows.length,
-        expanded: !(collapsedGroups.pinned ?? false),
-        onToggle: () => setCollapsedGroups(g => ({ ...g, pinned: !(g.pinned ?? false) })),
         rows: pinnedRows.map(rowOf) });
     }
     BUCKETS.filter(k => timeBuckets.includes(k)).forEach(key => {
@@ -469,13 +493,14 @@ export default function App() {
         !isPinned(s) && bucketOf(s.updated) === key && matchLib(s));
       if (!rows.length) return;
       groups.push({ key, label: t(`common:bucket.${key}`), count: rows.length,
-        expanded: !(collapsedGroups[key] ?? false),
-        onToggle: () => setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })),
         rows: rows.map(rowOf) });
     });
     return groups;
-  }, [sessions, libF, ql, collapsedGroups, migratedIds, metaMap, t]);
-  visibleIds.current.library = libGroups.filter(g => g.expanded)
+    // 折叠状态刻意不进依赖:展开/收起只切换渲染,不重算 3000+ 行数据
+  }, [sessions, libF, ql, migratedIds, metaMap, t]);
+  const onToggleGroup = useCallback(key =>
+    setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })), []);
+  visibleIds.current.library = libGroups.filter(g => !(collapsedGroups[g.key] ?? false))
     .flatMap(g => g.rows.map(r => r.id));
 
   const libTokens = [];
@@ -645,6 +670,7 @@ export default function App() {
                     fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
                     gap: 8 }}><Spinner /> {t("app:detail.scanningSessions")}</div>
                 : <LibraryList groups={libGroups}
+                    collapsed={collapsedGroups} onToggle={onToggleGroup}
                     empty={libGroups.length === 0} onClear={clearLibF}
                     selectedId={selId} multiSel={multiSel}
                     onRowClick={onRowClick} onRowPin={onRowPin}
@@ -687,16 +713,17 @@ export default function App() {
             prices={pricing?.prices || {}} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
-            meta={metaMap[cur.id]?.name ? { ...cur, title: metaMap[cur.id].name } : cur}
+            meta={detailMeta}
             data={detail?.data} error={detail?.error}
-            onDiscardAll={() => setOps([])}
-            scope={scope} setScope={setScope}
-            ops={ops} addOp={addOp} removeOp={removeOp} updateOp={updateOp}
+            onDiscardAll={detailActs.onDiscardAll}
+            scope={scope} setScope={detailActs.setScope}
+            ops={ops} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
+            updateOp={detailActs.updateOp}
             editCaps={editCaps} authoringCaps={authoringCaps}
-            startReplyEdit={startReplyEdit} authoringError={authoringError}
-            onOpenDiff={openDiff} onApply={() => setConfirmApply(true)} applying={applying}
-            onOpenMigrate={sc => setMig({ scope: sc ?? scope })}
-            onRefresh={refreshDetail} refreshing={refreshing} />
+            startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
+            onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
+            onOpenMigrate={detailActs.onOpenMigrate}
+            onRefresh={detailActs.onRefresh} refreshing={refreshing} />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--tx5)", fontSize: 13 }}>
