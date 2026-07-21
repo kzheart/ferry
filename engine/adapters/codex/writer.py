@@ -15,6 +15,7 @@ from pathlib import Path
 from ...domain.model import Session
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
+from .registry import register_tree
 
 GOLDEN = resource_path("golden", "codex")
 
@@ -279,7 +280,8 @@ def _destination(sessions_dir: Path, sid: str, ordinal: int) -> Path:
 
 
 def write(sess: Session, cwd: str | None = None,
-          sessions_dir: str | Path | None = None) -> tuple[str, Path]:
+          sessions_dir: str | Path | None = None,
+          state_db: str | Path | None = None) -> tuple[str, Path]:
     """写出整棵 rollout 树,返回根会话的 (session_id, 文件路径)。"""
     tpl = _load_templates()
     root_id = _uuid7()
@@ -289,6 +291,8 @@ def write(sess: Session, cwd: str | None = None,
     nodes = list(sess.walk())
     ids = {id(node): root_id if node is sess else _uuid7() for node in nodes}
     paths = {}
+    parents = {}
+    working_dirs = {}
 
     def emit(node: Session, parent: Session | None, depth: int,
              agent_path: str | None, ordinal: int):
@@ -309,6 +313,8 @@ def write(sess: Session, cwd: str | None = None,
                                   for line in records) + "\n")
         tmp.rename(dest)
         paths[id(node)] = dest
+        parents[id(node)] = ids[id(parent)] if parent else None
+        working_dirs[id(node)] = node_cwd
 
         next_ordinal = ordinal + 1
         for child_index, child in enumerate(node.children):
@@ -319,6 +325,13 @@ def write(sess: Session, cwd: str | None = None,
 
     try:
         emit(sess, None, 0, sess.agent_path or "/root", 0)
+        registry = (Path(state_db).expanduser() if state_db else
+                    output_root.parent / "state_5.sqlite")
+        register_tree(registry, [
+            (node, ids[id(node)], paths[id(node)], parents[id(node)],
+             working_dirs[id(node)])
+            for node in nodes
+        ], cli_version=str(tpl["session_meta"]["payload"].get("cli_version", "")))
     except Exception:
         for path in paths.values():
             path.unlink(missing_ok=True)
