@@ -17,13 +17,22 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const [editCaps, setEditCaps] = useState(null);
   const [authoringCaps, setAuthoringCaps] = useState(null);
   const capabilityRequest = useRef(0);
+  const capsCache = useRef({});   // tool -> {edit, authoring},能力按工具固定,切会话不重复请求
 
   const resetSelection = () => { setScope(null); setOps([]); };
   const loadCapabilities = tool => {
     const request = ++capabilityRequest.current;
+    const cached = capsCache.current[tool];
+    if (cached?.edit && cached?.authoring) {
+      setEditCaps(cached.edit);
+      setSaveMode(cached.edit.save_as ? "saveas" : "inplace");
+      setAuthoringCaps(cached.authoring);
+      return;
+    }
     setEditCaps(null);
     setAuthoringCaps(null);
     rpc("edit_capabilities", { tool }).then(caps => {
+      (capsCache.current[tool] ||= {}).edit = caps;
       if (request !== capabilityRequest.current) return;
       setEditCaps(caps);
       setSaveMode(caps.save_as ? "saveas" : "inplace");
@@ -32,6 +41,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
         setEditCaps({ operations: [], inplace: false, save_as: false });
     });
     rpc("authoring_capabilities", { tool }).then(caps => {
+      (capsCache.current[tool] ||= {}).authoring = caps;
       if (request === capabilityRequest.current) setAuthoringCaps(caps);
     }).catch(() => {
       if (request === capabilityRequest.current)

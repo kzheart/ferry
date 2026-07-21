@@ -1,5 +1,5 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { canReveal, openTerminal, revealPath, rpc } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
@@ -110,13 +110,22 @@ export default function App() {
     setToast({ kind: "ok", title: t("app:toast.metaUpdated"), desc: t("app:toast.metaUpdatedDesc", { n: multiSel.length }) });
   };
 
+  // 详情 LRU 缓存:切回看过的会话立即渲染旧内容,后台再取最新
+  const detailCache = useRef(new Map());
+  const cacheDetail = (id, data) => {
+    const c = detailCache.current;
+    c.delete(id); c.set(id, data);
+    if (c.size > 30) c.delete(c.keys().next().value);
+  };
+
   const select = id => {
     setSelId(id); resetSelection();
     const s = byId[id] || sessions.find(x => x.id === id);
     if (!s) return;
-    setDetail({ id, data: null });
+    setDetail({ id, data: detailCache.current.get(id) || null });
     rpc("show", { tool: s.tool, ref: sessionRef(s) })
-      .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
+      .then(data => { cacheDetail(id, data);
+        setDetail(d => d?.id === id ? { ...d, data } : d); })
       .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
     loadCapabilities(s.tool);
   };
@@ -128,6 +137,7 @@ export default function App() {
     setRefreshing(true);
     try {
       const data = await rpc("show", { tool: s.tool, ref: sessionRef(s) });
+      cacheDetail(selId, data);
       setDetail(d => d?.id === selId ? { id: selId, data } : d);
     } catch (e) {
       setDetail(d => d?.id === selId ? { ...d, error: e.message } : d);
@@ -163,6 +173,7 @@ export default function App() {
     setToast({ kind: "run", title: t("app:toast.deleting"), desc: t("app:toast.deletingDesc") });
     try {
       const r = await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+      detailCache.current.delete(s.id);
       if (selId === s.id) { setSelId(null); setDetail(null); }
       doScan();
       setToast({ kind: "ok", title: t("app:toast.deleteDone"),
@@ -186,6 +197,7 @@ export default function App() {
         desc: t("app:toast.batchProgress", { done: done + fail, total: targets.length }) });
       try {
         await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+        detailCache.current.delete(s.id);
         done++;
       } catch { fail++; }
     }
@@ -356,6 +368,40 @@ export default function App() {
         (s.dir || "").toLowerCase().includes(ql) || s.id.toLowerCase().includes(ql));
   };
 
+  // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
+  const rowHandlers = useRef({});
+  rowHandlers.current.click = (id, e) => {
+    if (e.metaKey || e.ctrlKey) {           // ⌘点击:切换多选
+      setMultiSel(sel => {
+        const base = sel.length ? sel : (selId ? [selId] : []);
+        return base.includes(id)
+          ? base.filter(x => x !== id) : [...base, id];
+      });
+      return;
+    }
+    if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
+      const ids = visibleIds.current.library || [];
+      const a = ids.indexOf(selId), b = ids.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
+        return;
+      }
+    }
+    setMultiSel([]); select(id);
+  };
+  rowHandlers.current.context = (id, e) => {
+    e.preventDefault();
+    if (multiSel.length > 1 && multiSel.includes(id)) {
+      setCtxMenu({ x: e.clientX, y: e.clientY, id, multi: true });
+      return;
+    }
+    setMultiSel([]);
+    if (id !== selId) select(id);
+    setCtxMenu({ x: e.clientX, y: e.clientY, id });
+  };
+  const onRowClick = useCallback((id, e) => rowHandlers.current.click(id, e), []);
+  const onRowContext = useCallback((id, e) => rowHandlers.current.context(id, e), []);
+
   const libGroups = useMemo(() => {
     const rowOf = s => {
       const m = metaMap[s.id] || {};
@@ -363,37 +409,7 @@ export default function App() {
         dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
         pinned: !!m.pinned, archived: !!m.archived, tags: m.tags,
         hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
-        hasMig: migratedIds.has(s.id), selected: s.id === selId,
-        multi: multiSel.includes(s.id),
-        onClick: e => {
-          if (e.metaKey || e.ctrlKey) {           // ⌘点击:切换多选
-            setMultiSel(sel => {
-              const base = sel.length ? sel : (selId ? [selId] : []);
-              return base.includes(s.id)
-                ? base.filter(x => x !== s.id) : [...base, s.id];
-            });
-            return;
-          }
-          if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
-            const ids = visibleIds.current.library || [];
-            const a = ids.indexOf(selId), b = ids.indexOf(s.id);
-            if (a >= 0 && b >= 0) {
-              setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
-              return;
-            }
-          }
-          setMultiSel([]); select(s.id);
-        },
-        onContext: e => {
-          e.preventDefault();
-          if (multiSel.length > 1 && multiSel.includes(s.id)) {
-            setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id, multi: true });
-            return;
-          }
-          setMultiSel([]);
-          if (s.id !== selId) select(s.id);
-          setCtxMenu({ x: e.clientX, y: e.clientY, id: s.id });
-        } };
+        hasMig: migratedIds.has(s.id) };
     };
     const isPinned = s => !!(metaMap[s.id] || {}).pinned;
     const groups = [];
@@ -414,7 +430,7 @@ export default function App() {
         rows: rows.map(rowOf) });
     });
     return groups;
-  }, [sessions, libF, ql, collapsedGroups, selId, migratedIds, metaMap, multiSel]);
+  }, [sessions, libF, ql, collapsedGroups, migratedIds, metaMap, t]);
   visibleIds.current.library = libGroups.filter(g => g.expanded)
     .flatMap(g => g.rows.map(r => r.id));
 
@@ -588,7 +604,9 @@ export default function App() {
                     fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center",
                     gap: 8 }}><Spinner /> {t("app:detail.scanningSessions")}</div>
                 : <LibraryList groups={libGroups}
-                    empty={libGroups.length === 0} onClear={clearLibF} />)}
+                    empty={libGroups.length === 0} onClear={clearLibF}
+                    selectedId={selId} multiSel={multiSel}
+                    onRowClick={onRowClick} onRowContext={onRowContext} />)}
             {view === "history" && (
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
