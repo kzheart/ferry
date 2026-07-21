@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
-from ...infrastructure.snapshots import BACKUP_DIR
+from ...infrastructure.snapshots import snapshot_payload
 from ..base.codec import positive_turn, select_span
 from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size
 from . import api as opencode_api
@@ -80,15 +79,10 @@ class OpenCodeBackend(EditBackend):
                 for message in payload.get("messages", [])
                 for part in message.get("parts", []) if part.get("id")}
 
-    def snapshot(self, doc, reason_code="snapshot.before_edit"):
-        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        path = BACKUP_DIR / f"{doc.ref}-{time.time_ns()}.jsonl"
+    def snapshot(self, doc, reason_code="snapshot.before_edit", extra=None):
         original = (doc.context or {}).get("original", doc.data)
-        path.write_text(json.dumps(original, ensure_ascii=False) + "\n")
-        path.with_suffix(".meta.json").write_text(json.dumps({
-            "reason_code": reason_code, "tool": self.name, "source": doc.ref,
-        }, ensure_ascii=False))
-        return path
+        return snapshot_payload(doc.ref, json.dumps(original, ensure_ascii=False) + "\n",
+                                reason_code, self.name, doc.ref, extra)
 
     def restore_snapshot(self, snapshot, doc):
         original = json.loads(Path(snapshot).read_text().splitlines()[0])

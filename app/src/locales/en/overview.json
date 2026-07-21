@@ -82,11 +82,6 @@
       "body": "{{repo}} cost {{cost}} in the last 7 days, {{pct}}% more than the week before — mostly in a few long sessions. Starting fresh sooner would save a chunk.",
       "chartLabel": "Last 5 weeks · {{repo}}"
     },
-    "idle": {
-      "eyebrow": "Project",
-      "title": "{{repo}}",
-      "body": "Untouched for {{days}} days. Either pick it back up or clear its snapshots to free space."
-    },
     "pingpong": {
       "eyebrow": "Migration",
       "title": "{{n}} round trips",
@@ -106,11 +101,6 @@
       "eyebrow": "Rhythm",
       "title": "{{days}}-day streak",
       "body": "{{days}} days of activity in a row now — that flow is worth keeping."
-    },
-    "snapshot": {
-      "eyebrow": "Snapshot",
-      "title": "{{title}}",
-      "body": "A {{days}}-day-old snapshot still holds {{gb}} GB. Clear it if you no longer need it."
     },
     "topRepo": {
       "eyebrow": "Project",

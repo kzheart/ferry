@@ -121,11 +121,6 @@ class SubagentNotSupportedError(DomainError, ValueError):
     category = "unsupported"
 
 
-class SnapshotNotFoundError(DomainError, ValueError):
-    code = "snapshot.not_found"
-    category = "not-found"
-
-
 class SnapshotInvalidSourceError(DomainError, ValueError):
     code = "snapshot.invalid_source"
     category = "validation"

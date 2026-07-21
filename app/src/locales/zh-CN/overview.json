@@ -82,11 +82,6 @@
       "body": "近 7 天 {{repo}} 花掉 {{cost}},比上一周多 {{pct}}%。多出来的多半在那几次长会话里,同样的活早点开新会话能省一截。",
       "chartLabel": "近 5 周 · {{repo}}"
     },
-    "idle": {
-      "eyebrow": "项目",
-      "title": "{{repo}}",
-      "body": "{{days}} 天没动过了。要么回去接着做,要么清掉快照腾点地方。"
-    },
     "pingpong": {
       "eyebrow": "迁移",
       "title": "来回 {{n}} 次",
@@ -106,11 +101,6 @@
       "eyebrow": "节奏",
       "title": "连续 {{days}} 天",
       "body": "已经连着 {{days}} 天有活动,这股手感值得保持。"
-    },
-    "snapshot": {
-      "eyebrow": "快照",
-      "title": "{{title}}",
-      "body": "{{days}} 天前的快照还占着 {{gb}} GB,确认不用了可以清掉。"
     },
     "topRepo": {
       "eyebrow": "项目",

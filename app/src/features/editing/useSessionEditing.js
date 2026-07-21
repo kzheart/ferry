@@ -4,7 +4,7 @@ import { rpc } from "../../api/transport/rpc.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
-export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
+export function useSessionEditing({ current, runtimeProbe, doScan,
   onInplaceApplied, onSavedAs }) {
   const { t } = useTranslation();
   const [ops, setOps] = useState([]);
@@ -158,7 +158,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan, loadSnaps,
           title: (saveMode === "saveas" ? t("browser:edit.toastSavedAs", { verdict }) : t("browser:edit.toastInplace", { verdict })),
           desc: saveMode === "saveas" ? t("browser:edit.toastSavedAsDesc") : t("browser:edit.toastInplaceDesc"),
           action: savedAs ? { label: t("browser:edit.toastOpenNew"), onClick: () => onSavedAs(savedAs) } : undefined });
-        setOps([]); doScan(); loadSnaps();
+        setOps([]); doScan();
         if (saveMode === "inplace") onInplaceApplied();
       } else setToast({ kind: "fail", title: t("browser:edit.toastVerifyFail"),
         desc: result.error || t("browser:edit.toastVerifyFailDesc") });

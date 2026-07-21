@@ -82,8 +82,8 @@ class CodexBackend(EditBackend):
     def stats(self, doc):
         return {"count": len(doc.data), "size": json_size(doc.data)}
 
-    def snapshot(self, doc, reason_code="snapshot.before_edit"):
-        return snapshot_file(doc.handle, reason_code, self.name)
+    def snapshot(self, doc, reason_code="snapshot.before_edit", extra=None):
+        return snapshot_file(doc.handle, reason_code, self.name, extra)
 
     def restore_snapshot(self, snapshot, doc):
         shutil.copy(snapshot, doc.handle)

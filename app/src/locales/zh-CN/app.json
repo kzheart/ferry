@@ -9,7 +9,6 @@
     "overview": "总览",
     "library": "会话",
     "history": "迁移",
-    "snapshots": "快照",
     "settings": "设置"
   },
   "detail": {
@@ -20,19 +19,15 @@
     "metaSaveFail": "保存元数据失败",
     "metaUpdated": "已更新",
     "metaUpdatedDesc": "已对 {{n}} 个会话生效。",
-    "snapshotCreating": "正在创建快照…",
-    "snapshotCreated": "已创建快照",
-    "snapshotCreatedDesc": "可在「快照与还原」中查看与还原。",
-    "snapshotCreateFail": "创建快照失败",
     "restoring": "正在恢复…",
-    "restoringDesc": "从快照写回会话文件",
+    "restoringDesc": "从备份写回会话文件",
     "restoreDone": "已恢复会话",
-    "restoreDoneDesc": "会话已从快照恢复到原位置。",
+    "restoreDoneDesc": "会话已恢复到原位置。",
     "restoreFail": "撤销失败",
     "deleting": "正在删除…",
-    "deletingDesc": "创建快照 → 移除会话文件",
+    "deletingDesc": "创建备份 → 移除会话文件",
     "deleteDone": "已删除会话",
-    "deleteDoneDesc": "「{{title}}」已移除,快照保存在「快照与还原」。",
+    "deleteDoneDesc": "「{{title}}」已移除,可立即撤销。",
     "undo": "撤销",
     "deleteFail": "删除失败",
     "batchDeleting": "正在批量删除…",
@@ -40,7 +35,7 @@
     "batchPartialFail": "批量删除部分失败",
     "batchPartialFailDesc": "成功 {{done}} 个,失败 {{fail}} 个。",
     "batchDone": "已删除会话",
-    "batchDoneDesc": "已删除 {{done}} 个会话,快照保存在「快照与还原」。"
+    "batchDoneDesc": "已删除 {{done}} 个会话。"
   },
   "ctx": {
     "batchArchive": "批量归档",
@@ -56,7 +51,6 @@
     "archive": "归档",
     "unarchive": "取消归档",
     "tags": "标签…",
-    "snapshot": "创建快照",
     "copyId": "复制会话 ID",
     "copyResume": "复制接续命令",
     "revealInFinder": "在 Finder 中显示",
@@ -85,17 +79,6 @@
     "yesterday": "昨天",
     "earlier": "更早"
   },
-  "snapshotsToken": {
-    "session": "会话 {{session}}",
-    "today": "今天",
-    "yesterday": "昨天",
-    "earlier": "更早"
-  },
-  "snapStatus": {
-    "restored": "已还原",
-    "restoring": "还原中",
-    "restorable": "可还原"
-  },
   "pane": {
     "filterButton": "筛选",
     "libraryTitle": "会话",
@@ -108,11 +91,7 @@
     "historyTitle": "迁移历史",
     "historyPlaceholder": "搜索迁移记录…",
     "historySort": "按时间",
-    "historyFooter": "{{n}} 条迁移记录",
-    "snapshotsTitle": "快照与还原",
-    "snapshotsPlaceholder": "搜索快照…",
-    "snapshotsSort": "按时间",
-    "snapshotsFooter": "{{n}} 个快照 · 源会话只读"
+    "historyFooter": "{{n}} 条迁移记录"
   },
   "prompt": {
     "renameTitle": "重命名会话",

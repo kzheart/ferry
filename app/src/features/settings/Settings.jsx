@@ -108,9 +108,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
             onChange={v => set({ locale: v || null })}>
             <option value="">{t("language.followSystem")}</option>
             {LOCALE_META.map(l => (
-              <option key={l.code} value={l.code}>
-                {l.nativeName === l.englishName ? l.nativeName : `${l.nativeName} · ${l.englishName}`}
-              </option>
+              <option key={l.code} value={l.code}>{l.nativeName}</option>
             ))}
           </Select>
         </Row>

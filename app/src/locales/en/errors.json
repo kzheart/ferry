@@ -24,8 +24,7 @@
     "subagent_not_supported": "Contains sub-agent spawn/task, authoring rejected"
   },
   "snapshot": {
-    "not_found": "No snapshot available",
-    "invalid_source": "Snapshot source is invalid, cannot proceed"
+    "invalid_source": "Invalid backup source; cannot undo"
   },
   "migration": {
     "tool_degraded": "Tool {{tool_name}} degraded to narration text",

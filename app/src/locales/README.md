@@ -17,7 +17,6 @@ app/src/locales/
     events.json    # 引擎结构化事件码 + 快照原因
     browser.json   # 会话详情、AI 回复编排器
     migration.json # 迁移向导、迁移历史
-    snapshots.json # 快照详情、还原 toast
     onboarding.json # 欢迎页、上手引导
     settings.json  # 设置页(偏好/数据来源/软件更新)
     overlays.json  # 弹层(差异预览/确认/筛选/损耗三栏)
@@ -34,7 +33,7 @@ app/src/locales/
 2. 翻译 `ja-JP/` 下每个 JSON 文件的值为目标语言。**保持 key 不变**，只翻译 value。
 3. 在 `app/src/i18n/index.js` 注册新语言：
    - 顶部 import：`import jaJPCommon from "../locales/ja-JP/common.json";`（每个 namespace 都要）
-   - `LOCALE_META` 数组加入 `{ code: "ja-JP", nativeName: "日本語", englishName: "Japanese" }`
+   - `LOCALE_META` 数组加入 `{ code: "ja-JP", nativeName: "日本語" }`（`nativeName` 用该语言的自称）
    - `RESOURCES` 对象加入 `"ja-JP": { common: jaJPCommon, errors: jaJPErrors, ... }`
 
    设置页的语言下拉框、系统语言匹配都由 `LOCALE_META` 驱动，不需要再改界面代码。

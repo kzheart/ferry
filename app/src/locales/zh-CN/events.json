@@ -28,13 +28,6 @@
     "turn_deleted": "删除第 {{turn}} 轮",
     "message_rewritten": "改写 1 条消息"
   },
-  "snapshot": {
-    "manual": "手动快照",
-    "before_delete": "删除前自动",
-    "before_edit": "会话编辑前自动",
-    "before_restore_guard": "还原前保护",
-    "default_reason": "会话编辑前自动"
-  },
   "probe": {
     "isolation_cleanup": "（{{kind}} {{id}} 已探测并清理）",
     "timeout": "探针超时",

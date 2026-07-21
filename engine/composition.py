@@ -5,7 +5,7 @@ from .adapters.registry import adapter, adapters
 from .application.ports import ApplicationPorts, configure
 from .infrastructure.resources import resource_path
 from .infrastructure.scan_cache import ScanCache
-from .infrastructure.snapshots import BACKUP_DIR
+from .infrastructure.snapshots import backup_dir
 
 
 def configure_application() -> None:
@@ -14,6 +14,6 @@ def configure_application() -> None:
         adapters=adapters,
         cache_factory=ScanCache,
         resource_path=resource_path,
-        snapshot_dir=BACKUP_DIR,
+        snapshot_dir=backup_dir,
         version=__version__,
     ))

@@ -93,12 +93,3 @@ export function probeText(p) {
   if (d.truncated) parts.push(t("events:probe.truncated_suffix"));
   return parts.filter(Boolean).join("\n");
 }
-
-export function renderSnapshotReason(snapshot) {
-  const code = snapshot?.reason_code;
-  if (code) {
-    const v = t(`events:snapshot.${code}`, { defaultValue: null });
-    if (v != null) return v;
-  }
-  return snapshot?.legacy_reason || snapshot?.reason || t("events:snapshot.default_reason");
-}

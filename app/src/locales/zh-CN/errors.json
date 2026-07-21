@@ -24,8 +24,7 @@
     "subagent_not_supported": "包含子 Agent spawn/task，authoring 已拒绝"
   },
   "snapshot": {
-    "not_found": "没有可用的快照",
-    "invalid_source": "快照来源非法，无法执行"
+    "invalid_source": "备份来源非法,无法撤销"
   },
   "migration": {
     "tool_degraded": "工具 {{tool_name}} 已降级为叙述文本",

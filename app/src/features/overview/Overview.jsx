@@ -281,15 +281,15 @@ function insightCopy(ins, t) {
 }
 
 // ---------- 主组件 ----------
-export default function Overview({ sessions = [], historyRows = [], snapItems = [],
+export default function Overview({ sessions = [], historyRows = [],
   prices = {} }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [scope, setScope] = useState("30");
   const [tool, setTool] = useState("all");
   const data = useMemo(() => computeOverview({
-    sessions, history: historyRows, snaps: snapItems, prices, scope, tool,
-  }), [sessions, historyRows, snapItems, prices, scope, tool]);
+    sessions, history: historyRows, prices, scope, tool,
+  }), [sessions, historyRows, prices, scope, tool]);
 
   const delta = (kpi, fmt) => {
     if (kpi.delta == null) return null;

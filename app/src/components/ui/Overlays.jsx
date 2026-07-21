@@ -1,4 +1,4 @@
-// 其余弹层:差异预览 / 原地修改确认 / 快照还原确认 / 结果 toast /
+// 其余弹层:差异预览 / 原地修改确认 / 结果 toast /
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -152,34 +152,6 @@ export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, o
   );
 }
 
-export function SnapRestoreConfirm({ snap, onCancel, onConfirm }) {
-  const { t } = useTranslation();
-  const bullets = [
-    ["var(--warn)", t("overlays:snapRestore.bullet1")],
-    ["var(--ok)", t("overlays:snapRestore.bullet2")],
-    ["var(--accent)", t("overlays:snapRestore.bullet3")],
-    ["var(--info-dot)", t("overlays:snapRestore.bullet4")],
-  ];
-  return (
-    <ConfirmBox width={440} title={t("overlays:snapRestore.title")} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:snapRestore.cancel")}</button>
-      <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
-        onClick={onConfirm}>{t("overlays:snapRestore.confirm")}</button>
-    </>}>
-      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        {t("overlays:snapRestore.desc", { title: snap.title, time: fmtTime(snap.time, t) })}</div>
-      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
-        display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, txt], i) => (
-          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{txt}
-          </div>
-        ))}
-      </div>
-    </ConfirmBox>
-  );
-}
 
 // ---------- 会话右键菜单 ----------
 export function ContextMenu({ x, y, items, onClose }) {
@@ -472,38 +444,6 @@ export function HistoryFilter({ f, setF, onClose, onClear }) {
       {statusOptions.map(([k, l]) => (
         <RadioRow key={k} on={f.status === k} label={l}
           onClick={() => setF(v => ({ ...v, status: k }))} />
-      ))}
-      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
-      {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
-        ["yesterday", t("overlays:filter.yesterday")], ["earlier", t("overlays:filter.earlier")]].map(([k, l]) => (
-        <RadioRow key={k} on={f.time === k} label={l}
-          onClick={() => setF(v => ({ ...v, time: k }))} />
-      ))}
-    </PopShell>
-  );
-}
-
-// 快照筛选:来源工具 / 创建原因 / 关联会话 / 时间
-export function SnapFilter({ f, setF, sessions, reasons, onClose, onClear }) {
-  const { t } = useTranslation();
-  return (
-    <PopShell onClose={onClose} onClear={onClear} t={t}>
-      <SectionTitle first>{t("overlays:filter.sourceTools")}</SectionTitle>
-      {TOOLS.map(t2 => (
-        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
-          label={TOOL_NAME[t2]}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
-            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
-      ))}
-      <SectionTitle>{t("overlays:filter.createReason")}</SectionTitle>
-      {[["all", t("overlays:filter.allReasons")], ...reasons.map(r => [r, r])].map(([k, l]) => (
-        <RadioRow key={k} on={f.reason === k} label={l}
-          onClick={() => setF(v => ({ ...v, reason: k }))} />
-      ))}
-      <SectionTitle>{t("overlays:filter.relatedSession")}</SectionTitle>
-      {[["all", t("overlays:filter.allSessions")], ...sessions.map(s => [s, s])].map(([k, l]) => (
-        <RadioRow key={k} on={f.session === k} label={l}
-          onClick={() => setF(v => ({ ...v, session: k }))} />
       ))}
       <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
       {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
