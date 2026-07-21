@@ -34,9 +34,10 @@ app/src/locales/
 2. 翻译 `ja-JP/` 下每个 JSON 文件的值为目标语言。**保持 key 不变**，只翻译 value。
 3. 在 `app/src/i18n/index.js` 注册新语言：
    - 顶部 import：`import jaJPCommon from "../locales/ja-JP/common.json";`（每个 namespace 都要）
-   - `SUPPORTED_LOCALES` 数组加入 `"ja-JP"`
+   - `LOCALE_META` 数组加入 `{ code: "ja-JP", nativeName: "日本語", englishName: "Japanese" }`
    - `RESOURCES` 对象加入 `"ja-JP": { common: jaJPCommon, errors: jaJPErrors, ... }`
-4. （可选）在 `app/src/features/settings/Settings.jsx` 的 `locales` 数组里加入新语言选项，让用户能在设置里手动切换。
+
+   设置页的语言下拉框、系统语言匹配都由 `LOCALE_META` 驱动，不需要再改界面代码。
 
 ## 翻译注意事项
 

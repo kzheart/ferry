@@ -2,9 +2,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
-import { SUPPORTED_LOCALES } from "../../i18n/index.js";
+import { LOCALE_META } from "../../i18n/index.js";
 import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
-import { RadioDot } from "../../components/ui/primitives.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 
 const SECTIONS = [["prefs", "settings:sections.prefs"], ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
@@ -33,6 +32,26 @@ function Row({ title, desc, children, first }) {
   );
 }
 
+// 原生 select:自带键盘导航与系统弹层,选项多了也不会撑爆设置面板
+function Select({ value, onChange, children }) {
+  return (
+    <div style={{ position: "relative", flex: "none" }}>
+      <select value={value} onChange={e => onChange(e.target.value)}
+        style={{ appearance: "none", height: 30, padding: "0 28px 0 11px", borderRadius: 8,
+          border: "1px solid var(--line4)", background: "var(--surface)", color: "var(--tx1)",
+          fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+        {children}
+      </select>
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
+        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+          pointerEvents: "none", color: "var(--tx4)" }}>
+        <path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.6"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
 function Toggle({ on, onChange }) {
   return (
     <button onClick={() => onChange(!on)} aria-pressed={on}
@@ -54,11 +73,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
     ["dark", t("settings:theme.dark"), "#17171A"],
     ["system", t("settings:theme.system"), "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
   ];
-  const locales = [
-    [null, t("language.followSystem"), t("settings:sections.followSystemDesc")],
-    ["zh-CN", "简体中文", "Simplified Chinese"],
-    ["en", "English", "English"],
-  ];
+  const localeValue = s.locale ?? "";
   return (
     <div style={{ animation: "fslide .16s ease" }}>
       <GroupTitle first>{t("settings:theme.groupTitle")}</GroupTitle>
@@ -87,21 +102,18 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
 
       <GroupTitle>{t("language.label")}</GroupTitle>
       <Card>
-        {locales.map(([k, label, desc], i) => {
-          const on = (s.locale ?? null) === k;
-          return (
-            <div key={k ?? "system"} onClick={() => set({ locale: k })}
-              className="hov-item"
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
-                borderTop: i === 0 ? "none" : "1px solid var(--line6)", cursor: "pointer" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{label}</div>
-                <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>
-              </div>
-              <RadioDot on={on} />
-            </div>
-          );
-        })}
+        <Row first title={t("language.label")}
+          desc={localeValue ? undefined : t("settings:sections.followSystemDesc")}>
+          <Select value={localeValue}
+            onChange={v => set({ locale: v || null })}>
+            <option value="">{t("language.followSystem")}</option>
+            {LOCALE_META.map(l => (
+              <option key={l.code} value={l.code}>
+                {l.nativeName === l.englishName ? l.nativeName : `${l.nativeName} · ${l.englishName}`}
+              </option>
+            ))}
+          </Select>
+        </Row>
       </Card>
 
       <GroupTitle>{t("settings:writeCheck.groupTitle")}</GroupTitle>
