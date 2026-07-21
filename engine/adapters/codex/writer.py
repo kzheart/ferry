@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 
 from ...domain.model import Session
-from ...domain.tool_ops import CanonicalOp
+from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
 from .registry import register_tree
@@ -161,7 +161,9 @@ OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
 def _native_records(tpl, t, cwd) -> list | None:
     """Render a canonical operation with the target-specific mapping table."""
     writer = OP_WRITERS.get(t.op)
-    return writer(tpl, t, cwd) if writer else None
+    if writer is None or not has_valid_tool_input(t.op, t.input):
+        return None
+    return writer(tpl, t, cwd)
 
 
 def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,

@@ -133,6 +133,8 @@ class SessionLifecycle(Protocol):
 
     def delete(self, plugin: "ToolPlugin", ref: str) -> dict: ...
 
+    def restore_delete(self, snapshot, meta: dict) -> dict: ...
+
 
 @dataclass(frozen=True)
 class ToolPlugin:

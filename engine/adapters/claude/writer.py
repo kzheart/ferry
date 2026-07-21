@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 
 from ...domain.model import AgentEdge, Session, ToolCall
-from ...domain.tool_ops import CanonicalOp
+from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
 
@@ -220,8 +220,10 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                 texts.append(block.text)
             elif block.kind == "tool" and block.tool:
                 tool = block.tool
-                native = (tool.op in OP_WRITERS and isinstance(tool.input, dict)) \
+                native = (tool.op in OP_WRITERS and
+                          has_valid_tool_input(tool.op, tool.input)) \
                     or ((tool.op == CanonicalOp.AGENT_SPAWN or tool.name == "Agent") and
+                        has_valid_tool_input(tool.op, tool.input) and
                         _edge_for_tool(session, tool))
                 if native:
                     if texts:

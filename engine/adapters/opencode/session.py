@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
-from ...domain.tool_ops import CanonicalOp
+from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...infrastructure import executables
 from ...infrastructure.resources import resource_path
 from ..base.media import image_from_data_url
@@ -507,7 +507,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             elif b.kind == "tool":
                 t = b.tool
                 writer = OP_WRITERS.get(t.op)
-                if writer is None or not writer(add_tool_part, t):
+                if (writer is None or not has_valid_tool_input(t.op, t.input) or
+                        not writer(add_tool_part, t)):
                     sess.lose("migration.tool_degraded", tool_name=t.name)
                     add_part("text", {"text": narrate(t)})
         if parts:

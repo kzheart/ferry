@@ -264,8 +264,7 @@ def session_delete(tool: str, ref: str) -> dict:
 
 
 def session_undelete(snapshot: str) -> dict:
-    """把「删除前自动」快照写回原路径,恢复整棵会话。"""
-    import shutil
+    """Validate a deletion snapshot, then delegate restoration to its adapter."""
     snap = Path(snapshot)
     if snap.parent != snapshot_dir():
         raise SnapshotInvalidSourceError("只允许从快照目录恢复", {"snapshot": snapshot})
@@ -274,27 +273,10 @@ def session_undelete(snapshot: str) -> dict:
     except (OSError, json.JSONDecodeError) as error:
         raise SnapshotInvalidSourceError("快照缺少元数据,无法撤销",
                                          {"snapshot": snapshot}) from error
-    source = meta.get("source")
-    if not source or not str(source).startswith("/"):
-        raise SnapshotInvalidSourceError("该快照没有可恢复的源路径",
-                                         {"snapshot": snapshot})
-    target = Path(source)
-    if target.exists():
-        raise SnapshotInvalidSourceError("源会话仍存在,未覆盖",
-                                         {"target": str(target)})
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(snap, target)
-    sidecar = snap.with_suffix("")
-    if sidecar.is_dir():
-        shutil.move(str(sidecar), str(target.with_suffix("")))
-    restored = 1
-    for child in meta.get("children", []):
-        child_snap, child_src = Path(child["snapshot"]), Path(child["source"])
-        if child_snap.exists() and not child_src.exists():
-            child_src.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(child_snap, child_src)
-            restored += 1
-    return {"ok": True, "restored": restored, "target": str(target)}
+    tool = meta.get("tool")
+    if not isinstance(tool, str) or not tool:
+        raise SnapshotInvalidSourceError("快照缺少来源 Agent", {"snapshot": snapshot})
+    return adapter(tool).require("lifecycle").restore_delete(snap, meta)
 
 
 # ---------- 迁移历史 / 快照 ----------
