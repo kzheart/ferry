@@ -81,3 +81,30 @@ def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path):
     stray.write_text("{}\n")
     with pytest.raises(SnapshotInvalidSourceError):
         services.session_undelete(str(stray))
+
+
+def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
+    root = backup_dir()
+    root.mkdir(parents=True)
+    snapshot = root / "session.jsonl"
+    snapshot.write_text("{}\n")
+    snapshot.with_suffix(".meta.json").write_text(json.dumps({
+        "tool": "fake", "source": "/work/session.jsonl",
+    }))
+    calls = []
+
+    class Lifecycle:
+        def restore_delete(self, snap, meta):
+            calls.append((snap, meta))
+            return {"ok": True, "target": meta["source"]}
+
+    class Plugin:
+        def require(self, capability):
+            assert capability == "lifecycle"
+            return Lifecycle()
+
+    monkeypatch.setattr(services, "adapter", lambda tool: Plugin() if tool == "fake" else None)
+
+    assert services.session_undelete(str(snapshot)) == {
+        "ok": True, "target": "/work/session.jsonl"}
+    assert calls == [(snapshot, {"tool": "fake", "source": "/work/session.jsonl"})]

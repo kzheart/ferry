@@ -93,6 +93,16 @@ def _json_args(raw) -> dict | str:
         return raw or ""
 
 
+def _spawn_input(raw) -> dict:
+    args = raw if isinstance(raw, dict) else {}
+    return {
+        "description": str(args.get("description") or "migrated subagent"),
+        "prompt": str(args.get("prompt") or args.get("message") or ""),
+        "subagent_type": str(args.get("subagent_type") or
+                             args.get("agent_type") or "general"),
+    }
+
+
 def _subagent_meta(meta: dict) -> dict:
     source = meta.get("source")
     if not isinstance(source, dict):
@@ -260,7 +270,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 args = _json_args(p.get("arguments", "{}"))
                 if p.get("name") == "spawn_agent":
                     tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                                  input=args, output="",
+                                  input=_spawn_input(args), output="",
                                   meta={"source_id": p.get("id")},
                                   source_call_id=p.get("call_id"),
                                   status=p.get("status"))
@@ -282,7 +292,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             else:
                 if p.get("name") == "spawn_agent":
                     tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                                  input=_json_args(p.get("input", "")), output="",
+                                  input=_spawn_input(_json_args(p.get("input", ""))), output="",
                                   meta={"source_id": p.get("id")},
                                   status=p.get("status"))
                 else:
@@ -344,8 +354,7 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
             sess.lose("session.subagent_unlinked", child_id=child.source_id)
         prompt = ""
         if matched and isinstance(matched.input, dict):
-            prompt = str(matched.input.get("message") or
-                         matched.input.get("prompt") or "")
+            prompt = str(matched.input.get("prompt") or "")
         edge = AgentEdge(
             parent_session_id=sess.source_id,
             child_session_id=child.source_id,

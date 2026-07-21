@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ...domain.events import event
+from ...domain.tool_ops import has_valid_tool_input
 
 
 def _walk_meta(nodes):
@@ -62,7 +63,7 @@ class MigrationTargetBase:
     tool_fidelity: Mapping[str, str] = {}
 
     def classify_tool_call(self, tool_call) -> str:
-        if not tool_call.op:
+        if not has_valid_tool_input(tool_call.op, tool_call.input):
             return "degrade"
         return self.tool_fidelity.get(tool_call.op, "degrade")
 
