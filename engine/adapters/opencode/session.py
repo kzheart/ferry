@@ -14,13 +14,14 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
+from ...domain.tool_ops import CanonicalOp
 from ...infrastructure import executables
 from ...infrastructure.resources import resource_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
 
-TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
-            "write": "fs.write", "edit": "fs.edit"}
+TOOL_OPS = {"bash": CanonicalOp.SHELL_EXEC, "read": CanonicalOp.FS_READ,
+            "write": CanonicalOp.FS_WRITE, "edit": CanonicalOp.FS_EDIT}
 GOLDEN = resource_path("golden", "opencode")
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
@@ -223,7 +224,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                         inp["new"] = inp.pop("newString")
                 blocks.append(Block("tool", tool=ToolCall(
                     name=p.get("tool", "?"),
-                    op=("agent.spawn" if p.get("tool") == "task" else
+                    op=(CanonicalOp.AGENT_SPAWN if p.get("tool") == "task" else
                         TOOL_OPS.get(p.get("tool"))),
                     input=inp,
                     output=st.get("output", ""),
@@ -346,6 +347,62 @@ def _clone(o):
     return json.loads(json.dumps(o))
 
 
+def _write_shell_exec(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    command = inputs.get("command")
+    if not command:
+        return False
+    return add_tool_part(
+        "bash", {"command": command}, tool.output, command,
+        {"output": tool.output, "exit": tool.meta.get("exit", 0) or 0,
+         "truncated": False})
+
+
+def _write_fs_read(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    path = inputs.get("file_path")
+    if not path:
+        return False
+    return add_tool_part("read", {"filePath": path}, tool.output, path,
+                         {"truncated": False})
+
+
+def _write_fs_write(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    path = inputs.get("file_path")
+    if not path:
+        return False
+    return add_tool_part(
+        "write", {"filePath": path, "content": inputs.get("content", "")},
+        tool.output or "Wrote file successfully.", path,
+        {"filepath": path, "exists": False, "truncated": False,
+         "diagnostics": {}})
+
+
+def _write_fs_edit(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    path = inputs.get("file_path")
+    if not path:
+        return False
+    return add_tool_part(
+        "edit", {"filePath": path, "oldString": inputs.get("old", ""),
+                 "newString": inputs.get("new", "")},
+        tool.output or "Edited file.", path, {"truncated": False})
+
+
+OP_WRITERS = {
+    CanonicalOp.SHELL_EXEC: _write_shell_exec,
+    CanonicalOp.FS_READ: _write_fs_read,
+    CanonicalOp.FS_WRITE: _write_fs_write,
+    CanonicalOp.FS_EDIT: _write_fs_edit,
+}
+
+OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
+    # Task links are emitted after child sessions have been assigned IDs.
+    CanonicalOp.AGENT_SPAWN: "native",
+}
+
+
 def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None,
                        tpl: dict) -> dict:
     now = int(time.time() * 1000)
@@ -449,33 +506,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                 add_part("text", {"text": b.text})
             elif b.kind == "tool":
                 t = b.tool
-                i = t.input if isinstance(t.input, dict) else {}
-                # 常用工具原生映射
-                if t.op == "shell.exec" and i.get("command"):
-                    add_tool_part("bash", {"command": i["command"]},
-                                  t.output, i["command"],
-                                  {"output": t.output,
-                                   "exit": t.meta.get("exit", 0) or 0,
-                                   "truncated": False})
-                elif t.op == "fs.read" and i.get("file_path"):
-                    add_tool_part("read", {"filePath": i["file_path"]},
-                                  t.output, i["file_path"],
-                                  {"truncated": False})
-                elif t.op == "fs.write" and i.get("file_path"):
-                    add_tool_part("write", {"filePath": i["file_path"],
-                                            "content": i.get("content", "")},
-                                  t.output or "Wrote file successfully.",
-                                  i["file_path"],
-                                  {"filepath": i["file_path"],
-                                   "exists": False, "truncated": False,
-                                   "diagnostics": {}})
-                elif t.op == "fs.edit" and i.get("file_path"):
-                    add_tool_part("edit", {"filePath": i["file_path"],
-                                           "oldString": i.get("old", ""),
-                                           "newString": i.get("new", "")},
-                                  t.output or "Edited file.",
-                                  i["file_path"], {"truncated": False})
-                else:
+                writer = OP_WRITERS.get(t.op)
+                if writer is None or not writer(add_tool_part, t):
                     sess.lose("migration.tool_degraded", tool_name=t.name)
                     add_part("text", {"text": narrate(t)})
         if parts:

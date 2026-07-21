@@ -4,10 +4,11 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
+from ...domain.tool_ops import CanonicalOp
 from ..base.media import image_from_base64
 
-TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
-            "Write": "fs.write", "Edit": "fs.edit"}
+TOOL_OPS = {"Bash": CanonicalOp.SHELL_EXEC, "Read": CanonicalOp.FS_READ,
+            "Write": CanonicalOp.FS_WRITE, "Edit": CanonicalOp.FS_EDIT}
 
 
 def _norm_input(name: str, inp: dict | str) -> dict | str:
@@ -118,7 +119,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                     session.lose("migration.reasoning_dropped", metadata_kind="signature")
             elif kind == "tool_use":
                 name = item.get("name", "")
-                op = "agent.spawn" if name == "Agent" else TOOL_OPS.get(name)
+                op = CanonicalOp.AGENT_SPAWN if name == "Agent" else TOOL_OPS.get(name)
                 source_input = item.get("input") or {}
                 tool = ToolCall(
                     name=name, op=op,

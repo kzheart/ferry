@@ -1,6 +1,8 @@
 """格式无关的迁移能力基类与会话树装配。"""
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ...domain.events import event
 
 
@@ -57,9 +59,12 @@ class MigrationTargetBase:
     """迁移目标基类：write 由子类实现，plan/classify 提供默认策略。"""
 
     tool: str
+    tool_fidelity: Mapping[str, str] = {}
 
     def classify_tool_call(self, tool_call) -> str:
-        return "native" if tool_call.op else "degrade"
+        if not tool_call.op:
+            return "degrade"
+        return self.tool_fidelity.get(tool_call.op, "degrade")
 
     def plan(self, session) -> dict:
         """预演统计原生映射/降级/丢弃，与 write 的分发逻辑一致。"""
@@ -67,7 +72,10 @@ class MigrationTargetBase:
         details = []
         dropped = []
         for node in session.walk():
-            dropped.extend(node.loss)
+            # Tool fidelity is derived from the target writer below. Do not
+            # reclassify writer-emitted degradation events as dropped losses.
+            dropped.extend(loss for loss in node.loss
+                           if loss.get("code") != "migration.tool_degraded")
             for message in node.messages:
                 for block in message.blocks:
                     if block.kind == "text":

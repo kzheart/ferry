@@ -6,19 +6,24 @@ import uuid
 from pathlib import Path
 
 from ...domain.model import AgentEdge, Session, ToolCall
+from ...domain.tool_ops import CanonicalOp
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
 
 GOLDEN = resource_path("golden", "claude")
 
-_OP_TOOLS = {
-    "shell.exec": ("Bash", lambda i: {"command": i.get("command", "")}),
-    "fs.write": ("Write", lambda i: {"file_path": i.get("file_path", ""),
-                                      "content": i.get("content", "")}),
-    "fs.read": ("Read", lambda i: {"file_path": i.get("file_path", "")}),
-    "fs.edit": ("Edit", lambda i: {"file_path": i.get("file_path", ""),
-                                    "old_string": i.get("old", ""),
-                                    "new_string": i.get("new", "")}),
+OP_WRITERS = {
+    CanonicalOp.SHELL_EXEC: ("Bash", lambda i: {"command": i.get("command", "")}),
+    CanonicalOp.FS_WRITE: ("Write", lambda i: {"file_path": i.get("file_path", ""),
+                                                 "content": i.get("content", "")}),
+    CanonicalOp.FS_READ: ("Read", lambda i: {"file_path": i.get("file_path", "")}),
+    CanonicalOp.FS_EDIT: ("Edit", lambda i: {"file_path": i.get("file_path", ""),
+                                               "old_string": i.get("old", ""),
+                                               "new_string": i.get("new", "")}),
+}
+
+OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
+    CanonicalOp.AGENT_SPAWN: "native",
 }
 
 
@@ -173,14 +178,14 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
 
     def add_tool(message, tool, edge_override=None):
         edge = edge_override or (_edge_for_tool(session, tool)
-                                 if tool.op == "agent.spawn" or
-                                 tool.name == "Agent" else None)
+                                  if tool.op == CanonicalOp.AGENT_SPAWN or
+                                  tool.name == "Agent" else None)
         if edge:
             native_name = "Agent"
             native_input = _clone(tool.input) if isinstance(tool.input, dict) else {}
             emitted_children.add(edge.child_session_id)
         else:
-            native_name, convert = _OP_TOOLS[tool.op]
+            native_name, convert = OP_WRITERS[tool.op]
             native_input = convert(tool.input)
         use_id = "toolu_" + uuid.uuid4().hex[:24]
         assistant = base("assistant")
@@ -215,8 +220,8 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                 texts.append(block.text)
             elif block.kind == "tool" and block.tool:
                 tool = block.tool
-                native = (tool.op in _OP_TOOLS and isinstance(tool.input, dict)) \
-                    or ((tool.op == "agent.spawn" or tool.name == "Agent") and
+                native = (tool.op in OP_WRITERS and isinstance(tool.input, dict)) \
+                    or ((tool.op == CanonicalOp.AGENT_SPAWN or tool.name == "Agent") and
                         _edge_for_tool(session, tool))
                 if native:
                     if texts:
@@ -242,7 +247,7 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                 if result:
                     break
         tool = ToolCall(
-            name="Agent", op="agent.spawn",
+            name="Agent", op=CanonicalOp.AGENT_SPAWN,
             input={"description": child.title or "migrated subagent",
                    "prompt": edge.prompt,
                    "subagent_type": edge.agent_type or child.agent_type or "general"},

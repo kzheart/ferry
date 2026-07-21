@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import codex_summary_text
+from ...domain.tool_ops import CanonicalOp
 from ...infrastructure.scan_cache import ScanCache
 from ..base.media import image_from_data_url
 
@@ -33,7 +34,7 @@ def _parse_call(payload, sess) -> ToolCall:
     if m:
         try:
             args = json.loads(m.group(1))
-            return ToolCall(name="exec", op="shell.exec",
+            return ToolCall(name="exec", op=CanonicalOp.SHELL_EXEC,
                             input={"command": args.get("cmd", ""),
                                    "workdir": args.get("workdir")}, output="")
         except json.JSONDecodeError:
@@ -46,7 +47,7 @@ def _parse_call(payload, sess) -> ToolCall:
         if m2:
             body = "\n".join(l[1:] for l in m2.group(2).splitlines()
                              if l.startswith("+"))
-            return ToolCall(name="apply_patch", op="fs.write",
+            return ToolCall(name="apply_patch", op=CanonicalOp.FS_WRITE,
                             input={"file_path": m2.group(1).strip(),
                                    "content": body}, output="")
         m3 = _UPD_FILE_RE.search(text)
@@ -54,7 +55,7 @@ def _parse_call(payload, sess) -> ToolCall:
             lines = m3.group(2).splitlines()
             old = "\n".join(l[1:] for l in lines if l.startswith("-"))
             new = "\n".join(l[1:] for l in lines if l.startswith("+"))
-            return ToolCall(name="apply_patch", op="fs.edit",
+            return ToolCall(name="apply_patch", op=CanonicalOp.FS_EDIT,
                             input={"file_path": m3.group(1).strip(),
                                    "old": old, "new": new}, output="")
         sess.lose("migration.apply_patch_unparsed")
@@ -258,7 +259,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             if pt == "function_call":
                 args = _json_args(p.get("arguments", "{}"))
                 if p.get("name") == "spawn_agent":
-                    tc = ToolCall(name="spawn_agent", op="agent.spawn",
+                    tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
                                   input=args, output="",
                                   meta={"source_id": p.get("id")},
                                   source_call_id=p.get("call_id"),
@@ -271,7 +272,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                         cmd = " ".join(cmd[2:]) if isinstance(cmd, list) and \
                             cmd[:2] == ["bash", "-lc"] else \
                             (" ".join(cmd) if isinstance(cmd, list) else str(cmd))
-                        tc = ToolCall(name=p.get("name", "shell"), op="shell.exec",
+                        tc = ToolCall(name=p.get("name", "shell"), op=CanonicalOp.SHELL_EXEC,
                                       input={"command": cmd}, output="",
                                       source_call_id=p.get("call_id"))
                     else:
@@ -280,7 +281,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                                       source_call_id=p.get("call_id"))
             else:
                 if p.get("name") == "spawn_agent":
-                    tc = ToolCall(name="spawn_agent", op="agent.spawn",
+                    tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
                                   input=_json_args(p.get("input", "")), output="",
                                   meta={"source_id": p.get("id")},
                                   status=p.get("status"))
@@ -315,7 +316,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
 def _spawn_calls(sess: Session) -> list[ToolCall]:
     return [block.tool for message in sess.messages for block in message.blocks
             if block.kind == "tool" and block.tool and
-            block.tool.op == "agent.spawn"]
+            block.tool.op == CanonicalOp.AGENT_SPAWN]
 
 
 def _contains_identity(tool: ToolCall, child: Session) -> bool:
