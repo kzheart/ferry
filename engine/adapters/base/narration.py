@@ -10,7 +10,9 @@ import json
 from contextlib import contextmanager
 
 DEFAULT_TEMPLATE = "historical-tool-call-v1"
-DEFAULT_LOCALE = "zh-CN"
+# 降级叙述固定写英文：目标 Agent 读的是上下文而非界面文案，英文最通用，
+# 也避免用户界面语言影响已写入目标会话的内容。
+DEFAULT_LOCALE = "en"
 
 _TEMPLATES = {
     ("historical-tool-call-v1", "zh-CN"):
@@ -35,8 +37,8 @@ def content_locale(locale: str | None, template: str | None = None):
 
 
 def _normalize(locale: str | None) -> str:
-    if locale and locale.lower().startswith("en"):
-        return "en"
+    if locale and locale.lower().startswith("zh"):
+        return "zh-CN"
     return DEFAULT_LOCALE
 
 

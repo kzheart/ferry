@@ -43,11 +43,9 @@
     "scopeWithCount": "{{scope}} · {{n}} msgs",
     "structureCheck": "Structure check",
     "runtimeProbe": "Runtime probe",
-    "narrLocale": "Degraded narration language",
     "structureAlways": "Always performed · no model calls",
     "probeOn": "On · {{model}} (shadow copy)",
     "probeOff": "Off",
-    "narrLocaleHint": "Tool calls that cannot be migrated natively are written into the target session body in this language",
     "probeTitle": "Runtime probe",
     "probeDesc": "Performs a real resume on a temporary shadow session for verification (takes tens of seconds and consumes one tiny model call; cleaned up automatically, no messages appended to the migration artifact). When off, only structure validation is performed.",
     "epilogue": "Ferry will write to the target tool and re-read the artifact for structure validation (node count, parent-child relationships, and topology). {{probe}}If verification fails, it rolls back automatically and leaves nothing in the target.",
@@ -78,10 +76,6 @@
     "start": "Start migration",
     "next": "Next",
     "done": "Done"
-  },
-  "narrLocale": {
-    "zhCN": "中文",
-    "en": "English"
   },
   "history": {
     "empty": "No migration records yet — click \"Migrate…\" in a session detail",

@@ -49,13 +49,13 @@ def test_probe_report_separates_status_and_diagnostic():
     assert len(rep["diagnostic"]["stdout"]) == 8000
 
 
-def test_narration_content_locale_is_independent_of_ui():
+def test_narration_defaults_to_english_and_ignores_ui_locale():
     from types import SimpleNamespace
 
     from engine.adapters.base import narration
     tool = SimpleNamespace(name="WebSearch", input={"q": "x"}, output="done")
-    assert "[历史记录" in narration.narrate(tool)
-    assert "[History: tool WebSearch" in narration.narrate(tool, locale="en-US")
-    with narration.content_locale("en"):
-        assert "[History" in narration.narrate(tool)
-    assert "[历史记录" in narration.narrate(tool)
+    assert "[History: tool WebSearch" in narration.narrate(tool)
+    assert "[History" in narration.narrate(tool, locale="en-US")
+    with narration.content_locale("zh-CN"):
+        assert "[历史记录" in narration.narrate(tool)
+    assert "[History" in narration.narrate(tool)
