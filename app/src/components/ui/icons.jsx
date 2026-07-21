@@ -87,9 +87,9 @@ export const Spinner = ({ size = 13, accent = "var(--accent)", track = "var(--sp
   `<circle cx="8" cy="8" r="6" fill="none" style="stroke:${track}" stroke-width="2"/><path d="M8 2 a6 6 0 0 1 6 6" fill="none" style="stroke:${accent}" stroke-width="2" stroke-linecap="round"/>`,
   { animation: "fspin .8s linear infinite", flex: "none" });
 
-export const RescanIcon = () => svg("0 0 16 16", 13, 13,
+export const RescanIcon = ({ size = 13, color = "var(--tx2)" } = {}) => svg("0 0 16 16", size, size,
   '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-  { color: "var(--tx2)" });
+  { color });
 
 export const SidebarIcon = () => svg("0 0 18 18", 16, 16,
   '<rect x="2" y="3.5" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="6.8" y1="3.5" x2="6.8" y2="14.5" stroke="currentColor" stroke-width="1.4"/><rect x="3.4" y="5.4" width="2" height="1.2" rx=".4" fill="currentColor"/><rect x="3.4" y="7.6" width="2" height="1.2" rx=".4" fill="currentColor"/>');
@@ -165,4 +165,30 @@ export const ImageGlyph = ({ size = 12 }) => svg("0 0 16 16", size, size,
 
 export const GearMini = ({ size = 11 }) => svg("0 0 16 16", size, size,
   `<path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/>`,
+  { flex: "none" });
+
+// 详情页工具栏图标(16px 线条风,随 currentColor 着色)
+export const RefreshIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
+  '<path d="M13.2 8a5.2 5.2 0 1 1-1.55-3.7M13.2 2.6v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+export const TerminalIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
+  '<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.4 6l2.2 2-2.2 2M8 10.4h3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+export const MigrateIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
+  '<path d="M9.6 3.2h3a1.2 1.2 0 0 1 1.2 1.2v7.2a1.2 1.2 0 0 1-1.2 1.2h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M1.8 8h8M7 4.8 10.2 8 7 11.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+// 侧栏行悬浮操作图标(11-12px)
+export const MoreDots = ({ size = 13 }) => svg("0 0 16 16", size, size,
+  '<circle cx="3.4" cy="8" r="1.35" fill="currentColor"/><circle cx="8" cy="8" r="1.35" fill="currentColor"/><circle cx="12.6" cy="8" r="1.35" fill="currentColor"/>',
+  { flex: "none" });
+
+export const ArchiveIcon = ({ size = 12 }) => svg("0 0 16 16", size, size,
+  '<rect x="1.8" y="2.6" width="12.4" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 6v6a1.4 1.4 0 0 0 1.4 1.4h7.2A1.4 1.4 0 0 0 13 12V6M6.4 8.6h3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  { flex: "none" });
+
+export const PinIcon = ({ size = 12, filled = false }) => svg("0 0 24 24", size, size,
+  `<path d="M12 17v5M9 4h6l1 7 2 2H6l2-2 1-7z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
   { flex: "none" });

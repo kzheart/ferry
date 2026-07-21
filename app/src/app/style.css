@@ -7,6 +7,7 @@ html, body, #root { height: 100%; }
   --accent-fg: #FFFFFF;
   --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
   --font-size: 13px;
+  --win-bg: var(--bg);
   color-scheme: light;
 
   /* 背景 / 表面 */
@@ -56,7 +57,9 @@ html, body, #root { height: 100%; }
   --info-dot: #8AA0B6;
   --tooltip: #2B333C;
 
-  /* 浮层 / 阴影辅助 */
+  /* 浮层 / 阴影辅助(两级投影:菜单/弹层 与 大面板,对齐系统 NSMenu/NSPanel 的细腻投影) */
+  --shadow-menu: 0 5px 16px rgba(0,0,0,.13), 0 0 0 1px var(--ring);
+  --shadow-sheet: 0 12px 32px rgba(0,0,0,.16), 0 0 0 1px var(--ring);
   --scrim: rgba(24,33,43,.34);
   --dim: rgba(20,28,38,.44);
   --veil: rgba(251,252,253,.92);
@@ -133,50 +136,52 @@ html, body, #root { height: 100%; }
   --accent: #E8E9EB;
   --accent-fg: #1A1A1D;
 
-  --bg: #17171A;
-  --surface: #1E1E21;
-  --titlebar: #151517;
-  --rail: #141416;
-  --rail-line: #26262B;
-  --pane: #19191C;
-  --pane-foot: #18181B;
-  --inset: #19191C;
-  --fill: #222226;
-  --fill2: #232327;
-  --fill3: #232327;
-  --fill4: #26262B;
+  --bg: #141416;
+  --surface: #242428;
+  --titlebar: #101012;
+  --rail: #0F0F11;
+  --rail-line: #262629;
+  --pane: #121214;
+  --pane-foot: #0F0F11;
+  --inset: #121214;
+  --fill: #26262A;
+  --fill2: #28282D;
+  --fill3: #222226;
+  --fill4: #2C2C32;
   --chip: #26262B;
   --badge: #222226;
-  --settings-bg: #17171A;
-  --settings-rail: #141416;
-  --seg-on: #2A2A2F;
-  --track: #2C2C31;
-  --hairline: #26262B;
+  --settings-bg: #141416;
+  --settings-rail: #0F0F11;
+  --seg-on: #33343B;
+  --track: #33343B;
+  --hairline: #2A2B31;
 
-  --line: #2A2A2E;
-  --line2: #313136;
-  --line3: #28282C;
-  --line4: #27272B;
-  --line5: #26262B;
-  --line6: #242428;
-  --line-strong: #3E3E44;
-  --check: #3E3E44;
-  --toggle-off: #3A3B42;
-  --dots: #33343A;
-  --spin-track: #3A3B42;
+  --line: #303138;
+  --line2: #383941;
+  --line3: #2C2D34;
+  --line4: #2A2B31;
+  --line5: #28292F;
+  --line6: #26272C;
+  --line-strong: #45464E;
+  --check: #45464E;
+  --toggle-off: #3E3F47;
+  --dots: #383941;
+  --spin-track: #3E3F47;
 
-  --tx1: #ECECEE;
-  --tx1b: #DEDFE2;
-  --tx2: #C6C7CC;
-  --tx2b: #BFC0C6;
-  --tx3: #A6A7AE;
-  --tx3b: #9EA0A7;
-  --tx4: #85868D;
-  --tx4b: #8D8E96;
-  --tx5: #6F7077;
+  --tx1: #F2F2F4;
+  --tx1b: #E4E5E8;
+  --tx2: #CDCED3;
+  --tx2b: #C4C5CB;
+  --tx3: #AAABB2;
+  --tx3b: #A0A2AA;
+  --tx4: #86878F;
+  --tx4b: #8E8F98;
+  --tx5: #6C6D75;
   --info-dot: #6C7891;
-  --tooltip: #3A3B42;
+  --tooltip: #3E3F47;
 
+  --shadow-menu: 0 5px 16px rgba(0,0,0,.4), 0 0 0 1px var(--ring);
+  --shadow-sheet: 0 12px 32px rgba(0,0,0,.5), 0 0 0 1px var(--ring);
   --scrim: rgba(0,0,0,.55);
   --dim: rgba(0,0,0,.6);
   --veil: rgba(23,23,26,.92);
@@ -184,15 +189,15 @@ html, body, #root { height: 100%; }
   --dot-ring: #19191C;
 
   --acc-soft: #26262B;
-  --acc-soft2: #2A2A30;
-  --acc-soft3: #28282D;
+  --acc-soft2: #2C2C32;
+  --acc-soft3: #26262B;
   --acc-soft4: #222226;
   --acc-soft5: #242429;
   --acc-soft6: #222226;
   --acc-line: #3A3B42;
   --acc-line2: #3A3B42;
-  --acc-text: #D5D6DA;
-  --acc-mut: #8D8E96;
+  --acc-text: #CBCCD2;
+  --acc-mut: #8B8C94;
 
   --ok: #37B575;
   --ok-deep: #58C088;
@@ -231,15 +236,15 @@ html, body, #root { height: 100%; }
   --t-codex: #34C29A;
   --t-opencode: #6B96E8;
 
-  --hov: #2A2A2F;
-  --hov-rail: #232327;
-  --hov-row: #242428;
-  --hov-item: #26262B;
-  --hov-ghost: #222226;
-  --btn-hov: #242428;
-  --btn-disabled: #3A3B42;
-  --sb-thumb: #3A3B42;
-  --sb-thumb-hov: #4A4B52;
+  --hov: #2C2D33;
+  --hov-rail: #202127;
+  --hov-row: #212228;
+  --hov-item: #2A2B31;
+  --hov-ghost: #26272C;
+  --btn-hov: #2C2D33;
+  --btn-disabled: #3E3F47;
+  --sb-thumb: #3E3F47;
+  --sb-thumb-hov: #4E4F57;
 }
 
 body {
@@ -248,27 +253,40 @@ body {
   font-size: var(--font-size);
   line-height: 1.45;
   color: var(--tx1);
-  background: var(--bg);
+  background: var(--win-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   user-select: none;
   cursor: default;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
-a:hover { filter: brightness(.9); }
-[data-theme="dark"] a:hover { filter: brightness(1.15); }
 .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
 .selectable { user-select: text; cursor: text; }
 input, button, textarea { font-family: inherit; }
 input { user-select: text; }
 
-.fscroll::-webkit-scrollbar { width: 9px; height: 9px; }
-.fscroll::-webkit-scrollbar-thumb {
-  background: var(--sb-thumb); border-radius: 6px;
-  border: 2px solid transparent; background-clip: content-box;
+.fscroll { overscroll-behavior: contain; }
+
+/* macOS:窗口层挂 NSVisualEffectView(见 src-tauri/lib.rs),
+   镶边区域(标题栏/导航轨/资源栏)改半透明让系统毛玻璃透出来 */
+html[data-platform="mac"] {
+  --win-bg: transparent;
+  --titlebar: rgba(241,244,247,.55);
+  --rail: rgba(232,236,240,.55);
+  --pane: rgba(243,245,247,.55);
+  --pane-foot: rgba(240,243,245,.55);
 }
-.fscroll::-webkit-scrollbar-thumb:hover { background: var(--sb-thumb-hov); background-clip: content-box; }
+html[data-platform="mac"][data-theme="dark"] {
+  /* 深色下磨砂材质本身发中性灰,透过来会把近黑洗成灰;
+     大幅提高不透明度并压深 RGB,让侧栏贴近内容区近黑、消除接缝,
+     只留极少材质通透——对齐 WorkBuddy 那种统一近纯黑 */
+  --titlebar: rgba(14,14,16,.86);
+  --rail: rgba(13,13,15,.88);
+  --pane: rgba(16,16,18,.88);
+  --pane-foot: rgba(13,13,15,.88);
+}
 
 @keyframes fspin { to { transform: rotate(360deg); } }
 @keyframes fsheet { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -289,25 +307,73 @@ input { user-select: text; }
 .hov-item:hover { background: var(--hov-item) !important; }
 .hov-ghost:hover { background: var(--hov-ghost) !important; }
 
-/* 常用按钮 */
+/* 常用按钮:对齐 NSButton 质感——白底不描边,半像素细描边 + 细投影撑立体感,
+   主按钮带自上而下微渐变;反馈用按下态,不做 hover 变色 */
 .fbtn {
   height: 28px; padding: 0 12px; background: var(--surface);
-  border: 1px solid var(--line2); border-radius: 7px;
-  font-size: 12px; color: var(--tx2); cursor: pointer;
+  border: none; border-radius: 6px;
+  font-size: 12px; color: var(--tx2); cursor: default;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 1px 2px rgba(0,0,0,.09);
 }
 .fbtn:hover { background: var(--btn-hov); }
+.fbtn:active { background: var(--fill4); }
+[data-theme="dark"] .fbtn {
+  background: rgba(255,255,255,.09);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.4), inset 0 .5px 0 rgba(255,255,255,.09);
+}
+[data-theme="dark"] .fbtn:hover { background: rgba(255,255,255,.12); }
+[data-theme="dark"] .fbtn:active { background: rgba(255,255,255,.16); }
 .fbtn-primary {
-  border: none; background: var(--accent); color: var(--accent-fg); font-weight: 600;
-  border-radius: 7px; cursor: pointer; font-size: 12.5px;
+  border: none; color: var(--accent-fg); font-weight: 600;
+  border-radius: 6px; cursor: default; font-size: 12px;
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--accent) 90%, #fff), var(--accent));
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 1px 2px rgba(0,0,0,.16);
 }
 .fbtn-primary:hover { filter: brightness(1.05); }
-.fbtn-primary:disabled { background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7; }
+.fbtn-primary:active { filter: brightness(.92); }
+.fbtn-primary:disabled {
+  background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.1);
+}
 
-/* 会话时间线:图标操作按钮 */
+/* macOS 设置式分组卡片:面板底 + 半像素描边投影 */
+.fcard {
+  background: var(--surface); border-radius: 10px;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.05);
+}
+[data-theme="dark"] .fcard {
+  background: rgba(255,255,255,.06);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.45), inset 0 .5px 0 rgba(255,255,255,.06);
+}
+
+/* 详情页工具栏:纯图标按钮,对齐 Big Sur+ 工具栏(常态无底,悬浮浅填充) */
+.ftool-btn {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--tx3); border-radius: 6px;
+  cursor: default; padding: 0; flex: none;
+}
+.ftool-btn:hover { background: var(--hov); color: var(--tx1); }
+.ftool-btn:active { background: var(--fill4); }
+.ftool-btn:disabled { opacity: .4; background: transparent; }
+
+/* 侧栏行:悬浮才浮现操作按钮,同时隐去右侧时间 */
+.lib-row .row-act { display: none; }
+.lib-row:hover .row-act { display: inline-flex; }
+.lib-row:hover .row-meta { display: none; }
+.row-act-btn {
+  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--tx4); border-radius: 5px;
+  cursor: default; padding: 0; flex: none;
+}
+.row-act-btn:hover { background: var(--fill4); color: var(--tx1); }
+.row-act-btn.row-act-danger:hover { background: var(--danger-soft, rgba(255,59,48,.14)); color: var(--danger, #ff453a); }
+
+/* 会话时间线:图标操作按钮(hover 高亮保留,对齐 Big Sur+ 工具栏按钮) */
 .ficon-btn {
   width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
-  border: none; background: transparent; color: var(--tx4); border-radius: 7px;
-  cursor: pointer; padding: 0; flex: none;
+  border: none; background: transparent; color: var(--tx4); border-radius: 6px;
+  cursor: default; padding: 0; flex: none;
 }
 .ficon-btn:hover { background: var(--hov); color: var(--tx2); }
 .ficon-btn.danger:hover { color: var(--err-deep); }
@@ -328,13 +394,13 @@ input { user-select: text; }
 .fdel .fdel-text { text-decoration: line-through; }
 
 /* AI 回复正文排版(marked 渲染输出) */
-.fmd { font-size: 13.5px; line-height: 1.75; color: var(--tx1b); overflow-wrap: break-word; }
+.fmd { font-size: 13px; line-height: 1.75; color: var(--tx1b); overflow-wrap: break-word; }
 .fmd > :first-child { margin-top: 0; }
 .fmd > :last-child { margin-bottom: 0; }
 .fmd p { margin: .55em 0; }
-.fmd h1, .fmd h2 { font-size: 15.5px; font-weight: 700; margin: 1em 0 .35em; letter-spacing: -.01em; }
+.fmd h1, .fmd h2 { font-size: 15px; font-weight: 700; margin: 1em 0 .35em; letter-spacing: -.01em; }
 .fmd h3 { font-size: 14px; font-weight: 650; margin: .9em 0 .3em; }
-.fmd h4, .fmd h5, .fmd h6 { font-size: 13.5px; font-weight: 650; margin: .8em 0 .25em; }
+.fmd h4, .fmd h5, .fmd h6 { font-size: 13px; font-weight: 650; margin: .8em 0 .25em; }
 .fmd ul, .fmd ol { margin: .45em 0; padding-left: 1.5em; }
 .fmd li { margin: .28em 0; }
 .fmd li > p { margin: .2em 0; }
@@ -346,12 +412,12 @@ input { user-select: text; }
   background: var(--fill); border: 1px solid var(--line5); border-radius: 9px;
   padding: 10px 13px; margin: .6em 0; overflow-x: auto;
 }
-.fmd pre code { background: none; padding: 0; font-size: 11.5px; line-height: 1.6; }
+.fmd pre code { background: none; padding: 0; font-size: 11px; line-height: 1.6; }
 .fmd hr { border: none; height: 1px; background: var(--hairline); margin: 1.1em 0; }
 .fmd blockquote {
   margin: .55em 0; padding: 1px 13px; border-left: 3px solid var(--line2); color: var(--tx3);
 }
-.fmd table { border-collapse: collapse; margin: .7em 0; font-size: 12.5px; }
+.fmd table { border-collapse: collapse; margin: .7em 0; font-size: 12px; }
 .fmd th, .fmd td { border: none; border-bottom: 1px solid var(--line5); padding: 6px 18px 6px 0; text-align: left; }
 .fmd th { font-weight: 650; color: var(--tx2); border-bottom: 1.5px solid var(--line2); }
 .fmd a { color: var(--accent); }

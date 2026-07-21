@@ -9,13 +9,13 @@ export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 
   return (
     <div style={{ position: "absolute", inset: 0, background: "var(--scrim)",
       display: "flex", alignItems: "center", justifyContent: "center", zIndex: z,
-      animation: "ffade .18s ease" }}
+       }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
         style={{ width, maxHeight, background: "var(--bg)", borderRadius: 13,
-          boxShadow: "0 30px 70px -20px rgba(20,28,38,.5)", display: "flex",
+          boxShadow: "var(--shadow-sheet)", display: "flex",
           flexDirection: "column", overflow: "hidden",
-          animation: "fsheet .22s cubic-bezier(.2,.7,.3,1)" }}>
+           }}>
         {children}
       </div>
     </div>
@@ -36,7 +36,7 @@ function LossCol({ kind, items, t }) {
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />{t(c.titleKey)}
       </div>
       {(items.length ? items : [t("overlays:loss.emptyItem")]).map((txt, i) => (
-        <div key={i} style={{ fontSize: 11.5, color: c.body, marginTop: 7, lineHeight: 1.4 }}>{txt}</div>
+        <div key={i} style={{ fontSize: 11, color: c.body, marginTop: 7, lineHeight: 1.4 }}>{txt}</div>
       ))}
     </div>
   );
@@ -77,9 +77,9 @@ export function CmdRow({ cmd, head }) {
   return (
     <div style={{ border: "1px solid var(--line3)", borderRadius: 10, overflow: "hidden" }}>
       {head && <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
-        fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>{head}</div>}
+        fontSize: 11, color: "var(--tx4)", fontWeight: 600 }}>{head}</div>}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
-        <code className="mono selectable" style={{ flex: 1, fontSize: 12.5, color: "var(--tx2)",
+        <code className="mono selectable" style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</code>
         <button className="fbtn" onClick={copy}>{copied ? t("overlays:cmd.copied") : t("overlays:cmd.copy")}</button>
       </div>

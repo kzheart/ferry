@@ -23,7 +23,7 @@ function StepsHeader({ step, t }) {
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: 6 }}>
       {ORDER.map((s, i) => (
         <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 600,
+          <span style={{ fontSize: 11, fontWeight: 600,
             color: i === cur ? ACCENT : i < cur ? "var(--tx3)" : "var(--line-strong)" }}>{labels[s]}</span>
           {i < ORDER.length - 1 && <span style={{ color: "var(--line-strong)", fontSize: 11 }}>›</span>}
         </span>
@@ -50,29 +50,29 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
   return (
     <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:probeModel.title")}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:probeModel.title")}</div>
         <div style={{ fontSize: 11, color: "var(--tx4)" }}>
           {loading ? t("migration:probeModel.loading") : srcHint}
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--tx3b)", marginBottom: 10, lineHeight: 1.45 }}>
+      <div style={{ fontSize: 11, color: "var(--tx3b)", marginBottom: 10, lineHeight: 1.45 }}>
         {t("migration:probeModel.hint")}
       </div>
-      {err && <div style={{ fontSize: 11.5, color: "var(--err-deep)", marginBottom: 8 }}>{t("migration:probeModel.loadFailed", { error: err })}</div>}
+      {err && <div style={{ fontSize: 11, color: "var(--err-deep)", marginBottom: 8 }}>{t("migration:probeModel.loadFailed", { error: err })}</div>}
       {catalog?.error && !err && (
-        <div style={{ fontSize: 11.5, color: "var(--err-mut)", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--err-mut)", marginBottom: 8 }}>
           {t("migration:probeModel.discoverWarn", { error: catalog.error })}
         </div>
       )}
       {filterable && (
         <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("migration:probeModel.filterPlaceholder")}
           style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
-            padding: "0 10px", fontSize: 12.5, marginBottom: 8, outline: "none" }} />
+            padding: "0 10px", fontSize: 12, marginBottom: 8 }} />
       )}
       <select value={selected} onChange={e => onSelect(e.target.value)}
         disabled={loading}
         style={{ width: "100%", height: 34, border: "1px solid var(--line)", borderRadius: 8,
-          padding: "0 10px", fontSize: 12.5, background: "var(--surface)", color: "var(--tx2)" }}>
+          padding: "0 10px", fontSize: 12, background: "var(--surface)", color: "var(--tx2)" }}>
         <option value="">{t("migration:probeModel.toolDefault", { suffix: catalog?.default ? ` (${catalog.default})` : "" })}</option>
         {shown.map(m => (
           <option key={m.id} value={m.id}>{m.label || m.id}</option>
@@ -82,7 +82,7 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
         <input value={custom} onChange={e => onCustom(e.target.value)}
           placeholder={t("migration:probeModel.customPlaceholder")}
           style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
-            padding: "0 10px", fontSize: 12.5, marginTop: 8, outline: "none" }} />
+            padding: "0 10px", fontSize: 12, marginTop: 8 }} />
       )}
     </div>
   );
@@ -198,8 +198,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
                 opacity: inst ? 1 : 0.55 }}>
               <ToolIcon tool={t2} size={32} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t2]}</div>
-                <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t2]}</div>
+                <div style={{ fontSize: 11, color: "var(--tx4)" }}>
                   {inst ? t("migration:target.installedMeta", { version: env[t2].version || "?", tool: t2 })
                     : t("migration:target.notInstalled")}
                 </div>
@@ -226,7 +226,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
       <>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
           <ToolIcon tool={meta.tool} size={24} />
-          <span style={{ color: "var(--tx4)", fontSize: 12.5 }}>{TOOL_NAME[meta.tool]}</span>
+          <span style={{ color: "var(--tx4)", fontSize: 12 }}>{TOOL_NAME[meta.tool]}</span>
           <span style={{ color: "var(--line-strong)" }}>→</span>
           <ToolIcon tool={target} size={26} />
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[target]}</span>
@@ -235,7 +235,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           {t("migration:preview.lossTitle", { scope: scopeLabel })}</div>
         <div style={{ marginBottom: 16 }}><LossCols loss={d.loss} /></div>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
-          display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
+          display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
           <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{t("migration:preview.scaleLabel")}</span>
           <span className="mono" style={{ color: "var(--tx2)" }}>
             {t("migration:preview.scaleMeta", { msg: d.msg_count, tree: d.tree_count })}</span>
@@ -246,8 +246,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     body = (
       <>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "16px 18px" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 650, marginBottom: 12 }}>{t("migration:confirm.title")}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
+          <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 12 }}>{t("migration:confirm.title")}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12 }}>
             {[["target", TOOL_NAME[target], true],
               ["scope", d ? t("migration:confirm.scopeWithCount", { scope: scopeLabel, n: d.msg_count }) : scopeLabel],
               ["structureCheck", t("migration:confirm.structureAlways")],
@@ -265,12 +265,12 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           marginTop: 12, display: "flex", alignItems: "flex-start", gap: 11 }}>
           <label onClick={() => setProbeOn(v => !v)}
-            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "none",
+            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "default", flex: "none",
               marginTop: 1 }}>
             <CheckSquare on={probeOn} accent={ACCENT} fg="#fff" />
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:confirm.probeTitle")}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:confirm.probeTitle")}</span>
           </label>
-          <div style={{ fontSize: 11.5, color: "var(--tx3b)", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: "var(--tx3b)", lineHeight: 1.5 }}>
             {t("migration:confirm.probeDesc")}</div>
         </div>
         {probeOn && (
@@ -322,20 +322,20 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           <div style={{ fontSize: 15, fontWeight: 650, marginTop: 12 }}>
             {result.validation?.runtime?.status === "passed"
               ? t("migration:result.doneBoth") : t("migration:result.doneStructure")}</div>
-          <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 5 }}>
+          <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 5 }}>
             {t("migration:result.doneDesc", { n: result.msg_count, tool: TOOL_NAME[target] })}</div>
         </div>
         <div style={{ marginTop: 18 }}>
           <CmdRow cmd={result.resume} head={t("migration:result.handoffIn", { tool: TOOL_NAME[target] })} />
         </div>
-        <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12.5 }}
+        <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12 }}
           onClick={() => openTerminal(result.resume)}>{t("migration:result.openTerminal")}</button>
       </>
     );
   } else if (fail) {
     body = (
       <>
-        <div style={{ border: "1px solid var(--err-line)", background: "var(--err-bg)", borderRadius: 11,
+        <div style={{ border: "1px solid var(--err-line)", background: "var(--err-bg)", borderRadius: 10,
           padding: "16px 18px", display: "flex", gap: 13 }}>
           <span style={{ width: 38, height: 38, flex: "none", borderRadius: "50%", background: "var(--err-bg3)",
             display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -345,7 +345,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           </span>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>{t("migration:result.failTitle")}</div>
-            <div style={{ fontSize: 12.5, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
               {t("migration:result.failDesc", { tool: TOOL_NAME[target] })}
               {(result?.probe?.model || result?.probe_model) && (
                 <>{t("migration:result.failDescProbe", { model: result.probe?.model || result.probe_model })}</>
@@ -365,15 +365,15 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           {handoffBusy ? t("migration:result.handoffBusy") : t("migration:result.useHandoff")}</button>
         {handoff && (
           <div style={{ marginTop: 12, border: "1px solid var(--line3)", borderRadius: 10,
-            overflow: "hidden", animation: "ffade .2s ease" }}>
+            overflow: "hidden" }}>
             <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
-              fontSize: 11.5, color: "var(--tx4)", fontWeight: 600 }}>{t("migration:result.handoffPreview")}</div>
+              fontSize: 11, color: "var(--tx4)", fontWeight: 600 }}>{t("migration:result.handoffPreview")}</div>
             <div className="fscroll selectable" style={{ padding: "12px 14px", fontSize: 12,
               color: "var(--tx2b)", lineHeight: 1.6, maxHeight: 180, overflowY: "auto",
               whiteSpace: "pre-wrap" }}>{handoff.preview}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px",
               borderTop: "1px solid var(--line6)", background: "var(--fill)" }}>
-              <code className="mono selectable" style={{ flex: 1, fontSize: 12.5, color: "var(--tx2)",
+              <code className="mono selectable" style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{handoff.command}</code>
               <button className="fbtn" onClick={() => openTerminal(handoff.command)}>{t("migration:result.openTerminal")}</button>
             </div>
@@ -392,14 +392,14 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     <Sheet width={720} maxHeight={800} onClose={step === "writing" ? undefined : onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 650 }}>{t("migration:sheet.title")}</div>
+        <div style={{ fontSize: 14, fontWeight: 650 }}>{t("migration:sheet.title")}</div>
         <StepsHeader step={step} t={t} />
         <div style={{ flex: 1 }} />
         {step !== "writing" &&
           <a onClick={onClose} style={{ color: "var(--tx5)", fontSize: 18, lineHeight: 1 }}>×</a>}
       </div>
       <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: 20,
-        animation: "fslide .16s ease" }} key={step}>
+         }} key={step}>
         {body}
       </div>
       {step !== "writing" && (

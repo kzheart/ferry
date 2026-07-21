@@ -10,8 +10,8 @@ export default function FirstRun({ env, scan, onStart }) {
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
       minHeight: 0, background: "var(--inset)" }}>
       <div style={{ width: 460, background: "var(--surface)", border: "1px solid var(--line3)", borderRadius: 14,
-        boxShadow: "0 12px 34px -18px rgba(20,28,38,.28)", padding: "30px 30px 26px",
-        animation: "ffade .3s ease" }}>
+        boxShadow: "var(--shadow-sheet)", padding: "30px 30px 26px",
+         }}>
         <img className="noinvert" src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
         <div style={{ fontSize: 20, fontWeight: 650, marginTop: 16, letterSpacing: "-.01em" }}>
           {t("onboarding:welcome.title")}</div>
@@ -29,13 +29,13 @@ export default function FirstRun({ env, scan, onStart }) {
               : t("onboarding:welcome.detectNotFound");
           return (
             <div key={t2} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",
-              border: "1px solid var(--line5)", borderRadius: 9, marginBottom: 8 }}>
+              border: "1px solid var(--line5)", borderRadius: 8, marginBottom: 8 }}>
               <ToolIcon tool={t2} size={26} dot={installed ? "var(--ok)" : "var(--line-strong)"} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, color: "var(--tx2)", fontWeight: 600 }}>{TOOL_NAME[t2]}</div>
-                <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>{detect}</div>
+                <div style={{ fontSize: 11, color: "var(--tx4)" }}>{detect}</div>
               </div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5,
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11,
                 color: installed ? "var(--ok-deep)" : "var(--tx5)", fontWeight: 600 }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%",
                   background: installed ? "var(--ok)" : "var(--line-strong)" }} />
@@ -45,7 +45,7 @@ export default function FirstRun({ env, scan, onStart }) {
           );
         })}
         <button className="fbtn-primary" onClick={onStart}
-          style={{ width: "100%", height: 40, marginTop: 12, borderRadius: 9, fontSize: 14 }}>
+          style={{ width: "100%", height: 40, marginTop: 12, borderRadius: 8, fontSize: 14 }}>
           {t("onboarding:welcome.start")}</button>
       </div>
     </div>

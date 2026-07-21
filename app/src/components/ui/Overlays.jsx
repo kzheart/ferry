@@ -7,8 +7,66 @@ import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { STATUS_CODE } from "../../features/migration/migrationModel.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
-import { Spinner, ToolIcon } from "./icons.jsx";
+import { CloseIcon, SearchIcon, Spinner, ToolIcon } from "./icons.jsx";
 import { CheckSquare, RadioDot, Sheet } from "./primitives.jsx";
+
+// ---------- 会话搜索命令面板(⌘K 风格居中浮层) ----------
+export function SearchPalette({ placeholder, query, onQuery, results,
+  recentLabel, emptyLabel, onClose }) {
+  const [sel, setSel] = useState(0);
+  useEffect(() => setSel(0), [query]);
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); setSel(s => Math.min(s + 1, results.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setSel(s => Math.max(s - 1, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); results[sel]?.onClick?.(); onClose(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [results, sel, onClose]);
+  return (
+    <div onClick={onClose}
+      style={{ position: "absolute", inset: 0, zIndex: 70, background: "var(--dim)",
+        display: "flex", justifyContent: "center", alignItems: "flex-start", paddingTop: "9vh" }}>
+      <div onClick={e => e.stopPropagation()} className="fsheet"
+        style={{ width: "min(680px, 78vw)", maxHeight: "76vh", display: "flex", flexDirection: "column",
+          background: "var(--bg)", borderRadius: 14, boxShadow: "var(--shadow-sheet)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "0 14px",
+          height: 52, borderBottom: "1px solid var(--line5)", flex: "none" }}>
+          <span style={{ color: "var(--tx4)", display: "inline-flex" }}><SearchIcon /></span>
+          <input autoFocus value={query} onChange={onQuery} placeholder={placeholder}
+            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15,
+              color: "var(--tx1)", outline: "none" }} />
+          <button className="ftool-btn" onClick={onClose}><CloseIcon size={13} /></button>
+        </div>
+        <div className="fscroll" style={{ overflowY: "auto", padding: "8px", minHeight: 0 }}>
+          {recentLabel && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx4)",
+              padding: "6px 10px 4px" }}>{recentLabel}</div>
+          )}
+          {results.length === 0 ? (
+            <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--tx5)",
+              fontSize: 13 }}>{emptyLabel}</div>
+          ) : results.map((r, i) => (
+            <div key={r.id} onMouseEnter={() => setSel(i)}
+              onClick={() => { r.onClick?.(); onClose(); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 10px", height: 42,
+                borderRadius: 8, cursor: "default",
+                background: i === sel ? "var(--acc-soft2)" : "transparent" }}>
+              {r.tool && <ToolIcon tool={r.tool} size={20} />}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--tx1)",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</span>
+              {r.meta && <span className="mono" style={{ fontSize: 11, color: "var(--tx5)", flex: "none",
+                maxWidth: "42%", whiteSpace: "nowrap", overflow: "hidden",
+                textOverflow: "ellipsis" }}>{r.meta}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ---------- 差异预览 ----------
 export function DiffSheet({ ops, preview, loading, error, onClose }) {
@@ -31,7 +89,7 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
     <Sheet width={760} maxHeight={780} onClose={onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center" }}>
-        <div style={{ fontSize: 14.5, fontWeight: 650 }}>{t("overlays:diff.title")}</div>
+        <div style={{ fontSize: 14, fontWeight: 650 }}>{t("overlays:diff.title")}</div>
         <div style={{ fontSize: 12, color: "var(--tx4)", marginLeft: 12 }}>
           {t("overlays:diff.metaOps", { n: ops.length })}
           {preview && `${t("overlays:diff.metaSize", { before: fmtSize(preview.before.size), after: fmtSize(preview.after.size) })}
@@ -45,7 +103,7 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
           <div style={{ textAlign: "center", color: "var(--tx5)", fontSize: 13, padding: 40 }}>{t("overlays:diff.empty")}</div>)}
         {loading && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--tx4)",
-            fontSize: 12.5, marginBottom: 14 }}><Spinner size={14} /> {t("overlays:diff.loading")}</div>)}
+            fontSize: 12, marginBottom: 14 }}><Spinner size={14} /> {t("overlays:diff.loading")}</div>)}
         {error && (
           <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--err-bg2)",
             color: "var(--err-text)", fontSize: 12, marginBottom: 12 }}>{error}</div>)}
@@ -55,11 +113,11 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
             <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
               display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: o.dot }} />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{o.labelKey ? t(o.labelKey, o.labelParams) : o.label}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{o.labelKey ? t(o.labelKey, o.labelParams) : o.label}</span>
               {o.type === "rewrite" && o.text === o.orig && (
                 <span style={{ fontSize: 11, color: "var(--warn-deep)", marginLeft: "auto" }}>{t("overlays:diff.contentUnchanged")}</span>)}
             </div>
-            <div className="mono selectable" style={{ padding: "11px 13px", fontSize: 11.5, lineHeight: 1.7 }}>
+            <div className="mono selectable" style={{ padding: "11px 13px", fontSize: 11, lineHeight: 1.7 }}>
               <div className="fscroll" style={{ background: "var(--err-bg2)", color: "var(--err-text)",
                  padding: "6px 10px", borderRadius: 5, whiteSpace: "pre-wrap", overflowWrap: "break-word",
                  maxHeight: 180, overflowY: "auto" }}>− {o.type === "assistant-reply"
@@ -95,9 +153,9 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
 function ConfirmBox({ width = 400, title, children, actions }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "var(--scrim)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 44, animation: "ffade .15s ease" }}>
+      alignItems: "center", justifyContent: "center", zIndex: 44 }}>
       <div style={{ width, background: "var(--bg)", borderRadius: 12,
-        boxShadow: "0 24px 60px -18px rgba(20,28,38,.5)", padding: 22, animation: "fsheet .2s ease" }}>
+        boxShadow: "var(--shadow-sheet)", padding: 22 }}>
         <div style={{ fontSize: 15, fontWeight: 650 }}>{title}</div>
         {children}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>{actions}</div>
@@ -121,7 +179,7 @@ export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, o
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:apply.cancel")}</button>
       {inplace ? (
         <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-          borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
           onClick={onConfirm}>{t("overlays:apply.confirmInplace")}</button>
       ) : (
         <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
@@ -136,10 +194,10 @@ export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, o
               style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 11px",
                 border: `1px solid ${on ? ACCENT : "var(--line3)"}`,
                 background: on ? "var(--acc-soft4)" : "var(--surface)",
-                borderRadius: 9, marginTop: 7, cursor: "pointer" }}>
+                borderRadius: 8, marginTop: 7, cursor: "default" }}>
               <span style={{ marginTop: 1, display: "inline-flex" }}><RadioDot on={on} /></span>
               <span>
-                <span style={{ fontSize: 12.5, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
+                <span style={{ fontSize: 12, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
                 <span style={{ fontSize: 11, color: "var(--tx5)" }}>{d}</span>
               </span>
             </label>
@@ -165,8 +223,8 @@ export function ContextMenu({ x, y, items, onClose }) {
         style={{ position: "absolute", inset: 0, zIndex: 55 }} />
       <div style={{ position: "absolute", left, top, width, zIndex: 56, padding: 6,
         background: "var(--bg)", borderRadius: 10,
-        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
-        animation: "fpop .12s ease" }}>
+        boxShadow: "var(--shadow-menu)",
+         }}>
         {items.map((it, i) => it.sep
           ? <div key={i} style={{ height: 1, background: "var(--line3)", margin: "4px 8px" }} />
           : (
@@ -174,7 +232,7 @@ export function ContextMenu({ x, y, items, onClose }) {
               onClick={() => { if (it.disabled) return; onClose(); it.onClick?.(); }}
               title={it.disabled ? it.disabledHint : undefined}
               style={{ display: "flex", alignItems: "center", gap: 8, height: 30,
-                padding: "0 9px", borderRadius: 7, fontSize: 12.5,
+                padding: "0 9px", borderRadius: 6, fontSize: 12,
                 color: it.disabled ? "var(--tx5)" : it.danger ? "var(--err-text)" : "var(--tx2)",
                 cursor: it.disabled ? "default" : "pointer", whiteSpace: "nowrap" }}>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
@@ -202,10 +260,10 @@ export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
     <ConfirmBox width={430} title={t("overlays:delete.title")} actions={<>
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
       <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
         onClick={onConfirm}>{oc ? t("overlays:delete.confirmOpenCode") : t("overlays:delete.confirmOther")}</button>
     </>}>
-      <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
         {t("overlays:delete.desc", { title: sess.title || sess.id, tool: TOOL_NAME[sess.tool] })}</div>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
         display: "flex", flexDirection: "column", gap: 9 }}>
@@ -232,14 +290,14 @@ export function PromptBox({ title, desc, placeholder, initial, confirmLabel,
       <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
         onClick={submit}>{confirmLabel || t("overlays:prompt.confirm")}</button>
     </>}>
-      {desc && <div style={{ fontSize: 12.5, color: "var(--tx3b)", marginTop: 7,
+      {desc && <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7,
         lineHeight: 1.5 }}>{desc}</div>}
       <input autoFocus value={val} placeholder={placeholder}
         onChange={e => setVal(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") submit(); }}
         style={{ width: "100%", boxSizing: "border-box", height: 34, marginTop: 12,
           padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
-          borderRadius: 8, fontSize: 13, color: "var(--tx1)", outline: "none" }} />
+          borderRadius: 8, fontSize: 13, color: "var(--tx1)" }} />
     </ConfirmBox>
   );
 }
@@ -257,7 +315,7 @@ export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
     <ConfirmBox width={430} title={t("overlays:delete.batchTitle", { n: sessions.length })} actions={<>
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
       <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "pointer", fontWeight: 600 }}
+        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
         onClick={onConfirm}>{t("overlays:delete.confirmOther")}</button>
     </>}>
       <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
@@ -284,7 +342,7 @@ export function Toast({ toast, onDismiss }) {
     <div style={{ position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)",
       zIndex: 45, display: "flex", alignItems: "center", gap: 11, padding: "12px 16px",
       borderRadius: 10, background: bg, border: `1px solid ${border}`,
-      boxShadow: "0 12px 30px -12px rgba(20,28,38,.4)", animation: "fsheet .22s ease", maxWidth: 560 }}>
+      boxShadow: "var(--shadow-sheet)", maxWidth: 560 }}>
       {kind === "run" ? <Spinner size={20} track="var(--line)" /> : (
         <span style={{ width: 26, height: 26, flex: "none", borderRadius: "50%",
           background: kind === "ok" ? "var(--ok)" : "var(--err)", display: "inline-flex",
@@ -292,7 +350,7 @@ export function Toast({ toast, onDismiss }) {
           {kind === "ok" ? "✓" : "×"}</span>)}
       <div>
         <div style={{ fontSize: 13, fontWeight: 600, color }}>{toast.title}</div>
-        <div style={{ fontSize: 11.5, color: "var(--tx3b)", marginTop: 2 }}>{toast.desc}</div>
+        <div style={{ fontSize: 11, color: "var(--tx3b)", marginTop: 2 }}>{toast.desc}</div>
       </div>
       {toast.action && (
         <button className="fbtn" style={{ height: 28, padding: "0 12px", fontSize: 12,
@@ -309,15 +367,15 @@ function PopShell({ onClose, onClear, children, t }) {
     <>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 35 }} />
       <div style={{ position: "absolute", left: 66, top: 190, width: 272, zIndex: 36,
-        background: "var(--bg)", borderRadius: 11,
-        boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
-        overflow: "hidden", animation: "fpop .14s ease" }}>
+        background: "var(--bg)", borderRadius: 10,
+        boxShadow: "var(--shadow-menu)",
+        overflow: "hidden" }}>
         <div className="fscroll" style={{ maxHeight: 430, overflowY: "auto", padding: "12px 13px" }}>
           {children}
         </div>
         <div style={{ display: "flex", alignItems: "center", padding: "9px 13px",
           borderTop: "1px solid var(--line5)" }}>
-          <a onClick={onClear} style={{ fontSize: 11.5, color: "var(--tx3b)" }}>{t("overlays:filter.clear")}</a>
+          <a onClick={onClear} style={{ fontSize: 11, color: "var(--tx3b)" }}>{t("overlays:filter.clear")}</a>
           <span style={{ flex: 1 }} />
           <button className="fbtn-primary" style={{ height: 28, padding: "0 14px", fontSize: 12 }}
             onClick={onClose}>{t("overlays:filter.done")}</button>
@@ -335,11 +393,11 @@ const SectionTitle = ({ children, first }) => (
 function CheckRow({ on, onClick, icon, label, extra }) {
   return (
     <div className="hov-item" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 7,
-        cursor: "pointer" }}>
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 6,
+        cursor: "default" }}>
       <CheckSquare on={on} />
       {icon}
-      <span style={{ fontSize: 12.5, color: "var(--tx2)", flex: 1, whiteSpace: "nowrap",
+      <span style={{ fontSize: 12, color: "var(--tx2)", flex: 1, whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
       {extra && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{extra}</span>}
     </div>
@@ -349,10 +407,10 @@ function CheckRow({ on, onClick, icon, label, extra }) {
 function RadioRow({ on, onClick, label }) {
   return (
     <div className="hov-item" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 7,
-        cursor: "pointer" }}>
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 6,
+        cursor: "default" }}>
       <RadioDot on={on} />
-      <span style={{ fontSize: 12.5, color: "var(--tx2)", whiteSpace: "nowrap", overflow: "hidden",
+      <span style={{ fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap", overflow: "hidden",
         textOverflow: "ellipsis" }}>{label}</span>
     </div>
   );
@@ -385,10 +443,10 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
             <button key={d} className="mono" onClick={() => setF(v => ({ ...v, dir: on ? null : d }))}
               style={{ height: 24, padding: "0 9px", borderRadius: 20,
                 border: `1px solid ${on ? ACCENT : "var(--line)"}`, background: on ? "var(--acc-soft)" : "var(--surface)",
-                color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{d}</button>
+                color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "default" }}>{d}</button>
           );
         })}
-        {dirs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>{t("overlays:filter.noDirs")}</span>}
+        {dirs.length === 0 && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{t("overlays:filter.noDirs")}</span>}
       </div>
       {tags.length > 0 && (<>
         <SectionTitle>{t("overlays:filter.tags")}</SectionTitle>
@@ -400,7 +458,7 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
                 style={{ height: 24, padding: "0 9px", borderRadius: 20,
                   border: `1px solid ${on ? ACCENT : "var(--line)"}`,
                   background: on ? "var(--acc-soft)" : "var(--surface)",
-                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "pointer" }}>{t2}</button>
+                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "default" }}>{t2}</button>
             );
           })}
         </div>
@@ -410,8 +468,6 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
         onClick={() => setF(v => ({ ...v, mig: !v.mig }))} />
       <CheckRow on={f.sub} label={t("overlays:filter.onlySubSessions")}
         onClick={() => setF(v => ({ ...v, sub: !v.sub }))} />
-      <CheckRow on={f.arch} label={t("overlays:filter.showArchived")}
-        onClick={() => setF(v => ({ ...v, arch: !v.arch }))} />
     </PopShell>
   );
 }
@@ -519,16 +575,16 @@ export function Guide({ step, onGo, onFinish }) {
           <div style={{ position: "absolute", left: b.l + b.w, top: b.t,
             width: Math.max(0, b.W - b.l - b.w), height: b.h, background: dim }} />
           <div style={{ position: "absolute", left: b.l, top: b.t, width: b.w, height: b.h,
-            borderRadius: 9, outline: `2px solid ${ACCENT}`,
+            borderRadius: 8, outline: `2px solid ${ACCENT}`,
             boxShadow: "0 0 0 4px var(--ring)", pointerEvents: "none",
             transition: "all .26s cubic-bezier(.2,.7,.3,1)" }} />
         </>
       )}
       <div style={{ position: "absolute", left: card?.left ?? -9999, top: card?.top ?? 0, width: 324,
-        background: "var(--bg)", borderRadius: 11,
-        boxShadow: "0 18px 44px -16px rgba(20,28,38,.5),0 0 0 1px var(--ring)",
+        background: "var(--bg)", borderRadius: 10,
+        boxShadow: "var(--shadow-menu)",
         padding: "16px 18px 14px", transition: "all .26s cubic-bezier(.2,.7,.3,1)",
-        animation: "fslide .16s ease" }}>
+         }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: ACCENT, letterSpacing: ".03em" }}>
             {step} / {GUIDE_TOTAL}</span>
@@ -538,16 +594,16 @@ export function Guide({ step, onGo, onFinish }) {
                 background: i <= step ? ACCENT : "var(--dots)" }} />))}
           </div>
           <span style={{ flex: 1 }} />
-          <a onClick={onFinish} style={{ fontSize: 11.5, color: "var(--tx5)" }}>{t("onboarding:guide.skip")}</a>
+          <a onClick={onFinish} style={{ fontSize: 11, color: "var(--tx5)" }}>{t("onboarding:guide.skip")}</a>
         </div>
-        <div style={{ fontSize: 14.5, fontWeight: 650, marginTop: 11, letterSpacing: "-.01em" }}>{t(cfg.titleKey)}</div>
-        <div style={{ fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.55, marginTop: 6 }}>{t(cfg.bodyKey)}</div>
+        <div style={{ fontSize: 14, fontWeight: 650, marginTop: 11, letterSpacing: "-.01em" }}>{t(cfg.titleKey)}</div>
+        <div style={{ fontSize: 12, color: "var(--tx3)", lineHeight: 1.55, marginTop: 6 }}>{t(cfg.bodyKey)}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 15 }}>
           {step > 1 && (
-            <button className="fbtn" style={{ height: 31, fontSize: 12.5 }}
+            <button className="fbtn" style={{ height: 31, fontSize: 12 }}
               onClick={() => onGo(step - 1)}>{t("onboarding:guide.back")}</button>)}
           <span style={{ flex: 1 }} />
-          <button className="fbtn-primary" style={{ height: 31, padding: "0 16px", fontSize: 12.5 }}
+          <button className="fbtn-primary" style={{ height: 31, padding: "0 16px", fontSize: 12 }}
             onClick={() => step >= GUIDE_TOTAL ? onFinish() : onGo(step + 1)}>
             {step >= GUIDE_TOTAL ? t("onboarding:guide.start") : t("onboarding:guide.next")}</button>
         </div>
