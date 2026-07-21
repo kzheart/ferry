@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
+# 记住用户手动调整过的窗口大小/位置,首启才用 tauri.conf.json 里的默认尺寸
+tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # GUI 启动(Finder/Dock)只继承 launchd 最小 PATH,启动时从登录 shell 恢复完整 PATH,
