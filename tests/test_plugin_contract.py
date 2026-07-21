@@ -71,6 +71,10 @@ def test_registry_accepts_fake_plugin():
     assert "fake" not in registry.adapters()
 
 
+def test_registry_discovers_all_bundled_adapter_packages():
+    assert {"claude", "codex", "opencode"} <= set(registry.adapters())
+
+
 @pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
 def test_turn_locator_consistent_across_read_author_delete(tool, tmp_path):
     """reader 展示的 turn locator == authoring 替换的原生 turn

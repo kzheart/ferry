@@ -30,6 +30,7 @@ class ToolManifest:
     source_path: str
     reference_kind: str                 # "path" | "id"
     executables: tuple[str, ...] = ()   # launch descriptor 可执行文件白名单
+    fallback_bin_dirs: tuple[str, ...] = ()
 
     def to_dict(self, capabilities: list[str] | None = None) -> dict:
         return {"id": self.id, "display_name": self.display_name,

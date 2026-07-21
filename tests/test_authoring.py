@@ -287,7 +287,7 @@ def test_opencode_probe_clones_authored_result(monkeypatch):
             discarded.append(result["session_id"])
 
     monkeypatch.setattr(
-        "engine.adapters.opencode.probe.probes.probe_opencode",
+        "engine.adapters.opencode.probe._probe",
         lambda sid, cwd, model: {"status": "passed", "code": None,
                                  "params": {}, "diagnostic": {}})
     doc = type("Doc", (), {"ref": "original",
