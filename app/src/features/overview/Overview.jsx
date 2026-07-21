@@ -143,6 +143,7 @@ function Clock({ clock, peakHour, t }) {
     return `M${A[0]} ${A[1]} A${R0} ${R0} 0 0 1 ${Bp[0]} ${Bp[1]} L${C[0]} ${C[1]} A${r} ${r} 0 0 0 ${D[0]} ${D[1]} Z`;
   };
   return (
+    <>
     <svg viewBox="0 0 260 232" width="100%" height="232" role="img" aria-label={t("overview:clock.aria")}>
       {[0.5, 1].map(f => (
         <circle key={f} cx={CX} cy={CY} r={R0 + (R1 - R0) * f} fill="none" stroke="var(--grid)" strokeWidth="1" />
@@ -159,13 +160,16 @@ function Clock({ clock, peakHour, t }) {
       <text x={CX} y={CY - 2} textAnchor="middle" fill="var(--tx1)" fontSize="17" fontWeight="600"
         fontFamily="var(--font-ui)" letterSpacing="-0.5">{String(peakHour).padStart(2, "0")}:00</text>
       <text x={CX} y={CY + 12} textAnchor="middle" fill="var(--tx4b)" fontSize="10" fontFamily="var(--font-ui)">{t("overview:clock.peak")}</text>
-      {[["var(--warn)", 0.9, t("overview:clock.night")], ["var(--c1)", 0.45, t("overview:clock.day")]].map(([fill, op, lb], i) => (
-        <g key={i}>
-          <rect x="214" y={84 + i * 18} width="8" height="8" rx="2" fill={fill} opacity={op} />
-          <text x="214" y={84 + i * 18 + 24} fill="var(--tx5)" fontSize="9.5" fontFamily="var(--font-ui)">{lb}</text>
-        </g>
-      ))}
     </svg>
+    <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 2 }}>
+      {[["var(--warn)", 0.9, t("overview:clock.night")], ["var(--c1)", 0.45, t("overview:clock.day")]].map(([fill, op, lb], i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--tx5)", fontFamily: "var(--font-ui)" }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: fill, opacity: op }} />
+          {lb}
+        </span>
+      ))}
+    </div>
+    </>
   );
 }
 
