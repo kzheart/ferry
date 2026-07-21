@@ -133,8 +133,9 @@ const rowSel = on => ({
   background: on ? "var(--acc-soft2)" : "transparent",
 });
 
+// 置顶标记:悬浮时隐藏,避免与浮现的置顶按钮重复
 const PinGlyph = () => (
-  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ACCENT}
+  <svg className="row-meta" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ACCENT}
     strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }}>
     <path d="M12 17v5M9 4h6l1 7 2 2H6l2-2 1-7z" />
   </svg>
