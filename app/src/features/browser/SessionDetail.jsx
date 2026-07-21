@@ -1,10 +1,11 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { resumeDescriptor } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
-import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
+import { fmtTime, sessionRef, toRounds } from "../../domain/sessions/sessionModel.js";
+import { rpc } from "../../api/transport/rpc.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
   PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
@@ -12,12 +13,116 @@ import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
 const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」
 
-// 用户消息里的图片占位(粘贴图片的缓存路径)不直出,收成计数
-const IMG_RE = /\[Image:\s*source:[^\]]*\]|\[Image #\d+\]/g;
-const splitImages = text => {
-  const imgs = (String(text || "").match(IMG_RE) || []).length;
-  return { text: String(text || "").replace(IMG_RE, "").replace(/\n{3,}/g, "\n\n").trim(), imgs };
-};
+const withoutImagePlaceholders = text => String(text || "")
+  .replace(/\s*\[Image #\d+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+
+function ImagePreview({ images, meta, onClose }) {
+  const { t: tt } = useTranslation();
+  const [selected, setSelected] = useState(0);
+  const [sources, setSources] = useState({});
+  const [error, setError] = useState("");
+  const [contextMenu, setContextMenu] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const image = images[selected];
+  const source = sources[image.id];
+
+  useEffect(() => {
+    const closeOnEscape = event => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (source) return;
+    let cancelled = false;
+    setError("");
+    rpc("session_asset", { tool: meta.tool, ref: sessionRef(meta), asset_id: image.id })
+      .then(asset => {
+        if (!cancelled) setSources(current => ({ ...current,
+          [image.id]: `data:${asset.mime_type};base64,${asset.data}` }));
+      })
+      .catch(() => { if (!cancelled) setError(tt("browser:round.imageLoadFailed")); });
+    return () => { cancelled = true; };
+  }, [image.id, meta, source, tt]);
+
+  const choose = index => { setSelected(index); setError(""); };
+  const previous = () => choose((selected + images.length - 1) % images.length);
+  const next = () => choose((selected + 1) % images.length);
+  const copyImage = async () => {
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error();
+      const blob = await (await fetch(source)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setError(tt("browser:round.imageCopyFailed"));
+    }
+    setContextMenu(null);
+  };
+  return (
+    <div role="dialog" aria-modal="true" aria-label={tt("browser:round.imagePreview")}
+      onMouseDown={event => { setContextMenu(null); if (event.target === event.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 20, display: "flex", alignItems: "center",
+        justifyContent: "center", padding: 22, background: "rgba(7, 9, 13, .8)", backdropFilter: "blur(9px)" }}>
+      <div style={{ width: "min(940px, 100%)", maxHeight: "min(760px, 100%)", display: "flex",
+        flexDirection: "column", overflow: "hidden", border: "1px solid var(--line3)", borderRadius: 14,
+        background: "var(--bg)", boxShadow: "0 28px 90px rgba(0, 0, 0, .45)" }}>
+        <div style={{ height: 48, display: "flex", alignItems: "center", padding: "0 12px 0 16px",
+          borderBottom: "1px solid var(--line5)", gap: 10 }}>
+          <ImageGlyph size={14} />
+          <span style={{ fontSize: 12, fontWeight: 650, color: "var(--tx2)", flex: 1 }}>
+            {tt("browser:round.imagePosition", { current: selected + 1, total: images.length })}
+          </span>
+          {copied && <span style={{ fontSize: 11, color: "var(--ok)", fontWeight: 600 }}>{tt("browser:round.imageCopied")}</span>}
+          <IconBtn title={tt("browser:round.closeImagePreview")} onClick={onClose}><CloseIcon /></IconBtn>
+        </div>
+        <div style={{ minHeight: 220, flex: 1, position: "relative", display: "flex", alignItems: "center",
+          justifyContent: "center", padding: 16, overflow: "auto", background: "var(--surface)" }}>
+          {!source && !error && <Spinner size={20} />}
+          {error && <span style={{ color: "var(--err-text)", fontSize: 12 }}>{error}</span>}
+          {source && <img src={source} alt={image.filename || tt("browser:round.imageAlt", { n: selected + 1 })}
+            onContextMenu={event => {
+              event.preventDefault();
+              setContextMenu({ x: Math.min(event.clientX, window.innerWidth - 178),
+                y: Math.min(event.clientY, window.innerHeight - 54) });
+            }}
+            style={{ maxWidth: "100%", maxHeight: "calc(min(760px, 100vh) - 148px)", display: "block",
+              objectFit: "contain", borderRadius: 6, boxShadow: "0 6px 24px rgba(0, 0, 0, .2)" }} />}
+          {images.length > 1 && <>
+            <button type="button" title={tt("browser:round.previousImage")} onClick={previous}
+              style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%) rotate(180deg)",
+                width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                border: "1px solid var(--line3)", borderRadius: "50%", background: "var(--bg)", color: "var(--tx2)", cursor: "default" }}><Caret open={false} size={15} /></button>
+            <button type="button" title={tt("browser:round.nextImage")} onClick={next}
+              style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                width: 34, height: 34, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                border: "1px solid var(--line3)", borderRadius: "50%", background: "var(--bg)", color: "var(--tx2)", cursor: "default" }}><Caret open={false} size={15} /></button>
+          </>}
+        </div>
+        {images.length > 1 && <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: 10,
+          borderTop: "1px solid var(--line5)", overflowX: "auto" }}>
+          {images.map((item, index) => <button key={item.id} type="button" onClick={() => choose(index)}
+            title={tt("browser:round.imagePosition", { current: index + 1, total: images.length })}
+            style={{ width: index === selected ? 18 : 6, height: 6, flex: "none", padding: 0,
+              border: "none", borderRadius: 8, background: index === selected ? ACCENT : "var(--line2)",
+              cursor: "default", transition: "width .16s ease" }} />)}
+        </div>}
+      </div>
+      {contextMenu && <div role="menu" onMouseDown={event => event.stopPropagation()}
+        style={{ position: "fixed", zIndex: 21, left: contextMenu.x, top: contextMenu.y, minWidth: 166,
+          padding: 5, border: "1px solid var(--line2)", borderRadius: 10, background: "var(--bg)",
+          boxShadow: "0 14px 38px rgba(0, 0, 0, .32)" }}>
+        <button role="menuitem" type="button" onClick={copyImage}
+          style={{ width: "100%", height: 32, padding: "0 10px", display: "flex", alignItems: "center",
+            border: "none", borderRadius: 6, background: "transparent", color: "var(--tx1)",
+            fontFamily: "inherit", fontSize: 12, textAlign: "left", cursor: "pointer" }}>
+          {tt("browser:round.copyImage")}
+        </button>
+      </div>}
+    </div>
+  );
+}
 
 function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
   return (
@@ -63,14 +168,16 @@ function ToolCard({ t, tt, open, onToggle }) {
 function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
   replyOp, canAuthor, authoringBlocked, onStartReply, onUpdateReply, onCancelReply,
-  scopeOn, onScope, onClearScope, onMigrateScope, scopeStats }) {
+  scopeOn, onScope, onClearScope, onMigrateScope, scopeStats, onOpenImages }) {
   const { t: tt } = useTranslation();
   const [open, setOpen] = useState({});
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rewEditing, setRewEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const taRef = useRef(null);
-  const { text: userText, imgs } = useMemo(() => splitImages(r.user), [r.user]);
+  const userText = useMemo(() => withoutImagePlaceholders(r.user), [r.user]);
+  const shownUserText = rewOp ? withoutImagePlaceholders(rewOp.text) : userText;
+  const images = r.images || [];
   const fullAiText = r.final || "";
   const aiText = fullAiText.slice(0, 8000);
   const deleted = !!delOp;
@@ -111,15 +218,17 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
         </div>
       )}
       <div className={deleted ? "fdel" : undefined}>
-        {r.user && imgs > 0 && (
+        {images.length > 0 && (
           <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0 4px" }}>
-            <span title={tt("browser:round.imagesCount", { n: imgs })} style={{ display: "inline-flex", alignItems: "center",
-              gap: 5, padding: "2px 9px", borderRadius: 20, background: "var(--chip)",
-              color: "var(--tx4)", fontSize: 10 }}>
-              <ImageGlyph /> ×{imgs}</span>
+            <button type="button" title={tt("browser:round.openImages", { n: images.length })} onClick={() => onOpenImages(images)}
+              style={{ display: "inline-flex", alignItems: "center",
+              gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--chip)",
+              color: "var(--tx3b)", fontSize: 11, fontWeight: 600, border: "1px solid var(--line4)",
+              cursor: "pointer", boxShadow: "0 1px 0 rgba(255, 255, 255, .08)" }}>
+              <ImageGlyph /> {tt("browser:round.viewImages", { n: images.length })}</button>
           </div>
         )}
-        {r.user && (
+        {(shownUserText || (rewOp && rewEditing)) && (
           <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
             {rewOp && rewEditing && !deleted ? (
               <div style={{ maxWidth: "82%", width: "82%", position: "relative" }}>
@@ -151,7 +260,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                   padding: "9px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
                   whiteSpace: "pre-wrap", overflowWrap: "break-word",
                   cursor: rewOp && !deleted ? "text" : undefined }}>
-                {(rewOp ? rewOp.text : userText).slice(0, 4000)}
+                {shownUserText.slice(0, 4000)}
                 {rewOp && !deleted && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
                     color: ACCENT, fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
@@ -287,6 +396,7 @@ export default memo(function SessionDetail({ meta, data, error,
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
   const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
   const [copied, setCopied] = useState(false);
+  const [previewImages, setPreviewImages] = useState(null);
 
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
@@ -377,9 +487,9 @@ export default memo(function SessionDetail({ meta, data, error,
               migratable={r.n < rounds.length}
               scopeOn={scope === r.n}
               onScope={() => setScope(r.n)}
-              onClearScope={() => setScope(null)}
-              onMigrateScope={() => onOpenMigrate(r.n)}
-              scopeStats={scopeStats} />
+               onClearScope={() => setScope(null)}
+               onMigrateScope={() => onOpenMigrate(r.n)}
+               scopeStats={scopeStats} onOpenImages={setPreviewImages} />
           ))}
           {data && rounds.length === 0 && (
             <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12 }}>{tt("browser:session.noMessages")}</div>
@@ -392,6 +502,8 @@ export default memo(function SessionDetail({ meta, data, error,
           invalid={authoringError(ops.find(op => op.type === "assistant-reply"))}
           onDiscardAll={onDiscardAll} />
       )}
+      {previewImages && <ImagePreview key={previewImages[0]?.id} images={previewImages}
+        meta={meta} onClose={() => setPreviewImages(null)} />}
     </div>
   );
 });

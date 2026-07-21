@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
+from ..base.media import image_from_base64
 
 TOOL_OPS = {"Bash": "shell.exec", "Read": "fs.read",
             "Write": "fs.write", "Edit": "fs.edit"}
@@ -78,6 +79,8 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
 
     pending: dict[str, ToolCall] = {}
     for record in messages:
+        if record.get("isMeta"):
+            continue
         body = record.get("message") or {}
         content = body.get("content")
         role = body.get("role")
@@ -93,10 +96,19 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
             continue
 
         blocks, result_carrier = [], False
-        for item in content or []:
+        for item_index, item in enumerate(content or []):
             kind = item.get("type")
             if kind == "text":
                 blocks.append(Block("text", item.get("text", "")))
+            elif kind == "image":
+                source = item.get("source") or {}
+                image = image_from_base64(
+                    f"{record.get('uuid')}:image:{item_index}",
+                    source.get("media_type", ""), source.get("data", ""))
+                if image is None:
+                    session.lose("migration.unknown_block_dropped", kind=kind)
+                else:
+                    blocks.append(Block("image", image=image))
             elif kind == "thinking":
                 text = visible_text(item.get("thinking"))
                 if text is not None:

@@ -10,6 +10,7 @@ from pathlib import Path
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import codex_summary_text
 from ...infrastructure.scan_cache import ScanCache
+from ..base.media import image_from_data_url
 
 _META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
 
@@ -225,9 +226,20 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         p = l["payload"]
         pt = p.get("type")
         if pt == "message":
-            texts = [c.get("text", "") for c in p.get("content", [])
+            content = p.get("content", [])
+            texts = [c.get("text", "") for c in content
                      if c.get("type") in ("input_text", "output_text")]
             text = "\n".join(t for t in texts if t)
+            image_blocks = []
+            for content_index, item in enumerate(content):
+                if item.get("type") != "input_image":
+                    continue
+                image = image_from_data_url(
+                    f"record:{ordinal}:image:{content_index}", item.get("image_url", ""))
+                if image is None:
+                    sess.lose("migration.unknown_block_dropped", kind="input_image")
+                else:
+                    image_blocks.append(Block("image", image=image))
             if p["role"] == "user" and text.strip().startswith(_SKIP_USER_PREFIX):
                 continue
             if p["role"] == "user" and (cur_tools or cur_reasoning):
@@ -235,9 +247,9 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 flush_pending_into(pending_blocks)
                 sess.messages.append(Message(role="assistant", blocks=pending_blocks,
                                              raw=[]))
-            if not text.strip() and not cur_tools and not cur_reasoning:
+            if not text.strip() and not image_blocks and not cur_tools and not cur_reasoning:
                 continue
-            blocks = [Block("text", text)] if text.strip() else []
+            blocks = ([Block("text", text)] if text.strip() else []) + image_blocks
             if p["role"] == "assistant":
                 flush_pending_into(blocks)
             sess.messages.append(Message(role=p["role"], blocks=blocks, raw=[l],

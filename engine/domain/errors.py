@@ -75,6 +75,14 @@ class SessionNotFoundError(DomainError, ValueError):
                          {"tool": tool, "ref": ref})
 
 
+class SessionAssetNotFoundError(DomainError, ValueError):
+    code = "session.asset_not_found"
+    category = "not-found"
+
+    def __init__(self, asset_id: str):
+        super().__init__("找不到会话图片", {"asset_id": asset_id})
+
+
 class LocatorStaleError(DomainError, ValueError):
     """UI 持有的定位符与当前会话不再匹配。"""
 

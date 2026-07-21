@@ -386,4 +386,4 @@ def health() -> dict:
 # 稳定门面仍从本模块导出，具体用例由职责更小的应用模块持有。
 from .models import list_models  # noqa: E402,F811
 from .scanning import scan  # noqa: E402,F811
-from .sessions import read_tree as _read_tree, show  # noqa: E402,F811
+from .sessions import read_tree as _read_tree, session_asset, show  # noqa: E402,F811

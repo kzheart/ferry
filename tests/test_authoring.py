@@ -488,3 +488,90 @@ def test_hidden_user_carriers_do_not_change_dto_or_compiler_turns(tool, tmp_path
 
     assert [item["text"] for item in _items(_roundtrip(tool, doc.data, tmp_path))
             if item["kind"] == "text"] == ["old1", "new2"]
+
+
+def test_claude_ismeta_image_companion_not_a_turn(tmp_path):
+    """粘贴图片时 Claude 会写 human user + isMeta companion；应合并为一轮。"""
+    from engine.adapters.claude.codec import TURN_INDEX
+
+    data = [
+        {"type": "user", "uuid": "u1", "parentUuid": None, "promptId": "p1",
+         "isSidechain": False,
+         "message": {"role": "user", "content": [
+             {"type": "text", "text": "看这张图 [Image #1]"},
+             {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                          "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"}},
+         ]}},
+        {"type": "user", "uuid": "u-meta", "parentUuid": "u1", "promptId": "p1",
+         "isSidechain": False, "isMeta": True,
+         "message": {"role": "user", "content": [
+             {"type": "text",
+              "text": "[Image: source: /tmp/.claude/image-cache/p1/1.png]"},
+         ]}},
+        {"type": "assistant", "uuid": "a1", "parentUuid": "u-meta",
+         "isSidechain": False,
+         "message": {"role": "assistant", "content": [
+             {"type": "text", "text": "看到了"},
+         ]}},
+    ]
+    dto = session_json(_roundtrip("claude", data, tmp_path))
+    assert len(dto["turns"]) == 1
+    assert dto["turns"][0]["turn_locator"] == "u1"
+    assert [item["text"] for item in dto["turns"][0]["assistant_reply"]["items"]] == \
+        ["看到了"]
+    assert "u-meta" not in {m.get("uuid") for m in dto["messages"]}
+    image = dto["turns"][0]["user"]["blocks"][1]["image"]
+    assert image == {"id": "u1:image:1", "mime_type": "image/png", "filename": None}
+    assert "iVBORw0KGgo" not in str(dto)
+
+    spans = TURN_INDEX.turns(data)
+    assert len(spans) == 1
+    assert spans[0].locator == "u1"
+    assert spans[0].start == 0
+    assert spans[0].end == 3
+
+    doc = _document("claude", data)
+    _compiler("claude").replace(
+        doc, dto["turns"][0]["turn_locator"],
+        AssistantReply.from_dict({"items": [{"kind": "text", "text": "新回复"}]}))
+    assert [item["text"] for item in _items(_roundtrip("claude", doc.data, tmp_path))
+            if item["kind"] == "text"] == ["新回复"]
+
+
+def test_image_blocks_normalize_codex_and_opencode(tmp_path):
+    image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+    codex = [
+        {"type": "session_meta", "payload": {"id": "codex-image", "cwd": "/tmp"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user",
+         "content": [{"type": "input_image", "image_url": image_url}]}},
+    ]
+    opencode = {"info": {"id": "opencode-image", "directory": "/tmp"}, "messages": [
+        {"info": {"id": "message-image", "role": "user"}, "parts": [
+            {"type": "file", "mime": "image/png", "filename": "diagram.png", "url": image_url},
+        ]},
+    ]}
+    for tool, data, expected in [
+        ("codex", codex, {"id": "record:1:image:0", "mime_type": "image/png", "filename": None}),
+        ("opencode", opencode, {"id": "message-image:image:0", "mime_type": "image/png", "filename": "diagram.png"}),
+    ]:
+        dto = session_json(_roundtrip(tool, data, tmp_path))
+        assert len(dto["turns"]) == 1
+        assert dto["turns"][0]["user"]["blocks"] == [{"kind": "image", "image": expected}]
+        assert "iVBORw0KGgo" not in str(dto)
+
+
+def test_session_asset_returns_image_only_on_demand(tmp_path, monkeypatch):
+    from engine.application import sessions
+
+    data = [
+        {"type": "user", "uuid": "u1", "message": {"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+             "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"}},
+        ]}},
+    ]
+    session = _roundtrip("claude", data, tmp_path)
+    monkeypatch.setattr(sessions, "read_tree", lambda tool, ref: session)
+    assert sessions.session_asset("claude", "fixture", "u1:image:0") == {
+        "mime_type": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
+        "filename": None,
+    }
