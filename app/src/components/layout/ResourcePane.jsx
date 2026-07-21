@@ -1,5 +1,5 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+搜索/筛选图标/标签/列表/页脚)
-import { memo } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
@@ -83,6 +83,53 @@ export function PaneEmpty({ text, onClear }) {
   );
 }
 
+// ----- 列表虚拟化:几千行会话全量渲染会拖垮 WebView,只挂载可视区 ± OVERSCAN 内的行 -----
+const ROW_H = 30;      // 会话/历史行高(与行内 style 的 height 一致)
+const HEADER_H = 24;   // 分组标题行高
+const OVERSCAN = 300;  // 视口上下各多渲染的像素,避免快速滚动露白
+
+// 跟踪所在滚动容器的视口(相对本列表顶部的偏移 + 高度),scroll 用 rAF 合帧
+function useViewport(ref) {
+  const [vp, setVp] = useState({ top: 0, h: 2000 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const sc = el?.closest("[data-pane-scroll]");
+    if (!sc) return;
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const base = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+      setVp(v => {
+        const top = sc.scrollTop - base, h = sc.clientHeight;
+        return v.top === top && v.h === h ? v : { top, h };
+      });
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    measure();
+    sc.addEventListener("scroll", schedule, { passive: true });
+    const ro = new ResizeObserver(schedule);
+    ro.observe(sc);
+    return () => { sc.removeEventListener("scroll", schedule); cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+  return vp;
+}
+
+// 平铺后的分组列表:items 为 {key, y, h, node},总高 total,超出视口的行不渲染
+function VirtualItems({ items, total }) {
+  const ref = useRef(null);
+  const { top, h } = useViewport(ref);
+  const lo = top - OVERSCAN, hi = top + h + OVERSCAN;
+  return (
+    <div ref={ref} style={{ position: "relative", height: total }}>
+      {items.map(it => (it.y + it.h < lo || it.y > hi) ? null : (
+        <div key={it.key} style={{ position: "absolute", top: it.y, left: 0, right: 0, height: it.h }}>
+          {it.node}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 选中态:Finder 式整块填充,不描边
 const rowSel = on => ({
   background: on ? "var(--acc-soft2)" : "transparent",
@@ -132,44 +179,54 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi,
 });
 
 // 会话库分组列表
-export function LibraryList({ groups, empty, onClear, selectedId, multiSel,
+export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selectedId, multiSel,
   onRowClick, onRowPin, onRowDelete, onRowMore }) {
   const { t } = useTranslation();
   if (empty) return <PaneEmpty text={t("common:empty.library")} onClear={onClear} />;
   const multiSet = new Set(multiSel);
-  return groups.map(g => (
-    <div key={g.key} style={{ marginBottom: 3 }}>
-      <div className="hov-row" onClick={g.onToggle}
-        style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px",
+  const items = [];
+  let y = 0;
+  groups.forEach(g => {
+    const expanded = !(collapsed[g.key] ?? false);
+    items.push({ key: `h:${g.key}`, y, h: HEADER_H, node: (
+      <div className="hov-row" onClick={() => onToggle(g.key)}
+        style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 8px", height: HEADER_H,
           cursor: "default", borderRadius: 6 }}>
-        <Caret open={g.expanded} />
+        <Caret open={expanded} />
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3)" }}>{g.label}</span>
         <span style={{ fontSize: 11, color: "var(--tx5)" }}>· {g.count}</span>
       </div>
-      {g.expanded && (
-        <div>
-          {g.rows.map(r => (
-            <LibraryRow key={r.id} r={r} selected={r.id === selectedId} multi={multiSet.has(r.id)}
-              onRowClick={onRowClick} onRowPin={onRowPin}
-              onRowDelete={onRowDelete} onRowMore={onRowMore} />
-          ))}
-        </div>
-      )}
-    </div>
-  ));
+    ) });
+    y += HEADER_H;
+    if (expanded) g.rows.forEach(r => {
+      items.push({ key: r.id, y, h: ROW_H, node: (
+        <LibraryRow r={r} selected={r.id === selectedId} multi={multiSet.has(r.id)}
+          onRowClick={onRowClick} onRowPin={onRowPin}
+          onRowDelete={onRowDelete} onRowMore={onRowMore} />
+      ) });
+      y += ROW_H;
+    });
+    y += 3;
+  });
+  return <VirtualItems items={items} total={y} />;
 }
 // 迁移历史分组列表
 export function HistoryList({ groups, empty, onClear }) {
   const { t } = useTranslation();
   if (empty) return <PaneEmpty text={t("common:empty.history")} onClear={onClear} />;
-  return groups.map(g => (
-    <div key={g.label} style={{ marginBottom: 5 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 4px" }}>
+  const items = [];
+  let y = 0;
+  groups.forEach(g => {
+    items.push({ key: `h:${g.label}`, y, h: HEADER_H, node: (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height: HEADER_H }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3)" }}>{g.label}</span>
         <span style={{ fontSize: 11, color: "var(--tx5)" }}>· {g.rows.length}</span>
       </div>
-      {g.rows.map(h => (
-        <div key={h.id} onClick={h.onClick} onContextMenu={e => e.preventDefault()}
+    ) });
+    y += HEADER_H;
+    g.rows.forEach(h => {
+      items.push({ key: h.id, y, h: ROW_H, node: (
+        <div onClick={h.onClick} onContextMenu={e => e.preventDefault()}
           title={`${h.from} → ${h.to} · ${h.statusLabel ?? h.status}`}
           className={h.selected ? "lib-row" : "lib-row hov-item"}
           style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,
@@ -180,7 +237,10 @@ export function HistoryList({ groups, empty, onClear }) {
           <span style={{ width: 5, height: 5, borderRadius: "50%", background: h.stColor, flex: "none" }} />
           <span style={{ fontSize: 10, color: "var(--tx5)", flex: "none" }}>{h.short}</span>
         </div>
-      ))}
-    </div>
-  ));
+      ) });
+      y += ROW_H;
+    });
+    y += 5;
+  });
+  return <VirtualItems items={items} total={y} />;
 }
