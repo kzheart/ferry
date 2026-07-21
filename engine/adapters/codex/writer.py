@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from ...domain.model import Session
+from ...domain.tool_ops import CanonicalOp
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
 from .registry import register_tree
@@ -106,31 +107,61 @@ def _apply_patch_pair(tpl, patch: str, output: str = "{}") -> list:
     return [call, outrec]
 
 
-def _native_records(tpl, t, cwd) -> list | None:
-    """规范操作 → Codex 原生记录;无法映射返回 None(由调用方降级)。
-
-    常用工具必须原生映射:目标缺同类工具时用等价 shell 形式(如 fs.read → cat)。
-    """
+def _write_shell_exec(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
-    if t.op == "shell.exec" and i.get("command"):
+    if i.get("command"):
         return _exec_pair(tpl, i["command"], cwd,
                           t.meta.get("stdout", t.output), None)
-    if t.op == "fs.read" and i.get("file_path"):
-        return _exec_pair(tpl, f"cat {i['file_path']}", cwd,
-                          t.output or "", 0)
-    if t.op == "fs.write" and i.get("file_path"):
+
+
+def _write_fs_read(tpl, t, cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    if i.get("file_path"):
+        return _exec_pair(tpl, f"cat {i['file_path']}", cwd, t.output or "", 0)
+    return None
+
+
+def _write_fs_write(tpl, t, _cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    if i.get("file_path"):
         body = str(i.get("content", ""))
         patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
             i["file_path"], "\n".join("+" + l for l in body.splitlines()))
         return _apply_patch_pair(tpl, patch)
-    if t.op == "fs.edit" and i.get("file_path"):
+    return None
+
+
+def _write_fs_edit(tpl, t, _cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    if i.get("file_path"):
         hunk = "\n".join(["@@"]
-                         + ["-" + l for l in str(i.get("old", "")).splitlines()]
-                         + ["+" + l for l in str(i.get("new", "")).splitlines()])
+                          + ["-" + l for l in str(i.get("old", "")).splitlines()]
+                          + ["+" + l for l in str(i.get("new", "")).splitlines()])
         patch = "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch".format(
             i["file_path"], hunk)
         return _apply_patch_pair(tpl, patch)
     return None
+
+
+OP_WRITERS = {
+    CanonicalOp.SHELL_EXEC: _write_shell_exec,
+    CanonicalOp.FS_READ: _write_fs_read,
+    CanonicalOp.FS_WRITE: _write_fs_write,
+    CanonicalOp.FS_EDIT: _write_fs_edit,
+}
+
+OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
+    # Codex has no native read tool. Rendering it as `cat` preserves content
+    # but changes the tool semantics, so migration preview must disclose it.
+    CanonicalOp.FS_READ: "degrade",
+    CanonicalOp.AGENT_SPAWN: "native",
+}
+
+
+def _native_records(tpl, t, cwd) -> list | None:
+    """Render a canonical operation with the target-specific mapping table."""
+    writer = OP_WRITERS.get(t.op)
+    return writer(tpl, t, cwd) if writer else None
 
 
 def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
@@ -181,7 +212,7 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                 texts.append(text)
             elif b.kind == "tool":
                 t = b.tool
-                if t.op == "agent.spawn":
+                if t.op == CanonicalOp.AGENT_SPAWN:
                     continue
                 native = _native_records(tpl, t, cwd)
                 if native:
