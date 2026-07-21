@@ -3,10 +3,10 @@ import { memo, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
-  SearchIcon, SortCaret, ToolIcon, TrashIcon } from "../ui/icons.jsx";
+  SearchIcon, ToolIcon, TrashIcon } from "../ui/icons.jsx";
 
 export function Pane({ collapsed, width, dragging, title, count, placeholder,
-  query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter, sortLabel, footer,
+  query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter, footer,
   tokens, listKey, children }) {
   const { t } = useTranslation();
   const w = collapsed ? 0 : width;
@@ -37,8 +37,6 @@ export function Pane({ collapsed, width, dragging, title, count, placeholder,
                 <span style={{ position: "absolute", top: 3, right: 3, width: 6, height: 6,
                   borderRadius: "50%", background: ACCENT }} />
               )}</button>
-            <span title={sortLabel} style={{ display: "inline-flex", alignItems: "center",
-              color: "var(--tx5)", paddingLeft: 2 }}><SortCaret /></span>
           </div>
           {query && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, height: 26, padding: "0 6px 0 10px",

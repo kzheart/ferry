@@ -362,15 +362,22 @@ export function Toast({ toast, onDismiss }) {
 }
 
 // ---------- 筛选弹层(共用外壳) ----------
-function PopShell({ onClose, onClear, children, t }) {
+function PopShell({ anchor, onClose, onClear, children, t }) {
+  // 锚定在筛选按钮下方、右缘对齐;无锚点时退回固定位置
+  const W = 272;
+  const left = anchor
+    ? Math.max(8, Math.min(anchor.right - W, window.innerWidth - W - 8))
+    : 66;
+  const top = anchor ? anchor.bottom + 6 : 190;
+  const maxH = Math.max(200, Math.min(430, window.innerHeight - top - 70));
   return (
     <>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 35 }} />
-      <div style={{ position: "absolute", left: 66, top: 190, width: 272, zIndex: 36,
+      <div style={{ position: "absolute", left, top, width: W, zIndex: 36,
         background: "var(--bg)", borderRadius: 10,
         boxShadow: "var(--shadow-menu)",
         overflow: "hidden" }}>
-        <div className="fscroll" style={{ maxHeight: 430, overflowY: "auto", padding: "12px 13px" }}>
+        <div className="fscroll" style={{ maxHeight: maxH, overflowY: "auto", padding: "12px 13px" }}>
           {children}
         </div>
         <div style={{ display: "flex", alignItems: "center", padding: "9px 13px",
@@ -417,12 +424,12 @@ function RadioRow({ on, onClick, label }) {
 }
 
 // 会话库筛选:来源 / 时间 / 目录
-export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onClear }) {
+export function LibraryFilter({ f, setF, counts, dirs, tags = [], anchor, onClose, onClear }) {
   const { t } = useTranslation();
   const times = [["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
     ["last7", t("overlays:filter.last7")], ["last30", t("overlays:filter.last30")]];
   return (
-    <PopShell onClose={onClose} onClear={onClear} t={t}>
+    <PopShell anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
       <SectionTitle first>{t("overlays:filter.source")}</SectionTitle>
       {TOOLS.map(t2 => (
         <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
@@ -473,7 +480,7 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], onClose, onCle
 }
 
 // 迁移历史筛选:来源 / 目标 / 状态 / 时间
-export function HistoryFilter({ f, setF, onClose, onClear }) {
+export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
   const { t } = useTranslation();
   const statusOptions = [
     [STATUS_CODE.success, t(`common:${STATUS_CODE.success}`)],
@@ -481,7 +488,7 @@ export function HistoryFilter({ f, setF, onClose, onClear }) {
     [STATUS_CODE.rolledBack, t(`common:${STATUS_CODE.rolledBack}`)],
   ];
   return (
-    <PopShell onClose={onClose} onClear={onClear} t={t}>
+    <PopShell anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
       <SectionTitle first>{t("overlays:filter.sourceTools")}</SectionTitle>
       {TOOLS.map(t2 => (
         <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
