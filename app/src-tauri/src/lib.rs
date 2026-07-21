@@ -1,5 +1,7 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
+#[cfg(target_os = "macos")]
+mod menu;
 mod reveal;
 mod sidecar;
 mod terminal;
@@ -11,6 +13,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|_app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(win) = _app.get_webview_window("main") {
+                    let _ = window_vibrancy::apply_vibrancy(
+                        &win,
+                        window_vibrancy::NSVisualEffectMaterial::Sidebar,
+                        None,
+                        None,
+                    );
+                }
+                menu::install(_app.handle())?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
             terminal::open_terminal,

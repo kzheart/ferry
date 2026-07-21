@@ -228,7 +228,7 @@ function ToolFilter({ tool, setTool, t }) {
   const row = (k, icon, text) => (
     <div key={k} role="option" aria-selected={tool === k} onClick={() => pick(k)} className="hov-item"
       style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px",
-        borderRadius: 7, fontSize: 12.5, color: "var(--tx2)", cursor: "pointer", whiteSpace: "nowrap" }}>
+        borderRadius: 6, fontSize: 12, color: "var(--tx2)", cursor: "default", whiteSpace: "nowrap" }}>
       {icon}
       <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
       {tool === k && <span style={{ color: "var(--tx3)", display: "inline-flex" }}><CheckIcon size={12} /></span>}
@@ -246,8 +246,8 @@ function ToolFilter({ tool, setTool, t }) {
       <button onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open}
         aria-label={t("overview:filter.label")}
         style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 28, padding: "0 9px",
-          border: "1px solid var(--line)", borderRadius: 7, background: "var(--surface)",
-          font: "inherit", fontSize: 12, color: "var(--tx1)", cursor: "pointer" }}>
+          border: "1px solid var(--line)", borderRadius: 6, background: "var(--surface)",
+          font: "inherit", fontSize: 12, color: "var(--tx1)", cursor: "default" }}>
         {tool === "all" ? allIcon : <ToolIcon tool={tool} size={18} />}
         {label}
         <SortCaret />
@@ -258,8 +258,8 @@ function ToolFilter({ tool, setTool, t }) {
           <div role="listbox" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)",
             zIndex: 56, minWidth: 176, maxHeight: 300, overflowY: "auto", padding: 6,
             background: "var(--bg)", borderRadius: 10,
-            boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
-            animation: "fpop .12s ease" }}>
+            boxShadow: "var(--shadow-menu)",
+             }}>
             {row("all", allIcon, t("overview:filter.all"))}
             <div style={{ height: 1, background: "var(--line3)", margin: "4px 6px" }} />
             {TOOLS.map(k => row(k, <ToolIcon tool={k} size={20} />, TOOL_NAME[k] || k))}
@@ -311,7 +311,7 @@ export default function Overview({ sessions = [], historyRows = [],
     <button key={label} onClick={onClick} aria-pressed={active}
       style={{ border: "none", background: active ? "var(--surface)" : "transparent",
         font: "inherit", fontSize: 12, color: active ? "var(--tx1)" : "var(--tx3)",
-        fontWeight: active ? 500 : 400, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
+        fontWeight: active ? 500 : 400, padding: "3px 10px", borderRadius: 5, cursor: "default",
         display: "inline-flex", alignItems: "center", gap: 6,
         boxShadow: active ? "0 1px 1px rgba(0,0,0,.05)" : "none" }}>
       {dot && <i style={{ width: 7, height: 7, borderRadius: 2, background: dot, opacity: active ? 1 : 0.55 }} />}
@@ -336,7 +336,7 @@ export default function Overview({ sessions = [], historyRows = [],
 
   return (
     <div className="fscroll" style={{ flex: 1, minWidth: 0, overflowY: "auto",
-      background: "var(--bg)", animation: "ffade .16s ease" }}>
+      background: "var(--bg)" }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "22px 24px 60px",
         display: "flex", flexDirection: "column", gap: 22 }}>
 
@@ -346,7 +346,7 @@ export default function Overview({ sessions = [], historyRows = [],
           <div style={{ flex: 1 }} />
           <ToolFilter tool={tool} setTool={setTool} t={t} />
           <div role="group" aria-label={t("overview:scope.label")}
-            style={{ display: "flex", background: "var(--track)", borderRadius: 7, padding: 2, gap: 2 }}>
+            style={{ display: "flex", background: "var(--track)", borderRadius: 6, padding: 2, gap: 2 }}>
             {scopeBtn("7")}{scopeBtn("30")}{scopeBtn("all")}
           </div>
         </div>
@@ -536,7 +536,7 @@ export default function Overview({ sessions = [], historyRows = [],
                         const maxCount = data.flows[0]?.count || 1;
                         return (
                           <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center",
-                            padding: "7px 10px", borderRadius: 7, background: "var(--inset)", border: "1px solid var(--line6)" }}>
+                            padding: "7px 10px", borderRadius: 6, background: "var(--inset)", border: "1px solid var(--line6)" }}>
                             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap" }}>
                               <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[f.src] || "var(--tx4)" }} />{TOOL_NAME[f.src] || f.src}
                               <span style={{ color: "var(--tx5)" }}>→</span>
@@ -570,7 +570,7 @@ export default function Overview({ sessions = [], historyRows = [],
                       <div key={i} style={{ ...card, padding: "15px 16px", display: "flex", flexDirection: "column", gap: 7 }}>
                         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tx4b)" }}>{c.eyebrow}</span>
                         <span style={{ fontSize: 21, fontWeight: 600, letterSpacing: "-0.025em", textWrap: "balance" }}>{c.title}</span>
-                        <p style={{ margin: 0, fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.6 }}>{c.body}</p>
+                        <p style={{ margin: 0, fontSize: 12, color: "var(--tx3)", lineHeight: 1.6 }}>{c.body}</p>
                       </div>
                     );
                   })}
@@ -598,7 +598,7 @@ function FeaturedInsight({ ins, t }) {
         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase",
           color: warn ? "var(--warn)" : "var(--tx4b)" }}>{c.eyebrow}</span>
         <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", textWrap: "balance" }}>{c.title}</span>
-        <p style={{ margin: 0, fontSize: 12.5, color: "var(--tx3)", lineHeight: 1.6, maxWidth: "54ch" }}>{c.body}</p>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--tx3)", lineHeight: 1.6, maxWidth: "54ch" }}>{c.body}</p>
       </div>
       {weeks?.length ? <MiniBars weeks={weeks} label={t("overview:ins.cost.chartLabel", { repo: ins.params.repo })} /> : null}
     </div>

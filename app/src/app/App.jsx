@@ -1,7 +1,8 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { canReveal, openTerminal, revealPath, rpc } from "../api/transport/rpc.js";
+import { canReveal, onMenu, openTerminal, revealPath, rpc,
+  preloadWindow, startWindowDrag, toggleWindowMaximize } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
@@ -15,7 +16,7 @@ import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
-  ApplyConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm,
+  ApplyConfirm, LibraryFilter, PromptBox, SearchPalette, SessionDeleteConfirm,
   Toast } from "../components/ui/Overlays.jsx";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
@@ -42,16 +43,17 @@ export default function App() {
 
   // ----- 布局 -----
   const [collapsed, setCollapsed] = useState(false);
-  const [paneW, setPaneW] = useState(328);
+  const [paneW, setPaneW] = useState(232);
   const [dragging, setDragging] = useState(false);
 
   // ----- 搜索与筛选 -----
   const [q, setQ] = useState("");
   const [hq, setHq] = useState("");
   const [libF, setLibF] = useState(
-    { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, arch: false, tag: null });
+    { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, tag: null });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
+  const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
@@ -88,6 +90,46 @@ export default function App() {
     if (!selId && sessions.length) select(sessions[0].id);
   }, [sessions]);
 
+  // macOS 惯例快捷键:⌘, 打开设置(桌面端由原生菜单接管,避免与菜单加速键重复触发)
+  useEffect(() => {
+    if (canReveal()) return;
+    const onKey = e => {
+      if (e.metaKey && !e.shiftKey && !e.altKey && e.key === ",") {
+        e.preventDefault(); setSettingsOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // 原生菜单栏事件:经 ref 转发,回调始终拿到最新闭包
+  const menuActs = useRef({});
+  menuActs.current = {
+    settings: () => setSettingsOpen(true),
+    "toggle-sidebar": () => setCollapsed(v => !v),
+    rescan: () => doScan(),
+  };
+  useEffect(() => {
+    let un;
+    onMenu(id => menuActs.current[id]?.()).then(u => { un = u; });
+    return () => un?.();
+  }, []);
+
+  // 透明窗口下内建拖拽区失效,手动补上:主键点在 data-tauri-drag-region 元素本体上才触发,
+  // 避免落到里面的按钮;双击标题栏切换最大化。窗口句柄需先预加载,否则同步栈里抓不到手势。
+  useEffect(() => {
+    preloadWindow();
+    const onDown = e => {
+      if (e.button !== 0) return;
+      const el = e.target;
+      if (!el?.hasAttribute?.("data-tauri-drag-region")) return;
+      if (e.detail === 2) toggleWindowMaximize();
+      else startWindowDrag();
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, []);
+
   // ----- 会话元数据(重命名/置顶/归档/标签,sidecar 存储) -----
   useEffect(() => {
     rpc("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
@@ -105,11 +147,6 @@ export default function App() {
       setToast({ kind: "fail", title: t("app:toast.metaSaveFail"), desc: e.message });
     }
   };
-  const batchMeta = async patch => {
-    for (const id of multiSel) await setMetaFor(id, patch);
-    setToast({ kind: "ok", title: t("app:toast.metaUpdated"), desc: t("app:toast.metaUpdatedDesc", { n: multiSel.length }) });
-  };
-
   // 详情 LRU 缓存:切回看过的会话立即渲染旧内容,后台再取最新
   const detailCache = useRef(new Map());
   const cacheDetail = (id, data) => {
@@ -213,8 +250,6 @@ export default function App() {
   const ctxMeta = ctxSess ? metaMap[ctxSess.id] || {} : {};
   const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
   const ctxItems = ctxMenu?.multi ? [
-    { label: t("app:ctx.batchArchive"), onClick: () => batchMeta({ archived: true }) },
-    { label: t("app:ctx.batchUnarchive"), onClick: () => batchMeta({ archived: false }) },
     { label: t("app:ctx.addTags"), onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
     { sep: true },
     { label: t("app:ctx.deleteN", { n: multiSess.length }), danger: true,
@@ -231,8 +266,6 @@ export default function App() {
     { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
     { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
       onClick: () => setMetaFor(ctxSess.id, { pinned: !ctxMeta.pinned }) },
-    { label: ctxMeta.archived ? t("app:ctx.unarchive") : t("app:ctx.archive"),
-      onClick: () => setMetaFor(ctxSess.id, { archived: !ctxMeta.archived }) },
     { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
     { sep: true },
     { label: t("app:ctx.copyId"), onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
@@ -251,7 +284,12 @@ export default function App() {
   useEffect(() => {
     const onKey = e => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        // 桌面端 ⌘B 由原生菜单加速键接管,这里只兜底浏览器环境
+        if (canReveal()) return;
         e.preventDefault(); setCollapsed(v => !v); return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && paneCfg) {
+        e.preventDefault(); setSearchOpen(true); return;
       }
       if (e.key === "Escape") {
         if (ctxMenu) setCtxMenu(null);
@@ -272,7 +310,7 @@ export default function App() {
           ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       // 会话库快捷键:仅在没有弹层时生效
       const overlayOpen = ctxMenu || delConfirm || batchDel || renameFor || tagFor ||
-        settingsOpen || popover || confirmApply || diff || mig || guideStep;
+        settingsOpen || popover || confirmApply || diff || mig || guideStep || searchOpen;
       if (!overlayOpen && view === "library" && cur) {
         if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
         if (e.key === "Backspace" || e.key === "Delete") {
@@ -307,7 +345,7 @@ export default function App() {
   const startDrag = e => {
     if (collapsed) return;
     const sx = e.clientX, sw = paneW;
-    const move = ev => setPaneW(Math.max(280, Math.min(420, sw + (ev.clientX - sx))));
+    const move = ev => setPaneW(Math.max(190, Math.min(360, sw + (ev.clientX - sx))));
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
@@ -357,7 +395,6 @@ export default function App() {
   const matchLib = s => {
     const m = metaMap[s.id] || {};
     return libF.src.includes(s.tool) &&
-      (libF.arch || !m.archived) &&
       (!libF.tag || (m.tags || []).includes(libF.tag)) &&
       (!libF.dir || repoOf(s.dir) === libF.dir) &&
       (!libF.mig || migratedIds.has(s.id)) &&
@@ -389,25 +426,32 @@ export default function App() {
     }
     setMultiSel([]); select(id);
   };
-  rowHandlers.current.context = (id, e) => {
-    e.preventDefault();
+  // ⋯ 按钮取代右键菜单:菜单锚定在按钮下方
+  rowHandlers.current.more = (id, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pos = { x: rect.right - 208, y: rect.bottom + 4 };
     if (multiSel.length > 1 && multiSel.includes(id)) {
-      setCtxMenu({ x: e.clientX, y: e.clientY, id, multi: true });
+      setCtxMenu({ ...pos, id, multi: true });
       return;
     }
     setMultiSel([]);
     if (id !== selId) select(id);
-    setCtxMenu({ x: e.clientX, y: e.clientY, id });
+    setCtxMenu({ ...pos, id });
   };
+  rowHandlers.current.pin = id =>
+    setMetaFor(id, { pinned: !(metaMap[id] || {}).pinned });
+  rowHandlers.current.delete = id => { const s = byId[id]; if (s) askDelete(s); };
   const onRowClick = useCallback((id, e) => rowHandlers.current.click(id, e), []);
-  const onRowContext = useCallback((id, e) => rowHandlers.current.context(id, e), []);
+  const onRowMore = useCallback((id, e) => rowHandlers.current.more(id, e), []);
+  const onRowPin = useCallback(id => rowHandlers.current.pin(id), []);
+  const onRowDelete = useCallback(id => rowHandlers.current.delete(id), []);
 
   const libGroups = useMemo(() => {
     const rowOf = s => {
       const m = metaMap[s.id] || {};
       return { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
         dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
-        pinned: !!m.pinned, archived: !!m.archived, tags: m.tags,
+        pinned: !!m.pinned, tags: m.tags,
         hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
         hasMig: migratedIds.has(s.id) };
     };
@@ -447,8 +491,6 @@ export default function App() {
     onRemove: () => setLibF(v => ({ ...v, mig: false })) });
   if (libF.sub) libTokens.push({ label: t("app:library.tokenOnlySub"),
     onRemove: () => setLibF(v => ({ ...v, sub: false })) });
-  if (libF.arch) libTokens.push({ label: t("app:library.tokenIncludeArchived"),
-    onRemove: () => setLibF(v => ({ ...v, arch: false })) });
   if (libF.tag) libTokens.push({ label: t("app:library.tokenTag", { tag: libF.tag }),
     onRemove: () => setLibF(v => ({ ...v, tag: null })) });
 
@@ -498,7 +540,7 @@ export default function App() {
       query: q, onQuery: e => setQ(e.target.value), sortLabel: t("app:pane.librarySort"),
       filterCount: (libF.src.length < 3 ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
         (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
-        (libF.arch ? 1 : 0) + (libF.tag ? 1 : 0),
+        (libF.tag ? 1 : 0),
       tokens: libTokens,
       footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
         : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
@@ -512,9 +554,11 @@ export default function App() {
 
   const clearLibF = () => {
     setLibF({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false,
-      arch: false, tag: null });
+      tag: null });
     setQ("");
   };
+  // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
+  const railOnly = !paneCfg || collapsed;
   const railItems = [
     { k: "overview", label: t("app:rail.overview") },
     { k: "library", label: t("app:rail.library") },
@@ -528,36 +572,20 @@ export default function App() {
   };
 
   return (
-    <div data-ferry-win="1" style={{ height: "100vh", display: "flex", flexDirection: "column",
-      background: "var(--bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
-      {/* 标题栏:红绿灯旁只放伸缩按钮,其余留白可拖拽窗口 */}
-      <div data-tauri-drag-region style={{ height: 44, flex: "none",
-        display: "flex", alignItems: "center", gap: 12, padding: "0 12px 0 78px",
-        background: "var(--titlebar)", borderBottom: "1px solid var(--line)" }}>
-        <button className="hov" onClick={() => setCollapsed(v => !v)}
-          title={collapsed ? t("app:titlebar.expand") : t("app:titlebar.collapse")}
-          style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
-            justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
-            cursor: "pointer", color: "var(--tx3b)" }}>
-          <SidebarIcon />
-        </button>
-        <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
-        {view === "library" && (
-          <button onClick={doScan} style={{ height: 26, display: "flex", alignItems: "center",
-            gap: 7, padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
-            borderRadius: 7, fontSize: 12.5, color: "var(--tx2)", cursor: "pointer" }}>
-            {scanning ? <Spinner /> : <RescanIcon />}
-            {scanning ? t("app:titlebar.scanning") : t("app:titlebar.rescan")}
-          </button>
-        )}
-      </div>
-
-      {/* 主体 */}
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-        {/* 导航轨 */}
-        <div style={{ width: 56, flex: "none", background: "var(--rail)", borderRight: "1px solid var(--rail-line)",
-          display: "flex", flexDirection: "column", alignItems: "center", padding: "11px 0 12px",
-          gap: 4, zIndex: 5 }}>
+    <div data-ferry-win="1" style={{ height: "100vh", display: "flex",
+      background: "var(--win-bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
+        {/* 导航轨:通高到窗口顶,顶部 44px 留给红绿灯、可拖拽窗口。
+            与资源栏同底色构成一整块侧栏(Finder 式);
+            侧栏只剩导航轨时加宽到 80,让红绿灯完整落在侧栏内,分界线也避开顶部 44px */}
+        <div style={{ width: railOnly ? 80 : 56, flex: "none", background: "var(--pane)",
+          position: "relative", display: "flex", flexDirection: "column", alignItems: "center",
+          padding: "0 0 12px", gap: 4, zIndex: 5,
+          transition: dragging ? "none" : "width .2s ease-out" }}>
+          {railOnly && (
+            <div style={{ position: "absolute", right: 0, top: 44, bottom: 0, width: 1,
+              background: "var(--line)", pointerEvents: "none" }} />
+          )}
+          <div data-tauri-drag-region style={{ height: 44, alignSelf: "stretch", flex: "none" }} />
           {railItems.map(n => {
             const on = view === n.k;
             return (
@@ -565,20 +593,31 @@ export default function App() {
                 data-guide={n.k === "library" ? "rail" : undefined}
                 onMouseEnter={e => railEnter(n.label, e)} onMouseLeave={railLeave}
                 onClick={() => { setView(n.k); setSettingsOpen(false); setPopover(null); railLeave(); }}
-                style={{ width: 40, height: 40, border: "none", borderRadius: 9,
+                style={{ width: 40, height: 40, border: "none", borderRadius: 8,
                   background: on ? "var(--acc-soft2)" : "transparent", display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "pointer", transition: "background .12s ease" }}>
+                  justifyContent: "center", cursor: "default", transition: "background .12s ease" }}>
                 <RailGlyph name={n.k} color={on ? ACCENT : "var(--tx4b)"} />
               </button>
             );
           })}
           <div style={{ flex: 1 }} />
           <button className="hov-rail"
+            onMouseEnter={e => railEnter(scanning ? t("app:titlebar.scanning") : t("app:titlebar.rescan"), e)}
+            onMouseLeave={railLeave}
+            disabled={scanning}
+            onClick={() => { doScan(); railLeave(); }}
+            style={{ width: 40, height: 40, border: "none", borderRadius: 8,
+              background: "transparent", display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "default", transition: "background .12s ease",
+              color: "var(--tx4b)" }}>
+            {scanning ? <Spinner size={18} /> : <RescanIcon size={18} color="var(--tx4b)" />}
+          </button>
+          <button className="hov-rail"
             onMouseEnter={e => railEnter(t("app:rail.settings"), e)} onMouseLeave={railLeave}
             onClick={() => { setSettingsOpen(v => !v); railLeave(); }}
-            style={{ width: 40, height: 40, border: "none", borderRadius: 9,
+            style={{ width: 40, height: 40, border: "none", borderRadius: 8,
               background: settingsOpen ? "var(--acc-soft2)" : "transparent", display: "flex",
-              alignItems: "center", justifyContent: "center", cursor: "pointer",
+              alignItems: "center", justifyContent: "center", cursor: "default",
               transition: "background .12s ease" }}>
             <RailGlyph name="settings" color={settingsOpen ? ACCENT : "var(--tx4b)"} />
           </button>
@@ -588,7 +627,9 @@ export default function App() {
         {paneCfg && (
           <Pane collapsed={collapsed} width={paneW} dragging={dragging}
             title={paneCfg.title} count={paneCfg.count} placeholder={paneCfg.placeholder}
-            query={paneCfg.query} onQuery={paneCfg.onQuery}
+            query={paneCfg.query}
+            onOpenSearch={() => setSearchOpen(true)}
+            onClearSearch={() => paneCfg.onQuery({ target: { value: "" } })}
             filterCount={paneCfg.filterCount}
             filterOn={popover === { library: "lib", history: "hist" }[view] ||
               paneCfg.filterCount > 0}
@@ -601,12 +642,13 @@ export default function App() {
             {view === "library" && (
               scanning && !sessions.length
                 ? <div style={{ padding: "34px 12px", textAlign: "center", color: "var(--tx5)",
-                    fontSize: 12.5, display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
                     gap: 8 }}><Spinner /> {t("app:detail.scanningSessions")}</div>
                 : <LibraryList groups={libGroups}
                     empty={libGroups.length === 0} onClear={clearLibF}
                     selectedId={selId} multiSel={multiSel}
-                    onRowClick={onRowClick} onRowContext={onRowContext} />)}
+                    onRowClick={onRowClick} onRowPin={onRowPin}
+                    onRowDelete={onRowDelete} onRowMore={onRowMore} />)}
             {view === "history" && (
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
@@ -615,16 +657,31 @@ export default function App() {
 
         {/* 拖拽分隔条 */}
         {paneCfg && !collapsed && (
-          <div onMouseDown={startDrag} onDoubleClick={() => setPaneW(328)}
+          <div onMouseDown={startDrag} onDoubleClick={() => setPaneW(232)}
             title={t("app:drag.hint")}
             style={{ width: 9, flex: "none", cursor: "col-resize", position: "relative",
-              background: dragging ? "var(--acc-soft2)" : "transparent", zIndex: 6 }}>
+              background: dragging ? "var(--acc-soft2)" : "var(--bg)", zIndex: 6 }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 1,
               background: dragging ? ACCENT : "var(--line)" }} />
           </div>
         )}
 
-        {/* 详情区 */}
+        {/* 内容列:自带 44px 工具栏,白底从窗口顶通到底(窗口透明走 vibrancy 时必须自带不透明底) */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
+        <div data-tauri-drag-region style={{ height: 44, flex: "none", display: "flex", alignItems: "center",
+          gap: 12, padding: "0 12px" }}>
+          {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
+          <button className={paneCfg ? "hov" : undefined} disabled={!paneCfg}
+            onClick={() => setCollapsed(v => !v)}
+            title={collapsed ? t("app:titlebar.expand") : t("app:titlebar.collapse")}
+            style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
+              justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
+              cursor: "default", color: "var(--tx3b)", opacity: paneCfg ? 1 : .35 }}>
+            <SidebarIcon />
+          </button>
+          <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         {view === "overview" && (
           <Overview sessions={sessions} historyRows={historyRows}
             prices={pricing?.prices || {}} />)}
@@ -647,6 +704,7 @@ export default function App() {
         ))}
         {view === "history" && <HistoryDetail h={histSel} />}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
+        </div>
       </div>
 
       {/* 弹层 */}
@@ -659,6 +717,21 @@ export default function App() {
         onClose={() => setDiff(null)} />}
       {confirmApply && <ApplyConfirm ops={ops} saveMode={saveMode} setSaveMode={setSaveMode}
         editCaps={editCaps} onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
+      {searchOpen && paneCfg && (
+        <SearchPalette
+          placeholder={paneCfg.placeholder}
+          query={paneCfg.query} onQuery={paneCfg.onQuery}
+          recentLabel={paneCfg.query ? null : t("app:search.recent")}
+          emptyLabel={t("app:search.empty")}
+          results={(view === "history"
+            ? histGroups.flatMap(g => g.rows).map(h => ({
+                id: h.id, title: h.title, tool: h.tool, meta: `${h.from} → ${h.to}`,
+                onClick: () => setSelHist(h.id) }))
+            : libGroups.flatMap(g => g.rows).map(r => ({
+                id: r.id, title: r.title, tool: r.tool, meta: r.repo,
+                onClick: () => { setMultiSel([]); select(r.id); } }))
+          ).slice(0, 60)}
+          onClose={() => setSearchOpen(false)} />)}
       {ctxMenu && ctxItems && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxItems}
           onClose={() => setCtxMenu(null)} />)}
@@ -695,10 +768,10 @@ export default function App() {
           }} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
       {railTip && (
-        <div style={{ position: "absolute", left: 62, top: railTip.top,
+        <div style={{ position: "absolute", left: railOnly ? 86 : 62, top: railTip.top,
           transform: "translateY(-50%)", zIndex: 60, background: "var(--tooltip)", color: "#fff",
-          fontSize: 11.5, padding: "5px 9px", borderRadius: 6,
-          boxShadow: "0 6px 16px -6px rgba(0,0,0,.4)", pointerEvents: "none",
+          fontSize: 11, padding: "5px 9px", borderRadius: 6,
+          boxShadow: "var(--shadow-menu)", pointerEvents: "none",
           whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}
       {settingsOpen && (
         <SettingsPage settings={settings} setSettings={setSettings}

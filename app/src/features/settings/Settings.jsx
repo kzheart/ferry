@@ -10,7 +10,7 @@ const SECTIONS = [["prefs", "settings:sections.prefs"], ["sources", "settings:se
 
 // ---------- 通用排版件 ----------
 const GroupTitle = ({ children, first }) => (
-  <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
+  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
     margin: first ? "0 0 9px 2px" : "22px 0 9px 2px" }}>{children}</div>
 );
 
@@ -25,7 +25,7 @@ function Row({ title, desc, children, first }) {
       borderTop: first ? "none" : "1px solid var(--line6)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{title}</div>
-        {desc && <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
+        {desc && <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
       </div>
       {children}
     </div>
@@ -39,7 +39,7 @@ function Select({ value, onChange, children }) {
       <select value={value} onChange={e => onChange(e.target.value)}
         style={{ appearance: "none", height: 30, padding: "0 28px 0 11px", borderRadius: 8,
           border: "1px solid var(--line4)", background: "var(--surface)", color: "var(--tx1)",
-          fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+          fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "default" }}>
         {children}
       </select>
       <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
@@ -56,7 +56,7 @@ function Toggle({ on, onChange }) {
   return (
     <button onClick={() => onChange(!on)} aria-pressed={on}
       style={{ width: 44, height: 26, borderRadius: 20, border: "none", flex: "none",
-        background: on ? "var(--accent)" : "var(--toggle-off)", cursor: "pointer", padding: 0,
+        background: on ? "var(--accent)" : "var(--toggle-off)", cursor: "default", padding: 0,
         position: "relative", transition: "background .15s ease" }}>
       <span style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20,
         borderRadius: "50%", background: "var(--surface)", boxShadow: "0 1px 3px rgba(0,0,0,.28)",
@@ -75,7 +75,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   ];
   const localeValue = s.locale ?? "";
   return (
-    <div style={{ animation: "fslide .16s ease" }}>
+    <div style={{  }}>
       <GroupTitle first>{t("settings:theme.groupTitle")}</GroupTitle>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         {themes.map(([k, label, sw]) => {
@@ -84,7 +84,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
             <div key={k} onClick={() => set({ theme: k })}
               style={{ border: `1.5px solid ${on ? "var(--accent)" : "var(--line4)"}`,
                 background: on ? "var(--acc-soft6)" : "var(--surface)", borderRadius: 12, padding: 12,
-                cursor: "pointer" }}>
+                cursor: "default" }}>
               <div style={{ height: 54, borderRadius: 8, background: sw,
                 border: "1px solid rgba(20,28,38,.10)" }} />
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11 }}>
@@ -93,7 +93,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
                   alignItems: "center", justifyContent: "center" }}>
                   <span style={{ width: 7, height: 7, borderRadius: "50%",
                     background: on ? "var(--accent)" : "transparent" }} /></span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>{label}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{label}</span>
               </div>
             </div>
           );
@@ -136,7 +136,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
             onClick={onOpenGuide}>{guideSeen ? t("settings:guideSection.reviewGuide") : t("settings:guideSection.quickStart")}</button>
         </Row>
         <Row title={t("settings:guideSection.firstRun")} desc={t("settings:guideSection.firstRunDesc")}>
-          <button className="fbtn" style={{ height: 30, fontSize: 12.5 }}
+          <button className="fbtn" style={{ height: 30, fontSize: 12 }}
             onClick={onFirstRun}>{t("settings:guideSection.open")}</button>
         </Row>
       </Card>
@@ -151,11 +151,11 @@ function Sources({ scan, env, scanning, onRescan }) {
   const connected = TOOLS.filter(t2 => tools[t2]?.ok).length;
   const total = TOOLS.reduce((a, t2) => a + (tools[t2]?.count || 0), 0);
   return (
-    <div style={{ animation: "fslide .16s ease" }}>
+    <div style={{  }}>
       <div style={{ display: "flex", alignItems: "flex-end", margin: "0 0 9px 2px" }}>
-        <div style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: "var(--tx5)",
+        <div style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "var(--tx5)",
           letterSpacing: ".05em" }}>{t("settings:sources.connectedTools")}</div>
-        <div style={{ fontSize: 11.5, color: "var(--tx4)" }}>
+        <div style={{ fontSize: 11, color: "var(--tx4)" }}>
           {t("settings:sources.connectedMeta", { connected, total })}</div>
       </div>
       <Card>
@@ -170,7 +170,7 @@ function Sources({ scan, env, scanning, onRescan }) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>
                   {TOOL_NAME[t2]}
                   {env?.[t2]?.version && <span style={{ fontWeight: 400, color: "var(--tx5)",
-                    fontSize: 11.5 }}> · v{env[t2].version}</span>}
+                    fontSize: 11 }}> · v{env[t2].version}</span>}
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 2,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -179,7 +179,7 @@ function Sources({ scan, env, scanning, onRescan }) {
               <div style={{ textAlign: "right", flex: "none", marginRight: 4 }}>
                 <div style={{ fontSize: 12, color: "var(--tx3b)" }}>
                   {ok ? t("settings:sources.sessionsCount", { n: info.count }) : (info.error || t("settings:sources.unavailable"))}</div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5,
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11,
                   fontWeight: 600, color: ok ? "var(--ok-deep)" : "var(--err-deep)", marginTop: 2 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%",
                     background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? t("settings:sources.connected") : t("settings:sources.scanFailed")}</div>
@@ -219,7 +219,7 @@ function Updates({ s, set, updater }) {
   const canCheck = supported && !["checking", "downloading", "installing"].includes(phase);
 
   return (
-    <div style={{ animation: "fslide .16s ease" }}>
+    <div style={{  }}>
       <GroupTitle first>{t("settings:updates.groupVersion")}</GroupTitle>
       <Card>
         <Row first title={t("settings:updates.currentVersion")}
@@ -240,10 +240,10 @@ function Updates({ s, set, updater }) {
               <div style={{ fontSize: 13, fontWeight: 650, color: error ? "var(--err-deep)" : "var(--tx1)" }}>
                 {t(UPDATE_COPY_KEY[phase] || UPDATE_COPY_KEY.idle)}
               </div>
-              {update && <div style={{ fontSize: 11.5, color: "var(--tx4)", marginTop: 3 }}>
+              {update && <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 3 }}>
                 v{currentVersion} → v{update.version}{update.date ? ` · ${new Date(update.date).toLocaleDateString(i18n.language)}` : ""}
               </div>}
-              {error && <div style={{ fontSize: 11.5, color: "var(--err-deep)", marginTop: 5,
+              {error && <div style={{ fontSize: 11, color: "var(--err-deep)", marginTop: 5,
                 overflowWrap: "anywhere" }}>{error}</div>}
             </div>
             <div className="update-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -272,7 +272,7 @@ function Updates({ s, set, updater }) {
           </div>}
         </div>
         {update?.body && <div style={{ borderTop: "1px solid var(--line6)", padding: "14px 16px" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
           <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 180,
             overflowY: "auto", fontSize: 12, lineHeight: 1.6, color: "var(--tx3b)" }}>{update.body}</div>
         </div>}
@@ -293,11 +293,11 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "absolute", inset: 0, zIndex: 60, display: "flex", alignItems: "center",
-        justifyContent: "center", background: "var(--scrim)", animation: "ffade .14s ease" }}>
+        justifyContent: "center", background: "var(--scrim)" }}>
       <div className="settings-sheet" style={{ width: "min(860px, calc(100vw - 40px))", height: "min(600px, calc(100vh - 48px))",
         display: "flex", borderRadius: 14, overflow: "hidden", background: "var(--settings-bg)",
-        border: "1px solid var(--line)", boxShadow: "0 24px 64px -16px rgba(0,0,0,.45)",
-        animation: "fsheet .18s ease" }}>
+        border: "1px solid var(--line)", boxShadow: "var(--shadow-sheet)",
+         }}>
         {/* 分类栏 */}
         <div style={{ width: 196, flex: "none", background: "var(--settings-rail)",
           borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column",
@@ -312,7 +312,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                   style={{ display: "flex", alignItems: "center", gap: 11, height: 36, padding: "0 11px",
                     border: "none", borderRadius: 8, background: on ? "var(--seg-on)" : "transparent",
                     color: on ? "var(--tx1)" : "var(--tx2b)", fontSize: 13, fontWeight: on ? 650 : 500,
-                    cursor: "pointer", textAlign: "left" }}>
+                    cursor: "default", textAlign: "left" }}>
                   <SetGlyph name={k} color={on ? "var(--tx1)" : "var(--tx3b)"} />{t(labelKey)}
                 </button>
               );
@@ -328,7 +328,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             <div style={{ flex: 1 }} />
             <button className="hov" onClick={onClose} title={t("settings:sections.close")}
               style={{ width: 28, height: 28, borderRadius: "50%", border: "none",
-                background: "var(--fill4)", color: "var(--tx3b)", cursor: "pointer",
+                background: "var(--fill4)", color: "var(--tx3b)", cursor: "default",
                 display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
               <svg viewBox="0 0 14 14" style={{ width: 12, height: 12 }}>
                 <line x1="3" y1="3" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

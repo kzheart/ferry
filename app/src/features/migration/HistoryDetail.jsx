@@ -40,9 +40,9 @@ export default function HistoryDetail({ h }) {
   const probeModel = h.probe?.model || h.probe_model;
 
   return (
-    <div className="fscroll" style={{ flex: 1, overflowY: "auto", minHeight: 0, animation: "ffade .16s ease" }}>
+    <div className="fscroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
       <div style={{ padding: "20px 26px 16px", borderBottom: "1px solid var(--line5)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 13, maxWidth: 720, margin: "0 auto" }}>
           <ToolIcon tool={h.src} size={40} dot={stColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: "-.01em" }}>{h.title || h.source_id}</div>
@@ -56,32 +56,33 @@ export default function HistoryDetail({ h }) {
           <StatusPill label={t(`common:${status}`)} color={stColor} bg={stBg} />
         </div>
       </div>
-      <div style={{ padding: "20px 26px 44px", maxWidth: 760 }}>
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px",
-          display: "flex", flexDirection: "column", gap: 9, fontSize: 12.5 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldRange")}</span>
-            <span style={{ color: "var(--tx2)" }}>{h.msg_count ? t("migration:history.rangeWithCount", { range, n: h.msg_count }) : range}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldSrcToDst")}</span>
-            <span style={{ color: "var(--tx2)" }}>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
-          </div>
-          {h.tree_count != null && (
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--tx4)" }}>{t("migration:history.fieldTree")}</span>
-              <span style={{ color: "var(--tx2)" }}>{t("migration:history.treeMeta", { n: h.tree_count, detail: h.topology?.detail ? ` · ${h.topology.detail}` : "" })}</span>
+      <div style={{ padding: "20px 26px 44px", maxWidth: 720, margin: "0 auto" }}>
+        {/* macOS 设置式分组卡片:面板底 + 行间发丝线 */}
+        <div className="fcard" style={{ fontSize: 12 }}>
+          {[
+            [t("migration:history.fieldRange"),
+              h.msg_count ? t("migration:history.rangeWithCount", { range, n: h.msg_count }) : range],
+            [t("migration:history.fieldSrcToDst"), `${TOOL_NAME[h.src]} → ${TOOL_NAME[h.dst]}`],
+            ...(h.tree_count != null
+              ? [[t("migration:history.fieldTree"),
+                  t("migration:history.treeMeta", { n: h.tree_count, detail: h.topology?.detail ? ` · ${h.topology.detail}` : "" })]]
+              : []),
+          ].map(([k, v], i) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 16,
+              padding: "10px 14px", borderTop: i ? "1px solid var(--line5)" : "none" }}>
+              <span style={{ color: "var(--tx4)", flex: "none" }}>{k}</span>
+              <span style={{ color: "var(--tx2)", textAlign: "right" }}>{v}</span>
             </div>
-          )}
+          ))}
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "18px 0 8px" }}>{t("migration:history.lossReport")}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "20px 2px 8px" }}>{t("migration:history.lossReport")}</div>
         <LossCols loss={h.loss} />
 
         <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,
           borderRadius: 10, padding: "13px 15px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: probeColor }}>{t("migration:history.verdict")}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: probeColor }}>{t("migration:history.verdict")}</div>
             {probeModel && (
               <div className="mono" style={{ fontSize: 11, color: "var(--tx3b)" }}>{probeModel}</div>
             )}
@@ -101,7 +102,7 @@ export default function HistoryDetail({ h }) {
 
         {rolled && (
           <div style={{ marginTop: 14, border: "1px solid var(--err-line)", background: "var(--err-bg)",
-            borderRadius: 10, padding: "13px 15px", fontSize: 12.5, color: "var(--err-text)", lineHeight: 1.55 }}>
+            borderRadius: 10, padding: "13px 15px", fontSize: 12, color: "var(--err-text)", lineHeight: 1.55 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("migration:history.rollbackTitle")}</div>
             {t("migration:history.rollbackDesc", { tool: TOOL_NAME[h.dst] })}
           </div>

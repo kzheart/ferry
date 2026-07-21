@@ -12,8 +12,8 @@ function SmallButton({ title, danger, disabled, onClick, children }) {
 
 const fieldStyle = {
   width: "100%", boxSizing: "border-box", border: "1px solid var(--line3)",
-  borderRadius: 7, background: "var(--surface)", color: "var(--tx2)",
-  padding: "7px 9px", fontSize: 12, lineHeight: 1.55, outline: "none", resize: "vertical",
+  borderRadius: 6, background: "var(--surface)", color: "var(--tx2)",
+  padding: "7px 9px", fontSize: 12, lineHeight: 1.55, resize: "vertical",
 };
 
 function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
@@ -21,13 +21,13 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
   const [expanded, setExpanded] = useState(
     item.kind === "text" ? !item.text : !item.name);
   return (
-    <div style={{ border: "1px solid var(--line3)", borderRadius: 9,
+    <div style={{ border: "1px solid var(--line3)", borderRadius: 8,
       background: "var(--fill)", marginBottom: 8, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
         borderBottom: expanded ? "1px solid var(--line5)" : "none" }}>
         <button onClick={() => setExpanded(value => !value)} style={{ border: 0, background: "none",
-          color: "var(--tx4)", cursor: "pointer", fontSize: 11 }}>{expanded ? "▾" : "▸"}</button>
-        <span className="mono" style={{ flex: 1, fontSize: 11.5, fontWeight: 600,
+          color: "var(--tx4)", cursor: "default", fontSize: 11 }}>{expanded ? "▾" : "▸"}</button>
+        <span className="mono" style={{ flex: 1, fontSize: 11, fontWeight: 600,
           color: item.kind === "tool" ? "var(--acc-text)" : "var(--tx3b)" }}>
           {item.kind === "tool"
             ? t("browser:replyEditor.toolNamed", { name: item.name || t("browser:replyEditor.toolUnnamed") })
@@ -46,20 +46,20 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
       )}
       {expanded && item.kind === "tool" && (
         <div style={{ padding: 9, display: "grid", gap: 8 }}>
-          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.toolName")}
+          <label style={{ fontSize: 10, color: "var(--tx4)" }}>{t("browser:replyEditor.toolName")}
             <input className="mono selectable" value={item.name}
               onChange={event => onPatch({ name: event.target.value })}
               placeholder="Read / bash / custom_tool" style={{ ...fieldStyle, marginTop: 4 }} />
           </label>
-          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>
+          <label style={{ fontSize: 10, color: "var(--tx4)" }}>
             {t("browser:replyEditor.params")} · <button onClick={() => onPatch({ inputFormat: item.inputFormat === "json" ? "text" : "json" })}
-              style={{ border: 0, padding: 0, background: "none", color: ACCENT, cursor: "pointer",
-                fontSize: 10.5 }}>{item.inputFormat === "json" ? t("browser:replyEditor.jsonFormat") : t("browser:replyEditor.textFormat")}</button>
+              style={{ border: 0, padding: 0, background: "none", color: ACCENT, cursor: "default",
+                fontSize: 10 }}>{item.inputFormat === "json" ? t("browser:replyEditor.jsonFormat") : t("browser:replyEditor.textFormat")}</button>
             <textarea className="mono fscroll selectable" value={item.inputText}
               onChange={event => onPatch({ inputText: event.target.value })}
               rows={4} style={{ ...fieldStyle, marginTop: 4 }} />
           </label>
-          <label style={{ fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.fakeOutput")}
+          <label style={{ fontSize: 10, color: "var(--tx4)" }}>{t("browser:replyEditor.fakeOutput")}
             <textarea className="mono fscroll selectable" value={item.output}
               onChange={event => onPatch({ output: event.target.value })}
               rows={4} style={{ ...fieldStyle, marginTop: 4 }} />
@@ -76,7 +76,7 @@ export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, 
     return (
       <button className="fbtn" disabled={!canAuthor || blocked} onClick={onStart}
         title={blocked ? t("browser:replyEditor.blockedHint") : t("browser:replyEditor.startHint")}
-        style={{ height: 27, padding: "0 10px", fontSize: 11.5, color: ACCENT }}>
+        style={{ height: 27, padding: "0 10px", fontSize: 11, color: ACCENT }}>
         <PencilIcon size={11} /> {t("browser:replyEditor.startButton")}
       </button>
     );
@@ -96,11 +96,11 @@ export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, 
     : { id: uid(), kind: "tool", name: "", inputText: "{}", inputFormat: "json", output: "" }]);
 
   return (
-    <div style={{ marginTop: 10, border: `1.5px solid ${ACCENT}`, borderRadius: 11,
+    <div style={{ marginTop: 10, border: `1.5px solid ${ACCENT}`, borderRadius: 10,
       background: "var(--acc-soft5)", padding: 10 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 9 }}>
         <span style={{ fontSize: 12, fontWeight: 650, color: "var(--acc-text)" }}>{t("browser:replyEditor.panelTitle")}</span>
-        <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--tx4)" }}>{t("browser:replyEditor.panelHint")}</span>
+        <span style={{ marginLeft: 8, fontSize: 10, color: "var(--tx4)" }}>{t("browser:replyEditor.panelHint")}</span>
         <button className="ficon-btn" title={t("browser:replyEditor.cancel")} onClick={onCancel}
           style={{ marginLeft: "auto" }}><CloseIcon size={11} /></button>
       </div>
@@ -113,9 +113,9 @@ export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, 
       </div>
       <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
         <button className="fbtn" onClick={() => add("text")}
-          style={{ height: 27, fontSize: 11.5 }}>{t("browser:replyEditor.addText")}</button>
+          style={{ height: 27, fontSize: 11 }}>{t("browser:replyEditor.addText")}</button>
         <button className="fbtn" onClick={() => add("tool")}
-          style={{ height: 27, fontSize: 11.5 }}>{t("browser:replyEditor.addTool")}</button>
+          style={{ height: 27, fontSize: 11 }}>{t("browser:replyEditor.addTool")}</button>
       </div>
     </div>
   );

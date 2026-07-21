@@ -56,7 +56,8 @@
     "revealInFinder": "Reveal in Finder",
     "deleteSession": "Delete session…",
     "onlyDesktop": "Desktop only",
-    "noSessionFile": "This source has no standalone session file"
+    "noSessionFile": "This source has no standalone session file",
+    "more": "More"
   },
   "drag": {
     "hint": "Drag to adjust width · double-click to reset"
@@ -91,7 +92,8 @@
     "historyTitle": "Migration history",
     "historyPlaceholder": "Search migration records…",
     "historySort": "By time",
-    "historyFooter": "{{n}} migration records"
+    "historyFooter": "{{n}} migration records",
+    "search": "Search"
   },
   "prompt": {
     "renameTitle": "Rename session",
@@ -103,5 +105,9 @@
     "tagsBatchDesc": "Tags entered will be appended to each selected session; separate multiple with commas.",
     "tagsDesc": "Separate multiple tags with commas; leave empty to clear all tags.",
     "tagsPlaceholder": "e.g. important, experiment"
+  },
+  "search": {
+    "recent": "Recent",
+    "empty": "No matches"
   }
 }

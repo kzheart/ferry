@@ -5,8 +5,8 @@ import { TOOL_NAME } from "../../api/contract/tools.js";
 import { resumeDescriptor } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, toRounds } from "../../domain/sessions/sessionModel.js";
-import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph,
-  PencilIcon, RescanIcon, Spinner, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
+import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
+  PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
@@ -38,19 +38,19 @@ function ToolCard({ t, tt, open, onToggle }) {
     <div style={{ margin: "5px 0", border: "1px solid var(--line3)", borderRadius: 8,
       overflow: "hidden", background: "var(--fill)" }}>
       <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9,
-        padding: "7px 11px", cursor: "pointer" }}>
+        padding: "7px 11px", cursor: "default" }}>
         <Caret open={open} size={10} />
-        <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
-        <span className="mono" style={{ fontSize: 11.5, color: "var(--tx4)", whiteSpace: "nowrap",
+        <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
+        <span className="mono" style={{ fontSize: 11, color: "var(--tx4)", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
         {big && (
-          <span style={{ fontSize: 10.5, color: "var(--warn-deep)", background: "var(--warn-bg)",
+          <span style={{ fontSize: 10, color: "var(--warn-deep)", background: "var(--warn-bg)",
             padding: "1px 7px", borderRadius: 20, flex: "none" }}>{tt("browser:tool.bigOutput", { size: fmtSize(t.size) })}</span>
         )}
       </div>
       {open && (
         <pre className="mono fscroll selectable" style={{ margin: 0, padding: "11px 13px",
-          fontSize: 11.5, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
+          fontSize: 11, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
           maxHeight: 200, overflow: "auto", background: "var(--surface)",
           borderTop: "1px solid var(--line5)" }}>
           {out.slice(0, 200000)}
@@ -97,7 +97,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
           style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0 8px" }}>
           <span style={{ width: 20, height: 20, flex: "none", borderRadius: "50%",
             border: "1.5px solid var(--line2)", display: "inline-flex", alignItems: "center",
-            justifyContent: "center", fontSize: 10.5, fontWeight: 700, color: "var(--tx4b)" }}>{r.n}</span>
+            justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--tx4b)" }}>{r.n}</span>
           <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
           <div style={{ display: "flex", gap: 3 }}>
             {deleted ? (
@@ -115,7 +115,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
           <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0 4px" }}>
             <span title={tt("browser:round.imagesCount", { n: imgs })} style={{ display: "inline-flex", alignItems: "center",
               gap: 5, padding: "2px 9px", borderRadius: 20, background: "var(--chip)",
-              color: "var(--tx4)", fontSize: 10.5 }}>
+              color: "var(--tx4)", fontSize: 10 }}>
               <ImageGlyph /> ×{imgs}</span>
           </div>
         )}
@@ -135,7 +135,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                   style={{ width: "100%", display: "block", resize: "none", overflow: "hidden",
                     boxSizing: "border-box", background: "var(--fill4)", color: "var(--tx1b)",
                     border: `1.5px solid ${ACCENT}`, padding: "9px 14px", borderRadius: 16,
-                    fontSize: 13, lineHeight: 1.65, outline: "none", userSelect: "text",
+                    fontSize: 13, lineHeight: 1.65, userSelect: "text",
                     fontFamily: "inherit", whiteSpace: "pre-wrap", overflowWrap: "break-word" }} />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 6 }}>
                   <IconBtn title={tt("browser:round.cancelRewrite")} onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
@@ -154,7 +154,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                 {(rewOp ? rewOp.text : userText).slice(0, 4000)}
                 {rewOp && !deleted && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
-                    color: ACCENT, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    color: ACCENT, fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
                     <PencilIcon size={10} /> {tt("browser:round.rewritten")}</span>
                 )}
               </div>
@@ -164,8 +164,8 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
         {!replyOp && r.steps.length > 0 && (
           <div style={{ margin: "8px 0" }}>
             <div onClick={() => setToolsOpen(v => !v)} style={{ display: "inline-flex",
-              alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 7,
-              cursor: "pointer", color: "var(--tx4)", fontSize: 12 }} className="hov-ghost">
+              alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 6,
+              cursor: "default", color: "var(--tx4)", fontSize: 12 }} className="hov-ghost">
               <Caret open={toolsOpen} size={9} />
               <span>{tt("browser:tool.stepCount", { n: r.steps.length })}</span>
             </div>
@@ -173,7 +173,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
               <div style={{ marginLeft: 18, marginTop: 2, borderLeft: "2px solid var(--line5)",
                 paddingLeft: 13 }}>
                 {r.steps.map((s, i) => s.kind === "text" ? (
-                  <div key={i} className="selectable" style={{ margin: "7px 0", fontSize: 12.5,
+                  <div key={i} className="selectable" style={{ margin: "7px 0", fontSize: 12,
                     lineHeight: 1.65, color: "var(--tx3b)", whiteSpace: "pre-wrap",
                     overflowWrap: "break-word" }}>{s.text.slice(0, 4000)}</div>
                 ) : (
@@ -209,16 +209,16 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
               <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
               <button data-guide={r.n === 1 ? "scope" : undefined}
                 className="ficon-btn accent" onClick={onScope}
-                style={{ width: "auto", padding: "0 11px", gap: 6, fontSize: 11.5, fontWeight: 500,
+                style={{ width: "auto", padding: "0 11px", gap: 6, fontSize: 11, fontWeight: 500,
                   border: "1px dashed var(--acc-line2)", borderRadius: 13 }}>
                 <BookmarkIcon /> {tt("browser:round.scopeHere")}</button>
               <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
             </div>
           ) : (
-            <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 9,
+            <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 8,
               padding: "11px 13px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12.5 }}>{tt("browser:round.scopeOnly", { n: r.n })}</span>
+                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12 }}>{tt("browser:round.scopeOnly", { n: r.n })}</span>
                 <IconBtn title={tt("browser:round.cancel")} onClick={onClearScope} style={{ marginLeft: "auto" }}><CloseIcon /></IconBtn>
               </div>
               <div style={{ fontSize: 12, color: "var(--tx2b)", marginTop: 5 }}>{scopeStats}</div>
@@ -239,18 +239,18 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
     ?.scrollIntoView({ behavior: "smooth", block: "center" });
   return (
     <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
-      zIndex: 5, animation: "ffade .16s ease" }}>
+      zIndex: 5 }}>
       {listOpen && (
         <div className="fscroll" style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0,
           minWidth: 250, maxHeight: 262, overflowY: "auto", background: "var(--bg)",
-          border: "1px solid var(--line3)", borderRadius: 11,
-          boxShadow: "0 14px 36px -14px rgba(20,28,38,.45)", padding: 5 }}>
+          border: "1px solid var(--line3)", borderRadius: 10,
+          boxShadow: "var(--shadow-menu)", padding: 5 }}>
           {ops.map(o => (
             <div key={o.id} className="hov-ghost" style={{ display: "flex", alignItems: "center",
-              gap: 8, padding: "5px 4px 5px 9px", borderRadius: 7 }}>
+              gap: 8, padding: "5px 4px 5px 9px", borderRadius: 6 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
               <a onClick={() => jump(o.n)} style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
-                cursor: "pointer", whiteSpace: "nowrap" }}>{o.labelKey ? tt(o.labelKey, o.labelParams) : o.label}</a>
+                cursor: "default", whiteSpace: "nowrap" }}>{o.labelKey ? tt(o.labelKey, o.labelParams) : o.label}</a>
               <IconBtn title={tt("browser:pendingBar.undoOp")} onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
             </div>
           ))}
@@ -258,7 +258,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: 7,
         background: "var(--bg)", border: "1px solid var(--line3)", borderRadius: 24,
-        boxShadow: "0 14px 40px -14px rgba(20,28,38,.5)" }}>
+        boxShadow: "var(--shadow-sheet)" }}>
         <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18, fontWeight: 600 }}
           onClick={() => setListOpen(v => !v)}>
           {tt("browser:pendingBar.pendingCount", { n: ops.length })} <Caret open={listOpen} size={9} /></button>
@@ -271,8 +271,8 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
           color: "var(--tx4)" }} onClick={onDiscardAll}>{tt("browser:pendingBar.discard")}</button>
       </div>
       {invalid && <div style={{ position: "absolute", right: 14, bottom: "calc(100% + 5px)",
-        maxWidth: 360, padding: "5px 9px", borderRadius: 7, background: "var(--err-bg2)",
-        color: "var(--err-text)", fontSize: 11.5 }}>{invalid}</div>}
+        maxWidth: 360, padding: "5px 9px", borderRadius: 6, background: "var(--err-bg2)",
+        color: "var(--err-text)", fontSize: 11 }}>{invalid}</div>}
     </div>
   );
 }
@@ -312,7 +312,7 @@ export default function SessionDetail({ meta, data, error,
   return (
     <div style={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0, position: "relative" }}>
       <div className="fscroll" data-guide-scroll="1"
-        style={{ flex: 1, overflowY: "auto", minWidth: 0, animation: "ffade .16s ease" }}>
+        style={{ flex: 1, overflowY: "auto", minWidth: 0 }}>
         <div style={{ padding: "18px 26px 14px", borderBottom: "1px solid var(--line5)", position: "sticky",
           top: 0, background: "var(--veil)", backdropFilter: "blur(6px)", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
@@ -329,22 +329,22 @@ export default function SessionDetail({ meta, data, error,
                 <span>{tt("browser:session.active", { time: fmtTime(meta.updated, tt) })}</span>
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
-              <button className="fbtn" title={tt("browser:session.refresh")}
-                style={{ height: 30, width: 30, padding: 0, display: "flex",
-                  alignItems: "center", justifyContent: "center" }}
+            <div style={{ display: "flex", alignItems: "center", gap: 2, flex: "none" }}>
+              <button className="ftool-btn" title={tt("browser:session.refresh")}
                 disabled={refreshing} onClick={onRefresh}>
-                {refreshing ? <Spinner size={13} /> : <RescanIcon />}</button>
-              <button className="fbtn" style={{ height: 30, fontSize: 12.5 }} onClick={copyResume}>
-                {copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}</button>
-              <button data-guide="migrate" className="fbtn-primary"
-                style={{ height: 30, padding: "0 14px" }}
-                onClick={() => onOpenMigrate(null)}>{tt("browser:session.migrate")}</button>
+                {refreshing ? <Spinner size={14} /> : <RefreshIcon />}</button>
+              <button className="ftool-btn" onClick={copyResume}
+                title={copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}
+                style={copied ? { color: "var(--ok)" } : undefined}>
+                {copied ? <CheckIcon size={15} /> : <TerminalIcon />}</button>
+              <button data-guide="migrate" className="ftool-btn"
+                title={tt("browser:session.migrate")}
+                onClick={() => onOpenMigrate(null)}><MigrateIcon /></button>
             </div>
           </div>
           {subCount > 0 && (
             <div className="mono" style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 13,
-              fontSize: 11.5, color: "var(--tx4)" }}>
+              fontSize: 11, color: "var(--tx4)" }}>
               <span style={{ padding: "2px 8px", borderRadius: 6, background: "var(--chip)",
                 color: "var(--tx3b)" }}>{tt("browser:session.subSessionsLine", { tool: TOOL_NAME[meta.tool] })}</span>
               <span>{tt("browser:session.arrow")}</span>
@@ -381,7 +381,7 @@ export default function SessionDetail({ meta, data, error,
               scopeStats={scopeStats} />
           ))}
           {data && rounds.length === 0 && (
-            <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12.5 }}>{tt("browser:session.noMessages")}</div>
+            <div style={{ padding: 30, color: "var(--tx5)", fontSize: 12 }}>{tt("browser:session.noMessages")}</div>
           )}
         </div>
       </div>

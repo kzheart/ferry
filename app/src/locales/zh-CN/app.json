@@ -56,7 +56,8 @@
     "revealInFinder": "在 Finder 中显示",
     "deleteSession": "删除会话…",
     "onlyDesktop": "仅桌面版可用",
-    "noSessionFile": "该来源没有独立会话文件"
+    "noSessionFile": "该来源没有独立会话文件",
+    "more": "更多"
   },
   "drag": {
     "hint": "拖动调整宽度 · 双击复位"
@@ -91,7 +92,8 @@
     "historyTitle": "迁移历史",
     "historyPlaceholder": "搜索迁移记录…",
     "historySort": "按时间",
-    "historyFooter": "{{n}} 条迁移记录"
+    "historyFooter": "{{n}} 条迁移记录",
+    "search": "搜索"
   },
   "prompt": {
     "renameTitle": "重命名会话",
@@ -103,5 +105,9 @@
     "tagsBatchDesc": "输入的标签会追加到每个选中会话上,用逗号分隔多个。",
     "tagsDesc": "用逗号分隔多个标签;留空清除全部标签。",
     "tagsPlaceholder": "如: 重要, 实验"
+  },
+  "search": {
+    "recent": "最近会话",
+    "empty": "无匹配结果"
   }
 }
