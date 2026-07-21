@@ -63,7 +63,6 @@ Ferry 解决三个问题：
 | Codex CLI | ✓ | ✓ |
 | OpenCode | ✓ | ✓ |
 
-更多 Agent 可通过 Ferry 的[插件架构](#架构)扩展。
 
 ## 功能
 

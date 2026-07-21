@@ -64,7 +64,6 @@ Ferry solves three problems:
 | Codex CLI | ✓ | ✓ |
 | OpenCode | ✓ | ✓ |
 
-Additional agents can be added through Ferry's [plugin architecture](#architecture).
 
 ## Features
 
