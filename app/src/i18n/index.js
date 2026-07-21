@@ -11,8 +11,6 @@ import zhCNBrowser from "../locales/zh-CN/browser.json";
 import enBrowser from "../locales/en/browser.json";
 import zhCNMigration from "../locales/zh-CN/migration.json";
 import enMigration from "../locales/en/migration.json";
-import zhCNSnapshots from "../locales/zh-CN/snapshots.json";
-import enSnapshots from "../locales/en/snapshots.json";
 import zhCNOnboarding from "../locales/zh-CN/onboarding.json";
 import enOnboarding from "../locales/en/onboarding.json";
 import zhCNSettings from "../locales/zh-CN/settings.json";
@@ -25,10 +23,10 @@ import zhCNOverview from "../locales/zh-CN/overview.json";
 import enOverview from "../locales/en/overview.json";
 
 // 新增语言只需在这里加一行(外加 RESOURCES 注册),设置页下拉框自动出现该选项。
-// nativeName 用目标语言自称,englishName 供不认识该文字的用户识别。
+// nativeName 用目标语言自称,不做翻译——找母语的人认自己的语言名最快。
 export const LOCALE_META = [
-  { code: "zh-CN", nativeName: "简体中文", englishName: "Simplified Chinese" },
-  { code: "en", nativeName: "English", englishName: "English" },
+  { code: "zh-CN", nativeName: "简体中文" },
+  { code: "en", nativeName: "English" },
 ];
 
 export const SUPPORTED_LOCALES = LOCALE_META.map(l => l.code);
@@ -36,8 +34,8 @@ export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, snapshots: zhCNSnapshots, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays, app: zhCNApp, overview: zhCNOverview },
-  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, snapshots: enSnapshots, onboarding: enOnboarding, settings: enSettings, overlays: enOverlays, app: enApp, overview: enOverview },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays, app: zhCNApp, overview: zhCNOverview },
+  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, onboarding: enOnboarding, settings: enSettings, overlays: enOverlays, app: enApp, overview: enOverview },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -86,7 +84,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common", "errors", "events", "browser", "migration", "snapshots", "onboarding", "settings", "overlays", "app", "overview"],
+      ns: ["common", "errors", "events", "browser", "migration", "onboarding", "settings", "overlays", "app", "overview"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,

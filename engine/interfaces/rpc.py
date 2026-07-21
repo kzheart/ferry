@@ -26,7 +26,6 @@ RPC_METHODS = {
     "models": lambda p: services.list_models(p["tool"]),
     "history": lambda p: services.history(),
     "pricing": lambda p: services.pricing(force=p.get("force", False)),
-    "snapshots": lambda p: services.snapshots(),
     "show": lambda p: services.show(p["tool"], p["ref"]),
     "authoring_capabilities": lambda p: services.authoring_capabilities(p["tool"]),
     "authoring_preview": lambda p: services.authoring_preview(
@@ -45,12 +44,8 @@ RPC_METHODS = {
     "edit_preview": lambda p: services.edit_preview(p["ref"], p["ops"], tool=p.get("tool", "claude")),
     "edit_apply": lambda p: services.edit_apply(p["ref"], p["ops"], probe=p.get("probe", False),
         save_as=p.get("save_as", False), tool=p.get("tool", "claude")),
-    "snapshot_restore": lambda p: services.snapshot_restore(p["session"],
-        run_probe_after=p.get("probe", False), tool=p.get("tool", "claude")),
-    "snapshot_delete": lambda p: services.snapshot_delete(p["path"]),
     "session_delete": lambda p: services.session_delete(p["tool"], p["ref"]),
     "session_undelete": lambda p: services.session_undelete(p["snapshot"]),
-    "session_snapshot": lambda p: services.session_snapshot(p["tool"], p["ref"]),
     "session_meta_list": lambda p: services.session_meta_list(),
     "session_meta_set": lambda p: services.session_meta_set(p["id"], p.get("patch") or {}),
 }

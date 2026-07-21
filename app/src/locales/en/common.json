@@ -15,7 +15,6 @@
   "empty": {
     "library": "No matching sessions",
     "history": "No matching migration records",
-    "snapshots": "No matching snapshots",
     "clearFilter": "Clear filters"
   },
   "bucket": {

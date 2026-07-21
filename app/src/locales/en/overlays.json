@@ -25,33 +25,23 @@
     "inplaceDesc": "Directly overwrite the original session file",
     "confirmInplace": "Confirm in-place edit",
     "confirmSaveas": "Save as new session",
-    "inplaceFootnote": "A snapshot is auto-created before applying and can be restored at any time; if verification fails it auto-reverts, leaving no changes.",
+    "inplaceFootnote": "A backup is made before applying; if verification fails it is rolled back automatically, leaving no changes.",
     "saveasFootnote": "The original session stays unchanged; the result is saved as a new session."
-  },
-  "snapRestore": {
-    "title": "Restore to this snapshot?",
-    "cancel": "Cancel",
-    "confirm": "Create protective snapshot and restore",
-    "desc": "Session \"{{title}}\" will be restored to the state at {{time}}.",
-    "bullet1": "Changes to the current session after this snapshot will be overwritten.",
-    "bullet2": "Ferry will auto-create a protective snapshot of the current state before restoring.",
-    "bullet3": "After restore, you can undo this operation via that protective snapshot.",
-    "bullet4": "Other sessions in the source tool are not affected."
   },
   "delete": {
     "title": "Delete this session?",
     "batchTitle": "Delete {{n}} selected sessions?",
     "cancel": "Cancel",
     "confirmOpenCode": "Delete anyway",
-    "confirmOther": "Create snapshot and delete",
+    "confirmOther": "Back up and delete",
     "desc": "Session \"{{title}}\" ({{tool}}) will be removed from this machine.",
     "bulletSub": "This session contains {{n}} sub-sessions, which will also be deleted.",
-    "bulletSnapshot": "A snapshot is auto-saved to \"Snapshots & Restore\" before deletion.",
-    "bulletOpenCode": "OpenCode sessions cannot be undone after deletion; only the exported snapshot is kept.",
-    "bulletUndoable": "After deletion, you can undo via the toast or the snapshots page.",
-    "bulletBatchSnapshot": "Each session is auto-snapshotted to \"Snapshots & Restore\" before deletion.",
+    "bulletSnapshot": "A backup is saved before deleting, so you can undo it right after.",
+    "bulletOpenCode": "OpenCode sessions cannot be undone in one click after deletion; only an exported backup is kept.",
+    "bulletUndoable": "You can undo the deletion from the toast.",
+    "bulletBatchSnapshot": "Each session is backed up before deletion, so you can undo it right after.",
     "bulletBatchOpenCode": "{{n}} of them are OpenCode sessions that cannot be undone after deletion.",
-    "bulletBatchRest": "Other sessions can be restored one by one on the snapshots page."
+    "bulletBatchRest": "Undo only restores the most recent deletion; the rest must be recovered manually."
   },
   "prompt": {
     "confirm": "OK",
@@ -78,11 +68,7 @@
     "showArchived": "Show archived",
     "targetTool": "Target tool",
     "allTargets": "All targets",
-    "status": "Status",
-    "createReason": "Creation reason",
-    "allReasons": "All reasons",
-    "relatedSession": "Related session",
-    "allSessions": "All sessions"
+    "status": "Status"
   },
   "loss": {
     "keepTitle": "Kept natively",

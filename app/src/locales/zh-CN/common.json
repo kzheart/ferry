@@ -15,7 +15,6 @@
   "empty": {
     "library": "没有匹配会话",
     "history": "没有匹配迁移记录",
-    "snapshots": "没有匹配快照",
     "clearFilter": "清除筛选"
   },
   "bucket": {

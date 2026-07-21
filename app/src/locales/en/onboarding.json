@@ -12,7 +12,7 @@
   },
   "guide": {
     "step1Title": "Switch modules via the navigation rail",
-    "step1Body": "The fixed rail on the far left switches between Sessions, Migrations, and Snapshots. The rail position and width stay constant; only the middle resource pane and right detail change.",
+    "step1Body": "The fixed rail on the far left switches between Overview, Sessions, and Migrate. Its position and width never change; only the middle pane and the detail view swap.",
     "step2Title": "Search and filter in the resource pane",
     "step2Body": "The pane's title, count, search box, and filter position are consistent across the three modules. Use them to quickly locate by source, time, and directory.",
     "step3Title": "Migrate up to here and deliver",

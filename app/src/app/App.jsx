@@ -7,40 +7,37 @@ import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
-import { HistoryList, LibraryList, Pane, SnapList } from "../components/layout/ResourcePane.jsx";
+import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
 import Overview from "../features/overview/Overview.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
 import HistoryDetail from "../features/migration/HistoryDetail.jsx";
-import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
 import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
-  ApplyConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm, SnapFilter,
-  SnapRestoreConfirm, Toast } from "../components/ui/Overlays.jsx";
+  ApplyConfirm, LibraryFilter, PromptBox, SessionDeleteConfirm,
+  Toast } from "../components/ui/Overlays.jsx";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
-import { useSnapshotState } from "../features/snapshots/useSnapshotState.js";
 
 export default function App() {
   const { t } = useTranslation();
   // ----- 数据 -----
-  const { env, scan, scanning, lastScan, historyRows, snapRows, pricing,
-    doScan, loadHistory, loadSnaps } = useBrowserData();
+  const { env, scan, scanning, lastScan, historyRows, pricing,
+    doScan, loadHistory } = useBrowserData();
 
   // ----- 导航与选中 -----
   const [view, setView] = useState(
     () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
   const [selId, setSelId] = useState(null);
   const [selHist, setSelHist] = useState(null);
-  const [selSnap, setSelSnap] = useState(null);
   const [detail, setDetail] = useState(null);   // {id, data, error}
   const [refreshing, setRefreshing] = useState(false);
 
   // ----- 编辑 -----
-  // ----- 迁移 / 快照 -----
+  // ----- 迁移 -----
   const [mig, setMig] = useState(null);         // {scope}
 
   // ----- 布局 -----
@@ -51,13 +48,10 @@ export default function App() {
   // ----- 搜索与筛选 -----
   const [q, setQ] = useState("");
   const [hq, setHq] = useState("");
-  const [sq, setSq] = useState("");
   const [libF, setLibF] = useState(
     { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, arch: false, tag: null });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
-  const [snapF, setSnapF] = useState(
-    { src: [...TOOLS], reason: "all", session: "all", time: "all" });
-  const [popover, setPopover] = useState(null); // 'lib'|'hist'|'snap'
+  const [popover, setPopover] = useState(null); // 'lib'|'hist'
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
@@ -81,17 +75,13 @@ export default function App() {
   const cur = selId ? byId[selId] : null;
   const savedAsRef = useRef(null);
   const editing = useSessionEditing({ current: cur,
-    runtimeProbe: !!settings.runtimeProbe, doScan, loadSnaps,
+    runtimeProbe: !!settings.runtimeProbe, doScan,
     onInplaceApplied: () => select(selId),
     onSavedAs: result => savedAsRef.current?.(result) });
   const { ops, setOps, saveMode, setSaveMode, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, applyEdit } = editing;
-  const snapshots = useSnapshotState({ snapRows, sessionsById: byId,
-    runtimeProbe: settings.runtimeProbe, loadSnaps, doScan, setToast });
-  const { items: snapItems, confirm: snapConfirm, setConfirm: setSnapConfirm,
-    restoring: snapRestoring, results: snapResults, confirmRestore } = snapshots;
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -118,16 +108,6 @@ export default function App() {
   const batchMeta = async patch => {
     for (const id of multiSel) await setMetaFor(id, patch);
     setToast({ kind: "ok", title: t("app:toast.metaUpdated"), desc: t("app:toast.metaUpdatedDesc", { n: multiSel.length }) });
-  };
-  const manualSnapshot = async s => {
-    setToast({ kind: "run", title: t("app:toast.snapshotCreating"), desc: s.title || s.id });
-    try {
-      await rpc("session_snapshot", { tool: s.tool, ref: sessionRef(s) });
-      loadSnaps();
-      setToast({ kind: "ok", title: t("app:toast.snapshotCreated"), desc: t("app:toast.snapshotCreatedDesc") });
-    } catch (e) {
-      setToast({ kind: "fail", title: t("app:toast.snapshotCreateFail"), desc: e.message });
-    }
   };
 
   const select = id => {
@@ -167,12 +147,12 @@ export default function App() {
     doScan();
   };
 
-  // ----- 会话删除(回收站语义:先快照,可撤销) -----
+  // ----- 会话删除(先落一份备份,可撤销) -----
   const undoDelete = async snapshot => {
     setToast({ kind: "run", title: t("app:toast.restoring"), desc: t("app:toast.restoringDesc") });
     try {
       await rpc("session_undelete", { snapshot });
-      doScan(); loadSnaps();
+      doScan();
       setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
     } catch (e) {
       setToast({ kind: "fail", title: t("app:toast.restoreFail"), desc: e.message });
@@ -184,7 +164,7 @@ export default function App() {
     try {
       const r = await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
       if (selId === s.id) { setSelId(null); setDetail(null); }
-      doScan(); loadSnaps();
+      doScan();
       setToast({ kind: "ok", title: t("app:toast.deleteDone"),
         desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
         action: r.undoable
@@ -210,7 +190,7 @@ export default function App() {
       } catch { fail++; }
     }
     if (targets.some(s => s.id === selId)) { setSelId(null); setDetail(null); }
-    setMultiSel([]); doScan(); loadSnaps();
+    setMultiSel([]); doScan();
     setToast(fail
       ? { kind: "fail", title: t("app:toast.batchPartialFail"), desc: t("app:toast.batchPartialFailDesc", { done, fail }) }
       : { kind: "ok", title: t("app:toast.batchDone"),
@@ -242,7 +222,6 @@ export default function App() {
     { label: ctxMeta.archived ? t("app:ctx.unarchive") : t("app:ctx.archive"),
       onClick: () => setMetaFor(ctxSess.id, { archived: !ctxMeta.archived }) },
     { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
-    { label: t("app:ctx.snapshot"), onClick: () => manualSnapshot(ctxSess) },
     { sep: true },
     { label: t("app:ctx.copyId"), onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
     { label: t("app:ctx.copyResume"), onClick: () => resumeDescriptor(
@@ -270,7 +249,6 @@ export default function App() {
         else if (delConfirm) setDelConfirm(null);
         else if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
-        else if (snapConfirm) setSnapConfirm(null);
         else if (confirmApply) setConfirmApply(false);
         else if (diff) setDiff(null);
         else if (mig) setMig(null);
@@ -282,7 +260,7 @@ export default function App() {
           ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       // 会话库快捷键:仅在没有弹层时生效
       const overlayOpen = ctxMenu || delConfirm || batchDel || renameFor || tagFor ||
-        settingsOpen || popover || snapConfirm || confirmApply || diff || mig || guideStep;
+        settingsOpen || popover || confirmApply || diff || mig || guideStep;
       if (!overlayOpen && view === "library" && cur) {
         if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
         if (e.key === "Backspace" || e.key === "Delete") {
@@ -302,12 +280,11 @@ export default function App() {
         e.preventDefault();
         const ids = visibleIds.current[view] || [];
         if (!ids.length) return;
-        const curSel = view === "library" ? selId : view === "history" ? selHist : selSnap;
+        const curSel = view === "library" ? selId : selHist;
         let i = ids.indexOf(curSel);
         i = i < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
         if (view === "library") select(ids[i]);
-        else if (view === "history") setSelHist(ids[i]);
-        else setSelSnap(ids[i]);
+        else setSelHist(ids[i]);
       }
     };
     document.addEventListener("keydown", onKey);
@@ -499,36 +476,6 @@ export default function App() {
     label: t(`app:historyToken.${histF.time}`),
     onRemove: () => setHistF(v => ({ ...v, time: "all" })) });
 
-  // ----- 资源栏数据:快照 -----
-  const snapReasons = useMemo(
-    () => [...new Set(snapItems.map(s => s.trigger))], [snapItems]);
-  const sql = sq.trim().toLowerCase();
-  const matchSnap = s => snapF.src.includes(s.tool) &&
-    (snapF.reason === "all" || s.trigger === snapF.reason) &&
-    (snapF.session === "all" || s.title === snapF.session) &&
-    (snapF.time === "all" || (snapF.time === "earlier"
-      ? !["today", "yesterday"].includes(bucketOf(s.time)) : bucketOf(s.time) === snapF.time)) &&
-    (!sql || s.id.toLowerCase().includes(sql) || s.title.toLowerCase().includes(sql));
-  const snapFiltered = snapItems.filter(matchSnap);
-  visibleIds.current.snapshots = snapFiltered.map(s => s.id);
-  const snapSel = snapItems.find(s => s.id === selSnap) || snapFiltered[0] || null;
-  const snapListRows = snapFiltered.map(s => {
-    const rst = snapRestoring[s.id];
-    const status = rst === "done" ? t("app:snapStatus.restored")
-      : rst ? t("app:snapStatus.restoring") : t("app:snapStatus.restorable");
-    return { id: s.id, title: s.title, short: fmtTime(s.time, t), trigger: s.trigger, status,
-      stColor: rst && rst !== "done" ? "var(--warn)" : "var(--ok)", tool: s.tool,
-      selected: s.id === (selSnap ?? snapFiltered[0]?.id), onClick: () => setSelSnap(s.id) };
-  });
-  const snapTokens = [];
-  if (snapF.reason !== "all") snapTokens.push({ label: snapF.reason,
-    onRemove: () => setSnapF(v => ({ ...v, reason: "all" })) });
-  if (snapF.session !== "all") snapTokens.push({ label: t("app:snapshotsToken.session", { session: snapF.session }),
-    onRemove: () => setSnapF(v => ({ ...v, session: "all" })) });
-  if (snapF.time !== "all") snapTokens.push({
-    label: t(`app:snapshotsToken.${snapF.time}`),
-    onRemove: () => setSnapF(v => ({ ...v, time: "all" })) });
-
   // ----- 资源栏骨架配置 -----
   const paneCfg = {
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
@@ -545,11 +492,6 @@ export default function App() {
       filterCount: (histF.src.length < 3 ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
         (histF.status !== "all" ? 1 : 0) + (histF.time !== "all" ? 1 : 0),
       tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
-    snapshots: { title: t("app:pane.snapshotsTitle"), count: String(snapItems.length), placeholder: t("app:pane.snapshotsPlaceholder"),
-      query: sq, onQuery: e => setSq(e.target.value), sortLabel: t("app:pane.snapshotsSort"),
-      filterCount: (snapF.src.length < TOOLS.length ? 1 : 0) + (snapF.reason !== "all" ? 1 : 0) +
-        (snapF.session !== "all" ? 1 : 0) + (snapF.time !== "all" ? 1 : 0),
-      tokens: snapTokens, footer: t("app:pane.snapshotsFooter", { n: snapItems.length }) },
   }[view] || null;
 
   const clearLibF = () => {
@@ -561,7 +503,7 @@ export default function App() {
     { k: "overview", label: t("app:rail.overview") },
     { k: "library", label: t("app:rail.library") },
     { k: "history", label: t("app:rail.history") },
-    { k: "snapshots", label: t("app:rail.snapshots") }];
+];
 
   const firstDone = () => {
     localStorage.setItem("ferry-first-done", "1");
@@ -632,10 +574,10 @@ export default function App() {
             title={paneCfg.title} count={paneCfg.count} placeholder={paneCfg.placeholder}
             query={paneCfg.query} onQuery={paneCfg.onQuery}
             filterCount={paneCfg.filterCount}
-            filterOn={popover === { library: "lib", history: "hist", snapshots: "snap" }[view] ||
+            filterOn={popover === { library: "lib", history: "hist" }[view] ||
               paneCfg.filterCount > 0}
             onFilter={() => setPopover(p => {
-              const key = { library: "lib", history: "hist", snapshots: "snap" }[view];
+              const key = { library: "lib", history: "hist" }[view];
               return p === key ? null : key;
             })}
             sortLabel={paneCfg.sortLabel} footer={paneCfg.footer} tokens={paneCfg.tokens}
@@ -650,9 +592,6 @@ export default function App() {
             {view === "history" && (
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
-            {view === "snapshots" && (
-              <SnapList rows={snapListRows} empty={snapFiltered.length === 0}
-                onClear={() => { setSnapF({ src: [...TOOLS], reason: "all", session: "all", time: "all" }); setSq(""); }} />)}
           </Pane>
         )}
 
@@ -669,7 +608,7 @@ export default function App() {
 
         {/* 详情区 */}
         {view === "overview" && (
-          <Overview sessions={sessions} historyRows={historyRows} snapItems={snapItems}
+          <Overview sessions={sessions} historyRows={historyRows}
             prices={pricing?.prices || {}} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
@@ -689,10 +628,6 @@ export default function App() {
             {scanning ? t("app:detail.scanningSessions") : t("app:detail.noSessionToDisplay")}</div>
         ))}
         {view === "history" && <HistoryDetail h={histSel} />}
-        {view === "snapshots" && (
-          <SnapshotDetail s={snapSel ? { ...snapSel, result: snapResults[snapSel.id] } : null}
-            restoring={snapSel ? snapRestoring[snapSel.id] : false}
-            onRestore={() => snapSel && setSnapConfirm(snapSel)} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
       </div>
 
@@ -701,13 +636,11 @@ export default function App() {
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
           defaultProbe={!!settings.runtimeProbe}
           onClose={() => setMig(null)}
-          onDone={() => { loadHistory(); loadSnaps(); }} />)}
+          onDone={() => loadHistory()} />)}
       {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading} error={diff.error}
         onClose={() => setDiff(null)} />}
       {confirmApply && <ApplyConfirm ops={ops} saveMode={saveMode} setSaveMode={setSaveMode}
         editCaps={editCaps} onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
-      {snapConfirm && <SnapRestoreConfirm snap={snapConfirm}
-        onCancel={() => setSnapConfirm(null)} onConfirm={confirmRestore} />}
       {ctxMenu && ctxItems && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxItems}
           onClose={() => setCtxMenu(null)} />)}
@@ -763,11 +696,6 @@ export default function App() {
       {popover === "hist" && (
         <HistoryFilter f={histF} setF={setHistF} onClose={() => setPopover(null)}
           onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
-      {popover === "snap" && (
-        <SnapFilter f={snapF} setF={setSnapF} reasons={snapReasons}
-          sessions={[...new Set(snapItems.map(s => s.title))].slice(0, 6)}
-          onClose={() => setPopover(null)}
-          onClear={() => { setSnapF({ src: [...TOOLS], reason: "all", session: "all", time: "all" }); setSq(""); }} />)}
       {guideStep > 0 && (
         <Guide step={guideStep} onGo={setGuideStep} onFinish={finishGuide} />)}
     </div>

@@ -17,9 +17,12 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
     doc = editor.load(ref)
     if expected_revision is not None and doc.revision != expected_revision:
         raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
+    before = editor.stats(doc)
     changes = mutate(doc)
     editor.validate(doc)
-    snapshot = None if save_as else editor.snapshot(doc)
+    # 快照记下它救的是哪次编辑，还原界面才能说清「会失去什么」
+    snapshot = None if save_as else editor.snapshot(
+        doc, extra={"changes": changes, "before": before, "after": editor.stats(doc)})
     try:
         result = editor.save_copy(doc) if save_as else editor.commit(doc)
         result.update(ok=True, changes=changes,

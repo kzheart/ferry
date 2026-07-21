@@ -5,14 +5,13 @@
     python3 -m engine.api scan
     python3 -m engine.api show claude <sid>
     python3 -m engine.api migrate claude codex <ref> [--dry-run] [--probe] [--cwd DIR]
-    python3 -m engine.api history / snapshots / env
+    python3 -m engine.api history / env
 """
 import json
-import re
 import time
 from pathlib import Path
 
-from ..domain.errors import SnapshotInvalidSourceError, SnapshotNotFoundError
+from ..domain.errors import SnapshotInvalidSourceError
 from . import verification as probe_mod
 from ..adapters.base import narration
 from .ports import current
@@ -31,7 +30,7 @@ def resource_path(*parts):
 
 
 def snapshot_dir():
-    return current().snapshot_dir
+    return current().snapshot_dir()
 
 from .history import append as _append_history, list_entries as history
 from .pricing import pricing  # noqa: F401  暴露给 RPC
@@ -258,14 +257,6 @@ def session_meta_set(sid: str, patch: dict) -> dict:
 
 # ---------- 会话生命周期 ----------
 
-def session_snapshot(tool: str, ref: str) -> dict:
-    """手动为会话创建一份快照,不改动会话本身。"""
-    impl = adapter(tool).require("editor")
-    doc = impl.load(ref)
-    snap = impl.snapshot(doc, reason_code="snapshot.manual")
-    return {"ok": True, "snapshot": str(snap)}
-
-
 def session_delete(tool: str, ref: str) -> dict:
     """删除会话前先落快照(回收站语义);具体策略由插件 lifecycle 决定。"""
     impl = adapter(tool)
@@ -307,98 +298,6 @@ def session_undelete(snapshot: str) -> dict:
 
 
 # ---------- 迁移历史 / 快照 ----------
-
-def snapshots() -> list[dict]:
-    d = snapshot_dir()
-    if not d.exists():
-        return []
-    out = []
-    for f in sorted(d.glob("*.jsonl"), reverse=True):
-        m = re.match(r"(.+)-(\d+)$", f.stem)
-        if not m:
-            continue
-        meta = {}
-        try:
-            meta = json.loads(f.with_suffix(".meta.json").read_text())
-        except (OSError, json.JSONDecodeError):
-            pass            # 旧快照没有 sidecar,用默认值
-        raw_time = int(m.group(2))
-        snapshot_time = raw_time // 1_000_000 if raw_time > 10**15 else raw_time * 1000
-        out.append({"session": m.group(1), "time": snapshot_time,
-                    "size": f.stat().st_size, "path": str(f),
-                    "reason_code": meta.get("reason_code"),
-                    "legacy_reason": meta.get("reason"),
-                    "tool": meta.get("tool") or "claude",
-                    "source": meta.get("source") or m.group(1)})
-    return out
-
-
-def snapshot_restore(session_id: str, run_probe_after: bool = False,
-                     tool: str = "claude") -> dict:
-    impl = adapter(tool).require("editor")
-    try:
-        doc = impl.load(session_id)
-    except (SystemExit, Exception):
-        # 源会话文件已不存在(多半是被删除):直接把最新快照写回原路径
-        stem = Path(session_id).stem
-        cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
-        if cands:
-            return session_undelete(str(cands[-1]))
-        raise
-    path = doc.handle if isinstance(doc.handle, Path) else None
-    stem = path.stem if path else str(doc.ref)
-    cands = sorted(snapshot_dir().glob(f"{stem}-*.jsonl"))
-    if not cands:
-        raise SnapshotNotFoundError("没有该会话的快照", {"session": session_id})
-    if path is None:
-        guard = impl.snapshot(doc, reason_code="snapshot.before_restore_guard")
-        impl.restore_snapshot(cands[-1], doc)
-        result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
-        if run_probe_after:
-            restored = impl.load(session_id)
-            shadow = impl.save_copy(restored)
-            try:
-                cwd = restored.data.get("info", {}).get("directory") or "."
-                rep = run_probe(tool, shadow["session_id"], cwd)
-            finally:
-                impl.discard(shadow)
-            rep.setdefault("isolation", {"kind": "shadow_session",
-                                         "id": shadow["session_id"],
-                                         "cleaned": True})
-            result["probe"] = rep
-            if rep["status"] != "passed":
-                impl.restore_snapshot(guard, restored)
-                result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
-        return result
-    import shutil
-    cur = path.read_bytes()               # 保住现状,探针失败时回退
-    guard = impl.snapshot(doc,
-                          reason_code="snapshot.before_restore_guard")  # UI 承诺的保护快照
-    shutil.copy(cands[-1], path)
-    result = {"ok": True, "from": str(cands[-1]), "guard": str(guard)}
-    if run_probe_after:
-        restored = impl.load(str(path))
-        saved = {"session_id": session_id, "saved_as": str(path)}
-        closure = getattr(restored, "context", None)
-        if closure is not None and hasattr(closure, "nodes"):
-            saved["published_paths"] = [str(node.path)
-                                        for node in closure.nodes.values()]
-        rep = _probe_edited(tool, impl, restored, saved)
-        result["probe"] = rep
-        if rep["status"] != "passed":
-            path.write_bytes(cur)
-            result.update(ok=False, error="还原后隔离探针未通过,已保持现状")
-    return result
-
-
-def snapshot_delete(path: str) -> dict:
-    p = Path(path)
-    if p.parent != snapshot_dir():
-        raise SnapshotInvalidSourceError("只允许删除快照目录内的文件", {"path": path})
-    p.unlink(missing_ok=True)
-    p.with_suffix(".meta.json").unlink(missing_ok=True)
-    return {"ok": True}
-
 
 # ---------- 会话编辑(可扩展原生后端) ----------
 

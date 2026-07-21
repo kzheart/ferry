@@ -63,8 +63,8 @@ class EditBackend(ABC):
     @abstractmethod
     def save_copy(self, doc: EditDocument) -> dict: ...
 
-    def snapshot(self, doc: EditDocument,
-                 reason_code="snapshot.before_edit") -> Path | None:
+    def snapshot(self, doc: EditDocument, reason_code="snapshot.before_edit",
+                 extra: dict | None = None) -> Path | None:
         return None
 
     def restore_snapshot(self, snapshot: Path, doc: EditDocument) -> None:

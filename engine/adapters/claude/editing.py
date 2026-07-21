@@ -21,8 +21,8 @@ def resolve(ref: str) -> Path:
 
 
 def backup(path: Path, reason_code: str = "snapshot.before_edit",
-           tool: str = "claude") -> Path:
-    return snapshot_file(path, reason_code, tool)
+           tool: str = "claude", extra: dict | None = None) -> Path:
+    return snapshot_file(path, reason_code, tool, extra)
 
 
 def load(path: Path) -> list[dict]:

@@ -37,8 +37,6 @@ def main(argv=None):
             dry_run="--dry-run" in rest, probe="--probe" in rest)
     elif cmd == "history":
         result = services.history()
-    elif cmd == "snapshots":
-        result = services.snapshots()
     elif cmd == "env":
         result = services.env()
     else:

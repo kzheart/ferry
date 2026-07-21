@@ -223,7 +223,11 @@ class _TransactionEditor:
     def validate(self, doc):
         pass
 
-    def snapshot(self, doc):
+    def stats(self, doc):
+        return {"count": len(doc.data), "size": 0}
+
+    def snapshot(self, doc, reason_code="snapshot.before_edit", extra=None):
+        self.extra = extra
         return Path("snapshot")
 
     def commit(self, doc):

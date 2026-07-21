@@ -28,13 +28,6 @@
     "turn_deleted": "Deleted turn {{turn}}",
     "message_rewritten": "Rewrote 1 message"
   },
-  "snapshot": {
-    "manual": "Manual snapshot",
-    "before_delete": "Auto snapshot before delete",
-    "before_edit": "Auto snapshot before edit",
-    "before_restore_guard": "Pre-restore guard",
-    "default_reason": "Auto snapshot before edit"
-  },
   "probe": {
     "isolation_cleanup": "({{kind}} {{id}} probed and cleaned up)",
     "timeout": "Probe timed out",

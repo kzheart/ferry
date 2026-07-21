@@ -25,33 +25,23 @@
     "inplaceDesc": "直接改写原始会话文件",
     "confirmInplace": "确认原地修改",
     "confirmSaveas": "另存为新会话",
-    "inplaceFootnote": "应用前自动创建快照,可随时还原;若验收未通过将自动还原,不留改动。",
+    "inplaceFootnote": "应用前自动备份;若验收未通过将自动还原,不留改动。",
     "saveasFootnote": "原会话保持不变,结果保存为一个新会话。"
-  },
-  "snapRestore": {
-    "title": "还原到此快照?",
-    "cancel": "取消",
-    "confirm": "创建保护快照并还原",
-    "desc": "会话「{{title}}」将恢复到 {{time}} 的状态。",
-    "bullet1": "当前会话在此快照之后的改动将被覆盖。",
-    "bullet2": "Ferry 会在还原前自动创建一个当前状态的保护快照。",
-    "bullet3": "还原完成后可通过该保护快照撤销本次操作。",
-    "bullet4": "源工具中的其他会话不受影响。"
   },
   "delete": {
     "title": "删除此会话?",
     "batchTitle": "删除选中的 {{n}} 个会话?",
     "cancel": "取消",
     "confirmOpenCode": "仍然删除",
-    "confirmOther": "创建快照并删除",
+    "confirmOther": "备份并删除",
     "desc": "会话「{{title}}」({{tool}})将从本机移除。",
     "bulletSub": "该会话含 {{n}} 个子会话,将一并删除。",
-    "bulletSnapshot": "删除前会自动保存一份快照到「快照与还原」。",
-    "bulletOpenCode": "OpenCode 会话删除后无法一键撤销,只保留导出快照。",
-    "bulletUndoable": "删除后可通过 Toast 或快照页撤销恢复。",
-    "bulletBatchSnapshot": "每个会话删除前都会自动保存一份快照到「快照与还原」。",
+    "bulletSnapshot": "删除前会自动备份,删除后可立即撤销。",
+    "bulletOpenCode": "OpenCode 会话删除后无法一键撤销,只保留导出备份。",
+    "bulletUndoable": "删除后可通过 Toast 撤销恢复。",
+    "bulletBatchSnapshot": "每个会话删除前都会自动备份,删除后可立即撤销。",
     "bulletBatchOpenCode": "其中 {{n}} 个 OpenCode 会话删除后无法一键撤销。",
-    "bulletBatchRest": "其余会话可在快照页逐个恢复。"
+    "bulletBatchRest": "撤销只能恢复最后一次删除,其余需要手动找回。"
   },
   "prompt": {
     "confirm": "确定",
@@ -78,11 +68,7 @@
     "showArchived": "显示已归档",
     "targetTool": "目标工具",
     "allTargets": "全部目标",
-    "status": "状态",
-    "createReason": "创建原因",
-    "allReasons": "全部原因",
-    "relatedSession": "关联会话",
-    "allSessions": "全部会话"
+    "status": "状态"
   },
   "loss": {
     "keepTitle": "原生保留",

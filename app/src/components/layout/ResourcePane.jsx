@@ -137,7 +137,6 @@ export function LibraryList({ groups, empty, onClear }) {
     </div>
   ));
 }
-
 // 迁移历史分组列表
 export function HistoryList({ groups, empty, onClear }) {
   const { t } = useTranslation();
@@ -169,34 +168,6 @@ export function HistoryList({ groups, empty, onClear }) {
           </div>
         </div>
       ))}
-    </div>
-  ));
-}
-
-// 快照列表
-export function SnapList({ rows, empty, onClear }) {
-  const { t } = useTranslation();
-  if (empty) return <PaneEmpty text={t("common:empty.snapshots")} onClear={onClear} />;
-  return rows.map(s => (
-    <div key={s.id} onClick={s.onClick}
-      className={s.selected ? undefined : "hov-item"}
-      style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8,
-        cursor: "pointer", transition: "background .12s ease", ...rowSel(s.selected) }}>
-      <ToolIcon tool={s.tool} size={22} dot={s.stColor} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--tx2)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{s.id}</span>
-          <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>{s.short}</span>
-        </div>
-        <div style={{ marginTop: 2, fontSize: 11, color: "var(--tx1)", whiteSpace: "nowrap",
-          overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-          <span style={{ fontSize: 10.5, color: "var(--tx4)" }}>{s.trigger}</span>
-          <span style={{ width: 4, height: 4, borderRadius: "50%", background: s.stColor, flex: "none" }} />
-          <span style={{ fontSize: 10.5, color: s.stColor }}>{s.status}</span>
-        </div>
-      </div>
     </div>
   ));
 }
