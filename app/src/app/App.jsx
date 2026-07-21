@@ -53,6 +53,7 @@ export default function App() {
     { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, tag: null });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
+  const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
@@ -389,21 +390,6 @@ export default function App() {
     [sessions]);
 
   const ql = q.trim().toLowerCase();
-  const timeBuckets = { all: [...BUCKETS], today: ["today"],
-    last7: ["today", "yesterday", "last7"],
-    last30: ["today", "yesterday", "last7", "last30"] }[libF.time];
-  const matchLib = s => {
-    const m = metaMap[s.id] || {};
-    return libF.src.includes(s.tool) &&
-      (!libF.tag || (m.tags || []).includes(libF.tag)) &&
-      (!libF.dir || repoOf(s.dir) === libF.dir) &&
-      (!libF.mig || migratedIds.has(s.id)) &&
-      (!libF.sub || (s.tree_count || 1) > 1) &&
-      (!ql || (s.title || "").toLowerCase().includes(ql) ||
-        (m.name || "").toLowerCase().includes(ql) ||
-        (m.tags || []).some(t => t.toLowerCase().includes(ql)) ||
-        (s.dir || "").toLowerCase().includes(ql) || s.id.toLowerCase().includes(ql));
-  };
 
   // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
   const rowHandlers = useRef({});
@@ -472,32 +458,51 @@ export default function App() {
   const detailMeta = useMemo(() => cur && metaMap[cur.id]?.name
     ? { ...cur, title: metaMap[cur.id].name } : cur, [cur, metaMap]);
 
-  const libGroups = useMemo(() => {
-    const rowOf = s => {
-      const m = metaMap[s.id] || {};
-      return { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
+  // 行展示数据与过滤用字段只依赖会话/元数据,预计算一次;
+  // 之后筛选条件怎么变都只做轻量匹配,不再重建 3000+ 行的时间/文案字符串
+  const libIndex = useMemo(() => sessions.map(s => {
+    const m = metaMap[s.id] || {};
+    const tags = m.tags || [];
+    return {
+      tool: s.tool, bucket: bucketOf(s.updated), repo: repoOf(s.dir), tags,
+      pinned: !!m.pinned, sub: (s.tree_count || 1) > 1, mig: migratedIds.has(s.id),
+      hay: `${s.title || ""}\n${m.name || ""}\n${tags.join("\n")}\n${s.dir || ""}\n${s.id}`.toLowerCase(),
+      row: { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
         dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
         pinned: !!m.pinned, tags: m.tags,
         hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
-        hasMig: migratedIds.has(s.id) };
+        hasMig: migratedIds.has(s.id) },
     };
-    const isPinned = s => !!(metaMap[s.id] || {}).pinned;
+  }), [sessions, metaMap, migratedIds, t]);
+
+  const libGroups = useMemo(() => {
+    const timeBuckets = { all: [...BUCKETS], today: ["today"],
+      last7: ["today", "yesterday", "last7"],
+      last30: ["today", "yesterday", "last7", "last30"] }[libF.time];
+    const match = e => libF.src.includes(e.tool) &&
+      (!libF.tag || e.tags.includes(libF.tag)) &&
+      (!libF.dir || e.repo === libF.dir) &&
+      (!libF.mig || e.mig) && (!libF.sub || e.sub) &&
+      (!ql || e.hay.includes(ql));
+    const byKey = { pinned: [] };
+    BUCKETS.forEach(k => { byKey[k] = []; });
+    for (const e of libIndex) {
+      if (!match(e)) continue;
+      (e.pinned ? byKey.pinned : byKey[e.bucket]).push(e.row);
+    }
     const groups = [];
-    const pinnedRows = sessions.filter(s => isPinned(s) && matchLib(s));
-    if (pinnedRows.length) {
-      groups.push({ key: "pinned", label: t("app:library.pinned"), count: pinnedRows.length,
-        rows: pinnedRows.map(rowOf) });
+    if (byKey.pinned.length) {
+      groups.push({ key: "pinned", label: t("app:library.pinned"),
+        count: byKey.pinned.length, rows: byKey.pinned });
     }
     BUCKETS.filter(k => timeBuckets.includes(k)).forEach(key => {
-      const rows = sessions.filter(s =>
-        !isPinned(s) && bucketOf(s.updated) === key && matchLib(s));
-      if (!rows.length) return;
-      groups.push({ key, label: t(`common:bucket.${key}`), count: rows.length,
-        rows: rows.map(rowOf) });
+      if (!byKey[key].length) return;
+      groups.push({ key, label: t(`common:bucket.${key}`),
+        count: byKey[key].length, rows: byKey[key] });
     });
     return groups;
-    // 折叠状态刻意不进依赖:展开/收起只切换渲染,不重算 3000+ 行数据
-  }, [sessions, libF, ql, migratedIds, metaMap, t]);
+    // 折叠状态刻意不进依赖:展开/收起只切换渲染,不重算数据
+  }, [libIndex, libF, ql, t]);
   const onToggleGroup = useCallback(key =>
     setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })), []);
   visibleIds.current.library = libGroups.filter(g => !(collapsedGroups[g.key] ?? false))
@@ -528,27 +533,31 @@ export default function App() {
     ...h, _id: `h${i}-${h.time}`, status: histStatus(h),
   })), [historyRows]);
   const hql = hq.trim().toLowerCase();
-  const matchHist = h => histF.src.includes(h.src) &&
-    (histF.target === "all" || h.dst === histF.target) &&
-    (histF.status === "all" || h.status === histF.status) &&
-    (histF.time === "all" || bucketOf(h.time) === histF.time ||
-      (histF.time === "earlier" && !["today", "yesterday"].includes(bucketOf(h.time)))) &&
-    (!hql || (h.title || "").toLowerCase().includes(hql) ||
-      (h.session_id || "").toLowerCase().includes(hql));
-  const histFiltered = histItems.filter(matchHist);
+  // 迁移历史此前每次渲染都重算分组;memo 后仅在数据/筛选/选中变化时重建
+  const { histFiltered, histGroups } = useMemo(() => {
+    const matchHist = h => histF.src.includes(h.src) &&
+      (histF.target === "all" || h.dst === histF.target) &&
+      (histF.status === "all" || h.status === histF.status) &&
+      (histF.time === "all" || bucketOf(h.time) === histF.time ||
+        (histF.time === "earlier" && !["today", "yesterday"].includes(bucketOf(h.time)))) &&
+      (!hql || (h.title || "").toLowerCase().includes(hql) ||
+        (h.session_id || "").toLowerCase().includes(hql));
+    const histFiltered = histItems.filter(matchHist);
+    const histGroups = [["today", t("app:historyToken.today")], ["yesterday", t("app:historyToken.yesterday")], ["earlier", t("app:historyToken.earlier")]].map(([k, label]) => ({
+      label,
+      rows: histFiltered.filter(h => k === "earlier"
+        ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
+        .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time, t),
+          from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
+          statusLabel: t(`common:${h.status}`),
+          stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
+            [STATUS_CODE.rolledBack]: "var(--tx3b)", [STATUS_CODE.dryRun]: "var(--warn)" }[h.status],
+          tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
+          onClick: () => setSelHist(h._id) })),
+    })).filter(g => g.rows.length);
+    return { histFiltered, histGroups };
+  }, [histItems, histF, hql, selHist, t]);
   visibleIds.current.history = histFiltered.map(h => h._id);
-  const histGroups = [["today", t("app:historyToken.today")], ["yesterday", t("app:historyToken.yesterday")], ["earlier", t("app:historyToken.earlier")]].map(([k, label]) => ({
-    label,
-    rows: histFiltered.filter(h => k === "earlier"
-      ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
-      .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time, t),
-        from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
-        statusLabel: t(`common:${h.status}`),
-        stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
-          [STATUS_CODE.rolledBack]: "var(--tx3b)", [STATUS_CODE.dryRun]: "var(--warn)" }[h.status],
-        tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
-        onClick: () => setSelHist(h._id) })),
-  })).filter(g => g.rows.length);
   const histSel = histItems.find(h => h._id === selHist) || histFiltered[0] || null;
   const histTokens = [];
   if (histF.target !== "all") histTokens.push({ label: t("app:historyToken.target", { tool: TOOL_NAME[histF.target] }),
@@ -562,7 +571,7 @@ export default function App() {
   // ----- 资源栏骨架配置 -----
   const paneCfg = {
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
-      query: q, onQuery: e => setQ(e.target.value), sortLabel: t("app:pane.librarySort"),
+      query: q, onQuery: e => setQ(e.target.value),
       filterCount: (libF.src.length < 3 ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
         (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
         (libF.tag ? 1 : 0),
@@ -571,7 +580,7 @@ export default function App() {
         : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
         : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan, t) }) : "" }) },
     history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
-      query: hq, onQuery: e => setHq(e.target.value), sortLabel: t("app:pane.historySort"),
+      query: hq, onQuery: e => setHq(e.target.value),
       filterCount: (histF.src.length < 3 ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
         (histF.status !== "all" ? 1 : 0) + (histF.time !== "all" ? 1 : 0),
       tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
@@ -658,11 +667,14 @@ export default function App() {
             filterCount={paneCfg.filterCount}
             filterOn={popover === { library: "lib", history: "hist" }[view] ||
               paneCfg.filterCount > 0}
-            onFilter={() => setPopover(p => {
-              const key = { library: "lib", history: "hist" }[view];
-              return p === key ? null : key;
-            })}
-            sortLabel={paneCfg.sortLabel} footer={paneCfg.footer} tokens={paneCfg.tokens}
+            onFilter={e => {
+              popAnchor.current = e.currentTarget.getBoundingClientRect();
+              setPopover(p => {
+                const key = { library: "lib", history: "hist" }[view];
+                return p === key ? null : key;
+              });
+            }}
+            footer={paneCfg.footer} tokens={paneCfg.tokens}
             listKey={view}>
             {view === "library" && (
               scanning && !sessions.length
@@ -810,9 +822,11 @@ export default function App() {
           onClose={() => setSettingsOpen(false)} />)}
       {popover === "lib" && (
         <LibraryFilter f={libF} setF={setLibF} counts={counts} dirs={dirs} tags={allTags}
+          anchor={popAnchor.current}
           onClose={() => setPopover(null)} onClear={clearLibF} />)}
       {popover === "hist" && (
-        <HistoryFilter f={histF} setF={setHistF} onClose={() => setPopover(null)}
+        <HistoryFilter f={histF} setF={setHistF} anchor={popAnchor.current}
+          onClose={() => setPopover(null)}
           onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
       {guideStep > 0 && (
         <Guide step={guideStep} onGo={setGuideStep} onFinish={finishGuide} />)}
