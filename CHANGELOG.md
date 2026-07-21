@@ -6,7 +6,46 @@ section — and only that section — as the GitHub Release body and as the in-a
 updater notes (`python scripts/release.py notes --version x.y.z`). A release
 fails validation if its version has no section.
 
+### Changelog writing guidelines
+
+- **Language** — always English.
+- **Structure** — group changes under `### Added`, `### Changed`, `### Removed`, `### Fixed`, `### Performance`.
+- **Content** — be concise but descriptive. Each entry starts with a bold **short name** followed by a description, never a raw git commit subject.
+- **Audience** — write for users, not contributors. Explain what changed and why, not how.
+- **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
+
 ## [Unreleased]
+
+## [0.4.0] - 2026-07-21
+
+### Added
+
+- **Session image preview** — inline preview for images referenced in session messages.
+- **Refresh button in session detail** — re-reads only the current session without a full rescan.
+- **macOS native look & feel** — Rust-side native menu bar (Ferry / Edit / View / Window), vibrancy sidebar material, deep dark color scheme, compact sidebar with icon toolbar and ⌘K command palette.
+
+### Changed
+
+- **Settings language picker** — redesigned from radio cards to a native select dropdown, driven by locale metadata (`LOCALE_META`).
+- **Narration always in English** — removed the language toggle on the migration confirm screen; narration is fixed to English since target agents read context, not UI text.
+
+### Removed
+
+- **Snapshot restore page** — the dedicated restore page has been removed.
+- **Archive feature** — entire archive flow removed, replaced with inline delete + undo.
+
+### Fixed
+
+- **Window drag not working** — added missing `core:window` permissions (`start-dragging`, `toggle-maximize`, `set-theme`) that Tauri v2 silently denied.
+- **Schedule chart legend overlap** — moved legend below the polar chart to fix text/swatch collisions; default window reduced from 1440×960 to 1120×760.
+- **Duplicate pin badge on hover** — pin badge hidden on hover to avoid collision with the pin button.
+- **Codex & OpenCode native resume** — fixed session continuation for migrated Codex and OpenCode sessions.
+
+### Performance
+
+- **Sidebar click & session switching** — row component memoized, content-visibility for off-screen rows, LRU cache for session detail, edit capability cached per tool. Click latency on 3000+ sessions dropped from ~200ms to <30ms.
+- **Large list virtualization** — fixed row height + virtual DOM mount (visible ±300px), zero-recalc expand/collapse. Thousands of grouped rows no longer build full DOM on expand.
+- **Filter popover anchoring** — popover now anchored below the filter button, right-aligned, clamped to window bounds. Pre-computed search index avoids rebuilding time/label strings for 3000+ rows on every filter change.
 
 ## [0.3.1] - 2026-07-21
 
