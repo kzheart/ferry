@@ -218,18 +218,26 @@ jobs:
           pattern: release-*
           path: release-assets
           merge-multiple: true
+      - name: Extract release notes for this version from CHANGELOG.md
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: >-
+          python scripts/release.py notes
+          --version "$RELEASE_VERSION"
+          --output release-notes.md
       - name: Build complete updater manifest
         env:
           RELEASE_PUB_DATE: ${{ needs.validate.outputs.pub_date }}
           REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        shell: bash
         run: >-
           python scripts/release.py latest
           --assets release-assets
           --output release-assets/latest.json
           --repository "$REPOSITORY"
           --version "$RELEASE_VERSION"
-          --notes "Ferry $RELEASE_VERSION"
+          --notes "$(cat release-notes.md)"
       - name: Publish all assets atomically after aggregation
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,4 +247,4 @@ jobs:
         run: |
           shopt -s globstar nullglob
           assets=(release-assets/**/*.dmg release-assets/**/*.exe release-assets/**/*.gz release-assets/**/*.sig release-assets/latest.json)
-          gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --generate-notes --title "Ferry $RELEASE_VERSION"
+          gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --notes-file release-notes.md --title "Ferry $RELEASE_VERSION"

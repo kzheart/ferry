@@ -15,6 +15,7 @@ PACKAGE = ROOT / "app/package.json"
 PACKAGE_LOCK = ROOT / "app/package-lock.json"
 CARGO = ROOT / "app/src-tauri/Cargo.toml"
 CARGO_LOCK = ROOT / "app/src-tauri/Cargo.lock"
+CHANGELOG = ROOT / "CHANGELOG.md"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 
 
@@ -72,6 +73,7 @@ def check(tag: str | None = None) -> None:
         raise ValueError("package-lock.json version is not synchronized")
     if tag is not None and tag != f"v{expected}":
         raise ValueError(f"tag {tag} != v{expected}")
+    notes(expected, output=None, quiet=True)
     print(expected)
 
 
@@ -128,6 +130,34 @@ def latest(assets: Path, output: Path, repository: str, version: str, notes: str
     output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+def notes(version: str, output: Path | None = None, quiet: bool = False) -> str:
+    """Extract a single version's section from CHANGELOG.md."""
+    heading = re.compile(r"^##\s+\[?v?([^\]\s]+)\]?")
+    lines = CHANGELOG.read_text(encoding="utf-8").splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        match = heading.match(line)
+        if match is None:
+            continue
+        if start is None and match.group(1) == version:
+            start = index + 1
+        elif start is not None:
+            lines = lines[start:index]
+            break
+    else:
+        if start is None:
+            raise ValueError(f"no CHANGELOG.md section for version {version}")
+        lines = lines[start:]
+    body = "\n".join(lines).strip() + "\n"
+    if not body.strip():
+        raise ValueError(f"CHANGELOG.md section for version {version} is empty")
+    if output is not None:
+        output.write_text(body, encoding="utf-8")
+    elif not quiet:
+        print(body, end="")
+    return body
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -147,11 +177,15 @@ def main() -> None:
     latest_parser.add_argument("--repository", required=True)
     latest_parser.add_argument("--version", required=True)
     latest_parser.add_argument("--notes", default="")
+    notes_parser = commands.add_parser("notes")
+    notes_parser.add_argument("--version", required=True)
+    notes_parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.command == "check": check(args.tag)
     elif args.command == "bump": bump(args.version)
     elif args.command == "config": release_config(args.output, args.repository, args.pubkey, args.targets, args.windows_thumbprint)
     elif args.command == "latest": latest(args.assets, args.output, args.repository, args.version, args.notes)
+    elif args.command == "notes": notes(args.version, args.output)
 
 
 if __name__ == "__main__":

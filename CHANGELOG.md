@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to Ferry are documented in this file.
+All notable changes to Ferry are documented in this file. Every release adds one
+`## [x.y.z] - YYYY-MM-DD` section here; the release workflow publishes that
+section — and only that section — as the GitHub Release body and as the in-app
+updater notes (`python scripts/release.py notes --version x.y.z`). A release
+fails validation if its version has no section.
+
+## [Unreleased]
 
 ## [0.3.0] - 2026-07-21
 
