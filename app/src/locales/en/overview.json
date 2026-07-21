@@ -7,6 +7,10 @@
     "30": "30 days",
     "all": "All"
   },
+  "filter": {
+    "label": "Filter by tool",
+    "all": "All"
+  },
   "kpi": {
     "sessions": "Total sessions",
     "tokens": "Total tokens",
@@ -43,8 +47,6 @@
     "more": "More",
     "total": "{{n}} sessions"
   },
-  "priceSource": "Prices from models.dev",
-  "priceCached": "Prices from models.dev · cached {{when}}",
   "cost": {
     "title": "Estimated cost",
     "sub": "Current range · Top 5 models",
@@ -52,8 +54,7 @@
     "model": "Model",
     "tokens": "Tokens",
     "amount": "Cost",
-    "unpriced": "Unmatched · {{n}} models",
-    "footnote": "Unit prices from models.dev. Prefixed/suffixed model names are fuzzy-matched; unmatched ones count tokens only, no cost."
+    "unpriced": "Unmatched · {{n}} models"
   },
   "comp": {
     "title": "Token composition",
@@ -107,11 +108,21 @@
       "eyebrow": "Snapshot",
       "title": "{{title}}",
       "body": "A {{days}}-day-old snapshot still holds {{gb}} GB. Clear it if you no longer need it."
+    },
+    "topRepo": {
+      "eyebrow": "Project",
+      "title": "{{repo}}",
+      "body": "Most active repo in this range, {{n}} sessions total."
+    },
+    "topModel": {
+      "eyebrow": "Model",
+      "title": "{{model}}",
+      "body": "Top model in this range, {{pct}}% of all tokens."
+    },
+    "avgDaily": {
+      "eyebrow": "Rhythm",
+      "title": "{{n}} sessions / day",
+      "body": "Averaged over active days, you start about {{n}} sessions a day."
     }
-  },
-  "time": {
-    "minutes": "{{n}}m ago",
-    "hours": "{{n}}h ago",
-    "days": "{{n}}d ago"
   }
 }

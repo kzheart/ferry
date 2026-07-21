@@ -7,6 +7,10 @@
     "30": "30 天",
     "all": "全部"
   },
+  "filter": {
+    "label": "按工具筛选",
+    "all": "全部"
+  },
   "kpi": {
     "sessions": "会话总数",
     "tokens": "Token 总量",
@@ -43,8 +47,6 @@
     "more": "多",
     "total": "共 {{n}} 个会话"
   },
-  "priceSource": "单价来自 models.dev",
-  "priceCached": "单价来自 models.dev · 缓存于 {{when}}",
   "cost": {
     "title": "估算成本",
     "sub": "当前区间 · Top 5 模型",
@@ -52,8 +54,7 @@
     "model": "模型",
     "tokens": "Token",
     "amount": "成本",
-    "unpriced": "未识别 · {{n}} 个模型",
-    "footnote": "单价取自 models.dev。模型名带前后缀时按模糊匹配归一;匹配不上的只记 token、不计价。"
+    "unpriced": "未识别 · {{n}} 个模型"
   },
   "comp": {
     "title": "Token 构成",
@@ -107,11 +108,21 @@
       "eyebrow": "快照",
       "title": "{{title}}",
       "body": "{{days}} 天前的快照还占着 {{gb}} GB,确认不用了可以清掉。"
+    },
+    "topRepo": {
+      "eyebrow": "项目",
+      "title": "{{repo}}",
+      "body": "当前区间里最活跃的仓库,共 {{n}} 个会话。"
+    },
+    "topModel": {
+      "eyebrow": "模型",
+      "title": "{{model}}",
+      "body": "当前区间的主力模型,占了 {{pct}}% 的 token。"
+    },
+    "avgDaily": {
+      "eyebrow": "节奏",
+      "title": "日均 {{n}} 个会话",
+      "body": "按有活动的天数算,平均每天开 {{n}} 个会话。"
     }
-  },
-  "time": {
-    "minutes": "{{n}} 分钟前",
-    "hours": "{{n}} 小时前",
-    "days": "{{n}} 天前"
   }
 }

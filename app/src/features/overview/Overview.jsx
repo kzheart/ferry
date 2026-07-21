@@ -2,11 +2,13 @@
 // 数据全部由 computeOverview 从真实扫描结果聚合;图表手写内联 SVG,随主题变量着色。
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME } from "../../api/contract/tools.js";
+import { TOOLS, TOOL_NAME } from "../../api/contract/tools.js";
+import { ToolIcon, SortCaret, CheckIcon, RailGlyph } from "../../components/ui/icons.jsx";
 import { computeOverview } from "../../domain/sessions/overviewModel.js";
 
 const TOOL_COLOR = { claude: "var(--t-claude)", codex: "var(--t-codex)", opencode: "var(--t-opencode)" };
 const COMP_OPACITY = { cache_read: 0.92, input: 0.6, cache_write: 0.38, output: 0.2 };
+const CHART = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];
 
 // ---------- 格式化 ----------
 const fmtInt = n => Math.round(n || 0).toLocaleString("en-US");
@@ -38,15 +40,16 @@ const card = { background: "var(--surface)", border: "1px solid var(--line)",
   borderRadius: 10, boxShadow: "var(--shadow)" };
 const num = { fontVariantNumeric: "tabular-nums" };
 
-function Card({ title, sub, extra, children }) {
+function Card({ title, sub, extra, fill, children }) {
   return (
-    <div style={card}>
+    <div style={fill ? { ...card, height: "100%", display: "flex", flexDirection: "column" } : card}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "13px 15px 0" }}>
         <h2 style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: ".02em", color: "var(--tx2)" }}>{title}</h2>
         {sub && <span style={{ fontSize: 11, color: "var(--tx4b)" }}>{sub}</span>}
         {extra && <><div style={{ flex: 1 }} />{extra}</>}
       </div>
-      <div style={{ padding: "13px 15px 15px" }}>{children}</div>
+      <div style={fill ? { padding: "13px 15px 15px", flex: 1, display: "flex", flexDirection: "column" }
+        : { padding: "13px 15px 15px" }}>{children}</div>
     </div>
   );
 }
@@ -70,9 +73,9 @@ function Spark({ values, w = 72, h = 24 }) {
   const d = smooth(pts);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} style={{ display: "block" }} aria-hidden="true">
-      <path d={`${d} L${x(values.length - 1)} ${h} L${x(0)} ${h} Z`} fill="var(--accent)" opacity=".07" />
-      <path d={d} fill="none" stroke="var(--accent)" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" opacity=".55" />
-      <circle cx={x(values.length - 1)} cy={y(values[values.length - 1] || 0)} r="2" fill="var(--accent)" />
+      <path d={`${d} L${x(values.length - 1)} ${h} L${x(0)} ${h} Z`} fill="var(--c1)" opacity=".1" />
+      <path d={d} fill="none" stroke="var(--c1)" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" opacity=".75" />
+      <circle cx={x(values.length - 1)} cy={y(values[values.length - 1] || 0)} r="2" fill="var(--c1)" />
     </svg>
   );
 }
@@ -85,7 +88,8 @@ function Bump({ bump }) {
   const y = r => T + ((r - 1) / Math.max(1, ranks - 1)) * (H - T - B);
   const order = models.map((m, i) => i).sort((a, b) => (models[a].lead ? 1 : 0) - (models[b].lead ? 1 : 0));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="200" role="img"
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet"
+      style={{ display: "block" }} role="img"
       aria-label="各模型每月按 token 用量排名的变迁">
       {Array.from({ length: ranks }, (_, i) => i + 1).map(r => (
         <g key={r}>
@@ -98,18 +102,20 @@ function Bump({ bump }) {
       ))}
       {order.map(mi => {
         const m = models[mi];
+        const color = CHART[mi % CHART.length];
         const pts = m.rank.map((r, i) => [x(i), y(r)]);
         return (
           <g key={m.name}>
-            <path d={smooth(pts)} fill="none" stroke={m.lead ? "var(--accent)" : "var(--tx4)"}
-              strokeWidth={m.lead ? 2.4 : 1.4} strokeLinecap="round" strokeLinejoin="round" opacity={m.lead ? 1 : 0.5} />
+            <path d={smooth(pts)} fill="none" stroke={color}
+              strokeWidth={m.lead ? 2.4 : 1.6} strokeLinecap="round" strokeLinejoin="round" opacity={m.lead ? 1 : 0.45} />
             {pts.map((p, i) => (
               <circle key={i} cx={p[0]} cy={p[1]} r={m.lead ? (i === n - 1 ? 4 : 3) : 2.4}
-                fill={m.lead ? "var(--accent)" : "var(--surface)"} stroke={m.lead ? "var(--surface)" : "var(--tx4)"}
-                strokeWidth={m.lead ? 1.4 : 1.2} opacity={m.lead ? 1 : 0.7} />
+                fill={m.lead ? color : "var(--surface)"} stroke={m.lead ? "var(--surface)" : color}
+                strokeWidth={m.lead ? 1.4 : 1.2} opacity={m.lead ? 1 : 0.6} />
             ))}
-            <text x={W - R + 10} y={y(m.rank[n - 1]) + 3.5} fill={m.lead ? "var(--tx1)" : "var(--tx4b)"}
-              fontSize="11" fontWeight={m.lead ? 600 : 400} fontFamily="var(--font-ui)">{m.name}</text>
+            <text x={W - R + 10} y={y(m.rank[n - 1]) + 3.5} fill={color}
+              fontSize="11" fontWeight={m.lead ? 600 : 400} fontFamily="var(--font-ui)"
+              opacity={m.lead ? 1 : 0.75}>{m.name}</text>
           </g>
         );
       })}
@@ -136,7 +142,7 @@ function Clock({ clock, peakHour, t }) {
       ))}
       {clock.map((v, h) => {
         const late = h <= 4 || h >= 21;
-        return <path key={h} d={wedge(h, v)} fill="var(--accent)" opacity={late ? 0.82 : 0.2} />;
+        return <path key={h} d={wedge(h, v)} fill={late ? "var(--warn)" : "var(--c1)"} opacity={late ? 0.9 : 0.45} />;
       })}
       {[[0, "0"], [6, "6"], [12, "12"], [18, "18"]].map(([hh, lb]) => {
         const ang = -Math.PI / 2 + (hh + 0.5) * step, rr = R1 + 15;
@@ -146,9 +152,9 @@ function Clock({ clock, peakHour, t }) {
       <text x={CX} y={CY - 2} textAnchor="middle" fill="var(--tx1)" fontSize="17" fontWeight="600"
         fontFamily="var(--font-ui)" letterSpacing="-0.5">{String(peakHour).padStart(2, "0")}:00</text>
       <text x={CX} y={CY + 12} textAnchor="middle" fill="var(--tx4b)" fontSize="10" fontFamily="var(--font-ui)">{t("overview:clock.peak")}</text>
-      {[[0.82, t("overview:clock.night")], [0.2, t("overview:clock.day")]].map(([op, lb], i) => (
+      {[["var(--warn)", 0.9, t("overview:clock.night")], ["var(--c1)", 0.45, t("overview:clock.day")]].map(([fill, op, lb], i) => (
         <g key={i}>
-          <rect x="214" y={84 + i * 18} width="8" height="8" rx="2" fill="var(--accent)" opacity={op} />
+          <rect x="214" y={84 + i * 18} width="8" height="8" rx="2" fill={fill} opacity={op} />
           <text x="214" y={84 + i * 18 + 24} fill="var(--tx5)" fontSize="9.5" fontFamily="var(--font-ui)">{lb}</text>
         </g>
       ))}
@@ -164,20 +170,18 @@ function Heatmap({ heatmap }) {
     const r = c / max;
     return r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1;
   };
-  const op = [0, 0.22, 0.45, 0.7, 1];
   const width = LX + grid.length * (cell + gap);
   const dow = ["一", "", "三", "", "五", "", "日"];
   return (
-    <svg viewBox={`0 0 ${width} ${TY + 7 * (cell + gap)}`} width={width} height={TY + 7 * (cell + gap)}
+    <svg viewBox={`0 0 ${width} ${TY + 7 * (cell + gap)}`} width="100%"
+      style={{ display: "block", minWidth: width }}
       role="img" aria-label="按天的会话活跃热力图">
       {dow.map((s, d) => s && (
         <text key={d} x={LX - 6} y={TY + d * (cell + gap) + 9} textAnchor="end" fill="var(--tx5)" fontSize="9" fontFamily="var(--font-ui)">{s}</text>
       ))}
       {grid.map((col, w) => col.map((c, d) => c === -1 ? null : (
         <rect key={`${w}-${d}`} x={LX + w * (cell + gap)} y={TY + d * (cell + gap)}
-          width={cell} height={cell} rx="2.5"
-          fill={level(c) === 0 ? "var(--track)" : "var(--accent)"}
-          opacity={level(c) === 0 ? 1 : op[level(c)]}>
+          width={cell} height={cell} rx="2.5" fill={`var(--heat-${level(c)})`}>
           <title>{c > 0 ? `${c}` : ""}</title>
         </rect>
       )))}
@@ -207,6 +211,56 @@ function MiniBars({ weeks, label }) {
   );
 }
 
+// Agent 筛选:产品图标下拉,清单来自引擎 tools RPC,新增 agent 自动出现
+function ToolFilter({ tool, setTool, t }) {
+  const [open, setOpen] = useState(false);
+  const label = tool === "all" ? t("overview:filter.all") : (TOOL_NAME[tool] || tool);
+  const pick = k => { setTool(k); setOpen(false); };
+  const row = (k, icon, text) => (
+    <div key={k} role="option" aria-selected={tool === k} onClick={() => pick(k)} className="hov-item"
+      style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px",
+        borderRadius: 7, fontSize: 12.5, color: "var(--tx2)", cursor: "pointer", whiteSpace: "nowrap" }}>
+      {icon}
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
+      {tool === k && <span style={{ color: "var(--tx3)", display: "inline-flex" }}><CheckIcon size={12} /></span>}
+    </div>
+  );
+  const allIcon = (
+    <span style={{ width: 20, height: 20, borderRadius: 6, background: "var(--fill3)",
+      border: "1px solid var(--line)", display: "inline-flex", alignItems: "center",
+      justifyContent: "center", flex: "none" }}>
+      <RailGlyph name="overview" size={11} color="var(--tx3b)" />
+    </span>
+  );
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open}
+        aria-label={t("overview:filter.label")}
+        style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 28, padding: "0 9px",
+          border: "1px solid var(--line)", borderRadius: 7, background: "var(--surface)",
+          font: "inherit", fontSize: 12, color: "var(--tx1)", cursor: "pointer" }}>
+        {tool === "all" ? allIcon : <ToolIcon tool={tool} size={18} />}
+        {label}
+        <SortCaret />
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 55 }} />
+          <div role="listbox" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)",
+            zIndex: 56, minWidth: 176, maxHeight: 300, overflowY: "auto", padding: 6,
+            background: "var(--bg)", borderRadius: 10,
+            boxShadow: "0 16px 40px -14px rgba(20,28,38,.42),0 0 0 1px var(--ring)",
+            animation: "fpop .12s ease" }}>
+            {row("all", allIcon, t("overview:filter.all"))}
+            <div style={{ height: 1, background: "var(--line3)", margin: "4px 6px" }} />
+            {TOOLS.map(k => row(k, <ToolIcon tool={k} size={20} />, TOOL_NAME[k] || k))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---------- 洞察文案 ----------
 function insightCopy(ins, t) {
   const p = ins.params;
@@ -219,12 +273,13 @@ function insightCopy(ins, t) {
 
 // ---------- 主组件 ----------
 export default function Overview({ sessions = [], historyRows = [], snapItems = [],
-  prices = {}, pricingMeta = null }) {
+  prices = {} }) {
   const { t } = useTranslation();
   const [scope, setScope] = useState("30");
+  const [tool, setTool] = useState("all");
   const data = useMemo(() => computeOverview({
-    sessions, history: historyRows, snaps: snapItems, prices, scope,
-  }), [sessions, historyRows, snapItems, prices, scope]);
+    sessions, history: historyRows, snaps: snapItems, prices, scope, tool,
+  }), [sessions, historyRows, snapItems, prices, scope, tool]);
 
   const delta = (kpi, fmt) => {
     if (kpi.delta == null) return null;
@@ -242,15 +297,18 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
     ? rest.slice(offset).concat(rest.slice(0, offset)).slice(0, featured ? 3 : 4)
     : [];
 
-  const scopeBtn = key => (
-    <button onClick={() => setScope(key)} aria-pressed={scope === key}
-      style={{ border: "none", background: scope === key ? "var(--surface)" : "transparent",
-        font: "inherit", fontSize: 12, color: scope === key ? "var(--tx1)" : "var(--tx3)",
-        fontWeight: scope === key ? 500 : 400, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
-        boxShadow: scope === key ? "0 1px 1px rgba(0,0,0,.05)" : "none" }}>
-      {t(`overview:scope.${key}`)}
+  const segBtn = (label, active, onClick, dot) => (
+    <button key={label} onClick={onClick} aria-pressed={active}
+      style={{ border: "none", background: active ? "var(--surface)" : "transparent",
+        font: "inherit", fontSize: 12, color: active ? "var(--tx1)" : "var(--tx3)",
+        fontWeight: active ? 500 : 400, padding: "3px 10px", borderRadius: 5, cursor: "pointer",
+        display: "inline-flex", alignItems: "center", gap: 6,
+        boxShadow: active ? "0 1px 1px rgba(0,0,0,.05)" : "none" }}>
+      {dot && <i style={{ width: 7, height: 7, borderRadius: 2, background: dot, opacity: active ? 1 : 0.55 }} />}
+      {label}
     </button>
   );
+  const scopeBtn = key => segBtn(t(`overview:scope.${key}`), scope === key, () => setScope(key));
 
   const kpiCard = (label, value, unit, footLeft, sparkVals) => (
     <div style={{ ...card, padding: "13px 14px 10px" }}>
@@ -276,6 +334,7 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--tx1)" }}>{t("overview:title")}</h1>
           <div style={{ flex: 1 }} />
+          <ToolFilter tool={tool} setTool={setTool} t={t} />
           <div role="group" aria-label={t("overview:scope.label")}
             style={{ display: "flex", background: "var(--track)", borderRadius: 7, padding: 2, gap: 2 }}>
             {scopeBtn("7")}{scopeBtn("30")}{scopeBtn("all")}
@@ -307,8 +366,10 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {data.bump && (
                 <div style={{ flex: "2 1 420px", minWidth: 0 }}>
-                  <Card title={t("overview:bump.title")} sub={t("overview:bump.sub")}>
-                    <Bump bump={data.bump} />
+                  <Card title={t("overview:bump.title")} sub={t("overview:bump.sub")} fill>
+                    <div style={{ flex: 1, display: "flex", alignItems: "stretch", minHeight: 200 }}>
+                      <Bump bump={data.bump} />
+                    </div>
                   </Card>
                 </div>
               )}
@@ -334,9 +395,9 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 11, color: "var(--tx4b)" }}>
                 <span>{t("overview:heat.less")}</span>
                 <span style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                  {[0, 0.22, 0.45, 0.7, 1].map((o, i) => (
+                  {[0, 1, 2, 3, 4].map(i => (
                     <i key={i} style={{ width: 10, height: 10, borderRadius: 2, display: "block",
-                      background: i === 0 ? "var(--track)" : "var(--accent)", opacity: i === 0 ? 1 : o }} />
+                      background: `var(--heat-${i})` }} />
                   ))}
                 </span>
                 <span>{t("overview:heat.more")}</span>
@@ -346,8 +407,7 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
             </Card>
 
             {/* Token 与成本 */}
-            <Section title={t("overview:sec.tokens")}
-              note={pricingMeta?.fetched_at ? t("overview:priceCached", { when: relTime(pricingMeta.fetched_at, t) }) : t("overview:priceSource")} />
+            <Section title={t("overview:sec.tokens")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {/* 成本表 */}
               <div style={{ flex: "1 1 340px", minWidth: 0 }}>
@@ -391,30 +451,27 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
                       </tbody>
                     </table>
                   </div>
-                  <div style={{ marginTop: 12, padding: "9px 11px", borderRadius: 6, background: "var(--inset)",
-                    border: "1px solid var(--line6)", fontSize: 11, color: "var(--tx3)", lineHeight: 1.55 }}>
-                    {t("overview:cost.footnote")}
-                  </div>
                 </Card>
               </div>
 
               {/* Token 构成 */}
               <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-                <Card title={t("overview:comp.title")} sub={t(`overview:scope.${scope}`)}>
+                <Card title={t("overview:comp.title")} sub={t(`overview:scope.${scope}`)} fill>
                   <div style={{ display: "flex", height: 30, borderRadius: 5, overflow: "hidden", gap: 1 }}>
                     {data.composition.filter(c => c.pct > 0).map(c => (
-                      <div key={c.key} style={{ flex: c.pct, background: "var(--accent)", opacity: COMP_OPACITY[c.key],
+                      <div key={c.key} style={{ flex: c.pct, background: "var(--c1)", opacity: COMP_OPACITY[c.key],
                         display: "grid", placeItems: "center", fontSize: 10, fontWeight: 600, color: "#fff" }}>
                         {c.pct > 12 ? c.pct.toFixed(1) + "%" : ""}
                       </div>
                     ))}
                   </div>
-                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column" }}>
+                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", flex: 1 }}>
                     {data.composition.map((c, i) => (
                       <div key={c.key} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12,
-                        alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--line6)" : "none" }}>
+                        alignItems: "center", padding: "7px 0", flex: 1,
+                        borderTop: i ? "1px solid var(--line6)" : "none" }}>
                         <span style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--tx2)" }}>
-                          <i style={{ width: 8, height: 8, borderRadius: 2, background: "var(--accent)", opacity: COMP_OPACITY[c.key] }} />
+                          <i style={{ width: 8, height: 8, borderRadius: 2, background: "var(--c1)", opacity: COMP_OPACITY[c.key] }} />
                           {t(`overview:comp.${c.key}`)}
                         </span>
                         <span style={{ fontSize: 13, fontWeight: 600, ...num }}>{fmtTokens(c.value)}</span>
@@ -433,9 +490,9 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
               <div style={{ flex: "2 1 420px", minWidth: 0 }}>
                 <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")}
                   extra={<div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)" }}>
-                    {["claude", "codex", "opencode"].map(tool => (
-                      <span key={tool} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[tool] }} />{TOOL_NAME[tool]}
+                    {TOOLS.map(tl => (
+                      <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[tl] || "var(--tx4)" }} />{TOOL_NAME[tl] || tl}
                       </span>
                     ))}
                   </div>}>
@@ -447,9 +504,9 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
                           <span title={r.name} style={{ fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap",
                             overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
                           <div style={{ height: 7, background: "var(--track)", borderRadius: 4, overflow: "hidden", display: "flex" }}>
-                            {["claude", "codex", "opencode"].map(tool => {
-                              const w = (r.byTool[tool] || 0) / maxTotal * 100;
-                              return w ? <i key={tool} style={{ display: "block", height: "100%", width: `${w}%`, background: TOOL_COLOR[tool] }} /> : null;
+                            {TOOLS.map(tl => {
+                              const w = (r.byTool[tl] || 0) / maxTotal * 100;
+                              return w ? <i key={tl} style={{ display: "block", height: "100%", width: `${w}%`, background: TOOL_COLOR[tl] || "var(--tx4)" }} /> : null;
                             })}
                           </div>
                           <span style={{ fontSize: 11, color: "var(--tx3)", minWidth: 44, textAlign: "right", ...num }}>{fmtInt(r.total)}</span>
@@ -494,8 +551,9 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
             {(featured || smalls.length) && (
               <>
                 <Section title={t("overview:sec.insights")} />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {featured && <FeaturedInsight ins={featured} t={t} />}
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, smalls.length)}, 1fr)`, gap: 12 }}>
                   {smalls.map((ins, i) => {
                     const c = insightCopy(ins, t);
                     return (
@@ -506,6 +564,7 @@ export default function Overview({ sessions = [], historyRows = [], snapItems = 
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </>
             )}
@@ -521,7 +580,7 @@ function FeaturedInsight({ ins, t }) {
   const weeks = ins.params?.weeks;
   const warn = ins.kind === "cost";
   return (
-    <div style={{ ...card, gridColumn: "1 / -1", display: "flex", flexDirection: "row", gap: 22,
+    <div style={{ ...card, display: "flex", flexDirection: "row", gap: 22,
       alignItems: "center", flexWrap: "wrap",
       background: warn ? "linear-gradient(100deg, var(--warn-bg), var(--surface) 62%)" : "var(--surface)",
       borderColor: warn ? "var(--warn-line)" : "var(--line)", padding: "15px 16px" }}>
@@ -536,14 +595,8 @@ function FeaturedInsight({ ins, t }) {
   );
 }
 
-// 成本表圆点:前三行用 agent 身份色,其余弱化
+// 成本表圆点:按行取分类色板,超出弱化
 function dotColor(i) {
-  return [`var(--t-claude)`, `var(--t-codex)`, `var(--t-opencode)`][i] || "var(--tx4)";
+  return CHART[i] || "var(--tx4)";
 }
 
-function relTime(ms, t) {
-  const d = Date.now() - ms;
-  if (d < 3600e3) return t("overview:time.minutes", { n: Math.max(1, Math.floor(d / 60e3)) });
-  if (d < 86400e3) return t("overview:time.hours", { n: Math.floor(d / 3600e3) });
-  return t("overview:time.days", { n: Math.floor(d / 86400e3) });
-}

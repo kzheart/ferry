@@ -101,6 +101,20 @@ html, body, #root { height: 100%; }
   --warn-line: #F0D9BC;
 
   /* 交互态 */
+  /* 图表:热力图(GitHub 绿)/ 分类色板 / agent 身份色 */
+  --heat-0: #EBEDF0;
+  --heat-1: #9BE9A8;
+  --heat-2: #40C463;
+  --heat-3: #30A14E;
+  --heat-4: #216E39;
+  --c1: #4C7EDB;
+  --c2: #3FA972;
+  --c3: #E0913D;
+  --c4: #9268C9;
+  --t-claude: #D97757;
+  --t-codex: #10A37F;
+  --t-opencode: #4C7EDB;
+
   --hov: #E4E9EE;
   --hov-rail: #DDE3E9;
   --hov-row: #E7ECF1;
@@ -203,6 +217,19 @@ html, body, #root { height: 100%; }
   --warn-text: #D3A468;
   --warn-bg: #2B2113;
   --warn-line: #493A1F;
+
+  --heat-0: #2C2C31;
+  --heat-1: #0E4429;
+  --heat-2: #006D32;
+  --heat-3: #26A641;
+  --heat-4: #39D353;
+  --c1: #6B96E8;
+  --c2: #4FBF87;
+  --c3: #E8A65D;
+  --c4: #A98BD9;
+  --t-claude: #E08B6D;
+  --t-codex: #34C29A;
+  --t-opencode: #6B96E8;
 
   --hov: #2A2A2F;
   --hov-rail: #232327;

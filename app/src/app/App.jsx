@@ -655,7 +655,7 @@ export default function App() {
         {/* 详情区 */}
         {view === "overview" && (
           <Overview sessions={sessions} historyRows={historyRows} snapItems={snapItems}
-            prices={pricing?.prices || {}} pricingMeta={pricing} />)}
+            prices={pricing?.prices || {}} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
             meta={metaMap[cur.id]?.name ? { ...cur, title: metaMap[cur.id].name } : cur}
