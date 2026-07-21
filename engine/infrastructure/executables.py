@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 _WINDOWS = sys.platform == "win32"
+_TOOL_FALLBACK_DIRS: dict[str, tuple[Path, ...]] = {}
 
 # Windows 下抑制子进程闪现控制台窗口；直接展开进 subprocess.run(**RUN_FLAGS)
 RUN_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW} if _WINDOWS else {}
@@ -22,8 +23,7 @@ RUN_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW} if _WINDOWS else {}
 def _fallback_dirs() -> list[Path]:
     home = Path.home()
     dirs = [home / ".local" / "bin", home / ".npm-global" / "bin",
-            home / ".bun" / "bin", home / ".volta" / "bin",
-            home / ".opencode" / "bin"]   # opencode 官方 install 脚本默认目录
+            home / ".bun" / "bin", home / ".volta" / "bin"]
     if _WINDOWS:
         appdata = os.environ.get("APPDATA")
         if appdata:
@@ -36,13 +36,23 @@ def _fallback_dirs() -> list[Path]:
     return dirs
 
 
+def register_fallback_dirs(executables: tuple[str, ...],
+                           directories: tuple[str, ...]) -> None:
+    """Register adapter-declared binary locations without naming an adapter here."""
+    paths = tuple(Path(directory).expanduser() for directory in directories)
+    for executable in executables:
+        _TOOL_FALLBACK_DIRS[executable] = paths
+    resolve.cache_clear()
+
+
 @lru_cache(maxsize=None)
 def resolve(tool: str) -> str | None:
     """解析 CLI 绝对路径；PATH 未命中时扫描常见安装目录。找不到返回 None。"""
     found = shutil.which(tool)
     if found:
         return found
-    for directory in _fallback_dirs():
+    directories = [*_TOOL_FALLBACK_DIRS.get(tool, ()), *_fallback_dirs()]
+    for directory in directories:
         found = shutil.which(tool, path=str(directory))
         if found:
             # CLI 可能是 node 等运行时的垫片(#!/usr/bin/env node),同目录通常就有

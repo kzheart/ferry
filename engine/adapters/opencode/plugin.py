@@ -19,6 +19,7 @@ MANIFEST = ToolManifest(
     source_path="~/.local/share/opencode",
     reference_kind="id",
     executables=("opencode",),
+    fallback_bin_dirs=("~/.opencode/bin",),
 )
 
 
@@ -43,6 +44,10 @@ class OpenCodeModels:
 
 
 def build() -> ToolPlugin:
+    from ...infrastructure import executables
+
+    executables.register_fallback_dirs(
+        MANIFEST.executables, MANIFEST.fallback_bin_dirs)
     lifecycle = OpenCodeLifecycle()
     lifecycle.executable = MANIFEST.executables[0]
     browser = OpenCodeBrowser()

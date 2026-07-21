@@ -1,23 +1,33 @@
-"""引擎内唯一的插件注册表：只负责装配 ToolPlugin。
-
-adapter 全部随应用打包，静态 factory 列表即可；lifecycle、
-resolve、cleanup 等策略都在各 Agent 包内，不在这里。
-"""
+"""Adapter registry with package discovery and lazy ToolPlugin construction."""
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from typing import Callable
 
 from ..domain.errors import ToolUnknownError
 from .base.plugin import ToolPlugin
-from .claude.plugin import build as _build_claude
-from .codex.plugin import build as _build_codex
-from .opencode.plugin import build as _build_opencode
 
-_FACTORIES: dict[str, Callable[[], ToolPlugin]] = {
-    "claude": _build_claude,
-    "codex": _build_codex,
-    "opencode": _build_opencode,
-}
+def _discover_factories() -> dict[str, Callable[[], ToolPlugin]]:
+    """Load every bundled adapter package exposing ``plugin.build``.
+
+    Adding an adapter only requires creating ``adapters/<id>/plugin.py``. The
+    registry deliberately contains no per-agent imports or identifiers.
+    """
+    factories = {}
+    package = importlib.import_module(__package__)
+    packages = sorted(pkgutil.iter_modules(package.__path__), key=lambda item: item.name)
+    for _, name, is_package in packages:
+        if not is_package or name == "base":
+            continue
+        module = importlib.import_module(f"{__package__}.{name}.plugin")
+        factory = getattr(module, "build", None)
+        if callable(factory):
+            factories[name] = factory
+    return factories
+
+
+_FACTORIES: dict[str, Callable[[], ToolPlugin]] = _discover_factories()
 
 _PLUGINS: dict[str, ToolPlugin] = {}
 
