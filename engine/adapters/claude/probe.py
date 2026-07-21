@@ -37,7 +37,11 @@ def _probe(session_id, cwd, model=None):
                 params[key] = output[key]
         return probes.report("failed", "probe.process_failed", params,
                              stdout=raw, stderr=error)
-    return probes.report("passed", stdout=str(output.get("result", "")))
+    reply = str(output.get("result", ""))
+    if not probes.response_matches(reply):
+        return probes.report("failed", "probe.unexpected_response",
+                             {"tool": "claude"}, stdout=reply, stderr=error)
+    return probes.report("passed", stdout=reply)
 
 
 class ClaudeVerifier:

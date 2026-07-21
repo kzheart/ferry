@@ -11,10 +11,14 @@ def _probe(session_id, cwd, model=None):
     if cwd:
         command[2:2] = ["--dir", cwd]
     result = probes.run(command + [probes.PROBE_PROMPT], cwd=cwd, timeout=360)
-    if result.returncode != 0 or not (result.stdout or "").strip():
+    if result.returncode != 0:
         return probes.report("failed", "probe.process_failed",
                              {"tool": "opencode", "exit_code": result.returncode},
                              stdout=result.stdout, stderr=result.stderr)
+    if not probes.response_matches(result.stdout):
+        return probes.report("failed", "probe.unexpected_response",
+                             {"tool": "opencode"}, stdout=result.stdout,
+                             stderr=result.stderr)
     return probes.report("passed", stdout=result.stdout, stderr=result.stderr)
 
 
