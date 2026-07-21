@@ -8,6 +8,7 @@ export function useBrowserData() {
   const [lastScan, setLastScan] = useState(null);
   const [historyRows, setHistoryRows] = useState([]);
   const [snapRows, setSnapRows] = useState([]);
+  const [pricing, setPricing] = useState(null);
   const booted = useRef(false);
 
   const doScan = async () => {
@@ -19,6 +20,7 @@ export function useBrowserData() {
   };
   const loadHistory = () => rpc("history").then(setHistoryRows).catch(() => {});
   const loadSnaps = () => rpc("snapshots").then(setSnapRows).catch(() => {});
+  const loadPricing = () => rpc("pricing").then(setPricing).catch(() => {});
 
   useEffect(() => {
     if (booted.current) return;
@@ -27,7 +29,9 @@ export function useBrowserData() {
     doScan();
     loadHistory();
     loadSnaps();
+    loadPricing();
   }, []);
 
-  return { env, scan, scanning, lastScan, historyRows, snapRows, doScan, loadHistory, loadSnaps };
+  return { env, scan, scanning, lastScan, historyRows, snapRows, pricing,
+    doScan, loadHistory, loadSnaps };
 }

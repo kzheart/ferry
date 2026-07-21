@@ -6,6 +6,7 @@
     "rescan": "重新扫描"
   },
   "rail": {
+    "overview": "总览",
     "library": "会话",
     "history": "迁移",
     "snapshots": "快照",

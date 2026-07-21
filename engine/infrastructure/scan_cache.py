@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class ScanCache:
-    def __init__(self, path=None, version=5):
+    def __init__(self, path=None, version=6):
         self.path = path or Path.home() / ".resume-harness" / "scan-cache.json"
         self.version = version
         self._data = None

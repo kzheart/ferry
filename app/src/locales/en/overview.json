@@ -1,0 +1,117 @@
+{
+  "title": "Overview",
+  "emptyState": "No sessions scanned yet — run a rescan from Sessions and come back.",
+  "scope": {
+    "label": "Time range",
+    "7": "7 days",
+    "30": "30 days",
+    "all": "All"
+  },
+  "kpi": {
+    "sessions": "Total sessions",
+    "tokens": "Total tokens",
+    "cost": "Est. cost",
+    "streak": "Active streak",
+    "days": "d",
+    "longest": "Longest {{n}}d",
+    "thisPeriod": "this range"
+  },
+  "sec": {
+    "habits": "Habits",
+    "tokens": "Tokens & cost",
+    "projects": "Projects & migrations",
+    "insights": "Insights"
+  },
+  "bump": {
+    "title": "Model rankings over time",
+    "sub": "Monthly rank · by token share"
+  },
+  "clock": {
+    "title": "Rhythm",
+    "sub": "Session start time",
+    "peak": "peak",
+    "night": "21:00 – 04:00",
+    "day": "Daytime",
+    "peakAt": "Peak at {{hour}}:00.",
+    "nightNote": "Late nights (after 21:00) make up {{pct}}% — go easy on yourself."
+  },
+  "heat": {
+    "title": "Activity heatmap",
+    "sub": "Last {{weeks}} weeks",
+    "streak": "Current {{cur}}d · longest {{max}}d",
+    "less": "Less",
+    "more": "More",
+    "total": "{{n}} sessions"
+  },
+  "priceSource": "Prices from models.dev",
+  "priceCached": "Prices from models.dev · cached {{when}}",
+  "cost": {
+    "title": "Estimated cost",
+    "sub": "Current range · Top 5 models",
+    "estimate": "Estimate, not actual billing",
+    "model": "Model",
+    "tokens": "Tokens",
+    "amount": "Cost",
+    "unpriced": "Unmatched · {{n}} models",
+    "footnote": "Unit prices from models.dev. Prefixed/suffixed model names are fuzzy-matched; unmatched ones count tokens only, no cost."
+  },
+  "comp": {
+    "title": "Token composition",
+    "cache_read": "Cache read",
+    "input": "Input",
+    "cache_write": "Cache write",
+    "output": "Output"
+  },
+  "repo": {
+    "title": "Top repos",
+    "sub": "By sessions · Top 6"
+  },
+  "flow": {
+    "title": "Migration flows",
+    "sub": "All migrations",
+    "empty": "No migrations yet"
+  },
+  "ins": {
+    "cost": {
+      "eyebrow": "Cost",
+      "title": "{{repo}} spend is up",
+      "body": "{{repo}} cost {{cost}} in the last 7 days, {{pct}}% more than the week before — mostly in a few long sessions. Starting fresh sooner would save a chunk.",
+      "chartLabel": "Last 5 weeks · {{repo}}"
+    },
+    "idle": {
+      "eyebrow": "Project",
+      "title": "{{repo}}",
+      "body": "Untouched for {{days}} days. Either pick it back up or clear its snapshots to free space."
+    },
+    "pingpong": {
+      "eyebrow": "Migration",
+      "title": "{{n}} round trips",
+      "body": "“{{title}}” bounced between tools {{n}} times — maybe neither side truly wrapped it up."
+    },
+    "night": {
+      "eyebrow": "Rhythm",
+      "title": "Night owl",
+      "body": "{{pct}}% of sessions start late at night, peaking around {{hour}}:00. Nice momentum — but rest too."
+    },
+    "weekend": {
+      "eyebrow": "Rhythm",
+      "title": "A full weekend",
+      "body": "Not a single session last weekend — a rare break. Hope you were out having fun."
+    },
+    "streak": {
+      "eyebrow": "Rhythm",
+      "title": "{{days}}-day streak",
+      "body": "{{days}} days of activity in a row now — that flow is worth keeping."
+    },
+    "snapshot": {
+      "eyebrow": "Snapshot",
+      "title": "{{title}}",
+      "body": "A {{days}}-day-old snapshot still holds {{gb}} GB. Clear it if you no longer need it."
+    }
+  },
+  "time": {
+    "minutes": "{{n}}m ago",
+    "hours": "{{n}}h ago",
+    "days": "{{n}}d ago"
+  }
+}

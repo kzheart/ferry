@@ -8,6 +8,7 @@ import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessio
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { HistoryList, LibraryList, Pane, SnapList } from "../components/layout/ResourcePane.jsx";
+import Overview from "../features/overview/Overview.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
 import HistoryDetail from "../features/migration/HistoryDetail.jsx";
 import SnapshotDetail from "../features/snapshots/SnapshotDetail.jsx";
@@ -26,7 +27,7 @@ import { useSnapshotState } from "../features/snapshots/useSnapshotState.js";
 export default function App() {
   const { t } = useTranslation();
   // ----- 数据 -----
-  const { env, scan, scanning, lastScan, historyRows, snapRows,
+  const { env, scan, scanning, lastScan, historyRows, snapRows, pricing,
     doScan, loadHistory, loadSnaps } = useBrowserData();
 
   // ----- 导航与选中 -----
@@ -542,6 +543,7 @@ export default function App() {
     setQ("");
   };
   const railItems = [
+    { k: "overview", label: t("app:rail.overview") },
     { k: "library", label: t("app:rail.library") },
     { k: "history", label: t("app:rail.history") },
     { k: "snapshots", label: t("app:rail.snapshots") }];
@@ -651,6 +653,9 @@ export default function App() {
         )}
 
         {/* 详情区 */}
+        {view === "overview" && (
+          <Overview sessions={sessions} historyRows={historyRows} snapItems={snapItems}
+            prices={pricing?.prices || {}} pricingMeta={pricing} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
             meta={metaMap[cur.id]?.name ? { ...cur, title: metaMap[cur.id].name } : cur}

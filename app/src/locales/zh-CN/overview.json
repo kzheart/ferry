@@ -1,0 +1,117 @@
+{
+  "title": "总览",
+  "emptyState": "还没有扫描到会话 —— 到「会话」里点重新扫描后再来看。",
+  "scope": {
+    "label": "时间范围",
+    "7": "7 天",
+    "30": "30 天",
+    "all": "全部"
+  },
+  "kpi": {
+    "sessions": "会话总数",
+    "tokens": "Token 总量",
+    "cost": "估算成本",
+    "streak": "连续活跃",
+    "days": "天",
+    "longest": "最长 {{n}} 天",
+    "thisPeriod": "本区间"
+  },
+  "sec": {
+    "habits": "使用习惯",
+    "tokens": "Token 与成本",
+    "projects": "项目与迁移",
+    "insights": "洞察"
+  },
+  "bump": {
+    "title": "主力模型变迁",
+    "sub": "按月排名 · 占当月 token"
+  },
+  "clock": {
+    "title": "作息",
+    "sub": "会话开始时刻",
+    "peak": "高峰",
+    "night": "21:00 – 04:00",
+    "day": "白天",
+    "peakAt": "高峰在 {{hour}}:00。",
+    "nightNote": "深夜（21 点后到凌晨）占了 {{pct}}%,注意别熬太狠。"
+  },
+  "heat": {
+    "title": "会话热力图",
+    "sub": "近 {{weeks}} 周",
+    "streak": "当前连续 {{cur}} 天 · 最长 {{max}} 天",
+    "less": "少",
+    "more": "多",
+    "total": "共 {{n}} 个会话"
+  },
+  "priceSource": "单价来自 models.dev",
+  "priceCached": "单价来自 models.dev · 缓存于 {{when}}",
+  "cost": {
+    "title": "估算成本",
+    "sub": "当前区间 · Top 5 模型",
+    "estimate": "估算成本,非实际成本",
+    "model": "模型",
+    "tokens": "Token",
+    "amount": "成本",
+    "unpriced": "未识别 · {{n}} 个模型",
+    "footnote": "单价取自 models.dev。模型名带前后缀时按模糊匹配归一;匹配不上的只记 token、不计价。"
+  },
+  "comp": {
+    "title": "Token 构成",
+    "cache_read": "缓存读取",
+    "input": "输入",
+    "cache_write": "缓存写入",
+    "output": "输出"
+  },
+  "repo": {
+    "title": "仓库排行",
+    "sub": "按会话数 · Top 6"
+  },
+  "flow": {
+    "title": "迁移流向",
+    "sub": "全部迁移记录",
+    "empty": "还没有迁移记录"
+  },
+  "ins": {
+    "cost": {
+      "eyebrow": "成本",
+      "title": "{{repo}} 的开销涨了",
+      "body": "近 7 天 {{repo}} 花掉 {{cost}},比上一周多 {{pct}}%。多出来的多半在那几次长会话里,同样的活早点开新会话能省一截。",
+      "chartLabel": "近 5 周 · {{repo}}"
+    },
+    "idle": {
+      "eyebrow": "项目",
+      "title": "{{repo}}",
+      "body": "{{days}} 天没动过了。要么回去接着做,要么清掉快照腾点地方。"
+    },
+    "pingpong": {
+      "eyebrow": "迁移",
+      "title": "来回 {{n}} 次",
+      "body": "「{{title}}」在两个工具之间搬了 {{n}} 趟,可能哪边都还没真正收尾。"
+    },
+    "night": {
+      "eyebrow": "作息",
+      "title": "深夜党",
+      "body": "{{pct}}% 的会话开在深夜,高峰在 {{hour}} 点。手感是不错,但也记得歇。"
+    },
+    "weekend": {
+      "eyebrow": "节奏",
+      "title": "整个周末",
+      "body": "上个周末一次都没开,难得停了下来。希望你是去玩了。"
+    },
+    "streak": {
+      "eyebrow": "节奏",
+      "title": "连续 {{days}} 天",
+      "body": "已经连着 {{days}} 天有活动,这股手感值得保持。"
+    },
+    "snapshot": {
+      "eyebrow": "快照",
+      "title": "{{title}}",
+      "body": "{{days}} 天前的快照还占着 {{gb}} GB,确认不用了可以清掉。"
+    }
+  },
+  "time": {
+    "minutes": "{{n}} 分钟前",
+    "hours": "{{n}} 小时前",
+    "days": "{{n}} 天前"
+  }
+}

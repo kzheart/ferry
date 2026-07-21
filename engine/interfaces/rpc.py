@@ -25,6 +25,7 @@ RPC_METHODS = {
         p["tool"], p["session_id"], p.get("cwd") or "."),
     "models": lambda p: services.list_models(p["tool"]),
     "history": lambda p: services.history(),
+    "pricing": lambda p: services.pricing(force=p.get("force", False)),
     "snapshots": lambda p: services.snapshots(),
     "show": lambda p: services.show(p["tool"], p["ref"]),
     "authoring_capabilities": lambda p: services.authoring_capabilities(p["tool"]),

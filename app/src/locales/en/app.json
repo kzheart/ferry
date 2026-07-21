@@ -6,6 +6,7 @@
     "rescan": "Rescan"
   },
   "rail": {
+    "overview": "Overview",
     "library": "Sessions",
     "history": "Migrations",
     "snapshots": "Snapshots",
