@@ -8,7 +8,11 @@ import subprocess
 
 from . import executables
 
-PROBE_PROMPT = "Reply with exactly: PROBE_OK"
+PROBE_TOKEN = "PROBE_OK"
+PROBE_PROMPT = (
+    "Runtime validation only. Do not explain, use tools, or add formatting. "
+    f"Your entire response must be exactly this single token: {PROBE_TOKEN}"
+)
 _DIAG_LIMIT = 8000
 
 
@@ -36,3 +40,8 @@ def report(status, code=None, params=None, stdout="", stderr=""):
 
 def timeout_report(tool, error):
     return report("failed", "probe.timeout", {"tool": tool}, stderr=str(error))
+
+
+def response_matches(stdout: str | None) -> bool:
+    """A resumed agent passes only when it returns the probe token exactly."""
+    return (stdout or "").strip() == PROBE_TOKEN

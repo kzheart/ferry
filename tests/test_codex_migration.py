@@ -9,7 +9,8 @@ from engine.adapters.claude.writer import write as write_claude
 from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import session as opencode_session
-from engine.domain.model import Block, Message, Session
+from engine.domain.model import Block, Message, RawRecord, Session, ToolCall
+from engine.domain.tool_ops import CanonicalOp
 
 
 SCHEMA = """
@@ -70,6 +71,32 @@ def test_claude_writer_publishes_discoverable_session(tmp_path, monkeypatch):
     restored = read_claude(str(path))
     assert restored.source_id == session_id
     assert restored.messages[0].blocks[0].text == "continue this work"
+    records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    assert all(record.get("timestamp") for record in records
+               if record.get("type") in {"user", "assistant"})
+    assert all(record.get("userType") == "external" for record in records
+               if record.get("type") in {"user", "assistant"})
+
+
+def test_claude_raw_rewrite_fills_resume_required_fields(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    source = Session("claude", "raw-root", str(tmp_path), title="raw")
+    source.messages = [Message("user", [Block("text", "hello from raw")])]
+    source.raw_records = [RawRecord(
+        source="claude", record_type="user", ordinal=0,
+        payload={
+            "type": "user", "uuid": "u1", "parentUuid": None,
+            "sessionId": "old", "cwd": "/fixture/path",
+            "message": {"role": "user", "content": "hello from raw"},
+            "version": "2.1.204",
+        })]
+
+    session_id, path = write_claude(source, cwd=str(tmp_path / "proj"))
+    record = json.loads(path.read_text().splitlines()[0])
+    assert record["sessionId"] == session_id
+    assert record["cwd"] == str(tmp_path / "proj")
+    assert record["timestamp"]
+    assert record["userType"] == "external"
 
 
 def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypatch):
@@ -101,6 +128,31 @@ def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypat
     assert child_messages[0]["info"]["role"] == "user"
     assert child_messages[1]["info"]["parentID"] == \
         child_messages[0]["info"]["id"]
+
+
+def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
+    imported = []
+    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(
+        opencode_session, "_import_payload",
+        lambda payload, sid, cwd: imported.append(payload),
+    )
+    root = Session("claude", "tools-root", str(tmp_path), title="tools")
+    root.messages = [
+        Message("user", [Block("text", "run tools")]),
+        Message("assistant", [Block("tool", tool=ToolCall(
+            name="Bash", op=CanonicalOp.SHELL_EXEC,
+            input={"command": "pwd"}, output="/tmp"))]),
+    ]
+
+    opencode_session.write(root, cwd=str(tmp_path))
+
+    tools = [part for message in imported[0]["messages"]
+             for part in message.get("parts", []) if part.get("type") == "tool"]
+    assert tools
+    assert all("time" in (part.get("state") or {}) for part in tools)
+    assert all({"start", "end"} <= set((part.get("state") or {})["time"])
+               for part in tools)
 
 
 def test_opencode_writer_rolls_back_partially_imported_session(tmp_path, monkeypatch):

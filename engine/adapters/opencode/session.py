@@ -494,9 +494,11 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
 
         def add_tool_part(tool, native_input, output, title, metadata):
             st = _clone(tpl["part.tool"]["state"])
+            # OpenCode 1.18+ validates tool state.time as required.
             st.update({"status": "completed", "input": native_input,
                        "output": output, "title": title[:80],
-                       "metadata": metadata})
+                       "metadata": metadata,
+                       "time": {"start": now, "end": now}})
             return add_part("tool", {"tool": tool,
                                      "callID": "call-" + secrets.token_hex(8),
                                      "state": st})

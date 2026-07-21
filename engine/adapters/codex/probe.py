@@ -19,6 +19,10 @@ def _probe_in_env(session_id, model=None, env=None):
         return probes.report("failed", "probe.process_failed",
                              {"tool": "codex", "exit_code": result.returncode},
                              stdout=result.stdout, stderr=result.stderr)
+    if not probes.response_matches(result.stdout):
+        return probes.report("failed", "probe.unexpected_response",
+                             {"tool": "codex"}, stdout=result.stdout,
+                             stderr=result.stderr)
     return probes.report("passed", stdout=result.stdout, stderr=result.stderr)
 
 
