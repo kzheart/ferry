@@ -1,4 +1,5 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+数量/搜索/筛选/标签/列表/页脚)
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { Caret, FilterIcon, SearchIcon, SortCaret, ToolIcon } from "../ui/icons.jsx";
@@ -85,10 +86,48 @@ const PinGlyph = () => (
   </svg>
 );
 
+// 单行会话:memo 化,点击切换选中时仅新旧两行重渲染,避免整棵列表重建
+const LibraryRow = memo(function LibraryRow({ r, selected, multi, onRowClick, onRowContext }) {
+  const { t } = useTranslation();
+  return (
+    <div onClick={e => onRowClick(r.id, e)} onContextMenu={e => onRowContext(r.id, e)} title={r.dir}
+      className={selected || multi ? "lib-row" : "lib-row hov-item"}
+      style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
+        borderRadius: 8, cursor: "pointer", transition: "background .12s ease,box-shadow .12s ease",
+        opacity: r.archived ? 0.55 : 1,
+        ...rowSel(selected || multi) }}>
+      <ToolIcon tool={r.tool} size={22} dot={r.dot} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {r.pinned && <PinGlyph />}
+          <span style={{ fontSize: 12.5, fontWeight: 550, color: "var(--tx1)", whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{r.title}</span>
+          <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>{r.active}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
+          <span className="mono" style={{ fontSize: 10.5, color: "var(--tx5)", whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis" }}>{r.repo}</span>
+          {(r.tags || []).slice(0, 3).map(t => (
+            <span key={t} style={{ fontSize: 10, color: "var(--acc-text)",
+              background: "var(--acc-soft3)", border: "1px solid var(--acc-line)",
+              borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t}</span>))}
+          {r.archived && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
+            borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t("app:library.archived")}</span>}
+          {r.hasSub && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
+            borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{r.subLabel}</span>}
+          {r.hasMig && <span title={t("app:library.hasMig")} style={{ width: 5, height: 5, borderRadius: "50%",
+            background: "var(--info-dot)", flex: "none" }} />}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // 会话库分组列表
-export function LibraryList({ groups, empty, onClear }) {
+export function LibraryList({ groups, empty, onClear, selectedId, multiSel, onRowClick, onRowContext }) {
   const { t } = useTranslation();
   if (empty) return <PaneEmpty text={t("common:empty.library")} onClear={onClear} />;
+  const multiSet = new Set(multiSel);
   return groups.map(g => (
     <div key={g.key} style={{ marginBottom: 3 }}>
       <div className="hov-row" onClick={g.onToggle}
@@ -101,36 +140,8 @@ export function LibraryList({ groups, empty, onClear }) {
       {g.expanded && (
         <div style={{ animation: "fslide .16s ease" }}>
           {g.rows.map(r => (
-            <div key={r.id} onClick={r.onClick} onContextMenu={r.onContext} title={r.dir}
-              className={r.selected || r.multi ? undefined : "hov-item"}
-              style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
-                borderRadius: 8, cursor: "pointer", transition: "background .12s ease,box-shadow .12s ease",
-                opacity: r.archived ? 0.55 : 1,
-                ...rowSel(r.selected || r.multi) }}>
-              <ToolIcon tool={r.tool} size={22} dot={r.dot} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {r.pinned && <PinGlyph />}
-                  <span style={{ fontSize: 12.5, fontWeight: 550, color: "var(--tx1)", whiteSpace: "nowrap",
-                    overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{r.title}</span>
-                  <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>{r.active}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
-                  <span className="mono" style={{ fontSize: 10.5, color: "var(--tx5)", whiteSpace: "nowrap",
-                    overflow: "hidden", textOverflow: "ellipsis" }}>{r.repo}</span>
-                  {(r.tags || []).slice(0, 3).map(t => (
-                    <span key={t} style={{ fontSize: 10, color: "var(--acc-text)",
-                      background: "var(--acc-soft3)", border: "1px solid var(--acc-line)",
-                      borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t}</span>))}
-                  {r.archived && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
-                    borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{t("app:library.archived")}</span>}
-                  {r.hasSub && <span style={{ fontSize: 10, color: "var(--tx3b)", background: "var(--chip)",
-                    borderRadius: 4, padding: "0 5px", flex: "none", whiteSpace: "nowrap" }}>{r.subLabel}</span>}
-                  {r.hasMig && <span title={t("app:library.hasMig")} style={{ width: 5, height: 5, borderRadius: "50%",
-                    background: "var(--info-dot)", flex: "none" }} />}
-                </div>
-              </div>
-            </div>
+            <LibraryRow key={r.id} r={r} selected={r.id === selectedId} multi={multiSet.has(r.id)}
+              onRowClick={onRowClick} onRowContext={onRowContext} />
           ))}
         </div>
       )}
@@ -149,7 +160,7 @@ export function HistoryList({ groups, empty, onClear }) {
       </div>
       {g.rows.map(h => (
         <div key={h.id} onClick={h.onClick}
-          className={h.selected ? undefined : "hov-item"}
+          className={h.selected ? "lib-row" : "lib-row hov-item"}
           style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8,
             cursor: "pointer", transition: "background .12s ease", ...rowSel(h.selected) }}>
           <ToolIcon tool={h.tool} size={22} dot={h.stColor} />

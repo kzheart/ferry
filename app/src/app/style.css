@@ -314,6 +314,9 @@ input { user-select: text; }
 .ficon-btn.accent { color: var(--accent); }
 .ficon-btn.accent:hover { color: var(--accent); }
 
+/* 长列表:视口外的行跳过布局与绘制 */
+.lib-row { content-visibility: auto; contain-intrinsic-size: auto 52px; }
+
 /* 悬停某一轮才浮现的操作(复制、迁移到此为止) */
 /* 长会话:视口外的轮次跳过渲染与布局,首屏秒开 */
 .fround { content-visibility: auto; contain-intrinsic-size: auto 160px; }
