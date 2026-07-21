@@ -20,10 +20,17 @@ def _discover_factories() -> dict[str, Callable[[], ToolPlugin]]:
     for _, name, is_package in packages:
         if not is_package or name == "base":
             continue
-        module = importlib.import_module(f"{__package__}.{name}.plugin")
+        module_name = f"{__package__}.{name}.plugin"
+        if importlib.util.find_spec(module_name) is None:
+            continue
+        module = importlib.import_module(module_name)
         factory = getattr(module, "build", None)
         if callable(factory):
-            factories[name] = factory
+            manifest = getattr(module, "MANIFEST", None)
+            tool_id = manifest.id if manifest is not None else name
+            if tool_id in factories:
+                raise ValueError(f"重复的 adapter id: {tool_id}")
+            factories[tool_id] = factory
     return factories
 
 
