@@ -7,6 +7,8 @@ stdout/stderr 是 opaque diagnostic，不翻译、不参与判定。
 import json
 import subprocess
 
+from . import executables
+
 PROBE_PROMPT = "Reply with exactly: PROBE_OK"
 _DIAG_LIMIT = 8000
 
@@ -18,7 +20,8 @@ class ProbeTimeout(RuntimeError):
 def _run(cmd, cwd=None, timeout=180, env=None):
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                              timeout=timeout, env=env)
+                              timeout=timeout, env=env,
+                              **executables.RUN_FLAGS)
     except subprocess.TimeoutExpired as error:
         raise ProbeTimeout(f"探针超时: {' '.join(cmd)}") from error
 
@@ -39,7 +42,8 @@ def timeout_report(tool, error):
 def probe_claude(sid, dirpath, model=None):
     if not dirpath:
         raise ValueError("claude 探针必须提供 --dir(项目目录)")
-    cmd = ["claude", "-p", PROBE_PROMPT, "--resume", sid, "--output-format", "json"]
+    cmd = executables.argv("claude", "-p", PROBE_PROMPT, "--resume", sid,
+                           "--output-format", "json")
     if model:
         cmd += ["--model", model]
     result = _run(cmd, cwd=dirpath)
@@ -66,7 +70,8 @@ def probe_claude(sid, dirpath, model=None):
 
 
 def probe_codex_in_env(sid, model=None, env=None):
-    cmd = ["codex", "exec", "resume", sid, "--skip-git-repo-check"]
+    cmd = executables.argv("codex", "exec", "resume", sid,
+                           "--skip-git-repo-check")
     if model:
         cmd += ["-m", model]
     result = _run(cmd + [PROBE_PROMPT], env=env)
@@ -82,7 +87,7 @@ def probe_codex(sid, _dirpath, model=None):
 
 
 def probe_opencode(sid, dirpath, model=None):
-    cmd = ["opencode", "run", "-s", sid]
+    cmd = executables.argv("opencode", "run", "-s", sid)
     if model:
         cmd += ["-m", model]
     if dirpath:

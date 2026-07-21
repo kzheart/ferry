@@ -8,6 +8,30 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-21
+
+### Fixed
+
+- **CLI detection in packaged builds** — apps launched from Finder/Dock inherit
+  launchd's minimal `PATH`, so the packaged app could scan session files yet
+  report claude / codex / opencode as "not installed" in onboarding and the
+  migration sheet. The Tauri shell now restores the login-shell `PATH` via
+  `fix-path-env` before spawning the engine, and the engine resolves each CLI
+  to an absolute path with `shutil.which` plus a fallback scan of common
+  install locations (`~/.local/bin`, `~/.npm-global/bin`, `~/.bun/bin`,
+  `~/.volta/bin`, `~/.opencode/bin`, Homebrew, nvm versions, `%APPDATA%\npm`).
+  When a CLI is found via the fallback scan its directory is prepended to the
+  engine's `PATH`, so runtime shims (e.g. codex's `#!/usr/bin/env node`) keep
+  working; the resolved path is reused by probes, model discovery, and session
+  commands so "detected as installed" and "actually runnable" can no longer
+  diverge.
+- **Windows CLI execution** — npm installs CLIs as `.cmd` shims that
+  `CreateProcess` cannot launch by bare name; resolving through `shutil.which`
+  (which honors `PATHEXT`) fixes detection and execution, and engine
+  subprocesses now run with `CREATE_NO_WINDOW` so no console windows flash.
+- Environment inspection now reports `path` (resolved executable) and `broken`
+  (found but `--version` fails, e.g. unsupported Node) alongside `installed`.
+
 ## [0.3.0] - 2026-07-21
 
 ### Added

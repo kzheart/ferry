@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 
+from ...infrastructure import executables
 from ..base.lifecycle import BaseLifecycle
 from . import session as opencode_session
 
@@ -23,8 +24,9 @@ class OpenCodeLifecycle(BaseLifecycle):
         except Exception:
             ids = [session_id]
         for sid in ids:
-            subprocess.run(["opencode", "session", "delete", sid],
-                           capture_output=True, text=True, timeout=30)
+            subprocess.run(executables.argv("opencode", "session", "delete", sid),
+                           capture_output=True, text=True, timeout=30,
+                           **executables.RUN_FLAGS)
 
     def validation_ref(self, session_id, _dest) -> str:
         return session_id

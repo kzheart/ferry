@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
+from ...infrastructure import executables
 from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
 
@@ -24,8 +25,9 @@ OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
 
 def _oc(args, **kw):
-    r = subprocess.run(["opencode", *args], capture_output=True, text=True,
-                       timeout=120, **kw)
+    r = subprocess.run(executables.argv("opencode", *args),
+                       capture_output=True, text=True,
+                       timeout=120, **executables.RUN_FLAGS, **kw)
     if r.returncode != 0:
         raise RuntimeError(f"opencode {' '.join(args)} 失败: {r.stderr[-400:]}")
     return r.stdout
@@ -38,8 +40,9 @@ def _oc_export(session_id: str) -> dict:
     try:
         with open(path, "w") as f:
             r = subprocess.run(
-                ["opencode", "export", session_id],
-                stdout=f, stderr=subprocess.PIPE, text=True, timeout=120)
+                executables.argv("opencode", "export", session_id),
+                stdout=f, stderr=subprocess.PIPE, text=True, timeout=120,
+                **executables.RUN_FLAGS)
         if r.returncode != 0:
             raise RuntimeError(
                 f"opencode export 失败: {(r.stderr or '')[-400:]}")

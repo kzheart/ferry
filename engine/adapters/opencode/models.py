@@ -2,9 +2,13 @@
 
 import subprocess
 
+from ...infrastructure import executables
+
 
 def discover():
-    result = subprocess.run(["opencode", "models"], capture_output=True, text=True, timeout=90)
+    result = subprocess.run(executables.argv("opencode", "models"),
+                            capture_output=True, text=True, timeout=90,
+                            **executables.RUN_FLAGS)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout or "opencode models 失败")[:300])
     models = []
