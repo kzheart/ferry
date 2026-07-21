@@ -37,10 +37,20 @@ class ToolCall:
 
 
 @dataclass
+class ImageAsset:
+    """规范图片块的私有源数据；DTO 仅暴露 id 与元数据。"""
+    id: str
+    mime_type: str
+    data: str
+    filename: str | None = None
+
+
+@dataclass
 class Block:
-    kind: str                    # text | thinking | tool
+    kind: str                    # text | thinking | tool | image
     text: str = ""
     tool: ToolCall | None = None
+    image: ImageAsset | None = None
 
 
 @dataclass

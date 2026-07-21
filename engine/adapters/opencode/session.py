@@ -16,6 +16,7 @@ from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolC
 from ...domain.reasoning import visible_text
 from ...infrastructure import executables
 from ...infrastructure.resources import resource_path
+from ..base.media import image_from_data_url
 from ..base.narration import narrate
 
 TOOL_OPS = {"bash": "shell.exec", "read": "fs.read",
@@ -194,6 +195,13 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
             pt = p.get("type")
             if pt == "text":
                 blocks.append(Block("text", p.get("text", "")))
+            elif pt == "file" and str(p.get("mime", "")).startswith("image/"):
+                image = image_from_data_url(
+                    f"{mid}:image:{part_ordinal}", p.get("url", ""), p.get("filename"))
+                if image is None:
+                    sess.lose("migration.unknown_block_dropped", kind="file")
+                else:
+                    blocks.append(Block("image", image=image))
             elif pt == "reasoning":
                 text = visible_text(p.get("text"))
                 if text is not None:

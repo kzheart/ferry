@@ -54,6 +54,8 @@ export function toRounds(messages, authoredTurns) {
       const userBlocks = turn.user?.blocks || [];
       const user = userBlocks.filter(block => block.kind === "text")
         .map(block => block.text).join("\n");
+      const images = userBlocks.filter(block => block.kind === "image")
+        .map(block => block.image).filter(Boolean);
       const seq = (turn.assistant_reply?.items || []).map(item => item.kind === "tool"
         ? { kind: "tool", tool: { ...item, size: item.output?.length || 0 } }
         : { kind: "text", text: item.text });
@@ -61,7 +63,7 @@ export function toRounds(messages, authoredTurns) {
       const tools = seq.filter(item => item.kind === "tool").map(item => item.tool);
       let last = -1;
       seq.forEach((item, index) => { if (item.kind === "text") last = index; });
-      return { n: turn.turn, user, locator: turn.turn_locator, index: turn.user?.index,
+      return { n: turn.turn, user, images, locator: turn.turn_locator, index: turn.user?.index,
         ai, tools, seq, final: last >= 0 ? seq[last].text : "",
         steps: seq.filter((_, index) => index !== last), authoring: turn };
     });
@@ -70,9 +72,11 @@ export function toRounds(messages, authoredTurns) {
   let current = null;
   for (const message of messages || []) {
     const texts = message.blocks.filter(block => block.kind === "text" && block.text.trim());
-    if (message.role === "user" && texts.length) {
+    const images = message.blocks.filter(block => block.kind === "image")
+      .map(block => block.image).filter(Boolean);
+    if (message.role === "user" && (texts.length || images.length)) {
       current = { n: rounds.length + 1, user: texts.map(text => text.text).join("\n"),
-        locator: message.locator || message.uuid, index: message.index, ai: [], tools: [], seq: [] };
+        images, locator: message.locator || message.uuid, index: message.index, ai: [], tools: [], seq: [] };
       rounds.push(current);
       continue;
     }

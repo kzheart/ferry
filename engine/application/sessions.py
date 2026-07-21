@@ -1,6 +1,7 @@
 """规范会话读取、树装配与 RPC DTO。"""
 
 from ..adapters.base.migration import assemble_tree
+from ..domain.errors import SessionAssetNotFoundError
 from .ports import current
 
 
@@ -22,6 +23,10 @@ def _messages(messages):
                 value = call.input if isinstance(call.input, dict) else str(call.input)
                 blocks.append({"kind": "tool", "name": call.name, "op": call.op,
                     "input": value, "output": call.output, "size": len(call.output or "")})
+            elif block.kind == "image" and block.image:
+                blocks.append({"kind": "image", "image": {
+                    "id": block.image.id, "mime_type": block.image.mime_type,
+                    "filename": block.image.filename}})
         entry = {"index": index, "role": message.role, "blocks": blocks}
         if message.raw and isinstance(message.raw[0], dict) and message.raw[0].get("uuid"):
             entry.update(uuid=message.raw[0]["uuid"], locator=message.raw[0]["uuid"])
@@ -70,3 +75,13 @@ def session_json(session):
 
 def show(tool: str, ref: str) -> dict:
     return session_json(read_tree(tool, ref))
+
+
+def session_asset(tool: str, ref: str, asset_id: str) -> dict:
+    for session in read_tree(tool, ref).walk():
+        for message in session.messages:
+            for block in message.blocks:
+                if block.kind == "image" and block.image and block.image.id == asset_id:
+                    return {"mime_type": block.image.mime_type, "data": block.image.data,
+                            "filename": block.image.filename}
+    raise SessionAssetNotFoundError(asset_id)

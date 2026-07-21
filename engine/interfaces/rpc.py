@@ -27,6 +27,7 @@ RPC_METHODS = {
     "history": lambda p: services.history(),
     "pricing": lambda p: services.pricing(force=p.get("force", False)),
     "show": lambda p: services.show(p["tool"], p["ref"]),
+    "session_asset": lambda p: services.session_asset(p["tool"], p["ref"], p["asset_id"]),
     "authoring_capabilities": lambda p: services.authoring_capabilities(p["tool"]),
     "authoring_preview": lambda p: services.authoring_preview(
         p["ref"], p["turn"], p["reply"], tool=p.get("tool", "claude")),

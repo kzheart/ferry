@@ -1,8 +1,8 @@
 """Claude 原生会话的唯一轮次解析与编辑编解码。
 
 reader DTO、delete-turn、rewrite、authoring 全部消费本模块的
-``TURN_INDEX``；轮次定义：非 sidechain、非 tool_result 载体、
-且含可见内容的用户消息，到下一条这样的消息之前。
+``TURN_INDEX``；轮次定义：非 sidechain、非 isMeta、非 tool_result
+载体、且含可见内容的用户消息，到下一条这样的消息之前。
 """
 from __future__ import annotations
 
@@ -51,7 +51,8 @@ class ClaudeTurnIndex:
     def visible_messages(self, records) -> list[tuple[int, dict]]:
         out = []
         for index, record in enumerate(records):
-            if record.get("isSidechain") or record.get("type") not in {"user", "assistant"}:
+            if (record.get("isSidechain") or record.get("isMeta") or
+                    record.get("type") not in {"user", "assistant"}):
                 continue
             content = (record.get("message") or {}).get("content")
             if record.get("type") == "user" and _is_tool_carrier(content):
@@ -62,7 +63,8 @@ class ClaudeTurnIndex:
     def turns(self, records) -> list[TurnSpan]:
         starts = []
         for index, record in enumerate(records):
-            if record.get("type") != "user" or record.get("isSidechain"):
+            if (record.get("type") != "user" or record.get("isSidechain") or
+                    record.get("isMeta")):
                 continue
             content = (record.get("message") or {}).get("content")
             if not _is_tool_carrier(content) and _visible_user_content(content):
