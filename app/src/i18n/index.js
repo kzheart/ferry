@@ -24,7 +24,14 @@ import enApp from "../locales/en/app.json";
 import zhCNOverview from "../locales/zh-CN/overview.json";
 import enOverview from "../locales/en/overview.json";
 
-export const SUPPORTED_LOCALES = ["zh-CN", "en"];
+// 新增语言只需在这里加一行(外加 RESOURCES 注册),设置页下拉框自动出现该选项。
+// nativeName 用目标语言自称,englishName 供不认识该文字的用户识别。
+export const LOCALE_META = [
+  { code: "zh-CN", nativeName: "简体中文", englishName: "Simplified Chinese" },
+  { code: "en", nativeName: "English", englishName: "English" },
+];
+
+export const SUPPORTED_LOCALES = LOCALE_META.map(l => l.code);
 export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
@@ -42,11 +49,18 @@ function readStoredLocale() {
   } catch { return null; }
 }
 
+// "zh-CN" -> "zh":按语言主标签匹配,地区变体(zh-TW/en-GB)落到同语言的受支持项
+function matchByLanguageTag(tag) {
+  const lc = String(tag || "").toLowerCase();
+  if (!lc) return null;
+  const exact = SUPPORTED_LOCALES.find(c => c.toLowerCase() === lc);
+  if (exact) return exact;
+  const primary = lc.split("-")[0];
+  return SUPPORTED_LOCALES.find(c => c.toLowerCase().split("-")[0] === primary) || null;
+}
+
 export function matchSystemLocale() {
-  const nav = (navigator.language || "").toLowerCase();
-  if (nav.startsWith("zh")) return "zh-CN";
-  if (nav.startsWith("en")) return "en";
-  return FALLBACK_LOCALE;
+  return matchByLanguageTag(navigator.language) || FALLBACK_LOCALE;
 }
 
 export function resolveLocale() {
@@ -56,10 +70,7 @@ export function resolveLocale() {
 
 export function normalizeLocale(locale) {
   if (!locale) return matchSystemLocale();
-  const lc = String(locale).toLowerCase();
-  if (lc.startsWith("zh")) return "zh-CN";
-  if (lc.startsWith("en")) return "en";
-  return FALLBACK_LOCALE;
+  return matchByLanguageTag(locale) || FALLBACK_LOCALE;
 }
 
 let initialized = false;
