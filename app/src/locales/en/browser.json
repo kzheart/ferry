@@ -4,6 +4,7 @@
     "source": "Source",
     "messages": "{{n}} messages",
     "active": "Active {{time}}",
+    "refresh": "Refresh session",
     "copyResume": "Copy resume command",
     "copiedResume": "Copied resume command",
     "migrate": "Migrate…",

@@ -4,6 +4,7 @@
     "source": "来源",
     "messages": "{{n}} 条消息",
     "active": "活跃 {{time}}",
+    "refresh": "刷新会话",
     "copyResume": "复制接续命令",
     "copiedResume": "已复制接续命令",
     "migrate": "迁移…",
