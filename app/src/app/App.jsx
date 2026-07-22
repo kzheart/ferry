@@ -462,6 +462,18 @@ export default function App() {
     openDiff, apply: () => setConfirmApply(true),
     openMigrate: sc => setMig({ scope: sc ?? scope }),
     refresh: refreshDetail,
+    resume: async meta => {
+      setToast({ kind: "run", title: t("app:toast.openingTerminal"),
+        desc: t("app:toast.openingTerminalDesc", { title: meta.title || meta.id }) });
+      try {
+        const launch = await resumeDescriptor(meta.tool, meta.id, meta.dir);
+        await openTerminal(launch, settings.terminalApp);
+        setToast({ kind: "ok", title: t("app:toast.terminalOpened"),
+          desc: t("app:toast.terminalOpenedDesc") });
+      } catch (error) {
+        setToast({ kind: "fail", title: t("app:toast.openTerminalFail"), desc: error.message });
+      }
+    },
   };
   const detailActs = useMemo(() => ({
     onDiscardAll: () => detailFns.current.discardAll(),
@@ -475,6 +487,7 @@ export default function App() {
     onApply: () => detailFns.current.apply(),
     onOpenMigrate: sc => detailFns.current.openMigrate(sc),
     onRefresh: () => detailFns.current.refresh(),
+    onResume: meta => detailFns.current.resume(meta),
   }), []);
   const detailMeta = useMemo(() => cur && metaMap[cur.id]?.name
     ? { ...cur, title: metaMap[cur.id].name } : cur, [cur, metaMap]);
@@ -781,7 +794,8 @@ export default function App() {
             startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
             onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
             onOpenMigrate={detailActs.onOpenMigrate}
-            onRefresh={detailActs.onRefresh} refreshing={refreshing} />
+            onRefresh={detailActs.onRefresh} refreshing={refreshing}
+            onResume={detailActs.onResume} />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--tx5)", fontSize: 13 }}>

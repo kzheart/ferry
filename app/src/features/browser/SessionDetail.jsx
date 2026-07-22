@@ -389,13 +389,14 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
-  onOpenMigrate, onRefresh, refreshing, editCaps, authoringCaps }) {
+  onOpenMigrate, onRefresh, refreshing, onResume, editCaps, authoringCaps }) {
   const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
   const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
   const canMigrate = toolHasCapability(meta.tool, "migrate-source");
   const [copied, setCopied] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
 
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
@@ -406,6 +407,13 @@ export default memo(function SessionDetail({ meta, data, error,
       .then(d => navigator.clipboard?.writeText(d.display_command))
       .catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 1600);
+  };
+
+  const resumeInTerminal = async () => {
+    if (resuming) return;
+    setResuming(true);
+    try { await onResume(meta); }
+    finally { setResuming(false); }
   };
 
   const scopeMsgs = scope
@@ -444,10 +452,13 @@ export default memo(function SessionDetail({ meta, data, error,
               <button className="ftool-btn" title={tt("browser:session.refresh")}
                 disabled={refreshing} onClick={onRefresh}>
                 {refreshing ? <Spinner size={14} /> : <RefreshIcon />}</button>
+              <button className="ftool-btn" onClick={resumeInTerminal} disabled={resuming}
+                title={resuming ? tt("browser:session.resumingTerminal") : tt("browser:session.resumeTerminal")}>
+                {resuming ? <Spinner size={14} /> : <TerminalIcon />}</button>
               <button className="ftool-btn" onClick={copyResume}
                 title={copied ? tt("browser:session.copiedResume") : tt("browser:session.copyResume")}
                 style={copied ? { color: "var(--ok)" } : undefined}>
-                {copied ? <CheckIcon size={15} /> : <TerminalIcon />}</button>
+                {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}</button>
               {canMigrate && (
                 <button data-guide="migrate" className="ftool-btn"
                   title={tt("browser:session.migrate")}

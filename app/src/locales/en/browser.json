@@ -5,6 +5,8 @@
     "messages": "{{n}} messages",
     "active": "Active {{time}}",
     "refresh": "Refresh session",
+    "resumeTerminal": "Resume session in terminal",
+    "resumingTerminal": "Opening terminal…",
     "copyResume": "Copy resume command",
     "copiedResume": "Copied resume command",
     "migrate": "Migrate…",
