@@ -46,7 +46,7 @@ def _insert(db: sqlite3.Connection, table: str, values: dict) -> None:
 
 def register_tree(
         state_db: Path,
-        nodes: list[tuple[Session, str, Path, str | None, str]],
+        nodes: list[tuple[Session, str, Path, str | None, str, str, str | None]],
         cli_version: str = "") -> None:
     """注册 writer 已发布的 (session, id, path, parent_id, cwd) 节点。"""
     if not state_db.exists():
@@ -56,13 +56,13 @@ def register_tree(
     with sqlite3.connect(state_db, timeout=5) as db:
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("BEGIN IMMEDIATE")
-        for session, session_id, path, parent_id, cwd in nodes:
+        for session, session_id, path, parent_id, cwd, agent_path, _status in nodes:
             first_user = _first_user_message(session)
             title = session.title or first_user[:80]
             source = "cli" if parent_id is None else json.dumps({
                 "subagent": {"thread_spawn": {
                     "parent_thread_id": parent_id,
-                    "agent_path": session.agent_path,
+                    "agent_path": agent_path,
                     "agent_nickname": session.meta.get("agent_nickname"),
                     "agent_role": session.meta.get("agent_role"),
                 }}
@@ -89,18 +89,18 @@ def register_tree(
                 "first_user_message": first_user,
                 "agent_nickname": session.meta.get("agent_nickname"),
                 "agent_role": session.meta.get("agent_role"),
-                "agent_path": session.agent_path,
+                "agent_path": agent_path,
                 "thread_source": "user" if parent_id is None else "subagent",
                 "preview": first_user,
                 "history_mode": "legacy",
             })
         if _columns(db, "thread_spawn_edges"):
-            for _session, session_id, _path, parent_id, _cwd in nodes:
+            for _session, session_id, _path, parent_id, _cwd, _agent_path, status in nodes:
                 if parent_id:
                     _insert(db, "thread_spawn_edges", {
                         "parent_thread_id": parent_id,
                         "child_thread_id": session_id,
-                        "status": "closed",
+                        "status": status or "closed",
                     })
 
 

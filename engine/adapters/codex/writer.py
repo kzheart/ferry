@@ -10,6 +10,7 @@ import json
 import secrets
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ...domain.model import Session
@@ -35,6 +36,17 @@ def _now_iso() -> str:
         f".{int(time.time()*1000)%1000:03d}Z"
 
 
+def _timestamp(value: str | int | None = None) -> str:
+    """保留 canonical 时间；仅在来源缺失时生成当前 UTC 时间。"""
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, (int, float)):
+        seconds = value / 1000 if value > 10_000_000_000 else value
+        return datetime.fromtimestamp(seconds, timezone.utc).isoformat(
+            timespec="milliseconds").replace("+00:00", "Z")
+    return _now_iso()
+
+
 def _load_templates():
     """从最新版本的黄金样本中取各类记录的原文模板。"""
     versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
@@ -58,22 +70,30 @@ def _clone(tpl: dict) -> dict:
     return json.loads(json.dumps(tpl))
 
 
-def _msg(tpl, role: str, text: str) -> dict:
+def _msg(tpl, role: str, text: str, created_at: str | int | None = None) -> dict:
     rec = _clone(tpl[f"message.{role}"])
-    rec["timestamp"] = _now_iso()
+    rec["timestamp"] = _timestamp(created_at)
     p = rec["payload"]
     p["content"] = [{"type": "input_text" if role == "user" else "output_text",
                      "text": text}]
-    if "id" in p:
-        p["id"] = None
+    # 原生 user message 不携带 id；assistant message 以 msg_* 标识，
+    # 供 Codex 恢复时关联响应链路。不要写 null，严格反序列化器会区分
+    # “字段缺失”和“字段类型错误”。
+    if role == "user":
+        p.pop("id", None)
+    else:
+        p["id"] = "msg_" + secrets.token_hex(25)
     return rec
 
 
-def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code) -> list:
+def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code,
+               started_at: str | int | None = None,
+               ended_at: str | int | None = None) -> list:
     call = _clone(tpl["response_item.custom_tool_call"])
     out = _clone(tpl["response_item.custom_tool_call_output"])
     call_id = "call_" + secrets.token_urlsafe(18)[:24]
-    call["timestamp"] = out["timestamp"] = _now_iso()
+    call["timestamp"] = _timestamp(started_at)
+    out["timestamp"] = _timestamp(ended_at or started_at)
     cp, op = call["payload"], out["payload"]
     cp["id"] = "ctc_" + secrets.token_hex(25)
     cp["call_id"] = op["call_id"] = call_id
@@ -111,13 +131,15 @@ def _write_shell_exec(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("command"):
         return _exec_pair(tpl, i["command"], cwd,
-                          t.meta.get("stdout", t.output), None)
+                          t.meta.get("stdout", t.output), None,
+                          t.started_at, t.ended_at)
 
 
 def _write_fs_read(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("file_path"):
-        return _exec_pair(tpl, f"cat {i['file_path']}", cwd, t.output or "", 0)
+        return _exec_pair(tpl, f"cat {i['file_path']}", cwd, t.output or "", 0,
+                          t.started_at, t.ended_at)
     return None
 
 
@@ -158,18 +180,29 @@ OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
 }
 
 
-def _native_records(tpl, t, cwd) -> list | None:
+def _native_records(tpl, t, cwd,
+                    message_time: str | int | None = None) -> list | None:
     """Render a canonical operation with the target-specific mapping table."""
     writer = OP_WRITERS.get(t.op)
     if writer is None or not has_valid_tool_input(t.op, t.input):
         return None
-    return writer(tpl, t, cwd)
+    records = writer(tpl, t, cwd)
+    if not records:
+        return records
+    # Claude 等来源通常只有消息时间、没有独立工具时间。此时沿用所属
+    # 消息的时间，避免历史工具记录被标成迁移时刻。
+    if t.started_at is None and message_time is not None:
+        records[0]["timestamp"] = _timestamp(message_time)
+    if t.ended_at is None and message_time is not None:
+        records[-1]["timestamp"] = _timestamp(t.started_at or message_time)
+    return records
 
 
 def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                      parent_id: str | None, depth: int,
-                     agent_path: str | None) -> list[dict]:
-    now = _now_iso()
+                     agent_path: str | None, child_links: dict[str, list]) -> list[dict]:
+    now = _timestamp(next((message.created_at for message in sess.messages
+                           if message.created_at is not None), None))
     meta = _clone(tpl["session_meta"])
     meta["timestamp"] = now
     mp = meta["payload"]
@@ -183,6 +216,7 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
     mp["model_provider"] = "openai"
     mp["memory_mode"] = "enabled"
     mp["history_mode"] = "legacy"
+    mp["agent_path"] = agent_path
     if parent_id:
         mp["parent_thread_id"] = parent_id
         mp["forked_from_id"] = parent_id
@@ -198,7 +232,6 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
             }
         }
         mp["thread_source"] = "subagent"
-        mp["agent_path"] = agent_path
 
     # 缺省 turn_context 会由 Codex 按当前配置恢复；字段不全的记录会使
     # 新版 TUI 严格反序列化失败。
@@ -216,17 +249,26 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                 t = b.tool
                 if t.op == CanonicalOp.AGENT_SPAWN:
                     continue
-                native = _native_records(tpl, t, cwd)
+                native = _native_records(tpl, t, cwd, m.created_at)
                 if native:
                     if texts:
-                        out_lines.append(_msg(tpl, role, "\n\n".join(texts)))
+                        out_lines.append(_msg(tpl, role, "\n\n".join(texts),
+                                              m.created_at))
                         texts = []
                     out_lines += native
                 else:
                     sess.lose("migration.tool_degraded", tool_name=t.name)
                     texts.append(narrate(t))
         if texts:
-            out_lines.append(_msg(tpl, role, "\n\n".join(texts)))
+            out_lines.append(_msg(tpl, role, "\n\n".join(texts), m.created_at))
+        # 子会话 spawn 是父消息的一部分；写在对应消息之后而非会话尾部。
+        if m.source_id:
+            for child_link in child_links.pop(m.source_id, []):
+                out_lines.extend(child_link(m.created_at))
+    # 缺少可定位消息的旧来源退化为追加；仍保留确定性 child 顺序。
+    for source_id in sorted(child_links):
+        for child_link in child_links[source_id]:
+            out_lines.extend(child_link(None))
     return out_lines
 
 
@@ -246,8 +288,17 @@ def _edge_for(parent: Session, child: Session):
                  if edge.child_session_id == child.source_id), None)
 
 
+def _edge_status(edge) -> str:
+    status = (edge.status if edge else None) or "closed"
+    if status in {"open", "closed"}:
+        return status
+    return "closed" if status.lower() in {
+        "completed", "complete", "done", "finished", "failed", "cancelled", "canceled",
+    } else "open"
+
+
 def _child_link_records(parent: Session, child: Session, child_id: str,
-                        agent_path: str) -> list[dict]:
+                        agent_path: str, created_at: str | int | None = None) -> list[dict]:
     edge = _edge_for(parent, child)
     call_id = (edge.source_call_id if edge and edge.source_call_id else
                "call_" + secrets.token_urlsafe(18)[:24])
@@ -257,15 +308,21 @@ def _child_link_records(parent: Session, child: Session, child_id: str,
     arguments = {"message": prompt}
     if agent_type:
         arguments["agent_type"] = agent_type
-    now = _now_iso()
+    now = _timestamp(created_at)
+    status = _edge_status(edge)
+    call_status = "completed" if status == "closed" else "in_progress"
     spawn = {
         "timestamp": now,
         "type": "response_item",
         "payload": {
             "type": "function_call",
+            "id": "fc_" + secrets.token_hex(25),
             "name": "spawn_agent",
             "arguments": json.dumps(arguments, ensure_ascii=False),
             "call_id": call_id,
+            # response_item 使用 Responses API 的状态枚举；SQLite 的
+            # thread_spawn_edges 则使用 open/closed，二者不能混写。
+            "status": call_status,
         },
     }
     activity = {
@@ -275,7 +332,7 @@ def _child_link_records(parent: Session, child: Session, child_id: str,
             "type": "sub_agent_activity",
             "agent_thread_id": child_id,
             "agent_path": agent_path,
-            "kind": "completed",
+            "kind": "completed" if status == "closed" else "working",
         },
     }
     result_text = _assistant_result(child)
@@ -329,19 +386,32 @@ def write(sess: Session, cwd: str | None = None,
     paths = {}
     parents = {}
     working_dirs = {}
+    agent_paths = {id(sess): sess.agent_path or "/root"}
+    edge_statuses = {id(sess): None}
+
+    def assign_tree_fields(node: Session, agent_path: str):
+        agent_paths[id(node)] = agent_path
+        for child_index, child in enumerate(node.children):
+            child_path = child.agent_path or f"{agent_path}/{child.agent_id or child_index + 1}"
+            edge_statuses[id(child)] = _edge_status(_edge_for(node, child))
+            assign_tree_fields(child, child_path)
+
+    assign_tree_fields(sess, agent_paths[id(sess)])
 
     def emit(node: Session, parent: Session | None, depth: int,
              agent_path: str | None, ordinal: int):
         sid = ids[id(node)]
         node_cwd = cwd or node.cwd or base_cwd
+        child_links = {}
+        for child in node.children:
+            edge = _edge_for(node, child)
+            key = edge.spawn_message_id if edge and edge.spawn_message_id else ""
+            child_links.setdefault(str(key), []).append(
+                lambda created_at, child=child: _child_link_records(
+                    node, child, ids[id(child)], agent_paths[id(child)], created_at))
         records = _session_records(tpl, node, node_cwd, sid, root_id,
                                    ids[id(parent)] if parent else None,
-                                   depth, agent_path)
-        for child_index, child in enumerate(node.children):
-            child_path = (child.agent_path or
-                          f"{agent_path or '/root'}/{child.agent_id or child_index + 1}")
-            records.extend(_child_link_records(node, child, ids[id(child)],
-                                               child_path))
+                                   depth, agent_path, child_links)
         dest = _destination(output_root, sid, ordinal)
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".tmp")
@@ -354,8 +424,7 @@ def write(sess: Session, cwd: str | None = None,
 
         next_ordinal = ordinal + 1
         for child_index, child in enumerate(node.children):
-            child_path = (child.agent_path or
-                          f"{agent_path or '/root'}/{child.agent_id or child_index + 1}")
+            child_path = agent_paths[id(child)]
             emit(child, node, depth + 1, child_path, next_ordinal)
             next_ordinal += sum(1 for _ in child.walk())
 
@@ -365,7 +434,7 @@ def write(sess: Session, cwd: str | None = None,
                     output_root.parent / "state_5.sqlite")
         register_tree(registry, [
             (node, ids[id(node)], paths[id(node)], parents[id(node)],
-             working_dirs[id(node)])
+             working_dirs[id(node)], agent_paths[id(node)], edge_statuses[id(node)])
             for node in nodes
         ], cli_version=str(tpl["session_meta"]["payload"].get("cli_version", "")))
     except Exception:
