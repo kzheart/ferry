@@ -76,7 +76,7 @@
     "dropTitle": "Cannot migrate",
     "emptyItem": "None",
     "moreItems": "… {{n}} more",
-    "keepNative": "{{n}} content blocks mapped natively",
+    "totalBlocks": "{{n}} content blocks",
     "keepRoles": "Message roles and order",
     "keepRefs": "File references and code blocks"
   },

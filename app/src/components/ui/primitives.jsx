@@ -23,24 +23,10 @@ export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 
 }
 
 const COLS_KEY = {
-  keep: { border: "var(--ok-line)", bg: "var(--ok-bg)", head: "var(--ok-deep)", dot: "var(--ok)", body: "var(--ok-body)", titleKey: "overlays:loss.keepTitle" },
-  down: { border: "var(--warn-line)", bg: "var(--warn-bg)", head: "var(--warn-deep)", dot: "var(--warn)", body: "var(--warn-text)", titleKey: "overlays:loss.downTitle" },
-  drop: { border: "var(--err-line)", bg: "var(--err-bg)", head: "var(--err-deep)", dot: "var(--err)", body: "var(--err-text)", titleKey: "overlays:loss.dropTitle" },
+  keep: { dot: "var(--ok)", titleKey: "overlays:loss.keepTitle" },
+  down: { dot: "var(--warn)", titleKey: "overlays:loss.downTitle" },
+  drop: { dot: "var(--err)", titleKey: "overlays:loss.dropTitle" },
 };
-
-function LossCol({ kind, items, t }) {
-  const c = COLS_KEY[kind];
-  return (
-    <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 10, padding: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 600, color: c.head }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />{t(c.titleKey)}
-      </div>
-      {(items.length ? items : [t("overlays:loss.emptyItem")]).map((txt, i) => (
-        <div key={i} style={{ fontSize: 11, color: c.body, marginTop: 7, lineHeight: 1.4 }}>{txt}</div>
-      ))}
-    </div>
-  );
-}
 
 const clipList = (arr, max, t) => {
   const uniq = [...new Set(arr || [])];
@@ -48,18 +34,65 @@ const clipList = (arr, max, t) => {
   return [...uniq.slice(0, max), t("overlays:loss.moreItems", { n: uniq.length })];
 };
 
-// 迁移影响三栏(迁移预演 / 迁移历史共用)
+function Dot({ color, size = 6 }) {
+  return <span style={{ width: size, height: size, flex: "none", borderRadius: "50%", background: color }} />;
+}
+
+// 影响分组:标题行(名称 + 计数) + 明细行
+function LossGroup({ kind, count, items, t }) {
+  const c = COLS_KEY[kind];
+  return (
+    <div style={{ padding: "11px 14px 12px", borderTop: "1px solid var(--line5)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+        <Dot color={c.dot} />
+        <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{t(c.titleKey)}</span>
+        {count != null && (
+          <span className="mono" style={{ marginLeft: "auto", color: "var(--tx4)" }}>{count}</span>
+        )}
+      </div>
+      {(items.length ? items : [t("overlays:loss.emptyItem")]).map((txt, i) => (
+        <div key={i} style={{ fontSize: 11.5, color: "var(--tx3b)", lineHeight: 1.45,
+          marginTop: 6, paddingLeft: 14 }}>{txt}</div>
+      ))}
+    </div>
+  );
+}
+
+// 迁移影响卡(迁移预演 / 迁移历史共用):占比条 + 图例 + 分组明细
 export function LossCols({ loss }) {
   const { t } = useTranslation();
   if (!loss) return null;
-  const keep = [t("overlays:loss.keepNative", { n: loss.native }), t("overlays:loss.keepRoles"), t("overlays:loss.keepRefs")];
-  const down = loss.degrade ? clipList(renderEvents(loss.degrade_details), 3, t) : [];
-  const drop = loss.drop ? clipList(renderEvents(loss.drop_details), 3, t) : [];
+  const n = { keep: loss.native || 0, down: loss.degrade || 0, drop: loss.drop || 0 };
+  const total = n.keep + n.down + n.drop;
+  const segs = ["keep", "down", "drop"].filter(k => n[k] > 0);
+  const down = n.down ? clipList(renderEvents(loss.degrade_details), 4, t) : [];
+  const drop = n.drop ? clipList(renderEvents(loss.drop_details), 4, t) : [];
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-      <LossCol kind="keep" items={keep} t={t} />
-      <LossCol kind="down" items={down} t={t} />
-      <LossCol kind="drop" items={drop} t={t} />
+    <div className="fcard">
+      <div style={{ padding: "13px 14px 12px" }}>
+        {/* 占比条:量级差两个数量级时也要看得见,故给最小宽度 */}
+        <div style={{ display: "flex", gap: 2, height: 6, borderRadius: 3, overflow: "hidden",
+          background: "var(--fill4)" }}>
+          {segs.map(k => (
+            <div key={k} style={{ flex: n[k], minWidth: 6, borderRadius: 3, background: COLS_KEY[k].dot }} />
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 11, fontSize: 12 }}>
+          {["keep", "down", "drop"].map(k => (
+            <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Dot color={COLS_KEY[k].dot} />
+              <span style={{ color: "var(--tx3b)" }}>{t(COLS_KEY[k].titleKey)}</span>
+              <span className="mono" style={{ color: "var(--tx2)", fontWeight: 600 }}>{n[k]}</span>
+            </span>
+          ))}
+          <span style={{ marginLeft: "auto", color: "var(--tx4)" }}>
+            {t("overlays:loss.totalBlocks", { n: total })}</span>
+        </div>
+      </div>
+      <LossGroup kind="keep" items={[t("overlays:loss.keepRoles"), t("overlays:loss.keepRefs")]} t={t} />
+      {n.down > 0 && <LossGroup kind="down" count={n.down} items={down} t={t} />}
+      {n.drop > 0 && <LossGroup kind="drop" count={n.drop} items={drop} t={t} />}
     </div>
   );
 }
@@ -75,10 +108,10 @@ export function CmdRow({ cmd, head }) {
     setTimeout(() => setCopied(false), 1600);
   };
   return (
-    <div style={{ border: "1px solid var(--line3)", borderRadius: 10, overflow: "hidden" }}>
-      {head && <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
+    <div className="fcard" style={{ overflow: "hidden" }}>
+      {head && <div style={{ padding: "9px 14px", borderBottom: "1px solid var(--line5)",
         fontSize: 11, color: "var(--tx4)", fontWeight: 600 }}>{head}</div>}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px" }}>
         <code className="mono selectable" style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</code>
         <button className="fbtn" onClick={copy}>{copied ? t("overlays:cmd.copied") : t("overlays:cmd.copy")}</button>
