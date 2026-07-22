@@ -7,8 +7,10 @@ import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
 import Providers from "./Providers.jsx";
+import Models from "./Models.jsx";
 
 const SECTIONS = [["prefs", "settings:sections.prefs"], ["providers", "settings:sections.providers"],
+  ["models", "settings:sections.models"],
   ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
 
 // ---------- 偏好设置 ----------
@@ -284,6 +286,8 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           </div>
           {section === "providers" ? (
             <Providers ferry={ferry} />
+          ) : section === "models" ? (
+            <Models ferry={ferry} onOpenProviders={() => setSection("providers")} />
           ) : (
             <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
               <div style={{ maxWidth: 620 }}>

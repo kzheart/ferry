@@ -56,6 +56,22 @@ export function Toggle({ on, onChange, size = 26 }) {
   );
 }
 
+// 勾选框:选中填 accent,对勾用 accent-fg——深色主题 accent 接近白色,写死 #fff 会看不见
+export function Check({ on, size = 16 }) {
+  return (
+    <span style={{ width: size, height: size, borderRadius: 5, flex: "none",
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      border: `1.5px solid ${on ? "var(--accent)" : "var(--tx5)"}`,
+      background: on ? "var(--accent)" : "transparent" }}>
+      {on && (
+        <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 10 10" aria-hidden>
+          <path d="M1.6 5.2l2.2 2.2 4.6-4.8" fill="none" stroke="var(--accent-fg)" strokeWidth="1.9"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>)}
+    </span>
+  );
+}
+
 export const inputStyle = {
   height: 32, border: "1px solid var(--line4)", borderRadius: 8, padding: "0 11px",
   fontSize: 12.5, background: "var(--surface)", color: "var(--tx1)", fontFamily: "inherit",

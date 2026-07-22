@@ -33,11 +33,6 @@
     "manualDesc": "Anything that writes local data waits for your approval",
     "autoDesc": "All write operations run automatically without approval"
   },
-  "setup": {
-    "title": "Connect a model",
-    "desc": "Add an API key for {{provider}} or sign in to another provider to start chatting. Credentials stay on this machine.",
-    "cta": "Configure providers"
-  },
   "tool": {
     "running": "Running",
     "failed": "Failed"
@@ -86,13 +81,14 @@
   },
   "model": {
     "pick": "Pick a model",
+    "setup": "Set up a model",
     "reasoning": "reasoning",
-    "empty": "No models available yet. Configure a provider under Settings · Providers.",
+    "empty": "No models selected yet. Pick some under Settings · Models.",
     "effort": "Effort",
     "effort_off": "Off",
     "effort_low": "Low",
     "effort_medium": "Medium",
     "effort_high": "High",
-    "manage": "Manage providers & models"
+    "manage": "Manage models"
   }
 }

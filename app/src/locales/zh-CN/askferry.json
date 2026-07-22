@@ -33,11 +33,6 @@
     "manualDesc": "写入本地数据的操作先经你确认",
     "autoDesc": "所有写入操作自动执行,无需确认"
   },
-  "setup": {
-    "title": "连接一个模型",
-    "desc": "为 {{provider}} 配置 API Key,或登录其他 Provider 后即可开始对话。凭据只保存在本机。",
-    "cta": "配置提供商"
-  },
   "tool": {
     "running": "执行中",
     "failed": "失败"
@@ -86,13 +81,14 @@
   },
   "model": {
     "pick": "选择模型",
+    "setup": "配置模型",
     "reasoning": "推理",
-    "empty": "还没有可用模型。到「设置 · 提供商」配置一个 Provider 并勾选模型。",
+    "empty": "还没有可用模型。到「设置 · 模型」勾选要显示的模型。",
     "effort": "推理强度",
     "effort_off": "关闭",
     "effort_low": "低",
     "effort_medium": "中",
     "effort_high": "高",
-    "manage": "管理提供商与模型"
+    "manage": "管理模型"
   }
 }

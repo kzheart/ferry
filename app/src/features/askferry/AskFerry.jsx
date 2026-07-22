@@ -1,11 +1,11 @@
 // Ask Ferry 主聊天视图 —— 对齐 ChatGPT/Claude/Cursor 桌面端的对话形态:
 // 头部只留标题;模式与模型选择器收进输入胶囊底部工具条(Cursor 式下拉);
-// 未配置凭据用居中引导卡,错误用浮层 toast;空对话时输入框垂直居中。
+// 未配置凭据时聊天框照常显示,模型按钮变成「配置模型」直达设置;空对话时输入框垂直居中。
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown from "../../components/ui/Markdown.jsx";
-import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, SendArrowIcon, Spinner,
-  StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
+import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrowIcon,
+  Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
@@ -253,6 +253,7 @@ function ModelMenu({ ferry, health, onClose, onManage }) {
                 <div key={`${m.provider}/${m.id}`} className="hov-item"
                   onMouseDown={e => { e.preventDefault(); pick(m); }}
                   style={{ ...menuRow, alignItems: "flex-start" }}>
+                  <ProviderIcon provider={m.provider} size={15} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -326,6 +327,8 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
   const modelLabel = currentModel?.name
     || (ferry.activeLog?.model || health?.model || "").split("/").pop();
   const effort = health?.thinking && health.thinking !== "off" ? health.thinking : null;
+  // 没凭据或一个可用模型都没有时,按钮不再开下拉,而是直达设置里的提供商页
+  const needsSetup = noCredential || !(ferry.models || []).length;
   useEffect(() => { if (autoFocus) taRef.current?.focus(); }, [autoFocus, taRef]);
   return (
     <div style={{ position: "relative" }}>
@@ -356,15 +359,17 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
             </button>
           </div>
           <div style={{ position: "relative" }}>
-            {modelOpen && (
-              <ModelMenu ferry={ferry} health={health} onManage={onOpenConfig}
+            {modelOpen && !needsSetup && (
+              <ModelMenu ferry={ferry} health={health} onManage={() => onOpenConfig("models")}
                 onClose={() => setModelOpen(false)} />)}
-            <button className="chat-ghost-btn" onClick={() => setModelOpen(v => !v)}>
-              {noCredential && (
+            <button className="chat-ghost-btn"
+              onClick={() => needsSetup ? onOpenConfig() : setModelOpen(v => !v)}>
+              {needsSetup ? (
                 <span style={{ width: 5, height: 5, borderRadius: "50%",
-                  background: "var(--err)", flex: "none" }} />)}
+                  background: "var(--warn)", flex: "none" }} />
+              ) : currentModel && <ProviderIcon provider={currentModel.provider} size={13} />}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {noCredential || !modelLabel ? t("askferry:model.pick") : modelLabel}</span>
+                {needsSetup ? t("askferry:model.setup") : (modelLabel || t("askferry:model.pick"))}</span>
               {effort && (
                 <span style={{ color: "var(--tx5)", flex: "none" }}>
                   {t(`askferry:model.effort_${effort}`)}</span>)}
@@ -394,22 +399,6 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
   );
 }
 
-// ----- 未配置凭据:居中引导卡 -----
-function SetupCard({ provider, onOpenConfig }) {
-  const { t } = useTranslation();
-  return (
-    <div className="fcard" style={{ maxWidth: 380, margin: "0 auto", padding: "30px 28px",
-      textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--tx1)" }}>
-        {t("askferry:setup.title")}</div>
-      <div style={{ fontSize: 12, color: "var(--tx4)", lineHeight: 1.6 }}>
-        {t("askferry:setup.desc", { provider })}</div>
-      <button className="fbtn fbtn-primary" style={{ marginTop: 10, padding: "0 18px" }}
-        onClick={onOpenConfig}>{t("askferry:setup.cta")}</button>
-    </div>
-  );
-}
-
 // ----- 主视图 -----
 export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
   const { t } = useTranslation();
@@ -424,7 +413,6 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
   const running = activeLog?.status === "running";
   const items = activeLog?.items || [];
   const empty = items.length === 0;
-  const noCredential = health && health.credential === "unavailable";
 
   // 新消息时贴底滚动(用户上翻后不打扰)
   const stickRef = useRef(true);
@@ -495,27 +483,23 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
       </div>
 
       {empty ? (
-        /* 空态:未配置凭据给引导卡;已配置给问候语 + 居中输入框 + 建议 chips */
+        /* 空态:问候语 + 居中输入框 + 建议 chips;未配置模型也照常显示 */
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
           justifyContent: "center", padding: "0 24px 60px" }}>
-          {noCredential ? (
-            <SetupCard provider={health.provider} onOpenConfig={onOpenConfig} />
-          ) : (
-            <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>
-              <div style={{ fontSize: 22, fontWeight: 600, color: "var(--tx1)",
-                textAlign: "center", letterSpacing: "-.01em", marginBottom: 22 }}>
-                {t("askferry:empty.title")}</div>
-              <Composer {...composerProps} autoFocus />
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8,
-                justifyContent: "center", marginTop: 18 }}>
-                {[t("askferry:empty.ex1"), t("askferry:empty.ex2"),
-                  t("askferry:empty.ex3"), t("askferry:empty.ex4")].map((ex, i) => (
-                  <button key={i} className="chat-chip"
-                    onClick={() => { updateText(ex); taRef.current?.focus(); }}>{ex}</button>
-                ))}
-              </div>
+          <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: "var(--tx1)",
+              textAlign: "center", letterSpacing: "-.01em", marginBottom: 22 }}>
+              {t("askferry:empty.title")}</div>
+            <Composer {...composerProps} autoFocus />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8,
+              justifyContent: "center", marginTop: 18 }}>
+              {[t("askferry:empty.ex1"), t("askferry:empty.ex2"),
+                t("askferry:empty.ex3"), t("askferry:empty.ex4")].map((ex, i) => (
+                <button key={i} className="chat-chip"
+                  onClick={() => { updateText(ex); taRef.current?.focus(); }}>{ex}</button>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       ) : (
         <>

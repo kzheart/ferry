@@ -1,3 +1,5 @@
+import { PROVIDER_ICON } from "./providerIcons.js";
+
 // 图标库:工具品牌图标 + 导航轨/通用小图标(均为内联 SVG,便于着色)
 // 三个工具的图形均取自各自官方来源,保留品牌原色:
 //   claude   — Claude Code 终端图标(Claude 橙放射星,来自 claude.ai/favicon.svg)
@@ -59,6 +61,28 @@ export function ToolIcon({ tool, size = 26, dot = null }) {
       {dot && <span style={{ position: "absolute", right: -3, bottom: -3, width: 10, height: 10,
         borderRadius: "50%", background: dot, boxShadow: "0 0 0 2px var(--dot-ring)" }} />}
     </span>
+  );
+}
+
+// Provider 品牌图标:认识的用真实商标,不认识的用首字母,尺寸统一便于对齐
+export function ProviderIcon({ provider, size = 16 }) {
+  const icon = PROVIDER_ICON[provider];
+  if (!icon) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: 4, flex: "none",
+        background: "var(--fill3)", color: "var(--tx3b)", display: "inline-flex",
+        alignItems: "center", justifyContent: "center",
+        fontSize: Math.round(size * 0.6), fontWeight: 700, lineHeight: 1 }}>
+        {String(provider || "?")[0].toUpperCase()}</span>
+    );
+  }
+  return (
+    <svg viewBox={icon.viewBox} aria-hidden
+      className={icon.mono ? undefined : "noinvert"}
+      fill={icon.mono ? "currentColor" : undefined}
+      style={{ width: size, height: size, flex: "none", display: "block" }}
+      {...(icon.fillRule ? { fillRule: "evenodd" } : {})}
+      dangerouslySetInnerHTML={{ __html: icon.body }} />
   );
 }
 
@@ -129,6 +153,7 @@ const SETTINGS_GLYPH = {
   prefs: `<g transform="scale(1.125)"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/></g>`,
   sources: '<ellipse cx="9" cy="4.6" rx="5.2" ry="2.1" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M3.8 4.6v8.8c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1V4.6M3.8 9c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>',
   updates: '<path d="M9 3.1v8.2m0 0 3-3m-3 3-3-3M4 14.4h10" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>',
+  models: '<path d="M9 2.2 15 5.6 9 9 3 5.6 9 2.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m3 9 6 3.4L15 9M3 12.4l6 3.4 6-3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
   providers: '<rect x="4.6" y="4.6" width="8.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="7.3" y="7.3" width="3.4" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 2.4v2.2M11 2.4v2.2M7 13.4v2.2M11 13.4v2.2M2.4 7h2.2M2.4 11h2.2M13.4 7h2.2M13.4 11h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
 };
 
@@ -144,8 +169,10 @@ export const CheckIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M3 8.5l3.4 3.4L13 5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
-export const ManualModeIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,
-  '<path d="M6.4 13.8V6.1a1 1 0 0 1 2 0v3.3M8.4 8.2V5.3a1 1 0 0 1 2 0v2.9M10.4 8.2V6.1a1 1 0 0 1 2 0v3.1M12.4 8.2V7a1 1 0 0 1 2 0v4.1c0 1.5-.6 2.8-1.7 3.7M6.4 10.3 5.2 9.1a1.15 1.15 0 0 0-1.6 1.6l2.5 2.5c.6.6 1.4 1 2.3 1h2.3c.8 0 1.5-.3 2.1-.8" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
+// 手动模式:摊开的手掌。用 24 画布重画,墨迹上下都到边(2~22),重心正好落在画布中心;
+// 旧的 16 画布版本墨迹压在下半部(5.3~14.8),居中的是画布不是墨迹,并排时会掉下去
+export const ManualModeIcon = ({ size = 14 }) => svg("0 0 24 24", size, size,
+  '<path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
 export const AutoModeIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,

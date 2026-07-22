@@ -15,8 +15,12 @@ export type CommandMethod =
   | "events.replay"
   | "providers.list"
   | "provider.enabled.set"
+  | "provider.test"
   | "models.list"
   | "models.enabled"
+  | "models.catalog"
+  | "custom_model.add"
+  | "custom_model.delete"
   | "models.visibility.set"
   | "models.refresh"
   | "config.get"
@@ -99,8 +103,12 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "events.replay",
     "providers.list",
     "provider.enabled.set",
+    "provider.test",
     "models.list",
     "models.enabled",
+    "models.catalog",
+    "custom_model.add",
+    "custom_model.delete",
     "models.visibility.set",
     "models.refresh",
     "config.get",

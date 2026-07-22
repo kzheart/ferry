@@ -66,6 +66,8 @@ export interface ProviderConfigDocument {
   enabled_providers: string[];
   // Provider → 允许出现在模型选择器里的模型;缺省表示该 Provider 的全部模型
   visible_models: Record<string, string[]>;
+  // Provider → 用户手填的模型 ID;叠加在该 Provider 自带目录之上
+  custom_models: Record<string, CustomModelConfig[]>;
 }
 
 export type StoredCredential =
@@ -90,6 +92,7 @@ export interface PublicProviderConfig {
   >;
   enabled_providers: string[];
   visible_models: Record<string, string[]>;
+  custom_models: Record<string, CustomModelConfig[]>;
 }
 
 function initialConfig(): ProviderConfigDocument {
@@ -100,6 +103,7 @@ function initialConfig(): ProviderConfigDocument {
     custom_providers: [],
     enabled_providers: [...DEFAULT_ENABLED_PROVIDERS],
     visible_models: {},
+    custom_models: {},
   };
 }
 
@@ -315,6 +319,22 @@ function visibleModels(value: unknown): Record<string, string[]> {
   );
 }
 
+function customModelMap(value: unknown): Record<string, CustomModelConfig[]> {
+  if (!record(value)) throw new Error("custom models are invalid");
+  return Object.fromEntries(
+    Object.entries(value).map(([providerId, list]) => {
+      if (!Array.isArray(list) || list.length > 200) {
+        throw new Error("custom models are invalid");
+      }
+      const models = list.map(customModel);
+      if (new Set(models.map((item) => item.id)).size !== models.length) {
+        throw new Error("custom model ids must be unique");
+      }
+      return [identifier(providerId, "provider id"), models];
+    }),
+  );
+}
+
 export function parseProviderConfig(value: unknown): ProviderConfigDocument {
   if (
     !record(value) ||
@@ -365,6 +385,7 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
     custom_providers: customProviders,
     enabled_providers: enabled,
     visible_models: legacy ? {} : visibleModels(value.visible_models ?? {}),
+    custom_models: legacy ? {} : customModelMap(value.custom_models ?? {}),
   };
 }
 
@@ -455,6 +476,7 @@ export class FileProviderConfigStore implements CredentialStore {
       ),
       enabled_providers: config.enabled_providers,
       visible_models: config.visible_models,
+      custom_models: config.custom_models,
     };
   }
 
@@ -527,6 +549,40 @@ export class FileProviderConfigStore implements CredentialStore {
     });
   }
 
+  // 手填的模型:同 id 覆盖;若该 Provider 已有可见白名单,新模型顺带加进去,否则加完看不见
+  async saveCustomModel(providerId: string, model: CustomModelConfig) {
+    identifier(providerId, "provider id");
+    const safe = customModel(model);
+    return this.mutate((config) => {
+      const list = (config.custom_models[providerId] ?? []).filter(
+        (item) => item.id !== safe.id,
+      );
+      config.custom_models[providerId] = [...list, safe];
+      const visible = config.visible_models[providerId];
+      if (visible && !visible.includes(safe.id)) visible.push(safe.id);
+      return safe;
+    });
+  }
+
+  async deleteCustomModel(providerId: string, modelId: string) {
+    identifier(providerId, "provider id");
+    modelIdentifier(modelId, "custom model id");
+    return this.mutate((config) => {
+      const list = (config.custom_models[providerId] ?? []).filter(
+        (item) => item.id !== modelId,
+      );
+      if (list.length) config.custom_models[providerId] = list;
+      else delete config.custom_models[providerId];
+      const visible = config.visible_models[providerId];
+      if (visible) {
+        config.visible_models[providerId] = visible.filter(
+          (item) => item !== modelId,
+        );
+      }
+      return { provider_id: providerId, model_id: modelId };
+    });
+  }
+
   async saveCustomProvider(
     provider: CustomProviderConfig,
     clearApiKey = false,
@@ -558,6 +614,7 @@ export class FileProviderConfigStore implements CredentialStore {
       );
       delete config.credentials[providerId];
       delete config.visible_models[providerId];
+      delete config.custom_models[providerId];
       config.enabled_providers = config.enabled_providers.filter(
         (item) => item !== providerId,
       );

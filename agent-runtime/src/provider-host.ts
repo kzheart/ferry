@@ -1,6 +1,7 @@
 import {
   createModels,
   createProvider,
+  type Api,
   type AuthEvent,
   type AuthInteraction,
   type AuthPrompt,
@@ -17,6 +18,7 @@ import { dirname, join } from "node:path";
 import { FileModelsStore } from "./model-catalog-store.js";
 import {
   FileProviderConfigStore,
+  type CustomModelConfig,
   type CustomProviderConfig,
   type ModelSelection,
 } from "./provider-config.js";
@@ -85,6 +87,46 @@ function customProvider(config: CustomProviderConfig): Provider {
   });
 }
 
+// 手填模型沿用同 Provider 某个已知模型的形状(api / baseUrl / headers),只换 id 与能力字段
+function overlayModel(
+  template: Model<Api>,
+  config: CustomModelConfig,
+): Model<Api> {
+  return {
+    ...template,
+    id: config.id,
+    name: config.name ?? config.id,
+    reasoning: config.reasoning,
+    input: config.input,
+    contextWindow: config.context_window,
+    maxTokens: config.max_tokens,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  };
+}
+
+// createProvider 返回的是纯对象 + 闭包方法,展开覆写 getModels 不会破坏 stream 行为
+function withCustomModels(
+  provider: Provider,
+  configs: CustomModelConfig[],
+): Provider {
+  const base = provider.getModels.bind(provider);
+  return {
+    ...provider,
+    getModels: () => {
+      const merged = [...base()];
+      const template = merged[0];
+      if (!template) return merged;
+      for (const config of configs) {
+        const model = overlayModel(template, config);
+        const index = merged.findIndex((item) => item.id === model.id);
+        if (index >= 0) merged[index] = model;
+        else merged.push(model);
+      }
+      return merged;
+    },
+  };
+}
+
 function summary(model: Model<string>): ModelSummary {
   return {
     id: model.id,
@@ -99,6 +141,9 @@ function summary(model: Model<string>): ModelSummary {
 }
 
 export class ProviderHost {
+  // 未叠加手填模型的原始 Provider,重新叠加时要从它出发,否则会套娃
+  private baseProviders = new Map<string, Provider>();
+
   private constructor(
     readonly store: FileProviderConfigStore,
     readonly models: MutableModels,
@@ -138,11 +183,35 @@ export class ProviderHost {
       customIds.add(item.id);
     }
     await models.refresh({ allowNetwork: false });
-    return new ProviderHost(store, models, customIds);
+    const host = new ProviderHost(store, models, customIds);
+    await host.applyCustomModels();
+    return host;
+  }
+
+  private async applyCustomModels() {
+    const config = await this.store.snapshot();
+    for (const provider of this.models.getProviders()) {
+      if (!this.baseProviders.has(provider.id)) {
+        this.baseProviders.set(provider.id, provider);
+      }
+    }
+    for (const [id, base] of [...this.baseProviders]) {
+      if (!this.models.getProvider(id)) {
+        this.baseProviders.delete(id);
+        continue;
+      }
+      const configs = config.custom_models[id];
+      this.models.setProvider(
+        configs?.length ? withCustomModels(base, configs) : base,
+      );
+    }
   }
 
   async reloadCustomProviders() {
-    for (const id of this.customIds) this.models.deleteProvider(id);
+    for (const id of this.customIds) {
+      this.models.deleteProvider(id);
+      this.baseProviders.delete(id);
+    }
     this.customIds = new Set();
     for (const item of (await this.store.snapshot()).custom_providers) {
       if (this.models.getProvider(item.id)) {
@@ -153,6 +222,75 @@ export class ProviderHost {
       this.models.setProvider(customProvider(item));
       this.customIds.add(item.id);
     }
+    await this.applyCustomModels();
+  }
+
+  // 手填一个模型 ID:未指定的能力字段沿用该 Provider 现有模型的参数
+  async saveCustomModel(
+    providerId: string,
+    input: Partial<CustomModelConfig> & { id: string },
+  ) {
+    const base = this.baseProviders.get(providerId);
+    if (!base) throw new Error("provider not found");
+    const template = base.getModels()[0];
+    if (!template) {
+      throw new Error("provider has no reference model; refresh the catalog");
+    }
+    const contextWindow = input.context_window ?? template.contextWindow;
+    const saved = await this.store.saveCustomModel(providerId, {
+      id: input.id,
+      ...(input.name ? { name: input.name } : {}),
+      input: input.input ?? [...template.input],
+      reasoning: input.reasoning ?? template.reasoning,
+      context_window: contextWindow,
+      // 沿用模板的输出上限,但不能超过用户填的上下文窗口
+      max_tokens: input.max_tokens ?? Math.min(template.maxTokens, contextWindow),
+    });
+    await this.applyCustomModels();
+    return { provider_id: providerId, model: saved };
+  }
+
+  // 连通性自检:拿该 Provider 的一个模型发一条最小请求,验证凭据与网络确实能打通
+  async testProvider(providerId: string, modelId?: string) {
+    const provider = this.models.getProvider(providerId);
+    if (!provider) throw new Error("provider not found");
+    if (!(await this.isConfigured(providerId))) {
+      throw new Error("provider is not configured");
+    }
+    const models = this.models.getModels(providerId);
+    const model = modelId
+      ? models.find((item) => item.id === modelId)
+      : models[0];
+    if (!model) throw new Error("provider has no model to test");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    const started = Date.now();
+    try {
+      const message = await this.models.completeSimple(
+        model,
+        { messages: [{ role: "user", content: "ping", timestamp: started }] },
+        { maxTokens: 16, signal: controller.signal },
+      );
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        throw new Error(message.errorMessage ?? "request failed");
+      }
+      return {
+        provider_id: providerId,
+        model: model.id,
+        latency_ms: Date.now() - started,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async deleteCustomModel(providerId: string, modelId: string) {
+    if (!this.baseProviders.has(providerId)) {
+      throw new Error("provider not found");
+    }
+    const result = await this.store.deleteCustomModel(providerId, modelId);
+    await this.applyCustomModels();
+    return result;
   }
 
   async providers(): Promise<ProviderSummary[]> {
@@ -222,6 +360,35 @@ export class ProviderHost {
       for (const model of this.models.getModels(providerId)) {
         if (visible && !visible.includes(model.id)) continue;
         output.push({ ...summary(model), provider_name: provider.name });
+      }
+    }
+    return output;
+  }
+
+  // 模型设置页的数据源:已添加且已配置凭据的 Provider 的全部模型,附带是否出现在选择器里
+  async catalogModels(): Promise<
+    Array<
+      ModelSummary & { provider_name: string; shown: boolean; custom: boolean }
+    >
+  > {
+    const config = await this.store.snapshot();
+    const output: Array<
+      ModelSummary & { provider_name: string; shown: boolean; custom: boolean }
+    > = [];
+    for (const providerId of config.enabled_providers) {
+      const provider = this.models.getProvider(providerId);
+      if (!provider || !(await this.isConfigured(providerId))) continue;
+      const visible = config.visible_models[providerId];
+      const custom = new Set(
+        (config.custom_models[providerId] ?? []).map((item) => item.id),
+      );
+      for (const model of this.models.getModels(providerId)) {
+        output.push({
+          ...summary(model),
+          provider_name: provider.name,
+          shown: !visible || visible.includes(model.id),
+          custom: custom.has(model.id),
+        });
       }
     }
     return output;

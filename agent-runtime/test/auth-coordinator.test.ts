@@ -14,6 +14,27 @@ async function until(events: AuthCoordinatorEvent[], type: string) {
 }
 
 describe("AuthCoordinator", () => {
+  it("starts the login only after returning its id", async () => {
+    let startReturned = false;
+    let loginStarted = false;
+    const coordinator = new AuthCoordinator(
+      async (_provider, _type, interaction) => {
+        expect(startReturned).toBe(true);
+        loginStarted = true;
+        await interaction.prompt({ type: "manual_code", message: "Paste code" });
+        return { type: "oauth", access: "a", refresh: "r", expires: 1 };
+      },
+      () => {},
+    );
+
+    const login = coordinator.start("openai-codex", "oauth");
+    expect(loginStarted).toBe(false);
+    startReturned = true;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(loginStarted).toBe(true);
+    coordinator.cancel(login.login_id);
+  });
+
   it("bridges prompts without echoing secret responses", async () => {
     const events: AuthCoordinatorEvent[] = [];
     let nextId = 0;

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "agent:build": "npm --prefix ../agent-runtime run build",
+    "desktop": "npm run agent:build && tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

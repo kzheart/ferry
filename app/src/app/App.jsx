@@ -783,7 +783,8 @@ export default function App() {
         {view === "history" && <HistoryDetail h={histSel} />}
         {view === "askferry" && (
           <AskFerry ferry={ferry} scanSessions={sessions}
-            onOpenConfig={() => { setSettingsSection("providers"); setSettingsOpen(true); }} />)}
+            onOpenConfig={(section = "providers") => {
+              setSettingsSection(section); setSettingsOpen(true); }} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
         </div>
       </div>

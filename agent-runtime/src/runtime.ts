@@ -716,6 +716,63 @@ export class AgentRuntime {
     return this.providerHost.enabledModels();
   }
 
+  async catalogModels() {
+    if (!this.providerHost) return [];
+    return this.providerHost.catalogModels();
+  }
+
+  async testProvider(providerId: string, modelId?: string) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    }
+    try {
+      return await this.providerHost.testProvider(providerId, modelId);
+    } catch (error) {
+      throw new ProtocolError(
+        "provider_unreachable",
+        error instanceof Error ? error.message : "provider test failed",
+      );
+    }
+  }
+
+  async saveCustomModel(
+    providerId: string,
+    input: {
+      id: string;
+      name?: string;
+      input?: Array<"text" | "image">;
+      reasoning?: boolean;
+      context_window?: number;
+      max_tokens?: number;
+    },
+  ) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    }
+    try {
+      return await this.providerHost.saveCustomModel(providerId, input);
+    } catch (error) {
+      throw new ProtocolError(
+        "invalid_params",
+        error instanceof Error ? error.message : "custom model is invalid",
+      );
+    }
+  }
+
+  async deleteCustomModel(providerId: string, modelId: string) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    }
+    try {
+      return await this.providerHost.deleteCustomModel(providerId, modelId);
+    } catch (error) {
+      throw new ProtocolError(
+        "provider_not_found",
+        error instanceof Error ? error.message : "provider not found",
+      );
+    }
+  }
+
   async setProviderEnabled(providerId: string, enabled: boolean) {
     if (!this.providerHost) {
       throw new ProtocolError("unsupported", "provider config unavailable");

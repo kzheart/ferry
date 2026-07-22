@@ -66,6 +66,43 @@ describe("ProviderHost", () => {
     ).rejects.toThrow("model is not available");
   });
 
+  it("overlays hand-typed model ids onto a built-in provider", async () => {
+    const { host: providers } = await host();
+    await providers.saveApiKey("anthropic", "configured-key");
+    const template = (await providers.enabledModels())[0]!;
+
+    await providers.saveCustomModel("anthropic", {
+      id: "claude-from-the-future",
+      name: "Future",
+    });
+    const added = (await providers.catalogModels()).find(
+      (model) => model.id === "claude-from-the-future",
+    );
+    expect(added?.name).toBe("Future");
+    expect(added?.custom).toBe(true);
+    // 缺省字段沿用同 Provider 的既有模型,streaming 走同一个 API
+    expect(added?.api).toBe(template.api);
+    expect(
+      providers.model({ provider: "anthropic", model: added!.id }),
+    ).toBeTruthy();
+
+    // 白名单存在时新模型要自动可见,否则加完就看不见
+    await providers.setVisibleModels("anthropic", [template.id]);
+    await providers.saveCustomModel("anthropic", { id: "another-one" });
+    expect(
+      (await providers.enabledModels()).map((model) => model.id),
+    ).toContain("another-one");
+
+    await providers.deleteCustomModel("anthropic", "claude-from-the-future");
+    expect(
+      (await providers.catalogModels()).some((model) => model.custom),
+    ).toBe(true);
+    await providers.deleteCustomModel("anthropic", "another-one");
+    expect(
+      (await providers.catalogModels()).some((model) => model.custom),
+    ).toBe(false);
+  });
+
   it("never reads ambient provider environment variables", async () => {
     process.env.OPENAI_API_KEY = "ambient-key-must-not-be-used";
     const { host: providers } = await host();

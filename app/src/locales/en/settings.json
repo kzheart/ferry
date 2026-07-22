@@ -6,7 +6,8 @@
     "railTitle": "Settings",
     "close": "Close settings (Esc)",
     "followSystemDesc": "Auto-select based on system language",
-    "providers": "Providers"
+    "providers": "Providers",
+    "models": "Models"
   },
   "theme": {
     "light": "Light",
@@ -79,25 +80,38 @@
     "remove": "Remove provider",
     "searchProvider": "Search providers",
     "noCandidate": "No more providers to add",
-    "emptyHint": "Click “+” at the bottom left to add a provider.\nOnly providers configured here show up in the model picker.",
-    "configured": "Configured · {{type}}",
-    "notConfigured": "Not configured",
+    "emptyHint": "Click “+” at the bottom left to add a provider.\nOnce its credential is set, its models show up under Models.",
     "apiKey": "API key",
     "keyPlaceholder": "Paste API key",
     "keySet": "Saved — paste a new key to replace it",
-    "keySaved": "API key saved and active",
     "save": "Save",
     "oauthLogin": "OAuth sign-in",
     "logout": "Sign out",
+    "clearKey": "Clear key",
+    "test": "Test connection",
+    "testOk": "Connected · {{model}} · {{ms}}ms",
     "models": "Models",
-    "shownCount": "{{n}}/{{total}} in picker",
-    "searchModel": "Search models",
-    "refreshModels": "Refresh catalog",
+    "noModels": "No models yet. Refresh the catalog on the Models page, or add one by hand here."
+  },
+  "models": {
+    "search": "Search models",
+    "refresh": "Refresh catalog",
     "refreshDone": "Model catalog refreshed",
     "refreshPartial": "Some providers failed to refresh: {{list}}",
-    "noModels": "No models for this provider yet — try refreshing the catalog",
+    "shownCount": "{{n}}/{{total}} selected — only selected models appear in the chat model picker",
+    "selectAll": "Select all",
+    "clearAll": "Clear all",
     "image": "image",
     "reasoning": "reasoning",
-    "plaintextNote": "Credentials are stored in plaintext in providers.json (0600) under Ferry's config directory; never logged. Host environment variables are not read."
+    "empty": "No models yet.\nAdd an API key for a provider under Providers and its models will show up here.",
+    "goProviders": "Go to Providers",
+    "add": "New",
+    "addConfirm": "Add",
+    "cancel": "Cancel",
+    "delete": "Remove this model",
+    "idPlaceholder": "Model ID, e.g. claude-opus-4-8",
+    "namePlaceholder": "Nickname (optional)",
+    "contextWindow": "Context",
+    "customTag": "Custom"
   }
 }
