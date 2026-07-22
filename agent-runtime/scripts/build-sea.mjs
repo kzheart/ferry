@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -102,26 +103,111 @@ if (process.platform === "darwin") {
   run("codesign", ["--sign", "-", output]);
 }
 
-const health = JSON.stringify({
-  protocol: "ferry-agent/v1",
-  id: "sea-smoke",
-  method: "health",
-  params: {},
-});
-const smoke = spawnSync(output, [], {
-  input: `${health}\n`,
-  encoding: "utf8",
-  timeout: 30_000,
-  env: { ...process.env, FERRY_AGENT_DATA_DIR: join(work, "smoke-data") },
-});
-if (smoke.error || smoke.status !== 0) {
-  throw smoke.error ?? new Error(`SEA smoke failed: ${smoke.stderr}`);
-}
-const response = JSON.parse(smoke.stdout.trim().split(/\r?\n/).at(-1));
-if (response.ok !== true || response.result?.model !== "deepseek-v4-flash") {
-  throw new Error(`SEA health mismatch: ${smoke.stdout}`);
-}
+await smokeSea(output, join(work, "smoke-data"));
 process.stdout.write(`${output}\n`);
+
+async function smokeSea(executable, dataDirectory) {
+  const child = spawn(executable, [], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, FERRY_AGENT_DATA_DIR: dataDirectory },
+  });
+  const messages = [];
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const lines = createInterface({ input: child.stdout });
+  lines.on("line", (line) => {
+    messages.push(JSON.parse(line));
+  });
+  const send = (id, method, params = {}) => {
+    child.stdin.write(
+      `${JSON.stringify({ protocol: "ferry-agent/v1", id, method, params })}\n`,
+    );
+  };
+  const waitFor = async (predicate, label) => {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      const match = messages.find(predicate);
+      if (match) return match;
+      if (child.exitCode !== null) {
+        throw new Error(`SEA exited while waiting for ${label}: ${stderr}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(
+      `SEA timed out waiting for ${label}: ${JSON.stringify(messages)} ${stderr}`,
+    );
+  };
+
+  try {
+    send("sea-health", "health");
+    const health = await waitFor(
+      (message) => message.id === "sea-health",
+      "health",
+    );
+    if (
+      health.ok !== true ||
+      health.result?.model !== "deepseek-v4-flash" ||
+      health.result?.provider_count !== 36
+    ) {
+      throw new Error(`SEA health mismatch: ${JSON.stringify(health)}`);
+    }
+
+    send("sea-providers", "providers.list");
+    const providers = await waitFor(
+      (message) => message.id === "sea-providers",
+      "provider catalog",
+    );
+    const providerIds = providers.result?.map?.((provider) => provider.id);
+    if (
+      providers.ok !== true ||
+      providerIds?.length !== 36 ||
+      providerIds.includes("amazon-bedrock") ||
+      providerIds.includes("google-vertex")
+    ) {
+      throw new Error(`SEA provider mismatch: ${JSON.stringify(providers)}`);
+    }
+
+    send("sea-auth-start", "auth.login.start", {
+      provider_id: "openai-codex",
+      auth_type: "oauth",
+    });
+    const started = await waitFor(
+      (message) => message.id === "sea-auth-start",
+      "OAuth start",
+    );
+    if (started.ok !== true) {
+      throw new Error(`SEA OAuth failed to start: ${JSON.stringify(started)}`);
+    }
+    const loginId = started.result.login_id;
+    const prompt = await waitFor(
+      (message) =>
+        message.type === "auth.prompt" &&
+        message.payload?.login_id === loginId &&
+        message.payload?.prompt?.type === "select",
+      "bundled OAuth prompt",
+    );
+    if (prompt.payload.provider_id !== "openai-codex") {
+      throw new Error(`SEA OAuth provider mismatch: ${JSON.stringify(prompt)}`);
+    }
+    send("sea-auth-cancel", "auth.login.cancel", { login_id: loginId });
+    const cancelled = await waitFor(
+      (message) =>
+        message.type === "auth.cancelled" &&
+        message.payload?.login_id === loginId,
+      "OAuth cancellation",
+    );
+    if (cancelled.payload.provider_id !== "openai-codex") {
+      throw new Error(`SEA OAuth cancellation mismatch`);
+    }
+  } finally {
+    child.stdin.end();
+    lines.close();
+    if (child.exitCode === null) child.kill();
+  }
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
