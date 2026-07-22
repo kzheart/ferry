@@ -98,14 +98,14 @@ export async function dispatch(
         result = await runtime.config();
         break;
       case "credential.set": {
-        const env = params.env;
-        if (env !== undefined && !isObject(env)) {
-          throw new ProtocolError("invalid_params", "env must be an object");
+        const fields = params.fields;
+        if (fields !== undefined && !isObject(fields)) {
+          throw new ProtocolError("invalid_params", "fields must be an object");
         }
         result = await runtime.saveApiKey(
           requireString(params, "provider_id", 128),
           requireString(params, "key", 64 * 1024),
-          env as Record<string, string> | undefined,
+          fields as Record<string, string> | undefined,
         );
         break;
       }

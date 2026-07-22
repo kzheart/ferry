@@ -224,7 +224,7 @@ export class ProviderHost {
   async saveApiKey(
     providerId: string,
     key: string,
-    env?: Record<string, string>,
+    fields?: Record<string, string>,
   ) {
     const provider = this.models.getProvider(providerId);
     if (!provider?.auth.apiKey)
@@ -232,7 +232,7 @@ export class ProviderHost {
     await this.store.modify(providerId, async () => ({
       type: "api_key",
       key,
-      ...(env && Object.keys(env).length > 0 ? { env } : {}),
+      ...(fields && Object.keys(fields).length > 0 ? { env: fields } : {}),
     }));
   }
 

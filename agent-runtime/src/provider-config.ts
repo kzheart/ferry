@@ -44,9 +44,22 @@ export interface CustomModelConfig {
 export interface ProviderConfigDocument {
   schema_version: typeof PROVIDER_CONFIG_VERSION;
   default_model: ModelSelection;
-  credentials: Record<string, Credential>;
+  credentials: Record<string, StoredCredential>;
   custom_providers: CustomProviderConfig[];
 }
+
+export type StoredCredential =
+  | {
+      type: "api_key";
+      key?: string;
+      fields?: ProviderEnv;
+    }
+  | (Record<string, unknown> & {
+      type: "oauth";
+      access: string;
+      refresh: string;
+      expires: number;
+    });
 
 export interface PublicProviderConfig {
   schema_version: typeof PROVIDER_CONFIG_VERSION;
@@ -110,29 +123,29 @@ function optionalSecret(value: unknown, label: string): string | undefined {
   return text(value, label, MAX_SECRET_BYTES);
 }
 
-function providerEnv(value: unknown): ProviderEnv | undefined {
+function providerFields(value: unknown): ProviderEnv | undefined {
   if (value === undefined) return undefined;
-  if (!record(value)) throw new Error("credential env is invalid");
+  if (!record(value)) throw new Error("credential fields are invalid");
   const entries = Object.entries(value);
-  if (entries.length > 64) throw new Error("credential env is too large");
+  if (entries.length > 64) throw new Error("credential fields are too large");
   return Object.fromEntries(
     entries.map(([key, item]) => [
-      identifier(key, "credential env key"),
-      text(item, "credential env value", MAX_SECRET_BYTES),
+      identifier(key, "credential field key"),
+      text(item, "credential field value", MAX_SECRET_BYTES),
     ]),
   );
 }
 
-function credential(value: unknown): Credential {
+function storedCredential(value: unknown): StoredCredential {
   if (!record(value)) throw new Error("credential is invalid");
   if (value.type === "api_key") {
     const key = optionalSecret(value.key, "API key");
-    const env = providerEnv(value.env);
-    if (!key && !env) throw new Error("API key credential is empty");
+    const fields = providerFields(value.fields);
+    if (!key && !fields) throw new Error("API key credential is empty");
     return {
       type: "api_key",
       ...(key ? { key } : {}),
-      ...(env ? { env } : {}),
+      ...(fields ? { fields } : {}),
     };
   }
   if (value.type === "oauth") {
@@ -158,6 +171,28 @@ function credential(value: unknown): Credential {
     return safe as Credential;
   }
   throw new Error("credential type is unsupported");
+}
+
+function fromPiCredential(value: Credential): StoredCredential {
+  if (value.type === "api_key") {
+    return storedCredential({
+      type: "api_key",
+      ...(value.key ? { key: value.key } : {}),
+      ...(value.env ? { fields: value.env } : {}),
+    });
+  }
+  return storedCredential(value);
+}
+
+function toPiCredential(value: StoredCredential): Credential {
+  if (value.type === "api_key") {
+    return {
+      type: "api_key",
+      ...(value.key ? { key: value.key } : {}),
+      ...(value.fields ? { env: value.fields } : {}),
+    };
+  }
+  return structuredClone(value) as Credential;
 }
 
 function customProvider(value: unknown): CustomProviderConfig {
@@ -232,7 +267,7 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
   const credentials = Object.fromEntries(
     Object.entries(value.credentials).map(([providerId, item]) => [
       identifier(providerId, "provider id"),
-      credential(item),
+      storedCredential(item),
     ]),
   );
   if (!Array.isArray(value.custom_providers)) {
@@ -360,7 +395,8 @@ export class FileProviderConfigStore implements CredentialStore {
   }
 
   async read(providerId: string) {
-    return structuredClone((await this.snapshot()).credentials[providerId]);
+    const value = (await this.snapshot()).credentials[providerId];
+    return value ? toPiCredential(value) : undefined;
   }
 
   async list(): Promise<readonly CredentialInfo[]> {
@@ -375,10 +411,14 @@ export class FileProviderConfigStore implements CredentialStore {
   ) {
     identifier(providerId, "provider id");
     return this.mutate(async (config) => {
-      const current = structuredClone(config.credentials[providerId]);
+      const stored = config.credentials[providerId];
+      const current = stored ? toPiCredential(stored) : undefined;
       const next = await update(current);
-      if (next !== undefined) config.credentials[providerId] = credential(next);
-      return structuredClone(config.credentials[providerId]);
+      if (next !== undefined) {
+        config.credentials[providerId] = fromPiCredential(next);
+      }
+      const saved = config.credentials[providerId];
+      return saved ? toPiCredential(saved) : undefined;
     });
   }
 

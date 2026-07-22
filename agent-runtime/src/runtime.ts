@@ -614,7 +614,7 @@ export class AgentRuntime {
   async saveApiKey(
     providerId: string,
     key: string,
-    env?: Record<string, string>,
+    fields?: Record<string, string>,
   ) {
     if (!this.providerHost)
       throw new ProtocolError("unsupported", "provider config unavailable");
@@ -625,7 +625,7 @@ export class AgentRuntime {
       );
     }
     try {
-      await this.providerHost.saveApiKey(providerId, key, env);
+      await this.providerHost.saveApiKey(providerId, key, fields);
       return {
         provider_id: providerId,
         configured: true,
