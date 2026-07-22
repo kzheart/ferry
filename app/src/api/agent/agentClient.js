@@ -1,0 +1,53 @@
+// Ask Ferry 传输层:经 Tauri `agent_command` 走 ferry-agent/v1 协议,
+// 审批走独立可信命令(approve 与 apply 在 Rust 内一次完成,凭证不进 WebView)
+import { invoke } from "@tauri-apps/api/core";
+
+const PROTOCOL = "ferry-agent/v1";
+const inTauri = () => !!window.__TAURI_INTERNALS__;
+let requestSeq = 1;
+
+export class AgentError extends Error {
+  constructor(code, message) {
+    super(message || code);
+    this.code = code;
+  }
+}
+
+export const agentAvailable = () => inTauri();
+
+export async function agentCommand(method, params) {
+  if (!inTauri()) throw new AgentError("desktop_only");
+  const request = JSON.stringify({
+    protocol: PROTOCOL,
+    id: `ui_${Date.now().toString(36)}_${requestSeq++}`,
+    method,
+    params: params || {},
+  });
+  let raw;
+  try {
+    raw = await invoke("agent_command", { request });
+  } catch (error) {
+    throw new AgentError("agent_unavailable", String(error));
+  }
+  const response = JSON.parse(raw);
+  if (!response.ok) {
+    throw new AgentError(response.error?.code || "agent_error", response.error?.message);
+  }
+  return response.result;
+}
+
+// 事件流:runtime 事件与 Rust 补发的 operation.proposed / runtime.disconnected 共用同一通道
+export async function onAgentEvent(handler) {
+  if (!inTauri()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen("ferry-agent-event", e => handler(e.payload));
+}
+
+export const operationDetail = operationId =>
+  invoke("agent_operation_detail", { operationId });
+
+export const operationApproveAndApply = (operationId, runId) =>
+  invoke("agent_operation_approve_and_apply", { operationId, runId });
+
+export const operationStatus = operationId =>
+  invoke("agent_operation_status", { operationId });

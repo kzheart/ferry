@@ -19,6 +19,10 @@ import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
   ApplyConfirm, LibraryFilter, PromptBox, SearchPalette, SessionDeleteConfirm,
   Toast } from "../components/ui/Overlays.jsx";
+import AskFerry from "../features/askferry/AskFerry.jsx";
+import AgentConfigSheet from "../features/askferry/AgentConfigSheet.jsx";
+import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
+import { useAskFerry } from "../features/askferry/useAskFerry.js";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
@@ -46,6 +50,11 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [paneW, setPaneW] = useState(232);
   const [dragging, setDragging] = useState(false);
+
+  // ----- Ask Ferry -----
+  const ferry = useAskFerry();
+  const [agentConfigOpen, setAgentConfigOpen] = useState(false);
+  const [aq, setAq] = useState("");
 
   // ----- 搜索与筛选 -----
   const [q, setQ] = useState("");
@@ -577,8 +586,20 @@ export default function App() {
     label: t(`app:historyToken.${histF.time}`),
     onRemove: () => setHistF(v => ({ ...v, time: "all" })) });
 
+  // ----- 资源栏数据:Ask Ferry 对话 -----
+  const aql = aq.trim().toLowerCase();
+  const ferrySessions = useMemo(() => aql
+    ? ferry.sessions.filter(s =>
+        (ferry.titles[s.session_id] || "").toLowerCase().includes(aql))
+    : ferry.sessions, [ferry.sessions, ferry.titles, aql]);
+
   // ----- 资源栏骨架配置 -----
   const paneCfg = {
+    askferry: { title: t("askferry:pane.title"), count: String(ferry.sessions.length),
+      placeholder: t("askferry:pane.placeholder"),
+      query: aq, onQuery: e => setAq(e.target.value),
+      filterCount: 0, tokens: [],
+      footer: t("askferry:pane.footer", { n: ferry.sessions.length }) },
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
       query: q, onQuery: e => setQ(e.target.value),
       filterCount: (libF.src.length < TOOLS.length ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
@@ -606,6 +627,7 @@ export default function App() {
     { k: "overview", label: t("app:rail.overview") },
     { k: "library", label: t("app:rail.library") },
     { k: "history", label: t("app:rail.history") },
+    { k: "askferry", label: t("askferry:rail") },
 ];
 
   const firstDone = () => {
@@ -699,6 +721,9 @@ export default function App() {
             {view === "history" && (
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
+            {view === "askferry" && (
+              <AgentSessionList sessions={ferrySessions} titles={ferry.titles}
+                activeId={ferry.activeId} onOpen={ferry.openSession} onNew={ferry.newChat} />)}
           </Pane>
         )}
 
@@ -751,11 +776,16 @@ export default function App() {
             {scanning ? t("app:detail.scanningSessions") : t("app:detail.noSessionToDisplay")}</div>
         ))}
         {view === "history" && <HistoryDetail h={histSel} />}
+        {view === "askferry" && (
+          <AskFerry ferry={ferry} scanSessions={sessions}
+            onOpenConfig={() => setAgentConfigOpen(true)} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
         </div>
       </div>
 
       {/* 弹层 */}
+      {agentConfigOpen && (
+        <AgentConfigSheet ferry={ferry} onClose={() => setAgentConfigOpen(false)} />)}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
           defaultProbe={!!settings.runtimeProbe}
@@ -771,7 +801,12 @@ export default function App() {
           query={paneCfg.query} onQuery={paneCfg.onQuery}
           recentLabel={paneCfg.query ? null : t("app:search.recent")}
           emptyLabel={t("app:search.empty")}
-          results={(view === "history"
+          results={(view === "askferry"
+            ? ferrySessions.map(s => ({
+                id: s.session_id, title: ferry.titles[s.session_id] || t("askferry:chat.untitled"),
+                tool: null, meta: s.model_id,
+                onClick: () => ferry.openSession(s.session_id) }))
+            : view === "history"
             ? histGroups.flatMap(g => g.rows).map(h => ({
                 id: h.id, title: h.title, tool: h.tool, meta: `${h.from} → ${h.to}`,
                 onClick: () => setSelHist(h.id) }))

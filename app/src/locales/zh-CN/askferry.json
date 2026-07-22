@@ -1,0 +1,103 @@
+{
+  "rail": "Ask Ferry",
+  "pane": {
+    "title": "Ask Ferry",
+    "placeholder": "搜索对话",
+    "newChat": "新对话",
+    "empty": "还没有对话",
+    "footer": "{{n}} 个对话"
+  },
+  "chat": {
+    "newChat": "新对话",
+    "untitled": "未命名对话",
+    "steered": "转向",
+    "followedUp": "追加",
+    "runFailed": "本次运行失败 {{message}}",
+    "runCancelled": "已停止",
+    "runInterrupted": "运行被中断(Agent 进程重启),不会自动重放,可重新发送"
+  },
+  "mode": {
+    "manual": "手动",
+    "auto": "自动",
+    "manualDesc": "写入本地数据的操作先经你确认",
+    "autoDesc": "迁移与元数据修改自动执行,编辑与删除仍需确认"
+  },
+  "setup": {
+    "title": "连接一个模型",
+    "desc": "为 {{provider}} 配置 API Key,或登录其他 Provider 后即可开始对话。凭据只保存在本机。",
+    "cta": "配置模型"
+  },
+  "tool": {
+    "running": "执行中",
+    "failed": "失败"
+  },
+  "approval": {
+    "kindMigration": "迁移提议",
+    "kindEdit": "编辑提议(另存副本)",
+    "kindMetadata": "元数据修改提议",
+    "kindGeneric": "写操作提议",
+    "applied": "已批准并执行",
+    "autoApplied": "已自动执行",
+    "applying": "执行中…",
+    "failed": "执行失败",
+    "dismissed": "已拒绝",
+    "affected": "影响 {{n}} 个会话",
+    "risk": "风险 {{risk}}",
+    "expires": "剩余",
+    "expired": "提议已过期,请让 Agent 重新提议",
+    "approve": "批准并执行",
+    "reject": "拒绝"
+  },
+  "composer": {
+    "placeholder": "询问任何问题",
+    "desktopOnly": "Ask Ferry 仅在桌面端可用",
+    "mentionHint": "@ 引用会话",
+    "send": "发送",
+    "followUp": "追加",
+    "steer": "转向",
+    "stop": "停止"
+  },
+  "empty": {
+    "title": "有什么可以帮你?",
+    "ex1": "找出上周与支付重构有关的会话",
+    "ex2": "比较这两个会话的实现路线",
+    "ex3": "评估把这个会话迁移到 Codex 会损失什么",
+    "ex4": "统计本月各项目的 token 用量"
+  },
+  "auth": {
+    "inProgress": "登录进行中…",
+    "completed": "登录成功",
+    "failed": "登录失败",
+    "cancelled": "已取消",
+    "close": "关闭",
+    "cancel": "取消",
+    "submit": "提交"
+  },
+  "config": {
+    "title": "模型与 Provider",
+    "open": "配置模型",
+    "close": "关闭",
+    "searchProvider": "搜索 Provider",
+    "searchModel": "搜索模型",
+    "pickProvider": "从左侧选择一个 Provider",
+    "configured": "已配置 ({{type}})",
+    "notConfigured": "未配置",
+    "keyPlaceholder": "粘贴 API Key",
+    "saveKey": "保存",
+    "keySaved": "API Key 已保存,立即生效",
+    "oauthLogin": "OAuth 登录",
+    "logout": "退出登录",
+    "setDefault": "设为默认",
+    "useForChat": "本对话使用",
+    "image": "图片",
+    "reasoning": "推理",
+    "noModels": "该 Provider 暂无可用模型,可尝试刷新模型目录",
+    "refreshModels": "刷新模型目录",
+    "refreshDone": "模型目录已刷新",
+    "refreshPartial": "部分 Provider 刷新失败:{{list}}",
+    "plaintextNote": "凭据以明文保存在 Ferry 配置目录的 providers.json(0600),不进日志与事件;不读取系统环境变量。",
+    "noCredential": "当前默认 Provider({{provider}})尚未配置凭据,发送前请先配置。",
+    "modelSetDefault": "默认模型已切换为 {{model}}",
+    "modelSetSession": "本对话已切换为 {{model}}"
+  }
+}

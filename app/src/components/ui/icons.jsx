@@ -114,6 +114,7 @@ const RAIL = {
   overview: '<rect x="2.2" y="2.2" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="8.6" y="2.2" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="2.2" y="8.6" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="8.6" y="8.6" width="5.2" height="5.2" rx="1.2" fill="currentColor"/>',
   library: '<rect x="2" y="3.4" width="12" height="1.9" rx=".9" fill="currentColor"/><rect x="2" y="7.05" width="12" height="1.9" rx=".9" fill="currentColor"/><rect x="2" y="10.7" width="8" height="1.9" rx=".9" fill="currentColor"/>',
   history: '<path d="M3 5.4h7.4M8.1 3 10.6 5.4 8.1 7.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 10.6H5.6M7.9 8.2 5.4 10.6 7.9 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  askferry: '<path d="M8 1.4 9.7 6.3 14.6 8 9.7 9.7 8 14.6 6.3 9.7 1.4 8 6.3 6.3Z" fill="currentColor"/>',
   settings: `<path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/>`,
 };
 
@@ -191,4 +192,17 @@ export const ArchiveIcon = ({ size = 12 }) => svg("0 0 16 16", size, size,
 
 export const PinIcon = ({ size = 12, filled = false }) => svg("0 0 24 24", size, size,
   `<path d="M12 17v5M9 4h6l1 7 2 2H6l2-2 1-7z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+  { flex: "none" });
+
+// Ask Ferry 对话视图图标
+export const SendArrowIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,
+  '<path d="M8 13V3.4M3.8 7.2 8 3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+export const StopFillIcon = ({ size = 11 }) => svg("0 0 16 16", size, size,
+  '<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.4" fill="currentColor"/>',
+  { flex: "none" });
+
+export const PlusIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
+  '<path d="M8 2.8v10.4M2.8 8h10.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
   { flex: "none" });

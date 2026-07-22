@@ -1,0 +1,103 @@
+{
+  "rail": "Ask Ferry",
+  "pane": {
+    "title": "Ask Ferry",
+    "placeholder": "Search chats",
+    "newChat": "New chat",
+    "empty": "No chats yet",
+    "footer": "{{n}} chats"
+  },
+  "chat": {
+    "newChat": "New chat",
+    "untitled": "Untitled chat",
+    "steered": "Steer",
+    "followedUp": "Follow-up",
+    "runFailed": "Run failed {{message}}",
+    "runCancelled": "Stopped",
+    "runInterrupted": "Run interrupted (agent restarted). It will not replay automatically; send again to retry."
+  },
+  "mode": {
+    "manual": "Manual",
+    "auto": "Auto",
+    "manualDesc": "Anything that writes local data waits for your approval",
+    "autoDesc": "Migrations and metadata changes run automatically; edits and deletion still ask"
+  },
+  "setup": {
+    "title": "Connect a model",
+    "desc": "Add an API key for {{provider}} or sign in to another provider to start chatting. Credentials stay on this machine.",
+    "cta": "Configure model"
+  },
+  "tool": {
+    "running": "Running",
+    "failed": "Failed"
+  },
+  "approval": {
+    "kindMigration": "Migration proposal",
+    "kindEdit": "Edit proposal (saved as copy)",
+    "kindMetadata": "Metadata change proposal",
+    "kindGeneric": "Write proposal",
+    "applied": "Approved & applied",
+    "autoApplied": "Auto-applied",
+    "applying": "Applying…",
+    "failed": "Apply failed",
+    "dismissed": "Rejected",
+    "affected": "Affects {{n}} sessions",
+    "risk": "Risk {{risk}}",
+    "expires": "Expires in",
+    "expired": "Proposal expired — ask the agent to propose again",
+    "approve": "Approve & apply",
+    "reject": "Reject"
+  },
+  "composer": {
+    "placeholder": "Ask anything",
+    "desktopOnly": "Ask Ferry is only available in the desktop app",
+    "mentionHint": "@ reference a session",
+    "send": "Send",
+    "followUp": "Follow up",
+    "steer": "Steer",
+    "stop": "Stop"
+  },
+  "empty": {
+    "title": "What can I help with?",
+    "ex1": "Find last week's sessions about the payments refactor",
+    "ex2": "Compare the implementation paths of these two sessions",
+    "ex3": "Estimate what migrating this session to Codex would lose",
+    "ex4": "Summarize this month's token usage by project"
+  },
+  "auth": {
+    "inProgress": "Signing in…",
+    "completed": "Signed in",
+    "failed": "Sign-in failed",
+    "cancelled": "Cancelled",
+    "close": "Close",
+    "cancel": "Cancel",
+    "submit": "Submit"
+  },
+  "config": {
+    "title": "Models & Providers",
+    "open": "Configure model",
+    "close": "Close",
+    "searchProvider": "Search providers",
+    "searchModel": "Search models",
+    "pickProvider": "Pick a provider on the left",
+    "configured": "Configured ({{type}})",
+    "notConfigured": "Not configured",
+    "keyPlaceholder": "Paste API key",
+    "saveKey": "Save",
+    "keySaved": "API key saved and active",
+    "oauthLogin": "OAuth sign-in",
+    "logout": "Sign out",
+    "setDefault": "Set default",
+    "useForChat": "Use for this chat",
+    "image": "image",
+    "reasoning": "reasoning",
+    "noModels": "No models for this provider yet — try refreshing the catalog",
+    "refreshModels": "Refresh model catalog",
+    "refreshDone": "Model catalog refreshed",
+    "refreshPartial": "Some providers failed to refresh: {{list}}",
+    "plaintextNote": "Credentials are stored in plaintext in providers.json (0600) under Ferry's config directory; never logged. Host environment variables are not read.",
+    "noCredential": "The default provider ({{provider}}) has no credential configured yet.",
+    "modelSetDefault": "Default model switched to {{model}}",
+    "modelSetSession": "This chat now uses {{model}}"
+  }
+}
