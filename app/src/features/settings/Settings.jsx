@@ -121,37 +121,19 @@ function TerminalPicker({ value, onChange, t }) {
 // ---------- 偏好设置 ----------
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   const { t } = useTranslation();
-  const themes = [
-    ["light", t("settings:theme.light"), "#FBFCFD"],
-    ["dark", t("settings:theme.dark"), "#17171A"],
-    ["system", t("settings:theme.system"), "linear-gradient(105deg,#FBFCFD 0 50%,#17171A 50% 100%)"],
-  ];
   const localeValue = s.locale ?? "";
   return (
     <div style={{  }}>
       <GroupTitle first>{t("settings:theme.groupTitle")}</GroupTitle>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        {themes.map(([k, label, sw]) => {
-          const on = s.theme === k;
-          return (
-            <div key={k} onClick={() => set({ theme: k })}
-              style={{ border: `1.5px solid ${on ? "var(--accent)" : "var(--line4)"}`,
-                background: on ? "var(--acc-soft6)" : "var(--surface)", borderRadius: 12, padding: 12,
-                cursor: "default" }}>
-              <div style={{ height: 54, borderRadius: 8, background: sw,
-                border: "1px solid rgba(20,28,38,.10)" }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 11 }}>
-                <span style={{ width: 15, height: 15, borderRadius: "50%", flex: "none",
-                  border: `2px solid ${on ? "var(--accent)" : "var(--toggle-off)"}`, display: "inline-flex",
-                  alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%",
-                    background: on ? "var(--accent)" : "transparent" }} /></span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{label}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <Card>
+        <Row first title={t("settings:theme.label")}>
+          <Select value={s.theme} onChange={theme => set({ theme })}>
+            <option value="light">{t("settings:theme.light")}</option>
+            <option value="dark">{t("settings:theme.dark")}</option>
+            <option value="system">{t("settings:theme.system")}</option>
+          </Select>
+        </Row>
+      </Card>
 
       <GroupTitle>{t("language.label")}</GroupTitle>
       <Card>
