@@ -256,16 +256,23 @@ body {
   background: var(--win-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  user-select: none;
   cursor: default;
   overflow: hidden;
   overscroll-behavior: none;
 }
+/* WebView 里默认一律不可选中(列表/按钮/标签都是应用式控件),
+   仅 .selectable 与输入类元素放行;WKWebView 需带 -webkit- 前缀才生效 */
+html, body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+img, svg { -webkit-user-drag: none; }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
 .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
-.selectable { user-select: text; cursor: text; }
+.selectable { -webkit-user-select: text; user-select: text; cursor: text; }
 input, button, textarea { font-family: inherit; }
-input { user-select: text; }
+input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
 
 .fscroll { overscroll-behavior: contain; }
 

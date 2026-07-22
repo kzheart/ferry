@@ -15,11 +15,25 @@ const fmtDur = (a, b) => {
   return s >= 0 ? `${s < 10 ? s.toFixed(1) : Math.round(s)}s` : "";
 };
 
-// ----- 工具调用:一行安静的灰字,点击展开参数 -----
+// 工具结果多为 JSON 字符串,能解析就缩进展示,解析不了按原文
+const prettyJson = text => {
+  if (typeof text !== "string") return "";
+  try { return JSON.stringify(JSON.parse(text), null, 2); }
+  catch { return text; }
+};
+
+const preStyle = { margin: 0, padding: "8px 12px", fontSize: 11, lineHeight: 1.55,
+  color: "var(--tx3)", background: "var(--inset)", border: "1px solid var(--line5)",
+  borderRadius: 9, overflow: "auto", maxHeight: 260, whiteSpace: "pre-wrap",
+  wordBreak: "break-word" };
+const secLabel = { fontSize: 10.5, color: "var(--tx5)", margin: "0 0 3px 2px" };
+
+// ----- 工具调用:一行安静的灰字,点击展开参数与结果 -----
 const ToolRow = memo(function ToolRow({ item }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const level = TOOL_LEVEL[item.name] || "read";
+  const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   return (
     <div>
       <div className="chat-tool" onClick={() => setOpen(v => !v)}>
@@ -38,11 +52,26 @@ const ToolRow = memo(function ToolRow({ item }) {
             {fmtDur(item.startedAt, item.endedAt)}</span>)}
       </div>
       {open && (
-        <pre className="mono selectable" style={{ margin: "4px 0 0", padding: "8px 12px",
-          fontSize: 11, lineHeight: 1.55, color: "var(--tx3)", background: "var(--inset)",
-          border: "1px solid var(--line5)", borderRadius: 9, overflowX: "auto", maxHeight: 220 }}>
-          {JSON.stringify(item.args ?? {}, null, 2)}
-        </pre>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 5 }}>
+          <div>
+            <div style={secLabel}>{t("askferry:tool.args")}</div>
+            <pre className="mono selectable" style={preStyle}>
+              {JSON.stringify(item.args ?? {}, null, 2)}
+            </pre>
+          </div>
+          {item.status !== "running" && (
+            <div>
+              <div style={secLabel}>
+                {item.status === "error" ? t("askferry:tool.errorResult") : t("askferry:tool.result")}
+                {item.result?.truncated && ` · ${t("askferry:tool.truncated")}`}
+              </div>
+              <pre className="mono selectable" style={{ ...preStyle,
+                color: item.status === "error" ? "var(--err-text)" : preStyle.color }}>
+                {resultText || t("askferry:tool.noResult")}
+              </pre>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

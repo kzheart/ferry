@@ -55,6 +55,34 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   ferry_propose_metadata_change: 125_000,
 };
 
+// 工具结果要进事件日志并回放，超长内容截断后再落盘
+const MAX_TOOL_RESULT_CHARS = 8_000;
+
+function summarizeToolResult(result: unknown) {
+  const blocks = (result as { content?: unknown })?.content;
+  const text = Array.isArray(blocks)
+    ? blocks
+        .map((block) =>
+          typeof (block as { text?: unknown })?.text === "string"
+            ? (block as { text: string }).text
+            : "",
+        )
+        .filter(Boolean)
+        .join("\n")
+    : "";
+  let raw = text;
+  if (!raw) {
+    try {
+      raw = JSON.stringify(result ?? null) ?? "";
+    } catch {
+      raw = String(result);
+    }
+  }
+  return raw.length > MAX_TOOL_RESULT_CHARS
+    ? { text: raw.slice(0, MAX_TOOL_RESULT_CHARS), truncated: true }
+    : { text: raw, truncated: false };
+}
+
 export interface RuntimeOptions {
   store?: SessionStore;
   backendFactory?: BackendFactory;
@@ -164,6 +192,13 @@ export function safeEvents(events: EventEnvelope[]): EventEnvelope[] {
     }
     if (event.type === "tool.progress" && "partial" in payload) {
       payload.partial = "[omitted]";
+    }
+    // 工具结果保留在日志里供回放展示，但要脱敏并进一步压缩
+    if (event.type === "tool.completed") {
+      const result = payload.result as { text?: unknown } | undefined;
+      if (result && typeof result.text === "string") {
+        payload.result = { ...result, text: safeText(result.text, 4_000) };
+      }
     }
     if (typeof payload.message === "string") {
       payload.message = safeText(payload.message, 1_000);
@@ -452,6 +487,7 @@ class RuntimeSession {
           tool_call_id: event.toolCallId,
           name: event.toolName,
           is_error: event.isError,
+          result: summarizeToolResult(event.result),
         });
         break;
       case "agent_end": {

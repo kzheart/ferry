@@ -35,7 +35,12 @@
   },
   "tool": {
     "running": "执行中",
-    "failed": "失败"
+    "failed": "失败",
+    "args": "参数",
+    "result": "结果",
+    "errorResult": "错误",
+    "noResult": "（无返回内容）",
+    "truncated": "已截断"
   },
   "approval": {
     "kindMigration": "迁移提议",

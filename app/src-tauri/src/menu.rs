@@ -4,9 +4,7 @@ use tauri::menu::{AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, SubmenuBui
 use tauri::{AppHandle, Emitter};
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
-    let about = AboutMetadataBuilder::new()
-        .name(Some("Ferry"))
-        .build();
+    let about = AboutMetadataBuilder::new().name(Some("Ferry")).build();
 
     let app_menu = SubmenuBuilder::new(app, "Ferry")
         .about_with_text("关于 Ferry", Some(about))
