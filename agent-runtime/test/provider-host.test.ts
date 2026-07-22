@@ -59,6 +59,14 @@ describe("ProviderHost", () => {
     ]);
   });
 
+  it("refreshes configured dynamic model catalogs without exposing errors", async () => {
+    const { host: providers } = await host();
+    await expect(providers.refreshModels()).resolves.toEqual({
+      aborted: false,
+      failed_provider_ids: [],
+    });
+  });
+
   it("adds a keyless OpenAI-compatible provider", async () => {
     const { host: providers } = await host();
     await providers.saveCustomProvider({

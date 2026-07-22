@@ -338,6 +338,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "events.replay"
             | "providers.list"
             | "models.list"
+            | "models.refresh"
             | "config.get"
             | "credential.set"
             | "provider.logout"

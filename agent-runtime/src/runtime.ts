@@ -599,6 +599,12 @@ export class AgentRuntime {
     }
   }
 
+  async refreshModels() {
+    if (!this.providerHost)
+      throw new ProtocolError("unsupported", "model refresh unavailable");
+    return this.providerHost.refreshModels();
+  }
+
   async config() {
     if (!this.providerHost)
       throw new ProtocolError("unsupported", "provider config unavailable");
