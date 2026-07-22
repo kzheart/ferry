@@ -91,6 +91,9 @@ export async function dispatch(
           optionalInteger(params, "limit") ?? 100,
         );
         break;
+      case "models.refresh":
+        result = await runtime.refreshModels();
+        break;
       case "config.get":
         result = await runtime.config();
         break;

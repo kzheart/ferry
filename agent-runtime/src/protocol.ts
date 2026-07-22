@@ -11,6 +11,7 @@ export type CommandMethod =
   | "events.replay"
   | "providers.list"
   | "models.list"
+  | "models.refresh"
   | "config.get"
   | "credential.set"
   | "provider.logout"
@@ -87,6 +88,7 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "events.replay",
     "providers.list",
     "models.list",
+    "models.refresh",
     "config.get",
     "credential.set",
     "provider.logout",
