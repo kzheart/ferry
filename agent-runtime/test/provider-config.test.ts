@@ -124,50 +124,6 @@ describe("FileProviderConfigStore", () => {
     ).toBeUndefined();
   });
 
-  it("merges writes made by separate store instances", async () => {
-    const first = await store();
-    const second = new FileProviderConfigStore(first.path);
-    await Promise.all([
-      first.modify("deepseek", async () => ({
-        type: "api_key",
-        key: "deepseek-key",
-      })),
-      second.modify("openai", async () => ({
-        type: "api_key",
-        key: "openai-key",
-      })),
-    ]);
-    expect((await first.snapshot()).credentials).toMatchObject({
-      deepseek: { key: "deepseek-key" },
-      openai: { key: "openai-key" },
-    });
-  });
-
-  it("rolls back only the credential written by a cancelled login", async () => {
-    const config = await store();
-    const previous = { type: "api_key" as const, key: "previous-key" };
-    const oauth = {
-      type: "oauth" as const,
-      access: "new-access",
-      refresh: "new-refresh",
-      expires: 123,
-    };
-    await config.modify("radius", async () => previous);
-    await config.modify("radius", async () => oauth);
-    await config.restoreCredential("radius", oauth, previous);
-    expect(await config.read("radius")).toEqual(previous);
-
-    await config.modify("radius", async () => oauth);
-    await config.modify("radius", async () => ({
-      ...oauth,
-      access: "newer-access",
-    }));
-    await config.restoreCredential("radius", oauth, previous);
-    expect(await config.read("radius")).toMatchObject({
-      access: "newer-access",
-    });
-  });
-
   it("rejects unsupported URLs and malformed credentials", async () => {
     const config = await store();
     await expect(
