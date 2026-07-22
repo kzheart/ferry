@@ -249,7 +249,7 @@ export class ProviderHost {
   ) {
     if (!this.models.getProvider(providerId))
       throw new Error("provider not found");
-    await this.models.login(providerId, type, interaction);
+    return this.models.login(providerId, type, interaction);
   }
 
   async saveCustomProvider(config: CustomProviderConfig) {

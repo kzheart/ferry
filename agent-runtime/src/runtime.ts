@@ -6,6 +6,8 @@ import {
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
+import type { AuthType } from "@earendil-works/pi-ai";
+import { AuthCoordinator } from "./auth-coordinator.js";
 import type { PersistedSession, SessionStore } from "./event-store.js";
 import { MemorySessionStore } from "./event-store.js";
 import type {
@@ -420,6 +422,8 @@ export class AgentRuntime {
   private readonly toolHandler: ToolHandler | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
+  private readonly auth: AuthCoordinator | undefined;
+  private runtimeSequence = 1;
 
   private constructor(
     options: RuntimeOptions,
@@ -433,6 +437,23 @@ export class AgentRuntime {
     this.providerHost = options.providerHost;
     this.backendFactory = backendFactory;
     this.backendInfo = this.backendFactory(defaultSelection);
+    this.auth = this.providerHost
+      ? new AuthCoordinator(
+          (providerId, type, interaction) =>
+            this.providerHost!.login(providerId, type, interaction),
+          (event) =>
+            this.publish({
+              protocol: PROTOCOL_VERSION,
+              session_id: "runtime",
+              run_id: null,
+              seq: this.runtimeSequence++,
+              timestamp: this.now().toISOString(),
+              type: event.type,
+              payload: event.payload,
+            }),
+          this.idFactory,
+        )
+      : undefined;
   }
 
   static async create(options: RuntimeOptions = {}) {
@@ -591,6 +612,12 @@ export class AgentRuntime {
   ) {
     if (!this.providerHost)
       throw new ProtocolError("unsupported", "provider config unavailable");
+    if (this.auth?.isProviderActive(providerId)) {
+      throw new ProtocolError(
+        "auth_in_progress",
+        "provider authentication is in progress",
+      );
+    }
     try {
       await this.providerHost.saveApiKey(providerId, key, env);
       return {
@@ -609,6 +636,12 @@ export class AgentRuntime {
   async logoutProvider(providerId: string) {
     if (!this.providerHost)
       throw new ProtocolError("unsupported", "provider config unavailable");
+    if (this.auth?.isProviderActive(providerId)) {
+      throw new ProtocolError(
+        "auth_in_progress",
+        "provider authentication is in progress",
+      );
+    }
     try {
       await this.providerHost.logout(providerId);
       return { provider_id: providerId, configured: false };
@@ -616,6 +649,64 @@ export class AgentRuntime {
       throw new ProtocolError(
         "provider_not_found",
         error instanceof Error ? error.message : "provider logout failed",
+      );
+    }
+  }
+
+  startAuthentication(providerId: string, type: AuthType) {
+    if (!this.providerHost || !this.auth) {
+      throw new ProtocolError(
+        "unsupported",
+        "provider authentication unavailable",
+      );
+    }
+    const provider = this.providerHost.models.getProvider(providerId);
+    const supported =
+      type === "oauth" ? provider?.auth.oauth : provider?.auth.apiKey;
+    if (!supported) {
+      throw new ProtocolError(
+        "auth_type_unsupported",
+        `provider does not support ${type} authentication`,
+      );
+    }
+    try {
+      return this.auth.start(providerId, type);
+    } catch (error) {
+      throw new ProtocolError(
+        "auth_in_progress",
+        error instanceof Error
+          ? error.message
+          : "authentication is in progress",
+      );
+    }
+  }
+
+  respondAuthentication(loginId: string, promptId: string, value: string) {
+    if (!this.auth)
+      throw new ProtocolError("unsupported", "authentication unavailable");
+    try {
+      return this.auth.respond(loginId, promptId, value);
+    } catch (error) {
+      throw new ProtocolError(
+        "auth_prompt_not_found",
+        error instanceof Error
+          ? error.message
+          : "authentication prompt not found",
+      );
+    }
+  }
+
+  cancelAuthentication(loginId: string) {
+    if (!this.auth)
+      throw new ProtocolError("unsupported", "authentication unavailable");
+    try {
+      return this.auth.cancel(loginId);
+    } catch (error) {
+      throw new ProtocolError(
+        "auth_login_not_found",
+        error instanceof Error
+          ? error.message
+          : "authentication login not found",
       );
     }
   }

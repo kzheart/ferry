@@ -1,5 +1,6 @@
 export * from "./commands.js";
 export * from "./deepseek-provider.js";
+export * from "./auth-coordinator.js";
 export * from "./provider-config.js";
 export * from "./provider-host.js";
 export * from "./event-store.js";

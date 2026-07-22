@@ -351,6 +351,9 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "model.select"
             | "custom_provider.upsert"
             | "custom_provider.delete"
+            | "auth.login.start"
+            | "auth.login.respond"
+            | "auth.login.cancel"
     ) {
         return Err("Agent 命令不允许从前端调用".to_owned());
     }
