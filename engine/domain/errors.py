@@ -144,3 +144,8 @@ class AgentReferenceError(DomainError, ValueError):
 class AgentRequestError(DomainError, ValueError):
     code = "agent.request_invalid"
     category = "validation"
+
+
+class AgentApprovalError(DomainError, ValueError):
+    code = "agent.approval_invalid"
+    category = "permission"

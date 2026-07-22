@@ -23,6 +23,7 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
     # 快照记下它救的是哪次编辑，还原界面才能说清「会失去什么」
     snapshot = None if save_as else editor.snapshot(
         doc, extra={"changes": changes, "before": before, "after": editor.stats(doc)})
+    result = None
     try:
         result = editor.save_copy(doc) if save_as else editor.commit(doc)
         result.update(ok=True, changes=changes,
@@ -31,9 +32,13 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
             result["snapshot"] = str(snapshot)
         return result, doc, snapshot
     except ConcurrentModificationError:
+        if save_as and result:
+            editor.discard(result)
         raise
     except Exception:
-        if snapshot:
+        if save_as and result:
+            editor.discard(result)
+        elif snapshot:
             editor.restore_snapshot(snapshot, doc)
         raise
 
@@ -45,9 +50,12 @@ def preview(editor, ref: str, ops: list[dict], loader=None) -> dict:
     return result
 
 
-def apply(editor, ref: str, ops: list[dict], save_as: bool):
+def apply(editor, ref: str, ops: list[dict], save_as: bool,
+          expected_revision: str | None = None):
     if not editor.supports_mode(ops, save_as):
         raise OperationUnsupportedError(
             editor.name, ",".join(op.get("op", "?") for op in ops),
             "saveas" if save_as else "inplace")
-    return apply_mutation(editor, ref, lambda doc: editor.apply_ops(doc, ops), save_as)
+    return apply_mutation(
+        editor, ref, lambda doc: editor.apply_ops(doc, ops), save_as,
+        expected_revision=expected_revision)
