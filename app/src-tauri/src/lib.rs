@@ -1,6 +1,7 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
 mod agent;
+mod credential;
 #[cfg(target_os = "macos")]
 mod menu;
 mod reveal;
@@ -42,6 +43,9 @@ pub fn run() {
             agent::agent_operation_detail,
             agent::agent_operation_approve_and_apply,
             agent::agent_operation_status,
+            credential::agent_credential_status,
+            credential::agent_credential_set,
+            credential::agent_credential_clear,
             terminal::open_terminal,
             reveal::reveal_path
         ])
