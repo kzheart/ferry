@@ -8,6 +8,7 @@ export type CommandMethod =
   | "steer"
   | "follow_up"
   | "state"
+  | "sessions.list"
   | "events.replay"
   | "providers.list"
   | "models.list"
@@ -85,6 +86,7 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "steer",
     "follow_up",
     "state",
+    "sessions.list",
     "events.replay",
     "providers.list",
     "models.list",

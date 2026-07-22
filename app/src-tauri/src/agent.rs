@@ -159,10 +159,11 @@ fn read_agent_output(
         if value.get("type").is_some() {
             let _ = app.emit("ferry-agent-event", &value);
             if value.get("type").and_then(Value::as_str) == Some("tool.request") {
+                let worker_app = app.clone();
                 let worker_resource = resource_dir.clone();
                 let worker_stdin = stdin.clone();
                 std::thread::spawn(move || {
-                    complete_tool_request(&worker_resource, &worker_stdin, &value)
+                    complete_tool_request(&worker_app, &worker_resource, &worker_stdin, &value)
                 });
             }
             continue;
@@ -184,7 +185,12 @@ fn read_agent_output(
     );
 }
 
-fn complete_tool_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, event: &Value) {
+fn complete_tool_request(
+    app: &tauri::AppHandle,
+    resource_dir: &Path,
+    stdin: &Arc<Mutex<ChildStdin>>,
+    event: &Value,
+) {
     let session_id = event
         .get("session_id")
         .and_then(Value::as_str)
@@ -205,6 +211,22 @@ fn complete_tool_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, ev
         .cloned()
         .unwrap_or_default();
     let outcome = route_tool(resource_dir, name, args, run_id);
+    // 提议类工具的结果只回给模型;UI 需要 operation_id 才能渲染审批卡,
+    // 由可信边界在此补发一条不落事件日志的 operation.proposed
+    if name.starts_with("ferry_propose_") {
+        if let Ok(result) = &outcome {
+            let _ = app.emit(
+                "ferry-agent-event",
+                json!({
+                    "protocol": AGENT_PROTOCOL,
+                    "session_id": session_id,
+                    "run_id": run_id,
+                    "type": "operation.proposed",
+                    "payload": { "tool": name, "operation": result },
+                }),
+            );
+        }
+    }
     let params = match outcome {
         Ok(result) => json!({
             "request_id": request_id,
@@ -335,6 +357,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "steer"
             | "follow_up"
             | "state"
+            | "sessions.list"
             | "events.replay"
             | "providers.list"
             | "models.list"

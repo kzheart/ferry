@@ -75,6 +75,9 @@ export async function dispatch(
       case "state":
         result = runtime.state(requireString(params, "session_id", 128));
         break;
+      case "sessions.list":
+        result = runtime.listSessions();
+        break;
       case "events.replay":
         result = runtime.replay(
           requireString(params, "session_id", 128),
