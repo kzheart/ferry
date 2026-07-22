@@ -258,15 +258,19 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     return sess, edges
 
 
-def read(session_id: str) -> Session:
+def _read(session_id: str, *, allow_cli: bool) -> Session:
     seen: dict[str, Session] = {}
     conn = _db_conn()
+    if conn is None and not allow_cli:
+        raise RuntimeError("OpenCode 数据库不可只读访问，拒绝执行 Agent 预览")
 
     def export(sid: str) -> dict:
         if conn is not None:
             data = _db_export(conn, sid)
             if data is not None:
                 return data
+        if not allow_cli:
+            raise RuntimeError("OpenCode 会话无法从数据库只读加载，拒绝执行 Agent 预览")
         return _oc_export(sid)
 
     def child_ids_of(sid: str) -> list[str]:
@@ -277,7 +281,7 @@ def read(session_id: str) -> Session:
                     "ORDER BY time_created, id", (sid,))]
             except sqlite3.Error:
                 pass
-        return _db_child_ids(sid)
+        return _db_child_ids(sid) if allow_cli else []
 
     def visit(sid: str, root_id: str) -> Session:
         if sid in seen:
@@ -318,6 +322,15 @@ def read(session_id: str) -> Session:
     finally:
         if conn is not None:
             conn.close()
+
+
+def read(session_id: str) -> Session:
+    return _read(session_id, allow_cli=True)
+
+
+def read_preview(session_id: str) -> Session:
+    """Agent 预览专用：只读 SQLite，不启动 CLI、不创建临时文件。"""
+    return _read(session_id, allow_cli=False)
 
 
 # ---------- writer ----------

@@ -132,3 +132,15 @@ class SubagentNotSupportedError(DomainError, ValueError):
 class SnapshotInvalidSourceError(DomainError, ValueError):
     code = "snapshot.invalid_source"
     category = "validation"
+
+
+class AgentReferenceError(DomainError, ValueError):
+    """Agent 只能使用当前 Engine 扫描索引签发的 opaque ref。"""
+
+    code = "agent.reference_invalid"
+    category = "validation"
+
+
+class AgentRequestError(DomainError, ValueError):
+    code = "agent.request_invalid"
+    category = "validation"

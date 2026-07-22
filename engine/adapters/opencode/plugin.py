@@ -9,8 +9,8 @@ from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
 from .models import discover, fallback
 from .probe import OpenCodeVerifier
-from .scanner import scan
-from .session import read
+from .scanner import fingerprint, scan
+from .session import read, read_preview
 
 MANIFEST = ToolManifest(
     id="opencode",
@@ -26,7 +26,8 @@ MANIFEST = ToolManifest(
 def build() -> ToolPlugin:
     return build_plugin(
         MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: ref),
+        BrowserAdapter(scan, read, lambda ref: ref, fingerprint=fingerprint,
+                       agent_read=read_preview),
         migration_target=OpenCodeMigrationTarget(),
         editor=OpenCodeBackend(),
         authoring=OpenCodeAuthoringCompiler(),

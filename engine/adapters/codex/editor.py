@@ -32,13 +32,20 @@ class CodexBackend(EditBackend):
         self._store_factory = store_factory
 
     def load(self, ref):
+        return self._load(ref, recover=True)
+
+    def load_preview(self, ref):
+        return self._load(ref, recover=False)
+
+    def _load(self, ref, *, recover):
         path = resolve(ref)
+        store = (self._store_factory(path) if self._store_factory else
+                 codex_native.CodexStore.for_rollout(path))
+        if recover:
+            codex_native.recover_transactions(store)
         raw = path.read_bytes()
         records = [json.loads(line) for line in raw.decode().splitlines()
                    if line.strip()]
-        store = (self._store_factory(path) if self._store_factory else
-                 codex_native.CodexStore.for_rollout(path))
-        codex_native.recover_transactions(store)
         closure = codex_native.discover_closure(path, store)
         return EditDocument(self.name, ref, path, records, hash_bytes(raw), closure)
 

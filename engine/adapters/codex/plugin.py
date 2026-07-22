@@ -10,7 +10,7 @@ from .migration import CodexMigrationTarget
 from .models import discover, fallback
 from .probe import CodexVerifier
 from .reader import read
-from .scanner import scan
+from .scanner import fingerprint, scan
 
 MANIFEST = ToolManifest(
     id="codex",
@@ -25,7 +25,8 @@ MANIFEST = ToolManifest(
 def build() -> ToolPlugin:
     return build_plugin(
         MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: str(resolve(ref))),
+        BrowserAdapter(scan, read, lambda ref: str(resolve(ref)),
+                       fingerprint=fingerprint),
         migration_target=CodexMigrationTarget(),
         editor=CodexBackend(),
         authoring=CodexAuthoringCompiler(),

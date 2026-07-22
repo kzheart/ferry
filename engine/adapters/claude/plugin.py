@@ -11,7 +11,7 @@ from .migration import ClaudeMigrationTarget
 from .models import discover, fallback
 from .probe import ClaudeVerifier
 from .reader import read
-from .scanner import scan
+from .scanner import fingerprint, scan
 
 MANIFEST = ToolManifest(
     id="claude",
@@ -26,7 +26,8 @@ MANIFEST = ToolManifest(
 def build() -> ToolPlugin:
     return build_plugin(
         MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: str(claude_edit.resolve(ref))),
+        BrowserAdapter(scan, read, lambda ref: str(claude_edit.resolve(ref)),
+                       fingerprint=fingerprint),
         migration_target=ClaudeMigrationTarget(),
         editor=ClaudeBackend(),
         authoring=ClaudeAuthoringCompiler(),

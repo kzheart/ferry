@@ -1,0 +1,393 @@
+from __future__ import annotations
+
+import copy
+import json
+import os
+import sqlite3
+from dataclasses import dataclass
+
+import pytest
+
+from engine.adapters.base.plugin import ToolManifest, ToolPlugin
+from engine.adapters.opencode import scanner as opencode_scanner
+from engine.application import agent_tools
+from engine.application.ports import ApplicationPorts, configure, current
+from engine.domain.errors import AgentReferenceError, AgentRequestError
+from engine.domain.model import Block, ImageAsset, Message, Session, ToolCall
+from engine.interfaces.rpc import rpc
+
+
+class Cache:
+    def flush(self):
+        pass
+
+
+class Browser:
+    def __init__(self, rows, session, *, identity=False):
+        self.rows = rows
+        self.session = session
+        self.identity = identity
+        self.fingerprint_value = "fingerprint-1"
+
+    def scan(self, _cache):
+        return list(self.rows)
+
+    def resolve_ref(self, ref):
+        return ref
+
+    def read(self, _ref):
+        return copy.deepcopy(self.session)
+
+    def fingerprint(self, _ref):
+        return self.fingerprint_value
+
+
+class MigrationTarget:
+    def plan(self, session):
+        return {"lossless": not session.loss, "events": list(session.loss)}
+
+    def write(self, _session, _cwd):
+        raise AssertionError("preview must not write")
+
+    def classify_tool_call(self, _tool_call):
+        return "native"
+
+
+@dataclass
+class Document:
+    revision: str = "revision-1"
+    count: int = 4
+
+
+class Editor:
+    name = "claude"
+
+    def __init__(self):
+        self.commits = 0
+        self.load_calls = 0
+        self.preview_load_calls = 0
+
+    def load(self, _ref):
+        self.load_calls += 1
+        return Document()
+
+    def load_preview(self, _ref):
+        self.preview_load_calls += 1
+        return Document()
+
+    def stats(self, doc):
+        return {"count": doc.count, "size": doc.count * 10}
+
+    def apply_ops(self, doc, ops):
+        doc.count -= len(ops)
+        return [{"code": "turn.deleted"} for _ in ops]
+
+    def validate(self, _doc):
+        pass
+
+    def capabilities(self):
+        return {"inplace": True, "operations": ["delete-turn"]}
+
+    def supports_mode(self, _ops, _save_as):
+        return True
+
+    def commit(self, _doc):
+        self.commits += 1
+        raise AssertionError("preview must not commit")
+
+
+def _session():
+    return Session(
+        source_tool="claude",
+        source_id="private-source-id",
+        cwd="/Users/private/secret-project",
+        title="支付 /Users/private/project",
+        messages=[
+            Message("user", [Block("text", "第一轮 token=topsecret /tmp/private.txt")]),
+            Message("assistant", [
+                Block("thinking", "private chain of thought"),
+                Block("text", "回答一"),
+                Block("tool", tool=ToolCall(
+                    "shell", "shell.exec", {"command": "cat /etc/passwd"},
+                    "Bearer very-secret-token-value", status="completed")),
+                Block("image", image=ImageAsset(
+                    "image-1", "image/png", "BASE64_PRIVATE",
+                    "/tmp/ghp_abcdefghijklmnopqrstuvwxyz.png")),
+            ]),
+            Message("user", [Block("text", "第二轮 " + "界" * 5000)]),
+            Message("assistant", [Block("text", "回答二")]),
+        ],
+    )
+
+
+@pytest.fixture
+def agent_environment(tmp_path):
+    previous = current()
+    root = tmp_path / "sessions"
+    root.mkdir()
+    transcript = root / "session.jsonl"
+    transcript.write_text("{}\n")
+    editor = Editor()
+    rows = [{
+        "tool": "claude", "id": "private-id", "path": str(transcript),
+        "dir": "/Users/private/secret-project", "title": "支付重构",
+        "updated": 2000, "count": 4, "size": transcript.stat().st_size,
+        "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
+        "model": "claude-safe",
+    }]
+    claude = ToolPlugin(
+        ToolManifest("claude", "Claude Code", "claude", str(root), "path"),
+        Browser(rows, _session()), migration_target=MigrationTarget(), editor=editor,
+    )
+    opencode_rows = [{
+        "tool": "opencode", "id": "oc-1", "path": "", "dir": "/tmp/project-b",
+        "title": "Other", "updated": 1000, "count": 2, "size": 0,
+        "tokens": {"input": 1, "output": 2, "cache_read": 0, "cache_write": 0},
+        "model": "model-b",
+    }]
+    opencode_browser = Browser(
+        opencode_rows, Session("opencode", "oc-1", "/tmp/project-b"))
+    opencode = ToolPlugin(
+        ToolManifest("opencode", "OpenCode", "opencode", "/unused", "id"),
+        opencode_browser,
+        migration_target=MigrationTarget(),
+    )
+    plugins = {"claude": claude, "opencode": opencode}
+    configure(ApplicationPorts(
+        adapter=plugins.__getitem__, adapters=lambda: list(plugins),
+        cache_factory=Cache, resource_path=lambda *_: tmp_path,
+        snapshot_dir=lambda: tmp_path, version="test",
+    ))
+    agent_tools.reset_index()
+    yield {"root": root, "transcript": transcript, "editor": editor,
+           "claude_browser": claude.browser, "opencode_browser": opencode_browser}
+    agent_tools.reset_index()
+    configure(previous)
+
+
+def _claude_ref():
+    result = agent_tools.search_sessions("支付", limit=20)
+    return result["sessions"][0]["ref"]
+
+
+def test_capabilities_and_search_never_expose_storage_locations(agent_environment):
+    capabilities = agent_tools.list_capabilities()
+    encoded = json.dumps(capabilities, ensure_ascii=False)
+    assert "source_path" not in encoded
+    assert "executables" not in encoded
+
+    result = agent_tools.search_sessions("支付", agents=["claude"], limit=1)
+    assert result["returned"] == 1
+    item = result["sessions"][0]
+    assert item["ref"].startswith("fsr_")
+    assert "path" not in item and "dir" not in item and "id" not in item
+    assert "/Users/" not in json.dumps(result, ensure_ascii=False)
+    with pytest.raises(AgentRequestError):
+        agent_tools.search_sessions(limit=51)
+
+
+def test_only_current_index_refs_are_accepted(agent_environment):
+    ref = _claude_ref()
+    with pytest.raises(AgentReferenceError):
+        agent_tools.get_session_context("claude", str(agent_environment["transcript"]))
+    with pytest.raises(AgentReferenceError):
+        agent_tools.get_session_context("opencode", ref)
+    with pytest.raises(AgentReferenceError):
+        agent_tools.get_session_context("opencode", "oc-arbitrary")
+
+
+def test_id_backed_ref_rejects_changed_or_recreated_session(agent_environment):
+    ref = agent_tools.search_sessions("Other")["sessions"][0]["ref"]
+    agent_environment["opencode_browser"].fingerprint_value = "fingerprint-2"
+    with pytest.raises(AgentReferenceError, match="扫描后已变化"):
+        agent_tools.get_session_context("opencode", ref)
+
+
+def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
+    ref = _claude_ref()
+    old_stat = agent_environment["transcript"].stat()
+    agent_environment["transcript"].write_text("[]\n")
+    os.utime(agent_environment["transcript"],
+             ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns))
+    with pytest.raises(AgentReferenceError, match="扫描后已变化"):
+        agent_tools.get_session_context("claude", ref)
+    refreshed = _claude_ref()
+    assert refreshed != ref
+    with pytest.raises(AgentReferenceError, match="扫描索引"):
+        agent_tools.get_session_context("claude", ref)
+
+    agent_tools.reset_index()
+    ref = _claude_ref()
+    child_dir = agent_environment["root"] / "session" / "subagents"
+    child_dir.mkdir(parents=True)
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text("{}\n")
+    (child_dir / "agent-escape.jsonl").symlink_to(outside)
+    with pytest.raises(AgentReferenceError, match="超出"):
+        agent_tools.get_session_context("claude", ref)
+
+
+def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):
+    ref = _claude_ref()
+    result = agent_tools.get_session_context(
+        "claude", ref, from_turn=1, to_turn=2, max_bytes=1024)
+    encoded = json.dumps(result, ensure_ascii=False).encode()
+    assert len(encoded) <= 1024
+    text = encoded.decode()
+    assert "topsecret" not in text
+    assert "/tmp/" not in text and "/Users/" not in text
+    assert "private chain of thought" not in text
+    assert "cat /etc/passwd" not in text
+    assert "very-secret-token-value" not in text
+    assert "BASE64_PRIVATE" not in text
+    assert "ghp_" not in text
+    assert '"input": "[omitted]"' in text
+    assert result["truncation"]["truncated"] is True
+
+    with_output = agent_tools.get_session_context(
+        "claude", ref, from_turn=1, to_turn=1,
+        include_tool_outputs=True, max_bytes=4096)
+    output_text = json.dumps(with_output, ensure_ascii=False)
+    assert "very-secret-token-value" not in output_text
+    assert "[REDACTED]" in output_text
+
+
+def test_redaction_covers_cross_platform_paths_and_common_credentials():
+    private_key = (
+        "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----")
+    value = (
+        "/root/a /Volumes/drive/a /mnt/a C:/Users/alice/private D:\\private\\a "
+        "\\\\server\\share\\a "
+        "file:///root/a ~/secret ghp_abcdefghijklmnopqrstuvwxyz "
+        "github_pat_abcdefghijklmnopqrstuvwxyz gho_abcdefghijklmnopqrstuvwxyz "
+        "ghu_abcdefghijklmnopqrstuvwxyz ghs_abcdefghijklmnopqrstuvwxyz "
+        "ghr_abcdefghijklmnopqrstuvwxyz AKIAABCDEFGHIJKLMNOP "
+        "AWS_SECRET_ACCESS_KEY=supersecretvalue xoxb-1234567890123456 "
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\nenc\n"
+        "-----END ENCRYPTED PRIVATE KEY----- "
+        "-----BEGIN DSA PRIVATE KEY-----\ndsa\n-----END DSA PRIVATE KEY----- "
+        + private_key)
+    redacted = agent_tools._redact(value)
+    for secret in ("/root", "/Volumes", "/mnt", "C:/", "D:\\", "server", "ghp_",
+                   "github_pat_", "gho_", "ghu_", "ghs_", "ghr_", "AKIA",
+                   "abc123", "enc", "dsa"):
+        assert secret not in redacted
+    assert "supersecretvalue" not in redacted and "xoxb-" not in redacted
+
+
+def test_usage_is_aggregated_without_raw_session_data(agent_environment):
+    result = agent_tools.get_usage(agents=["claude"])
+    assert result == {
+        "sessions": 1,
+        "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
+        "by_agent": {
+            "claude": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4}
+        },
+        "cost": None,
+        "currency": "USD",
+    }
+    assert "private-id" not in json.dumps(result)
+
+
+def test_agent_rpc_returns_stable_structured_errors(agent_environment):
+    response = rpc(json.dumps({
+        "method": "agent_get_session_context", "request_id": "agent-1",
+        "params": {"tool": "claude", "ref": "/tmp/not-issued.jsonl"},
+    }))
+    assert response["ok"] is False
+    assert response["error"] == {
+        "code": "agent.reference_invalid",
+        "params": {},
+        "category": "validation",
+        "retryable": False,
+        "request_id": "agent-1",
+    }
+
+
+def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment):
+    with pytest.raises(AgentRequestError):
+        agent_tools.search_sessions(agents=[f"tool-{index}" for index in range(9)])
+    with pytest.raises(AgentRequestError):
+        agent_tools.search_sessions(time_range={"from": float("nan")})
+    ref = _claude_ref()
+    with pytest.raises(AgentRequestError):
+        agent_tools.preview_edit(
+            "claude", ref,
+            ops=[{"op": "delete-turn", "turn": 1}] * 51)
+    nested = {}
+    cursor = nested
+    for _ in range(10):
+        cursor["next"] = {}
+        cursor = cursor["next"]
+    with pytest.raises(AgentRequestError):
+        agent_tools.preview_edit(
+            "claude", ref, turn=1,
+            reply={"items": [{"kind": "tool", "name": "x",
+                               "input": nested, "output": ""}]})
+
+
+def test_opencode_fingerprint_detects_update_and_delete(tmp_path, monkeypatch):
+    database_path = tmp_path / "opencode.db"
+    with sqlite3.connect(database_path) as database:
+        database.execute("CREATE TABLE session (id TEXT PRIMARY KEY, data TEXT)")
+        database.execute("CREATE TABLE message (id TEXT, session_id TEXT, data TEXT)")
+        database.execute("CREATE TABLE part (id TEXT, session_id TEXT, data TEXT)")
+        database.execute("INSERT INTO session VALUES ('s1', '{}')")
+        database.execute("INSERT INTO message VALUES ('m1', 's1', '{}')")
+        database.execute("INSERT INTO part VALUES ('p1', 's1', '{\"text\":\"a\"}')")
+    monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    first = opencode_scanner.fingerprint("s1")
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "UPDATE part SET data = '{\"text\":\"b\"}' WHERE id = 'p1'")
+    assert opencode_scanner.fingerprint("s1") != first
+    with sqlite3.connect(database_path) as database:
+        database.execute("DELETE FROM session WHERE id = 's1'")
+    assert opencode_scanner.fingerprint("s1") is None
+
+
+def test_path_ref_rejects_changed_child_tree(agent_environment):
+    child_dir = agent_environment["root"] / "session" / "subagents"
+    child_dir.mkdir(parents=True)
+    child = child_dir / "agent-child.jsonl"
+    child.write_text("{}\n")
+    ref = _claude_ref()
+    agent_environment["claude_browser"].fingerprint_value = "fingerprint-2"
+    with pytest.raises(AgentReferenceError, match="扫描后已变化"):
+        agent_tools.get_session_context("claude", ref)
+
+
+def test_search_dto_is_byte_bounded(agent_environment):
+    browser = agent_environment["claude_browser"]
+    browser.rows.clear()
+    for index in range(50):
+        transcript = agent_environment["root"] / f"session-{index}.jsonl"
+        transcript.write_text("{}\n")
+        browser.rows.append({
+            "tool": "claude", "id": f"private-{index}",
+            "path": str(transcript), "dir": "/tmp/" + "项" * 256,
+            "title": "标题" * 200, "updated": 2000 - index,
+            "count": 4, "size": transcript.stat().st_size,
+            "model": "模型" * 120,
+        })
+    result = agent_tools.search_sessions(limit=50)
+    assert len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 64 * 1024
+    assert result["returned"] < 50
+    assert result["has_more"] is True
+    assert result["truncation"]["reason"] == "byte_budget"
+
+
+def test_previews_are_narrow_and_do_not_write(agent_environment):
+    ref = _claude_ref()
+    migration = agent_tools.preview_migration("claude", ref, "opencode", max_turn=1)
+    assert migration["source_tool"] == "claude"
+    assert "cwd" not in migration and "source_id" not in migration
+
+    edit = agent_tools.preview_edit(
+        "claude", ref, ops=[{"op": "delete-turn", "turn": 1}])
+    assert edit["mode"] == "edit"
+    assert edit["revision"] == "revision-1"
+    assert agent_environment["editor"].commits == 0
+    assert agent_environment["editor"].load_calls == 0
+    assert agent_environment["editor"].preview_load_calls == 1
+    assert "saved_as" not in edit
