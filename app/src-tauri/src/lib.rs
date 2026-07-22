@@ -14,11 +14,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .setup(|_app| {
+        .setup(|app| {
+            use tauri::Manager;
+            // 引擎预热与 webview 启动并行,首个 RPC 无需再等冷启动
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                sidecar::warm_up(resource_dir);
+            }
             #[cfg(target_os = "macos")]
             {
-                use tauri::Manager;
-                if let Some(win) = _app.get_webview_window("main") {
+                if let Some(win) = app.get_webview_window("main") {
                     let _ = window_vibrancy::apply_vibrancy(
                         &win,
                         window_vibrancy::NSVisualEffectMaterial::Sidebar,
@@ -26,7 +30,7 @@ pub fn run() {
                         None,
                     );
                 }
-                menu::install(_app.handle())?;
+                menu::install(app.handle())?;
             }
             Ok(())
         })

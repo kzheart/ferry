@@ -5,7 +5,6 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
 const ENGINE_PROTOCOL: u64 = 2;
-static ENGINE_HANDSHAKE: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
 struct EngineProcess {
@@ -36,14 +35,47 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
         .map_err(|error| format!("启动引擎失败: {error}"))?;
     let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
     let stdout = BufReader::new(child.stdout.take().ok_or("引擎 stdout 不可用")?);
-    Ok(EngineProcess {
+    let mut engine = EngineProcess {
         child,
         stdin,
         stdout,
-    })
+    };
+    handshake(&mut engine)?;
+    Ok(engine)
 }
 
-fn engine_request(resource_dir: &Path, request: &str) -> Result<String, String> {
+/// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
+/// 在 release 下会让 PyInstaller onefile 多解压一整次,冷启动时间翻倍。
+fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
+    let line = (|| -> std::io::Result<String> {
+        engine.stdin.write_all(b"{\"method\":\"health\"}\n")?;
+        engine.stdin.flush()?;
+        let mut line = String::new();
+        if engine.stdout.read_line(&mut line)? == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "引擎进程已退出",
+            ));
+        }
+        Ok(line)
+    })()
+    .map_err(|error| format!("引擎健康检查失败: {error}"))?;
+    let health: Value = serde_json::from_str(&line)
+        .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
+    let protocol = health.get("protocol").and_then(Value::as_u64);
+    if health.get("ok").and_then(Value::as_bool) != Some(true) || protocol != Some(ENGINE_PROTOCOL)
+    {
+        return Err(format!(
+            "引擎协议不兼容: 需要 {ENGINE_PROTOCOL}，实际 {protocol:?}"
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn engine_request_blocking(
+    resource_dir: &Path,
+    request: &str,
+) -> Result<String, String> {
     let slot = ENGINE.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
     let mut last_error = String::new();
@@ -150,56 +182,19 @@ fn hide_console(command: &mut Command) {
 #[cfg(not(target_os = "windows"))]
 fn hide_console(_command: &mut Command) {}
 
-fn run_engine(resource_dir: &Path, args: &[&str]) -> Result<std::process::Output, String> {
-    let mut command = engine_command(resource_dir)?;
-    command.args(args);
-    hide_console(&mut command);
-    command
-        .output()
-        .map_err(|error| format!("启动引擎失败: {error}"))
-}
-
-fn check_engine(resource_dir: &Path) -> Result<(), String> {
-    let output = run_engine(resource_dir, &["health"])?;
-    if !output.status.success() {
-        return Err(format!(
-            "引擎健康检查失败: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    let health: Value = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
-    let protocol = health.get("protocol").and_then(Value::as_u64);
-    if health.get("status").and_then(Value::as_str) != Some("ok")
-        || protocol != Some(ENGINE_PROTOCOL)
-    {
-        return Err(format!(
-            "引擎协议不兼容: 需要 {ENGINE_PROTOCOL}，实际 {protocol:?}"
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn engine_request_blocking(
-    resource_dir: &Path,
-    request: &str,
-) -> Result<String, String> {
-    ENGINE_HANDSHAKE
-        .get_or_init(|| check_engine(resource_dir))
-        .clone()?;
-    engine_request(resource_dir, request)
+/// 应用启动即预热常驻引擎:PyInstaller 解压与 webview 启动并行,
+/// 首个前端 RPC 到达时引擎大概率已就绪。失败静默,错误会在首个真实 RPC 上重现。
+pub(crate) fn warm_up(resource_dir: PathBuf) {
+    std::thread::spawn(move || {
+        let _ = engine_request_blocking(&resource_dir, r#"{"method":"health"}"#);
+    });
 }
 
 #[tauri::command]
 pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result<String, String> {
     use tauri::Manager;
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || {
-        ENGINE_HANDSHAKE
-            .get_or_init(|| check_engine(&resource_dir))
-            .clone()?;
-        engine_request(&resource_dir, &request)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
+        .await
+        .map_err(|e| e.to_string())?
 }
