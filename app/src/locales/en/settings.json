@@ -20,6 +20,15 @@
     "runtimeProbe": "Runtime probe",
     "runtimeProbeDesc": "After writing, performs a real resume on a temporary shadow session for verification (consumes one model call; cleaned up automatically, no messages appended to the live session). When off, only structure validation is performed (default)."
   },
+  "terminal": {
+    "groupTitle": "Terminal",
+    "app": "Open terminals with",
+    "appDesc": "Auto tries Warp, iTerm2, then Terminal. If the selected app is unavailable, Ferry falls back to Terminal.",
+    "auto": "Auto",
+    "terminal": "Terminal",
+    "iterm": "iTerm2",
+    "warp": "Warp"
+  },
   "motion": {
     "groupTitle": "Motion",
     "reduceMotion": "Reduce motion",

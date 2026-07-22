@@ -38,6 +38,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
+            sidecar::migration_preview,
+            sidecar::migration_commit,
+            sidecar::migration_handoff,
             agent::agent_command,
             agent::agent_operation_detail,
             agent::agent_operation_approve_and_apply,

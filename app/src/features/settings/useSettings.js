@@ -10,6 +10,7 @@ export const DEFAULTS = {
   theme: "light",
   reduceMotion: false,
   runtimeProbe: false,
+  terminalApp: "auto",
   autoCheckUpdates: true,
   locale: null,
 };

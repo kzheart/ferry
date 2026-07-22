@@ -4,19 +4,63 @@ import { throwEngineError } from "./errors.js";
 
 const inTauri = () => !!window.__TAURI_INTERNALS__;
 
-export async function rpc(method, params) {
+async function transport(command, request) {
+  try {
+    return inTauri()
+      ? await invoke(command, { request })
+      : await (await fetch("/api/rpc", { method: "POST", body: request })).text();
+  } catch (error) {
+    throwEngineError(typeof error === "string" ? error : (error?.message || String(error)));
+  }
+}
+
+async function callEngine(command, method, params) {
   const request = JSON.stringify({ method, params: params || {} });
-  const raw = inTauri()
-    ? await invoke("engine_rpc", { request })
-    : await (await fetch("/api/rpc", { method: "POST", body: request })).text();
+  const raw = await transport(command, request);
   const response = JSON.parse(raw);
   if (!response.ok) throwEngineError(response.error);
   return response.result;
 }
 
-// The desktop command currently accepts the existing launch DTO as-is.
-export const openTerminal = launch =>
-  inTauri() ? invoke("open_terminal", { launch }) : Promise.resolve();
+export const rpc = (method, params) => callEngine("engine_rpc", method, params);
+
+async function nativeMigration(command, input) {
+  let raw;
+  try {
+    raw = await invoke(command, { input });
+  } catch (error) {
+    throwEngineError(typeof error === "string" ? error : (error?.message || String(error)));
+  }
+  const response = JSON.parse(raw);
+  if (!response.ok) throwEngineError(response.error);
+  return response.result;
+}
+
+const migrationInput = params => ({
+  src: params.src,
+  dst: params.dst,
+  reference: params.ref,
+  maxTurn: params.max_turn,
+  probe: !!params.probe,
+  probeModel: params.probe_model,
+});
+
+// 桌面端迁移经受限原生命令进入引擎；浏览器预览仍走同一 HTTP RPC。
+export const migrationPreview = params => inTauri()
+  ? nativeMigration("migration_preview", migrationInput(params))
+  : callEngine("engine_rpc", "migrate", { ...params, dry_run: true });
+
+export const migrationCommit = params => inTauri()
+  ? nativeMigration("migration_commit", migrationInput(params))
+  : callEngine("engine_rpc", "migrate", { ...params, dry_run: false });
+
+export const migrationHandoff = params => inTauri()
+  ? nativeMigration("migration_handoff", migrationInput(params))
+  : callEngine("engine_rpc", "handoff", params);
+
+// 启动描述符仍由引擎生成；终端偏好只决定原生层用哪个应用承载它。
+export const openTerminal = (launch, terminalApp = "auto") =>
+  inTauri() ? invoke("open_terminal", { launch, terminalApp }) : Promise.resolve();
 
 export const revealPath = path =>
   inTauri() ? invoke("reveal_path", { path }) : Promise.resolve();

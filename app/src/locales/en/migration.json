@@ -32,6 +32,7 @@
   },
   "preview": {
     "failed": "Preview failed: {{error}}",
+    "retry": "Retry",
     "loading": "Previewing conversion and assessing impact…",
     "impactTitle": "Impact preview · {{scope}}",
     "scaleLabel": "Migration scale",
