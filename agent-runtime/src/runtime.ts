@@ -736,7 +736,7 @@ export class AgentRuntime {
     return { ...selection };
   }
 
-  async saveCustomProvider(config: CustomProviderConfig) {
+  async saveCustomProvider(config: CustomProviderConfig, clearApiKey = false) {
     if (!this.providerHost) {
       throw new ProtocolError("unsupported", "custom providers unavailable");
     }
@@ -752,7 +752,7 @@ export class AgentRuntime {
       );
     }
     try {
-      await this.providerHost.saveCustomProvider(config);
+      await this.providerHost.saveCustomProvider(config, clearApiKey);
       return { provider_id: config.id, configured: true };
     } catch (error) {
       throw new ProtocolError(

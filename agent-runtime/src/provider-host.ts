@@ -13,6 +13,8 @@ import {
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import { dirname, join } from "node:path";
+import { FileModelsStore } from "./model-catalog-store.js";
 import {
   FileProviderConfigStore,
   type CustomProviderConfig,
@@ -105,6 +107,9 @@ export class ProviderHost {
     registerBunOAuthFlows();
     const models = createModels({
       credentials: store,
+      modelsStore: new FileModelsStore(
+        join(dirname(store.path), "model-catalogs"),
+      ),
       authContext: {
         async env() {
           return undefined;
@@ -130,6 +135,7 @@ export class ProviderHost {
       models.setProvider(customProvider(item));
       customIds.add(item.id);
     }
+    await models.refresh({ allowNetwork: false });
     return new ProviderHost(store, models, customIds);
   }
 
@@ -249,15 +255,23 @@ export class ProviderHost {
   ) {
     if (!this.models.getProvider(providerId))
       throw new Error("provider not found");
+    const previous = await this.store.read(providerId);
     const credential = await this.models.login(providerId, type, interaction);
-    await this.refreshModels();
+    const refresh = await this.refreshModels(interaction.signal);
+    if (interaction.signal?.aborted || refresh.aborted) {
+      await this.store.restoreCredential(providerId, credential, previous);
+      const error = new Error("authentication cancelled");
+      error.name = "AbortError";
+      throw error;
+    }
     return credential;
   }
 
-  async refreshModels() {
+  async refreshModels(signal?: AbortSignal) {
     const result = await this.models.refresh({
       allowNetwork: true,
       force: true,
+      ...(signal ? { signal } : {}),
     });
     return {
       aborted: result.aborted,
@@ -265,11 +279,14 @@ export class ProviderHost {
     };
   }
 
-  async saveCustomProvider(config: CustomProviderConfig) {
+  async saveCustomProvider(config: CustomProviderConfig, clearApiKey = false) {
+    if (UNSUPPORTED_PROVIDER_IDS.has(config.id)) {
+      throw new Error("provider id is reserved for an unsupported provider");
+    }
     if (!this.customIds.has(config.id) && this.models.getProvider(config.id)) {
       throw new Error("custom provider id conflicts with a built-in provider");
     }
-    await this.store.saveCustomProvider(config);
+    await this.store.saveCustomProvider(config, clearApiKey);
     await this.reloadCustomProviders();
   }
 

@@ -124,7 +124,19 @@ export async function dispatch(
         );
         break;
       case "custom_provider.upsert":
-        result = await runtime.saveCustomProvider(parseCustomProvider(params));
+        if (
+          params.clear_api_key !== undefined &&
+          typeof params.clear_api_key !== "boolean"
+        ) {
+          throw new ProtocolError(
+            "invalid_params",
+            "clear_api_key must be a boolean",
+          );
+        }
+        result = await runtime.saveCustomProvider(
+          parseCustomProvider(params),
+          params.clear_api_key === true,
+        );
         break;
       case "custom_provider.delete":
         result = await runtime.deleteCustomProvider(
