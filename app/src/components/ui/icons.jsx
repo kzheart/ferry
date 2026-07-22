@@ -144,6 +144,14 @@ export const CheckIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M3 8.5l3.4 3.4L13 5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
+export const ManualModeIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,
+  '<path d="M6.4 13.8V6.1a1 1 0 0 1 2 0v3.3M8.4 8.2V5.3a1 1 0 0 1 2 0v2.9M10.4 8.2V6.1a1 1 0 0 1 2 0v3.1M12.4 8.2V7a1 1 0 0 1 2 0v4.1c0 1.5-.6 2.8-1.7 3.7M6.4 10.3 5.2 9.1a1.15 1.15 0 0 0-1.6 1.6l2.5 2.5c.6.6 1.4 1 2.3 1h2.3c.8 0 1.5-.3 2.1-.8" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+export const AutoModeIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,
+  '<path d="M9.2 1.8 3.3 9h3.9l-.4 5.2L12.7 7H8.8l.4-5.2Z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
 export const CloseIcon = ({ size = 12 }) => svg("0 0 16 16", size, size,
   '<path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
   { flex: "none" });

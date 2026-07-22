@@ -4,7 +4,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown from "../../components/ui/Markdown.jsx";
-import { Caret, CheckIcon, SendArrowIcon, Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
+import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, SendArrowIcon, Spinner,
+  StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
@@ -177,8 +178,8 @@ function ChatItem({ item, sessionId, ferry }) {
 function ModeMenu({ mode, onPick, onClose }) {
   const { t } = useTranslation();
   const options = [
-    ["manual", t("askferry:mode.manual"), t("askferry:mode.manualDesc")],
-    ["auto", t("askferry:mode.auto"), t("askferry:mode.autoDesc")],
+    ["manual", ManualModeIcon, t("askferry:mode.manual"), t("askferry:mode.manualDesc")],
+    ["auto", AutoModeIcon, t("askferry:mode.auto"), t("askferry:mode.autoDesc")],
   ];
   return (
     <>
@@ -186,14 +187,15 @@ function ModeMenu({ mode, onPick, onClose }) {
       <div style={{ position: "absolute", left: 0, bottom: "100%", marginBottom: 8, width: 240,
         background: "var(--bg)", borderRadius: 11, boxShadow: "var(--shadow-menu)",
         padding: 4, zIndex: 30, animation: "fpop .14s ease" }}>
-        {options.map(([k, name, desc]) => (
+        {options.map(([k, Icon, name, desc]) => (
           <div key={k} className="hov-item"
             onMouseDown={e => { e.preventDefault(); onPick(k); }}
             style={{ padding: "7px 9px", borderRadius: 7, cursor: "default" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {k === "auto" && (
-                <span style={{ width: 5, height: 5, borderRadius: "50%",
-                  background: "var(--warn)", flex: "none" }} />)}
+              <span style={{ display: "inline-flex",
+                color: k === "auto" ? "var(--warn)" : "var(--tx3b)" }}>
+                <Icon />
+              </span>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", flex: 1 }}>
                 {name}</span>
               {mode === k && <CheckIcon size={12} />}
@@ -345,9 +347,10 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
               <ModeMenu mode={mode} onClose={() => setModeOpen(false)}
                 onPick={k => { ferry.setMode(k); setModeOpen(false); }} />)}
             <button className="chat-ghost-btn" onClick={() => setModeOpen(v => !v)}>
-              {mode === "auto" && (
-                <span style={{ width: 5, height: 5, borderRadius: "50%",
-                  background: "var(--warn)", flex: "none" }} />)}
+              <span style={{ display: "inline-flex",
+                color: mode === "auto" ? "var(--warn)" : "var(--tx3b)" }}>
+                {mode === "auto" ? <AutoModeIcon size={13} /> : <ManualModeIcon size={13} />}
+              </span>
               {t(mode === "auto" ? "askferry:mode.auto" : "askferry:mode.manual")}
               <Caret size={8} open={false} />
             </button>
