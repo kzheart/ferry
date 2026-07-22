@@ -153,6 +153,12 @@ export function safeEvents(events: EventEnvelope[]): EventEnvelope[] {
     if (typeof payload.message === "string") {
       payload.message = safeText(payload.message, 1_000);
     }
+    if (typeof payload.prompt === "string") {
+      payload.prompt = safeText(payload.prompt, 16_000);
+    }
+    if (typeof payload.text === "string") {
+      payload.text = safeText(payload.text, 16_000);
+    }
     return { ...event, payload };
   });
   const deltas = new Map<string, { first: number; text: string }>();
@@ -260,7 +266,11 @@ class RuntimeSession {
     if (images.length > 0) this.containsImages = true;
     this.activeRunId = runId;
     this.terminalResult = null;
-    await this.emit("run.started", {}, runId);
+    await this.emit(
+      "run.started",
+      { prompt: text, image_count: images.length },
+      runId,
+    );
     let task!: Promise<void>;
     task = (async () => {
       try {
@@ -294,12 +304,14 @@ class RuntimeSession {
     if (!this.isRunning)
       throw new ProtocolError("no_active_run", "session has no active run");
     this.agent.steer(userMessage(text));
+    void this.emit("user.message", { text, kind: "steer" });
   }
 
   followUp(text: string) {
     if (!this.isRunning)
       throw new ProtocolError("no_active_run", "session has no active run");
     this.agent.followUp(userMessage(text));
+    void this.emit("user.message", { text, kind: "follow_up" });
   }
 
   async waitForIdle() {
@@ -316,6 +328,14 @@ class RuntimeSession {
       latest_seq: this.nextSeq - 1,
       queued_messages: this.agent.hasQueuedMessages(),
       contains_images: this.containsImages,
+    };
+  }
+
+  summary() {
+    return {
+      ...this.state(),
+      created_at: this.events[0]?.timestamp ?? null,
+      updated_at: this.events.at(-1)?.timestamp ?? null,
     };
   }
 
@@ -806,6 +826,16 @@ export class AgentRuntime {
 
   state(sessionId: string) {
     return this.session(sessionId).state();
+  }
+
+  listSessions() {
+    return [...this.sessions.values()]
+      .map((session) => session.summary())
+      .sort((left, right) =>
+        String(right.updated_at ?? "").localeCompare(
+          String(left.updated_at ?? ""),
+        ),
+      );
   }
 
   replay(sessionId: string, afterSeq: number) {
