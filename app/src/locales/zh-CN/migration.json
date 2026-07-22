@@ -32,6 +32,7 @@
   },
   "preview": {
     "failed": "预演失败:{{error}}",
+    "retry": "重试",
     "loading": "正在预演转换、评估影响…",
     "impactTitle": "影响预览 · {{scope}}",
     "scaleLabel": "迁移规模",

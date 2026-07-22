@@ -276,7 +276,8 @@ export default function App() {
     { label: t("app:ctx.cancelMulti"), onClick: () => setMultiSel([]) },
   ] : ctxSess ? [
     { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
-        ctxSess.tool, ctxSess.id, ctxSess.dir).then(openTerminal).catch(() => {}) },
+        ctxSess.tool, ctxSess.id, ctxSess.dir)
+        .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
     ...(toolHasCapability(ctxSess.tool, "migrate-source") ? [{
       label: t("app:ctx.migrateTo"), onClick: () => {
         if (ctxSess.id !== selId) select(ctxSess.id);
@@ -343,7 +344,7 @@ export default function App() {
         if (e.key === "Enter") {
           e.preventDefault();
           resumeDescriptor(cur.tool, cur.id, cur.dir)
-            .then(openTerminal).catch(() => {});
+            .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {});
           return;
         }
       }
@@ -799,7 +800,7 @@ export default function App() {
       {/* 弹层 */}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
-          defaultProbe={!!settings.runtimeProbe}
+          defaultProbe={!!settings.runtimeProbe} terminalApp={settings.terminalApp}
           onClose={() => setMig(null)}
           onDone={() => loadHistory()} />)}
       {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading} error={diff.error}

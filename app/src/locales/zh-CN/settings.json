@@ -20,6 +20,15 @@
     "runtimeProbe": "运行时探针",
     "runtimeProbeDesc": "写入后在临时影子会话上真实 resume 验证,消耗一次模型调用,完成后自动清理,不向正式会话追加消息;关闭时仅做结构验证(默认)"
   },
+  "terminal": {
+    "groupTitle": "终端",
+    "app": "打开终端时使用",
+    "appDesc": "自动模式依次尝试 Warp、iTerm2 和系统 Terminal；所选应用不可用时会回退到系统 Terminal",
+    "auto": "自动选择",
+    "terminal": "Terminal",
+    "iterm": "iTerm2",
+    "warp": "Warp"
+  },
   "motion": {
     "groupTitle": "动效",
     "reduceMotion": "减少动效",

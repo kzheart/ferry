@@ -1,9 +1,10 @@
 // 设置悬浮弹窗(参考 LM Studio):左侧分类 + 偏好设置 / 数据来源
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { LOCALE_META } from "../../i18n/index.js";
-import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
+import { SetGlyph, TerminalIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
 import Providers from "./Providers.jsx";
@@ -12,6 +13,110 @@ import Models from "./Models.jsx";
 const SECTIONS = [["prefs", "settings:sections.prefs"], ["providers", "settings:sections.providers"],
   ["models", "settings:sections.models"],
   ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
+
+function TerminalAppIcon({ app, size = 16 }) {
+  if (app === "terminal") return <TerminalIcon size={size} />;
+  if (app === "iterm") return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden style={{ flex: "none" }}>
+      <rect x="1.35" y="1.35" width="13.3" height="13.3" rx="3.1" fill="#202A37" />
+      <path d="m4.2 5 2.35 3-2.35 3M8.7 11h3" fill="none" stroke="#69D88E" strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  if (app === "warp") return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden style={{ flex: "none" }}>
+      <rect x="1.35" y="1.35" width="13.3" height="13.3" rx="3.1" fill="#FA6B3A" />
+      <path d="M8 3.4c2.7 0 4.7 2.3 4.1 4.9-.5 2-2.3 3.4-4.3 3.3-1.7-.1-3-1.6-2.7-3.3.2-1.2 1.2-2 2.4-1.9 1 .1 1.7.9 1.5 1.9"
+        fill="none" stroke="white" strokeWidth="1.35" strokeLinecap="round" />
+    </svg>
+  );
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden style={{ flex: "none" }}>
+      <rect x="1.65" y="1.65" width="5.35" height="5.35" rx="1.3" fill="var(--tx4)" />
+      <rect x="9" y="1.65" width="5.35" height="5.35" rx="1.3" fill="var(--tx4)" opacity=".72" />
+      <rect x="1.65" y="9" width="5.35" height="5.35" rx="1.3" fill="var(--tx4)" opacity=".72" />
+      <rect x="9" y="9" width="5.35" height="5.35" rx="1.3" fill="var(--tx4)" opacity=".46" />
+    </svg>
+  );
+}
+
+function TerminalPicker({ value, onChange, t }) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const options = [
+    ["auto", t("settings:terminal.auto")],
+    ["terminal", t("settings:terminal.terminal")],
+    ["iterm", t("settings:terminal.iterm")],
+    ["warp", t("settings:terminal.warp")],
+  ];
+  const current = options.find(([key]) => key === value) || options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const position = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (rect) setMenuPos({ top: rect.bottom + 6, left: rect.right - 194 });
+    };
+    const close = event => {
+      if (!rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = event => { if (event.key === "Escape") setOpen(false); };
+    position();
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} style={{ position: "relative", flex: "none" }}>
+      <button type="button" onClick={() => setOpen(v => !v)} aria-haspopup="listbox" aria-expanded={open}
+        style={{ minWidth: 168, height: 32, padding: "0 10px", borderRadius: 9,
+          border: `1px solid ${open ? "var(--accent)" : "var(--line4)"}`,
+          background: "var(--surface)", color: "var(--tx1)", display: "flex", alignItems: "center",
+          gap: 8, fontSize: 12, fontWeight: 650, fontFamily: "inherit", cursor: "default",
+          boxShadow: open ? "0 0 0 2px var(--acc-soft3)" : "none" }}>
+        <TerminalAppIcon app={current[0]} />
+        <span style={{ flex: 1, textAlign: "left" }}>{current[1]}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
+          style={{ color: "var(--tx4)", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }}>
+          <path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.6"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && menuPos && createPortal(
+        <div ref={menuRef} role="listbox" aria-label={t("settings:terminal.app")}
+          style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 70, minWidth: 194, padding: 5,
+            border: "1px solid var(--line3)", borderRadius: 11, background: "var(--surface)",
+            boxShadow: "0 14px 28px rgba(0,0,0,.20)" }}>
+          {options.map(([key, label]) => {
+            const selected = key === current[0];
+            return (
+              <button key={key} type="button" role="option" aria-selected={selected}
+                onClick={() => { onChange(key); setOpen(false); }}
+                style={{ width: "100%", height: 32, padding: "0 8px", border: "none", borderRadius: 7,
+                  background: selected ? "var(--acc-soft5)" : "transparent", color: "var(--tx1)",
+                  display: "flex", alignItems: "center", gap: 9, textAlign: "left", fontFamily: "inherit",
+                  fontSize: 12, fontWeight: selected ? 650 : 550, cursor: "default" }}>
+                <TerminalAppIcon app={key} />
+                <span style={{ flex: 1 }}>{label}</span>
+                {selected && <span style={{ color: "var(--accent)", fontSize: 15, lineHeight: 1 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>, document.body
+      )}
+    </div>
+  );
+}
 
 // ---------- 偏好设置 ----------
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
@@ -67,6 +172,13 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         <Row first title={t("settings:writeCheck.runtimeProbe")}
           desc={t("settings:writeCheck.runtimeProbeDesc")}>
           <Toggle on={s.runtimeProbe} onChange={v => set({ runtimeProbe: v })} />
+        </Row>
+      </Card>
+
+      <GroupTitle>{t("settings:terminal.groupTitle")}</GroupTitle>
+      <Card>
+        <Row first title={t("settings:terminal.app")} desc={t("settings:terminal.appDesc")}>
+          <TerminalPicker value={s.terminalApp} onChange={v => set({ terminalApp: v })} t={t} />
         </Row>
       </Card>
 

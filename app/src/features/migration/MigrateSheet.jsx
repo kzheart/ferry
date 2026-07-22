@@ -1,7 +1,7 @@
 // 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal, rpc } from "../../api/transport/rpc.js";
+import { migrationCommit, migrationHandoff, migrationPreview, openTerminal, rpc } from "../../api/transport/rpc.js";
 import { TOOL_NAME, toolsWithCapability } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
@@ -88,7 +88,7 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
   );
 }
 
-export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, onDone }) {
+export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalApp, onClose, onDone }) {
   const { t } = useTranslation();
   // Only agents that declare migrate-target are valid write destinations.
   const targets = toolsWithCapability("migrate-target").filter(t2 => t2 !== meta.tool);
@@ -97,6 +97,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   const [probeOn, setProbeOn] = useState(!!defaultProbe);
   const [dry, setDry] = useState(null);        // { [target]: result }
   const [dryErr, setDryErr] = useState(null);
+  const [dryBusy, setDryBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [wroteFirst, setWroteFirst] = useState(false);
@@ -115,14 +116,18 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
   const resolvedProbeModel = (probeCustom[target] || "").trim()
     || (probeModel[target] || "").trim()
     || undefined;
+  const errorMessage = error => String(error?.message || error || t("errors:fallback"));
 
   const loadDry = async tgt => {
+    if (dryBusy) return;
     setDryErr(null);
+    setDryBusy(true);
     try {
-      const r = await rpc("migrate", { src: meta.tool, dst: tgt, ref,
-        dry_run: true, max_turn: scope || undefined });
+      const r = await migrationPreview({ src: meta.tool, dst: tgt, ref,
+        max_turn: scope || undefined });
       setDry(prev => ({ ...prev, [tgt]: r }));
-    } catch (e) { setDryErr(e.message); }
+    } catch (e) { setDryErr(errorMessage(e)); }
+    finally { setDryBusy(false); }
   };
 
   const loadModels = async tgt => {
@@ -133,13 +138,13 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
       const r = await rpc("models", { tool: tgt });
       setModelCatalog(prev => ({ ...prev, [tgt]: r }));
     } catch (e) {
-      setModelErr(prev => ({ ...prev, [tgt]: e.message }));
+      setModelErr(prev => ({ ...prev, [tgt]: errorMessage(e) }));
     }
     setModelLoad(prev => ({ ...prev, [tgt]: false }));
   };
 
   useEffect(() => {
-    if (step === "confirm" || step === "preview") loadModels(target);
+    if (step === "confirm") loadModels(target);
   }, [step, target]);
 
   const next = () => {
@@ -157,12 +162,12 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     setWroteFirst(false);
     setTimeout(() => setWroteFirst(true), 1500);
     try {
-      const r = await rpc("migrate", { src: meta.tool, dst: target, ref,
+      const r = await migrationCommit({ src: meta.tool, dst: target, ref,
         max_turn: scope || undefined,
         probe: probeOn,
         probe_model: probeOn ? resolvedProbeModel : undefined });
       setResult(r);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(errorMessage(e)); }
     setStep("result");
     if (!doneRef.current) { doneRef.current = true; onDone?.(); }
   };
@@ -171,8 +176,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     if (handoff) return;
     setHandoffBusy(true);
     try {
-      setHandoff(await rpc("handoff", { src: meta.tool, dst: target, ref }));
-    } catch (e) { setError(e.message); }
+      setHandoff(await migrationHandoff({ src: meta.tool, dst: target, ref }));
+    } catch (e) { setError(errorMessage(e)); }
     setHandoffBusy(false);
   };
 
@@ -225,7 +230,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
     body = !d ? (
       <div style={{ padding: "60px 0", display: "flex", alignItems: "center", justifyContent: "center",
         gap: 10, color: "var(--tx4)", fontSize: 13 }}>
-        {dryErr ? <span style={{ color: "var(--err-deep)" }}>{t("migration:preview.failed", { error: dryErr })}</span>
+        {dryErr ? <><span style={{ color: "var(--err-deep)" }}>{t("migration:preview.failed", { error: dryErr })}</span>
+          <button className="fbtn" onClick={() => loadDry(target)}>{t("migration:preview.retry")}</button></>
           : <><Spinner size={16} /> {t("migration:preview.loading")}</>}
       </div>
     ) : (
@@ -335,7 +341,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           <CmdRow cmd={result.resume} head={t("migration:result.handoffIn", { tool: TOOL_NAME[target] })} />
         </div>
         <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12 }}
-          onClick={() => openTerminal(result.resume)}>{t("migration:result.openTerminal")}</button>
+          onClick={() => openTerminal(result.resume, terminalApp)}>{t("migration:result.openTerminal")}</button>
       </>
     );
   } else if (fail) {
@@ -381,7 +387,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
               borderTop: "1px solid var(--line6)", background: "var(--fill)" }}>
               <code className="mono selectable" style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{handoff.command}</code>
-              <button className="fbtn" onClick={() => openTerminal(handoff.command)}>{t("migration:result.openTerminal")}</button>
+              <button className="fbtn" onClick={() => openTerminal(handoff.command, terminalApp)}>{t("migration:result.openTerminal")}</button>
             </div>
           </div>
         )}
