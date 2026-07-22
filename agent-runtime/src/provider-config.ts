@@ -71,6 +71,19 @@ function identifier(value: unknown, label: string): string {
   return value;
 }
 
+function modelIdentifier(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 512 ||
+    value.trim() !== value ||
+    /[\0\r\n]/.test(value)
+  ) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value;
+}
+
 function text(value: unknown, label: string, max = 8_192): string {
   if (
     typeof value !== "string" ||
@@ -149,13 +162,18 @@ function customProvider(value: unknown): CustomProviderConfig {
   if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error("custom provider base_url must use HTTP or HTTPS");
   }
+  if (parsed.username || parsed.password || parsed.hash) {
+    throw new Error(
+      "custom provider base_url cannot contain credentials or fragments",
+    );
+  }
   const apiKey = optionalSecret(value.api_key, "custom provider API key");
   return {
     id: identifier(value.id, "custom provider id"),
     name: text(value.name, "custom provider name", 256),
     base_url: parsed.toString().replace(/\/$/, ""),
     ...(apiKey ? { api_key: apiKey } : {}),
-    models: models.map((model) => identifier(model, "custom model id")),
+    models: models.map((model) => modelIdentifier(model, "custom model id")),
   };
 }
 
@@ -186,7 +204,7 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
     schema_version: PROVIDER_CONFIG_VERSION,
     default_model: {
       provider: identifier(value.default_model.provider, "default provider"),
-      model: identifier(value.default_model.model, "default model"),
+      model: modelIdentifier(value.default_model.model, "default model"),
     },
     credentials,
     custom_providers: customProviders,
@@ -329,7 +347,7 @@ export class FileProviderConfigStore implements CredentialStore {
   async setDefaultModel(selection: ModelSelection) {
     const safe = {
       provider: identifier(selection.provider, "default provider"),
-      model: identifier(selection.model, "default model"),
+      model: modelIdentifier(selection.model, "default model"),
     };
     await this.mutate((config) => {
       config.default_model = safe;
