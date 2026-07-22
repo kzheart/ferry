@@ -128,6 +128,32 @@ export async function dispatch(
           requireString(params, "provider_id", 128),
         );
         break;
+      case "auth.login.start": {
+        const authType = requireString(params, "auth_type", 16);
+        if (authType !== "api_key" && authType !== "oauth") {
+          throw new ProtocolError(
+            "invalid_params",
+            "auth_type must be api_key or oauth",
+          );
+        }
+        result = runtime.startAuthentication(
+          requireString(params, "provider_id", 128),
+          authType,
+        );
+        break;
+      }
+      case "auth.login.respond":
+        result = runtime.respondAuthentication(
+          requireString(params, "login_id", 128),
+          requireString(params, "prompt_id", 128),
+          requireString(params, "value", 64 * 1024),
+        );
+        break;
+      case "auth.login.cancel":
+        result = runtime.cancelAuthentication(
+          requireString(params, "login_id", 128),
+        );
+        break;
       case "tool.result":
         result = runtime.completeTool(
           requireString(params, "request_id", 128),

@@ -17,6 +17,9 @@ export type CommandMethod =
   | "model.select"
   | "custom_provider.upsert"
   | "custom_provider.delete"
+  | "auth.login.start"
+  | "auth.login.respond"
+  | "auth.login.cancel"
   | "tool.result";
 
 export interface CommandEnvelope {
@@ -90,6 +93,9 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "model.select",
     "custom_provider.upsert",
     "custom_provider.delete",
+    "auth.login.start",
+    "auth.login.respond",
+    "auth.login.cancel",
     "tool.result",
   ];
   if (typeof input.method !== "string" || !methods.includes(input.method)) {
