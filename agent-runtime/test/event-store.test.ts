@@ -22,6 +22,9 @@ describe("FileSessionStore", () => {
     const store = new FileSessionStore(directory);
     const base: PersistedSession = {
       session_id: "s1",
+      provider_id: "test",
+      model_id: "test-model",
+      contains_images: false,
       next_seq: 1,
       status: "idle",
       active_run_id: null,

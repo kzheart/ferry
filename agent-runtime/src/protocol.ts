@@ -9,6 +9,14 @@ export type CommandMethod =
   | "follow_up"
   | "state"
   | "events.replay"
+  | "providers.list"
+  | "models.list"
+  | "config.get"
+  | "credential.set"
+  | "provider.logout"
+  | "model.select"
+  | "custom_provider.upsert"
+  | "custom_provider.delete"
   | "tool.result";
 
 export interface CommandEnvelope {
@@ -45,7 +53,7 @@ export class ProtocolError extends Error {
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
+export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -74,6 +82,14 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "follow_up",
     "state",
     "events.replay",
+    "providers.list",
+    "models.list",
+    "config.get",
+    "credential.set",
+    "provider.logout",
+    "model.select",
+    "custom_provider.upsert",
+    "custom_provider.delete",
     "tool.result",
   ];
   if (typeof input.method !== "string" || !methods.includes(input.method)) {
@@ -83,6 +99,23 @@ export function parseCommand(input: unknown): CommandEnvelope {
     throw new ProtocolError("invalid_request", "params must be an object");
   }
   return input as unknown as CommandEnvelope;
+}
+
+export function optionalString(
+  params: Record<string, unknown>,
+  key: string,
+  max = 200_000,
+): string | undefined {
+  if (params[key] === undefined) return undefined;
+  return requireString(params, key, max);
+}
+
+export function optionalInteger(
+  params: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  if (params[key] === undefined) return undefined;
+  return requireInteger(params, key);
 }
 
 export function requireString(

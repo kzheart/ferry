@@ -58,7 +58,15 @@ describe("FileProviderConfigStore", () => {
       name: "Local Ollama",
       base_url: "http://127.0.0.1:11434/v1/",
       api_key: "ollama-plain-key",
-      models: ["qwen3.5"],
+      models: [
+        {
+          id: "qwen3.5",
+          input: ["text"],
+          reasoning: false,
+          context_window: 128_000,
+          max_tokens: 8_192,
+        },
+      ],
     });
 
     expect(await config.publicSnapshot()).toMatchObject({
@@ -83,7 +91,15 @@ describe("FileProviderConfigStore", () => {
         id: "bad",
         name: "Bad",
         base_url: "file:///tmp/provider",
-        models: ["model"],
+        models: [
+          {
+            id: "model",
+            input: ["text"],
+            reasoning: false,
+            context_window: 128_000,
+            max_tokens: 8_192,
+          },
+        ],
       }),
     ).rejects.toThrow("HTTP or HTTPS");
     await expect(
