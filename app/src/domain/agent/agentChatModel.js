@@ -74,7 +74,8 @@ export function applyEvent(log, ev) {
       break;
     case "tool.completed": {
       const i = items.findLastIndex(it => it.kind === "tool" && it.callId === p.tool_call_id);
-      if (i >= 0) items[i] = { ...items[i], status: p.is_error ? "error" : "ok", endedAt: ev.timestamp };
+      if (i >= 0) items[i] = { ...items[i], status: p.is_error ? "error" : "ok",
+        endedAt: ev.timestamp, result: p.result };
       break;
     }
     // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进

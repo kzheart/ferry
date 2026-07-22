@@ -35,7 +35,12 @@
   },
   "tool": {
     "running": "Running",
-    "failed": "Failed"
+    "failed": "Failed",
+    "args": "Arguments",
+    "result": "Result",
+    "errorResult": "Error",
+    "noResult": "(no content returned)",
+    "truncated": "truncated"
   },
   "approval": {
     "kindMigration": "Migration proposal",
