@@ -240,7 +240,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", marginBottom: 8 }}>
           {t("migration:preview.impactTitle", { scope: scopeLabel })}</div>
         <div style={{ marginBottom: 16 }}><LossCols loss={d.loss} /></div>
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
+        <div className="fcard" style={{ padding: "11px 14px",
           display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
           <span style={{ color: "var(--tx2)", fontWeight: 600 }}>{t("migration:preview.scaleLabel")}</span>
           <span className="mono" style={{ color: "var(--tx2)" }}>

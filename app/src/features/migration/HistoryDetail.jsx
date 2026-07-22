@@ -15,6 +15,16 @@ const ST_STYLE = {
   [STATUS_CODE.dryRun]: ["var(--warn-bg)", "var(--warn)"],
 };
 
+// 卡片外的小标题(右侧可挂一段次要信息)
+function SectionHead({ children, aside }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 12, margin: "20px 2px 8px" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)" }}>{children}</div>
+      {aside && <div className="mono" style={{ marginLeft: "auto", fontSize: 11, color: "var(--tx5)" }}>{aside}</div>}
+    </div>
+  );
+}
+
 export default function HistoryDetail({ h, onDelete }) {
   const { t } = useTranslation();
   if (!h) return (
@@ -34,9 +44,8 @@ export default function HistoryDetail({ h, onDelete }) {
     : h.validation?.structure
       ? [h.validation.structure.detail, t("migration:history.probeNotRunDefault")]
       : [t("migration:history.probeNotRun")];
-  const probeColor = ok ? "var(--ok-deep)" : fail ? "var(--err-deep)" : "var(--tx3b)";
-  const probeBg = ok ? "var(--ok-bg)" : fail ? "var(--err-bg)" : "var(--fill3)";
-  const probeBorder = ok ? "var(--ok-line)" : fail ? "var(--err-line)" : "var(--line3)";
+  // 容器保持中性,状态只由圆点承载
+  const probeDot = ok ? "var(--ok)" : fail ? "var(--err)" : "var(--tx5)";
   const probeModel = h.probe?.model || h.probe_model;
 
   return (
@@ -83,36 +92,34 @@ export default function HistoryDetail({ h, onDelete }) {
           ))}
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "20px 2px 8px" }}>{t("migration:history.impactReport")}</div>
+        <SectionHead>{t("migration:history.impactReport")}</SectionHead>
         <LossCols loss={h.loss} />
 
-        <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,
-          borderRadius: 10, padding: "13px 15px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: probeColor }}>{t("migration:history.verdict")}</div>
-            {probeModel && (
-              <div className="mono" style={{ fontSize: 11, color: "var(--tx3b)" }}>{probeModel}</div>
-            )}
-          </div>
+        <SectionHead aside={probeModel}>{t("migration:history.verdict")}</SectionHead>
+        <div className="fcard" style={{ padding: "12px 14px" }}>
           {fail && probeDetail ? (
-            <pre className="mono selectable fscroll" style={{ margin: "8px 0 0", fontSize: 11,
+            <pre className="mono selectable fscroll" style={{ margin: 0, fontSize: 11,
               color: "var(--err-pre)", whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto",
               lineHeight: 1.5 }}>{probeDetail}</pre>
           ) : probeLines.map((p, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12,
-              color: "var(--tx2b)", marginTop: 7 }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: probeColor,
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 12,
+              color: "var(--tx2b)", lineHeight: 1.45, marginTop: i ? 8 : 0 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: probeDot,
                 flex: "none", marginTop: 6 }} />{p}
             </div>
           ))}
         </div>
 
         {rolled && (
-          <div style={{ marginTop: 14, border: "1px solid var(--err-line)", background: "var(--err-bg)",
-            borderRadius: 10, padding: "13px 15px", fontSize: 12, color: "var(--err-text)", lineHeight: 1.55 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("migration:history.rollbackTitle")}</div>
-            {t("migration:history.rollbackDesc", { tool: TOOL_NAME[h.dst] })}
-          </div>
+          <>
+            <SectionHead>{t("migration:history.rollbackTitle")}</SectionHead>
+            <div className="fcard" style={{ padding: "12px 14px", display: "flex", gap: 9,
+              fontSize: 12, color: "var(--tx2b)", lineHeight: 1.5 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--err)",
+                flex: "none", marginTop: 6 }} />
+              <span>{t("migration:history.rollbackDesc", { tool: TOOL_NAME[h.dst] })}</span>
+            </div>
+          </>
         )}
 
         {ok && h.resume && (

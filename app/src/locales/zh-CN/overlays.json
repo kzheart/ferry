@@ -76,7 +76,7 @@
     "dropTitle": "无法迁移",
     "emptyItem": "无",
     "moreItems": "… 等共 {{n}} 项",
-    "keepNative": "{{n}} 个内容块原生映射",
+    "totalBlocks": "共 {{n}} 个内容块",
     "keepRoles": "消息角色与顺序",
     "keepRefs": "文件引用与代码块"
   },
