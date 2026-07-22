@@ -392,12 +392,6 @@ export default function Overview({ sessions = [], historyRows = [],
               <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                 <Card title={t("overview:clock.title")} sub={t("overview:clock.sub")}>
                   <Clock clock={data.clock} peakHour={data.peakHour} t={t} />
-                  <div style={{ marginTop: 12, padding: "8px 10px", borderRadius: 6,
-                    background: "var(--acc-soft)", border: "1px solid var(--line6)", fontSize: 11,
-                    color: "var(--tx2)", lineHeight: 1.55 }}>
-                    <b style={{ color: "var(--tx1)" }}>{t("overview:clock.peakAt", { hour: String(data.peakHour).padStart(2, "0") })}</b>
-                    {" "}{t("overview:clock.nightNote", { pct: Math.round(data.nightShare * 100) })}
-                  </div>
                 </Card>
               </div>
             </div>
@@ -615,4 +609,3 @@ function FeaturedInsight({ ins, t }) {
 function dotColor(i) {
   return CHART[i] || "var(--tx4)";
 }
-
