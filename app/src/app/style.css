@@ -423,6 +423,73 @@ html[data-platform="mac"][data-theme="dark"] {
 .fmd a { color: var(--accent); }
 .fmd img { max-width: 100%; }
 
+/* ---- Ask Ferry 对话视图:参考 ChatGPT/Claude 桌面端 —— 用户气泡 + 无框助手正文 + 安静工具行 + 胶囊输入框 ---- */
+.chat-user {
+  max-width: 76%; padding: 8px 14px; border-radius: 18px;
+  background: var(--fill4); color: var(--tx1);
+  font-size: 13px; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: break-word;
+}
+[data-theme="dark"] .chat-user { background: rgba(255,255,255,.08); }
+
+/* 工具调用:一行灰字,悬浮才浮现浅底,展开看参数 */
+.chat-tool {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+  padding: 3px 9px; margin-left: -9px; border-radius: 7px;
+  font-size: 12px; color: var(--tx4);
+}
+.chat-tool:hover { background: var(--hov-ghost); color: var(--tx3); }
+
+/* 输入胶囊:焦点时投影轻微加深,不用系统蓝描边 */
+.chat-composer {
+  background: var(--surface); border-radius: 24px;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 2px 12px rgba(0,0,0,.05);
+  transition: box-shadow .18s ease;
+}
+.chat-composer:focus-within { box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 4px 18px rgba(0,0,0,.08); }
+[data-theme="dark"] .chat-composer {
+  background: var(--fill2);
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.11), 0 2px 12px rgba(0,0,0,.35);
+}
+[data-theme="dark"] .chat-composer:focus-within {
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.17), 0 4px 18px rgba(0,0,0,.45);
+}
+
+/* 圆形发送/停止按钮 */
+.chat-round-btn {
+  width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; cursor: default;
+  background: var(--accent); color: var(--accent-fg);
+}
+.chat-round-btn:hover { filter: brightness(1.12); }
+.chat-round-btn:active { filter: brightness(.88); }
+.chat-round-btn:disabled { background: var(--btn-disabled); opacity: .5; filter: none; }
+
+/* 空态建议 chips 与头部幽灵按钮 */
+.chat-chip {
+  border: none; border-radius: 999px; padding: 7px 14px; background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line2); font-size: 12.5px; color: var(--tx3); cursor: default;
+}
+.chat-chip:hover { background: var(--hov-ghost); color: var(--tx1); }
+.chat-ghost-btn {
+  border: none; background: transparent; border-radius: 7px; padding: 4px 9px;
+  font-size: 12px; color: var(--tx3); cursor: default;
+  display: inline-flex; align-items: center; gap: 5px; max-width: 220px;
+}
+.chat-ghost-btn:hover { background: var(--hov-ghost); color: var(--tx1); }
+
+/* 手动/自动分段:随系统分段控件质感,自动态用琥珀圆点提示而非整块变色 */
+.chat-seg { display: inline-flex; background: var(--fill4); border-radius: 7px; padding: 2px; flex: none; }
+.chat-seg button {
+  border: none; padding: 2px 11px; border-radius: 5px; font-size: 11.5px; font-weight: 500;
+  background: transparent; color: var(--tx4); cursor: default;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.chat-seg button.on {
+  background: var(--seg-on); color: var(--tx1);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.1);
+}
+
 /* 设置里的「减少动效」(与系统偏好等效,但由用户显式开关) */
 [data-reduce="1"] * {
   animation-duration: .001s !important;
