@@ -77,10 +77,6 @@ fn write_line(stdin: &Arc<Mutex<ChildStdin>>, line: &str) -> Result<(), String> 
 
 fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProcess, String> {
     let mut command = agent_binary_command(resource_dir)?;
-    let api_key = std::env::var("DEEPSEEK_API_KEY")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(crate::credential::load_deepseek_api_key);
     command.env_clear();
     for name in [
         "PATH",
@@ -102,9 +98,6 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
         if let Some(value) = std::env::var_os(name) {
             command.env(name, value);
         }
-    }
-    if let Some(api_key) = api_key {
-        command.env("DEEPSEEK_API_KEY", api_key);
     }
     let data_dir = app
         .path()
@@ -456,14 +449,6 @@ pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
                              "method": "health", "params": {}});
         let _ = request_agent(&app, &resource_dir, &request.to_string());
     });
-}
-
-pub(crate) fn reset() {
-    if let Some(slot) = AGENT.get() {
-        if let Ok(mut guard) = slot.lock() {
-            *guard = None;
-        }
-    }
 }
 
 #[cfg(debug_assertions)]

@@ -18,7 +18,6 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-keyring = "=4.1.5"
 # GUI 启动(Finder/Dock)只继承 launchd 最小 PATH,启动时从登录 shell 恢复完整 PATH,
 # 否则引擎子进程探测/执行 claude、codex、opencode 等 CLI 会找不到命令。Windows 上为 no-op。
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
