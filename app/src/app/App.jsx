@@ -549,8 +549,9 @@ export default function App() {
     [metaMap]);
 
   // ----- 资源栏数据:迁移历史 -----
+  // 优先用引擎给的稳定 id:删除后下标会整体前移,按下标编号会让选中项跳到别的记录上
   const histItems = useMemo(() => historyRows.map((h, i) => ({
-    ...h, _id: `h${i}-${h.time}`, status: histStatus(h),
+    ...h, _id: h.id ? `h${h.id}` : `h${i}-${h.time}`, status: histStatus(h),
   })), [historyRows]);
   const hql = hq.trim().toLowerCase();
   // 迁移历史此前每次渲染都重算分组;memo 后仅在数据/筛选/选中变化时重建
@@ -573,6 +574,8 @@ export default function App() {
           stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
             [STATUS_CODE.rolledBack]: "var(--tx3b)", [STATUS_CODE.dryRun]: "var(--warn)" }[h.status],
           tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
+          // 旧缓存里的记录没有引擎 id,删不了,索性不给删除按钮
+          deletable: !!h.id,
           onClick: () => setSelHist(h._id) })),
     })).filter(g => g.rows.length);
     return { histFiltered, histGroups };
@@ -724,6 +727,7 @@ export default function App() {
                     onRowDelete={onRowDelete} onRowMore={onRowMore} />)}
             {view === "history" && (
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
+                onDelete={id => setHistDel(histItems.find(x => x._id === id))}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
             {view === "askferry" && (
               <AgentSessionList sessions={ferrySessions}
@@ -833,8 +837,9 @@ export default function App() {
         <HistoryDeleteConfirm h={histDel}
           onCancel={() => setHistDel(null)}
           onConfirm={() => {
-            // 删的是当前选中项,先清掉选中,列表会回落到第一条
-            setSelHist(null); setHistDel(null);
+            // 删的正好是选中项才清选中,列表回落到第一条;删别的不该打断当前查看
+            if (histDel._id === selHist) setSelHist(null);
+            setHistDel(null);
             deleteHistory(histDel.id).catch(() => {});
           }} />)}
       {batchDel && (
