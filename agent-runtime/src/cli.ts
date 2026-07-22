@@ -2,6 +2,8 @@
 import { join } from "node:path";
 import { AgentRuntime } from "./runtime.js";
 import { FileSessionStore } from "./event-store.js";
+import { FileProviderConfigStore } from "./provider-config.js";
+import { ProviderHost } from "./provider-host.js";
 import { dispatch } from "./commands.js";
 import {
   PROTOCOL_VERSION,
@@ -18,8 +20,12 @@ function write(value: unknown) {
 async function main() {
   const dataDirectory =
     process.env.FERRY_AGENT_DATA_DIR ?? join(process.cwd(), ".runtime-data");
+  const providerHost = await ProviderHost.create(
+    new FileProviderConfigStore(join(dataDirectory, "providers.json")),
+  );
   const runtime = await AgentRuntime.create({
-    store: new FileSessionStore(dataDirectory),
+    store: new FileSessionStore(join(dataDirectory, "sessions")),
+    providerHost,
   });
   runtime.subscribe(write);
 

@@ -29,7 +29,16 @@ export interface CustomProviderConfig {
   name: string;
   base_url: string;
   api_key?: string;
-  models: string[];
+  models: CustomModelConfig[];
+}
+
+export interface CustomModelConfig {
+  id: string;
+  name?: string;
+  input: Array<"text" | "image">;
+  reasoning: boolean;
+  context_window: number;
+  max_tokens: number;
 }
 
 export interface ProviderConfigDocument {
@@ -173,7 +182,43 @@ function customProvider(value: unknown): CustomProviderConfig {
     name: text(value.name, "custom provider name", 256),
     base_url: parsed.toString().replace(/\/$/, ""),
     ...(apiKey ? { api_key: apiKey } : {}),
-    models: models.map((model) => modelIdentifier(model, "custom model id")),
+    models: models.map(customModel),
+  };
+}
+
+function customModel(value: unknown): CustomModelConfig {
+  if (!record(value)) throw new Error("custom model is invalid");
+  const input = value.input;
+  if (
+    !Array.isArray(input) ||
+    input.length === 0 ||
+    !input.every((item) => item === "text" || item === "image")
+  ) {
+    throw new Error("custom model input is invalid");
+  }
+  const number = (item: unknown, label: string, maximum: number) => {
+    if (
+      !Number.isSafeInteger(item) ||
+      (item as number) <= 0 ||
+      (item as number) > maximum
+    ) {
+      throw new Error(`${label} is invalid`);
+    }
+    return item as number;
+  };
+  return {
+    id: modelIdentifier(value.id, "custom model id"),
+    ...(value.name === undefined
+      ? {}
+      : { name: text(value.name, "custom model name", 256) }),
+    input: [...new Set(input)] as Array<"text" | "image">,
+    reasoning: value.reasoning === true,
+    context_window: number(
+      value.context_window,
+      "custom model context_window",
+      10_000_000,
+    ),
+    max_tokens: number(value.max_tokens, "custom model max_tokens", 1_000_000),
   };
 }
 

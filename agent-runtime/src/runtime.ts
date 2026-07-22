@@ -5,13 +5,14 @@ import {
   type AgentMessage,
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { Model } from "@earendil-works/pi-ai";
-import {
-  createDeepSeekBackend,
-  DEEPSEEK_API_KEY_ENV,
-} from "./deepseek-provider.js";
+import type { ImageContent, Model } from "@earendil-works/pi-ai";
 import type { PersistedSession, SessionStore } from "./event-store.js";
 import { MemorySessionStore } from "./event-store.js";
+import type {
+  CustomProviderConfig,
+  ModelSelection,
+} from "./provider-config.js";
+import type { ProviderHost } from "./provider-host.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -28,10 +29,10 @@ export interface AgentBackend {
   streamFn: StreamFn;
   provider?: string;
   modelId?: string;
-  credentialAvailable?: () => boolean;
+  credentialAvailable?: () => boolean | Promise<boolean>;
 }
 
-export type BackendFactory = () => AgentBackend;
+export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
 export type ToolHandler = (
   name: FerryToolName,
   args: Record<string, unknown>,
@@ -41,6 +42,7 @@ export type ToolHandler = (
 export interface RuntimeOptions {
   store?: SessionStore;
   backendFactory?: BackendFactory;
+  providerHost?: ProviderHost;
   toolHandler?: ToolHandler;
   now?: () => Date;
   idFactory?: () => string;
@@ -177,6 +179,7 @@ class RuntimeSession {
   activeRunId: string | null;
   private terminalResult: TerminalResult | null = null;
   private runPromise: Promise<void> | null = null;
+  private containsImages: boolean;
 
   constructor(
     readonly id: string,
@@ -184,9 +187,11 @@ class RuntimeSession {
     events: EventEnvelope[],
     private readonly runtime: AgentRuntime,
     backend: AgentBackend,
+    private selection: ModelSelection,
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
+    this.containsImages = state?.contains_images ?? false;
     this.activeRunId = null;
     this.agent = new Agent({
       sessionId: id,
@@ -243,20 +248,21 @@ class RuntimeSession {
     return event;
   }
 
-  async prompt(text: string) {
+  async prompt(text: string, images: ImageContent[] = []) {
     if (this.isRunning)
       throw new ProtocolError(
         "run_in_progress",
         "session already has an active run",
       );
     const runId = this.runtime.newId();
+    if (images.length > 0) this.containsImages = true;
     this.activeRunId = runId;
     this.terminalResult = null;
     await this.emit("run.started", {}, runId);
     let task!: Promise<void>;
     task = (async () => {
       try {
-        await this.agent.prompt(text);
+        await this.agent.prompt(text, images);
       } catch (error) {
         this.terminalResult = {
           type: "run.failed",
@@ -301,11 +307,38 @@ class RuntimeSession {
   state() {
     return {
       session_id: this.id,
+      provider_id: this.selection.provider,
+      model_id: this.selection.model,
       status: this.isRunning ? "running" : "idle",
       active_run_id: this.activeRunId,
       latest_seq: this.nextSeq - 1,
       queued_messages: this.agent.hasQueuedMessages(),
+      contains_images: this.containsImages,
     };
+  }
+
+  async selectModel(selection: ModelSelection, backend: AgentBackend) {
+    if (this.isRunning) {
+      throw new ProtocolError(
+        "run_in_progress",
+        "cannot change model while a run is active",
+      );
+    }
+    if (this.containsImages && !backend.model.input.includes("image")) {
+      throw new ProtocolError(
+        "model_capability_mismatch",
+        "the conversation contains images but the target model does not support image input",
+      );
+    }
+    this.agent.streamFunction = backend.streamFn;
+    this.agent.state.model = backend.model;
+    this.selection = selection;
+    await this.persist();
+    await this.emit("session.model_changed", {
+      provider_id: selection.provider,
+      model_id: selection.model,
+    });
+    return this.state();
   }
 
   private async onAgentEvent(event: AgentEvent) {
@@ -363,6 +396,9 @@ class RuntimeSession {
     return this.runtime.store.save(
       {
         session_id: this.id,
+        provider_id: this.selection.provider,
+        model_id: this.selection.model,
+        contains_images: this.containsImages,
         next_seq: this.nextSeq,
         status: this.activeRunId ? "running" : "idle",
         active_run_id: this.activeRunId,
@@ -380,28 +416,51 @@ export class AgentRuntime {
   private readonly listeners = new Set<(event: EventEnvelope) => void>();
   private readonly pendingTools = new Map<string, DeferredTool>();
   private readonly backendFactory: BackendFactory;
+  private readonly providerHost: ProviderHost | undefined;
   private readonly toolHandler: ToolHandler | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
 
-  private constructor(options: RuntimeOptions) {
+  private constructor(
+    options: RuntimeOptions,
+    backendFactory: BackendFactory,
+    defaultSelection?: ModelSelection,
+  ) {
     this.store = options.store ?? new MemorySessionStore();
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? randomUUID;
     this.toolHandler = options.toolHandler;
-    this.backendFactory = options.backendFactory ?? createDeepSeekBackend;
-    this.backendInfo = this.backendFactory();
+    this.providerHost = options.providerHost;
+    this.backendFactory = backendFactory;
+    this.backendInfo = this.backendFactory(defaultSelection);
   }
 
   static async create(options: RuntimeOptions = {}) {
-    const runtime = new AgentRuntime(options);
+    let defaultSelection: ModelSelection | undefined;
+    if (options.providerHost) {
+      defaultSelection = await options.providerHost.defaultModel();
+    }
+    const backendFactory =
+      options.backendFactory ??
+      ((selection?: ModelSelection) => {
+        if (!options.providerHost || !selection) {
+          throw new Error("provider host and model selection are required");
+        }
+        return options.providerHost.backend(selection);
+      });
+    const runtime = new AgentRuntime(options, backendFactory, defaultSelection);
     for (const record of await runtime.store.loadAll()) {
+      const selection = {
+        provider: record.state.provider_id,
+        model: record.state.model_id,
+      };
       const session = new RuntimeSession(
         record.state.session_id,
         record.state,
         record.events,
         runtime,
-        runtime.backendFactory(),
+        runtime.backendFactory(selection),
+        selection,
       );
       runtime.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -419,14 +478,24 @@ export class AgentRuntime {
     return this.idFactory();
   }
 
-  providerStatus() {
+  async providerStatus() {
+    const selection = this.providerHost
+      ? await this.providerHost.defaultModel()
+      : {
+          provider:
+            this.backendInfo.provider ?? this.backendInfo.model.provider,
+          model: this.backendInfo.modelId ?? this.backendInfo.model.id,
+        };
+    const configured = this.providerHost
+      ? await this.providerHost.isConfigured(selection.provider)
+      : await this.backendInfo.credentialAvailable?.();
     return {
-      provider: this.backendInfo.provider ?? this.backendInfo.model.provider,
-      model: this.backendInfo.modelId ?? this.backendInfo.model.id,
-      credential: this.backendInfo.credentialAvailable?.()
-        ? "available"
-        : "unavailable",
-      credential_env: DEEPSEEK_API_KEY_ENV,
+      provider: selection.provider,
+      model: selection.model,
+      credential: configured ? "available" : "unavailable",
+      provider_count: this.providerHost
+        ? (await this.providerHost.providers()).length
+        : 1,
     };
   }
 
@@ -439,32 +508,188 @@ export class AgentRuntime {
     for (const listener of this.listeners) listener(event);
   }
 
-  async createSession(requestedId?: string) {
+  async createSession(requestedId?: string, requestedModel?: ModelSelection) {
     const id = requestedId ?? this.newId();
     if (this.sessions.has(id))
       throw new ProtocolError("session_exists", "session already exists");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
       throw new ProtocolError("invalid_params", "invalid session_id");
+    const selection = this.providerHost
+      ? (requestedModel ?? (await this.providerHost.defaultModel()))
+      : {
+          provider:
+            this.backendInfo.provider ?? this.backendInfo.model.provider,
+          model: this.backendInfo.modelId ?? this.backendInfo.model.id,
+        };
     const session = new RuntimeSession(
       id,
       undefined,
       [],
       this,
-      this.backendFactory(),
+      this.backendFactory(selection),
+      selection,
     );
     this.sessions.set(id, session);
-    await session.emit("session.created", {});
+    await session.emit("session.created", {
+      provider_id: selection.provider,
+      model_id: selection.model,
+    });
     return session.state();
   }
 
-  async prompt(sessionId: string, text: string) {
-    if (this.backendInfo.credentialAvailable?.() === false) {
+  async prompt(sessionId: string, text: string, images: ImageContent[] = []) {
+    const session = this.session(sessionId);
+    const state = session.state();
+    const configured = this.providerHost
+      ? await this.providerHost.isConfigured(state.provider_id)
+      : ((await this.backendInfo.credentialAvailable?.()) ?? true);
+    if (!configured) {
       throw new ProtocolError(
         "provider_unavailable",
-        `${DEEPSEEK_API_KEY_ENV} is not configured for deepseek-v4-flash`,
+        `provider ${state.provider_id} is not configured`,
       );
     }
-    return { run_id: await this.session(sessionId).prompt(text) };
+    if (
+      images.length > 0 &&
+      !session.agent.state.model.input.includes("image")
+    ) {
+      throw new ProtocolError(
+        "model_capability_mismatch",
+        "the current model does not support image input",
+      );
+    }
+    return { run_id: await session.prompt(text, images) };
+  }
+
+  async providers() {
+    if (!this.providerHost) return [];
+    return this.providerHost.providers();
+  }
+
+  models(providerId: string, query = "", limit = 100) {
+    if (!this.providerHost) return [];
+    try {
+      return this.providerHost.listModels(providerId, query, limit);
+    } catch (error) {
+      throw new ProtocolError(
+        "provider_not_found",
+        error instanceof Error ? error.message : "provider not found",
+      );
+    }
+  }
+
+  async config() {
+    if (!this.providerHost)
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    return this.providerHost.store.publicSnapshot();
+  }
+
+  async saveApiKey(
+    providerId: string,
+    key: string,
+    env?: Record<string, string>,
+  ) {
+    if (!this.providerHost)
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    try {
+      await this.providerHost.saveApiKey(providerId, key, env);
+      return {
+        provider_id: providerId,
+        configured: true,
+        credential_type: "api_key",
+      };
+    } catch (error) {
+      throw new ProtocolError(
+        "invalid_provider_config",
+        error instanceof Error ? error.message : "provider config failed",
+      );
+    }
+  }
+
+  async logoutProvider(providerId: string) {
+    if (!this.providerHost)
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    try {
+      await this.providerHost.logout(providerId);
+      return { provider_id: providerId, configured: false };
+    } catch (error) {
+      throw new ProtocolError(
+        "provider_not_found",
+        error instanceof Error ? error.message : "provider logout failed",
+      );
+    }
+  }
+
+  async selectModel(sessionId: string | undefined, selection: ModelSelection) {
+    if (!this.providerHost)
+      throw new ProtocolError("unsupported", "model selection unavailable");
+    let backend: AgentBackend;
+    try {
+      backend = this.providerHost.backend(selection);
+    } catch (error) {
+      throw new ProtocolError(
+        "model_not_found",
+        error instanceof Error ? error.message : "model not found",
+      );
+    }
+    if (sessionId) {
+      return this.session(sessionId).selectModel(selection, backend);
+    }
+    await this.providerHost.selectDefault(selection);
+    return { ...selection };
+  }
+
+  async saveCustomProvider(config: CustomProviderConfig) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "custom providers unavailable");
+    }
+    if (
+      this.providerHost.isCustom(config.id) &&
+      [...this.sessions.values()].some(
+        (session) => session.state().provider_id === config.id,
+      )
+    ) {
+      throw new ProtocolError(
+        "provider_in_use",
+        "custom provider is used by a session",
+      );
+    }
+    try {
+      await this.providerHost.saveCustomProvider(config);
+      return { provider_id: config.id, configured: true };
+    } catch (error) {
+      throw new ProtocolError(
+        "invalid_provider_config",
+        error instanceof Error ? error.message : "custom provider save failed",
+      );
+    }
+  }
+
+  async deleteCustomProvider(providerId: string) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "custom providers unavailable");
+    }
+    if (
+      [...this.sessions.values()].some(
+        (session) => session.state().provider_id === providerId,
+      )
+    ) {
+      throw new ProtocolError(
+        "provider_in_use",
+        "custom provider is used by a session",
+      );
+    }
+    try {
+      await this.providerHost.deleteCustomProvider(providerId);
+      return { provider_id: providerId, deleted: true };
+    } catch (error) {
+      throw new ProtocolError(
+        "invalid_provider_config",
+        error instanceof Error
+          ? error.message
+          : "custom provider delete failed",
+      );
+    }
   }
 
   abort(sessionId: string) {

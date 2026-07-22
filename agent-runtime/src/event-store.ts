@@ -13,6 +13,9 @@ import type { EventEnvelope } from "./protocol.js";
 
 export interface PersistedSession {
   session_id: string;
+  provider_id: string;
+  model_id: string;
+  contains_images: boolean;
   next_seq: number;
   status: "idle" | "running";
   active_run_id: string | null;

@@ -46,17 +46,17 @@ export interface ModelSummary {
 }
 
 function customProvider(config: CustomProviderConfig): Provider {
-  const models: Model<"openai-completions">[] = config.models.map((id) => ({
-    id,
-    name: id,
+  const models: Model<"openai-completions">[] = config.models.map((item) => ({
+    id: item.id,
+    name: item.name ?? item.id,
     api: "openai-completions",
     provider: config.id,
     baseUrl: config.base_url,
-    reasoning: false,
-    input: ["text"],
+    reasoning: item.reasoning,
+    input: item.input,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
-    maxTokens: 8_192,
+    contextWindow: item.context_window,
+    maxTokens: item.max_tokens,
   }));
   return createProvider({
     id: config.id,
@@ -194,6 +194,10 @@ export class ProviderHost {
 
   async defaultModel() {
     return (await this.store.snapshot()).default_model;
+  }
+
+  isCustom(providerId: string) {
+    return this.customIds.has(providerId);
   }
 
   async selectDefault(selection: ModelSelection) {

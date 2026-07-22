@@ -11,7 +11,7 @@ use tauri::{Emitter, Manager};
 use crate::sidecar::engine_request_blocking;
 
 const AGENT_PROTOCOL: &str = "ferry-agent/v1";
-const MAX_COMMAND_BYTES: usize = 256 * 1024;
+const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -343,6 +343,14 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "follow_up"
             | "state"
             | "events.replay"
+            | "providers.list"
+            | "models.list"
+            | "config.get"
+            | "credential.set"
+            | "provider.logout"
+            | "model.select"
+            | "custom_provider.upsert"
+            | "custom_provider.delete"
     ) {
         return Err("Agent 命令不允许从前端调用".to_owned());
     }

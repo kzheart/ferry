@@ -156,6 +156,9 @@ describe("AgentRuntime", () => {
     const store = new MemorySessionStore();
     const state: PersistedSession = {
       session_id: "s1",
+      provider_id: "test",
+      model_id: "test-model",
+      contains_images: false,
       next_seq: 2,
       status: "running",
       active_run_id: "old-run",
