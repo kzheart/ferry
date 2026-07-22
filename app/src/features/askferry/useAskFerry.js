@@ -9,8 +9,6 @@ import { applyEvent, emptyLog, patchApproval }
 const MODE_KEY = "ferry-askferry-mode";
 const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
   "run.cancelled", "run.interrupted"]);
-// 自动模式只放行迁移与元数据;编辑另存副本仍要求人工确认
-const AUTO_TOOLS = new Set(["ferry_propose_migration", "ferry_propose_metadata_change"]);
 
 export function useAskFerry() {
   const available = agentAvailable();
@@ -118,8 +116,8 @@ export function useAskFerry() {
               updated_at: ev.timestamp || s.updated_at }
           : s));
       }
-      if (ev.type === "operation.proposed" && modeRef.current === "auto"
-          && AUTO_TOOLS.has(ev.payload?.tool)) {
+      // 自动模式放行所有提议型写操作,不再向用户请求确认。
+      if (ev.type === "operation.proposed" && modeRef.current === "auto") {
         const item = { operation: ev.payload?.operation || {}, runId: ev.run_id };
         approveRef.current(sid, item, true);
       }

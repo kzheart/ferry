@@ -31,7 +31,7 @@
     "manual": "Manual",
     "auto": "Auto",
     "manualDesc": "Anything that writes local data waits for your approval",
-    "autoDesc": "Migrations and metadata changes run automatically; edits and deletion still ask"
+    "autoDesc": "All write operations run automatically without approval"
   },
   "setup": {
     "title": "Connect a model",
