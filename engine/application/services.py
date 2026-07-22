@@ -79,8 +79,8 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             dry_run: bool = False, probe: bool = False,
             max_turn: int | None = None,
             probe_model: str | None = None,
-            content_locale: str | None = None) -> dict:
-    sess = _read_tree(src, ref)
+            content_locale: str | None = None, *, _session=None) -> dict:
+    sess = _session if _session is not None else _read_tree(src, ref)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
     target = adapter(dst).require("migration_target")
@@ -105,39 +105,46 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
 
     with narration.content_locale(content_locale):
         sid, dest = target.write(sess, target_cwd)
-    # 写回阶段可能追加新的损耗(writer 分发时才知道)
-    base["loss"] = target.plan(sess)
-    result = {**base, "session_id": sid, "dest": str(dest),
-              "resume": resume_command(dst, sid, target_cwd)}
+    artifact_active = True
+    try:
+        # 写回阶段可能追加新的损耗(writer 分发时才知道)
+        base["loss"] = target.plan(sess)
+        result = {**base, "session_id": sid, "dest": str(dest),
+                  "resume": resume_command(dst, sid, target_cwd)}
 
-    # 静态结构验证始终执行:重读产物,校验节点数 / 父子边 / 拓扑,不调用模型
-    ok, tree_detail = validate_written_tree(dst, sid, dest, _tree_shape(sess))
-    validation = {"structure": {"ok": ok, "detail": tree_detail},
-                  "runtime": {"status": "skipped"}}
-    runtime_report = None
-    if ok and probe:
-        # 运行时探针只打在临时影子副本上,正式产物不接收探针消息
-        with narration.content_locale(content_locale):
-            runtime_report = _isolated_migrate_probe(
-                dst, sess, target_cwd, model=probe_model)
-        validation["runtime"] = {**runtime_report,
-                                 "model": probe_model or None}
-        ok = runtime_report["status"] == "passed"
-    result["validation"] = validation
-    if probe or not ok:                 # 历史记录/UI 消费的 probe 字段
-        result["probe"] = runtime_report or {
-            "status": "passed" if ok else "failed",
-            "code": None if ok else "probe.structure_invalid",
-            "params": {},
-            "diagnostic": {"stdout": tree_detail, "stderr": "",
-                           "truncated": False}}
-        if probe:
-            result["probe"]["model"] = probe_model or None
-    if not ok:                          # 验收失败:删除产物,不留半成品
-        _cleanup_artifact(dst, sid, dest)
-        result["rolled_back"] = True
-    _append_history({**result, "time": int(time.time() * 1000)})
-    return result
+        # 静态结构验证始终执行:重读产物,校验节点数 / 父子边 / 拓扑,不调用模型
+        ok, tree_detail = validate_written_tree(dst, sid, dest, _tree_shape(sess))
+        validation = {"structure": {"ok": ok, "detail": tree_detail},
+                      "runtime": {"status": "skipped"}}
+        runtime_report = None
+        if ok and probe:
+            # 运行时探针只打在临时影子副本上,正式产物不接收探针消息
+            with narration.content_locale(content_locale):
+                runtime_report = _isolated_migrate_probe(
+                    dst, sess, target_cwd, model=probe_model)
+            validation["runtime"] = {**runtime_report,
+                                     "model": probe_model or None}
+            ok = runtime_report["status"] == "passed"
+        result["validation"] = validation
+        if probe or not ok:             # 历史记录/UI 消费的 probe 字段
+            result["probe"] = runtime_report or {
+                "status": "passed" if ok else "failed",
+                "code": None if ok else "probe.structure_invalid",
+                "params": {},
+                "diagnostic": {"stdout": tree_detail, "stderr": "",
+                               "truncated": False}}
+            if probe:
+                result["probe"]["model"] = probe_model or None
+        if not ok:                      # 验收失败:删除产物,不留半成品
+            _cleanup_artifact(dst, sid, dest)
+            artifact_active = False
+            result["rolled_back"] = True
+        _append_history({**result, "time": int(time.time() * 1000)})
+        return result
+    except Exception:
+        if artifact_active:
+            _cleanup_artifact(dst, sid, dest)
+        raise
 
 
 def _isolated_migrate_probe(dst: str, sess, cwd: str,
@@ -247,12 +254,18 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
 
 from .session_meta import list_all as session_meta_list  # noqa: E402
 from .session_meta import set_entry as _meta_set
+from .session_meta import compare_and_set_entry as _meta_compare_and_set
 
 META_FIELDS = {"name", "pinned", "archived", "tags"}
 
 
 def session_meta_set(sid: str, patch: dict) -> dict:
     return _meta_set(sid, {k: v for k, v in patch.items() if k in META_FIELDS})
+
+
+def session_meta_compare_and_set(sid: str, expected: dict, patch: dict) -> dict:
+    return _meta_compare_and_set(
+        sid, expected, {k: v for k, v in patch.items() if k in META_FIELDS})
 
 
 # ---------- 会话生命周期 ----------

@@ -26,6 +26,9 @@ export const FERRY_TOOL_NAMES = [
   "ferry_get_usage",
   "ferry_preview_migration",
   "ferry_preview_edit",
+  "ferry_propose_migration",
+  "ferry_propose_edit",
+  "ferry_propose_metadata_change",
 ] as const;
 
 export type FerryToolName = (typeof FERRY_TOOL_NAMES)[number];
@@ -157,6 +160,95 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
+  ferry_propose_migration: Type.Object(
+    {
+      source_tool: Type.String({ minLength: 1, maxLength: 32 }),
+      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      target_tool: Type.String({ minLength: 1, maxLength: 32 }),
+      max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
+    },
+    { additionalProperties: false },
+  ),
+  ferry_propose_edit: Type.Object(
+    {
+      tool: Type.String({ minLength: 1, maxLength: 32 }),
+      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      ops: Type.Optional(
+        Type.Array(
+          Type.Union([
+            Type.Object(
+              {
+                op: Type.Literal("delete-turn"),
+                turn: Type.Integer({ minimum: 1 }),
+              },
+              { additionalProperties: false },
+            ),
+            Type.Object(
+              {
+                op: Type.Literal("rewrite"),
+                locator: Type.String({ minLength: 1, maxLength: 512 }),
+                text: Type.String({ minLength: 1, maxLength: 20_000 }),
+              },
+              { additionalProperties: false },
+            ),
+          ]),
+          { minItems: 1, maxItems: 50 },
+        ),
+      ),
+      turn: Type.Optional(Type.Integer({ minimum: 1 })),
+      reply: Type.Optional(
+        Type.Object(
+          {
+            items: Type.Array(
+              Type.Union([
+                Type.Object(
+                  {
+                    kind: Type.Literal("text"),
+                    text: Type.String({ minLength: 1, maxLength: 20_000 }),
+                  },
+                  { additionalProperties: false },
+                ),
+                Type.Object(
+                  {
+                    kind: Type.Literal("tool"),
+                    name: Type.String({ minLength: 1, maxLength: 120 }),
+                    input: Type.Union([
+                      Type.String({ maxLength: 20_000 }),
+                      Type.Record(Type.String(), Type.Unknown()),
+                    ]),
+                    output: Type.String({ maxLength: 20_000 }),
+                  },
+                  { additionalProperties: false },
+                ),
+              ]),
+              { minItems: 1, maxItems: 100 },
+            ),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+      save_as: Type.Optional(Type.Literal(true)),
+    },
+    { additionalProperties: false },
+  ),
+  ferry_propose_metadata_change: Type.Object(
+    {
+      tool: Type.String({ minLength: 1, maxLength: 32 }),
+      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      patch: Type.Object(
+        {
+          name: Type.Optional(Type.String({ maxLength: 200 })),
+          pinned: Type.Optional(Type.Boolean()),
+          archived: Type.Optional(Type.Boolean()),
+          tags: Type.Optional(
+            Type.Array(Type.String({ maxLength: 64 }), { maxItems: 20 }),
+          ),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
@@ -168,6 +260,11 @@ const descriptions: Record<FerryToolName, string> = {
   ferry_get_usage: "Get privacy-filtered aggregate usage.",
   ferry_preview_migration: "Preview a session migration without writing data.",
   ferry_preview_edit: "Preview a session edit without writing data.",
+  ferry_propose_migration:
+    "Create an approval-required immutable migration proposal.",
+  ferry_propose_edit: "Create an approval-required immutable edit proposal.",
+  ferry_propose_metadata_change:
+    "Create an approval-required immutable metadata proposal.",
 };
 
 export function createFerryTools(

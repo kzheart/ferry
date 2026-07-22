@@ -8,6 +8,7 @@ import sys
 
 from ..application import services
 from ..application import agent_tools
+from ..application import agent_mutations
 from ..application.verification import ProbeTimeout
 from ..domain.errors import (
     DomainError, InvalidJsonError, MissingParamError, UnknownMethodError,
@@ -68,6 +69,24 @@ RPC_METHODS = {
     "agent_preview_edit": lambda p: agent_tools.preview_edit(
         p["tool"], p["ref"], ops=p.get("ops"), turn=p.get("turn"),
         reply=p.get("reply")),
+    "agent_propose_migration": lambda p: agent_mutations.propose_migration(
+        p["source_tool"], p["ref"], p["target_tool"], p["run_id"],
+        max_turn=p.get("max_turn")),
+    "agent_propose_edit": lambda p: agent_mutations.propose_edit(
+        p["tool"], p["ref"], ops=p.get("ops"), turn=p.get("turn"),
+        reply=p.get("reply"), save_as=p.get("save_as", True),
+        run_id=p["run_id"]),
+    "agent_propose_metadata_change": lambda p:
+        agent_mutations.propose_metadata_change(
+            p["tool"], p["ref"], p["patch"], p["run_id"]),
+    "agent_operation_authorize": lambda p: agent_mutations.authorize(
+        p["operation_id"], p["run_id"]),
+    "agent_operation_detail": lambda p: agent_mutations.detail(
+        p["operation_id"]),
+    "agent_operation_apply": lambda p: agent_mutations.apply(
+        p["operation_id"], p["run_id"], p["approval_token"]),
+    "agent_operation_status": lambda p: agent_mutations.status(
+        p["operation_id"]),
 }
 
 
