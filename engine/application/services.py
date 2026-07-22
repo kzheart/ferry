@@ -321,8 +321,9 @@ def authoring_preview(ref: str, turn: int | str, reply: dict,
                       tool: str = "claude") -> dict:
     from .authoring import preview
     impl = adapter(tool)
-    return preview(impl.require("editor"), impl.require("authoring"),
-                   ref, turn, reply)
+    editor = impl.require("editor")
+    return preview(editor, impl.require("authoring"), ref, turn, reply,
+                   loader=getattr(editor, "load_preview", None))
 
 
 def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
@@ -343,7 +344,9 @@ def edit_capabilities(tool: str) -> dict:
 def edit_preview(ref: str, ops: list[dict], tool: str = "claude") -> dict:
     """在内存中施加操作,返回前后统计与摘要,不落盘。"""
     from .editing import preview
-    return preview(adapter(tool).require("editor"), ref, ops)
+    editor = adapter(tool).require("editor")
+    return preview(editor, ref, ops,
+                   loader=getattr(editor, "load_preview", None))
 
 
 def edit_apply(ref: str, ops: list[dict], probe: bool = False,
