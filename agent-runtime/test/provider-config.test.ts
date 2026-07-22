@@ -21,6 +21,8 @@ describe("FileProviderConfigStore", () => {
 
     const source = await readFile(config.path, "utf8");
     expect(source).toContain("sk-plain-text-value");
+    expect(source).toContain('"fields"');
+    expect(source).not.toContain('"env"');
     expect((await stat(config.path)).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(await config.publicSnapshot())).not.toContain(
       "sk-plain-text-value",
