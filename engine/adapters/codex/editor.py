@@ -78,8 +78,11 @@ class CodexBackend(EditBackend):
             elif subtype in ("custom_tool_call_output", "function_call_output") and call_id:
                 outputs.add(call_id)
             if subtype == "message":
-                expected = "input_text" if payload.get("role") == "user" else "output_text"
-                if any(block.get("type") != expected for block in payload.get("content", [])):
+                role = payload.get("role")
+                allowed = ({"input_text", "input_image"} if role == "user"
+                           else {"output_text"} if role == "assistant" else set())
+                if not allowed or any(block.get("type") not in allowed
+                                      for block in payload.get("content", [])):
                     raise ValueError(f"Codex {payload.get('role')} 消息内容类型错误")
         if metas < 1:
             raise ValueError("Codex 会话缺少 session_meta")

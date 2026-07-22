@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { renderEvents } from "../../api/contract/events.js";
+import { writeClipboardText } from "../../api/transport/rpc.js";
 
 // 居中模态(带遮罩)
 export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 }) {
@@ -102,10 +103,12 @@ export function CmdRow({ cmd, head }) {
   const { t } = useTranslation();
   const text = typeof cmd === "string" ? cmd : cmd?.display_command || "";
   const [copied, setCopied] = useState(false);
-  const copy = () => {
-    try { navigator.clipboard?.writeText(text); } catch {}
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+  const copy = async () => {
+    try {
+      await writeClipboardText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {}
   };
   return (
     <div className="fcard" style={{ overflow: "hidden" }}>

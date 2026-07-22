@@ -23,6 +23,8 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
     # 快照记下它救的是哪次编辑，还原界面才能说清「会失去什么」
     snapshot = None if save_as else editor.snapshot(
         doc, extra={"changes": changes, "before": before, "after": editor.stats(doc)})
+    if not save_as and not snapshot:
+        raise RuntimeError("原地编辑无法创建恢复快照，已取消写入")
     result = None
     try:
         result = editor.save_copy(doc) if save_as else editor.commit(doc)

@@ -129,9 +129,19 @@ class CodexEditCodec:
             raise LocatorStaleError("Codex 消息定位符已失效，请刷新会话",
                                     {"locator": locator})
         payload = record["payload"]
-        if payload.get("role") != "user":
-            raise OperationUnsupportedError("codex", "rewrite", "assistant")
-        payload["content"] = [{"type": "input_text", "text": text}]
+        role = payload.get("role")
+        if role not in {"user", "assistant"}:
+            raise OperationUnsupportedError("codex", "rewrite", str(role))
+        content = payload.get("content") or []
+        text_types = {"input_text", "output_text"}
+        first = next((index for index, item in enumerate(content)
+                      if item.get("type") in text_types), None)
+        if first is None:
+            raise OperationUnsupportedError("codex", "rewrite", "no-text")
+        rewritten = [item for item in content if item.get("type") not in text_types]
+        rewritten.insert(first, {"type": "input_text" if role == "user" else "output_text",
+                                 "text": text})
+        payload["content"] = rewritten
         return [event("edit.message_rewritten", count=1)]
 
 

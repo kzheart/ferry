@@ -36,6 +36,8 @@ class EditBackend(ABC):
         return {"tool": self.name, "operations": operations,
             "inplace": self.inplace, "save_as": self.save_as,
             "probe": self.probe,
+            "operation_roles": {"rewrite": ["user", "assistant"],
+                                "delete-turn": ["turn"]},
             "operation_modes": {op: (["inplace"] if self.inplace else []) +
                                 (["saveas"] if self.save_as else [])
                                 for op in operations}}

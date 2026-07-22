@@ -141,13 +141,14 @@ const PinGlyph = () => (
   </svg>
 );
 
-// 单行会话:紧凑单行,悬浮浮现操作按钮(置顶/删除/更多),右键在列表内禁用
+// 单行会话:紧凑单行,悬浮浮现操作按钮(置顶/删除/更多)
 const LibraryRow = memo(function LibraryRow({ r, selected, multi,
   onRowClick, onRowPin, onRowDelete, onRowMore }) {
   const { t } = useTranslation();
   const act = (fn, id) => e => { e.stopPropagation(); fn(id, e); };
   return (
-    <div onClick={e => onRowClick(r.id, e)} onContextMenu={e => e.preventDefault()}
+    <div onClick={e => onRowClick(r.id, e)}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.id, e); }}
       title={r.dir}
       className={selected || multi ? "lib-row" : "lib-row hov-item"}
       style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,

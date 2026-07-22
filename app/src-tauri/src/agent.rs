@@ -14,6 +14,7 @@ const AGENT_PROTOCOL: &str = "ferry-agent/v1";
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static AUTO_SESSIONS: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
 type PendingResult = Result<String, String>;
 type Pending = Arc<Mutex<HashMap<String, mpsc::Sender<PendingResult>>>>;
@@ -157,6 +158,14 @@ fn read_agent_output(
             continue;
         };
         if value.get("type").is_some() {
+            if matches!(
+                value.get("type").and_then(Value::as_str),
+                Some("run.completed" | "run.failed" | "run.cancelled")
+            ) {
+                if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
+                    forget_auto_policy(session_id);
+                }
+            }
             let _ = app.emit("ferry-agent-event", &value);
             if value.get("type").and_then(Value::as_str) == Some("tool.request") {
                 let worker_app = app.clone();
@@ -210,21 +219,59 @@ fn complete_tool_request(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let outcome = route_tool(resource_dir, name, args, run_id);
-    // 提议类工具的结果只回给模型;UI 需要 operation_id 才能渲染审批卡,
-    // 由可信边界在此补发一条不落事件日志的 operation.proposed
+    let mut outcome = route_tool(resource_dir, name, args, run_id);
+    // 提议类工具由可信边界决定：手动模式发审批卡，自动模式同步授权并应用。
     if name.starts_with("ferry_propose_") {
-        if let Ok(result) = &outcome {
-            let _ = app.emit(
-                "ferry-agent-event",
-                json!({
-                    "protocol": AGENT_PROTOCOL,
-                    "session_id": session_id,
-                    "run_id": run_id,
-                    "type": "operation.proposed",
-                    "payload": { "tool": name, "operation": result },
-                }),
-            );
+        if let Ok(operation) = outcome.clone() {
+            let auto = auto_policy(session_id);
+            if auto {
+                let operation_id = operation
+                    .get("operation_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                match approve_and_apply(resource_dir, operation_id, run_id) {
+                    Ok(result) => {
+                        let _ = app.emit(
+                            "ferry-agent-event",
+                            json!({
+                                "protocol": AGENT_PROTOCOL,
+                                "session_id": session_id,
+                                "run_id": run_id,
+                                "type": "operation.applied",
+                                "payload": { "tool": name, "operation": operation.clone(),
+                                             "result": result, "auto": true },
+                            }),
+                        );
+                        outcome = Ok(json!({"operation": operation, "status": "applied",
+                                            "result": result}));
+                    }
+                    Err(code) => {
+                        let _ = app.emit(
+                            "ferry-agent-event",
+                            json!({
+                                "protocol": AGENT_PROTOCOL,
+                                "session_id": session_id,
+                                "run_id": run_id,
+                                "type": "operation.failed",
+                                "payload": { "tool": name, "operation": operation.clone(),
+                                             "error": code, "auto": true },
+                            }),
+                        );
+                        outcome = Err(code);
+                    }
+                }
+            } else {
+                let _ = app.emit(
+                    "ferry-agent-event",
+                    json!({
+                        "protocol": AGENT_PROTOCOL,
+                        "session_id": session_id,
+                        "run_id": run_id,
+                        "type": "operation.proposed",
+                        "payload": { "tool": name, "operation": operation },
+                    }),
+                );
+            }
         }
     }
     let params = match outcome {
@@ -281,19 +328,36 @@ fn route_tool(
     if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
         Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
     } else {
-        Err(envelope
-            .pointer("/error/code")
-            .and_then(Value::as_str)
-            .unwrap_or("engine.request_failed")
-            .to_owned())
+        Err(structured_engine_error(&envelope))
     }
+}
+
+fn structured_engine_error(envelope: &Value) -> String {
+    let error = envelope.get("error").and_then(Value::as_object);
+    let params = error
+        .and_then(|value| value.get("params"))
+        .cloned()
+        .filter(|value| value.to_string().len() <= 4096)
+        .unwrap_or_else(|| json!({}));
+    json!({
+        "code": error.and_then(|value| value.get("code")).and_then(Value::as_str)
+            .unwrap_or("engine.request_failed"),
+        "category": error.and_then(|value| value.get("category")).and_then(Value::as_str)
+            .unwrap_or("internal"),
+        "retryable": error.and_then(|value| value.get("retryable")).and_then(Value::as_bool)
+            .unwrap_or(false),
+        "params": params,
+    })
+    .to_string()
 }
 
 fn tool_method(name: &str) -> Option<&'static str> {
     Some(match name {
         "ferry_list_capabilities" => "agent_list_capabilities",
         "ferry_search_sessions" => "agent_search_sessions",
+        "ferry_resolve_session" => "agent_resolve_session",
         "ferry_get_session_context" => "agent_get_session_context",
+        "ferry_search_session_content" => "agent_search_session_content",
         "ferry_get_usage" => "agent_get_usage",
         "ferry_preview_migration" => "agent_preview_migration",
         "ferry_preview_edit" => "agent_preview_edit",
@@ -401,11 +465,74 @@ fn engine_value(resource_dir: &Path, method: &str, params: Value) -> Result<Valu
     if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
         Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
     } else {
-        Err(envelope
-            .pointer("/error/code")
-            .and_then(Value::as_str)
-            .unwrap_or("engine.request_failed")
-            .to_owned())
+        Err(structured_engine_error(&envelope))
+    }
+}
+
+fn approve_and_apply(
+    resource_dir: &Path,
+    operation_id: &str,
+    run_id: &str,
+) -> Result<Value, String> {
+    let approval = engine_value(
+        resource_dir,
+        "agent_operation_authorize",
+        json!({"operation_id": operation_id, "run_id": run_id}),
+    )?;
+    let token = approval
+        .get("approval_token")
+        .and_then(Value::as_str)
+        .ok_or("Engine 未返回审批凭证")?;
+    engine_value(
+        resource_dir,
+        "agent_operation_apply",
+        json!({"operation_id": operation_id, "run_id": run_id,
+               "approval_token": token}),
+    )
+}
+
+fn remember_auto_policy(request: &str) {
+    let Ok(value) = serde_json::from_str::<Value>(request) else {
+        return;
+    };
+    let method = value.get("method").and_then(Value::as_str).unwrap_or("");
+    // 自动策略绑定一次完整 run；steer/follow_up 不应在运行中途改写它。
+    if method != "prompt" {
+        return;
+    }
+    let Some(params) = value.get("params") else {
+        return;
+    };
+    let Some(session_id) = params.get("session_id").and_then(Value::as_str) else {
+        return;
+    };
+    let auto = params
+        .get("auto_apply")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if let Ok(mut sessions) = AUTO_SESSIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        sessions.insert(session_id.to_owned(), auto);
+    }
+}
+
+fn auto_policy(session_id: &str) -> bool {
+    AUTO_SESSIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .ok()
+        .and_then(|sessions| sessions.get(session_id).copied())
+        .unwrap_or(false)
+}
+
+fn forget_auto_policy(session_id: &str) {
+    if let Ok(mut sessions) = AUTO_SESSIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        sessions.remove(session_id);
     }
 }
 
@@ -415,6 +542,7 @@ pub(crate) async fn agent_command(
     request: String,
 ) -> Result<String, String> {
     validate_public_command(&request)?;
+    remember_auto_policy(&request);
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || request_agent(&app, &resource_dir, &request))
         .await
@@ -446,21 +574,7 @@ pub(crate) async fn agent_operation_approve_and_apply(
 ) -> Result<Value, String> {
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        let approval = engine_value(
-            &resource_dir,
-            "agent_operation_authorize",
-            json!({"operation_id": operation_id, "run_id": run_id}),
-        )?;
-        let token = approval
-            .get("approval_token")
-            .and_then(Value::as_str)
-            .ok_or("Engine 未返回审批凭证")?;
-        engine_value(
-            &resource_dir,
-            "agent_operation_apply",
-            json!({"operation_id": operation_id, "run_id": run_id,
-                   "approval_token": token}),
-        )
+        approve_and_apply(&resource_dir, &operation_id, &run_id)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -548,6 +662,14 @@ mod tests {
     #[test]
     fn tool_gateway_is_an_exact_allowlist() {
         assert_eq!(
+            tool_method("ferry_resolve_session"),
+            Some("agent_resolve_session")
+        );
+        assert_eq!(
+            tool_method("ferry_search_session_content"),
+            Some("agent_search_session_content")
+        );
+        assert_eq!(
             tool_method("ferry_propose_edit"),
             Some("agent_propose_edit")
         );
@@ -560,5 +682,39 @@ mod tests {
         let request = json!({"protocol": AGENT_PROTOCOL, "id": "x",
                              "method": "tool.result", "params": {}});
         assert!(validate_public_command(&request.to_string()).is_err());
+    }
+
+    #[test]
+    fn engine_errors_keep_safe_recovery_details() {
+        let envelope = json!({"ok": false, "error": {
+            "code": "agent.reference_invalid", "category": "validation",
+            "retryable": false, "params": {"field": "locator", "hint": "read context"}
+        }});
+        let error: Value = serde_json::from_str(&structured_engine_error(&envelope)).unwrap();
+        assert_eq!(error["code"], "agent.reference_invalid");
+        assert_eq!(error["params"]["hint"], "read context");
+    }
+
+    #[test]
+    fn automatic_apply_policy_is_bound_to_the_prompt_run() {
+        let session_id = "test-auto-policy-prompt-run";
+        forget_auto_policy(session_id);
+        remember_auto_policy(
+            &json!({"method": "prompt", "params": {
+                "session_id": session_id, "auto_apply": true
+            }})
+            .to_string(),
+        );
+        assert!(auto_policy(session_id));
+
+        remember_auto_policy(
+            &json!({"method": "follow_up", "params": {
+                "session_id": session_id, "auto_apply": false
+            }})
+            .to_string(),
+        );
+        assert!(auto_policy(session_id));
+        forget_auto_policy(session_id);
+        assert!(!auto_policy(session_id));
     }
 }

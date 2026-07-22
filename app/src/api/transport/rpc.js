@@ -67,6 +67,24 @@ export const revealPath = path =>
 
 export const canReveal = () => inTauri();
 
+export const writeClipboardText = async text => {
+  if (inTauri()) {
+    const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+    return writeText(String(text));
+  }
+  if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+  return navigator.clipboard.writeText(String(text));
+};
+
+export const readClipboardText = async () => {
+  if (inTauri()) {
+    const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
+    return readText();
+  }
+  if (!navigator.clipboard?.readText) throw new Error("clipboard unavailable");
+  return navigator.clipboard.readText();
+};
+
 // 原生菜单栏事件:handler 收到菜单项 id("settings"/"toggle-sidebar"/"rescan"),返回取消订阅函数
 export const onMenu = async handler => {
   if (!inTauri()) return () => {};

@@ -11,7 +11,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..domain.errors import AgentApprovalError, AgentRequestError
+from ..domain.errors import (
+    AgentApprovalError,
+    AgentRequestError,
+    LocatorStaleError,
+    OperationUnsupportedError,
+)
 from . import agent_tools, services
 from .ports import current
 
@@ -112,13 +117,15 @@ class MutationGateway:
 
     @staticmethod
     def _public(operation: Operation) -> dict:
+        risk = "low" if operation.kind == "metadata" \
+            else "high" if operation.kind == "edit" else "medium"
         return agent_tools._finalize_dto({
             "operation_id": operation.operation_id,
             "kind": operation.kind,
             "summary": _summary(operation),
             "affected_refs": [operation.params["ref"]],
             "preview": operation.preview,
-            "risk": "low" if operation.kind == "metadata" else "medium",
+            "risk": risk,
             "base_revision": operation.base_revision,
             "parameter_hash": operation.parameter_hash,
             "expires_at": operation.expires_at,
@@ -229,7 +236,7 @@ def _summary(operation: Operation) -> str:
         return f"将 {params['source_tool']} 会话迁移到 {params['target_tool']}"
     if operation.kind == "metadata":
         return "修改会话元数据"
-    return "应用已预览的会话编辑"
+    return "修改原始会话（执行前自动创建可恢复快照）"
 
 
 def _apply_operation(operation: Operation) -> dict:
@@ -249,20 +256,25 @@ def _apply_operation(operation: Operation) -> dict:
     if operation.kind == "edit":
         plugin = current().adapter(params["tool"])
         editor = plugin.require("editor")
-        if params.get("ops") is not None:
-            from .editing import apply
+        from .editing import apply
+        native_ops = agent_tools.resolve_edit_ops(record, params["ops"])
+        try:
             result, doc, snapshot = apply(
-                editor, record.canonical_ref, params["ops"],
+                editor, record.canonical_ref, native_ops,
                 params["save_as"], expected_revision=params["document_revision"])
-        else:
-            from .authoring import apply
-            result, doc, snapshot = apply(
-                editor, plugin.require("authoring"), record.canonical_ref,
-                params["turn"], params["reply"], params["save_as"],
-                revision=params["document_revision"])
-        return services._finish_mutation(
+        except LocatorStaleError as error:
+            raise agent_tools._public_locator_error(params["ops"]) from error
+        finished = services._finish_mutation(
             params["tool"], editor, result, doc, snapshot, False,
             params["save_as"])
+        session_id = finished.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            try:
+                finished["session"] = agent_tools.resolve_session(
+                    params["tool"], session_id)
+            except Exception:
+                finished["session_ref_refresh"] = "retry_with_ferry_resolve_session"
+        return finished
     if operation.kind == "metadata":
         session_id = record.row.get("id")
         if not isinstance(session_id, str) or not session_id:
@@ -292,17 +304,15 @@ def propose_migration(source_tool: str, ref: str, target_tool: str,
         "migration", params, preview, preview["revision"], run_id)
 
 
-def propose_edit(tool: str, ref: str, *, ops=None, turn=None, reply=None,
-                 save_as: bool = True, run_id: str) -> dict:
-    if not isinstance(save_as, bool):
-        raise AgentRequestError("save_as 必须是 boolean")
-    if not save_as:
-        raise AgentRequestError("Agent 编辑仅允许另存副本")
-    preview = agent_tools.preview_edit(
-        tool, ref, ops=ops, turn=turn, reply=reply)
+def propose_edit(tool: str, ref: str, *, ops, run_id: str) -> dict:
+    preview = agent_tools.preview_edit(tool, ref, ops=ops)
     record = agent_tools._INDEX.resolve(tool, ref)
-    params = {"tool": tool, "ref": ref, "ops": ops, "turn": turn,
-              "reply": reply, "save_as": save_as,
+    plugin = current().adapter(tool)
+    native_ops = agent_tools.resolve_edit_ops(record, ops)
+    if not plugin.require("editor").supports_mode(native_ops, False):
+        operations = ",".join(sorted({op["op"] for op in ops}))
+        raise OperationUnsupportedError(tool, operations, "inplace")
+    params = {"tool": tool, "ref": ref, "ops": ops, "save_as": False,
               "document_revision": preview["revision"]}
     return _GATEWAY.propose("edit", params, preview, record.revision, run_id)
 

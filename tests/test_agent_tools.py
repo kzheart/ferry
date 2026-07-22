@@ -19,6 +19,7 @@ from engine.domain.errors import (
     AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
+    LocatorStaleError,
 )
 from engine.domain.model import Block, ImageAsset, Message, Session, ToolCall
 from engine.interfaces.rpc import rpc
@@ -86,6 +87,7 @@ class Editor:
         return {"count": doc.count, "size": doc.count * 10}
 
     def apply_ops(self, doc, ops):
+        self.last_ops = copy.deepcopy(ops)
         doc.count -= len(ops)
         return [{"code": "turn.deleted"} for _ in ops]
 
@@ -100,7 +102,7 @@ class Editor:
 
     def commit(self, _doc):
         self.commits += 1
-        return {"session_id": "edited-session"}
+        return {"session_id": "private-id"}
 
     def save_copy(self, _doc):
         self.commits += 1
@@ -110,7 +112,7 @@ class Editor:
         pass
 
     def snapshot(self, _doc, reason_code="snapshot.before_edit", extra=None):
-        return None
+        return "snapshot-before-agent-edit"
 
     def restore_snapshot(self, _snapshot, _doc):
         raise AssertionError("successful apply must not restore")
@@ -211,6 +213,20 @@ def test_capabilities_and_search_never_expose_storage_locations(agent_environmen
         agent_tools.search_sessions(limit=51)
 
 
+def test_native_session_id_resolves_to_scoped_reference(agent_environment):
+    result = agent_tools.resolve_session("claude", "private-id")
+    assert result["tool"] == "claude"
+    assert result["ref"].startswith("fsr_")
+    assert result["title"] == "支付重构"
+    assert "id" not in result and "path" not in result and "dir" not in result
+    assert agent_tools.get_session_context("claude", result["ref"])["tool"] == "claude"
+
+    with pytest.raises(AgentReferenceError, match="找不到"):
+        agent_tools.resolve_session("claude", "missing-id")
+    with pytest.raises(AgentRequestError):
+        agent_tools.resolve_session("claude", "bad\nid")
+
+
 def test_only_current_index_refs_are_accepted(agent_environment):
     ref = _claude_ref()
     with pytest.raises(AgentReferenceError):
@@ -255,9 +271,9 @@ def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
 def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):
     ref = _claude_ref()
     result = agent_tools.get_session_context(
-        "claude", ref, from_turn=1, to_turn=2, max_bytes=1024)
+        "claude", ref, from_message=1, limit=4, max_bytes=2048)
     encoded = json.dumps(result, ensure_ascii=False).encode()
-    assert len(encoded) <= 1024
+    assert len(encoded) <= 2048
     text = encoded.decode()
     assert "topsecret" not in text
     assert "/tmp/" not in text and "/Users/" not in text
@@ -268,13 +284,91 @@ def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):
     assert "ghp_" not in text
     assert '"input": "[omitted]"' in text
     assert result["truncation"]["truncated"] is True
+    assert result["turn_count"] == 2
+    assert result["message_count"] == 4
+    assert result["next_from_message"] is not None
+    assert result["messages"]
+    assert result["message_range"]["to"] == result["messages"][-1]["message"]
+    assert all(item["locator"].startswith("fml_")
+               for item in result["messages"] if item["editable"])
 
     with_output = agent_tools.get_session_context(
-        "claude", ref, from_turn=1, to_turn=1,
+        "claude", ref, from_message=1, limit=2,
         include_tool_outputs=True, max_bytes=4096)
     output_text = json.dumps(with_output, ensure_ascii=False)
     assert "very-secret-token-value" not in output_text
     assert "[REDACTED]" in output_text
+
+
+def test_context_locator_is_required_for_agent_rewrite(agent_environment):
+    ref = _claude_ref()
+    context = agent_tools.get_session_context(
+        "claude", ref, from_message=1, limit=2, max_bytes=4096)
+    locator = next(item["locator"] for item in context["messages"]
+                   if item["role"] == "user" and item["editable"])
+
+    preview = agent_tools.preview_edit(
+        "claude", ref,
+        ops=[{"op": "rewrite", "locator": locator, "text": "委婉文本"}])
+    assert preview["mode"] == "edit"
+    assert agent_environment["editor"].last_ops[0]["locator"] == "index:0"
+    assert not agent_environment["editor"].last_ops[0]["locator"].startswith("fml_")
+
+    with pytest.raises(AgentReferenceError, match="Engine 签发") as error:
+        agent_tools.preview_edit(
+            "claude", ref,
+            ops=[{"op": "rewrite", "locator": "turn:1", "text": "错误定位"}])
+    assert "messages[].locator" in error.value.params["hint"]
+
+    with pytest.raises(LocatorStaleError) as stale:
+        agent_tools.preview_edit(
+            "claude", ref,
+            ops=[{"op": "rewrite", "locator": "fml_missing", "text": "错误定位"}])
+    assert stale.value.retryable is True
+    assert "messages[].locator" in stale.value.params["hint"]
+
+
+def test_content_search_returns_editable_message_locators(agent_environment):
+    ref = _claude_ref()
+    result = agent_tools.search_session_content(
+        "claude", ref, ["第二轮", "回答一"], roles=["user", "assistant"])
+    assert result["total_matches"] == 2
+    assert result["returned"] == 2
+    assert result["turn_count"] == 2
+    assert {item["role"] for item in result["matches"]} == {"user", "assistant"}
+    assert all(item["locator"].startswith("fml_") for item in result["matches"])
+    assert all("topsecret" not in item["snippet"] for item in result["matches"])
+    assert all(isinstance(item["complete"], bool) for item in result["matches"])
+
+    user = next(item for item in result["matches"] if item["role"] == "user")
+    agent_tools.preview_edit(
+        "claude", ref,
+        ops=[{"op": "rewrite", "locator": user["locator"], "text": "新的第二轮"}])
+    assert agent_environment["editor"].last_ops[0]["locator"] == "index:2"
+
+    with pytest.raises(AgentRequestError):
+        agent_tools.search_session_content("claude", ref, [], limit=20)
+
+
+def test_context_paginates_long_single_turn_by_message(agent_environment):
+    session = agent_environment["claude_browser"].session
+    session.messages = [Message("user", [Block("text", "问题")])] + [
+        Message("assistant", [Block("text", f"片段 {index}")])
+        for index in range(1, 6)
+    ]
+    ref = _claude_ref()
+
+    first = agent_tools.get_session_context(
+        "claude", ref, from_message=1, limit=2, max_bytes=4096)
+    assert first["turn_count"] == 1
+    assert [item["message"] for item in first["messages"]] == [1, 2]
+    assert first["next_from_message"] == 3
+
+    second = agent_tools.get_session_context(
+        "claude", ref, from_message=first["next_from_message"],
+        limit=2, max_bytes=4096)
+    assert [item["message"] for item in second["messages"]] == [3, 4]
+    assert all(item["turn"] == 1 for item in second["messages"])
 
 
 def test_redaction_covers_cross_platform_paths_and_common_credentials():
@@ -346,9 +440,8 @@ def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment)
         cursor = cursor["next"]
     with pytest.raises(AgentRequestError):
         agent_tools.preview_edit(
-            "claude", ref, turn=1,
-            reply={"items": [{"kind": "tool", "name": "x",
-                               "input": nested, "output": ""}]})
+            "claude", ref,
+            ops=[{"op": "rewrite", "locator": "fml_invalid", "text": nested}])
 
 
 def test_opencode_fingerprint_detects_update_and_delete(tmp_path, monkeypatch):
@@ -425,7 +518,7 @@ def test_mutation_requires_bound_one_time_approval(agent_environment):
         run_id="run-1")
     operation_id = proposal["operation_id"]
     assert proposal["parameter_hash"]
-    assert proposal["risk"] == "medium"
+    assert proposal["risk"] == "high"
     detail = agent_mutations.detail(operation_id)
     assert detail["params"]["ops"] == [{"op": "delete-turn", "turn": 1}]
     assert detail["parameter_hash"] == proposal["parameter_hash"]
@@ -442,6 +535,8 @@ def test_mutation_requires_bound_one_time_approval(agent_environment):
     result = agent_mutations.apply(
         operation_id, "run-1", approval["approval_token"])
     assert result["status"] == "applied"
+    assert result["result"]["session"]["ref"].startswith("fsr_")
+    assert result["result"]["snapshot"] == "snapshot-before-agent-edit"
     assert agent_environment["editor"].commits == 1
     with pytest.raises(AgentApprovalError):
         agent_mutations.apply(
@@ -458,9 +553,13 @@ def test_mutation_requires_bound_one_time_approval(agent_environment):
 
 def test_mutation_audit_never_persists_raw_edit_content(agent_environment):
     secret = "Bearer mutation-secret-credential"
+    context = agent_tools.get_session_context(
+        "claude", _claude_ref(), from_message=1, limit=2)
+    locator = next(item["locator"] for item in context["messages"]
+                   if item["role"] == "user" and item["editable"])
     agent_mutations.propose_edit(
         "claude", _claude_ref(),
-        ops=[{"op": "rewrite", "locator": "turn:1", "text": secret}],
+        ops=[{"op": "rewrite", "locator": locator, "text": secret}],
         run_id="run-secret")
     audit = (agent_environment["root"].parent /
              "agent-operation-audit.jsonl").read_text()

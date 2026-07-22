@@ -13,7 +13,9 @@ export const emptyLog = () => ({
 export const TOOL_LEVEL = {
   ferry_list_capabilities: "read",
   ferry_search_sessions: "read",
+  ferry_resolve_session: "read",
   ferry_get_session_context: "read",
+  ferry_search_session_content: "read",
   ferry_get_usage: "read",
   ferry_preview_migration: "preview",
   ferry_preview_edit: "preview",
@@ -82,6 +84,14 @@ export function applyEvent(log, ev) {
     case "operation.proposed":
       items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
         runId: ev.run_id, status: "pending" });
+      break;
+    case "operation.applied":
+      items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
+        runId: ev.run_id, status: "applied", result: p.result, auto: !!p.auto });
+      break;
+    case "operation.failed":
+      items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
+        runId: ev.run_id, status: "failed", error: p.error, auto: !!p.auto });
       break;
     case "run.completed":
       endRun(log, items);

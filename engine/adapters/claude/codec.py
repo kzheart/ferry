@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from ...domain.authoring import TextItem
 from ...domain.events import event
+from ...domain.errors import LocatorStaleError, OperationUnsupportedError
 from ...domain.reasoning import visible_text
 from ..base.authoring import (
     is_spawn_name, reject_authored_spawn, reject_target_spawn, replace_at_first,
@@ -149,18 +150,28 @@ class ClaudeEditCodec:
         return [event("edit.turn_deleted", turn=span.ordinal)]
 
     def rewrite_message(self, doc, locator: str, text: str) -> list[str]:
-        hit = False
-        for r in doc.data:
-            if r.get("uuid") != locator:
-                continue
-            m = r.get("message") or {}
-            if isinstance(m.get("content"), str):
-                m["content"] = text
-            elif isinstance(m.get("content"), list):
-                m["content"] = [{"type": "text", "text": text}]
-            hit = True
-        if not hit:
-            raise ValueError(f"未找到 uuid={locator}")
+        record = next((item for item in doc.data
+                       if item.get("uuid") == locator), None)
+        if record is None:
+            raise LocatorStaleError("Claude 消息定位符已失效，请刷新会话",
+                                    {"locator": locator})
+        message = record.get("message") or {}
+        role = message.get("role") or record.get("type")
+        if role not in {"user", "assistant"}:
+            raise OperationUnsupportedError("claude", "rewrite", str(role))
+        content = message.get("content")
+        if isinstance(content, str):
+            message["content"] = text
+        elif isinstance(content, list):
+            first = next((index for index, item in enumerate(content)
+                          if item.get("type") == "text"), None)
+            if first is None:
+                raise OperationUnsupportedError("claude", "rewrite", "no-text")
+            rewritten = [item for item in content if item.get("type") != "text"]
+            rewritten.insert(first, {"type": "text", "text": text})
+            message["content"] = rewritten
+        else:
+            raise OperationUnsupportedError("claude", "rewrite", "no-text")
         return [event("edit.message_rewritten", count=1)]
 
 

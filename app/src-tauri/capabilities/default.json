@@ -8,6 +8,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
     "core:window:allow-set-theme",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
     "updater:allow-check",
     "updater:allow-download",
     "updater:allow-install",
