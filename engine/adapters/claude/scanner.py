@@ -84,3 +84,22 @@ def fingerprint(ref: str) -> str:
         digest.update(resolved.read_bytes())
         digest.update(b"\0")
     return "sha256:" + digest.hexdigest()
+
+
+def agent_fingerprint(ref: str) -> str:
+    """用主会话与直属 subagent 的元数据标记 Agent 读取引用。"""
+    path = Path(ref).resolve(strict=True)
+    root = Path(os.path.expanduser("~/.claude/projects")).resolve(strict=True)
+    candidates = [path]
+    child_root = path.with_suffix("") / "subagents"
+    if child_root.exists():
+        candidates.extend(sorted(child_root.rglob("*.jsonl")))
+    digest = hashlib.sha256()
+    for candidate in candidates:
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_file() or not resolved.is_relative_to(root):
+            raise ValueError("Claude 会话树超出存储根目录")
+        stat = resolved.stat()
+        digest.update(str(resolved.relative_to(root)).encode())
+        digest.update(f"\0{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}\0".encode())
+    return "stat:" + digest.hexdigest()

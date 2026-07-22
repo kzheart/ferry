@@ -9,6 +9,7 @@ from ...domain.topology import session_roots
 from ...domain.usage import add_tokens, dominant_model, empty_tokens, has_tokens
 
 OPENCODE_DB = Path.home() / ".local/share/opencode/opencode.db"
+_FINGERPRINT_INDEX: tuple[tuple, set[str]] | None = None
 
 
 def _msg_tokens(data: dict) -> dict:
@@ -63,29 +64,26 @@ def scan(_cache):
 
 
 def fingerprint(session_id: str) -> str | None:
-    """保守地指纹化整个存储，覆盖递归子会话和 task 关联。"""
+    """以 SQLite 修订元数据校验 Agent 引用，避免每个会话重复哈希整库。"""
     if not OPENCODE_DB.exists():
         return None
     digest = hashlib.sha256()
-    uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
-    with sqlite3.connect(uri, uri=True, timeout=5) as database:
-        tables = {row[0] for row in database.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
-        if "session" not in tables:
-            return None
-        found = bool(database.execute(
-            'SELECT 1 FROM "session" WHERE "id" = ? LIMIT 1',
-            (session_id,)).fetchone())
-        if not found:
-            return None
-        for table in ("session", "message", "part"):
-            if table not in tables:
-                continue
-            rows = database.execute(
-                f'SELECT * FROM "{table}" ORDER BY 1').fetchall()
-            digest.update(table.encode())
-            digest.update(b"\0")
-            for row in rows:
-                digest.update(repr(tuple(row)).encode())
-                digest.update(b"\0")
+    stat = OPENCODE_DB.stat()
+    stamp = (str(OPENCODE_DB.resolve()), stat.st_dev, stat.st_ino,
+             stat.st_mtime_ns, stat.st_size)
+    global _FINGERPRINT_INDEX
+    if _FINGERPRINT_INDEX is None or _FINGERPRINT_INDEX[0] != stamp:
+        uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=5) as database:
+            tables = {row[0] for row in database.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "session" not in tables:
+                return None
+            session_ids = {str(row[0]) for row in database.execute(
+                'SELECT "id" FROM "session"')}
+        _FINGERPRINT_INDEX = (stamp, session_ids)
+    if session_id not in _FINGERPRINT_INDEX[1]:
+        return None
+    digest.update(session_id.encode())
+    digest.update(f"\0{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}\0".encode())
     return "sha256:" + digest.hexdigest()

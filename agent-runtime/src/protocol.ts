@@ -3,6 +3,9 @@ export const PROTOCOL_VERSION = "ferry-agent/v1" as const;
 export type CommandMethod =
   | "health"
   | "session.create"
+  | "session.rename"
+  | "session.pin"
+  | "session.delete"
   | "prompt"
   | "abort"
   | "steer"
@@ -11,7 +14,10 @@ export type CommandMethod =
   | "sessions.list"
   | "events.replay"
   | "providers.list"
+  | "provider.enabled.set"
   | "models.list"
+  | "models.enabled"
+  | "models.visibility.set"
   | "models.refresh"
   | "config.get"
   | "credential.set"
@@ -81,6 +87,9 @@ export function parseCommand(input: unknown): CommandEnvelope {
   const methods: readonly string[] = [
     "health",
     "session.create",
+    "session.rename",
+    "session.pin",
+    "session.delete",
     "prompt",
     "abort",
     "steer",
@@ -89,7 +98,10 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "sessions.list",
     "events.replay",
     "providers.list",
+    "provider.enabled.set",
     "models.list",
+    "models.enabled",
+    "models.visibility.set",
     "models.refresh",
     "config.get",
     "credential.set",

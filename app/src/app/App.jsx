@@ -20,7 +20,6 @@ import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
   ApplyConfirm, LibraryFilter, PromptBox, SearchPalette, SessionDeleteConfirm,
   Toast } from "../components/ui/Overlays.jsx";
 import AskFerry from "../features/askferry/AskFerry.jsx";
-import AgentConfigSheet from "../features/askferry/AgentConfigSheet.jsx";
 import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
 import { useAskFerry } from "../features/askferry/useAskFerry.js";
 import { useSettings } from "../features/settings/useSettings.js";
@@ -53,7 +52,8 @@ export default function App() {
 
   // ----- Ask Ferry -----
   const ferry = useAskFerry();
-  const [agentConfigOpen, setAgentConfigOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState("prefs");
+  const [agentRenameFor, setAgentRenameFor] = useState(null);
   const [aq, setAq] = useState("");
 
   // ----- 搜索与筛选 -----
@@ -112,7 +112,7 @@ export default function App() {
     if (canReveal()) return;
     const onKey = e => {
       if (e.metaKey && !e.shiftKey && !e.altKey && e.key === ",") {
-        e.preventDefault(); setSettingsOpen(true);
+        e.preventDefault(); setSettingsSection("prefs"); setSettingsOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -122,7 +122,7 @@ export default function App() {
   // 原生菜单栏事件:经 ref 转发,回调始终拿到最新闭包
   const menuActs = useRef({});
   menuActs.current = {
-    settings: () => setSettingsOpen(true),
+    settings: () => { setSettingsSection("prefs"); setSettingsOpen(true); },
     "toggle-sidebar": () => setCollapsed(v => !v),
     rescan: () => doScan(),
   };
@@ -588,10 +588,12 @@ export default function App() {
 
   // ----- 资源栏数据:Ask Ferry 对话 -----
   const aql = aq.trim().toLowerCase();
-  const ferrySessions = useMemo(() => aql
-    ? ferry.sessions.filter(s =>
-        (ferry.titles[s.session_id] || "").toLowerCase().includes(aql))
-    : ferry.sessions, [ferry.sessions, ferry.titles, aql]);
+  const ferrySessions = useMemo(() => (aql
+    ? ferry.sessions.filter(s => (s.title || "").toLowerCase().includes(aql))
+    : ferry.sessions).slice().sort((left, right) =>
+      Number(!!right.pinned) - Number(!!left.pinned)
+      || String(right.updated_at || "").localeCompare(String(left.updated_at || ""))),
+  [ferry.sessions, aql]);
 
   // ----- 资源栏骨架配置 -----
   const paneCfg = {
@@ -679,7 +681,7 @@ export default function App() {
           </button>
           <button className="hov-rail"
             onMouseEnter={e => railEnter(t("app:rail.settings"), e)} onMouseLeave={railLeave}
-            onClick={() => { setSettingsOpen(v => !v); railLeave(); }}
+            onClick={() => { setSettingsSection("prefs"); setSettingsOpen(v => !v); railLeave(); }}
             style={{ width: 40, height: 40, border: "none", borderRadius: 8,
               background: settingsOpen ? "var(--acc-soft2)" : "transparent", display: "flex",
               alignItems: "center", justifyContent: "center", cursor: "default",
@@ -722,8 +724,11 @@ export default function App() {
               <HistoryList groups={histGroups} empty={histFiltered.length === 0}
                 onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
             {view === "askferry" && (
-              <AgentSessionList sessions={ferrySessions} titles={ferry.titles}
-                activeId={ferry.activeId} onOpen={ferry.openSession} onNew={ferry.newChat} />)}
+              <AgentSessionList sessions={ferrySessions}
+                activeId={ferry.activeId} onOpen={ferry.openSession} onNew={ferry.newChat}
+                onPin={s => ferry.pin(s.session_id, !s.pinned).catch(ferry.reportError)}
+                onDelete={s => ferry.deleteSession(s.session_id).catch(ferry.reportError)}
+                onRename={setAgentRenameFor} />)}
           </Pane>
         )}
 
@@ -778,14 +783,12 @@ export default function App() {
         {view === "history" && <HistoryDetail h={histSel} />}
         {view === "askferry" && (
           <AskFerry ferry={ferry} scanSessions={sessions}
-            onOpenConfig={() => setAgentConfigOpen(true)} />)}
+            onOpenConfig={() => { setSettingsSection("providers"); setSettingsOpen(true); }} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
         </div>
       </div>
 
       {/* 弹层 */}
-      {agentConfigOpen && (
-        <AgentConfigSheet ferry={ferry} onClose={() => setAgentConfigOpen(false)} />)}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
           defaultProbe={!!settings.runtimeProbe}
@@ -803,7 +806,7 @@ export default function App() {
           emptyLabel={t("app:search.empty")}
           results={(view === "askferry"
             ? ferrySessions.map(s => ({
-                id: s.session_id, title: ferry.titles[s.session_id] || t("askferry:chat.untitled"),
+                id: s.session_id, title: s.title || t("askferry:chat.untitled"),
                 tool: null, meta: s.model_id,
                 onClick: () => ferry.openSession(s.session_id) }))
             : view === "history"
@@ -832,6 +835,15 @@ export default function App() {
           initial={metaMap[renameFor.id]?.name || renameFor.title || ""}
           onCancel={() => setRenameFor(null)}
           onConfirm={v => { setRenameFor(null); setMetaFor(renameFor.id, { name: v }); }} />)}
+      {agentRenameFor && (
+        <PromptBox title={t("askferry:pane.renameTitle")}
+          desc={t("askferry:pane.renameDesc", { title: agentRenameFor.title || t("askferry:chat.untitled") })}
+          placeholder={t("askferry:pane.renamePlaceholder")} confirmLabel={t("askferry:pane.save")}
+          initial={agentRenameFor.title || ""} onCancel={() => setAgentRenameFor(null)}
+          onConfirm={title => {
+            setAgentRenameFor(null);
+            if (title) ferry.rename(agentRenameFor.session_id, title).catch(ferry.reportError);
+          }} />)}
       {tagFor && (
         <PromptBox
           title={tagFor.batch ? t("app:prompt.tagsBatchTitle", { n: tagFor.ids.length }) : t("app:prompt.tagsTitle")}
@@ -858,7 +870,7 @@ export default function App() {
           whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}
       {settingsOpen && (
         <SettingsPage settings={settings} setSettings={setSettings}
-          updater={updater}
+          updater={updater} ferry={ferry} initialSection={settingsSection}
           scan={scan} env={env} scanning={scanning} onRescan={doScan}
           guideSeen={guideSeen}
           onOpenGuide={() => { setSettingsOpen(false); openGuide(); }}

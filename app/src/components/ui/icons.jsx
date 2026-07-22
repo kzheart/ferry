@@ -75,9 +75,12 @@ export const FilterIcon = () => svg("0 0 16 16", 12, 12,
   '<path d="M2 4h12M4.5 8h7M6.5 12h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   { color: "var(--tx3b)" });
 
-export const Caret = ({ open, size = 9 }) => svg("0 0 12 12", size, size,
+// 默认朝右;open 展开朝下,dir="left" 用于二级菜单的返回箭头
+export const Caret = ({ open, size = 9, dir }) => svg("0 0 12 12", size, size,
   '<path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
-  { flex: "none", color: "var(--tx5)", transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .16s ease" });
+  { flex: "none", color: "var(--tx5)",
+    transform: dir === "left" ? "rotate(180deg)" : open ? "rotate(90deg)" : "rotate(0deg)",
+    transition: "transform .16s ease" });
 
 export const SortCaret = () => svg("0 0 16 16", 10, 10,
   '<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -126,6 +129,7 @@ const SETTINGS_GLYPH = {
   prefs: `<g transform="scale(1.125)"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/></g>`,
   sources: '<ellipse cx="9" cy="4.6" rx="5.2" ry="2.1" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M3.8 4.6v8.8c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1V4.6M3.8 9c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>',
   updates: '<path d="M9 3.1v8.2m0 0 3-3m-3 3-3-3M4 14.4h10" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>',
+  providers: '<rect x="4.6" y="4.6" width="8.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="7.3" y="7.3" width="3.4" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 2.4v2.2M11 2.4v2.2M7 13.4v2.2M11 13.4v2.2M2.4 7h2.2M2.4 11h2.2M13.4 7h2.2M13.4 11h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
 };
 
 export const SetGlyph = ({ name, color = "var(--tx3b)" }) =>

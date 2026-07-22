@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore, type PersistedSession } from "../src/event-store.js";
+import type { EventEnvelope } from "../src/protocol.js";
 import { safeEvents, safeMessages } from "../src/runtime.js";
 
 const directories: string[] = [];
@@ -33,12 +34,12 @@ describe("FileSessionStore", () => {
 
     await Promise.all(
       Array.from({ length: 20 }, (_, index) =>
-        store.save({ ...base, next_seq: index + 1 }, []),
+        store.save({ ...base, title: `title-${index + 1}` }, []),
       ),
     );
 
     const [record] = await store.loadAll();
-    expect(record?.state.next_seq).toBe(20);
+    expect(record?.state.title).toBe("title-20");
   });
 
   it("omits tool payloads and credentials from persisted records", () => {
@@ -101,5 +102,186 @@ describe("FileSessionStore", () => {
       },
     ]);
     expect(JSON.stringify(failed)).not.toContain("secret-value");
+  });
+
+  it("keeps assistant text on the correct side of tool events", () => {
+    const events = safeEvents([
+      {
+        protocol: "ferry-agent/v1",
+        session_id: "s1",
+        run_id: "r1",
+        seq: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        type: "content.delta",
+        payload: { delta: "先搜索。" },
+      },
+      {
+        protocol: "ferry-agent/v1",
+        session_id: "s1",
+        run_id: "r1",
+        seq: 2,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        type: "tool.started",
+        payload: { name: "ferry_search_sessions", args: {} },
+      },
+      {
+        protocol: "ferry-agent/v1",
+        session_id: "s1",
+        run_id: "r1",
+        seq: 3,
+        timestamp: "2026-01-01T00:00:02.000Z",
+        type: "content.delta",
+        payload: { delta: "搜索失败。" },
+      },
+    ]);
+    expect(events.map((event) => event.type)).toEqual([
+      "content.delta",
+      "tool.started",
+      "content.delta",
+    ]);
+    expect(events.map((event) => event.payload.delta)).toEqual([
+      "先搜索。",
+      undefined,
+      "搜索失败。",
+    ]);
+  });
+
+  it("serializes deletion after pending writes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-agent-store-"));
+    directories.push(directory);
+    const store = new FileSessionStore(directory);
+    const state: PersistedSession = {
+      session_id: "s1",
+      provider_id: "test",
+      model_id: "test-model",
+      contains_images: false,
+      next_seq: 1,
+      status: "idle",
+      active_run_id: null,
+      messages: [],
+      title: "测试",
+      pinned: false,
+    };
+    await Promise.all([store.save(state, []), store.delete("s1")]);
+    expect(await readdir(directory)).not.toContain("s1.jsonl");
+  });
+
+  it("appends ordered JSONL records and buffers an unfinished assistant block", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-agent-store-"));
+    directories.push(directory);
+    const store = new FileSessionStore(directory);
+    const state: PersistedSession = {
+      session_id: "s1",
+      provider_id: "test",
+      model_id: "test-model",
+      contains_images: false,
+      next_seq: 3,
+      status: "running",
+      active_run_id: "r1",
+      messages: [
+        { role: "user", content: "搜索", timestamp: 1 },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "正在搜索" }],
+          api: "test",
+          provider: "test",
+          model: "test-model",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0,
+            },
+          },
+          stopReason: "stop",
+          timestamp: 2,
+        },
+      ],
+    };
+    const started: EventEnvelope = {
+      protocol: "ferry-agent/v1",
+      session_id: "s1",
+      run_id: "r1",
+      seq: 1,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      type: "run.started",
+      payload: { prompt: "搜索" },
+    };
+    const delta: EventEnvelope = {
+      protocol: "ferry-agent/v1",
+      session_id: "s1",
+      run_id: "r1",
+      seq: 2,
+      timestamp: "2026-01-01T00:00:01.000Z",
+      type: "content.delta",
+      payload: { delta: "正在搜索" },
+    };
+    await store.save(state, [started, delta]);
+    const beforeBoundary = await readFile(join(directory, "s1.jsonl"), "utf8");
+    expect(beforeBoundary).toContain('"type":"run.started"');
+    expect(beforeBoundary).not.toContain('"type":"content.delta"');
+
+    const tool: EventEnvelope = {
+      protocol: "ferry-agent/v1",
+      session_id: "s1",
+      run_id: "r1",
+      seq: 3,
+      timestamp: "2026-01-01T00:00:02.000Z",
+      type: "tool.started",
+      payload: { tool_call_id: "tool-1", name: "ferry_search_sessions" },
+    };
+    await store.save({ ...state, next_seq: 4 }, [started, delta, tool]);
+    const [restored] = await store.loadAll();
+    expect(restored?.events.map((event) => event.type)).toEqual([
+      "run.started",
+      "content.delta",
+      "tool.started",
+    ]);
+    expect(restored?.state.messages).toHaveLength(2);
+    expect(
+      JSON.parse(
+        await readFile(join(directory, "sessions-index.json"), "utf8"),
+      ),
+    ).toMatchObject({
+      version: 1,
+      entries: [{ session_id: "s1", latest_seq: 3 }],
+    });
+  });
+
+  it("drops an incomplete crash tail before later appends", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-agent-store-"));
+    directories.push(directory);
+    const state: PersistedSession = {
+      session_id: "s1",
+      provider_id: "test",
+      model_id: "test-model",
+      contains_images: false,
+      next_seq: 1,
+      status: "idle",
+      active_run_id: null,
+      messages: [],
+      title: "before",
+    };
+    const first = new FileSessionStore(directory);
+    await first.loadAll();
+    await first.save(state, []);
+    await appendFile(
+      join(directory, "s1.jsonl"),
+      '{"version":1,"type":"event"',
+    );
+
+    const restored = new FileSessionStore(directory);
+    expect((await restored.loadAll())[0]?.state.title).toBe("before");
+    await restored.save({ ...state, title: "after" }, []);
+    expect(
+      (await new FileSessionStore(directory).loadAll())[0]?.state.title,
+    ).toBe("after");
   });
 });

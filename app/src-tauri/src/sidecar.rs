@@ -7,6 +7,7 @@ use std::time::Duration;
 
 const ENGINE_PROTOCOL: u64 = 2;
 const ENGINE_TIMEOUT: Duration = Duration::from_secs(120);
+const AGENT_LOOKUP_TIMEOUT: Duration = Duration::from_secs(20);
 const ENGINE_COMMIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
@@ -106,7 +107,7 @@ pub(crate) fn engine_request_blocking(
     let slot = ENGINE.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
     let mut last_error = String::new();
-    for _attempt in 0..2 {
+    for _attempt in 0..request_attempts(request) {
         if guard.is_none() {
             *guard = Some(spawn_engine(resource_dir)?);
         }
@@ -134,8 +135,37 @@ fn request_timeout(request: &str) -> Duration {
         });
     if method.as_deref() == Some("agent_operation_apply") {
         ENGINE_COMMIT_TIMEOUT
+    } else if matches!(
+        method.as_deref(),
+        Some(
+            "agent_list_capabilities"
+                | "agent_search_sessions"
+                | "agent_get_session_context"
+                | "agent_get_usage"
+        )
+    ) {
+        AGENT_LOOKUP_TIMEOUT
     } else {
         ENGINE_TIMEOUT
+    }
+}
+
+fn request_attempts(request: &str) -> u8 {
+    let method = serde_json::from_str::<Value>(request)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("method")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+    if method
+        .as_deref()
+        .is_some_and(|name| name.starts_with("agent_"))
+    {
+        1
+    } else {
+        2
     }
 }
 
@@ -267,7 +297,10 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{request_timeout, validate_public_engine_request, ENGINE_COMMIT_TIMEOUT};
+    use super::{
+        request_attempts, request_timeout, validate_public_engine_request, AGENT_LOOKUP_TIMEOUT,
+        ENGINE_COMMIT_TIMEOUT,
+    };
 
     #[test]
     fn sensitive_agent_methods_are_not_generic_rpc_methods() {
@@ -283,5 +316,12 @@ mod tests {
             request_timeout(r#"{"method":"agent_operation_apply"}"#),
             ENGINE_COMMIT_TIMEOUT
         );
+    }
+
+    #[test]
+    fn agent_lookups_have_one_short_deadline() {
+        let request = r#"{"method":"agent_search_sessions"}"#;
+        assert_eq!(request_timeout(request), AGENT_LOOKUP_TIMEOUT);
+        assert_eq!(request_attempts(request), 1);
     }
 }

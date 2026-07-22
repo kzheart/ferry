@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { FileProviderConfigStore } from "../src/provider-config.js";
+import {
+  DEFAULT_ENABLED_PROVIDERS,
+  FileProviderConfigStore,
+  parseProviderConfig,
+  PROVIDER_CONFIG_VERSION,
+} from "../src/provider-config.js";
 
 async function store() {
   const directory = await mkdtemp(join(tmpdir(), "ferry-provider-config-"));
@@ -145,5 +150,60 @@ describe("FileProviderConfigStore", () => {
     await expect(
       config.modify("bad", async () => ({ type: "api_key" })),
     ).rejects.toThrow("empty");
+  });
+
+  it("tracks enabled providers, model visibility and thinking level", async () => {
+    const config = await store();
+    expect((await config.snapshot()).enabled_providers).toEqual(
+      DEFAULT_ENABLED_PROVIDERS,
+    );
+
+    await config.setProviderEnabled("groq", true);
+    expect((await config.snapshot()).enabled_providers).toContain("groq");
+    await config.setVisibleModels("groq", ["a", "b"]);
+    expect((await config.publicSnapshot()).visible_models).toEqual({
+      groq: ["a", "b"],
+    });
+    // 传 null 恢复「全部可见」;停用 Provider 也会丢掉它的可见性白名单
+    await config.setVisibleModels("groq", null);
+    expect((await config.snapshot()).visible_models.groq).toBeUndefined();
+    await config.setVisibleModels("groq", ["a"]);
+    await config.setProviderEnabled("groq", false);
+    const after = await config.snapshot();
+    expect(after.enabled_providers).not.toContain("groq");
+    expect(after.visible_models.groq).toBeUndefined();
+
+    await config.setDefaultModel({
+      provider: "openai",
+      model: "gpt-5",
+      thinking: "high",
+    });
+    expect((await config.snapshot()).default_model).toEqual({
+      provider: "openai",
+      model: "gpt-5",
+      thinking: "high",
+    });
+    await expect(
+      config.setDefaultModel({
+        provider: "openai",
+        model: "gpt-5",
+        thinking: "turbo" as never,
+      }),
+    ).rejects.toThrow("thinking level");
+  });
+
+  it("migrates a v1 document by keeping providers that already have credentials", () => {
+    const migrated = parseProviderConfig({
+      schema_version: 1,
+      default_model: { provider: "groq", model: "llama" },
+      credentials: { groq: { type: "api_key", key: "k" } },
+      custom_providers: [],
+    });
+    expect(migrated.schema_version).toBe(PROVIDER_CONFIG_VERSION);
+    expect(migrated.enabled_providers).toEqual([
+      ...DEFAULT_ENABLED_PROVIDERS,
+      "groq",
+    ]);
+    expect(migrated.visible_models).toEqual({});
   });
 });

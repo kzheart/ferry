@@ -13,11 +13,13 @@ class BrowserAdapter:
 
     def __init__(self, scan: Callable, read: Callable, resolve_ref: Callable,
                  fingerprint: Callable | None = None,
+                 agent_fingerprint: Callable | None = None,
                  agent_read: Callable | None = None):
         self._scan = scan
         self._read = read
         self._resolve_ref = resolve_ref
         self._fingerprint = fingerprint
+        self._agent_fingerprint = agent_fingerprint
         self._agent_read = agent_read
 
     def scan(self, cache):
@@ -34,6 +36,12 @@ class BrowserAdapter:
 
     def fingerprint(self, ref):
         return self._fingerprint(ref) if self._fingerprint else None
+
+    def agent_fingerprint(self, ref):
+        """Agent 索引用轻量修订标记，避免搜索时深度遍历整个历史库。"""
+        if self._agent_fingerprint:
+            return self._agent_fingerprint(ref)
+        return self.fingerprint(ref)
 
 
 class ModelCatalogAdapter:

@@ -138,6 +138,11 @@ def _path_identity(path: Path) -> tuple:
             digest.hexdigest())
 
 
+def _agent_fingerprint(browser, ref: str):
+    marker = getattr(browser, "agent_fingerprint", None)
+    return (marker or browser.fingerprint)(ref)
+
+
 class AgentSessionIndex:
     def __init__(self):
         self._by_opaque: dict[str, IndexedSession] = {}
@@ -192,8 +197,7 @@ class AgentSessionIndex:
             if not resolved.is_relative_to(root) or not resolved.is_file():
                 raise AgentReferenceError("ref 超出 Agent 会话根目录")
             browser = current().adapter(tool).browser
-            fingerprint = getattr(browser, "fingerprint", lambda _ref: None)(
-                str(resolved))
+            fingerprint = _agent_fingerprint(browser, str(resolved))
             identity = (_path_identity(resolved), fingerprint)
             if fingerprint is None or record.source_identity != identity:
                 raise AgentReferenceError("ref 在扫描后已变化，请重新搜索")
@@ -201,8 +205,8 @@ class AgentSessionIndex:
             if Path(plugin_ref).resolve(strict=True) != resolved:
                 raise AgentReferenceError("adapter 未能规范解析 ref")
         else:
-            fingerprint = getattr(current().adapter(tool).browser,
-                                  "fingerprint", lambda _ref: None)(record.canonical_ref)
+            browser = current().adapter(tool).browser
+            fingerprint = _agent_fingerprint(browser, record.canonical_ref)
             if fingerprint is None or fingerprint != record.source_identity:
                 raise AgentReferenceError("ref 在扫描后已变化，请重新搜索")
         return record
@@ -230,8 +234,7 @@ class AgentSessionIndex:
             if resolved != path:
                 return None, None, True, None
             try:
-                fingerprint = getattr(
-                    plugin.browser, "fingerprint", lambda _ref: None)(str(path))
+                fingerprint = _agent_fingerprint(plugin.browser, str(path))
                 if fingerprint is None:
                     return None, None, True, None
                 identity = (_path_identity(path), fingerprint)
@@ -243,7 +246,7 @@ class AgentSessionIndex:
             return None, None, False, None
         if plugin.browser.resolve_ref(raw) != raw:
             return None, None, False, None
-        fingerprint = getattr(plugin.browser, "fingerprint", lambda _ref: None)(raw)
+        fingerprint = _agent_fingerprint(plugin.browser, raw)
         if fingerprint is None:
             return None, None, False, None
         return raw, None, False, fingerprint

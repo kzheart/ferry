@@ -5,7 +5,8 @@
     "updates": "Updates",
     "railTitle": "Settings",
     "close": "Close settings (Esc)",
-    "followSystemDesc": "Auto-select based on system language"
+    "followSystemDesc": "Auto-select based on system language",
+    "providers": "Providers"
   },
   "theme": {
     "light": "Light",
@@ -72,5 +73,31 @@
       "installing": "Installing, restarting soon…",
       "error": "Update operation failed"
     }
+  },
+  "providers": {
+    "add": "Add provider",
+    "remove": "Remove provider",
+    "searchProvider": "Search providers",
+    "noCandidate": "No more providers to add",
+    "emptyHint": "Click “+” at the bottom left to add a provider.\nOnly providers configured here show up in the model picker.",
+    "configured": "Configured · {{type}}",
+    "notConfigured": "Not configured",
+    "apiKey": "API key",
+    "keyPlaceholder": "Paste API key",
+    "keySet": "Saved — paste a new key to replace it",
+    "keySaved": "API key saved and active",
+    "save": "Save",
+    "oauthLogin": "OAuth sign-in",
+    "logout": "Sign out",
+    "models": "Models",
+    "shownCount": "{{n}}/{{total}} in picker",
+    "searchModel": "Search models",
+    "refreshModels": "Refresh catalog",
+    "refreshDone": "Model catalog refreshed",
+    "refreshPartial": "Some providers failed to refresh: {{list}}",
+    "noModels": "No models for this provider yet — try refreshing the catalog",
+    "image": "image",
+    "reasoning": "reasoning",
+    "plaintextNote": "Credentials are stored in plaintext in providers.json (0600) under Ferry's config directory; never logged. Host environment variables are not read."
   }
 }

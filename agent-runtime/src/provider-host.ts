@@ -33,7 +33,9 @@ export interface ProviderSummary {
   credential_type: CredentialInfo["type"] | null;
   auth_types: AuthType[];
   custom: boolean;
+  enabled: boolean;
   model_count: number;
+  visible_model_count: number;
 }
 
 export interface ModelSummary {
@@ -154,15 +156,19 @@ export class ProviderHost {
   }
 
   async providers(): Promise<ProviderSummary[]> {
+    const config = await this.store.snapshot();
     const credentials = new Map(
-      (await this.store.list()).map((item) => [item.providerId, item.type]),
+      Object.entries(config.credentials).map(([id, value]) => [id, value.type]),
     );
+    const enabled = new Set(config.enabled_providers);
     const output: ProviderSummary[] = [];
     for (const provider of this.models.getProviders()) {
       const credentialType = credentials.get(provider.id) ?? null;
       const authTypes: AuthType[] = [];
       if (provider.auth.apiKey) authTypes.push("api_key");
       if (provider.auth.oauth) authTypes.push("oauth");
+      const models = provider.getModels();
+      const visible = config.visible_models[provider.id];
       output.push({
         id: provider.id,
         name: provider.name,
@@ -170,10 +176,55 @@ export class ProviderHost {
         credential_type: credentialType,
         auth_types: authTypes,
         custom: this.customIds.has(provider.id),
-        model_count: provider.getModels().length,
+        enabled: enabled.has(provider.id),
+        model_count: models.length,
+        visible_model_count: visible
+          ? models.filter((model) => visible.includes(model.id)).length
+          : models.length,
       });
     }
     return output.sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async setProviderEnabled(providerId: string, enabled: boolean) {
+    if (!this.models.getProvider(providerId)) {
+      throw new Error("provider not found");
+    }
+    if (!enabled && this.customIds.has(providerId)) {
+      throw new Error("custom providers are removed instead of disabled");
+    }
+    await this.store.setProviderEnabled(providerId, enabled);
+    return { provider_id: providerId, enabled };
+  }
+
+  async setVisibleModels(providerId: string, modelIds: string[] | null) {
+    const provider = this.models.getProvider(providerId);
+    if (!provider) throw new Error("provider not found");
+    if (modelIds) {
+      const known = new Set(provider.getModels().map((model) => model.id));
+      const unknown = modelIds.find((id) => !known.has(id));
+      if (unknown) throw new Error(`model is not available: ${unknown}`);
+    }
+    await this.store.setVisibleModels(providerId, modelIds);
+    return { provider_id: providerId, model_ids: modelIds };
+  }
+
+  // 模型选择器的数据源:已启用 + 已配置凭据的 Provider,按用户勾选的可见模型展开
+  async enabledModels(): Promise<
+    Array<ModelSummary & { provider_name: string }>
+  > {
+    const config = await this.store.snapshot();
+    const output: Array<ModelSummary & { provider_name: string }> = [];
+    for (const providerId of config.enabled_providers) {
+      const provider = this.models.getProvider(providerId);
+      if (!provider || !(await this.isConfigured(providerId))) continue;
+      const visible = config.visible_models[providerId];
+      for (const model of this.models.getModels(providerId)) {
+        if (visible && !visible.includes(model.id)) continue;
+        output.push({ ...summary(model), provider_name: provider.name });
+      }
+    }
+    return output;
   }
 
   model(selection: ModelSelection) {
