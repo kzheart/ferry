@@ -32,7 +32,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            agent-runtime/package-lock.json
+      - run: npm ci
+        working-directory: agent-runtime
+      - run: npm run format:check && npm run typecheck && npm test && npm run build
+        working-directory: agent-runtime
       - run: npm ci
         working-directory: app
       - run: npm run build
@@ -46,9 +52,11 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             binary: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
+            agent-binary: app/src-tauri/binaries/ferry-agent-aarch64-apple-darwin
           - os: windows-2022
             target: x86_64-pc-windows-msvc
             binary: app/src-tauri/binaries/ferry-engine-x86_64-pc-windows-msvc.exe
+            agent-binary: app/src-tauri/binaries/ferry-agent-x86_64-pc-windows-msvc.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -57,6 +65,11 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-build.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agent-runtime/package-lock.json
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           target: ${{ matrix.target }}
@@ -65,6 +78,13 @@ jobs:
           workspaces: app/src-tauri -> target
           key: ${{ matrix.target }}
       - run: python -m pip install -r requirements-build.txt
+      - run: npm ci
+        working-directory: agent-runtime
+      - run: npm run build:sea -- "$BUILD_TARGET"
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        working-directory: agent-runtime
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
         shell: bash
         env:
@@ -93,3 +113,23 @@ jobs:
                   assert response["result"], response
               else:
                   assert set(response["result"]) == {"claude", "codex", "opencode"}, response
+      - name: Agent sidecar smoke
+        shell: python
+        env:
+          SIDECAR: ${{ matrix.agent-binary }}
+        run: |
+          import json, os, subprocess, tempfile
+          request = {
+              "protocol": "ferry-agent/v1", "id": "ci-health",
+              "method": "health", "params": {},
+          }
+          with tempfile.TemporaryDirectory() as data_dir:
+              env = {**os.environ, "FERRY_AGENT_DATA_DIR": data_dir}
+              process = subprocess.run(
+                  [os.environ["SIDECAR"]], input=json.dumps(request) + "\n",
+                  text=True, capture_output=True, check=True, timeout=30, env=env)
+          response = json.loads(process.stdout.splitlines()[-1])
+          assert response["ok"] is True, (response, process.stderr)
+          assert response["result"]["protocol"] == "ferry-agent/v1", response
+          assert response["result"]["provider"] == "deepseek", response
+          assert response["result"]["model"] == "deepseek-v4-flash", response

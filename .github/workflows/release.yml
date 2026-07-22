@@ -73,7 +73,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: |
+            app/package-lock.json
+            agent-runtime/package-lock.json
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           target: ${{ matrix.target }}
@@ -84,6 +86,13 @@ jobs:
       - run: python -m pip install -r requirements-build.txt
       - run: npm ci
         working-directory: app
+      - run: npm ci
+        working-directory: agent-runtime
+      - run: npm run build:sea -- "$BUILD_TARGET"
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        working-directory: agent-runtime
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
         shell: bash
         env:

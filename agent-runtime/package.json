@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:sea": "node scripts/build-sea.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --exclude test/deepseek.integration.test.ts",
     "test:deepseek": "vitest run test/deepseek.integration.test.ts",
@@ -22,6 +23,8 @@
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "esbuild": "0.28.1",
+    "postject": "1.0.0-alpha.6",
     "prettier": "3.7.4",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
