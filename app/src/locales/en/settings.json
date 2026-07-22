@@ -13,7 +13,8 @@
     "light": "Light",
     "dark": "Dark",
     "system": "Follow system",
-    "groupTitle": "Appearance"
+    "groupTitle": "Appearance",
+    "label": "Theme"
   },
   "writeCheck": {
     "groupTitle": "Write verification",
