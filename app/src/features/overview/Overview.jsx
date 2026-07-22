@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../../api/contract/tools.js";
-import { ToolIcon, SortCaret, CheckIcon, RailGlyph } from "../../components/ui/icons.jsx";
+import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../components/ui/icons.jsx";
 import { computeOverview } from "../../domain/sessions/overviewModel.js";
 
 const TOOL_COLOR = { claude: "var(--t-claude)", codex: "var(--t-codex)", opencode: "var(--t-opencode)" };
@@ -286,7 +286,7 @@ function insightCopy(ins, t) {
 
 // ---------- 主组件 ----------
 export default function Overview({ sessions = [], historyRows = [],
-  prices = {} }) {
+  prices = {}, scanning = false }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [scope, setScope] = useState("30");
@@ -356,8 +356,10 @@ export default function Overview({ sessions = [], historyRows = [],
         </div>
 
         {data.empty ? (
-          <div style={{ ...card, padding: "48px 20px", textAlign: "center", color: "var(--tx5)", fontSize: 13 }}>
-            {t("overview:emptyState")}
+          <div style={{ ...card, padding: "48px 20px", color: "var(--tx5)", fontSize: 13,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {/* 首次扫描尚未完成时是加载中,不是"没有会话",避免误导去手动重扫 */}
+            {scanning ? <><Spinner /> {t("overview:scanning")}</> : t("overview:emptyState")}
           </div>
         ) : (
           <>

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { canReveal, onMenu, openTerminal, revealPath, rpc,
   preloadWindow, startWindowDrag, toggleWindowMaximize } from "../api/transport/rpc.js";
-import { TOOLS, TOOL_NAME, toolHasCapability } from "../api/contract/tools.js";
+import { TOOLS, TOOL_NAME, onToolsHydrated, resumeDescriptor,
+  toolHasCapability } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
@@ -85,6 +86,12 @@ export default function App() {
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, applyEdit } = editing;
+
+  // 清单水合(首启无缓存 / 引擎清单与缓存不一致)后,把"全选"态筛选器扩展到新全集
+  useEffect(() => onToolsHydrated(() => {
+    setLibF(v => ({ ...v, src: [...TOOLS] }));
+    setHistF(v => ({ ...v, src: [...TOOLS] }));
+  }), []);
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -724,7 +731,7 @@ export default function App() {
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         {view === "overview" && (
           <Overview sessions={sessions} historyRows={historyRows}
-            prices={pricing?.prices || {}} />)}
+            prices={pricing?.prices || {}} scanning={scanning} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
             meta={detailMeta}
