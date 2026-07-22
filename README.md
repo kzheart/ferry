@@ -13,7 +13,7 @@
 <p align="center">
   Ferry brings together the conversation history of Claude Code, Codex CLI, and OpenCode
   into a single library. Browse thousands of sessions, migrate context between agents
-  with loss preview, and understand your token usage — privacy-first, no account required.
+  with an impact preview, and understand your token usage — privacy-first, no account required.
 </p>
 
 <p align="center">
@@ -53,7 +53,7 @@ means digging through JSONL files by hand.
 Ferry solves three problems:
 
 - **Unified library** — All agent sessions side by side, searchable by title, directory, or command, with tool calls, reasoning summaries, and session trees rendered in a single consistent view.
-- **Cross-agent migration** — Move a conversation between agents with a loss preview upfront: see what maps natively, what gets downgraded, and what can't come along. Source sessions are never modified.
+- **Cross-agent migration** — Move a conversation between agents with a migration impact preview upfront: see what maps natively, what gets downgraded, and what can't come along. Source sessions are never modified.
 - **Usage insights** — Year-round activity view, cost by model and project, migration summaries, and insight cards that surface notable changes in your coding habits.
 
 ## Supported Agents
@@ -88,13 +88,13 @@ Move a conversation from one agent to another. Every agent stores sessions diffe
 so migration is rarely lossless. Ferry shows you exactly what the cost is — _before_
 anything is written.
 
-- **Loss preview** — See what maps natively, what gets downgraded, and what drops, before you commit.
+- **Impact preview** — See what maps natively, what gets downgraded, and what drops, before you commit.
 - **Native output** — Sessions are written in the target agent's own format.
 - **Resume command** — Ferry hands back a terminal command to continue the conversation immediately.
 - **Migration history** — Every migration is recorded, so you can trace where a session came from and what it cost to bring it across.
 
 <div align="center">
-  <img src="./docs/screenshots/migrate.png" alt="Migration loss preview" width="88%" />
+  <img src="./docs/screenshots/migrate.png" alt="Migration impact preview" width="88%" />
 </div>
 
 <div align="center">

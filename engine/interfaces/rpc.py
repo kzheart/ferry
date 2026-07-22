@@ -27,6 +27,7 @@ RPC_METHODS = {
         p["tool"], p["session_id"], p.get("cwd") or "."),
     "models": lambda p: services.list_models(p["tool"]),
     "history": lambda p: services.history(),
+    "history_delete": lambda p: services.history_delete(p["id"]),
     "pricing": lambda p: services.pricing(force=p.get("force", False)),
     "show": lambda p: services.show(p["tool"], p["ref"]),
     "session_asset": lambda p: services.session_asset(p["tool"], p["ref"], p["asset_id"]),

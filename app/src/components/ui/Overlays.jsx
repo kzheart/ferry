@@ -164,6 +164,34 @@ function ConfirmBox({ width = 400, title, children, actions }) {
   );
 }
 
+// ---------- 删除迁移记录确认 ----------
+export function HistoryDeleteConfirm({ h, onCancel, onConfirm }) {
+  const { t } = useTranslation();
+  return (
+    <ConfirmBox width={420} title={t("overlays:historyDelete.title")} actions={<>
+      <button className="fbtn" style={{ height: 34, fontSize: 13 }}
+        onClick={onCancel}>{t("overlays:delete.cancel")}</button>
+      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
+        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
+        onClick={onConfirm}>{t("overlays:historyDelete.confirm")}</button>
+    </>}>
+      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
+        {t("overlays:historyDelete.desc", { title: h.title || h.source_id })}</div>
+      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
+        padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+        {[["var(--ok)", t("overlays:historyDelete.bulletTarget", { tool: TOOL_NAME[h.dst] })],
+          ["var(--err)", t("overlays:historyDelete.bulletIrreversible")]].map(([c, txt], i) => (
+          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)",
+            lineHeight: 1.45 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
+              marginTop: 6 }} />{txt}
+          </div>
+        ))}
+      </div>
+    </ConfirmBox>
+  );
+}
+
 export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, onConfirm }) {
   const { t } = useTranslation();
   const modes = [

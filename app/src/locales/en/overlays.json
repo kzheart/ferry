@@ -83,5 +83,12 @@
   "cmd": {
     "copied": "Copied",
     "copy": "Copy"
+  },
+  "historyDelete": {
+    "title": "Delete this migration record?",
+    "desc": "The record for “{{title}}” will be removed from Ferry's history.",
+    "bulletTarget": "The session already migrated to {{tool}} is untouched and still resumable",
+    "bulletIrreversible": "The record itself cannot be undone",
+    "confirm": "Delete record"
   }
 }

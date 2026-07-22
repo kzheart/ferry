@@ -32,8 +32,8 @@
   },
   "preview": {
     "failed": "预演失败:{{error}}",
-    "loading": "正在预演转换、计算损耗…",
-    "lossTitle": "损耗预演 · {{scope}}",
+    "loading": "正在预演转换、评估影响…",
+    "impactTitle": "影响预览 · {{scope}}",
     "scaleLabel": "迁移规模",
     "scaleMeta": "{{msg}} 条消息 · {{tree}} 个树节点"
   },
@@ -87,12 +87,13 @@
     "fieldSrcToDst": "源工具 → 目标工具",
     "fieldTree": "会话树",
     "treeMeta": "{{n}} 个节点{{detail}}",
-    "lossReport": "损耗报告",
+    "impactReport": "迁移影响",
     "verdict": "验收结果",
     "probeNotRunDefault": "运行时探针未执行(默认关闭,可在设置中开启)",
     "probeNotRun": "未运行探针验收",
     "rollbackTitle": "回滚信息",
     "rollbackDesc": "探针未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可重试或改用上下文摘要继续。",
-    "handoffIn": "交付 · 在 {{tool}} 中接续"
+    "handoffIn": "交付 · 在 {{tool}} 中接续",
+    "delete": "删除这条记录"
   }
 }

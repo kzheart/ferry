@@ -1,4 +1,4 @@
-// 共享 UI 构件:弹层容器 / 损耗三栏 / 水位条 / 复制按钮等
+// 共享 UI 构件:弹层容器 / 影响三栏 / 水位条 / 复制按钮等
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -48,7 +48,7 @@ const clipList = (arr, max, t) => {
   return [...uniq.slice(0, max), t("overlays:loss.moreItems", { n: uniq.length })];
 };
 
-// 损耗报告三栏(迁移预演 / 迁移历史共用)
+// 迁移影响三栏(迁移预演 / 迁移历史共用)
 export function LossCols({ loss }) {
   const { t } = useTranslation();
   if (!loss) return null;
