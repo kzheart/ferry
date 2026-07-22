@@ -2,6 +2,7 @@ import json
 
 from engine.adapters.codex.editor import CodexBackend
 from engine.adapters.codex.native import CodexStore
+from engine.application import services
 
 
 def _rollout(path, thread_id):
@@ -12,7 +13,7 @@ def _rollout(path, thread_id):
     }) + "\n")
 
 
-def test_codex_preview_load_does_not_recover_pending_transactions(tmp_path):
+def test_codex_preview_load_does_not_recover_pending_transactions(tmp_path, monkeypatch):
     home = tmp_path / "codex-home"
     sessions = home / "sessions"
     anchor = sessions / "2026/07/22/rollout-anchor.jsonl"
@@ -31,7 +32,18 @@ def test_codex_preview_load_does_not_recover_pending_transactions(tmp_path):
     before = {path: path.read_bytes() for path in (anchor, victim, marker, journal)}
     store = CodexStore(home, sessions, None)
 
-    document = CodexBackend(store_factory=lambda _path: store).load_preview(str(anchor))
+    backend = CodexBackend(store_factory=lambda _path: store)
+    document = backend.load_preview(str(anchor))
 
     assert document.ref == str(anchor)
+    assert {path: path.read_bytes() for path in before} == before
+
+    class Plugin:
+        @staticmethod
+        def require(capability):
+            assert capability == "editor"
+            return backend
+
+    monkeypatch.setattr(services, "adapter", lambda _tool: Plugin())
+    services.edit_preview(str(anchor), [], tool="codex")
     assert {path: path.read_bytes() for path in before} == before

@@ -1,5 +1,6 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
+mod agent;
 #[cfg(target_os = "macos")]
 mod menu;
 mod reveal;
@@ -18,7 +19,8 @@ pub fn run() {
             use tauri::Manager;
             // 引擎预热与 webview 启动并行,首个 RPC 无需再等冷启动
             if let Ok(resource_dir) = app.path().resource_dir() {
-                sidecar::warm_up(resource_dir);
+                sidecar::warm_up(resource_dir.clone());
+                agent::warm_up(app.handle().clone(), resource_dir);
             }
             #[cfg(target_os = "macos")]
             {
@@ -36,6 +38,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
+            agent::agent_command,
+            agent::agent_operation_detail,
+            agent::agent_operation_approve_and_apply,
+            agent::agent_operation_status,
             terminal::open_terminal,
             reveal::reveal_path
         ])

@@ -62,15 +62,47 @@ function userMessage(content: string): AgentMessage {
   return { role: "user", content, timestamp: Date.now() };
 }
 
-function safeMessages(messages: AgentMessage[]): AgentMessage[] {
+function safeText(value: string, limit: number): string {
+  const redacted = value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "[REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
+    .replace(/\b(?:gh[opusr]|github_pat)_[A-Za-z0-9_]{16,}\b/g, "[REDACTED]")
+    .replace(
+      /\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*\s*[:=]\s*[^\s,;]+/gi,
+      "[REDACTED]",
+    )
+    .replace(
+      /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----/g,
+      "[REDACTED]",
+    )
+    .replace(/\b[A-Z]:[\\/][^\s\]\[)(}{"']+/gi, "[ABSOLUTE_PATH]")
+    .replace(/(?<![:\w])\/(?:[^/\s]+\/)*[^\s\]\[)(}{"']+/g, "[ABSOLUTE_PATH]");
+  return redacted.length > limit ? `${redacted.slice(0, limit)}…` : redacted;
+}
+
+export function safeMessages(messages: AgentMessage[]): AgentMessage[] {
   return messages.map((message): AgentMessage => {
     if (message.role === "assistant") {
       return {
         ...message,
-        content: message.content.filter((part) => part.type !== "thinking"),
+        ...(message.errorMessage
+          ? { errorMessage: safeText(message.errorMessage, 1_000) }
+          : {}),
+        content: message.content
+          .filter((part) => part.type !== "thinking")
+          .map((part) =>
+            part.type === "text"
+              ? { ...part, text: safeText(part.text, 16_000) }
+              : part.type === "toolCall"
+                ? { ...part, arguments: { omitted: true } }
+                : part,
+          ),
       };
     }
-    if (message.role === "user" && Array.isArray(message.content)) {
+    if (message.role === "user") {
+      if (typeof message.content === "string") {
+        return { ...message, content: safeText(message.content, 16_000) };
+      }
       return {
         ...message,
         content: message.content.map((part) =>
@@ -79,7 +111,9 @@ function safeMessages(messages: AgentMessage[]): AgentMessage[] {
                 type: "text" as const,
                 text: `[image omitted: ${part.mimeType}]`,
               }
-            : part,
+            : part.type === "text"
+              ? { ...part, text: safeText(part.text, 16_000) }
+              : part,
         ),
       };
     }
@@ -93,12 +127,47 @@ function safeMessages(messages: AgentMessage[]): AgentMessage[] {
                 type: "text" as const,
                 text: `[image omitted: ${part.mimeType}]`,
               }
-            : part,
+            : part.type === "text"
+              ? { ...part, text: safeText(part.text, 4_000) }
+              : part,
         ),
       };
     }
     return message;
   });
+}
+
+export function safeEvents(events: EventEnvelope[]): EventEnvelope[] {
+  const safe = events.map((event) => {
+    const payload = { ...event.payload };
+    if (event.type === "tool.started" || event.type === "tool.request") {
+      if ("args" in payload) payload.args = "[omitted]";
+    }
+    if (event.type === "tool.progress" && "partial" in payload) {
+      payload.partial = "[omitted]";
+    }
+    if (typeof payload.message === "string") {
+      payload.message = safeText(payload.message, 1_000);
+    }
+    return { ...event, payload };
+  });
+  const deltas = new Map<string, { first: number; text: string }>();
+  safe.forEach((event, index) => {
+    if (
+      event.type !== "content.delta" ||
+      typeof event.payload.delta !== "string"
+    )
+      return;
+    const key = event.run_id ?? event.session_id;
+    const group = deltas.get(key) ?? { first: index, text: "" };
+    group.text += event.payload.delta;
+    deltas.set(key, group);
+    event.payload.delta = "";
+  });
+  for (const group of deltas.values()) {
+    safe[group.first]!.payload.delta = safeText(group.text, 16_000);
+  }
+  return safe;
 }
 
 class RuntimeSession {
@@ -191,9 +260,7 @@ class RuntimeSession {
       } catch (error) {
         this.terminalResult = {
           type: "run.failed",
-          payload: {
-            message: error instanceof Error ? error.message : "unknown failure",
-          },
+          payload: { message: "provider request failed" },
         };
       }
       const terminal = this.terminalResult ?? {
@@ -282,7 +349,7 @@ class RuntimeSession {
         ) {
           this.terminalResult = {
             type: "run.failed",
-            payload: { message: final.errorMessage ?? "provider error" },
+            payload: { message: "provider request failed" },
           };
         } else {
           this.terminalResult = { type: "run.completed", payload: {} };
@@ -301,7 +368,7 @@ class RuntimeSession {
         active_run_id: this.activeRunId,
         messages: safeMessages(this.agent.state.messages),
       },
-      this.events,
+      safeEvents(this.events),
     );
   }
 }

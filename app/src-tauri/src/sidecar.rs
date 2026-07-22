@@ -1,16 +1,19 @@
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::{mpsc, Mutex, OnceLock};
+use std::time::Duration;
 
 const ENGINE_PROTOCOL: u64 = 2;
+const ENGINE_TIMEOUT: Duration = Duration::from_secs(120);
+const ENGINE_COMMIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
 struct EngineProcess {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    responses: mpsc::Receiver<Result<String, String>>,
 }
 
 impl Drop for EngineProcess {
@@ -34,11 +37,31 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
         .spawn()
         .map_err(|error| format!("启动引擎失败: {error}"))?;
     let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
-    let stdout = BufReader::new(child.stdout.take().ok_or("引擎 stdout 不可用")?);
+    let stdout = child.stdout.take().ok_or("引擎 stdout 不可用")?;
+    let (sender, responses) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if sender.send(Ok(line.trim_end().to_owned())).is_err() {
+                        return;
+                    }
+                }
+                Err(error) => {
+                    let _ = sender.send(Err(format!("读取引擎失败: {error}")));
+                    return;
+                }
+            }
+        }
+        let _ = sender.send(Err("引擎进程已退出".to_owned()));
+    });
     let mut engine = EngineProcess {
         child,
         stdin,
-        stdout,
+        responses,
     };
     handshake(&mut engine)?;
     Ok(engine)
@@ -47,19 +70,9 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
 /// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
 /// 在 release 下会让 PyInstaller onefile 多解压一整次,冷启动时间翻倍。
 fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
-    let line = (|| -> std::io::Result<String> {
-        engine.stdin.write_all(b"{\"method\":\"health\"}\n")?;
-        engine.stdin.flush()?;
-        let mut line = String::new();
-        if engine.stdout.read_line(&mut line)? == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "引擎进程已退出",
-            ));
-        }
-        Ok(line)
-    })()
-    .map_err(|error| format!("引擎健康检查失败: {error}"))?;
+    let line = engine
+        .exchange(r#"{"method":"health"}"#, Duration::from_secs(15))
+        .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     let health: Value = serde_json::from_str(&line)
         .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
     let protocol = health.get("protocol").and_then(Value::as_u64);
@@ -72,10 +85,24 @@ fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
     Ok(())
 }
 
+impl EngineProcess {
+    fn exchange(&mut self, request: &str, timeout: Duration) -> Result<String, String> {
+        self.stdin
+            .write_all(request.as_bytes())
+            .and_then(|_| self.stdin.write_all(b"\n"))
+            .and_then(|_| self.stdin.flush())
+            .map_err(|error| format!("写入引擎失败: {error}"))?;
+        self.responses
+            .recv_timeout(timeout)
+            .map_err(|error| format!("等待引擎响应失败: {error}"))?
+    }
+}
+
 pub(crate) fn engine_request_blocking(
     resource_dir: &Path,
     request: &str,
 ) -> Result<String, String> {
+    let timeout = request_timeout(request);
     let slot = ENGINE.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
     let mut last_error = String::new();
@@ -84,28 +111,32 @@ pub(crate) fn engine_request_blocking(
             *guard = Some(spawn_engine(resource_dir)?);
         }
         let engine = guard.as_mut().expect("engine just ensured");
-        let exchange = (|| -> std::io::Result<String> {
-            engine.stdin.write_all(request.as_bytes())?;
-            engine.stdin.write_all(b"\n")?;
-            engine.stdin.flush()?;
-            let mut line = String::new();
-            if engine.stdout.read_line(&mut line)? == 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "引擎进程已退出",
-                ));
-            }
-            Ok(line)
-        })();
+        let exchange = engine.exchange(request, timeout);
         match exchange {
-            Ok(line) => return Ok(line.trim_end().to_owned()),
+            Ok(line) => return Ok(line),
             Err(error) => {
-                last_error = error.to_string();
+                last_error = error;
                 *guard = None; // Drop 会回收进程,下一轮重启
             }
         }
     }
     Err(format!("引擎通信失败: {last_error}"))
+}
+
+fn request_timeout(request: &str) -> Duration {
+    let method = serde_json::from_str::<Value>(request)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("method")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+    if method.as_deref() == Some("agent_operation_apply") {
+        ENGINE_COMMIT_TIMEOUT
+    } else {
+        ENGINE_TIMEOUT
+    }
 }
 
 /// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
@@ -159,7 +190,7 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
         });
         command.args(["-m", "engine.api"]);
         command.current_dir(repo_root());
-        return Ok(command);
+        Ok(command)
     }
 
     #[cfg(not(debug_assertions))]
@@ -193,8 +224,64 @@ pub(crate) fn warm_up(resource_dir: PathBuf) {
 #[tauri::command]
 pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result<String, String> {
     use tauri::Manager;
+    validate_public_engine_request(&request)?;
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
+}
+
+fn validate_public_engine_request(request: &str) -> Result<(), String> {
+    let value: Value = serde_json::from_str(request)
+        .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
+    let method = value.get("method").and_then(Value::as_str).unwrap_or("");
+    if !matches!(
+        method,
+        "health"
+            | "version"
+            | "scan"
+            | "env"
+            | "tools"
+            | "resume"
+            | "models"
+            | "history"
+            | "pricing"
+            | "show"
+            | "session_asset"
+            | "authoring_capabilities"
+            | "authoring_preview"
+            | "edit_capabilities"
+            | "edit_preview"
+            | "session_meta_list"
+            | "agent_list_capabilities"
+            | "agent_search_sessions"
+            | "agent_get_session_context"
+            | "agent_get_usage"
+            | "agent_preview_migration"
+            | "agent_preview_edit"
+    ) {
+        return Err("该 Engine 方法不允许从通用前端 RPC 调用".to_owned());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{request_timeout, validate_public_engine_request, ENGINE_COMMIT_TIMEOUT};
+
+    #[test]
+    fn sensitive_agent_methods_are_not_generic_rpc_methods() {
+        assert!(validate_public_engine_request(r#"{"method":"agent_operation_apply"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"edit_apply"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"migrate"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"scan"}"#).is_ok());
+    }
+
+    #[test]
+    fn mutation_commit_is_not_killed_by_normal_rpc_timeout() {
+        assert_eq!(
+            request_timeout(r#"{"method":"agent_operation_apply"}"#),
+            ENGINE_COMMIT_TIMEOUT
+        );
+    }
 }

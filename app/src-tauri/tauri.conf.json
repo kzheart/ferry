@@ -36,7 +36,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": ["app", "dmg", "nsis"],
-    "externalBin": ["binaries/ferry-engine"],
+    "externalBin": ["binaries/ferry-engine", "binaries/ferry-agent"],
     "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }
