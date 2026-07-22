@@ -40,7 +40,9 @@
     "batchPartialFail": "批量删除部分失败",
     "batchPartialFailDesc": "成功 {{done}} 个,失败 {{fail}} 个。",
     "batchDone": "已删除会话",
-    "batchDoneDesc": "已删除 {{done}} 个会话。"
+    "batchDoneDesc": "已删除 {{done}} 个会话。",
+    "sessionReferenceCopied": "已复制会话引用",
+    "sessionReferenceCopiedDesc": "粘贴到 Agent 输入框即可添加该会话。"
   },
   "ctx": {
     "batchArchive": "批量归档",
@@ -49,6 +51,7 @@
     "deleteN": "删除 {{n}} 个会话…",
     "cancelMulti": "取消多选",
     "resumeTerminal": "在终端恢复会话",
+    "addToAgent": "添加到 Agent 对话",
     "migrateTo": "迁移到…",
     "rename": "重命名…",
     "unpin": "取消置顶",
@@ -57,6 +60,7 @@
     "unarchive": "取消归档",
     "tags": "标签…",
     "copyId": "复制会话 ID",
+    "copySessionReference": "复制会话引用",
     "copyResume": "复制接续命令",
     "revealInFinder": "在 Finder 中显示",
     "deleteSession": "删除会话…",

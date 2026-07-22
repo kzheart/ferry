@@ -40,6 +40,23 @@ describe("AgentRuntime", () => {
     expect(runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
   });
 
+  it("keeps structured prompt context out of the visible chat history", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    await runtime.prompt(
+      "s1",
+      '<ferry_session_refs>{"sessions":[]}</ferry_session_refs>\n\ninspect',
+      [],
+      "@「支付重构」\ninspect",
+    );
+    await runtime.waitForIdle("s1");
+
+    const started = runtime
+      .replay("s1", 0)
+      .find((event) => event.type === "run.started");
+    expect(started?.payload.prompt).toBe("@「支付重构」\ninspect");
+  });
+
   it("executes only an explicitly registered Ferry tool", async () => {
     const calls: string[] = [];
     const runtime = await createRuntime({

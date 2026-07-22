@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor, toolHasCapability } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds } from "../../domain/sessions/sessionModel.js";
-import { rpc } from "../../api/transport/rpc.js";
+import { rpc, writeClipboardText } from "../../api/transport/rpc.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
   PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
@@ -181,9 +181,11 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   const aiText = fullAiText.slice(0, 8000);
   const deleted = !!delOp;
 
-  const copyAi = () => {
-    try { navigator.clipboard?.writeText(fullAiText); } catch {}
-    setCopied(true); setTimeout(() => setCopied(false), 1400);
+  const copyAi = async () => {
+    try {
+      await writeClipboardText(fullAiText);
+      setCopied(true); setTimeout(() => setCopied(false), 1400);
+    } catch {}
   };
   const fitTa = el => {
     if (!el) return;
@@ -404,7 +406,7 @@ export default memo(function SessionDetail({ meta, data, error,
 
   const copyResume = () => {
     resumeDescriptor(meta.tool, meta.id, meta.dir)
-      .then(d => navigator.clipboard?.writeText(d.display_command))
+      .then(d => writeClipboardText(d.display_command))
       .catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };

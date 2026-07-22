@@ -22,7 +22,7 @@ class OpenCodeApiError(RuntimeError):
 
 
 class OpenCodeApi:
-    SUPPORTED_VERSION = "1.18.3"
+    SUPPORTED_VERSION = "1.18.4"
 
     def __init__(self, cwd: str, timeout: float = 20):
         self.cwd = cwd

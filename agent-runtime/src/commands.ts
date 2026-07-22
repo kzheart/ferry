@@ -76,6 +76,8 @@ export async function dispatch(
           requireString(params, "session_id", 128),
           requireString(params, "text"),
           parseImages(params.images),
+          optionalString(params, "display_text") ??
+            requireString(params, "text"),
         );
         break;
       case "abort":
@@ -85,12 +87,16 @@ export async function dispatch(
         result = runtime.steer(
           requireString(params, "session_id", 128),
           requireString(params, "text"),
+          optionalString(params, "display_text") ??
+            requireString(params, "text"),
         );
         break;
       case "follow_up":
         result = runtime.followUp(
           requireString(params, "session_id", 128),
           requireString(params, "text"),
+          optionalString(params, "display_text") ??
+            requireString(params, "text"),
         );
         break;
       case "state":

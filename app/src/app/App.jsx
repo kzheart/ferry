@@ -2,11 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { canReveal, onMenu, openTerminal, revealPath, rpc,
-  preloadWindow, startWindowDrag, toggleWindowMaximize } from "../api/transport/rpc.js";
+  preloadWindow, startWindowDrag, toggleWindowMaximize,
+  writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, onToolsHydrated, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
+import { addSessionAttachment, serializeSessionAttachment }
+  from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
@@ -67,6 +70,7 @@ export default function App() {
 
   // ----- Ask Ferry -----
   const ferry = useAskFerry();
+  const [agentAttachments, setAgentAttachments] = useState([]);
   const [settingsSection, setSettingsSection] = useState("prefs");
   const [agentRenameFor, setAgentRenameFor] = useState(null);
   const [aq, setAq] = useState("");
@@ -287,6 +291,18 @@ export default function App() {
   const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
   const ctxMeta = ctxSess ? metaMap[ctxSess.id] || {} : {};
   const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
+  const addToAgent = session => {
+    setAgentAttachments(list => addSessionAttachment(list, session));
+    setView("askferry");
+    setCtxMenu(null);
+  };
+  const copySessionReference = session => {
+    const reference = serializeSessionAttachment(session);
+    writeClipboardText(reference).then(() => {
+      setToast({ kind: "ok", title: t("app:toast.sessionReferenceCopied"),
+        desc: t("app:toast.sessionReferenceCopiedDesc") });
+    }).catch(() => {});
+  };
   const ctxItems = ctxMenu?.multi ? [
     { label: t("app:ctx.addTags"), onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
     { sep: true },
@@ -295,6 +311,7 @@ export default function App() {
     { sep: true },
     { label: t("app:ctx.cancelMulti"), onClick: () => setMultiSel([]) },
   ] : ctxSess ? [
+    { label: t("app:ctx.addToAgent"), onClick: () => addToAgent(ctxSess) },
     { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir)
         .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
@@ -309,10 +326,12 @@ export default function App() {
       onClick: () => setMetaFor(ctxSess.id, { pinned: !ctxMeta.pinned }) },
     { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
     { sep: true },
-    { label: t("app:ctx.copyId"), onClick: () => navigator.clipboard?.writeText(ctxSess.id) },
+    { label: t("app:ctx.copySessionReference"),
+      onClick: () => copySessionReference(ctxSess) },
+    { label: t("app:ctx.copyId"), onClick: () => writeClipboardText(ctxSess.id).catch(() => {}) },
     { label: t("app:ctx.copyResume"), onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir)
-        .then(d => navigator.clipboard?.writeText(d.display_command))
+        .then(d => writeClipboardText(d.display_command))
         .catch(() => {}) },
     { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path || !canReveal(),
       disabledHint: ctxSess.path ? t("app:ctx.onlyDesktop") : t("app:ctx.noSessionFile"),
@@ -509,10 +528,14 @@ export default function App() {
     }
     setMultiSel([]); select(id);
   };
-  // ⋯ 按钮取代右键菜单:菜单锚定在按钮下方
+  // 更多按钮锚定在按钮下方;右键则锚定在指针位置
   rowHandlers.current.more = (id, e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pos = { x: rect.right - 208, y: rect.bottom + 4 };
+    const pos = e.type === "contextmenu"
+      ? { x: e.clientX, y: e.clientY }
+      : (() => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          return { x: rect.right - 208, y: rect.bottom + 4 };
+        })();
     if (multiSel.length > 1 && multiSel.includes(id)) {
       setCtxMenu({ ...pos, id, multi: true });
       return;
@@ -894,6 +917,7 @@ export default function App() {
           <HistoryDetail h={histSel} onDelete={() => setHistDel(histSel)} />)}
         {view === "askferry" && (
           <AskFerry ferry={ferry} scanSessions={sessions}
+            attachments={agentAttachments} onAttachmentsChange={setAgentAttachments}
             onOpenConfig={(section = "providers") => {
               setSettingsSection(section); setSettingsOpen(true); }} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}

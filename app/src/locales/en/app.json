@@ -40,7 +40,9 @@
     "batchPartialFail": "Batch delete partially failed",
     "batchPartialFailDesc": "{{done}} succeeded, {{fail}} failed.",
     "batchDone": "Sessions deleted",
-    "batchDoneDesc": "Deleted {{done}} sessions."
+    "batchDoneDesc": "Deleted {{done}} sessions.",
+    "sessionReferenceCopied": "Session reference copied",
+    "sessionReferenceCopiedDesc": "Paste it into the Agent composer to attach this session."
   },
   "ctx": {
     "batchArchive": "Archive all",
@@ -49,6 +51,7 @@
     "deleteN": "Delete {{n}} sessions…",
     "cancelMulti": "Cancel multi-select",
     "resumeTerminal": "Resume in terminal",
+    "addToAgent": "Add to Agent chat",
     "migrateTo": "Migrate to…",
     "rename": "Rename…",
     "unpin": "Unpin",
@@ -57,6 +60,7 @@
     "unarchive": "Unarchive",
     "tags": "Tags…",
     "copyId": "Copy session ID",
+    "copySessionReference": "Copy session reference",
     "copyResume": "Copy resume command",
     "revealInFinder": "Reveal in Finder",
     "deleteSession": "Delete session…",

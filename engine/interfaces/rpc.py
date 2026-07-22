@@ -56,11 +56,16 @@ RPC_METHODS = {
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),
+    "agent_resolve_session": lambda p: agent_tools.resolve_session(
+        p["tool"], p["session_id"]),
     "agent_get_session_context": lambda p: agent_tools.get_session_context(
-        p["tool"], p["ref"], from_turn=p.get("from_turn", 1),
-        to_turn=p.get("to_turn"),
+        p["tool"], p["ref"], from_message=p.get("from_message", 1),
+        limit=p.get("limit", 20),
         include_tool_outputs=p.get("include_tool_outputs", False),
         max_bytes=p.get("max_bytes", agent_tools.DEFAULT_CONTEXT_BYTES)),
+    "agent_search_session_content": lambda p: agent_tools.search_session_content(
+        p["tool"], p["ref"], p["terms"], roles=p.get("roles"),
+        limit=p.get("limit", 20)),
     "agent_get_usage": lambda p: agent_tools.get_usage(
         agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range")),
@@ -68,15 +73,12 @@ RPC_METHODS = {
         p["source_tool"], p["ref"], p["target_tool"],
         max_turn=p.get("max_turn")),
     "agent_preview_edit": lambda p: agent_tools.preview_edit(
-        p["tool"], p["ref"], ops=p.get("ops"), turn=p.get("turn"),
-        reply=p.get("reply")),
+        p["tool"], p["ref"], ops=p["ops"]),
     "agent_propose_migration": lambda p: agent_mutations.propose_migration(
         p["source_tool"], p["ref"], p["target_tool"], p["run_id"],
         max_turn=p.get("max_turn")),
     "agent_propose_edit": lambda p: agent_mutations.propose_edit(
-        p["tool"], p["ref"], ops=p.get("ops"), turn=p.get("turn"),
-        reply=p.get("reply"), save_as=p.get("save_as", True),
-        run_id=p["run_id"]),
+        p["tool"], p["ref"], ops=p["ops"], run_id=p["run_id"]),
     "agent_propose_metadata_change": lambda p:
         agent_mutations.propose_metadata_change(
             p["tool"], p["ref"], p["patch"], p["run_id"]),

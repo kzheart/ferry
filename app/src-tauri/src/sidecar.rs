@@ -149,7 +149,9 @@ fn request_timeout(request: &str) -> Duration {
         Some(
             "agent_list_capabilities"
                 | "agent_search_sessions"
+                | "agent_resolve_session"
                 | "agent_get_session_context"
+                | "agent_search_session_content"
                 | "agent_get_usage"
         )
     ) {
@@ -402,7 +404,9 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "session_meta_list"
             | "agent_list_capabilities"
             | "agent_search_sessions"
+            | "agent_resolve_session"
             | "agent_get_session_context"
+            | "agent_search_session_content"
             | "agent_get_usage"
             | "agent_preview_migration"
             | "agent_preview_edit"

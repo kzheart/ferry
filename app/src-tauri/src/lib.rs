@@ -12,6 +12,7 @@ pub fn run() {
     // 必须在 spawn 任何引擎进程之前修复 PATH,子进程只在 fork 时继承一次环境。
     let _ = fix_path_env::fix();
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())

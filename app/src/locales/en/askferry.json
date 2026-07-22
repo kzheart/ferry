@@ -31,7 +31,7 @@
     "manual": "Manual",
     "auto": "Auto",
     "manualDesc": "Anything that writes local data waits for your approval",
-    "autoDesc": "All write operations run automatically without approval"
+    "autoDesc": "Snapshot and edit original sessions automatically without approval"
   },
   "tool": {
     "running": "Running",
@@ -44,7 +44,7 @@
   },
   "approval": {
     "kindMigration": "Migration proposal",
-    "kindEdit": "Edit proposal (saved as copy)",
+    "kindEdit": "Edit original session",
     "kindMetadata": "Metadata change proposal",
     "kindGeneric": "Write proposal",
     "applied": "Approved & applied",
@@ -66,7 +66,8 @@
     "send": "Send",
     "followUp": "Follow up",
     "steer": "Steer",
-    "stop": "Stop"
+    "stop": "Stop",
+    "removeAttachment": "Remove session reference"
   },
   "empty": {
     "title": "What can I help with?",

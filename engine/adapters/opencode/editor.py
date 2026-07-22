@@ -23,7 +23,7 @@ class OpenCodeBackend(EditBackend):
         result = super().capabilities()
         result["operation_modes"] = {
             "rewrite": ["inplace", "saveas"],
-            # OpenCode 1.18.3 没有批量事务 API，整轮删除只能另存。
+            # OpenCode 当前没有批量事务 API，整轮删除只能另存。
             "delete-turn": ["saveas"],
         }
         return result
@@ -70,8 +70,9 @@ class OpenCodeBackend(EditBackend):
             message_ids.add(mid)
             if info.get("sessionID") != sid:
                 raise ValueError("OpenCode message.sessionID 不一致")
-            if info.get("role") == "assistant" and not info.get("finish"):
-                raise ValueError("OpenCode assistant 消息缺少 finish")
+            if (info.get("role") == "assistant" and not info.get("finish")
+                    and not info.get("error")):
+                raise ValueError("OpenCode assistant 消息缺少 finish/error 终态")
             for part in message.get("parts", []):
                 if part.get("messageID") != mid or part.get("sessionID") != sid:
                     raise ValueError("OpenCode part 外键不一致")
@@ -92,7 +93,7 @@ class OpenCodeBackend(EditBackend):
                                 reason_code, self.name, doc.ref, extra)
 
     def restore_snapshot(self, snapshot, doc):
-        original = json.loads(Path(snapshot).read_text().splitlines()[0])
+        original = json.loads(Path(snapshot).read_text())
         current = rw_opencode._oc_export(doc.ref)
         current_parts = self._part_map(current)
         original_parts = self._part_map(original)

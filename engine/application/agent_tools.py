@@ -11,12 +11,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..domain.errors import AgentReferenceError, AgentRequestError
+from ..domain.errors import AgentReferenceError, AgentRequestError, LocatorStaleError
 from ..domain.usage import add_tokens, empty_tokens
 from .ports import current
 
 MAX_SEARCH_RESULTS = 50
-MAX_CONTEXT_TURNS = 20
+MAX_CONTENT_SEARCH_RESULTS = 50
+MAX_CONTEXT_MESSAGES = 50
 MAX_CONTEXT_BYTES = 64 * 1024
 DEFAULT_CONTEXT_BYTES = 24 * 1024
 MAX_AGENT_DTO_BYTES = 64 * 1024
@@ -124,6 +125,17 @@ class IndexedSession:
     source_identity: tuple | str | None
 
 
+@dataclass(frozen=True)
+class IndexedMessage:
+    opaque_locator: str
+    session_ref: str
+    tool: str
+    revision: str
+    native_locator: str
+    role: str
+    editable: bool
+
+
 def _path_identity(path: Path) -> tuple:
     before = path.stat()
     digest = hashlib.sha256()
@@ -147,6 +159,8 @@ class AgentSessionIndex:
     def __init__(self):
         self._by_opaque: dict[str, IndexedSession] = {}
         self._opaque_by_key: dict[tuple[str, str, str], str] = {}
+        self._messages_by_opaque: dict[str, IndexedMessage] = {}
+        self._opaque_by_message_key: dict[tuple[str, str, str], str] = {}
         self._lock = threading.RLock()
 
     def refresh(self) -> list[IndexedSession]:
@@ -179,6 +193,13 @@ class AgentSessionIndex:
                 stale = self._by_opaque.pop(opaque)
                 self._opaque_by_key.pop(
                     (stale.tool, stale.canonical_ref, stale.revision), None)
+                stale_messages = [locator for locator, message
+                                  in self._messages_by_opaque.items()
+                                  if message.session_ref == opaque]
+                for locator in stale_messages:
+                    message = self._messages_by_opaque.pop(locator)
+                    self._opaque_by_message_key.pop(
+                        (message.session_ref, message.native_locator, message.role), None)
         return records
 
     def resolve(self, tool: str, opaque_ref: str) -> IndexedSession:
@@ -210,6 +231,38 @@ class AgentSessionIndex:
             if fingerprint is None or fingerprint != record.source_identity:
                 raise AgentReferenceError("ref 在扫描后已变化，请重新搜索")
         return record
+
+    def issue_message_locator(self, record: IndexedSession,
+                              native_locator: str, role: str,
+                              editable: bool) -> str:
+        if not native_locator or len(native_locator) > 512:
+            raise AgentReferenceError("消息缺少可编辑定位信息")
+        key = (record.opaque_ref, native_locator, role)
+        with self._lock:
+            opaque = self._opaque_by_message_key.get(key)
+            if opaque is None:
+                opaque = "fml_" + secrets.token_urlsafe(18)
+                self._opaque_by_message_key[key] = opaque
+            self._messages_by_opaque[opaque] = IndexedMessage(
+                opaque, record.opaque_ref, record.tool, record.revision,
+                native_locator, role, editable)
+        return opaque
+
+    def resolve_message_locator(self, record: IndexedSession,
+                                opaque_locator: str) -> IndexedMessage:
+        hint = "重新调用 ferry_get_session_context，并原样使用 messages[].locator"
+        if not isinstance(opaque_locator, str) or not opaque_locator.startswith("fml_"):
+            raise AgentReferenceError(
+                "locator 不是 Engine 签发的消息引用",
+                {"field": "locator", "hint": hint})
+        with self._lock:
+            message = self._messages_by_opaque.get(opaque_locator)
+        if (message is None or message.session_ref != record.opaque_ref
+                or message.tool != record.tool or message.revision != record.revision):
+            raise LocatorStaleError(
+                "消息引用已失效或不属于当前会话",
+                {"field": "locator", "hint": hint})
+        return message
 
     @staticmethod
     def _canonicalize(plugin, row: dict) -> tuple[
@@ -266,17 +319,19 @@ def list_capabilities() -> dict:
     ports = current()
     for name in ports.adapters():
         plugin = ports.adapter(name)
+        editing = plugin.editor.capabilities() if plugin.editor is not None else None
         tools.append({
             "id": plugin.id,
             "display_name": _redact(plugin.manifest.display_name, 80),
-            "capabilities": plugin.capabilities(),
+            "capabilities": [cap for cap in plugin.capabilities() if cap != "author"],
+            "editing": _bounded_json(editing, 12 * 1024) if editing else None,
             "reference_kind": "opaque",
         })
     return _finalize_dto({
         "tools": tools,
         "limits": {
             "search_results": MAX_SEARCH_RESULTS,
-            "context_turns": MAX_CONTEXT_TURNS,
+            "context_messages": MAX_CONTEXT_MESSAGES,
             "context_bytes": MAX_CONTEXT_BYTES,
         },
         "mutations_require_approval": True,
@@ -327,6 +382,7 @@ def _validate_ops(ops) -> None:
     if not isinstance(ops, list) or not ops or len(ops) > 50:
         raise AgentRequestError("ops 必须是 1 到 50 项的数组")
     _validate_json_shape(ops)
+    rewrite_locators = []
     for op in ops:
         if not isinstance(op, dict):
             raise AgentRequestError("每个 edit op 必须是 object")
@@ -341,40 +397,38 @@ def _validate_ops(ops) -> None:
             if (not isinstance(locator, str) or not 1 <= len(locator) <= 512
                     or not isinstance(text, str) or not 1 <= len(text) <= 20_000):
                 raise AgentRequestError("rewrite locator/text 超出范围")
+            rewrite_locators.append(locator)
         else:
             raise AgentRequestError("Agent edit 仅允许 delete-turn/rewrite")
+    if len(rewrite_locators) != len(set(rewrite_locators)):
+        raise AgentRequestError(
+            "同一消息不能在一次编辑中重复改写", {"field": "ops.locator"})
 
 
-def _validate_reply_payload(turn, reply) -> None:
-    if isinstance(turn, bool) or not isinstance(turn, int) or turn < 1:
-        raise AgentRequestError("turn 必须是正整数")
-    _validate_json_shape(reply)
-    if not isinstance(reply, dict) or set(reply) != {"items"}:
-        raise AgentRequestError("reply 必须且只能包含 items")
-    items = reply["items"]
-    if not isinstance(items, list) or not 1 <= len(items) <= 100:
-        raise AgentRequestError("reply.items 必须是 1 到 100 项的数组")
-    for item in items:
-        if not isinstance(item, dict):
-            raise AgentRequestError("reply item 必须是 object")
-        if item.get("kind") == "text":
-            text = item.get("text")
-            if set(item) != {"kind", "text"} or not isinstance(text, str) \
-                    or not 1 <= len(text) <= 20_000:
-                raise AgentRequestError("reply text item 参数非法")
-        elif item.get("kind") == "tool":
-            if set(item) != {"kind", "name", "input", "output"}:
-                raise AgentRequestError("reply tool item 参数非法")
-            if (not isinstance(item.get("name"), str)
-                    or not 1 <= len(item["name"]) <= 120
-                    or not isinstance(item.get("input"), (dict, str))
-                    or not isinstance(item.get("output"), str)
-                    or len(item["output"]) > 20_000):
-                raise AgentRequestError("reply tool item 字段超出范围")
-            if isinstance(item["input"], str) and len(item["input"]) > 20_000:
-                raise AgentRequestError("reply tool input 超出范围")
-        else:
-            raise AgentRequestError("reply item kind 仅允许 text/tool")
+def resolve_edit_ops(record: IndexedSession, ops: list[dict]) -> list[dict]:
+    """把 Agent 可见的 fml_ 定位符换成适配器原生定位符。"""
+    resolved = []
+    for op in ops:
+        item = dict(op)
+        if item.get("op") == "rewrite":
+            message = _INDEX.resolve_message_locator(record, item["locator"])
+            if not message.editable:
+                raise AgentRequestError(
+                    "目标消息不支持文本改写",
+                    {"field": "locator", "locator": item["locator"],
+                     "hint": "仅使用 editable=true 的消息引用"})
+            item["locator"] = message.native_locator
+        resolved.append(item)
+    return resolved
+
+
+def _public_locator_error(ops: list[dict]) -> LocatorStaleError:
+    locator = next((op.get("locator") for op in ops
+                    if op.get("op") == "rewrite"), None)
+    return LocatorStaleError(
+        "消息定位信息与当前会话不匹配",
+        {"field": "locator", "locator": locator,
+         "hint": "重新调用 ferry_get_session_context，并原样使用 messages[].locator"})
 
 
 def _validated_interval(value) -> tuple[int | None, int | None]:
@@ -490,6 +544,38 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
     return _finalize_dto(result)
 
 
+def resolve_session(tool: str, session_id: str) -> dict:
+    """把来源工具的稳定会话 ID 换成当前索引签发的安全引用。"""
+    if not isinstance(tool, str) or not 1 <= len(tool) <= 32:
+        raise AgentRequestError("tool 必须是有效的会话来源")
+    if not isinstance(session_id, str) or not 1 <= len(session_id) <= 512:
+        raise AgentRequestError("session_id 必须是有效字符串")
+    if any(char in session_id for char in ("\0", "\n", "\r")):
+        raise AgentRequestError("session_id 包含非法字符")
+    matches = [record for record in _INDEX.refresh()
+               if record.tool == tool and str(record.row.get("id") or "") == session_id]
+    if not matches:
+        raise AgentReferenceError(
+            "当前扫描索引中找不到这个原始会话 ID",
+            {"tool": tool, "hint": "重新扫描后再解析，或按标题/项目搜索会话"})
+    canonical = {record.canonical_ref for record in matches}
+    if len(canonical) != 1:
+        raise AgentReferenceError(
+            "原始会话 ID 匹配到多个会话",
+            {"tool": tool, "hint": "请使用标题、项目和时间缩小范围"})
+    record = max(matches, key=lambda item: int(item.row.get("updated") or 0))
+    row = record.row
+    return _finalize_dto({
+        "tool": record.tool,
+        "ref": record.opaque_ref,
+        "title": _redact(str(row.get("title") or ""), 200),
+        "project": _safe_project(row.get("dir")),
+        "updated": int(row.get("updated") or 0),
+        "message_count": int(row.get("count") or 0),
+        "revision": record.revision,
+    })
+
+
 def _take(text: str, remaining: int) -> tuple[str, int, bool]:
     encoded = text.encode("utf-8")
     if len(encoded) <= remaining:
@@ -531,43 +617,78 @@ def _read_record(record: IndexedSession):
 def _fit_context_result(result: dict, budget: int) -> dict:
     truncation = result["truncation"]
     while len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > budget:
-        turns = result["turns"]
-        if not turns:
+        messages = result["messages"]
+        if not messages:
             result["title"] = ""
             break
-        if turns[-1]["blocks"]:
-            turns[-1]["blocks"].pop()
-            truncation["omitted_blocks"] += 1
-        else:
-            turns.pop()
+        removed = messages.pop()
+        next_message = removed["message"]
+        current_next = result.get("next_from_message")
+        result["next_from_message"] = min(current_next, next_message) \
+            if isinstance(current_next, int) else next_message
+        truncation["omitted_blocks"] += len(removed["blocks"])
         truncation["truncated"] = True
+    result["returned_message_count"] = len(result["messages"])
+    result["message_range"]["to"] = (
+        result["messages"][-1]["message"] if result["messages"] else None)
     return result
 
 
-def get_session_context(tool: str, opaque_ref: str, from_turn: int = 1,
-                        to_turn: int | None = None,
+def _message_native_locator(message, index: int) -> str:
+    if isinstance(message.source_id, str) and message.source_id:
+        return message.source_id
+    if message.raw and isinstance(message.raw[0], dict):
+        value = message.raw[0].get("uuid")
+        if isinstance(value, str) and value:
+            return value
+    return f"index:{index}"
+
+
+def _message_is_rewritable(tool: str, message) -> bool:
+    if not any(block.kind == "text" for block in message.blocks):
+        return False
+    payloads = [getattr(item, "payload", item) for item in message.raw]
+    payloads = [item for item in payloads if isinstance(item, dict)]
+    if not payloads:
+        return True
+    if tool == "opencode":
+        return any(item.get("type") == "text" for item in payloads)
+    if tool == "codex":
+        payload = payloads[0].get("payload") or {}
+        return any(item.get("type") in {"input_text", "output_text"}
+                   for item in payload.get("content") or [])
+    if tool == "claude":
+        content = (payloads[0].get("message") or {}).get("content")
+        return isinstance(content, str) or isinstance(content, list) and any(
+            item.get("type") == "text" for item in content if isinstance(item, dict))
+    return True
+
+
+def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
+                        limit: int = 20,
                         include_tool_outputs: bool = False,
                         max_bytes: int = DEFAULT_CONTEXT_BYTES) -> dict:
     record = _INDEX.resolve(tool, opaque_ref)
-    first = _bounded_int(from_turn, 1, 1, 1_000_000, "from_turn")
-    last = first + MAX_CONTEXT_TURNS - 1 if to_turn is None else _bounded_int(
-        to_turn, first, first, 1_000_000, "to_turn")
-    if last - first + 1 > MAX_CONTEXT_TURNS:
-        raise AgentRequestError("单次最多读取 20 轮")
+    first = _bounded_int(from_message, 1, 1, 1_000_000, "from_message")
+    count = _bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")
     budget = _bounded_int(max_bytes, DEFAULT_CONTEXT_BYTES, 1024,
                           MAX_CONTEXT_BYTES, "max_bytes")
     if not isinstance(include_tool_outputs, bool):
         raise AgentRequestError("include_tool_outputs 必须是 boolean")
     session = _read_record(record)
-    turns, current_turn, remaining = [], 0, budget
+    total_turns = sum(message.role == "user" for message in session.messages)
+    messages, current_turn, remaining = [], 0, budget
     omitted_blocks = omitted_bytes = 0
     exhausted = False
-    for message in session.messages:
+    selected_until = min(len(session.messages), first - 1 + count)
+    for index, message in enumerate(session.messages):
         if message.role == "user":
             current_turn += 1
-        if current_turn < first or current_turn > last or current_turn == 0:
+        message_number = index + 1
+        if message_number < first or message_number > selected_until:
             continue
         blocks = []
+        message_clipped = False
         for block in message.blocks:
             item = None
             if block.kind == "text":
@@ -575,6 +696,7 @@ def get_session_context(tool: str, opaque_ref: str, from_turn: int = 1,
                 value, remaining, clipped = _take(original, remaining)
                 item = {"kind": "text", "text": value}
                 if clipped:
+                    message_clipped = True
                     omitted_bytes += len(original.encode("utf-8")) - len(value.encode("utf-8"))
             elif block.kind == "tool" and block.tool:
                 item = {"kind": "tool", "name": _redact(block.tool.name, 120),
@@ -589,6 +711,7 @@ def get_session_context(tool: str, opaque_ref: str, from_turn: int = 1,
                     item["output"] = value
                     clipped = clipped or output_clipped
                 if clipped:
+                    message_clipped = True
                     omitted_blocks += 1
             elif block.kind == "image" and block.image:
                 item = {"kind": "image", "id": _redact(block.image.id, 200),
@@ -603,23 +726,113 @@ def get_session_context(tool: str, opaque_ref: str, from_turn: int = 1,
             if remaining == 0:
                 exhausted = True
                 break
-        turns.append({"turn": current_turn, "role": message.role, "blocks": blocks})
+        editable = _message_is_rewritable(tool, message)
+        item = {"message": message_number, "turn": current_turn,
+                "role": message.role, "blocks": blocks, "editable": editable,
+                "complete": not message_clipped}
+        item["locator"] = _INDEX.issue_message_locator(
+            record, _message_native_locator(message, index), message.role, editable)
+        messages.append(item)
         if exhausted:
             break
+    last_returned = messages[-1]["message"] if messages else first - 1
+    has_more = last_returned < len(session.messages)
     result = {
         "tool": tool,
         "ref": opaque_ref,
         "title": _redact(session.title, 200),
         "project": _safe_project(session.cwd),
         "revision": record.revision,
-        "turn_range": {"from": first, "to": last},
-        "turns": turns,
+        "message_count": len(session.messages),
+        "turn_count": total_turns,
+        "returned_message_count": len(messages),
+        "message_range": {"from": first,
+                          "to": last_returned if messages else None},
+        "next_from_message": last_returned + 1 if has_more else None,
+        "messages": messages,
         "truncation": {"truncated": exhausted or omitted_blocks > 0,
                        "omitted_blocks": omitted_blocks,
                        "omitted_bytes": omitted_bytes,
                        "budget_bytes": budget},
     }
     return _fit_context_result(result, budget)
+
+
+def search_session_content(tool: str, opaque_ref: str, terms,
+                           roles=None, limit: int = 20) -> dict:
+    """在单个会话的可见文本中检索，返回可直接用于改写的消息引用。"""
+    record = _INDEX.resolve(tool, opaque_ref)
+    wanted = _string_set(terms, "terms", 20, 100)
+    if not wanted:
+        raise AgentRequestError("terms 至少包含一个检索词", {"field": "terms"})
+    allowed_roles = _string_set(roles, "roles", 2, 16)
+    if not allowed_roles <= {"user", "assistant"}:
+        raise AgentRequestError(
+            "roles 仅允许 user/assistant", {"field": "roles"})
+    maximum = _bounded_int(
+        limit, 20, 1, MAX_CONTENT_SEARCH_RESULTS, "limit")
+    normalized = [(term, term.casefold()) for term in sorted(wanted)]
+    session = _read_record(record)
+    total_turns = sum(message.role == "user" for message in session.messages)
+    matches = []
+    current_turn = 0
+    total_matches = 0
+    byte_limited = False
+    for index, message in enumerate(session.messages):
+        if message.role == "user":
+            current_turn += 1
+        if allowed_roles and message.role not in allowed_roles:
+            continue
+        text = "\n".join(block.text for block in message.blocks
+                         if block.kind == "text" and block.text)
+        folded = text.casefold()
+        hit_terms = [term for term, folded_term in normalized
+                     if folded_term in folded]
+        if not hit_terms:
+            continue
+        total_matches += 1
+        if len(matches) >= maximum:
+            continue
+        first_hit = min(folded.find(term.casefold()) for term in hit_terms)
+        start = max(0, first_hit - 240)
+        end = min(len(text), first_hit + 560)
+        snippet = ("…" if start else "") + text[start:end] + \
+            ("…" if end < len(text) else "")
+        editable = _message_is_rewritable(tool, message)
+        item = {
+            "message": index + 1,
+            "turn": current_turn,
+            "role": message.role,
+            "editable": editable,
+            "locator": _INDEX.issue_message_locator(
+                record, _message_native_locator(message, index), message.role, editable),
+            "matched_terms": hit_terms,
+            "snippet": _redact(snippet, 900),
+            "complete": start == 0 and end == len(text),
+        }
+        candidate = {"matches": [*matches, item], "message_count": len(session.messages),
+                     "turn_count": total_turns, "total_matches": total_matches}
+        if len(json.dumps(candidate, ensure_ascii=False).encode("utf-8")) \
+                > MAX_AGENT_DTO_BYTES - 2048:
+            byte_limited = True
+            continue
+        matches.append(item)
+    has_more = total_matches > len(matches)
+    return _finalize_dto({
+        "tool": tool,
+        "ref": opaque_ref,
+        "revision": record.revision,
+        "message_count": len(session.messages),
+        "turn_count": total_turns,
+        "matches": matches,
+        "returned": len(matches),
+        "total_matches": total_matches,
+        "has_more": has_more,
+        "truncation": {"truncated": has_more,
+                       "reason": "byte_budget" if byte_limited
+                       else "result_limit" if has_more else None,
+                       "budget_bytes": MAX_AGENT_DTO_BYTES},
+    })
 
 
 def get_usage(agents=None, projects=None, time_range=None) -> dict:
@@ -679,33 +892,22 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
             "topology": topology, "max_turn": max_turn})
 
 
-def preview_edit(tool: str, opaque_ref: str, *, ops=None, turn=None,
-                 reply=None) -> dict:
+def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
     record = _INDEX.resolve(tool, opaque_ref)
     plugin = current().adapter(tool)
-    if ops is not None:
-        _validate_ops(ops)
-        if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
-            raise AgentRequestError("ops 超过 64 KiB")
-        from .editing import preview
-        editor = plugin.require("editor")
-        result = preview(editor, record.canonical_ref, ops,
+    _validate_ops(ops)
+    if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
+        raise AgentRequestError("ops 超过 64 KiB")
+    from .editing import preview
+    editor = plugin.require("editor")
+    native_ops = resolve_edit_ops(record, ops)
+    try:
+        result = preview(editor, record.canonical_ref, native_ops,
                          loader=getattr(editor, "load_preview", None))
-        mode = "edit"
-    elif turn is not None and reply is not None:
-        _validate_reply_payload(turn, reply)
-        if len(json.dumps(reply, ensure_ascii=False, default=str).encode()) > 64 * 1024:
-            raise AgentRequestError("reply 超过 64 KiB")
-        from .authoring import preview
-        editor = plugin.require("editor")
-        result = preview(editor, plugin.require("authoring"),
-                         record.canonical_ref, turn, reply,
-                         loader=getattr(editor, "load_preview", None))
-        mode = "authoring"
-    else:
-        raise AgentRequestError("必须提供 ops，或同时提供 turn/reply")
+    except LocatorStaleError as error:
+        raise _public_locator_error(ops) from error
     _INDEX.resolve(tool, opaque_ref)
-    return _finalize_dto({"tool": tool, "ref": opaque_ref, "mode": mode,
+    return _finalize_dto({"tool": tool, "ref": opaque_ref, "mode": "edit",
             "revision": _redact(str(result["revision"]), 256),
             "before": _bounded_json(result["before"], 12 * 1024),
             "after": _bounded_json(result["after"], 12 * 1024),

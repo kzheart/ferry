@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
 repo = Path(SPECPATH)
 golden_files = [
@@ -13,7 +14,10 @@ a = Analysis(
     pathex=[str(repo)],
     binaries=[],
     datas=golden_files,
-    hiddenimports=[],
+    # Adapter packages are discovered with pkgutil at runtime. PyInstaller
+    # cannot infer those imports from the source graph, so include them
+    # explicitly in the sidecar bundle.
+    hiddenimports=collect_submodules("engine.adapters"),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

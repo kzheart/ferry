@@ -120,12 +120,13 @@ class OpenCodeEditCodec:
         if message is None:
             raise LocatorStaleError("OpenCode 消息定位符已失效，请刷新会话",
                                     {"locator": locator})
-        if message["info"].get("role") != "user":
-            raise OperationUnsupportedError("opencode", "rewrite", "assistant")
+        role = message["info"].get("role")
+        if role not in {"user", "assistant"}:
+            raise OperationUnsupportedError("opencode", "rewrite", str(role))
         text_parts = [p for p in message.get("parts", [])
                       if p.get("type") == "text"]
         if not text_parts:
-            raise ValueError("该用户消息没有可改写的文本")
+            raise OperationUnsupportedError("opencode", "rewrite", "no-text")
         text_parts[0]["text"] = text
         for part in text_parts[1:]:
             part["text"] = ""

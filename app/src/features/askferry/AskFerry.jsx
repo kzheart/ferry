@@ -6,8 +6,11 @@ import { useTranslation } from "react-i18next";
 import Markdown from "../../components/ui/Markdown.jsx";
 import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrowIcon,
   Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
+import { readClipboardText } from "../../api/transport/rpc.js";
 import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
-import { sessionRef } from "../../domain/sessions/sessionModel.js";
+import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
+  sessionAttachmentKey, sessionDisplayText }
+  from "../../domain/sessions/sessionAttachment.js";
 
 const fmtDur = (a, b) => {
   if (!a || !b) return "";
@@ -345,11 +348,13 @@ function ModelMenu({ ferry, health, onClose, onManage }) {
 
 // ----- 输入胶囊:文本域 + 底部工具条(模式/模型在左,发送在右) -----
 function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
-  onPickMention, onKeyDown, onSend, running, mode, onOpenConfig, health, autoFocus }) {
+  onPickMention, onKeyDown, onPaste, onSend, onSteer, running, mode, onOpenConfig,
+  health, autoFocus, attachments, onRemoveAttachment }) {
   const { t } = useTranslation();
   const [modeOpen, setModeOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const canSend = !!text.trim() && ferry.available;
+  const hasContent = !!text.trim() || attachments.length > 0;
+  const canSend = hasContent && ferry.available;
   const noCredential = health && health.credential === "unavailable";
   const currentModel = (ferry.models || []).find(m =>
     m.provider === health?.provider && m.id === health?.model);
@@ -364,9 +369,27 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
       {mention && (
         <MentionMenu query={mention.query} sessions={scanSessions} onPick={onPickMention} />)}
       <div className="chat-composer" style={{ padding: "12px 12px 8px 16px" }}>
+        {!!attachments.length && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingBottom: 9 }}>
+            {attachments.map(item => (
+              <span key={sessionAttachmentKey(item)} style={{ display: "inline-flex",
+                alignItems: "center", gap: 5, maxWidth: 240, padding: "4px 7px",
+                borderRadius: 7, background: "var(--inset)", color: "var(--tx2)",
+                fontSize: 11.5 }}>
+                <ToolIcon tool={item.tool} size={14} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: "nowrap" }}>{item.title}</span>
+                <button onClick={() => onRemoveAttachment(item)}
+                  title={t("askferry:composer.removeAttachment")}
+                  style={{ border: 0, background: "transparent", color: "var(--tx4)",
+                    padding: 0, lineHeight: 1, fontSize: 15, cursor: "default" }}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea ref={taRef} value={text}
           rows={Math.min(8, Math.max(1, text.split("\n").length))}
-          onChange={e => setTextValue(e.target.value)} onKeyDown={onKeyDown}
+          onChange={e => setTextValue(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste}
           placeholder={ferry.available ? t("askferry:composer.placeholder")
             : t("askferry:composer.desktopOnly")}
           disabled={!ferry.available}
@@ -406,18 +429,15 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
             </button>
           </div>
           <span style={{ flex: 1 }} />
-          {running && text.trim() && (
-            <button className="chat-ghost-btn" onClick={() => {
-              const value = text.trim();
-              setTextValue("");
-              ferry.steer(value).catch(() => setTextValue(value));
-            }}>{t("askferry:composer.steer")}</button>
+          {running && hasContent && (
+            <button className="chat-ghost-btn" onClick={onSteer}>
+              {t("askferry:composer.steer")}</button>
           )}
           {running && (
             <button className="chat-round-btn" title={t("askferry:composer.stop")}
               onClick={ferry.abort}><StopFillIcon /></button>
           )}
-          {(!running || !!text.trim()) && (
+          {(!running || hasContent) && (
             <button className="chat-round-btn" disabled={!canSend}
               title={running ? t("askferry:composer.followUp") : t("askferry:composer.send")}
               onClick={onSend}><SendArrowIcon /></button>
@@ -429,7 +449,8 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
 }
 
 // ----- 主视图 -----
-export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
+export default function AskFerry({ ferry, scanSessions, onOpenConfig,
+  attachments, onAttachmentsChange }) {
   const { t } = useTranslation();
   const { activeId, activeLog, mode, health } = ferry;
   const activeSession = activeId
@@ -474,21 +495,82 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
   const pickMention = s => {
     const el = taRef.current;
     const caret = el ? el.selectionStart : text.length;
-    const label = `@「${s.title || s.id}」(tool=${s.tool}, ref=${sessionRef(s)}) `;
-    setText(text.slice(0, mention.start) + label + text.slice(caret));
+    setText(text.slice(0, mention.start) + text.slice(caret));
+    onAttachmentsChange(list => addSessionAttachment(list, s));
     setMention(null);
     el?.focus();
   };
 
+  const removeAttachment = target => onAttachmentsChange(list =>
+    list.filter(item => sessionAttachmentKey(item) !== sessionAttachmentKey(target)));
+
+  const applyClipboardText = pastedText => {
+    const pasted = parseSessionAttachments(pastedText);
+    if (pasted.length) {
+      onAttachmentsChange(list => pasted.reduce(addSessionAttachment, list));
+      return;
+    }
+    if (!pastedText) return;
+    const el = taRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? start;
+    const next = text.slice(0, start) + pastedText + text.slice(end);
+    updateText(next);
+    requestAnimationFrame(() => {
+      const caret = start + pastedText.length;
+      taRef.current?.setSelectionRange(caret, caret);
+    });
+  };
+
+  const onPaste = event => {
+    const pastedText = event.clipboardData?.getData("text/plain") || "";
+    if (!pastedText && window.__TAURI_INTERNALS__) {
+      event.preventDefault();
+      readClipboardText().then(applyClipboardText).catch(() => {});
+      return;
+    }
+    const pasted = parseSessionAttachments(pastedText);
+    if (!pasted.length) return;
+    event.preventDefault();
+    onAttachmentsChange(list => pasted.reduce(addSessionAttachment, list));
+  };
+
+  const payload = value => ({
+    prompt: buildSessionPrompt(value, attachments),
+    display: sessionDisplayText(value, attachments),
+  });
+
   const doSend = async () => {
     const value = text.trim();
-    if (!value) return;
-    setText(""); setMention(null); stickRef.current = true;
-    try { await ferry.send(value); }
-    catch (error) { setText(value); ferry.reportError(error); }
+    if (!value && !attachments.length) return;
+    const currentAttachments = attachments;
+    const message = payload(value);
+    setText(""); onAttachmentsChange([]); setMention(null); stickRef.current = true;
+    try { await ferry.send(message.prompt, message.display); }
+    catch (error) {
+      setText(value); onAttachmentsChange(currentAttachments); ferry.reportError(error);
+    }
+  };
+
+  const doSteer = async () => {
+    const value = text.trim();
+    if (!value && !attachments.length) return;
+    const currentAttachments = attachments;
+    const message = payload(value);
+    setText(""); onAttachmentsChange([]); setMention(null);
+    try { await ferry.steer(message.prompt, message.display); }
+    catch (error) {
+      setText(value); onAttachmentsChange(currentAttachments); ferry.reportError(error);
+    }
   };
 
   const onKeyDown = e => {
+    if (window.__TAURI_INTERNALS__ && (e.metaKey || e.ctrlKey)
+        && e.key.toLowerCase() === "v") {
+      e.preventDefault();
+      readClipboardText().then(applyClipboardText).catch(() => {});
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !mention) {
       e.preventDefault();
       doSend();
@@ -497,7 +579,8 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
   };
 
   const composerProps = { ferry, text, setTextValue: updateText, taRef, mention, scanSessions,
-    onPickMention: pickMention, onKeyDown, onSend: doSend, running, mode, onOpenConfig, health };
+    onPickMention: pickMention, onKeyDown, onPaste, onSend: doSend, onSteer: doSteer,
+    running, mode, onOpenConfig, health, attachments, onRemoveAttachment: removeAttachment };
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",

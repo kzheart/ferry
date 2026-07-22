@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-process = "2"
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
 # 记住用户手动调整过的窗口大小/位置,首启才用 tauri.conf.json 里的默认尺寸
 tauri-plugin-window-state = "2"

@@ -46,7 +46,9 @@ export type ToolHandler = (
 const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   ferry_list_capabilities: 10_000,
   ferry_search_sessions: 25_000,
+  ferry_resolve_session: 25_000,
   ferry_get_session_context: 25_000,
+  ferry_search_session_content: 25_000,
   ferry_get_usage: 25_000,
   ferry_preview_migration: 125_000,
   ferry_preview_edit: 125_000,
@@ -282,7 +284,7 @@ class RuntimeSession {
       followUpMode: "one-at-a-time",
       initialState: {
         systemPrompt:
-          "You are Ferry's local assistant. Use only the explicitly registered Ferry tools. Never claim shell, filesystem, or network access.",
+          "You are Ferry's local assistant. Use only the explicitly registered Ferry tools. Never claim shell, filesystem, or network access. Session attachments contain a source tool and native session_id: resolve each one with ferry_resolve_session, then use the returned fsr_ ref for context, search, preview, migration, or editing. When a user supplies a native session ID directly, call ferry_resolve_session instead of searching for that ID. Never pass native IDs or paths to tools that require ref. message_count and turn_count are different. Read long sessions by message pages using next_from_message, or use ferry_search_session_content for targeted wording changes; never guess turn ranges from message_count. To rewrite content, copy an editable message's fml_ locator exactly; never invent a locator, derive one from a turn number, or reuse one from another ref. Batch all requested rewrites, preview once, then propose once. ferry_propose_edit changes the original session in place after snapshot and revision checks. After an edit, use the refreshed session ref returned by the apply result for further work. Never mutate metadata unless the user explicitly requests that metadata change. If the same tool error repeats after one corrective read, stop retrying and explain the exact structured error.",
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
         tools: createFerryTools(
@@ -329,7 +331,7 @@ class RuntimeSession {
     return event;
   }
 
-  async prompt(text: string, images: ImageContent[] = []) {
+  async prompt(text: string, images: ImageContent[] = [], displayText = text) {
     if (this.isRunning)
       throw new ProtocolError(
         "run_in_progress",
@@ -341,7 +343,7 @@ class RuntimeSession {
     this.terminalResult = null;
     await this.emit(
       "run.started",
-      { prompt: text, image_count: images.length },
+      { prompt: displayText, image_count: images.length },
       runId,
     );
     let task!: Promise<void>;
@@ -373,18 +375,18 @@ class RuntimeSession {
     this.agent.abort();
   }
 
-  steer(text: string) {
+  steer(text: string, displayText = text) {
     if (!this.isRunning)
       throw new ProtocolError("no_active_run", "session has no active run");
     this.agent.steer(userMessage(text));
-    void this.emit("user.message", { text, kind: "steer" });
+    void this.emit("user.message", { text: displayText, kind: "steer" });
   }
 
-  followUp(text: string) {
+  followUp(text: string, displayText = text) {
     if (!this.isRunning)
       throw new ProtocolError("no_active_run", "session has no active run");
     this.agent.followUp(userMessage(text));
-    void this.emit("user.message", { text, kind: "follow_up" });
+    void this.emit("user.message", { text: displayText, kind: "follow_up" });
   }
 
   async waitForIdle() {
@@ -685,7 +687,12 @@ export class AgentRuntime {
     return session.state();
   }
 
-  async prompt(sessionId: string, text: string, images: ImageContent[] = []) {
+  async prompt(
+    sessionId: string,
+    text: string,
+    images: ImageContent[] = [],
+    displayText = text,
+  ) {
     const session = this.session(sessionId);
     const state = session.state();
     const configured = this.providerHost
@@ -706,7 +713,7 @@ export class AgentRuntime {
         "the current model does not support image input",
       );
     }
-    return { run_id: await session.prompt(text, images) };
+    return { run_id: await session.prompt(text, images, displayText) };
   }
 
   async renameSession(sessionId: string, title: string) {
@@ -1032,13 +1039,13 @@ export class AgentRuntime {
     return { accepted: true };
   }
 
-  steer(sessionId: string, text: string) {
-    this.session(sessionId).steer(text);
+  steer(sessionId: string, text: string, displayText = text) {
+    this.session(sessionId).steer(text, displayText);
     return { accepted: true };
   }
 
-  followUp(sessionId: string, text: string) {
-    this.session(sessionId).followUp(text);
+  followUp(sessionId: string, text: string, displayText = text) {
+    this.session(sessionId).followUp(text, displayText);
     return { accepted: true };
   }
 

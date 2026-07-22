@@ -16,7 +16,7 @@ export function useAskFerry() {
   const [activeId, setActiveId] = useState(null);
   const [logs, setLogs] = useState({});
   const [health, setHealth] = useState(null);
-  const [mode, setModeState] = useState(() => localStorage.getItem(MODE_KEY) || "manual");
+  const [mode, setModeState] = useState(() => localStorage.getItem(MODE_KEY) || "auto");
   const [auth, setAuth] = useState(null);
   const [models, setModels] = useState([]);
   const [lastError, setLastError] = useState(null);
@@ -51,8 +51,6 @@ export function useAskFerry() {
         patchApproval(log, opId, { status: "failed", error: String(error), auto }));
     }
   }, [mutateLog]);
-  const approveRef = useRef(approve); approveRef.current = approve;
-
   const dismiss = useCallback((sessionId, item) => {
     const opId = item.operation?.operation_id;
     if (opId) mutateLog(sessionId, log => patchApproval(log, opId, { status: "dismissed" }));
@@ -116,11 +114,6 @@ export function useAskFerry() {
               updated_at: ev.timestamp || s.updated_at }
           : s));
       }
-      // 自动模式放行所有提议型写操作,不再向用户请求确认。
-      if (ev.type === "operation.proposed" && modeRef.current === "auto") {
-        const item = { operation: ev.payload?.operation || {}, runId: ev.run_id };
-        approveRef.current(sid, item, true);
-      }
     }).then(u => { un = u; });
     return () => un?.();
   }, [available]);
@@ -180,7 +173,7 @@ export function useAskFerry() {
     if (activeRef.current === id) setActiveId(null);
   }, []);
 
-  const send = useCallback(async text => {
+  const send = useCallback(async (text, displayText = text) => {
     let sid = activeRef.current;
     if (!sid) {
       const state = await agentCommand("session.create", {});
@@ -191,16 +184,22 @@ export function useAskFerry() {
       setActiveId(sid);
     }
     const running = logsRef.current[sid]?.status === "running";
-    await agentCommand(running ? "follow_up" : "prompt", { session_id: sid, text });
+    await agentCommand(running ? "follow_up" : "prompt", {
+      session_id: sid,
+      text,
+      display_text: displayText,
+      auto_apply: modeRef.current === "auto",
+    });
     if (!running && !sessions.find(s => s.session_id === sid)?.title) {
-      const title = text.split("\n")[0].trim().slice(0, 200);
+      const title = displayText.split("\n")[0].trim().slice(0, 200);
       if (title) rename(sid, title).catch(() => {});
     }
     return sid;
   }, [rename, sessions]);
 
-  const steer = useCallback(text =>
-    agentCommand("steer", { session_id: activeRef.current, text }), []);
+  const steer = useCallback((text, displayText = text) =>
+    agentCommand("steer", { session_id: activeRef.current, text,
+      display_text: displayText, auto_apply: modeRef.current === "auto" }), []);
   const abort = useCallback(() =>
     agentCommand("abort", { session_id: activeRef.current }).catch(() => {}), []);
 

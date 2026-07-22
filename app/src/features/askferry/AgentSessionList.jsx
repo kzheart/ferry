@@ -3,6 +3,7 @@ import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MoreDots, PinIcon, PlusIcon, Spinner, TrashIcon } from "../../components/ui/icons.jsx";
+import { writeClipboardText } from "../../api/transport/rpc.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
 
 function MoreMenu({ item, anchor, onClose, onRename }) {
@@ -27,7 +28,7 @@ function MoreMenu({ item, anchor, onClose, onRename }) {
         {t("askferry:pane.rename")}
       </button>
       <button className="hov-item" onClick={() => {
-        navigator.clipboard?.writeText(item.session_id).catch(() => {});
+        writeClipboardText(item.session_id).catch(() => {});
         onClose();
       }} style={{ width: "100%", height: 30, display: "flex", alignItems: "center", border: "none",
         borderRadius: 6, padding: "0 9px", background: "transparent", color: "var(--tx2)",

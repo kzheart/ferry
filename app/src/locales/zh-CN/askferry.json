@@ -31,7 +31,7 @@
     "manual": "手动",
     "auto": "自动",
     "manualDesc": "写入本地数据的操作先经你确认",
-    "autoDesc": "所有写入操作自动执行,无需确认"
+    "autoDesc": "自动创建快照并直接修改原始会话,无需确认"
   },
   "tool": {
     "running": "执行中",
@@ -44,7 +44,7 @@
   },
   "approval": {
     "kindMigration": "迁移提议",
-    "kindEdit": "编辑提议(另存副本)",
+    "kindEdit": "修改原始会话",
     "kindMetadata": "元数据修改提议",
     "kindGeneric": "写操作提议",
     "applied": "已批准并执行",
@@ -66,7 +66,8 @@
     "send": "发送",
     "followUp": "追加",
     "steer": "转向",
-    "stop": "停止"
+    "stop": "停止",
+    "removeAttachment": "移除会话引用"
   },
   "empty": {
     "title": "有什么可以帮你?",
