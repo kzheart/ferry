@@ -6,7 +6,8 @@
     "railTitle": "设置",
     "close": "关闭设置 (Esc)",
     "followSystemDesc": "按系统语言自动选择",
-    "providers": "提供商"
+    "providers": "提供商",
+    "models": "模型"
   },
   "theme": {
     "light": "浅色",
@@ -79,25 +80,38 @@
     "remove": "移除提供商",
     "searchProvider": "搜索提供商",
     "noCandidate": "没有更多可添加的提供商",
-    "emptyHint": "点击左下角「+」添加一个提供商。\n只有在这里配置过的提供商,才会出现在模型选择器里。",
-    "configured": "已配置 · {{type}}",
-    "notConfigured": "未配置",
+    "emptyHint": "点击左下角「+」添加一个提供商。\n配好凭据后,它的模型会自动出现在「模型」页里。",
     "apiKey": "API Key",
     "keyPlaceholder": "粘贴 API Key",
     "keySet": "已保存,粘贴新的 Key 可覆盖",
-    "keySaved": "API Key 已保存,立即生效",
     "save": "保存",
     "oauthLogin": "OAuth 登录",
     "logout": "退出登录",
+    "clearKey": "清除 Key",
+    "test": "测试连通性",
+    "testOk": "连接正常 · {{model}} · {{ms}}ms",
     "models": "模型",
-    "shownCount": "{{n}}/{{total}} 出现在选择器",
-    "searchModel": "搜索模型",
-    "refreshModels": "刷新目录",
+    "noModels": "该提供商暂时没有可用模型,试试在「模型」页刷新目录,或在这里手动新建一个。"
+  },
+  "models": {
+    "search": "搜索模型",
+    "refresh": "刷新目录",
     "refreshDone": "模型目录已刷新",
     "refreshPartial": "部分提供商刷新失败:{{list}}",
-    "noModels": "该提供商暂无可用模型,可尝试刷新目录",
+    "shownCount": "已勾选 {{n}}/{{total}},只有勾选的模型会出现在对话的模型选择器里",
+    "selectAll": "全选",
+    "clearAll": "全不选",
     "image": "图片",
     "reasoning": "推理",
-    "plaintextNote": "凭据以明文保存在 Ferry 配置目录的 providers.json(0600),不进日志与事件;不读取系统环境变量。"
+    "empty": "还没有可用模型。\n先在「提供商」里配置一个 Provider 的 API Key,它的模型就会自动出现在这里。",
+    "goProviders": "去配置提供商",
+    "add": "新建",
+    "addConfirm": "添加",
+    "cancel": "取消",
+    "delete": "删除该模型",
+    "idPlaceholder": "Model ID,例如 claude-opus-4-8",
+    "namePlaceholder": "昵称(可选)",
+    "contextWindow": "上下文",
+    "customTag": "手动添加"
   }
 }

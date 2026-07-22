@@ -332,9 +332,17 @@ html[data-platform="mac"][data-theme="dark"] {
 }
 .fbtn-primary:hover { filter: brightness(1.05); }
 .fbtn-primary:active { filter: brightness(.92); }
+.fbtn:disabled { color: var(--tx5); opacity: .55; box-shadow: 0 0 0 .5px rgba(0,0,0,.1); }
+.fbtn:disabled:hover { background: var(--surface); }
+[data-theme="dark"] .fbtn:disabled:hover { background: rgba(255,255,255,.09); }
+/* 禁用态不能只压暗背景:深色主题 accent 接近白色,沿用 var(--bg) 当文字色会糊成一团 */
 .fbtn-primary:disabled {
   background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7;
-  box-shadow: 0 0 0 .5px rgba(0,0,0,.1);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.1); filter: none;
+}
+[data-theme="dark"] .fbtn-primary:disabled {
+  background: rgba(255,255,255,.07); color: var(--tx4); opacity: 1;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.4);
 }
 
 /* macOS 设置式分组卡片:面板底 + 半像素描边投影 */

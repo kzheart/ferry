@@ -85,7 +85,9 @@ export class AuthCoordinator {
     };
     this.logins.set(id, pending);
     this.providers.set(providerId, id);
-    void this.run(pending);
+    // 先让命令响应带着 login_id 返回给 UI；否则首个 OAuth 提示可能先到，
+    // 被尚未建立登录状态的 UI 丢弃，随后登录永远等待该提示的回复。
+    setImmediate(() => void this.run(pending));
     return { login_id: id, provider_id: providerId, auth_type: type };
   }
 

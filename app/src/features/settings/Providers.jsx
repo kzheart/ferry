@@ -1,9 +1,9 @@
-// 设置 · 提供商:左侧是已添加的 Provider,右侧配置凭据并勾选哪些模型出现在模型选择器里
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// 设置 · 提供商:左侧是已添加的 Provider,右侧只配置凭据;配好凭据它的模型就自动进入「模型」页
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { agentCommand } from "../../api/agent/agentClient.js";
-import { Spinner } from "../../components/ui/icons.jsx";
-import { inputStyle, Toggle } from "./parts.jsx";
+import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
+import { Check, inputStyle } from "./parts.jsx";
 
 // 从 auth.event 通知里挑出可打开的授权 URL / device code
 const noticeBits = notice => {
@@ -79,6 +79,65 @@ function AuthFlow({ auth, ferry }) {
   );
 }
 
+// 手填模型:Provider 目录里没有的新模型,填 ID 就能用,能力字段决定它能收什么输入
+function AddModel({ onSubmit, onCancel, busy }) {
+  const { t } = useTranslation();
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [image, setImage] = useState(false);
+  const [reasoning, setReasoning] = useState(false);
+  const [ctx, setCtx] = useState("");
+  const submit = () => id.trim() && onSubmit({
+    model_id: id.trim(),
+    ...(name.trim() ? { name: name.trim() } : {}),
+    image, reasoning,
+    ...(Number(ctx) > 0 ? { context_window: Math.round(Number(ctx) * 1000) } : {}),
+  });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12,
+      border: "1px solid var(--line4)", borderRadius: 10, background: "var(--surface)" }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input autoFocus value={id} onChange={e => setId(e.target.value)}
+          onKeyDown={e => { if (e.key === "Escape") onCancel(); }}
+          placeholder={t("settings:models.idPlaceholder")}
+          className="mono" style={{ ...inputStyle, flex: 2 }} />
+        <input value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === "Escape") onCancel(); }}
+          placeholder={t("settings:models.namePlaceholder")}
+          style={{ ...inputStyle, flex: 1 }} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <Capability on={image} onChange={setImage} label={t("settings:models.image")} />
+        <Capability on={reasoning} onChange={setReasoning} label={t("settings:models.reasoning")} />
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 11.5, color: "var(--tx3b)" }}>
+            {t("settings:models.contextWindow")}</span>
+          <input value={ctx} onChange={e => setCtx(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="128" className="mono"
+            style={{ ...inputStyle, width: 62, height: 26, fontSize: 11.5 }} />
+          <span style={{ fontSize: 11.5, color: "var(--tx5)" }}>k</span>
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <button className="fbtn" onClick={onCancel}>{t("settings:models.cancel")}</button>
+        <button className="fbtn fbtn-primary" disabled={!id.trim() || busy} onClick={submit}
+          style={{ height: 28 }}>{t("settings:models.addConfirm")}</button>
+      </div>
+    </div>
+  );
+}
+
+// 能力开关:小尺寸勾选框,和模型页的选中态同一套视觉
+function Capability({ on, onChange, label }) {
+  return (
+    <span onClick={() => onChange(!on)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "default" }}>
+      <Check on={on} size={15} />
+      <span style={{ fontSize: 11.5, color: "var(--tx2b)" }}>{label}</span>
+    </span>
+  );
+}
+
 // 「+」弹层:列出尚未添加的内置 Provider
 function AddMenu({ candidates, onPick, onClose }) {
   const { t } = useTranslation();
@@ -99,9 +158,12 @@ function AddMenu({ candidates, onPick, onClose }) {
           {matched.map(p => (
             <div key={p.id} className="hov-item"
               onMouseDown={e => { e.preventDefault(); onPick(p); }}
-              style={{ padding: "6px 8px", borderRadius: 7, fontSize: 12.5, color: "var(--tx1)",
-                cursor: "default", overflow: "hidden", textOverflow: "ellipsis",
-                whiteSpace: "nowrap" }}>{p.name}</div>
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
+                borderRadius: 7, cursor: "default" }}>
+              <ProviderIcon provider={p.id} size={15} />
+              <span style={{ fontSize: 12.5, color: "var(--tx1)", minWidth: 0, overflow: "hidden",
+                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+            </div>
           ))}
           {!matched.length && (
             <div style={{ padding: "10px 8px", fontSize: 11.5, color: "var(--tx5)" }}>
@@ -115,47 +177,40 @@ function AddMenu({ candidates, onPick, onClose }) {
 export default function Providers({ ferry }) {
   const { t } = useTranslation();
   const [providers, setProviders] = useState(null);
-  const [visible, setVisible] = useState({});
   const [selId, setSelId] = useState(null);
-  const [models, setModels] = useState([]);
-  const [query, setQuery] = useState("");
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [adding, setAdding] = useState(false);
-  const selIdRef = useRef(selId); selIdRef.current = selId;
+  const [catalog, setCatalog] = useState([]);
+  const [addingModel, setAddingModel] = useState(false);
 
   const load = useCallback(async () => {
-    const [list, config] = await Promise.all([
-      agentCommand("providers.list"), agentCommand("config.get")]);
+    const list = await agentCommand("providers.list");
     setProviders(list);
-    setVisible(config.visible_models || {});
+    // 模型目录里带 custom 标记,能区分手填模型与 Provider 自带的
+    setCatalog(await agentCommand("models.catalog").catch(() => []));
     return list;
   }, []);
 
-  useEffect(() => { load().catch(e => setNotice(String(e.message || e))); }, [load]);
-
-  const loadModels = useCallback(async providerId => {
-    if (!providerId) return setModels([]);
-    const list = await agentCommand("models.list",
-      { provider_id: providerId, limit: 200 }).catch(() => []);
-    setModels(list || []);
-  }, []);
-  useEffect(() => { loadModels(selId); }, [selId, loadModels]);
+  // 失败也要落地成空列表,否则 providers 停在 null,左栏 spinner 会一直转
+  useEffect(() => {
+    load().catch(e => { setNotice(String(e.message || e)); setProviders([]); });
+  }, [load]);
 
   // OAuth 登录完成后凭据与动态模型目录都会变
   useEffect(() => {
     if (ferry?.auth?.status !== "completed") return;
     load().catch(() => {});
-    agentCommand("models.refresh")
-      .then(() => loadModels(selIdRef.current))
-      .catch(() => {});
+    agentCommand("models.refresh").catch(() => {});
     ferry.loadModels?.();
   }, [ferry?.auth?.status]);
 
   const enabled = useMemo(() => (providers || []).filter(p => p.enabled), [providers]);
   const candidates = useMemo(() => (providers || []).filter(p => !p.enabled), [providers]);
   const sel = enabled.find(p => p.id === selId) || null;
+  const selModels = useMemo(
+    () => catalog.filter(m => m.provider === selId), [catalog, selId]);
   useEffect(() => {
     if (!sel && enabled.length) setSelId(enabled[0].id);
   }, [sel, enabled]);
@@ -190,7 +245,26 @@ export default function Providers({ ferry }) {
   const saveKey = () => act(async () => {
     await agentCommand("credential.set", { provider_id: sel.id, key });
     setKey("");
-    setNotice(t("settings:providers.keySaved"));
+    // 有了凭据才能问 Provider 要动态模型表,存完 Key 立刻拉一次
+    await agentCommand("models.refresh").catch(() => {});
+    await load();
+    await syncFerry();
+  });
+
+  const testProvider = () => act(async () => {
+    const r = await agentCommand("provider.test", { provider_id: sel.id });
+    setNotice(t("settings:providers.testOk", { model: r.model, ms: r.latency_ms }));
+  });
+
+  const addModel = payload => act(async () => {
+    await agentCommand("custom_model.add", { provider_id: sel.id, ...payload });
+    setAddingModel(false);
+    await load();
+    await syncFerry();
+  });
+
+  const deleteModel = modelId => act(async () => {
+    await agentCommand("custom_model.delete", { provider_id: sel.id, model_id: modelId });
     await load();
     await syncFerry();
   });
@@ -200,32 +274,6 @@ export default function Providers({ ferry }) {
     await load();
     await syncFerry();
   });
-
-  const refreshCatalog = () => act(async () => {
-    const r = await agentCommand("models.refresh");
-    setNotice(r.failed_provider_ids?.length
-      ? t("settings:providers.refreshPartial", { list: r.failed_provider_ids.join(", ") })
-      : t("settings:providers.refreshDone"));
-    await loadModels(selId);
-    await load();
-  });
-
-  // visible_models 缺省表示全部可见;取消勾选时才写入显式白名单
-  const shownIds = sel ? visible[sel.id] : undefined;
-  const isShown = id => !shownIds || shownIds.includes(id);
-  const toggleModel = id => act(async () => {
-    const all = models.map(m => m.id);
-    const base = shownIds || all;
-    const next = base.includes(id) ? base.filter(x => x !== id) : [...base, id];
-    const payload = next.length === all.length && all.every(x => next.includes(x)) ? null : next;
-    await agentCommand("models.visibility.set", { provider_id: sel.id, model_ids: payload });
-    await load();
-    await ferry?.loadModels?.();
-  });
-
-  const filtered = models.filter(m => !query
-    || m.id.toLowerCase().includes(query.toLowerCase())
-    || m.name.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
@@ -237,10 +285,13 @@ export default function Providers({ ferry }) {
             <div style={{ padding: 20, textAlign: "center" }}><Spinner /></div>)}
           {enabled.map(p => (
             <div key={p.id} className={p.id === selId ? undefined : "hov-item"}
-              onClick={() => { setSelId(p.id); setQuery(""); setNotice(null); setKey(""); }}
+              onClick={() => {
+                setSelId(p.id); setNotice(null); setKey(""); setAddingModel(false);
+              }}
               style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px",
                 borderRadius: 8, cursor: "default",
                 background: p.id === selId ? "var(--seg-on)" : "transparent" }}>
+              <ProviderIcon provider={p.id} size={16} />
               <span style={{ fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden",
                 textOverflow: "ellipsis", whiteSpace: "nowrap",
                 color: p.id === selId ? "var(--tx1)" : "var(--tx2b)",
@@ -276,13 +327,9 @@ export default function Providers({ ferry }) {
             {t("settings:providers.emptyHint")}</div>)}
         {sel && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <ProviderIcon provider={sel.id} size={20} />
               <span style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{sel.name}</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 11.5, color: sel.configured ? "var(--ok-deep)" : "var(--tx5)" }}>
-                {sel.configured
-                  ? t("settings:providers.configured", { type: sel.credential_type || "custom" })
-                  : t("settings:providers.notConfigured")}</span>
             </div>
 
             {sel.auth_types.includes("api_key") && (
@@ -301,13 +348,20 @@ export default function Providers({ ferry }) {
             )}
 
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              {sel.auth_types.includes("oauth") && !ferry?.auth && (
+              {/* 只有不支持 API Key 的 Provider 才走 OAuth,Anthropic 一律用 API Key */}
+              {sel.auth_types.includes("oauth") && !sel.auth_types.includes("api_key")
+                && !ferry?.auth && (
                 <button className="fbtn" disabled={busy}
                   onClick={() => act(() => ferry.startLogin(sel.id, "oauth"))}>
                   {t("settings:providers.oauthLogin")}</button>)}
+              {sel.configured && (
+                <button className="fbtn" disabled={busy} onClick={testProvider}>
+                  {t("settings:providers.test")}</button>)}
               {sel.configured && !sel.custom && (
                 <button className="fbtn" disabled={busy} onClick={logout}>
-                  {t("settings:providers.logout")}</button>)}
+                  {/* API Key 是「清除」,OAuth 才叫「退出登录」 */}
+                  {t(sel.credential_type === "oauth"
+                    ? "settings:providers.logout" : "settings:providers.clearKey")}</button>)}
             </div>
             <AuthFlow auth={ferry?.auth} ferry={ferry} />
 
@@ -316,41 +370,53 @@ export default function Providers({ ferry }) {
                 border: "1px solid var(--acc-line)", borderRadius: 8, padding: "7px 10px" }}>
                 {notice}</div>)}
 
-            {/* 模型可见性 */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)", flex: 1 }}>
-                {t("settings:providers.models")}</span>
-              <span style={{ fontSize: 11, color: "var(--tx5)" }}>
-                {t("settings:providers.shownCount",
-                  { n: sel.visible_model_count, total: sel.model_count })}</span>
-              <button className="fbtn" onClick={refreshCatalog} disabled={busy}
-                style={{ height: 28, fontSize: 11.5 }}>
-                {t("settings:providers.refreshModels")}</button>
-            </div>
-            <input value={query} onChange={e => setQuery(e.target.value)}
-              placeholder={t("settings:providers.searchModel")}
-              style={{ ...inputStyle, width: "100%" }} />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {filtered.map((m, i) => (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 2px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, color: "var(--tx1)", overflow: "hidden",
-                      textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
-                    <div className="mono" style={{ fontSize: 10.5, color: "var(--tx5)", marginTop: 1 }}>
-                      {m.id} · {Math.round(m.context_window / 1000)}k
-                      {m.input.includes("image") ? ` · ${t("settings:providers.image")}` : ""}
-                      {m.reasoning ? ` · ${t("settings:providers.reasoning")}` : ""}</div>
-                  </div>
-                  <Toggle size={20} on={isShown(m.id)} onChange={() => toggleModel(m.id)} />
+            {sel.configured && (
+              <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
+                    {t("settings:providers.models")}</span>
+                  <span style={{ fontSize: 11, color: "var(--tx5)" }}>{selModels.length}</span>
+                  <span style={{ flex: 1 }} />
+                  <button className="fbtn" disabled={busy} style={{ height: 26, fontSize: 11 }}
+                    onClick={() => setAddingModel(v => !v)}>
+                    {t("settings:models.add")}</button>
                 </div>
-              ))}
-              {!filtered.length && (
-                <div style={{ fontSize: 11.5, color: "var(--tx5)", padding: "12px 0" }}>
-                  {t("settings:providers.noModels")}</div>)}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--tx5)", lineHeight: 1.55 }}>
-              {t("settings:providers.plaintextNote")}</div>
+                {addingModel && (
+                  <div style={{ paddingBottom: 8 }}>
+                    <AddModel busy={busy} onSubmit={addModel}
+                      onCancel={() => setAddingModel(false)} />
+                  </div>)}
+                {selModels.map((m, i) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10,
+                    padding: "7px 2px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, color: "var(--tx1)", overflow: "hidden",
+                        textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                      <div className="mono"
+                        style={{ fontSize: 10.5, color: "var(--tx5)", marginTop: 1 }}>
+                        {m.id} · {Math.round(m.context_window / 1000)}k
+                        {m.input.includes("image") ? ` · ${t("settings:models.image")}` : ""}
+                        {m.reasoning ? ` · ${t("settings:models.reasoning")}` : ""}</div>
+                    </div>
+                    {m.custom && (
+                      <button className="hov" disabled={busy} title={t("settings:models.delete")}
+                        onClick={() => deleteModel(m.id)}
+                        style={{ width: 24, height: 24, border: "none", borderRadius: 6,
+                          flex: "none", background: "transparent", color: "var(--tx4)",
+                          cursor: "default", display: "inline-flex", alignItems: "center",
+                          justifyContent: "center" }}>
+                        <svg viewBox="0 0 14 14" style={{ width: 12, height: 12 }} aria-hidden>
+                          <path d="M2.6 3.9h8.8M5.6 3.9V2.7h2.8v1.2M3.7 3.9l.5 7.4h5.6l.5-7.4"
+                            fill="none" stroke="currentColor" strokeWidth="1.2"
+                            strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>)}
+                  </div>
+                ))}
+                {!selModels.length && (
+                  <div style={{ fontSize: 11.5, color: "var(--tx5)", padding: "6px 2px" }}>
+                    {t("settings:providers.noModels")}</div>)}
+              </div>)}
           </>
         )}
       </div>

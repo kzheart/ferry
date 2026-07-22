@@ -118,6 +118,42 @@ export async function dispatch(
       case "models.enabled":
         result = await runtime.enabledModels();
         break;
+      case "models.catalog":
+        result = await runtime.catalogModels();
+        break;
+      case "custom_model.add": {
+        const name = optionalString(params, "name", 256);
+        const contextWindow = optionalInteger(params, "context_window");
+        const maxTokens = optionalInteger(params, "max_tokens");
+        result = await runtime.saveCustomModel(
+          requireString(params, "provider_id", 128),
+          {
+            id: requireString(params, "model_id", 512),
+            ...(name ? { name } : {}),
+            ...(typeof params.image === "boolean"
+              ? { input: params.image ? ["text", "image"] : ["text"] }
+              : {}),
+            ...(typeof params.reasoning === "boolean"
+              ? { reasoning: params.reasoning }
+              : {}),
+            ...(contextWindow ? { context_window: contextWindow } : {}),
+            ...(maxTokens ? { max_tokens: maxTokens } : {}),
+          },
+        );
+        break;
+      }
+      case "custom_model.delete":
+        result = await runtime.deleteCustomModel(
+          requireString(params, "provider_id", 128),
+          requireString(params, "model_id", 512),
+        );
+        break;
+      case "provider.test":
+        result = await runtime.testProvider(
+          requireString(params, "provider_id", 128),
+          optionalString(params, "model_id", 512),
+        );
+        break;
       case "provider.enabled.set":
         if (typeof params.enabled !== "boolean") {
           throw new ProtocolError(
