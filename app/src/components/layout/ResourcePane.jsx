@@ -210,7 +210,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selec
   return <VirtualItems items={items} total={y} />;
 }
 // 迁移历史分组列表
-export function HistoryList({ groups, empty, onClear }) {
+export function HistoryList({ groups, empty, onClear, onDelete }) {
   const { t } = useTranslation();
   if (empty) return <PaneEmpty text={t("common:empty.history")} onClear={onClear} />;
   const items = [];
@@ -233,8 +233,16 @@ export function HistoryList({ groups, empty, onClear }) {
           <ToolIcon tool={h.tool} size={18} />
           <span style={{ fontSize: 12, color: "var(--tx1)", whiteSpace: "nowrap",
             overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{h.title}</span>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: h.stColor, flex: "none" }} />
-          <span style={{ fontSize: 10, color: "var(--tx5)", flex: "none" }}>{h.short}</span>
+          <span className="row-meta" style={{ width: 5, height: 5, borderRadius: "50%",
+            background: h.stColor, flex: "none" }} />
+          <span className="row-meta"
+            style={{ fontSize: 10, color: "var(--tx5)", flex: "none" }}>{h.short}</span>
+          {onDelete && h.deletable && (
+            <span className="row-act" style={{ gap: 1, flex: "none" }}>
+              <button className="row-act-btn row-act-danger" title={t("migration:history.delete")}
+                onClick={e => { e.stopPropagation(); onDelete(h.id); }}>
+                <TrashIcon size={13} /></button>
+            </span>)}
         </div>
       ) });
       y += ROW_H;

@@ -55,7 +55,7 @@ export default function HistoryDetail({ h, onDelete }) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
             <StatusPill label={t(`common:${status}`)} color={stColor} bg={stBg} />
-            {onDelete && (
+            {onDelete && h.id && (
               <button className="ftool-btn" title={t("migration:history.delete")}
                 onClick={onDelete}>
                 <TrashIcon size={14} />
