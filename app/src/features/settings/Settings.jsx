@@ -5,65 +5,11 @@ import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { LOCALE_META } from "../../i18n/index.js";
 import { SetGlyph, ToolIcon } from "../../components/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
+import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
+import Providers from "./Providers.jsx";
 
-const SECTIONS = [["prefs", "settings:sections.prefs"], ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
-
-// ---------- 通用排版件 ----------
-const GroupTitle = ({ children, first }) => (
-  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
-    margin: first ? "0 0 9px 2px" : "22px 0 9px 2px" }}>{children}</div>
-);
-
-const Card = ({ children }) => (
-  <div style={{ border: "1px solid var(--line4)", borderRadius: 12, background: "var(--surface)",
-    overflow: "hidden" }}>{children}</div>
-);
-
-function Row({ title, desc, children, first }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
-      borderTop: first ? "none" : "1px solid var(--line6)" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{title}</div>
-        {desc && <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// 原生 select:自带键盘导航与系统弹层,选项多了也不会撑爆设置面板
-function Select({ value, onChange, children }) {
-  return (
-    <div style={{ position: "relative", flex: "none" }}>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        style={{ appearance: "none", height: 30, padding: "0 28px 0 11px", borderRadius: 8,
-          border: "1px solid var(--line4)", background: "var(--surface)", color: "var(--tx1)",
-          fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "default" }}>
-        {children}
-      </select>
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden
-        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-          pointerEvents: "none", color: "var(--tx4)" }}>
-        <path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.6"
-          strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-function Toggle({ on, onChange }) {
-  return (
-    <button onClick={() => onChange(!on)} aria-pressed={on}
-      style={{ width: 44, height: 26, borderRadius: 20, border: "none", flex: "none",
-        background: on ? "var(--accent)" : "var(--toggle-off)", cursor: "default", padding: 0,
-        position: "relative", transition: "background .15s ease" }}>
-      <span style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20,
-        borderRadius: "50%", background: "var(--surface)", boxShadow: "0 1px 3px rgba(0,0,0,.28)",
-        transition: "left .15s ease" }} />
-    </button>
-  );
-}
+const SECTIONS = [["prefs", "settings:sections.prefs"], ["providers", "settings:sections.providers"],
+  ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
 
 // ---------- 偏好设置 ----------
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
@@ -285,9 +231,9 @@ function Updates({ s, set, updater }) {
 
 // ---------- 弹窗外壳 ----------
 export default function SettingsPage({ settings, setSettings, scan, env, scanning, onRescan,
-  updater, guideSeen, onOpenGuide, onFirstRun, onClose }) {
+  updater, guideSeen, onOpenGuide, onFirstRun, onClose, ferry, initialSection }) {
   const { t } = useTranslation();
-  const [section, setSection] = useState("prefs");
+  const [section, setSection] = useState(initialSection || "prefs");
   const title = Object.fromEntries(SECTIONS)[section];
 
   return (
@@ -336,15 +282,19 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
               </svg>
             </button>
           </div>
-          <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-            <div style={{ maxWidth: 620 }}>
-              {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
-                onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
-              {section === "sources" && <Sources scan={scan} env={env}
-                scanning={scanning} onRescan={onRescan} />}
-              {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}
+          {section === "providers" ? (
+            <Providers ferry={ferry} />
+          ) : (
+            <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+              <div style={{ maxWidth: 620 }}>
+                {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
+                  onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
+                {section === "sources" && <Sources scan={scan} env={env}
+                  scanning={scanning} onRescan={onRescan} />}
+                {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

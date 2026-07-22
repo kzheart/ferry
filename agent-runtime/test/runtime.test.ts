@@ -81,6 +81,49 @@ describe("AgentRuntime", () => {
     expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
   });
 
+  it("persists renamed and pinned sessions, then deletes them", async () => {
+    const store = new MemorySessionStore();
+    const runtime = await createRuntime({ store });
+    await runtime.createSession("s1");
+    await runtime.renameSession("s1", "项目检索");
+    await runtime.pinSession("s1", true);
+    expect(runtime.listSessions()).toMatchObject([
+      { session_id: "s1", title: "项目检索", pinned: true },
+    ]);
+
+    const restored = await createRuntime({ store });
+    expect(restored.listSessions()).toMatchObject([
+      { session_id: "s1", title: "项目检索", pinned: true },
+    ]);
+    await restored.deleteSession("s1");
+    expect(restored.listSessions()).toEqual([]);
+    expect(await store.loadAll()).toEqual([]);
+  });
+
+  it("rejects deletion while a run is active", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "slow:x");
+    await expect(runtime.deleteSession("s1")).rejects.toThrow("cannot delete");
+    runtime.abort("s1");
+    await runtime.waitForIdle("s1");
+  });
+
+  it("ends a tool wait at the configured gateway deadline", async () => {
+    const runtime = await createRuntime({
+      toolDeadlinesMs: { ferry_list_capabilities: 5 },
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "tool:list_capabilities");
+    await runtime.waitForIdle("s1");
+
+    const events = runtime.replay("s1", 0);
+    expect(
+      events.find((event) => event.type === "tool.completed")?.payload,
+    ).toMatchObject({ is_error: true });
+    expect(events.at(-1)?.type).toMatch(/run\.(completed|failed)/);
+  });
+
   it("opens the next prompt gate before publishing the terminal event", async () => {
     const runtime = await createRuntime();
     let secondRun: Promise<unknown> | undefined;

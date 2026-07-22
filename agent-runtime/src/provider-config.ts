@@ -15,13 +15,29 @@ import type {
   ProviderEnv,
 } from "@earendil-works/pi-ai";
 
-export const PROVIDER_CONFIG_VERSION = 1 as const;
+export const PROVIDER_CONFIG_VERSION = 2 as const;
 const MAX_SECRET_BYTES = 64 * 1024;
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
+const MAX_VISIBLE_MODELS = 500;
+
+export const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
+// 首次启动只亮这几家常见 Provider,其余由用户在设置里用「+」添加
+export const DEFAULT_ENABLED_PROVIDERS = ["anthropic", "openai", "deepseek"];
 
 export interface ModelSelection {
   provider: string;
   model: string;
+  thinking?: ThinkingLevel;
 }
 
 export interface CustomProviderConfig {
@@ -46,6 +62,10 @@ export interface ProviderConfigDocument {
   default_model: ModelSelection;
   credentials: Record<string, StoredCredential>;
   custom_providers: CustomProviderConfig[];
+  // 设置页里出现、且允许在模型选择器里使用的 Provider
+  enabled_providers: string[];
+  // Provider → 允许出现在模型选择器里的模型;缺省表示该 Provider 的全部模型
+  visible_models: Record<string, string[]>;
 }
 
 export type StoredCredential =
@@ -68,6 +88,8 @@ export interface PublicProviderConfig {
   custom_providers: Array<
     Omit<CustomProviderConfig, "api_key"> & { configured: boolean }
   >;
+  enabled_providers: string[];
+  visible_models: Record<string, string[]>;
 }
 
 function initialConfig(): ProviderConfigDocument {
@@ -76,6 +98,8 @@ function initialConfig(): ProviderConfigDocument {
     default_model: { provider: "deepseek", model: "deepseek-v4-flash" },
     credentials: {},
     custom_providers: [],
+    enabled_providers: [...DEFAULT_ENABLED_PROVIDERS],
+    visible_models: {},
   };
 }
 
@@ -257,10 +281,50 @@ function customModel(value: unknown): CustomModelConfig {
   };
 }
 
+function thinkingLevel(value: unknown): ThinkingLevel | undefined {
+  if (value === undefined) return undefined;
+  if (!THINKING_LEVELS.includes(value as ThinkingLevel)) {
+    throw new Error("thinking level is invalid");
+  }
+  return value as ThinkingLevel;
+}
+
+export function parseThinkingLevel(value: unknown): ThinkingLevel | undefined {
+  return thinkingLevel(value);
+}
+
+function providerIdList(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length > 200) {
+    throw new Error(`${label} is invalid`);
+  }
+  return [...new Set(value.map((item) => identifier(item, label)))];
+}
+
+function visibleModels(value: unknown): Record<string, string[]> {
+  if (!record(value)) throw new Error("visible models are invalid");
+  return Object.fromEntries(
+    Object.entries(value).map(([providerId, ids]) => {
+      if (!Array.isArray(ids) || ids.length > MAX_VISIBLE_MODELS) {
+        throw new Error("visible models are invalid");
+      }
+      return [
+        identifier(providerId, "provider id"),
+        [...new Set(ids.map((id) => modelIdentifier(id, "visible model id")))],
+      ];
+    }),
+  );
+}
+
 export function parseProviderConfig(value: unknown): ProviderConfigDocument {
-  if (!record(value) || value.schema_version !== PROVIDER_CONFIG_VERSION) {
+  if (
+    !record(value) ||
+    (value.schema_version !== PROVIDER_CONFIG_VERSION &&
+      value.schema_version !== 1)
+  ) {
     throw new Error("provider config schema is unsupported");
   }
+  // v1 没有可见性字段:迁移时点亮默认 Provider,并把已有凭据的 Provider 一并保留
+  const legacy = value.schema_version === 1;
   if (!record(value.default_model) || !record(value.credentials)) {
     throw new Error("provider config is invalid");
   }
@@ -280,14 +344,27 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
   ) {
     throw new Error("custom provider ids must be unique");
   }
+  const thinking = thinkingLevel(value.default_model.thinking);
+  const enabled = legacy
+    ? [
+        ...new Set([
+          ...DEFAULT_ENABLED_PROVIDERS,
+          ...Object.keys(credentials),
+          ...customProviders.map((provider) => provider.id),
+        ]),
+      ]
+    : providerIdList(value.enabled_providers, "enabled provider id");
   return {
     schema_version: PROVIDER_CONFIG_VERSION,
     default_model: {
       provider: identifier(value.default_model.provider, "default provider"),
       model: modelIdentifier(value.default_model.model, "default model"),
+      ...(thinking ? { thinking } : {}),
     },
     credentials,
     custom_providers: customProviders,
+    enabled_providers: enabled,
+    visible_models: legacy ? {} : visibleModels(value.visible_models ?? {}),
   };
 }
 
@@ -376,6 +453,8 @@ export class FileProviderConfigStore implements CredentialStore {
           configured: Boolean(api_key),
         }),
       ),
+      enabled_providers: config.enabled_providers,
+      visible_models: config.visible_models,
     };
   }
 
@@ -415,12 +494,36 @@ export class FileProviderConfigStore implements CredentialStore {
   }
 
   async setDefaultModel(selection: ModelSelection) {
+    const thinking = thinkingLevel(selection.thinking);
     const safe = {
       provider: identifier(selection.provider, "default provider"),
       model: modelIdentifier(selection.model, "default model"),
+      ...(thinking ? { thinking } : {}),
     };
     await this.mutate((config) => {
       config.default_model = safe;
+    });
+  }
+
+  async setProviderEnabled(providerId: string, enabled: boolean) {
+    identifier(providerId, "provider id");
+    return this.mutate((config) => {
+      const rest = config.enabled_providers.filter(
+        (item) => item !== providerId,
+      );
+      config.enabled_providers = enabled ? [...rest, providerId] : rest;
+      if (!enabled) delete config.visible_models[providerId];
+      return config.enabled_providers;
+    });
+  }
+
+  // modelIds 传 null 表示恢复「全部可见」
+  async setVisibleModels(providerId: string, modelIds: string[] | null) {
+    identifier(providerId, "provider id");
+    return this.mutate((config) => {
+      if (modelIds === null) delete config.visible_models[providerId];
+      else config.visible_models[providerId] = modelIds;
+      return config.visible_models[providerId] ?? null;
     });
   }
 
@@ -441,6 +544,9 @@ export class FileProviderConfigStore implements CredentialStore {
         (item) => item.id !== safe.id,
       );
       config.custom_providers.push(replacement);
+      if (!config.enabled_providers.includes(safe.id)) {
+        config.enabled_providers.push(safe.id);
+      }
     });
   }
 
@@ -451,6 +557,10 @@ export class FileProviderConfigStore implements CredentialStore {
         (item) => item.id !== providerId,
       );
       delete config.credentials[providerId];
+      delete config.visible_models[providerId];
+      config.enabled_providers = config.enabled_providers.filter(
+        (item) => item !== providerId,
+      );
     });
   }
 }

@@ -37,6 +37,35 @@ describe("ProviderHost", () => {
     expect(ids).toContain("github-copilot");
   });
 
+  it("only offers models from enabled, configured providers the user kept visible", async () => {
+    const { host: providers } = await host();
+    // 默认点亮但未配置凭据 → 选择器里什么都没有
+    expect(await providers.enabledModels()).toEqual([]);
+
+    await providers.saveApiKey("openai", "configured-key");
+    const all = await providers.enabledModels();
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((model) => model.provider === "openai")).toBe(true);
+    expect(all[0]?.provider_name).toBe("OpenAI");
+
+    const kept = all[0]!.id;
+    await providers.setVisibleModels("openai", [kept]);
+    expect((await providers.enabledModels()).map((model) => model.id)).toEqual([
+      kept,
+    ]);
+    const summary = (await providers.providers()).find(
+      (provider) => provider.id === "openai",
+    );
+    expect(summary?.visible_model_count).toBe(1);
+    expect(summary?.model_count).toBeGreaterThan(1);
+
+    await providers.setProviderEnabled("openai", false);
+    expect(await providers.enabledModels()).toEqual([]);
+    await expect(
+      providers.setVisibleModels("openai", ["not-a-real-model"]),
+    ).rejects.toThrow("model is not available");
+  });
+
   it("never reads ambient provider environment variables", async () => {
     process.env.OPENAI_API_KEY = "ambient-key-must-not-be-used";
     const { host: providers } = await host();
@@ -205,6 +234,10 @@ describe("ProviderHost", () => {
     await runtime.selectModel("conversation", {
       provider: "switch-test",
       model: "vision-b",
+      thinking: "high",
+    });
+    expect(runtime.state("conversation")).toMatchObject({
+      thinking_level: "high",
     });
 
     const restored = await AgentRuntime.create({
@@ -216,6 +249,7 @@ describe("ProviderHost", () => {
       provider_id: "switch-test",
       model_id: "vision-b",
       contains_images: true,
+      thinking_level: "high",
     });
     await expect(
       restored.selectModel("conversation", {

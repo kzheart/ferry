@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { AgentRuntime } from "./runtime.js";
 import { FileSessionStore } from "./event-store.js";
 import { FileProviderConfigStore } from "./provider-config.js";
@@ -19,7 +20,7 @@ function write(value: unknown) {
 
 async function main() {
   const dataDirectory =
-    process.env.FERRY_AGENT_DATA_DIR ?? join(process.cwd(), ".runtime-data");
+    process.env.FERRY_AGENT_DATA_DIR ?? join(homedir(), ".ferry");
   const providerHost = await ProviderHost.create(
     new FileProviderConfigStore(join(dataDirectory, "providers.json")),
   );

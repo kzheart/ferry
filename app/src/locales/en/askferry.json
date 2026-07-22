@@ -1,11 +1,22 @@
 {
-  "rail": "Ask Ferry",
+  "rail": "Agent",
   "pane": {
-    "title": "Ask Ferry",
+    "title": "Agent",
     "placeholder": "Search chats",
     "newChat": "New chat",
     "empty": "No chats yet",
-    "footer": "{{n}} chats"
+    "footer": "{{n}} chats",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "delete": "Delete chat",
+    "stopBeforeDelete": "Stop the current run first",
+    "more": "More actions",
+    "rename": "Rename",
+    "copyId": "Copy chat ID",
+    "renameTitle": "Rename chat",
+    "renameDesc": "Give “{{title}}” a clear name.",
+    "renamePlaceholder": "Enter a chat name",
+    "save": "Save"
   },
   "chat": {
     "newChat": "New chat",
@@ -25,7 +36,7 @@
   "setup": {
     "title": "Connect a model",
     "desc": "Add an API key for {{provider}} or sign in to another provider to start chatting. Credentials stay on this machine.",
-    "cta": "Configure model"
+    "cta": "Configure providers"
   },
   "tool": {
     "running": "Running",
@@ -73,31 +84,15 @@
     "cancel": "Cancel",
     "submit": "Submit"
   },
-  "config": {
-    "title": "Models & Providers",
-    "open": "Configure model",
-    "close": "Close",
-    "searchProvider": "Search providers",
-    "searchModel": "Search models",
-    "pickProvider": "Pick a provider on the left",
-    "configured": "Configured ({{type}})",
-    "notConfigured": "Not configured",
-    "keyPlaceholder": "Paste API key",
-    "saveKey": "Save",
-    "keySaved": "API key saved and active",
-    "oauthLogin": "OAuth sign-in",
-    "logout": "Sign out",
-    "setDefault": "Set default",
-    "useForChat": "Use for this chat",
-    "image": "image",
+  "model": {
+    "pick": "Pick a model",
     "reasoning": "reasoning",
-    "noModels": "No models for this provider yet — try refreshing the catalog",
-    "refreshModels": "Refresh model catalog",
-    "refreshDone": "Model catalog refreshed",
-    "refreshPartial": "Some providers failed to refresh: {{list}}",
-    "plaintextNote": "Credentials are stored in plaintext in providers.json (0600) under Ferry's config directory; never logged. Host environment variables are not read.",
-    "noCredential": "The default provider ({{provider}}) has no credential configured yet.",
-    "modelSetDefault": "Default model switched to {{model}}",
-    "modelSetSession": "This chat now uses {{model}}"
+    "empty": "No models available yet. Configure a provider under Settings · Providers.",
+    "effort": "Effort",
+    "effort_off": "Off",
+    "effort_low": "Low",
+    "effort_medium": "Medium",
+    "effort_high": "High",
+    "manage": "Manage providers & models"
   }
 }

@@ -13,6 +13,7 @@ import { MemorySessionStore } from "./event-store.js";
 import type {
   CustomProviderConfig,
   ModelSelection,
+  ThinkingLevel,
 } from "./provider-config.js";
 import type { ProviderHost } from "./provider-host.js";
 import {
@@ -41,6 +42,19 @@ export type ToolHandler = (
   context: ToolRequestContext,
 ) => Promise<unknown>;
 
+// 新增工具时 TypeScript 会强制补齐策略；长任务不能被短读取工具的截止时间误伤。
+const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
+  ferry_list_capabilities: 10_000,
+  ferry_search_sessions: 25_000,
+  ferry_get_session_context: 25_000,
+  ferry_get_usage: 25_000,
+  ferry_preview_migration: 125_000,
+  ferry_preview_edit: 125_000,
+  ferry_propose_migration: 125_000,
+  ferry_propose_edit: 125_000,
+  ferry_propose_metadata_change: 125_000,
+};
+
 export interface RuntimeOptions {
   store?: SessionStore;
   backendFactory?: BackendFactory;
@@ -48,6 +62,7 @@ export interface RuntimeOptions {
   toolHandler?: ToolHandler;
   now?: () => Date;
   idFactory?: () => string;
+  toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
 }
 
 interface DeferredTool {
@@ -161,21 +176,40 @@ export function safeEvents(events: EventEnvelope[]): EventEnvelope[] {
     }
     return { ...event, payload };
   });
-  const deltas = new Map<string, { first: number; text: string }>();
-  safe.forEach((event, index) => {
+  // delta 是按网络到达顺序记录的事实；渲染层会把连续 delta 组成一块回复，
+  // 但持久化层绝不能压扁它们，否则无法区分工具调用前后的两段 AI 回复。
+  let index = 0;
+  while (index < safe.length) {
+    const first = safe[index]!;
     if (
-      event.type !== "content.delta" ||
-      typeof event.payload.delta !== "string"
-    )
-      return;
-    const key = event.run_id ?? event.session_id;
-    const group = deltas.get(key) ?? { first: index, text: "" };
-    group.text += event.payload.delta;
-    deltas.set(key, group);
-    event.payload.delta = "";
-  });
-  for (const group of deltas.values()) {
-    safe[group.first]!.payload.delta = safeText(group.text, 16_000);
+      first.type !== "content.delta" ||
+      typeof first.payload.delta !== "string"
+    ) {
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (
+      end < safe.length &&
+      safe[end]!.type === "content.delta" &&
+      safe[end]!.run_id === first.run_id &&
+      typeof safe[end]!.payload.delta === "string"
+    ) {
+      end += 1;
+    }
+    const raw = safe
+      .slice(index, end)
+      .map((event) => event.payload.delta)
+      .join("");
+    const redacted = safeText(raw, 16_000);
+    // 仅在脱敏或截断时把相邻片段收敛为一个安全值，避免跨分片泄露凭据。
+    if (redacted !== raw) {
+      first.payload.delta = redacted;
+      for (let cursor = index + 1; cursor < end; cursor += 1) {
+        safe[cursor]!.payload.delta = "";
+      }
+    }
+    index = end;
   }
   return safe;
 }
@@ -188,6 +222,8 @@ class RuntimeSession {
   private terminalResult: TerminalResult | null = null;
   private runPromise: Promise<void> | null = null;
   private containsImages: boolean;
+  private title: string | null;
+  private pinned: boolean;
 
   constructor(
     readonly id: string,
@@ -200,6 +236,8 @@ class RuntimeSession {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
     this.containsImages = state?.contains_images ?? false;
+    this.title = state?.title ?? null;
+    this.pinned = state?.pinned ?? false;
     this.activeRunId = null;
     this.agent = new Agent({
       sessionId: id,
@@ -211,7 +249,7 @@ class RuntimeSession {
         systemPrompt:
           "You are Ferry's local assistant. Use only the explicitly registered Ferry tools. Never claim shell, filesystem, or network access.",
         model: backend.model,
-        thinkingLevel: "off",
+        thinkingLevel: selection.thinking ?? "off",
         tools: createFerryTools(
           {
             invoke: (name, args, context) =>
@@ -328,6 +366,9 @@ class RuntimeSession {
       latest_seq: this.nextSeq - 1,
       queued_messages: this.agent.hasQueuedMessages(),
       contains_images: this.containsImages,
+      title: this.title,
+      pinned: this.pinned,
+      thinking_level: this.selection.thinking ?? "off",
     };
   }
 
@@ -354,13 +395,34 @@ class RuntimeSession {
     }
     this.agent.streamFunction = backend.streamFn;
     this.agent.state.model = backend.model;
+    this.agent.state.thinkingLevel = selection.thinking ?? "off";
     this.selection = selection;
     await this.persist();
     await this.emit("session.model_changed", {
       provider_id: selection.provider,
       model_id: selection.model,
+      thinking_level: selection.thinking ?? "off",
     });
     return this.state();
+  }
+
+  async rename(title: string) {
+    const next = title.trim();
+    if (!next || next.length > 200) {
+      throw new ProtocolError(
+        "invalid_params",
+        "title must be 1 to 200 characters",
+      );
+    }
+    this.title = next;
+    await this.persist();
+    return this.summary();
+  }
+
+  async pin(pinned: boolean) {
+    this.pinned = pinned;
+    await this.persist();
+    return this.summary();
   }
 
   private async onAgentEvent(event: AgentEvent) {
@@ -425,6 +487,9 @@ class RuntimeSession {
         status: this.activeRunId ? "running" : "idle",
         active_run_id: this.activeRunId,
         messages: safeMessages(this.agent.state.messages),
+        title: this.title,
+        pinned: this.pinned,
+        thinking_level: this.selection.thinking ?? "off",
       },
       safeEvents(this.events),
     );
@@ -443,6 +508,7 @@ export class AgentRuntime {
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
   private readonly auth: AuthCoordinator | undefined;
+  private readonly toolDeadlinesMs: Record<FerryToolName, number>;
   private runtimeSequence = 1;
 
   private constructor(
@@ -453,6 +519,7 @@ export class AgentRuntime {
     this.store = options.store ?? new MemorySessionStore();
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? randomUUID;
+    this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
     this.toolHandler = options.toolHandler;
     this.providerHost = options.providerHost;
     this.backendFactory = backendFactory;
@@ -491,9 +558,12 @@ export class AgentRuntime {
       });
     const runtime = new AgentRuntime(options, backendFactory, defaultSelection);
     for (const record of await runtime.store.loadAll()) {
-      const selection = {
+      const selection: ModelSelection = {
         provider: record.state.provider_id,
         model: record.state.model_id,
+        ...(record.state.thinking_level
+          ? { thinking: record.state.thinking_level as ThinkingLevel }
+          : {}),
       };
       const session = new RuntimeSession(
         record.state.session_id,
@@ -533,6 +603,7 @@ export class AgentRuntime {
     return {
       provider: selection.provider,
       model: selection.model,
+      thinking: selection.thinking ?? "off",
       credential: configured ? "available" : "unavailable",
       provider_count: this.providerHost
         ? (await this.providerHost.providers()).length
@@ -602,6 +673,27 @@ export class AgentRuntime {
     return { run_id: await session.prompt(text, images) };
   }
 
+  async renameSession(sessionId: string, title: string) {
+    return this.session(sessionId).rename(title);
+  }
+
+  async pinSession(sessionId: string, pinned: boolean) {
+    return this.session(sessionId).pin(pinned);
+  }
+
+  async deleteSession(sessionId: string) {
+    const session = this.session(sessionId);
+    if (session.isRunning) {
+      throw new ProtocolError(
+        "run_in_progress",
+        "cannot delete a running session",
+      );
+    }
+    this.sessions.delete(sessionId);
+    await this.store.delete(sessionId);
+    return { session_id: sessionId, deleted: true };
+  }
+
   async providers() {
     if (!this.providerHost) return [];
     return this.providerHost.providers();
@@ -615,6 +707,39 @@ export class AgentRuntime {
       throw new ProtocolError(
         "provider_not_found",
         error instanceof Error ? error.message : "provider not found",
+      );
+    }
+  }
+
+  async enabledModels() {
+    if (!this.providerHost) return [];
+    return this.providerHost.enabledModels();
+  }
+
+  async setProviderEnabled(providerId: string, enabled: boolean) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    }
+    try {
+      return await this.providerHost.setProviderEnabled(providerId, enabled);
+    } catch (error) {
+      throw new ProtocolError(
+        "provider_not_found",
+        error instanceof Error ? error.message : "provider not found",
+      );
+    }
+  }
+
+  async setVisibleModels(providerId: string, modelIds: string[] | null) {
+    if (!this.providerHost) {
+      throw new ProtocolError("unsupported", "provider config unavailable");
+    }
+    try {
+      return await this.providerHost.setVisibleModels(providerId, modelIds);
+    } catch (error) {
+      throw new ProtocolError(
+        "model_not_found",
+        error instanceof Error ? error.message : "model not found",
       );
     }
   }
@@ -856,10 +981,12 @@ export class AgentRuntime {
     if (this.toolHandler) return this.toolHandler(name, args, context);
     const requestId = this.newId();
     let abortListener: (() => void) | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const result = new Promise<unknown>((resolve, reject) => {
       const cleanup = () => {
         if (abortListener)
           context.signal?.removeEventListener("abort", abortListener);
+        if (timeout) clearTimeout(timeout);
       };
       const deferred: DeferredTool = {
         sessionId: context.sessionId,
@@ -873,11 +1000,18 @@ export class AgentRuntime {
         cleanup();
         reject(new Error("tool request aborted"));
       };
-      if (context.signal?.aborted) abortListener();
-      else
+      if (context.signal?.aborted) {
+        abortListener();
+      } else {
         context.signal?.addEventListener("abort", abortListener, {
           once: true,
         });
+        timeout = setTimeout(() => {
+          if (!this.pendingTools.delete(requestId)) return;
+          cleanup();
+          reject(new Error("tool gateway timed out"));
+        }, this.toolDeadlinesMs[name]);
+      }
     });
     if (!this.pendingTools.has(requestId)) return result;
     try {

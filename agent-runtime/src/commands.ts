@@ -1,3 +1,4 @@
+import { parseThinkingLevel, type ThinkingLevel } from "./provider-config.js";
 import type { AgentRuntime } from "./runtime.js";
 import {
   PROTOCOL_VERSION,
@@ -50,6 +51,26 @@ export async function dispatch(
               },
         );
         break;
+      case "session.rename":
+        result = await runtime.renameSession(
+          requireString(params, "session_id", 128),
+          requireString(params, "title", 200),
+        );
+        break;
+      case "session.pin":
+        if (typeof params.pinned !== "boolean") {
+          throw new ProtocolError("invalid_params", "pinned must be a boolean");
+        }
+        result = await runtime.pinSession(
+          requireString(params, "session_id", 128),
+          params.pinned,
+        );
+        break;
+      case "session.delete":
+        result = await runtime.deleteSession(
+          requireString(params, "session_id", 128),
+        );
+        break;
       case "prompt":
         result = await runtime.prompt(
           requireString(params, "session_id", 128),
@@ -94,6 +115,27 @@ export async function dispatch(
           optionalInteger(params, "limit") ?? 100,
         );
         break;
+      case "models.enabled":
+        result = await runtime.enabledModels();
+        break;
+      case "provider.enabled.set":
+        if (typeof params.enabled !== "boolean") {
+          throw new ProtocolError(
+            "invalid_params",
+            "enabled must be a boolean",
+          );
+        }
+        result = await runtime.setProviderEnabled(
+          requireString(params, "provider_id", 128),
+          params.enabled,
+        );
+        break;
+      case "models.visibility.set":
+        result = await runtime.setVisibleModels(
+          requireString(params, "provider_id", 128),
+          parseModelIds(params.model_ids),
+        );
+        break;
       case "models.refresh":
         result = await runtime.refreshModels();
         break;
@@ -117,15 +159,23 @@ export async function dispatch(
           requireString(params, "provider_id", 128),
         );
         break;
-      case "model.select":
+      case "model.select": {
+        let thinking: ThinkingLevel | undefined;
+        try {
+          thinking = parseThinkingLevel(params.thinking);
+        } catch {
+          throw new ProtocolError("invalid_params", "thinking is invalid");
+        }
         result = await runtime.selectModel(
           optionalString(params, "session_id", 128),
           {
             provider: requireString(params, "provider_id", 128),
             model: requireString(params, "model_id", 512),
+            ...(thinking ? { thinking } : {}),
           },
         );
         break;
+      }
       case "custom_provider.upsert":
         if (
           params.clear_api_key !== undefined &&
@@ -224,6 +274,23 @@ function parseImages(value: unknown) {
       throw new ProtocolError("invalid_params", "image payload is too large");
     }
     return { type: "image" as const, data, mimeType };
+  });
+}
+
+// null 表示恢复「该 Provider 全部模型可见」
+function parseModelIds(value: unknown): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length > 500) {
+    throw new ProtocolError(
+      "invalid_params",
+      "model_ids must be an array of at most 500 items",
+    );
+  }
+  return value.map((item) => {
+    if (typeof item !== "string" || !item || item.length > 512) {
+      throw new ProtocolError("invalid_params", "model id is invalid");
+    }
+    return item;
   });
 }
 

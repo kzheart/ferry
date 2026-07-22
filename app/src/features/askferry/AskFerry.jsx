@@ -207,14 +207,123 @@ function ModeMenu({ mode, onPick, onClose }) {
   );
 }
 
+// ----- 模型下拉:一级选模型,二级选推理强度,底部通往设置里的 Provider 配置 -----
+const EFFORT_LEVELS = ["off", "low", "medium", "high"];
+
+const menuShell = {
+  position: "absolute", left: 0, bottom: "100%", marginBottom: 8, width: 268,
+  background: "var(--bg)", borderRadius: 11, boxShadow: "var(--shadow-menu)",
+  padding: 4, zIndex: 30, animation: "fpop .14s ease",
+};
+const menuRow = {
+  display: "flex", alignItems: "center", gap: 8, padding: "7px 9px",
+  borderRadius: 7, cursor: "default",
+};
+const menuDivider = { height: 1, background: "var(--line5)", margin: "4px 8px" };
+
+function ModelMenu({ ferry, health, onClose, onManage }) {
+  const { t } = useTranslation();
+  const [panel, setPanel] = useState("models");
+  const models = ferry.models || [];
+  const current = models.find(m =>
+    m.provider === health?.provider && m.id === health?.model);
+  const effort = health?.thinking || "off";
+
+  const pick = m => {
+    onClose();
+    ferry.selectModel(m.provider, m.id, m.reasoning ? effort : undefined)
+      .catch(ferry.reportError);
+  };
+  const pickEffort = level => {
+    onClose();
+    if (current) ferry.selectModel(current.provider, current.id, level)
+      .catch(ferry.reportError);
+  };
+
+  return (
+    <>
+      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 29 }} />
+      <div style={menuShell}>
+        {panel === "models" ? (
+          <>
+            <div className="fscroll" style={{ maxHeight: 280, overflowY: "auto" }}>
+              {models.map(m => (
+                <div key={`${m.provider}/${m.id}`} className="hov-item"
+                  onMouseDown={e => { e.preventDefault(); pick(m); }}
+                  style={{ ...menuRow, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 1 }}>
+                      {m.provider_name}
+                      {m.reasoning ? ` · ${t("askferry:model.reasoning")}` : ""}</div>
+                  </div>
+                  {current === m && <CheckIcon size={12} />}
+                </div>
+              ))}
+              {!models.length && (
+                <div style={{ fontSize: 11.5, color: "var(--tx5)", padding: "12px 9px",
+                  lineHeight: 1.55 }}>{t("askferry:model.empty")}</div>)}
+            </div>
+            {current?.reasoning && (
+              <>
+                <div style={menuDivider} />
+                <div className="hov-item" onMouseDown={e => { e.preventDefault();
+                  setPanel("effort"); }} style={menuRow}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", flex: 1 }}>
+                    {t("askferry:model.effort")}</span>
+                  <span style={{ fontSize: 12, color: "var(--tx4)" }}>
+                    {t(`askferry:model.effort_${effort}`)}</span>
+                  <Caret size={8} dir="right" />
+                </div>
+              </>
+            )}
+            <div style={menuDivider} />
+            <div className="hov-item" onMouseDown={e => { e.preventDefault(); onClose(); onManage(); }}
+              style={menuRow}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", flex: 1 }}>
+                {t("askferry:model.manage")}</span>
+              <Caret size={8} dir="right" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="hov-item" onMouseDown={e => { e.preventDefault(); setPanel("models"); }}
+              style={menuRow}>
+              <Caret size={8} dir="left" />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)" }}>
+                {t("askferry:model.effort")}</span>
+            </div>
+            <div style={menuDivider} />
+            {EFFORT_LEVELS.map(level => (
+              <div key={level} className="hov-item"
+                onMouseDown={e => { e.preventDefault(); pickEffort(level); }} style={menuRow}>
+                <span style={{ fontSize: 12.5, color: "var(--tx1)", flex: 1 }}>
+                  {t(`askferry:model.effort_${level}`)}</span>
+                {effort === level && <CheckIcon size={12} />}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ----- 输入胶囊:文本域 + 底部工具条(模式/模型在左,发送在右) -----
 function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
   onPickMention, onKeyDown, onSend, running, mode, onOpenConfig, health, autoFocus }) {
   const { t } = useTranslation();
   const [modeOpen, setModeOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const canSend = !!text.trim() && ferry.available;
   const noCredential = health && health.credential === "unavailable";
-  const modelLabel = (ferry.activeLog?.model || health?.model || "").split("/").pop();
+  const currentModel = (ferry.models || []).find(m =>
+    m.provider === health?.provider && m.id === health?.model);
+  const modelLabel = currentModel?.name
+    || (ferry.activeLog?.model || health?.model || "").split("/").pop();
+  const effort = health?.thinking && health.thinking !== "off" ? health.thinking : null;
   useEffect(() => { if (autoFocus) taRef.current?.focus(); }, [autoFocus, taRef]);
   return (
     <div style={{ position: "relative" }}>
@@ -243,14 +352,22 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
               <Caret size={8} open={false} />
             </button>
           </div>
-          <button className="chat-ghost-btn" onClick={onOpenConfig}>
-            {noCredential && (
-              <span style={{ width: 5, height: 5, borderRadius: "50%",
-                background: "var(--err)", flex: "none" }} />)}
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {noCredential || !modelLabel ? t("askferry:config.open") : modelLabel}</span>
-            <Caret size={8} open={false} />
-          </button>
+          <div style={{ position: "relative" }}>
+            {modelOpen && (
+              <ModelMenu ferry={ferry} health={health} onManage={onOpenConfig}
+                onClose={() => setModelOpen(false)} />)}
+            <button className="chat-ghost-btn" onClick={() => setModelOpen(v => !v)}>
+              {noCredential && (
+                <span style={{ width: 5, height: 5, borderRadius: "50%",
+                  background: "var(--err)", flex: "none" }} />)}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {noCredential || !modelLabel ? t("askferry:model.pick") : modelLabel}</span>
+              {effort && (
+                <span style={{ color: "var(--tx5)", flex: "none" }}>
+                  {t(`askferry:model.effort_${effort}`)}</span>)}
+              <Caret size={8} open={false} />
+            </button>
+          </div>
           <span style={{ flex: 1 }} />
           {running && text.trim() && (
             <button className="chat-ghost-btn" onClick={() => {
@@ -294,6 +411,9 @@ function SetupCard({ provider, onOpenConfig }) {
 export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
   const { t } = useTranslation();
   const { activeId, activeLog, mode, health } = ferry;
+  const activeSession = activeId
+    ? ferry.sessions.find(session => session.session_id === activeId)
+    : null;
   const [text, setText] = useState("");
   const [mention, setMention] = useState(null); // {query, start}
   const taRef = useRef(null);
@@ -367,7 +487,7 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig }) {
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)",
           display: "inline-block", maxWidth: "70%", overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>
-          {activeId ? (ferry.titles[activeId] || t("askferry:chat.untitled")) : t("askferry:chat.newChat")}
+          {activeId ? (activeSession?.title || t("askferry:chat.untitled")) : t("askferry:chat.newChat")}
         </span>
       </div>
 

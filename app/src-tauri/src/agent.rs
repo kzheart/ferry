@@ -101,9 +101,9 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
     }
     let data_dir = app
         .path()
-        .app_data_dir()
+        .home_dir()
         .map_err(|error| error.to_string())?
-        .join("agent-runtime");
+        .join(".ferry");
     std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     command.env("FERRY_AGENT_DATA_DIR", data_dir);
     hide_console(&mut command);
@@ -268,8 +268,14 @@ fn route_tool(
         "request_id": next_id("engine_tool"),
         "params": args,
     });
-    let response = engine_request_blocking(resource_dir, &request.to_string())
-        .map_err(|_| "engine.unavailable".to_owned())?;
+    let response =
+        engine_request_blocking(resource_dir, &request.to_string()).map_err(|error| {
+            if error.contains("等待引擎响应失败") {
+                "engine.timeout".to_owned()
+            } else {
+                "engine.unavailable".to_owned()
+            }
+        })?;
     let envelope: Value =
         serde_json::from_str(&response).map_err(|_| "engine.invalid_response".to_owned())?;
     if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
@@ -352,6 +358,9 @@ fn validate_public_command(request: &str) -> Result<(), String> {
         method,
         "health"
             | "session.create"
+            | "session.rename"
+            | "session.pin"
+            | "session.delete"
             | "prompt"
             | "abort"
             | "steer"
@@ -360,7 +369,10 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "sessions.list"
             | "events.replay"
             | "providers.list"
+            | "provider.enabled.set"
             | "models.list"
+            | "models.enabled"
+            | "models.visibility.set"
             | "models.refresh"
             | "config.get"
             | "credential.set"

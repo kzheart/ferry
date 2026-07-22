@@ -3,30 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentAvailable, agentCommand, onAgentEvent,
   operationApproveAndApply } from "../../api/agent/agentClient.js";
-import { applyEvent, emptyLog, patchApproval, titleOf }
+import { applyEvent, emptyLog, patchApproval }
   from "../../domain/agent/agentChatModel.js";
 
 const MODE_KEY = "ferry-askferry-mode";
-const TITLES_KEY = "ferry-agent-titles";
 const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
   "run.cancelled", "run.interrupted"]);
 // 自动模式只放行迁移与元数据;编辑另存副本仍要求人工确认
 const AUTO_TOOLS = new Set(["ferry_propose_migration", "ferry_propose_metadata_change"]);
-
-const readTitles = () => {
-  try { return JSON.parse(localStorage.getItem(TITLES_KEY) || "{}"); }
-  catch { return {}; }
-};
 
 export function useAskFerry() {
   const available = agentAvailable();
   const [sessions, setSessions] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [logs, setLogs] = useState({});
-  const [titles, setTitles] = useState(readTitles);
   const [health, setHealth] = useState(null);
   const [mode, setModeState] = useState(() => localStorage.getItem(MODE_KEY) || "manual");
   const [auth, setAuth] = useState(null);
+  const [models, setModels] = useState([]);
   const [lastError, setLastError] = useState(null);
 
   const logsRef = useRef(logs); logsRef.current = logs;
@@ -37,16 +31,6 @@ export function useAskFerry() {
   const refreshRef = useRef(() => {});
 
   const setMode = m => { setModeState(m); localStorage.setItem(MODE_KEY, m); };
-
-  const rememberTitle = useCallback((id, title) => {
-    if (!title) return;
-    setTitles(prev => {
-      if (prev[id] === title) return prev;
-      const next = { ...prev, [id]: title };
-      try { localStorage.setItem(TITLES_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
 
   const mutateLog = useCallback((id, fn) => {
     setLogs(prev => {
@@ -170,16 +154,34 @@ export function useAskFerry() {
       for (const ev of loadingRef.current.get(id) || []) log = applyEvent(log, ev);
       loadingRef.current.delete(id);
       setLogs(prev => ({ ...prev, [id]: log }));
-      rememberTitle(id, titleOf(log));
     } catch (error) {
       loadingRef.current.delete(id);
       setLastError(error);
     }
-  }, [rememberTitle]);
+  }, []);
 
   const newChat = useCallback(() => setActiveId(null), []);
 
   // ----- 发送:无会话则先创建;运行中改走 follow_up -----
+  const rename = useCallback(async (id, title) => {
+    const state = await agentCommand("session.rename", { session_id: id, title });
+    setSessions(list => list.map(s => s.session_id === id ? { ...s, ...state } : s));
+    return state;
+  }, []);
+
+  const pin = useCallback(async (id, pinned) => {
+    const state = await agentCommand("session.pin", { session_id: id, pinned });
+    setSessions(list => list.map(s => s.session_id === id ? { ...s, ...state } : s));
+    return state;
+  }, []);
+
+  const deleteSession = useCallback(async id => {
+    await agentCommand("session.delete", { session_id: id });
+    setSessions(list => list.filter(s => s.session_id !== id));
+    setLogs(prev => { const { [id]: _deleted, ...next } = prev; return next; });
+    if (activeRef.current === id) setActiveId(null);
+  }, []);
+
   const send = useCallback(async text => {
     let sid = activeRef.current;
     if (!sid) {
@@ -192,20 +194,38 @@ export function useAskFerry() {
     }
     const running = logsRef.current[sid]?.status === "running";
     await agentCommand(running ? "follow_up" : "prompt", { session_id: sid, text });
-    if (!running) rememberTitle(sid, text.split("\n")[0].slice(0, 60));
+    if (!running && !sessions.find(s => s.session_id === sid)?.title) {
+      const title = text.split("\n")[0].trim().slice(0, 200);
+      if (title) rename(sid, title).catch(() => {});
+    }
     return sid;
-  }, [rememberTitle]);
+  }, [rename, sessions]);
 
   const steer = useCallback(text =>
     agentCommand("steer", { session_id: activeRef.current, text }), []);
   const abort = useCallback(() =>
     agentCommand("abort", { session_id: activeRef.current }).catch(() => {}), []);
 
-  const selectModel = useCallback(async (providerId, modelId, forSession) => {
+  // 模型选择器的候选:已启用且已配置凭据的 Provider 下用户勾选可见的模型
+  const loadModels = useCallback(async () => {
+    if (!available) return [];
+    const list = await agentCommand("models.enabled").catch(() => []);
+    setModels(list || []);
+    return list || [];
+  }, [available]);
+  useEffect(() => { loadModels(); }, [loadModels]);
+
+  // 切模型/切推理强度:默认与当前对话一起改,新开对话也就沿用同一个选择
+  const selectModel = useCallback(async (providerId, modelId, thinking) => {
     const params = { provider_id: providerId, model_id: modelId };
-    if (forSession && activeRef.current) params.session_id = activeRef.current;
+    if (thinking) params.thinking = thinking;
     const result = await agentCommand("model.select", params);
-    if (!forSession) setHealth(h => h ? { ...h, provider: providerId, model: modelId } : h);
+    setHealth(h => h ? { ...h, provider: providerId, model: modelId,
+      thinking: thinking || "off" } : h);
+    if (activeRef.current) {
+      await agentCommand("model.select", { ...params, session_id: activeRef.current })
+        .catch(() => {});
+    }
     return result;
   }, []);
 
@@ -234,10 +254,10 @@ export function useAskFerry() {
 
   const activeLog = activeId ? logs[activeId] : null;
   return {
-    available, health, sessions, titles, activeId, activeLog, mode, auth,
+    available, health, sessions, activeId, activeLog, mode, auth, models,
     lastError, clearError: () => setLastError(null), reportError: setLastError,
-    refresh, openSession, newChat, send, steer, abort, setMode,
-    approve, dismiss, selectModel,
+    refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
+    approve, dismiss, selectModel, loadModels,
     startLogin, respondLogin, cancelLogin, clearAuth,
   };
 }

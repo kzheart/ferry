@@ -1,11 +1,22 @@
 {
-  "rail": "Ask Ferry",
+  "rail": "Agent",
   "pane": {
-    "title": "Ask Ferry",
+    "title": "Agent",
     "placeholder": "搜索对话",
     "newChat": "新对话",
     "empty": "还没有对话",
-    "footer": "{{n}} 个对话"
+    "footer": "{{n}} 个对话",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "delete": "删除对话",
+    "stopBeforeDelete": "请先停止当前运行",
+    "more": "更多操作",
+    "rename": "重命名",
+    "copyId": "复制对话 ID",
+    "renameTitle": "重命名对话",
+    "renameDesc": "为“{{title}}”设置一个清晰的名称。",
+    "renamePlaceholder": "输入对话名称",
+    "save": "保存"
   },
   "chat": {
     "newChat": "新对话",
@@ -25,7 +36,7 @@
   "setup": {
     "title": "连接一个模型",
     "desc": "为 {{provider}} 配置 API Key,或登录其他 Provider 后即可开始对话。凭据只保存在本机。",
-    "cta": "配置模型"
+    "cta": "配置提供商"
   },
   "tool": {
     "running": "执行中",
@@ -73,31 +84,15 @@
     "cancel": "取消",
     "submit": "提交"
   },
-  "config": {
-    "title": "模型与 Provider",
-    "open": "配置模型",
-    "close": "关闭",
-    "searchProvider": "搜索 Provider",
-    "searchModel": "搜索模型",
-    "pickProvider": "从左侧选择一个 Provider",
-    "configured": "已配置 ({{type}})",
-    "notConfigured": "未配置",
-    "keyPlaceholder": "粘贴 API Key",
-    "saveKey": "保存",
-    "keySaved": "API Key 已保存,立即生效",
-    "oauthLogin": "OAuth 登录",
-    "logout": "退出登录",
-    "setDefault": "设为默认",
-    "useForChat": "本对话使用",
-    "image": "图片",
+  "model": {
+    "pick": "选择模型",
     "reasoning": "推理",
-    "noModels": "该 Provider 暂无可用模型,可尝试刷新模型目录",
-    "refreshModels": "刷新模型目录",
-    "refreshDone": "模型目录已刷新",
-    "refreshPartial": "部分 Provider 刷新失败:{{list}}",
-    "plaintextNote": "凭据以明文保存在 Ferry 配置目录的 providers.json(0600),不进日志与事件;不读取系统环境变量。",
-    "noCredential": "当前默认 Provider({{provider}})尚未配置凭据,发送前请先配置。",
-    "modelSetDefault": "默认模型已切换为 {{model}}",
-    "modelSetSession": "本对话已切换为 {{model}}"
+    "empty": "还没有可用模型。到「设置 · 提供商」配置一个 Provider 并勾选模型。",
+    "effort": "推理强度",
+    "effort_off": "关闭",
+    "effort_low": "低",
+    "effort_medium": "中",
+    "effort_high": "高",
+    "manage": "管理提供商与模型"
   }
 }
