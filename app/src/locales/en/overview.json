@@ -38,8 +38,6 @@
     "peak": "peak",
     "night": "21:00 – 04:00",
     "day": "Daytime",
-    "peakAt": "Peak at {{hour}}:00.",
-    "nightNote": "Late nights (after 21:00) make up {{pct}}% — go easy on yourself.",
     "aria": "Session start times across the 24-hour day"
   },
   "heat": {
