@@ -275,6 +275,7 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "resume"
             | "models"
             | "history"
+            | "history_delete"
             | "pricing"
             | "show"
             | "session_asset"
@@ -308,6 +309,8 @@ mod tests {
         assert!(validate_public_engine_request(r#"{"method":"edit_apply"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"migrate"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"scan"}"#).is_ok());
+        // 删除迁移记录只动 Ferry 自己的历史文件,不写目标工具的会话
+        assert!(validate_public_engine_request(r#"{"method":"history_delete"}"#).is_ok());
     }
 
     #[test]

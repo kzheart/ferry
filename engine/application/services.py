@@ -32,7 +32,11 @@ def resource_path(*parts):
 def snapshot_dir():
     return current().snapshot_dir()
 
-from .history import append as _append_history, list_entries as history
+from .history import (
+    append as _append_history,
+    delete as history_delete,
+    list_entries as history,
+)
 from .pricing import pricing  # noqa: F401  暴露给 RPC
 
 

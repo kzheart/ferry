@@ -43,6 +43,8 @@ export function useBrowserData() {
   const loadHistory = () => rpc("history")
     .then(rows => { setHistoryRows(rows); persist({ history: rows }); })
     .catch(() => {});
+  // 只删 Ferry 自己的迁移记录,已迁到目标工具里的会话不受影响
+  const deleteHistory = id => rpc("history_delete", { id }).then(loadHistory);
   const loadPricing = () => rpc("pricing")
     .then(p => { setPricing(p); persist({ pricing: p }); })
     .catch(() => {});
@@ -59,5 +61,5 @@ export function useBrowserData() {
   }, []);
 
   return { env, scan, scanning, lastScan, historyRows, pricing,
-    doScan, loadHistory };
+    doScan, loadHistory, deleteHistory };
 }

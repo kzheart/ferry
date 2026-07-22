@@ -32,8 +32,8 @@
   },
   "preview": {
     "failed": "Preview failed: {{error}}",
-    "loading": "Previewing conversion and computing losses…",
-    "lossTitle": "Loss preview · {{scope}}",
+    "loading": "Previewing conversion and assessing impact…",
+    "impactTitle": "Impact preview · {{scope}}",
     "scaleLabel": "Migration scale",
     "scaleMeta": "{{msg}} messages · {{tree}} tree nodes"
   },
@@ -87,12 +87,13 @@
     "fieldSrcToDst": "Source tool → Target tool",
     "fieldTree": "Session tree",
     "treeMeta": "{{n}} nodes{{detail}}",
-    "lossReport": "Loss report",
+    "impactReport": "Migration impact",
     "verdict": "Verification result",
     "probeNotRunDefault": "Runtime probe not executed (off by default, can be enabled in settings)",
     "probeNotRun": "Probe verification not run",
     "rollbackTitle": "Rollback info",
     "rollbackDesc": "Probe did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. Source session intact; you can retry or continue with a context summary.",
-    "handoffIn": "Delivered · continue in {{tool}}"
+    "handoffIn": "Delivered · continue in {{tool}}",
+    "delete": "Delete this record"
   }
 }

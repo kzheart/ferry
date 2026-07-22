@@ -238,7 +238,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, onClose, 
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[target]}</span>
         </div>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", marginBottom: 8 }}>
-          {t("migration:preview.lossTitle", { scope: scopeLabel })}</div>
+          {t("migration:preview.impactTitle", { scope: scopeLabel })}</div>
         <div style={{ marginBottom: 16 }}><LossCols loss={d.loss} /></div>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>

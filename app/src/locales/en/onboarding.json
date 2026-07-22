@@ -16,7 +16,7 @@
     "step2Title": "Search and filter in the resource pane",
     "step2Body": "The pane's title, count, search box, and filter position are consistent across the three modules. Use them to quickly locate by source, time, and directory.",
     "step3Title": "Migrate up to here and deliver",
-    "step3Body": "Long sessions can be truncated at a turn with \"Migrate up to here\"; preview migration losses before delivering. If verification fails, it rolls back automatically and leaves nothing behind.",
+    "step3Body": "Long sessions can be truncated at a turn with \"Migrate up to here\"; preview the migration impact before delivering. If verification fails, it rolls back automatically and leaves nothing behind.",
     "skip": "Skip",
     "back": "Back",
     "next": "Next",

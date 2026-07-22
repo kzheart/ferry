@@ -19,7 +19,7 @@ app/src/locales/
     migration.json # 迁移向导、迁移历史
     onboarding.json # 欢迎页、上手引导
     settings.json  # 设置页(偏好/数据来源/软件更新)
-    overlays.json  # 弹层(差异预览/确认/筛选/损耗三栏)
+    overlays.json  # 弹层(差异预览/确认/筛选/影响三栏)
     app.json       # 主壳(标题栏/导航轨/toast/右键/资源栏)
   en/              # English,结构与 zh-CN 完全一致
 ```

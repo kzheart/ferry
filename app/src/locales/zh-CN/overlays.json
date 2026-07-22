@@ -83,5 +83,12 @@
   "cmd": {
     "copied": "已复制",
     "copy": "复制"
+  },
+  "historyDelete": {
+    "title": "删除这条迁移记录?",
+    "desc": "「{{title}}」的迁移记录将从 Ferry 的历史里移除。",
+    "bulletTarget": "已迁移到 {{tool}} 的会话不受影响,仍然可以接续",
+    "bulletIrreversible": "记录本身无法撤销恢复",
+    "confirm": "删除记录"
   }
 }

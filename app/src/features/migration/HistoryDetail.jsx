@@ -1,11 +1,11 @@
-// 迁移历史详情:范围/损耗报告/上下文水位/验收结果/回滚信息/接续命令
+// 迁移历史详情:范围/迁移影响/上下文水位/验收结果/回滚信息/接续命令
 import { useTranslation } from "react-i18next";
 import { probeText } from "../../api/contract/events.js";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime } from "../../domain/sessions/sessionModel.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";
-import { ToolIcon } from "../../components/ui/icons.jsx";
+import { ToolIcon, TrashIcon } from "../../components/ui/icons.jsx";
 import { CmdRow, LossCols, StatusPill } from "../../components/ui/primitives.jsx";
 
 const ST_STYLE = {
@@ -15,7 +15,7 @@ const ST_STYLE = {
   [STATUS_CODE.dryRun]: ["var(--warn-bg)", "var(--warn)"],
 };
 
-export default function HistoryDetail({ h }) {
+export default function HistoryDetail({ h, onDelete }) {
   const { t } = useTranslation();
   if (!h) return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -53,7 +53,14 @@ export default function HistoryDetail({ h }) {
               <span>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
             </div>
           </div>
-          <StatusPill label={t(`common:${status}`)} color={stColor} bg={stBg} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+            <StatusPill label={t(`common:${status}`)} color={stColor} bg={stBg} />
+            {onDelete && (
+              <button className="ftool-btn" title={t("migration:history.delete")}
+                onClick={onDelete}>
+                <TrashIcon size={14} />
+              </button>)}
+          </div>
         </div>
       </div>
       <div style={{ padding: "20px 26px 44px", maxWidth: 720, margin: "0 auto" }}>
@@ -76,7 +83,7 @@ export default function HistoryDetail({ h }) {
           ))}
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "20px 2px 8px" }}>{t("migration:history.lossReport")}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx3b)", margin: "20px 2px 8px" }}>{t("migration:history.impactReport")}</div>
         <LossCols loss={h.loss} />
 
         <div style={{ marginTop: 14, border: `1px solid ${probeBorder}`, background: probeBg,

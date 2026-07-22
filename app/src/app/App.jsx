@@ -16,9 +16,9 @@ import HistoryDetail from "../features/migration/HistoryDetail.jsx";
 import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
-import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryFilter,
-  ApplyConfirm, LibraryFilter, PromptBox, SearchPalette, SessionDeleteConfirm,
-  Toast } from "../components/ui/Overlays.jsx";
+import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
+  HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
+  SessionDeleteConfirm, Toast } from "../components/ui/Overlays.jsx";
 import AskFerry from "../features/askferry/AskFerry.jsx";
 import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
 import { useAskFerry } from "../features/askferry/useAskFerry.js";
@@ -31,7 +31,7 @@ export default function App() {
   const { t } = useTranslation();
   // ----- 数据 -----
   const { env, scan, scanning, lastScan, historyRows, pricing,
-    doScan, loadHistory } = useBrowserData();
+    doScan, loadHistory, deleteHistory } = useBrowserData();
 
   // ----- 导航与选中 -----
   const [view, setView] = useState(
@@ -67,6 +67,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
+  const [histDel, setHistDel] = useState(null);
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
   const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
   const [tagFor, setTagFor] = useState(null);       // {ids} 待编辑标签的会话
@@ -316,6 +317,7 @@ export default function App() {
         else if (tagFor) setTagFor(null);
         else if (batchDel) setBatchDel(null);
         else if (delConfirm) setDelConfirm(null);
+        else if (histDel) setHistDel(null);
         else if (settingsOpen) setSettingsOpen(false);
         else if (popover) setPopover(null);
         else if (confirmApply) setConfirmApply(false);
@@ -328,7 +330,7 @@ export default function App() {
       if (document.activeElement &&
           ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       // 会话库快捷键:仅在没有弹层时生效
-      const overlayOpen = ctxMenu || delConfirm || batchDel || renameFor || tagFor ||
+      const overlayOpen = ctxMenu || delConfirm || histDel || batchDel || renameFor || tagFor ||
         settingsOpen || popover || confirmApply || diff || mig || guideStep || searchOpen;
       if (!overlayOpen && view === "library" && cur) {
         if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
@@ -780,7 +782,8 @@ export default function App() {
             color: "var(--tx5)", fontSize: 13 }}>
             {scanning ? t("app:detail.scanningSessions") : t("app:detail.noSessionToDisplay")}</div>
         ))}
-        {view === "history" && <HistoryDetail h={histSel} />}
+        {view === "history" && (
+          <HistoryDetail h={histSel} onDelete={() => setHistDel(histSel)} />)}
         {view === "askferry" && (
           <AskFerry ferry={ferry} scanSessions={sessions}
             onOpenConfig={(section = "providers") => {
@@ -826,6 +829,14 @@ export default function App() {
         <SessionDeleteConfirm sess={delConfirm}
           onCancel={() => setDelConfirm(null)}
           onConfirm={() => deleteSession(delConfirm)} />)}
+      {histDel && (
+        <HistoryDeleteConfirm h={histDel}
+          onCancel={() => setHistDel(null)}
+          onConfirm={() => {
+            // 删的是当前选中项,先清掉选中,列表会回落到第一条
+            setSelHist(null); setHistDel(null);
+            deleteHistory(histDel.id).catch(() => {});
+          }} />)}
       {batchDel && (
         <BatchDeleteConfirm sessions={batchDel}
           onCancel={() => setBatchDel(null)} onConfirm={doBatchDelete} />)}
