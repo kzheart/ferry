@@ -15,6 +15,7 @@ from pathlib import Path
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
 from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
+from ...domain.usage import iso_ms
 from ...infrastructure import executables
 from ...infrastructure.resources import resource_path
 from ..base.media import image_from_data_url
@@ -58,6 +59,11 @@ def _oc_export(session_id: str) -> dict:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(6)}{secrets.token_urlsafe(12)[:14]}"
+
+
+def _new_ordered_id(prefix: str, ordinal: int) -> str:
+    """生成同一父记录内可按字典序恢复原顺序的 ID。"""
+    return f"{prefix}_{ordinal:08x}{secrets.token_hex(10)}"
 
 
 def _export_from_capture(capture: dict) -> dict:
@@ -416,13 +422,112 @@ OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
 }
 
 
+def _message_times(messages: list[Message], now: int) -> list[int]:
+    """保留源会话顺序，并为 OpenCode 生成严格递增的毫秒时间戳。"""
+    parsed = [iso_ms(message.created_at) for message in messages]
+    known = [value for value in parsed if value is not None]
+    fallback = (min(known) if known else now) - len(messages)
+    ordered = []
+    previous = None
+    for value in parsed:
+        candidate = value if value is not None else (
+            previous + 1 if previous is not None else fallback)
+        current = candidate if previous is None else max(candidate, previous + 1)
+        ordered.append(current)
+        previous = current
+    return ordered
+
+
+def _normalize_payload_message_times(payload: dict) -> None:
+    """按 export 数组顺序消除时间戳并列，避免随机 ID 成为排序依据。"""
+    messages = payload.get("messages", [])
+    parsed = [iso_ms((message.get("info") or {}).get("time", {}).get("created"))
+              for message in messages]
+    known = [value for value in parsed if value is not None]
+    fallback = (min(known) if known else int(time.time() * 1000)) - len(messages)
+    previous_created = None
+    previous_completed = None
+    for message, original_created in zip(messages, parsed):
+        info = message.setdefault("info", {})
+        source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        candidate = original_created if original_created is not None else (
+            previous_created + 1 if previous_created is not None else fallback)
+        created = candidate if previous_created is None else max(
+            candidate, previous_created + 1)
+        normalized_time = dict(source_time)
+        normalized_time["created"] = created
+        if "completed" in source_time:
+            original_completed = iso_ms(source_time.get("completed"))
+            duration = max(0, original_completed - original_created) \
+                if original_completed is not None and original_created is not None else 0
+            completed = created + duration
+            if previous_completed is not None:
+                completed = max(completed, previous_completed + 1)
+            normalized_time["completed"] = completed
+            previous_completed = completed
+        info["time"] = normalized_time
+        previous_created = created
+
+    if messages:
+        session_time = payload.setdefault("info", {}).setdefault("time", {})
+        session_time["created"] = min(
+            iso_ms(session_time.get("created")) or parsed[0] or messages[0]["info"]["time"]["created"],
+            messages[0]["info"]["time"]["created"],
+        )
+        session_time["updated"] = max(
+            iso_ms(session_time.get("updated")) or 0,
+            messages[-1]["info"]["time"]["created"],
+        )
+
+
+def _assistant_result(sess: Session) -> str:
+    for message in reversed(sess.messages):
+        if message.role == "assistant":
+            text = "\n".join(block.text for block in message.blocks
+                             if block.kind == "text" and block.text)
+            if text:
+                return text
+    return ""
+
+
+def _task_part(tpl: dict, sid: str, mid: str, ordinal: int, child: Session,
+               child_sid: str, edge: AgentEdge | None, when: int,
+               source_call_id: str | None = None) -> dict:
+    part = _clone(tpl["part.tool"])
+    prompt = edge.prompt if edge else ""
+    part.update({
+        "id": _new_ordered_id("prt", ordinal), "messageID": mid,
+        "sessionID": sid, "type": "tool", "tool": "task",
+        "callID": (edge.source_call_id if edge and edge.source_call_id
+                   else source_call_id or "call-" + secrets.token_hex(8)),
+        "state": {
+            "status": "completed",
+            "input": {"description": child.title or "migrated subagent",
+                      "prompt": prompt,
+                      "subagent_type": (edge.agent_type if edge else None)
+                      or child.agent_type or "general"},
+            "output": _assistant_result(child),
+            "title": child.title or "Subagent",
+            "metadata": {"parentSessionId": sid, "sessionId": child_sid},
+            "time": {"start": when, "end": when},
+        },
+    })
+    return part
+
+
 def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None,
-                       tpl: dict) -> dict:
+                       tpl: dict, sid_map: dict[str, str] | None = None) -> dict:
     now = int(time.time() * 1000)
+    message_times = _message_times(sess.messages, now)
+    session_created = message_times[0] if message_times else now
+    if sess.messages and sess.messages[0].role == "assistant":
+        session_created -= 1
+    session_updated = message_times[-1] if message_times else session_created
     info = _clone(tpl["info"])
     info.update({"id": sid, "directory": cwd,
                   "title": sess.title or f"migrated from {sess.source_tool}",
-                  "time": {"created": now, "updated": now}})
+                  "time": {"created": session_created,
+                           "updated": session_updated}})
     # `opencode import` 严格校验完整 Session.Info；黄金 fixture 的最小
     # 快照可供内部 reader 使用，但不足以通过官方导入器。
     info.setdefault("slug", f"ferry-{sid[-8:].lower()}")
@@ -444,9 +549,13 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
 
     messages = []
     last_user_mid = None
+    sid_map = sid_map or {}
+    children = {child.source_id: child for child in sess.children}
+    edges = {edge.child_session_id: edge for edge in sess.agent_edges}
+    linked_children = set()
     provider_id = str(sess.meta.get("model_provider") or "openai")
     model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
-    for m in sess.messages:
+    for m, message_time in zip(sess.messages, message_times):
         mid = _new_id("msg")
         minfo = _clone(tpl.get(f"msg.{m.role}", tpl["msg.user"]))
         minfo.update({"id": mid, "sessionID": sid})
@@ -456,22 +565,22 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                 parent_info = _clone(tpl["msg.user"])
                 parent_info.update({
                     "id": last_user_mid, "sessionID": sid, "role": "user",
-                    "time": {"created": now}, "agent": "build",
+                    "time": {"created": message_time - 1}, "agent": "build",
                     "model": {"providerID": provider_id,
                               "modelID": model_id},
                     "summary": {"diffs": []},
                 })
                 parent_part = _clone(tpl["part.text"])
                 parent_part.update({
-                    "id": _new_id("prt"), "messageID": last_user_mid,
+                    "id": _new_ordered_id("prt", 0), "messageID": last_user_mid,
                     "sessionID": sid, "type": "text",
                     "text": "[Migrated subagent task]",
                 })
                 messages.append({"info": parent_info, "parts": [parent_part]})
             # completed + finish 缺失会让 runtime 认为该轮未结束而死循环
-            minfo["time"] = {"created": now, "completed": now}
-            minfo["finish"] = ("tool-calls" if any(
-                b.kind == "tool" for b in m.blocks) else "stop")
+            minfo["time"] = {"created": message_time,
+                             "completed": message_time}
+            minfo["finish"] = "stop"
             minfo.update({
                 "mode": "build", "agent": "build",
                 "path": {"cwd": cwd, "root": cwd}, "cost": 0,
@@ -485,7 +594,7 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             else:
                 minfo.pop("parentID", None)
         else:
-            minfo["time"] = {"created": now}
+            minfo["time"] = {"created": message_time}
             minfo.update({
                 "agent": "build",
                 "model": {"providerID": provider_id, "modelID": model_id},
@@ -499,7 +608,7 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             if key not in tpl:
                 return False
             p = _clone(tpl[key])
-            p.update({"id": _new_id("prt"), "messageID": mid,
+            p.update({"id": _new_ordered_id("prt", len(parts)), "messageID": mid,
                       "sessionID": sid})
             p.update(fill)
             parts.append(p)
@@ -511,7 +620,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             st.update({"status": "completed", "input": native_input,
                        "output": output, "title": title[:80],
                        "metadata": metadata,
-                       "time": {"start": now, "end": now}})
+                       "time": {"start": message_time,
+                                "end": message_time}})
             return add_part("tool", {"tool": tool,
                                      "callID": "call-" + secrets.token_hex(8),
                                      "state": st})
@@ -521,12 +631,41 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                 add_part("text", {"text": b.text})
             elif b.kind == "tool":
                 t = b.tool
+                if t.op == CanonicalOp.AGENT_SPAWN:
+                    edge = next((candidate for candidate in sess.agent_edges
+                                 if candidate.child_session_id not in linked_children and
+                                 ((candidate.spawn_message_id and
+                                   candidate.spawn_message_id == m.source_id) or
+                                  (candidate.source_call_id and
+                                   candidate.source_call_id == t.source_call_id))), None)
+                    child = children.get(edge.child_session_id) if edge else None
+                    child_sid = sid_map.get(edge.child_session_id) if edge else None
+                    if child is not None and child_sid is not None:
+                        parts.append(_task_part(
+                            tpl, sid, mid, len(parts), child, child_sid, edge,
+                            message_time, t.source_call_id))
+                        linked_children.add(child.source_id)
+                    else:
+                        sess.lose("migration.tool_degraded", tool_name=t.name)
+                        add_part("text", {"text": narrate(t)})
+                    continue
                 writer = OP_WRITERS.get(t.op)
                 if (writer is None or not has_valid_tool_input(t.op, t.input) or
                         not writer(add_tool_part, t)):
                     sess.lose("migration.tool_degraded", tool_name=t.name)
                     add_part("text", {"text": narrate(t)})
+        for child_id, edge in edges.items():
+            if (child_id in linked_children or edge.spawn_message_id != m.source_id or
+                    child_id not in children or child_id not in sid_map):
+                continue
+            parts.append(_task_part(
+                tpl, sid, mid, len(parts), children[child_id], sid_map[child_id],
+                edge, message_time))
+            linked_children.add(child_id)
         if parts:
+            if m.role == "assistant":
+                minfo["finish"] = ("tool-calls" if any(
+                    part.get("type") == "tool" for part in parts) else "stop")
             messages.append({"info": minfo, "parts": parts})
     return {"info": info, "messages": messages}
 
@@ -592,26 +731,22 @@ def _remap_payload(payload: dict, sid: str, cwd: str,
             if minfo["parentID"] is None:
                 minfo.pop("parentID")
 
-        for part in message.get("parts", []):
-            part["id"] = _new_id("prt")
+        for ordinal, part in enumerate(message.get("parts", [])):
+            part["id"] = _new_ordered_id("prt", ordinal)
             part["messageID"] = mid
             part["sessionID"] = sid
             if part.get("tool") == "task":
-                metadata = (part.get("state") or {}).get("metadata") or {}
+                state = part.get("state") if isinstance(part.get("state"), dict) else {}
+                metadata = state.get("metadata") \
+                    if isinstance(state.get("metadata"), dict) else {}
+                state["metadata"] = metadata
+                part["state"] = state
+                metadata["parentSessionId"] = sid
                 child_id = metadata.get("sessionId")
                 if child_id in sid_map:
                     metadata["sessionId"] = sid_map[child_id]
+    _normalize_payload_message_times(payload)
     return payload
-
-
-def _assistant_result(sess: Session) -> str:
-    for message in reversed(sess.messages):
-        if message.role == "assistant":
-            text = "\n".join(block.text for block in message.blocks
-                             if block.kind == "text" and block.text)
-            if text:
-                return text
-    return ""
 
 
 def _ensure_task_links(payload: dict, sess: Session, sid: str,
@@ -624,17 +759,41 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
                     "sessionId")
                 if child_id:
                     linked.add(child_id)
+                    if child_id in sid_map:
+                        linked.add(sid_map[child_id])
 
     last_user = next((message["info"]["id"]
                       for message in reversed(payload.get("messages", []))
                       if message["info"].get("role") == "user"), None)
-    now = int(time.time() * 1000)
+    message_times = [
+        (message.get("info") or {}).get("time", {}).get("created")
+        for message in payload.get("messages", [])
+    ]
+    now = max((value for value in message_times if isinstance(value, int)),
+              default=int(time.time() * 1000)) + 1
     edges = {edge.child_session_id: edge for edge in sess.agent_edges}
     for child in sess.children:
         target_child = sid_map[child.source_id]
         if target_child in linked:
             continue
         edge = edges.get(child.source_id)
+        spawn_message = next((message for message in payload.get("messages", [])
+                              if edge and edge.spawn_message_id and
+                              message.get("info", {}).get("id") ==
+                              edge.spawn_message_id), None)
+        if spawn_message is not None:
+            minfo = spawn_message["info"]
+            when = iso_ms((minfo.get("time") or {}).get("created")) or now
+            parts = spawn_message.setdefault("parts", [])
+            parts.append(_task_part(
+                tpl, sid, minfo["id"], len(parts), child, target_child, edge,
+                when))
+            if minfo.get("role") == "assistant":
+                minfo["finish"] = "tool-calls"
+                minfo.setdefault("time", {})["completed"] = max(
+                    when, iso_ms((minfo.get("time") or {}).get("completed")) or when)
+            linked.add(target_child)
+            continue
         mid = _new_id("msg")
         minfo = _clone(tpl["msg.assistant"])
         cwd = payload["info"]["directory"]
@@ -653,27 +812,12 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
             minfo["parentID"] = last_user
         else:
             minfo.pop("parentID", None)
-        part = _clone(tpl["part.tool"])
-        prompt = edge.prompt if edge else ""
-        part.update({
-            "id": _new_id("prt"), "messageID": mid, "sessionID": sid,
-            "type": "tool", "tool": "task",
-            "callID": (edge.source_call_id if edge and edge.source_call_id
-                       else "call-" + secrets.token_hex(8)),
-            "state": {
-                "status": edge.status if edge and edge.status else "completed",
-                "input": {"description": child.title or "migrated subagent",
-                          "prompt": prompt,
-                          "subagent_type": (edge.agent_type if edge else None)
-                          or child.agent_type or "general"},
-                "output": _assistant_result(child),
-                "title": child.title or "Subagent",
-                "metadata": {"parentSessionId": sid,
-                             "sessionId": target_child},
-                "time": {"start": now, "end": now},
-            },
-        })
+        part = _task_part(tpl, sid, mid, 0, child, target_child, edge, now)
         payload.setdefault("messages", []).append({"info": minfo, "parts": [part]})
+        linked.add(target_child)
+        now += 1
+    if sess.children:
+        payload["info"].setdefault("time", {})["updated"] = now - 1
 
 
 def _import_payload(payload: dict, sid: str, cwd: str) -> None:
@@ -710,13 +854,20 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
             Path(node.cwd or target_cwd).resolve())
         parent_sid = parent_map.get(id(node))
         payload = _raw_payload(node)
+        is_raw = payload is not None
         if payload is not None:
+            if node.children:
+                if tpl is None:
+                    tpl = _template()
+                # 原生 payload 尚未重映射时，edge.spawn_message_id 仍可精确定位。
+                _ensure_task_links(payload, node, sid, sid_map, tpl)
             payload = _remap_payload(payload, sid, node_cwd, parent_sid, sid_map)
         else:
             if tpl is None:
                 tpl = _template()
-            payload = _canonical_payload(node, sid, node_cwd, parent_sid, tpl)
-        if node.children:
+            payload = _canonical_payload(
+                node, sid, node_cwd, parent_sid, tpl, sid_map=sid_map)
+        if node.children and not is_raw:
             if tpl is None:
                 tpl = _template()
             _ensure_task_links(payload, node, sid, sid_map, tpl)

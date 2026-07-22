@@ -54,7 +54,13 @@ def tool_manifests() -> list[dict]:
 # ---------- 范围截断 ----------
 
 def _truncate_rounds(sess, max_turn: int):
-    """仅保留到第 max_turn 轮(用户消息计轮),含该轮的全部后续回应。"""
+    """裁剪根会话，并保留由保留消息明确发起的完整子树。
+
+    ``max_turn`` 的范围只针对根会话的用户轮次。子会话不是根会话的
+    独立轮次；只要其 ``AgentEdge.spawn_message_id`` 落在保留的根消息中，
+    就将该任务及其完整后代作为该轮的结果保留。没有可追溯 spawn 消息的
+    目录关联子会话无法证明属于截断范围，因此不迁移。
+    """
     kept, turn = [], 0
     for m in sess.messages:
         if m.role == "user":
@@ -67,15 +73,20 @@ def _truncate_rounds(sess, max_turn: int):
         sess.lose("migration.truncated", max_turn=max_turn, dropped=dropped)
     sess.messages = kept
     kept_ids = {m.source_id for m in kept if m.source_id}
-    edges = [e for e in sess.agent_edges
-             if e.spawn_message_id is None or e.spawn_message_id in kept_ids]
-    kept_children = {e.child_session_id for e in edges}
-    removed = [c for c in sess.children
-               if sess.agent_edges and c.source_id not in kept_children]
+    child_ids = {child.source_id for child in sess.children}
+    # 仅以落在已保留根消息中的原始 spawn 为准。不能把目录扫描得到、但
+    # 没有 spawn_message_id 的子会话当作截断范围内的内容。
+    edges = [edge for edge in sess.agent_edges
+             if edge.child_session_id in child_ids and edge.spawn_message_id and
+             edge.spawn_message_id in kept_ids]
+    kept_children = {edge.child_session_id for edge in edges}
+    removed = [child for child in sess.children
+               if child.source_id not in kept_children]
     if removed:
         sess.lose("migration.children_not_migrated", count=len(removed))
-        sess.children = [c for c in sess.children if c.source_id in kept_children]
-        sess.agent_edges = edges
+    sess.children = [child for child in sess.children
+                     if child.source_id in kept_children]
+    sess.agent_edges = edges
     return sess
 
 
@@ -102,7 +113,8 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "title": sess.title, "cwd": target_cwd, "loss": stats,
             "tree_count": tree_count, "child_count": tree_count - 1,
             "topology": topology,
-            "max_turn": max_turn, "msg_count": len(sess.messages),
+            "max_turn": max_turn, "msg_count": sess.message_count(),
+            "root_msg_count": len(sess.messages),
             "probe_model": probe_model or None}
     if dry_run:
         return {**base, "dry_run": True}

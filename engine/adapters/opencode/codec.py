@@ -64,8 +64,20 @@ class OpenCodeEditCodec:
         info.update({"id": mid, "sessionID": sid, "parentID": user_id,
                      "role": "assistant", "finish": "stop"})
         now = int(time.time() * 1000)
+        source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        user_time = messages[span.start].get("info", {}).get("time", {})
+        anchor = source_time.get("created")
+        if not isinstance(anchor, int):
+            anchor = user_time.get("created")
+        if not isinstance(anchor, int):
+            anchor = now
         if "time" in info:
-            info["time"] = {"created": now, "completed": now}
+            completed = source_time.get("completed")
+            info["time"] = {
+                "created": anchor,
+                "completed": completed if isinstance(completed, int) and
+                completed >= anchor else anchor,
+            }
         parts = []
         for item in reply.items:
             common = {"id": _new_id("prt"), "messageID": mid, "sessionID": sid}
@@ -78,8 +90,11 @@ class OpenCodeEditCodec:
                               "state": {"status": "completed",
                                         "input": copy.deepcopy(item.input),
                                         "output": item.output, "metadata": {},
-                                        "time": {"start": now, "end": now}}})
-        is_reply = lambda message: (message.get("info") or {}).get("role") == "assistant"
+                                        "time": {"start": anchor,
+                                                 "end": anchor}}})
+        def is_reply(message):
+            return (message.get("info") or {}).get("role") == "assistant"
+
         messages[span.start + 1:span.end] = replace_at_first(
             old, is_reply, [{"info": info, "parts": parts}])
         return [event("edit.reply_replaced", turn=span.ordinal,

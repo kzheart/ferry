@@ -124,6 +124,10 @@ def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypat
     assert {"agent", "model", "summary", "time"} <= user.keys()
     assert {"mode", "agent", "path", "cost", "tokens", "modelID",
             "providerID", "time", "finish"} <= assistant.keys()
+    task = next(part for message in root["messages"]
+                for part in message.get("parts", [])
+                if part.get("tool") == "task")
+    assert task["state"]["status"] == "completed"
     child_messages = imported[1][0]["messages"]
     assert child_messages[0]["info"]["role"] == "user"
     assert child_messages[1]["info"]["parentID"] == \
@@ -153,6 +157,34 @@ def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
     assert all("time" in (part.get("state") or {}) for part in tools)
     assert all({"start", "end"} <= set((part.get("state") or {})["time"])
                for part in tools)
+
+
+def test_opencode_writer_preserves_source_message_chronology(tmp_path, monkeypatch):
+    imported = []
+    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(
+        opencode_session, "_import_payload",
+        lambda payload, sid, cwd: imported.append(payload),
+    )
+    root = Session("claude", "ordered-root", str(tmp_path), title="ordered")
+    root.messages = [
+        Message("user", [Block("text", "first")],
+                created_at="2026-07-22T04:17:06.066Z"),
+        Message("assistant", [Block("text", "second")],
+                created_at="2026-07-22T04:17:28.433Z"),
+        Message("user", [Block("text", "third")],
+                created_at="2026-07-22T10:22:34.060Z"),
+    ]
+
+    opencode_session.write(root, cwd=str(tmp_path))
+
+    messages = imported[0]["messages"]
+    assert [message["parts"][0]["text"] for message in messages] == [
+        "first", "second", "third",
+    ]
+    created = [message["info"]["time"]["created"] for message in messages]
+    assert created == sorted(created)
+    assert len(created) == len(set(created))
 
 
 def test_opencode_writer_rolls_back_partially_imported_session(tmp_path, monkeypatch):

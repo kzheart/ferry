@@ -5,6 +5,7 @@
 """
 import json
 import re
+import sqlite3
 from pathlib import Path
 
 from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
@@ -224,8 +225,11 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     cur_tools: list[Block] = []          # 未落消息的工具块,附到下一条 assistant
     cur_reasoning: list[Block] = []      # 可见 reasoning 降级为 text,附到下一条 assistant
 
-    def flush_pending_into(blocks):
+    def flush_pending_into(blocks, message_source_id: str | None = None):
         nonlocal cur_tools, cur_reasoning
+        for block in cur_tools:
+            if block.tool and message_source_id:
+                block.tool.meta.setdefault("message_source_id", message_source_id)
         blocks[:0] = cur_reasoning + cur_tools
         cur_tools = []
         cur_reasoning = []
@@ -255,16 +259,19 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 continue
             if p["role"] == "user" and (cur_tools or cur_reasoning):
                 pending_blocks = []
-                flush_pending_into(pending_blocks)
+                source_id = f"record:{ordinal}"
+                flush_pending_into(pending_blocks, source_id)
                 sess.messages.append(Message(role="assistant", blocks=pending_blocks,
-                                             raw=[]))
+                                             raw=[], source_id=source_id,
+                                             created_at=l.get("timestamp")))
             if not text.strip() and not image_blocks and not cur_tools and not cur_reasoning:
                 continue
             blocks = ([Block("text", text)] if text.strip() else []) + image_blocks
             if p["role"] == "assistant":
-                flush_pending_into(blocks)
+                flush_pending_into(blocks, f"record:{ordinal}")
             sess.messages.append(Message(role=p["role"], blocks=blocks, raw=[l],
-                                         source_id=f"record:{ordinal}"))
+                                         source_id=f"record:{ordinal}",
+                                         created_at=l.get("timestamp")))
         elif pt in ("custom_tool_call", "function_call"):
             if pt == "function_call":
                 args = _json_args(p.get("arguments", "{}"))
@@ -298,6 +305,10 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 else:
                     tc = _parse_call(p, sess)
                 tc.source_call_id = p.get("call_id")
+            if tc.op == CanonicalOp.AGENT_SPAWN:
+                tc.meta.setdefault("message_source_id", next((
+                    message.source_id for message in reversed(sess.messages)
+                    if message.role in {"user", "assistant"}), None))
             pending[p.get("call_id")] = tc
             cur_tools.append(Block("tool", tool=tc))
         elif pt in ("custom_tool_call_output", "function_call_output"):
@@ -336,13 +347,29 @@ def _contains_identity(tool: ToolCall, child: Session) -> bool:
     return any(value and value in haystack for value in values)
 
 
-def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[str]):
+def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[str],
+                 edge_statuses: dict[str, str]):
     if sess.source_id in seen:
         return
     seen.add(sess.source_id)
     spawn_calls = _spawn_calls(sess)
+    candidates = list(by_parent.get(sess.source_id, []))
+    ordered_children = []
+    selected_children: set[int] = set()
+    # 优先按父 rollout 中 spawn_agent 的物理顺序恢复 siblings。writer 的
+    # function_call_output 包含 agent_path，因此即使目录遍历顺序不同也能
+    # 找回原顺序；无法关联的旧记录再走稳定排序兜底。
+    for tool in spawn_calls:
+        child = next((candidate for candidate in candidates
+                      if id(candidate) not in selected_children and
+                      _contains_identity(tool, candidate)), None)
+        if child is not None:
+            selected_children.add(id(child))
+            ordered_children.append(child)
+    ordered_children.extend(candidate for candidate in candidates
+                            if id(candidate) not in selected_children)
     used_calls: set[int] = set()
-    for child in by_parent.get(sess.source_id, []):
+    for child in ordered_children:
         if child.source_id in seen:
             continue
         matched = next((tool for tool in spawn_calls
@@ -359,14 +386,14 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
             parent_session_id=sess.source_id,
             child_session_id=child.source_id,
             source_call_id=matched.source_call_id if matched else None,
-            spawn_message_id=(matched.meta.get("source_id")
-                              if matched else None),
+            spawn_message_id=(matched.meta.get("message_source_id") if matched else None),
             result_message_id=matched.source_result_id if matched else None,
             agent_id=child.agent_id,
             agent_path=child.agent_path,
             agent_type=child.agent_type,
             prompt=prompt,
-            status=matched.status if matched else None,
+            status=(_canonical_edge_status(matched.status) if matched else None) or
+                   edge_statuses.get(child.source_id),
             meta={
                 "parent_thread_id": child.parent_id,
                 "forked_from_id": child.forked_from_id,
@@ -375,7 +402,29 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
         )
         sess.children.append(child)
         sess.agent_edges.append(edge)
-        _attach_tree(child, by_parent, seen)
+        _attach_tree(child, by_parent, seen, edge_statuses)
+
+
+def _registry_edge_statuses(sessions_root: Path) -> dict[str, str]:
+    db_path = sessions_root.parent / "state_5.sqlite"
+    if not db_path.exists():
+        return {}
+    try:
+        with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) as db:
+            return {str(child): str(status) for child, status in db.execute(
+                "SELECT child_thread_id, status FROM thread_spawn_edges")}
+    except sqlite3.Error:
+        return {}
+
+
+def _canonical_edge_status(value: str | None) -> str | None:
+    if value in {"open", "closed"}:
+        return value
+    if value in {"completed", "failed", "cancelled", "canceled"}:
+        return "closed"
+    if value in {"in_progress", "queued"}:
+        return "open"
+    return None
 
 
 def read(path: str, sessions_dir: str | Path | None = None) -> Session:
@@ -399,5 +448,7 @@ def read(path: str, sessions_dir: str | Path | None = None) -> Session:
     for candidate in sessions.values():
         if candidate.parent_id:
             by_parent.setdefault(candidate.parent_id, []).append(candidate)
-    _attach_tree(root, by_parent, set())
+    for children in by_parent.values():
+        children.sort(key=lambda child: (child.agent_path or "", child.source_id))
+    _attach_tree(root, by_parent, set(), _registry_edge_statuses(_sessions_root(rollout)))
     return root
