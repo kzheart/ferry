@@ -3,8 +3,8 @@
 from ..domain.errors import ConcurrentModificationError, OperationUnsupportedError
 
 
-def preview_mutation(editor, ref: str, mutate) -> dict:
-    doc = editor.load(ref)
+def preview_mutation(editor, ref: str, mutate, loader=None) -> dict:
+    doc = (loader or editor.load)(ref)
     before = editor.stats(doc)
     changes = mutate(doc)
     editor.validate(doc)
@@ -38,8 +38,9 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
         raise
 
 
-def preview(editor, ref: str, ops: list[dict]) -> dict:
-    result = preview_mutation(editor, ref, lambda doc: editor.apply_ops(doc, ops))
+def preview(editor, ref: str, ops: list[dict], loader=None) -> dict:
+    result = preview_mutation(
+        editor, ref, lambda doc: editor.apply_ops(doc, ops), loader=loader)
     result["capabilities"] = editor.capabilities()
     return result
 

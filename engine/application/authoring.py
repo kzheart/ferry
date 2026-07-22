@@ -10,10 +10,11 @@ def capabilities(compiler) -> dict:
     return compiler.capabilities()
 
 
-def preview(editor, compiler, ref: str, turn: int | str, reply_value: dict) -> dict:
+def preview(editor, compiler, ref: str, turn: int | str, reply_value: dict,
+            loader=None) -> dict:
     reply = AssistantReply.from_dict(reply_value)
     result = preview_mutation(
-        editor, ref, lambda doc: compiler.replace(doc, turn, reply))
+        editor, ref, lambda doc: compiler.replace(doc, turn, reply), loader=loader)
     result.update(turn=turn, reply=reply.to_dict(),
                   capabilities=compiler.capabilities())
     return result

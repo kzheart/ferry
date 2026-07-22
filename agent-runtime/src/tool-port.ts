@@ -1,6 +1,24 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 
+const timeRange = Type.Object(
+  {
+    from: Type.Optional(
+      Type.Union([
+        Type.Integer({ minimum: 0 }),
+        Type.String({ maxLength: 64 }),
+      ]),
+    ),
+    to: Type.Optional(
+      Type.Union([
+        Type.Integer({ minimum: 0 }),
+        Type.String({ maxLength: 64 }),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const FERRY_TOOL_NAMES = [
   "ferry_list_capabilities",
   "ferry_search_sessions",
@@ -39,6 +57,7 @@ const schemas = {
       projects: Type.Optional(
         Type.Array(Type.String({ maxLength: 256 }), { maxItems: 20 }),
       ),
+      time_range: Type.Optional(timeRange),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
     },
     { additionalProperties: false },
@@ -50,16 +69,21 @@ const schemas = {
       from_turn: Type.Optional(Type.Integer({ minimum: 1 })),
       to_turn: Type.Optional(Type.Integer({ minimum: 1 })),
       include_tool_outputs: Type.Optional(Type.Boolean()),
+      max_bytes: Type.Optional(
+        Type.Integer({ minimum: 1024, maximum: 65_536 }),
+      ),
     },
     { additionalProperties: false },
   ),
   ferry_get_usage: Type.Object(
     {
-      from: Type.Optional(Type.String({ maxLength: 64 })),
-      to: Type.Optional(Type.String({ maxLength: 64 })),
+      agents: Type.Optional(
+        Type.Array(Type.String({ maxLength: 32 }), { maxItems: 8 }),
+      ),
       projects: Type.Optional(
         Type.Array(Type.String({ maxLength: 256 }), { maxItems: 20 }),
       ),
+      time_range: Type.Optional(timeRange),
     },
     { additionalProperties: false },
   ),
@@ -68,6 +92,7 @@ const schemas = {
       source_tool: Type.String({ minLength: 1, maxLength: 32 }),
       ref: Type.String({ minLength: 1, maxLength: 512 }),
       target_tool: Type.String({ minLength: 1, maxLength: 32 }),
+      max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
     },
     { additionalProperties: false },
   ),
@@ -75,7 +100,60 @@ const schemas = {
     {
       tool: Type.String({ minLength: 1, maxLength: 32 }),
       ref: Type.String({ minLength: 1, maxLength: 512 }),
-      instructions: Type.String({ minLength: 1, maxLength: 20_000 }),
+      ops: Type.Optional(
+        Type.Array(
+          Type.Union([
+            Type.Object(
+              {
+                op: Type.Literal("delete-turn"),
+                turn: Type.Integer({ minimum: 1 }),
+              },
+              { additionalProperties: false },
+            ),
+            Type.Object(
+              {
+                op: Type.Literal("rewrite"),
+                locator: Type.String({ minLength: 1, maxLength: 512 }),
+                text: Type.String({ minLength: 1, maxLength: 20_000 }),
+              },
+              { additionalProperties: false },
+            ),
+          ]),
+          { minItems: 1, maxItems: 50 },
+        ),
+      ),
+      turn: Type.Optional(Type.Integer({ minimum: 1 })),
+      reply: Type.Optional(
+        Type.Object(
+          {
+            items: Type.Array(
+              Type.Union([
+                Type.Object(
+                  {
+                    kind: Type.Literal("text"),
+                    text: Type.String({ minLength: 1, maxLength: 20_000 }),
+                  },
+                  { additionalProperties: false },
+                ),
+                Type.Object(
+                  {
+                    kind: Type.Literal("tool"),
+                    name: Type.String({ minLength: 1, maxLength: 120 }),
+                    input: Type.Union([
+                      Type.String({ maxLength: 20_000 }),
+                      Type.Record(Type.String(), Type.Unknown()),
+                    ]),
+                    output: Type.String({ maxLength: 20_000 }),
+                  },
+                  { additionalProperties: false },
+                ),
+              ]),
+              { minItems: 1, maxItems: 100 },
+            ),
+          },
+          { additionalProperties: false },
+        ),
+      ),
     },
     { additionalProperties: false },
   ),

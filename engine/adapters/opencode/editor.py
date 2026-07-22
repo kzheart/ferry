@@ -30,9 +30,16 @@ class OpenCodeBackend(EditBackend):
 
     def load(self, ref):
         tree = rw_opencode.read(ref)
+        return self._document(ref, tree)
+
+    def load_preview(self, ref):
+        tree = rw_opencode.read_preview(ref)
+        return self._document(ref, tree)
+
+    def _document(self, ref, tree):
         payload = tree.meta.get("opencode_export")
         if not isinstance(payload, dict):
-            payload = rw_opencode._oc_export(ref)
+            raise RuntimeError("OpenCode 会话缺少只读 export 数据")
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
         return EditDocument(self.name, ref, ref, rw_opencode._clone(payload), hash_bytes(raw),
                             {"original": rw_opencode._clone(payload), "tree": tree})

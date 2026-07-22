@@ -76,3 +76,11 @@ def _meta(path: Path, stat) -> dict:
 def scan(cache):
     pattern = os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")
     return scan_jsonl(pattern, cache, _meta)
+
+
+def fingerprint(ref: str) -> str:
+    """计算 Codex 可达会话 closure（含 registry）的只读指纹。"""
+    from .native import discover_closure
+
+    closure = discover_closure(Path(ref).resolve(strict=True))
+    return closure.revision + ":" + (closure.registry_revision or "none")

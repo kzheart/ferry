@@ -11,10 +11,14 @@ from .plugin import ToolManifest, ToolPlugin
 class BrowserAdapter:
     """Turn three adapter functions into the SessionBrowser contract."""
 
-    def __init__(self, scan: Callable, read: Callable, resolve_ref: Callable):
+    def __init__(self, scan: Callable, read: Callable, resolve_ref: Callable,
+                 fingerprint: Callable | None = None,
+                 agent_read: Callable | None = None):
         self._scan = scan
         self._read = read
         self._resolve_ref = resolve_ref
+        self._fingerprint = fingerprint
+        self._agent_read = agent_read
 
     def scan(self, cache):
         return self._scan(cache)
@@ -22,8 +26,14 @@ class BrowserAdapter:
     def read(self, ref):
         return self._read(ref)
 
+    def read_agent(self, ref):
+        return (self._agent_read or self._read)(ref)
+
     def resolve_ref(self, ref):
         return self._resolve_ref(ref)
+
+    def fingerprint(self, ref):
+        return self._fingerprint(ref) if self._fingerprint else None
 
 
 class ModelCatalogAdapter:

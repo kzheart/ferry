@@ -1,5 +1,6 @@
 """OpenCode SQLite 存储扫描。"""
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -59,3 +60,32 @@ def scan(_cache):
             "tokens": tokens if has_tokens(tokens) else None,
             "model": dominant_model(by_model)})
     return [root for root in session_roots(rows) if root["count"]]
+
+
+def fingerprint(session_id: str) -> str | None:
+    """保守地指纹化整个存储，覆盖递归子会话和 task 关联。"""
+    if not OPENCODE_DB.exists():
+        return None
+    digest = hashlib.sha256()
+    uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as database:
+        tables = {row[0] for row in database.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if "session" not in tables:
+            return None
+        found = bool(database.execute(
+            'SELECT 1 FROM "session" WHERE "id" = ? LIMIT 1',
+            (session_id,)).fetchone())
+        if not found:
+            return None
+        for table in ("session", "message", "part"):
+            if table not in tables:
+                continue
+            rows = database.execute(
+                f'SELECT * FROM "{table}" ORDER BY 1').fetchall()
+            digest.update(table.encode())
+            digest.update(b"\0")
+            for row in rows:
+                digest.update(repr(tuple(row)).encode())
+                digest.update(b"\0")
+    return "sha256:" + digest.hexdigest()
