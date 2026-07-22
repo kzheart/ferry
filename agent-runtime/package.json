@@ -1,0 +1,29 @@
+{
+  "name": "@ferry/agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "ferry-agent": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --exclude test/deepseek.integration.test.ts",
+    "test:deepseek": "vitest run test/deepseek.integration.test.ts",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.81.1",
+    "@earendil-works/pi-ai": "0.81.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "prettier": "3.7.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}
