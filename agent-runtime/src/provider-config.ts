@@ -2,16 +2,12 @@ import { randomUUID } from "node:crypto";
 import {
   chmod,
   mkdir,
-  open,
   readFile,
   rename,
-  stat,
   unlink,
-  utimes,
   writeFile,
 } from "node:fs/promises";
 import { dirname } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import type {
   Credential,
   CredentialInfo,
@@ -306,11 +302,9 @@ export class FileProviderConfigStore implements CredentialStore {
 
   private async load() {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    await this.withFileLock(async () => {
-      const existing = await this.readDisk();
-      if (existing) this.document = existing;
-      else await this.writeDisk(this.document);
-    });
+    const existing = await this.readDisk();
+    if (existing) this.document = existing;
+    else await this.writeDisk(this.document);
   }
 
   private async readDisk() {
@@ -340,43 +334,6 @@ export class FileProviderConfigStore implements CredentialStore {
     }
   }
 
-  private async withFileLock<T>(action: () => Promise<T>): Promise<T> {
-    const lockPath = `${this.path}.lock`;
-    let handle;
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      try {
-        handle = await open(lockPath, "wx", 0o600);
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        let age = 0;
-        try {
-          age = Date.now() - (await stat(lockPath)).mtimeMs;
-        } catch (statError) {
-          if ((statError as NodeJS.ErrnoException).code !== "ENOENT") {
-            throw statError;
-          }
-          continue;
-        }
-        if (age > 30_000) await unlink(lockPath).catch(() => undefined);
-        else await delay(25);
-      }
-    }
-    if (!handle) throw new Error("provider config lock timed out");
-    const heartbeat = setInterval(() => {
-      const now = new Date();
-      void utimes(lockPath, now, now).catch(() => undefined);
-    }, 5_000);
-    heartbeat.unref();
-    try {
-      return await action();
-    } finally {
-      clearInterval(heartbeat);
-      await handle.close();
-      await unlink(lockPath).catch(() => undefined);
-    }
-  }
-
   private async mutate<T>(
     action: (document: ProviderConfigDocument) => T | Promise<T>,
   ) {
@@ -386,13 +343,10 @@ export class FileProviderConfigStore implements CredentialStore {
     const task = previous
       .catch(() => undefined)
       .then(async () => {
-        await this.withFileLock(async () => {
-          const latest = (await this.readDisk()) ?? initialConfig();
-          const draft = structuredClone(latest);
-          result = await action(draft);
-          this.document = parseProviderConfig(draft);
-          await this.writeDisk(this.document);
-        });
+        const draft = structuredClone(this.document);
+        result = await action(draft);
+        this.document = parseProviderConfig(draft);
+        await this.writeDisk(this.document);
       });
     this.writeQueue = task;
     await task;
@@ -402,10 +356,7 @@ export class FileProviderConfigStore implements CredentialStore {
   async snapshot() {
     await this.ready;
     await this.writeQueue;
-    return this.withFileLock(async () => {
-      this.document = (await this.readDisk()) ?? initialConfig();
-      return structuredClone(this.document);
-    });
+    return structuredClone(this.document);
   }
 
   async publicSnapshot(): Promise<PublicProviderConfig> {
@@ -490,24 +441,6 @@ export class FileProviderConfigStore implements CredentialStore {
         (item) => item.id !== safe.id,
       );
       config.custom_providers.push(replacement);
-    });
-  }
-
-  async restoreCredential(
-    providerId: string,
-    expected: Credential,
-    previous: Credential | undefined,
-  ) {
-    await this.mutate((config) => {
-      const current = config.credentials[providerId];
-      if (
-        current &&
-        JSON.stringify(toPiCredential(current)) === JSON.stringify(expected)
-      ) {
-        if (previous)
-          config.credentials[providerId] = fromPiCredential(previous);
-        else delete config.credentials[providerId];
-      }
     });
   }
 

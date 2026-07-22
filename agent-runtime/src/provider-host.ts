@@ -255,23 +255,13 @@ export class ProviderHost {
   ) {
     if (!this.models.getProvider(providerId))
       throw new Error("provider not found");
-    const previous = await this.store.read(providerId);
-    const credential = await this.models.login(providerId, type, interaction);
-    const refresh = await this.refreshModels(interaction.signal);
-    if (interaction.signal?.aborted || refresh.aborted) {
-      await this.store.restoreCredential(providerId, credential, previous);
-      const error = new Error("authentication cancelled");
-      error.name = "AbortError";
-      throw error;
-    }
-    return credential;
+    return this.models.login(providerId, type, interaction);
   }
 
-  async refreshModels(signal?: AbortSignal) {
+  async refreshModels() {
     const result = await this.models.refresh({
       allowNetwork: true,
       force: true,
-      ...(signal ? { signal } : {}),
     });
     return {
       aborted: result.aborted,
