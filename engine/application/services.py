@@ -73,21 +73,33 @@ def _truncate_rounds(sess, max_turn: int):
         sess.lose("migration.truncated", max_turn=max_turn, dropped=dropped)
     sess.messages = kept
     kept_ids = {m.source_id for m in kept if m.source_id}
-    child_ids = {child.source_id for child in sess.children}
+    children_by_id = {}
+    for child in sess.children:
+        children_by_id.setdefault(child.source_id, child)
     # 仅以落在已保留根消息中的原始 spawn 为准。不能把目录扫描得到、但
     # 没有 spawn_message_id 的子会话当作截断范围内的内容。
-    edges = [edge for edge in sess.agent_edges
-             if edge.child_session_id in child_ids and edge.spawn_message_id and
-             edge.spawn_message_id in kept_ids]
-    kept_children = {edge.child_session_id for edge in edges}
-    removed = [child for child in sess.children
-               if child.source_id not in kept_children]
+    edges, kept_children = [], set()
+    for edge in sess.agent_edges:
+        if (edge.child_session_id not in children_by_id or
+                not edge.spawn_message_id or edge.spawn_message_id not in kept_ids or
+                edge.child_session_id in kept_children):
+            continue
+        edges.append(edge)
+        kept_children.add(edge.child_session_id)
+    children = [child for child_id, child in children_by_id.items()
+                if child_id in kept_children]
+    removed = len(sess.children) - len(children)
     if removed:
-        sess.lose("migration.children_not_migrated", count=len(removed))
-    sess.children = [child for child in sess.children
-                     if child.source_id in kept_children]
+        sess.lose("migration.children_not_migrated", count=removed)
+    sess.children = children
     sess.agent_edges = edges
     return sess
+
+
+def _migration_counts(sess) -> tuple[int, int]:
+    """返回实际将写出的整棵树节点数与消息数。"""
+    nodes = sum(1 for _ in sess.walk())
+    return nodes, sess.message_count()
 
 
 def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
@@ -101,7 +113,7 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
     target = adapter(dst).require("migration_target")
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     stats = target.plan(sess)
-    tree_count = sum(1 for _ in sess.walk())
+    tree_count, message_count = _migration_counts(sess)
     edge_count = sum(len(node.agent_edges) for node in sess.walk())
     topology = {"nodes": tree_count,
                 "edges": max(0, tree_count - 1),
@@ -113,7 +125,7 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "title": sess.title, "cwd": target_cwd, "loss": stats,
             "tree_count": tree_count, "child_count": tree_count - 1,
             "topology": topology,
-            "max_turn": max_turn, "msg_count": sess.message_count(),
+            "max_turn": max_turn, "msg_count": message_count,
             "root_msg_count": len(sess.messages),
             "probe_model": probe_model or None}
     if dry_run:
@@ -171,16 +183,18 @@ def _isolated_migrate_probe(dst: str, sess, cwd: str,
     写入过程可能追加损耗记录,探测前保存、结束后还原。
     """
     saved_loss = [(node, list(node.loss)) for node in sess.walk()]
-    shadow_sid, shadow_dest = adapter(dst).require("migration_target").write(sess, cwd)
-    for node, loss in saved_loss:
-        node.loss = loss
+    shadow_sid = shadow_dest = None
     try:
+        shadow_sid, shadow_dest = adapter(dst).require("migration_target").write(sess, cwd)
         rep = run_probe(dst, shadow_sid, cwd, model=model)
         rep.setdefault("isolation", {"kind": "shadow_copy", "id": shadow_sid,
                                      "cleaned": True})
         return rep
     finally:
-        _cleanup_artifact(dst, shadow_sid, shadow_dest)
+        for node, loss in saved_loss:
+            node.loss = loss
+        if shadow_sid is not None:
+            _cleanup_artifact(dst, shadow_sid, shadow_dest)
 
 
 def run_probe(tool: str, sid: str, cwd: str,

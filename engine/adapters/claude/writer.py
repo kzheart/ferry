@@ -193,9 +193,12 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
         parent = record["uuid"]
         return _ensure_resume_fields(record, cwd=cwd, stamp=record["timestamp"])
 
-    def remember(message, record):
+    def remember(message, record, *, replace=False):
         if message.source_id:
-            source_uuids.setdefault(message.source_id, record["uuid"])
+            if replace:
+                source_uuids[message.source_id] = record["uuid"]
+            else:
+                source_uuids.setdefault(message.source_id, record["uuid"])
 
     def add_text(message, text):
         kind = "assistant" if message.role == "assistant" else "user"
@@ -227,7 +230,11 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
             "name": native_name, "input": native_input}]
         records.append(assistant)
         if message is not None:
-            remember(message, assistant)
+            # 子会话必须 fork 在真实 Agent 调用上，而不是同一 canonical
+            # 消息里先输出的文字记录上。
+            remember(message, assistant, replace=edge is not None)
+        elif edge and edge.spawn_message_id:
+            source_uuids[edge.spawn_message_id] = assistant["uuid"]
 
         user = base("user")
         user["message"] = {"role": "user", "content": [{

@@ -441,19 +441,30 @@ def _message_times(messages: list[Message], now: int) -> list[int]:
 def _normalize_payload_message_times(payload: dict) -> None:
     """按 export 数组顺序消除时间戳并列，避免随机 ID 成为排序依据。"""
     messages = payload.get("messages", [])
-    parsed = [iso_ms((message.get("info") or {}).get("time", {}).get("created"))
-              for message in messages]
+    source_times = []
+    for message in messages:
+        info = message.get("info") if isinstance(message.get("info"), dict) else {}
+        source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        source_times.append(source_time)
+    parsed = [iso_ms(source_time.get("created")) for source_time in source_times]
     known = [value for value in parsed if value is not None]
     fallback = (min(known) if known else int(time.time() * 1000)) - len(messages)
+    created_times = []
     previous_created = None
-    previous_completed = None
-    for message, original_created in zip(messages, parsed):
-        info = message.setdefault("info", {})
-        source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
-        candidate = original_created if original_created is not None else (
+    for value in parsed:
+        candidate = value if value is not None else (
             previous_created + 1 if previous_created is not None else fallback)
         created = candidate if previous_created is None else max(
             candidate, previous_created + 1)
+        created_times.append(created)
+        previous_created = created
+    previous_completed = None
+    for message, source_time, original_created, created in zip(
+            messages, source_times, parsed, created_times):
+        info = message.get("info")
+        if not isinstance(info, dict):
+            info = {}
+            message["info"] = info
         normalized_time = dict(source_time)
         normalized_time["created"] = created
         if "completed" in source_time:
@@ -466,18 +477,36 @@ def _normalize_payload_message_times(payload: dict) -> None:
             normalized_time["completed"] = completed
             previous_completed = completed
         info["time"] = normalized_time
-        previous_created = created
 
     if messages:
-        session_time = payload.setdefault("info", {}).setdefault("time", {})
+        info = payload.get("info")
+        if not isinstance(info, dict):
+            info = {}
+            payload["info"] = info
+        session_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        info["time"] = session_time
+        source_created = iso_ms(session_time.get("created"))
+        source_updated = iso_ms(session_time.get("updated"))
         session_time["created"] = min(
-            iso_ms(session_time.get("created")) or parsed[0] or messages[0]["info"]["time"]["created"],
-            messages[0]["info"]["time"]["created"],
+            source_created if source_created is not None else created_times[0],
+            created_times[0],
         )
         session_time["updated"] = max(
-            iso_ms(session_time.get("updated")) or 0,
-            messages[-1]["info"]["time"]["created"],
+            source_updated if source_updated is not None else created_times[-1],
+            created_times[-1],
         )
+    else:
+        info = payload.get("info")
+        if not isinstance(info, dict):
+            info = {}
+            payload["info"] = info
+        session_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        now = int(time.time() * 1000)
+        created = iso_ms(session_time.get("created"))
+        updated = iso_ms(session_time.get("updated"))
+        created = created if created is not None else now
+        updated = max(created, updated if updated is not None else created)
+        info["time"] = {**session_time, "created": created, "updated": updated}
 
 
 def _assistant_result(sess: Session) -> str:
@@ -632,12 +661,16 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             elif b.kind == "tool":
                 t = b.tool
                 if t.op == CanonicalOp.AGENT_SPAWN:
-                    edge = next((candidate for candidate in sess.agent_edges
-                                 if candidate.child_session_id not in linked_children and
-                                 ((candidate.spawn_message_id and
-                                   candidate.spawn_message_id == m.source_id) or
-                                  (candidate.source_call_id and
-                                   candidate.source_call_id == t.source_call_id))), None)
+                    candidates = [
+                        candidate for candidate in sess.agent_edges
+                        if candidate.child_session_id not in linked_children]
+                    edge = next((candidate for candidate in candidates
+                                 if t.source_call_id and candidate.source_call_id ==
+                                 t.source_call_id), None)
+                    if edge is None:
+                        at_message = [candidate for candidate in candidates
+                                      if candidate.spawn_message_id == m.source_id]
+                        edge = at_message[0] if len(at_message) == 1 else None
                     child = children.get(edge.child_session_id) if edge else None
                     child_sid = sid_map.get(edge.child_session_id) if edge else None
                     if child is not None and child_sid is not None:
@@ -762,13 +795,14 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
                     if child_id in sid_map:
                         linked.add(sid_map[child_id])
 
-    last_user = next((message["info"]["id"]
+    last_user = next(((message.get("info") or {}).get("id")
                       for message in reversed(payload.get("messages", []))
-                      if message["info"].get("role") == "user"), None)
-    message_times = [
-        (message.get("info") or {}).get("time", {}).get("created")
-        for message in payload.get("messages", [])
-    ]
+                      if (message.get("info") or {}).get("role") == "user"), None)
+    message_times = []
+    for message in payload.get("messages", []):
+        minfo = message.get("info") or {}
+        message_time = minfo.get("time") if isinstance(minfo.get("time"), dict) else {}
+        message_times.append(message_time.get("created"))
     now = max((value for value in message_times if isinstance(value, int)),
               default=int(time.time() * 1000)) + 1
     edges = {edge.child_session_id: edge for edge in sess.agent_edges}
@@ -799,6 +833,23 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
         cwd = payload["info"]["directory"]
         provider_id = str(sess.meta.get("model_provider") or "openai")
         model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
+        if last_user is None:
+            last_user = _new_id("msg")
+            user_info = _clone(tpl["msg.user"])
+            user_info.update({
+                "id": last_user, "sessionID": sid, "role": "user",
+                "time": {"created": now - 1}, "agent": "build",
+                "model": {"providerID": provider_id, "modelID": model_id},
+                "summary": {"diffs": []},
+            })
+            user_part = _clone(tpl["part.text"])
+            user_part.update({
+                "id": _new_ordered_id("prt", 0), "messageID": last_user,
+                "sessionID": sid, "type": "text",
+                "text": "[Migrated subagent task]",
+            })
+            payload.setdefault("messages", []).append(
+                {"info": user_info, "parts": [user_part]})
         minfo.update({"id": mid, "sessionID": sid,
                       "time": {"created": now, "completed": now},
                       "finish": "tool-calls", "mode": "build",
@@ -817,7 +868,10 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
         linked.add(target_child)
         now += 1
     if sess.children:
-        payload["info"].setdefault("time", {})["updated"] = now - 1
+        info = payload["info"]
+        session_time = info.get("time") if isinstance(info.get("time"), dict) else {}
+        session_time["updated"] = now - 1
+        info["time"] = session_time
 
 
 def _import_payload(payload: dict, sid: str, cwd: str) -> None:

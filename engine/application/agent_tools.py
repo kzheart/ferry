@@ -881,13 +881,14 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
         _truncate_rounds(session, max_turn)
     target = current().adapter(target_tool).require("migration_target")
     loss = target.plan(session)
-    tree_count = sum(1 for _ in session.walk())
+    from .services import _migration_counts
+    tree_count, message_count = _migration_counts(session)
     edge_count = sum(len(node.agent_edges) for node in session.walk())
     topology = {"nodes": tree_count, "edges": max(0, tree_count - 1),
                 "agent_edges": edge_count, "preserved": True}
     return _finalize_dto({"source_tool": source_tool, "target_tool": target_tool,
             "ref": opaque_ref, "revision": record.revision,
-            "message_count": session.message_count(),
+            "message_count": message_count,
             "root_message_count": len(session.messages), "tree_count": tree_count,
             "child_count": tree_count - 1, "loss": _bounded_json(loss),
             "topology": topology, "max_turn": max_turn})
