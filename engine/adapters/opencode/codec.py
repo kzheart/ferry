@@ -65,19 +65,21 @@ class OpenCodeEditCodec:
                      "role": "assistant", "finish": "stop"})
         now = int(time.time() * 1000)
         source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
-        user_time = messages[span.start].get("info", {}).get("time", {})
+        user_info = messages[span.start].get("info") or {}
+        user_time = user_info.get("time") if isinstance(user_info.get("time"), dict) else {}
         anchor = source_time.get("created")
         if not isinstance(anchor, int):
             anchor = user_time.get("created")
+            if isinstance(anchor, int):
+                anchor += 1
         if not isinstance(anchor, int):
             anchor = now
-        if "time" in info:
-            completed = source_time.get("completed")
-            info["time"] = {
-                "created": anchor,
-                "completed": completed if isinstance(completed, int) and
-                completed >= anchor else anchor,
-            }
+        completed = source_time.get("completed")
+        info["time"] = {
+            "created": anchor,
+            "completed": completed if isinstance(completed, int) and
+            completed >= anchor else anchor,
+        }
         parts = []
         for item in reply.items:
             common = {"id": _new_id("prt"), "messageID": mid, "sessionID": sid}

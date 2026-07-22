@@ -386,13 +386,21 @@ def write(sess: Session, cwd: str | None = None,
     paths = {}
     parents = {}
     working_dirs = {}
+    pending_paths = set()
     agent_paths = {id(sess): sess.agent_path or "/root"}
     edge_statuses = {id(sess): None}
 
     def assign_tree_fields(node: Session, agent_path: str):
         agent_paths[id(node)] = agent_path
+        used_paths = set()
         for child_index, child in enumerate(node.children):
-            child_path = child.agent_path or f"{agent_path}/{child.agent_id or child_index + 1}"
+            base_path = child.agent_path or f"{agent_path}/{child.agent_id or child_index + 1}"
+            child_path = base_path
+            suffix = 2
+            while child_path in used_paths:
+                child_path = f"{base_path}-{suffix}"
+                suffix += 1
+            used_paths.add(child_path)
             edge_statuses[id(child)] = _edge_status(_edge_for(node, child))
             assign_tree_fields(child, child_path)
 
@@ -415,9 +423,12 @@ def write(sess: Session, cwd: str | None = None,
         dest = _destination(output_root, sid, ordinal)
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".tmp")
+        pending_paths.add(tmp)
         tmp.write_text("\n".join(json.dumps(line, ensure_ascii=False)
                                   for line in records) + "\n")
         tmp.rename(dest)
+        pending_paths.discard(tmp)
+        pending_paths.add(dest)
         paths[id(node)] = dest
         parents[id(node)] = ids[id(parent)] if parent else None
         working_dirs[id(node)] = node_cwd
@@ -438,7 +449,7 @@ def write(sess: Session, cwd: str | None = None,
             for node in nodes
         ], cli_version=str(tpl["session_meta"]["payload"].get("cli_version", "")))
     except Exception:
-        for path in paths.values():
+        for path in pending_paths:
             path.unlink(missing_ok=True)
         raise
     return root_id, paths[id(sess)]
