@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileProviderConfigStore } from "../src/provider-config.js";
+import { FileModelsStore } from "../src/model-catalog-store.js";
 import { MemorySessionStore } from "../src/event-store.js";
 import {
   ProviderHost,
@@ -65,6 +66,43 @@ describe("ProviderHost", () => {
       aborted: false,
       failed_provider_ids: [],
     });
+  });
+
+  it("restores a configured Radius model catalog before sessions load", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-radius-restore-"));
+    const config = new FileProviderConfigStore(
+      join(directory, "providers.json"),
+    );
+    await config.modify("radius", async () => ({
+      type: "oauth",
+      access: "test-access",
+      refresh: "test-refresh",
+      expires: Date.now() + 60_000,
+    }));
+    await new FileModelsStore(join(directory, "model-catalogs")).write(
+      "radius",
+      {
+        checkedAt: Date.now(),
+        models: [
+          {
+            id: "restored-radius-model",
+            name: "Restored Radius Model",
+            api: "openai-completions",
+            provider: "radius",
+            baseUrl: "https://api.tryradius.ai/v1",
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 128_000,
+            maxTokens: 8_192,
+          },
+        ],
+      },
+    );
+    const providers = await ProviderHost.create(config);
+    expect(providers.listModels("radius")).toMatchObject([
+      { id: "restored-radius-model", provider: "radius" },
+    ]);
   });
 
   it("adds a keyless OpenAI-compatible provider", async () => {

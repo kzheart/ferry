@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import {
   chmod,
   mkdir,
+  open,
   readFile,
   rename,
+  stat,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { dirname } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   Credential,
   CredentialInfo,
@@ -302,39 +306,75 @@ export class FileProviderConfigStore implements CredentialStore {
 
   private async load() {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+    await this.withFileLock(async () => {
+      const existing = await this.readDisk();
+      if (existing) this.document = existing;
+      else await this.writeDisk(this.document);
+    });
+  }
+
+  private async readDisk() {
     try {
       const source = await readFile(this.path, "utf8");
       if (Buffer.byteLength(source) > MAX_CONFIG_BYTES) {
         throw new Error("provider config is too large");
       }
-      this.document = parseProviderConfig(JSON.parse(source) as unknown);
       await chmod(this.path, 0o600);
+      return parseProviderConfig(JSON.parse(source) as unknown);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      await this.persist();
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
     }
   }
 
-  private persist() {
-    const payload = JSON.stringify(this.document, null, 2);
-    const task = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
+  private async writeDisk(document: ProviderConfigDocument) {
+    const payload = JSON.stringify(document, null, 2);
+    const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
+      await rename(temporary, this.path);
+      await chmod(this.path, 0o600);
+    } catch (error) {
+      await unlink(temporary).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async withFileLock<T>(action: () => Promise<T>): Promise<T> {
+    const lockPath = `${this.path}.lock`;
+    let handle;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      try {
+        handle = await open(lockPath, "wx", 0o600);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        let age = 0;
         try {
-          await writeFile(temporary, payload, {
-            encoding: "utf8",
-            mode: 0o600,
-          });
-          await rename(temporary, this.path);
-          await chmod(this.path, 0o600);
-        } catch (error) {
-          await unlink(temporary).catch(() => undefined);
-          throw error;
+          age = Date.now() - (await stat(lockPath)).mtimeMs;
+        } catch (statError) {
+          if ((statError as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw statError;
+          }
+          continue;
         }
-      });
-    this.writeQueue = task;
-    return task;
+        if (age > 30_000) await unlink(lockPath).catch(() => undefined);
+        else await delay(25);
+      }
+    }
+    if (!handle) throw new Error("provider config lock timed out");
+    const heartbeat = setInterval(() => {
+      const now = new Date();
+      void utimes(lockPath, now, now).catch(() => undefined);
+    }, 5_000);
+    heartbeat.unref();
+    try {
+      return await action();
+    } finally {
+      clearInterval(heartbeat);
+      await handle.close();
+      await unlink(lockPath).catch(() => undefined);
+    }
   }
 
   private async mutate<T>(
@@ -346,22 +386,13 @@ export class FileProviderConfigStore implements CredentialStore {
     const task = previous
       .catch(() => undefined)
       .then(async () => {
-        const draft = structuredClone(this.document);
-        result = await action(draft);
-        this.document = parseProviderConfig(draft);
-        const payload = JSON.stringify(this.document, null, 2);
-        const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
-        try {
-          await writeFile(temporary, payload, {
-            encoding: "utf8",
-            mode: 0o600,
-          });
-          await rename(temporary, this.path);
-          await chmod(this.path, 0o600);
-        } catch (error) {
-          await unlink(temporary).catch(() => undefined);
-          throw error;
-        }
+        await this.withFileLock(async () => {
+          const latest = (await this.readDisk()) ?? initialConfig();
+          const draft = structuredClone(latest);
+          result = await action(draft);
+          this.document = parseProviderConfig(draft);
+          await this.writeDisk(this.document);
+        });
       });
     this.writeQueue = task;
     await task;
@@ -371,7 +402,10 @@ export class FileProviderConfigStore implements CredentialStore {
   async snapshot() {
     await this.ready;
     await this.writeQueue;
-    return structuredClone(this.document);
+    return this.withFileLock(async () => {
+      this.document = (await this.readDisk()) ?? initialConfig();
+      return structuredClone(this.document);
+    });
   }
 
   async publicSnapshot(): Promise<PublicProviderConfig> {
@@ -439,13 +473,41 @@ export class FileProviderConfigStore implements CredentialStore {
     });
   }
 
-  async saveCustomProvider(provider: CustomProviderConfig) {
+  async saveCustomProvider(
+    provider: CustomProviderConfig,
+    clearApiKey = false,
+  ) {
     const safe = customProvider(provider);
     await this.mutate((config) => {
+      const existing = config.custom_providers.find(
+        (item) => item.id === safe.id,
+      );
+      const replacement =
+        !clearApiKey && !safe.api_key && existing?.api_key
+          ? { ...safe, api_key: existing.api_key }
+          : safe;
       config.custom_providers = config.custom_providers.filter(
         (item) => item.id !== safe.id,
       );
-      config.custom_providers.push(safe);
+      config.custom_providers.push(replacement);
+    });
+  }
+
+  async restoreCredential(
+    providerId: string,
+    expected: Credential,
+    previous: Credential | undefined,
+  ) {
+    await this.mutate((config) => {
+      const current = config.credentials[providerId];
+      if (
+        current &&
+        JSON.stringify(toPiCredential(current)) === JSON.stringify(expected)
+      ) {
+        if (previous)
+          config.credentials[providerId] = fromPiCredential(previous);
+        else delete config.credentials[providerId];
+      }
     });
   }
 
