@@ -27,6 +27,21 @@ import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 
+const RAIL_ORDER_KEY = "ferry-rail-order";
+const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
+
+function loadRailOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RAIL_ORDER_KEY) || "null");
+    if (!Array.isArray(saved)) return [...DEFAULT_RAIL_ORDER];
+    const known = new Set(DEFAULT_RAIL_ORDER);
+    const order = saved.filter((key, index) => known.has(key) && saved.indexOf(key) === index);
+    return [...order, ...DEFAULT_RAIL_ORDER.filter(key => !order.includes(key))];
+  } catch {
+    return [...DEFAULT_RAIL_ORDER];
+  }
+}
+
 export default function App() {
   const { t } = useTranslation();
   // ----- 数据 -----
@@ -77,7 +92,12 @@ export default function App() {
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
   const [railTip, setRailTip] = useState(null);  // {label, top}
+  const [railOrder, setRailOrder] = useState(loadRailOrder);
+  const [railDragging, setRailDragging] = useState(null);
+  const [railDrop, setRailDrop] = useState(null); // {key, position}
   const tipTimer = useRef(null);
+  const railPointer = useRef(null);
+  const suppressRailClick = useRef(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
   const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
@@ -395,6 +415,62 @@ export default function App() {
   };
   const railLeave = () => { clearTimeout(tipTimer.current); setRailTip(null); };
   useEffect(() => () => clearTimeout(tipTimer.current), []);
+
+  const railDropAt = (x, y) => {
+    const target = document.elementFromPoint(x, y)?.closest?.("[data-rail-key]");
+    const key = target?.dataset.railKey;
+    if (!DEFAULT_RAIL_ORDER.includes(key)) return null;
+    const rect = target.getBoundingClientRect();
+    return { key, position: y < rect.top + rect.height / 2 ? "before" : "after" };
+  };
+  const reorderRail = useCallback((source, target, position) => {
+    if (!source || !target || source === target) return;
+    setRailOrder(order => {
+      const next = order.filter(key => key !== source);
+      const index = next.indexOf(target) + (position === "after" ? 1 : 0);
+      next.splice(index, 0, source);
+      try { localStorage.setItem(RAIL_ORDER_KEY, JSON.stringify(next)); } catch { /* 私密模式等存储不可用时仅本次生效 */ }
+      return next;
+    });
+  }, []);
+  const endRailDrag = e => {
+    const drag = railPointer.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.dragging) {
+      const drop = railDropAt(e.clientX, e.clientY);
+      if (drop) reorderRail(drag.key, drop.key, drop.position);
+      suppressRailClick.current = true;
+      window.setTimeout(() => { suppressRailClick.current = false; }, 0);
+    }
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    railPointer.current = null;
+    setRailDragging(null);
+    setRailDrop(null);
+  };
+  const startRailDrag = e => {
+    if (e.button !== 0 || e.isPrimary === false) return;
+    railPointer.current = { key: e.currentTarget.dataset.railKey, pointerId: e.pointerId,
+      x: e.clientX, y: e.clientY, dragging: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const moveRailDrag = e => {
+    const drag = railPointer.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (!drag.dragging) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
+      drag.dragging = true;
+      setRailDragging(drag.key);
+      railLeave();
+    }
+    e.preventDefault();
+    setRailDrop(railDropAt(e.clientX, e.clientY));
+  };
+  const cancelRailDrag = e => {
+    if (railPointer.current?.pointerId !== e.pointerId) return;
+    railPointer.current = null;
+    setRailDragging(null);
+    setRailDrop(null);
+  };
   const finishGuide = () => {
     setGuideStep(0); setGuideSeen(true);
     localStorage.setItem("ferry-guide-seen", "1");
@@ -644,12 +720,13 @@ export default function App() {
   };
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
   const railOnly = !paneCfg || collapsed;
-  const railItems = [
-    { k: "overview", label: t("app:rail.overview") },
-    { k: "library", label: t("app:rail.library") },
-    { k: "history", label: t("app:rail.history") },
-    { k: "askferry", label: t("askferry:rail") },
-];
+  const railLabels = {
+    overview: t("app:rail.overview"),
+    library: t("app:rail.library"),
+    history: t("app:rail.history"),
+    askferry: t("askferry:rail"),
+  };
+  const railItems = railOrder.map(k => ({ k, label: railLabels[k] })).filter(n => n.label);
 
   const firstDone = () => {
     localStorage.setItem("ferry-first-done", "1");
@@ -674,14 +751,26 @@ export default function App() {
           <div data-tauri-drag-region style={{ height: 44, alignSelf: "stretch", flex: "none" }} />
           {railItems.map(n => {
             const on = view === n.k;
+            const dropBefore = railDrop?.key === n.k && railDrop.position === "before" && railDragging !== n.k;
+            const dropAfter = railDrop?.key === n.k && railDrop.position === "after" && railDragging !== n.k;
             return (
               <button key={n.k} className="hov-rail"
+                data-rail-key={n.k}
                 data-guide={n.k === "library" ? "rail" : undefined}
                 onMouseEnter={e => railEnter(n.label, e)} onMouseLeave={railLeave}
-                onClick={() => { setView(n.k); setSettingsOpen(false); setPopover(null); railLeave(); }}
+                onPointerDown={startRailDrag} onPointerMove={moveRailDrag}
+                onPointerUp={endRailDrag} onPointerCancel={cancelRailDrag}
+                onClick={() => {
+                  if (suppressRailClick.current) return;
+                  setView(n.k); setSettingsOpen(false); setPopover(null); railLeave();
+                }}
                 style={{ width: 40, height: 40, border: "none", borderRadius: 8,
                   background: on ? "var(--acc-soft2)" : "transparent", display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "default", transition: "background .12s ease" }}>
+                  justifyContent: "center", cursor: "default",
+                  touchAction: "none", opacity: railDragging === n.k ? .48 : 1,
+                  transform: railDragging === n.k ? "scale(.9)" : "none",
+                  boxShadow: dropBefore ? `0 -2px 0 ${ACCENT}` : dropAfter ? `0 2px 0 ${ACCENT}` : "none",
+                  transition: "background .12s ease, transform .12s ease, opacity .12s ease" }}>
                 <RailGlyph name={n.k} color={on ? ACCENT : "var(--tx4b)"} />
               </button>
             );
