@@ -1,6 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "./app/architectureBoundary.js";
 import { initI18n } from "./i18n/index.js";
 import { preloadBrowserCache } from "./features/browser/useBrowserData.js";
 import App from "./app/App.jsx";
