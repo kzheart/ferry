@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class StateDatabase:
@@ -68,7 +68,15 @@ class StateDatabase:
                     );
                     CREATE INDEX operation_audit_plan
                         ON operation_audit(plan_id, sequence);
-                    PRAGMA user_version = 1;
+                    CREATE TABLE deletion_recoveries (
+                        recovery_id TEXT PRIMARY KEY,
+                        tool TEXT NOT NULL,
+                        snapshot TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    );
+                    PRAGMA user_version = 2;
                     COMMIT;
                 """)
             connection.execute(
@@ -226,3 +234,55 @@ class StateDatabase:
             }
             for row in rows
         ]
+
+    def store_recovery(self, recovery_id: str, tool: str,
+                       snapshot: str, now: int) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO deletion_recoveries(
+                    recovery_id, tool, snapshot, status, created_at, updated_at
+                ) VALUES (?, ?, ?, 'available', ?, ?)
+                """,
+                (recovery_id, tool, snapshot, now, now),
+            )
+
+    def get_recovery(self, recovery_id: str) -> dict | None:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT recovery_id, tool, snapshot, status, created_at, updated_at
+                FROM deletion_recoveries
+                WHERE recovery_id = ?
+                """,
+                (recovery_id,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def claim_recovery(self, recovery_id: str, now: int) -> bool:
+        return self._transition_recovery(
+            recovery_id, "available", "restoring", now,
+        )
+
+    def complete_recovery(self, recovery_id: str, now: int) -> bool:
+        return self._transition_recovery(
+            recovery_id, "restoring", "restored", now,
+        )
+
+    def release_recovery(self, recovery_id: str, now: int) -> bool:
+        return self._transition_recovery(
+            recovery_id, "restoring", "available", now,
+        )
+
+    def _transition_recovery(self, recovery_id: str, expected: str,
+                             status: str, now: int) -> bool:
+        with self._lock, self._connect() as connection:
+            changed = connection.execute(
+                """
+                UPDATE deletion_recoveries
+                SET status = ?, updated_at = ?
+                WHERE recovery_id = ? AND status = ?
+                """,
+                (status, now, recovery_id, expected),
+            ).rowcount
+            return changed == 1

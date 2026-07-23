@@ -269,6 +269,8 @@ pub(crate) enum OperationPlanInput {
     Metadata(MetadataOperationPlanInput),
     #[serde(rename = "delete")]
     Delete(DeleteOperationPlanInput),
+    #[serde(rename = "restore-delete")]
+    RestoreDelete(RestoreDeleteOperationPlanInput),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -312,6 +314,12 @@ pub(crate) struct DeleteOperationPlanInput {
     tool: String,
     #[serde(rename = "ref")]
     reference: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RestoreDeleteOperationPlanInput {
+    recovery_id: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -601,12 +609,30 @@ fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(
     Ok(())
 }
 
+fn validate_restore_delete_operation_input(
+    input: &RestoreDeleteOperationPlanInput,
+) -> Result<(), String> {
+    if !(16..=128).contains(&input.recovery_id.len())
+        || !input.recovery_id.starts_with("recovery_")
+        || !input
+            .recovery_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("Restore Delete Operation recovery_id 无效".to_owned());
+    }
+    Ok(())
+}
+
 fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     match input {
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
         OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
         OperationPlanInput::Delete(delete) => validate_delete_operation_input(delete),
+        OperationPlanInput::RestoreDelete(restore) => {
+            validate_restore_delete_operation_input(restore)
+        }
     }
 }
 
@@ -738,8 +764,8 @@ mod tests {
         operation_plan_id_request, operation_plan_request, request_attempts, request_timeout,
         validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
-        MetadataPatch, MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
-        ENGINE_COMMIT_TIMEOUT,
+        MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
+        RestoreDeleteOperationPlanInput, AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
     };
 
     #[test]
@@ -936,6 +962,25 @@ mod tests {
             reference: "fsr_fixture".to_owned(),
         });
         assert!(validate_operation_plan_input(&unknown).is_err());
+    }
+
+    #[test]
+    fn operation_accepts_strict_restore_delete_input() {
+        let input = OperationPlanInput::RestoreDelete(RestoreDeleteOperationPlanInput {
+            recovery_id: "recovery_fixture-123".to_owned(),
+        });
+        assert!(validate_operation_plan_input(&input).is_ok());
+
+        let request = operation_plan_request(&input).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value
+                .pointer("/params/input/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("restore-delete")
+        );
+        assert!(value.pointer("/params/input/recovery_id").is_some());
+        assert!(value.pointer("/params/input/ref").is_none());
     }
 
     #[test]

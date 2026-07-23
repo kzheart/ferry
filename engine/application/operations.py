@@ -93,6 +93,8 @@ class OperationService:
             return self._plan_metadata(value)
         if value.get("kind") == "delete":
             return self._plan_delete(value)
+        if value.get("kind") == "restore-delete":
+            return self._plan_restore_delete(value)
         raise AgentRequestError(
             "operation kind 非法", {"kind": value.get("kind")},
         )
@@ -212,6 +214,27 @@ class OperationService:
             document_revision=None,
         )
 
+    def _plan_restore_delete(self, value: dict) -> dict:
+        operation_input = self._validate_restore_delete_input(value)
+        recovery = self._database().get_recovery(
+            operation_input["recovery_id"],
+        )
+        if recovery is None or recovery["status"] != "available":
+            raise AgentRequestError(
+                "删除恢复记录不可用",
+                {"recovery_id": operation_input["recovery_id"]},
+            )
+        preview = {
+            "recovery_id": recovery["recovery_id"],
+            "tool": recovery["tool"],
+        }
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision="available",
+            document_revision=None,
+        )
+
     def _store_plan(self, operation_input: dict, preview: dict, *,
                     base_revision: str,
                     document_revision: str | None) -> dict:
@@ -259,6 +282,8 @@ class OperationService:
                 result = self._apply_metadata(operation)
             elif operation.kind == "delete":
                 result = self._apply_delete(operation)
+            elif operation.kind == "restore-delete":
+                result = self._apply_restore_delete(operation)
             else:
                 raise AgentRequestError(
                     "operation kind 非法", {"kind": operation.kind},
@@ -461,6 +486,24 @@ class OperationService:
             raise AgentRequestError("delete ref 非法")
         return {"kind": "delete", "tool": tool, "ref": ref}
 
+    @staticmethod
+    def _validate_restore_delete_input(value: dict) -> dict:
+        if set(value) != {"kind", "recovery_id"}:
+            raise AgentRequestError("restore-delete operation 参数非法")
+        recovery_id = value.get("recovery_id")
+        if (not isinstance(recovery_id, str)
+                or not recovery_id.startswith("recovery_")
+                or not 16 <= len(recovery_id) <= 128
+                or not all(
+                    character.isalnum() or character in "_-"
+                    for character in recovery_id
+                )):
+            raise AgentRequestError("recovery_id 非法")
+        return {
+            "kind": "restore-delete",
+            "recovery_id": recovery_id,
+        }
+
     def _apply_edit(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
@@ -571,9 +614,35 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在删除计划生成后已变化，请重新计划"
             )
-        return services.session_delete(
+        result = services.session_delete(
             params["tool"], record.canonical_ref,
         )
+        snapshot = result.pop("snapshot", None)
+        if result.get("undoable") is True:
+            if not isinstance(snapshot, str) or not snapshot:
+                raise RuntimeError("可恢复删除未返回快照")
+            recovery_id = "recovery_" + secrets.token_urlsafe(18)
+            self._database().store_recovery(
+                recovery_id, params["tool"], snapshot, _now_ms(),
+            )
+            result["recovery_id"] = recovery_id
+        return result
+
+    def _apply_restore_delete(self, operation: OperationPlan) -> dict:
+        recovery_id = operation.input()["recovery_id"]
+        recovery = self._database().get_recovery(recovery_id)
+        if recovery is None or recovery["status"] != "available":
+            raise ConcurrentModificationError("删除恢复记录已使用或不可用")
+        if not self._database().claim_recovery(recovery_id, _now_ms()):
+            raise ConcurrentModificationError("删除恢复记录已使用或不可用")
+        try:
+            result = services.session_undelete(recovery["snapshot"])
+        except Exception:
+            self._database().release_recovery(recovery_id, _now_ms())
+            raise
+        if not self._database().complete_recovery(recovery_id, _now_ms()):
+            raise RuntimeError("删除恢复状态提交失败")
+        return {**result, "recovery_id": recovery_id}
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
@@ -766,6 +835,8 @@ class OperationService:
             summary = "修改会话元数据"
         elif operation.kind == "delete":
             summary = "删除原始会话（执行前创建恢复快照）"
+        elif operation.kind == "restore-delete":
+            summary = "恢复已删除的会话"
         else:
             summary = "修改原始会话（执行前自动创建可恢复快照）"
         return {
@@ -775,7 +846,7 @@ class OperationService:
             "preview": operation.preview(),
             "summary": summary,
             "risk": "low" if operation.kind == "metadata" else "high",
-            "affected_refs": [params["ref"]],
+            "affected_refs": [params["ref"]] if "ref" in params else [],
             "base_revision": operation.base_revision,
             "document_revision": operation.document_revision,
             "input_digest": operation.input_digest,
