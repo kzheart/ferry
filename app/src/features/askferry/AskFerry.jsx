@@ -8,6 +8,7 @@ import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrow
   Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { readClipboardText } from "../../api/transport/rpc.js";
 import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
+import { TOOL_NAME } from "../../api/contract/tools.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../../domain/sessions/sessionAttachment.js";
@@ -33,30 +34,107 @@ const preStyle = { margin: 0, padding: "8px 12px", fontSize: 11, lineHeight: 1.5
   wordBreak: "break-word" };
 const secLabel = { fontSize: 10.5, color: "var(--tx5)", margin: "0 0 3px 2px" };
 
-// ----- 工具调用:一行安静的灰字,点击展开参数与结果 -----
+// 只读类工具:过程步骤,默认收在时间线里不吐卡
+const READ_TOOLS = new Set(["session_search", "session_read", "usage"]);
+
+const railDot = { position: "absolute", left: 2, top: 8, width: 7, height: 7,
+  borderRadius: "50%", boxShadow: "0 0 0 3px var(--bg)" };
+const railSpin = { position: "absolute", left: 1, top: 6, display: "inline-flex" };
+
+const tokenTotal = tokens => Object.values(tokens || {})
+  .filter(v => typeof v === "number").reduce((a, b) => a + b, 0);
+
+// 行内一句话摘要:从已生成的实体里取,取不到就留空
+function toolSummary(item, t) {
+  const ents = item.entities || [];
+  switch (item.name) {
+    case "session_search":
+      return ents.length ? t("askferry:trace.hits", { n: ents.length }) : "";
+    case "session_read": {
+      const s = ents.find(e => e.type === "Session");
+      if (!s) return "";
+      const name = s.title || s.sessionId || s.ref || "";
+      return s.turn != null ? `${name} · ${t("askferry:entity.turn", { n: s.turn })}` : name;
+    }
+    case "usage": {
+      const u = ents.find(e => e.type === "UsageSlice");
+      return u ? t("askferry:trace.usage",
+        { n: tokenTotal(u.tokens).toLocaleString(), s: u.sessions || 0 }) : "";
+    }
+    case "migrate": {
+      const m = ents.find(e => e.type === "Migration");
+      return m ? `${TOOL_NAME[m.sourceTool] || m.sourceTool || "?"} → ${TOOL_NAME[m.targetTool] || m.targetTool || "?"}` : "";
+    }
+    case "session_edit": {
+      const e = ents.find(x => x.type === "Edit");
+      return e ? t("askferry:entity.edits",
+        { count: e.changes?.length || 1, n: e.changes?.length || 1 }) : "";
+    }
+    default: return "";
+  }
+}
+
+// ----- 工具调用:时间线上的一行,点击展开参数/结果;结果卡按需出现 -----
 const ToolRow = memo(function ToolRow({ item, onNavigate }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const level = TOOL_LEVEL[item.name] || "read";
+  const running = item.status === "running";
+  const error = item.status === "error";
+  const merged = item.merged;                     // 合并的连续同类只读调用
+  const count = merged ? merged.length : 1;
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
+  const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
+  const summary = toolSummary(item, t);
+  // mutate 且成功 → 结果卡常驻(产出);只读类仅展开时出卡;失败/合并不出卡
+  const showCards = !error && !merged && (item.entities?.length > 0) &&
+    (level === "mutate" || open);
+  const dotColor = error ? "var(--err)" : level === "mutate" ? "var(--warn)" : "var(--ok)";
+
   return (
-    <div>
-      <div className="chat-tool" onClick={() => setOpen(v => !v)}>
-        {item.status === "running" ? <Spinner size={11} />
-          : <Caret open={open} size={8} />}
-        <span className="mono" style={{ fontSize: 11.5, overflow: "hidden",
-          textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span>
-        {level === "mutate" && (
-          <span style={{ width: 5, height: 5, borderRadius: "50%", flex: "none",
-            background: "var(--warn)" }} />)}
-        {item.status === "error" && (
+    <div style={{ position: "relative", paddingLeft: 20 }}>
+      {running
+        ? <span style={railSpin}><Spinner size={9} /></span>
+        : <span style={{ ...railDot, background: dotColor }} />}
+      <div onClick={() => setOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22,
+          cursor: "default", fontSize: 12 }}>
+        <span style={{ color: "var(--tx2)", fontWeight: 500, flex: "none" }}>{verb}</span>
+        {count > 1 && (
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--acc)",
+            background: "var(--acc-soft2)", padding: "0 5px", borderRadius: 4, flex: "none" }}>
+            ×{count}</span>)}
+        {summary && (
+          <span style={{ color: "var(--tx4)", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{summary}</span>)}
+        {error && (
           <span style={{ fontSize: 11, color: "var(--err-text)", flex: "none" }}>
             {t("askferry:tool.failed")}</span>)}
-        {item.status !== "running" && (
+        <span style={{ flex: 1 }} />
+        {!running && (
           <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>
             {fmtDur(item.startedAt, item.endedAt)}</span>)}
+        <Caret open={open} size={8} />
       </div>
-      {open && (
+
+      {open && merged && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3,
+          margin: "4px 0 4px" }}>
+          {merged.map((sub, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--tx4)" }}>
+              <span style={{ color: "var(--tx5)", flex: "none" }}>{i + 1}.</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                whiteSpace: "nowrap", minWidth: 0 }}>
+                {toolSummary(sub, t) || t("askferry:tool.noResult")}</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ color: "var(--tx5)", flex: "none" }}>
+                {fmtDur(sub.startedAt, sub.endedAt)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {open && !merged && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 5 }}>
           <div>
             <div style={secLabel}>{t("askferry:tool.args")}</div>
@@ -64,24 +142,73 @@ const ToolRow = memo(function ToolRow({ item, onNavigate }) {
               {JSON.stringify(item.args ?? {}, null, 2)}
             </pre>
           </div>
-          {item.status !== "running" && (
+          {!running && (
             <div>
               <div style={secLabel}>
-                {item.status === "error" ? t("askferry:tool.errorResult") : t("askferry:tool.result")}
+                {error ? t("askferry:tool.errorResult") : t("askferry:tool.result")}
                 {item.result?.truncated && ` · ${t("askferry:tool.truncated")}`}
               </div>
               <pre className="mono selectable" style={{ ...preStyle,
-                color: item.status === "error" ? "var(--err-text)" : preStyle.color }}>
+                color: error ? "var(--err-text)" : preStyle.color }}>
                 {resultText || t("askferry:tool.noResult")}
               </pre>
             </div>
           )}
         </div>
       )}
-      <EntityCards entities={item.entities} onNavigate={onNavigate} />
+
+      {showCards && (
+        <div style={{ marginTop: 6 }}>
+          <EntityCards entities={item.entities} onNavigate={onNavigate} />
+        </div>
+      )}
     </div>
   );
 });
+
+// 连续的工具步骤聚成一条竖线时间线
+function Trace({ rows, onNavigate }) {
+  return (
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ position: "absolute", left: 5, top: 12, bottom: 12, width: 1.5,
+        background: "var(--line3)", borderRadius: 1 }} />
+      {rows.map((row, i) => (
+        <ToolRow key={row.callId || i} item={row} onNavigate={onNavigate} />))}
+    </div>
+  );
+}
+
+// 合并连续、同名、已完成的只读调用(如重读 ×6);mutate/进行中各自独立
+function mergeReads(run) {
+  const rows = [];
+  for (const it of run) {
+    const mergeable = READ_TOOLS.has(it.name) && it.status !== "running";
+    const prev = rows[rows.length - 1];
+    if (mergeable && prev?._merge && prev.name === it.name) {
+      prev.merged.push(it);
+      prev.endedAt = it.endedAt;
+    } else if (mergeable) {
+      rows.push({ ...it, _merge: true, merged: [it] });
+    } else {
+      rows.push(it);
+    }
+  }
+  return rows.map(r => (r._merge && r.merged.length === 1)
+    ? (({ _merge, merged, ...rest }) => rest)(r) : r);
+}
+
+// 把连续的工具项收进时间线段,其余项(用户/助手/审批/状态)保持独立
+function groupTimeline(items) {
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    if (items[i].kind !== "tool") { out.push(items[i]); i++; continue; }
+    const run = [];
+    while (i < items.length && items[i].kind === "tool") { run.push(items[i]); i++; }
+    out.push({ kind: "trace", rows: mergeReads(run) });
+  }
+  return out;
+}
 
 // ----- 审批卡倒计时 -----
 function Countdown({ until }) {
@@ -685,9 +812,11 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
             style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 24px" }}>
             <div style={{ maxWidth: 680, margin: "0 auto", display: "flex",
               flexDirection: "column", gap: 14 }}>
-              {items.map((item, i) => (
-                <ChatItem key={i} item={item} sessionId={activeId} ferry={ferry}
-                  onNavigate={onNavigate} />))}
+              {groupTimeline(items).map((g, i) => (
+                g.kind === "trace"
+                  ? <Trace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
+                  : <ChatItem key={`item-${i}`} item={g} sessionId={activeId}
+                      ferry={ferry} onNavigate={onNavigate} />))}
             </div>
           </div>
 

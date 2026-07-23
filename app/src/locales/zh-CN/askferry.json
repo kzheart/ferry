@@ -100,6 +100,17 @@
     "openInLibrary": "在会话库中打开",
     "close": "关闭"
   },
+  "trace": {
+    "verb": {
+      "session_search": "搜索会话",
+      "session_read": "读取会话",
+      "usage": "统计用量",
+      "migrate": "迁移会话",
+      "session_edit": "编辑会话"
+    },
+    "hits": "命中 {{n}} 个会话",
+    "usage": "{{n}} tokens · {{s}} 会话"
+  },
   "model": {
     "pick": "选择模型",
     "setup": "配置模型",
