@@ -11,16 +11,14 @@ import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
-import { SidebarIcon, Spinner } from "../components/ui/icons.jsx";
+import { SidebarIcon } from "../components/ui/icons.jsx";
 import { Sheet } from "../components/ui/primitives.jsx";
-import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
   HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
   SessionDeleteConfirm, Toast } from "../components/ui/Overlays.jsx";
-import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
 import { useAskFerry } from "../features/askferry/useAskFerry.js";
 import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
@@ -31,6 +29,7 @@ import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
 import { AppShell } from "../features/shell/AppShell.jsx";
 import { WorkspaceRouter } from "../features/shell/WorkspaceRouter.jsx";
+import { ResourcePaneHost } from "../features/shell/ResourcePaneHost.jsx";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -846,45 +845,42 @@ export default function App() {
           }}
         />}
         resourcePane={paneCfg && (
-          <Pane collapsed={collapsed} width={paneW} dragging={dragging}
-            title={paneCfg.title} count={paneCfg.count} placeholder={paneCfg.placeholder}
-            query={paneCfg.query}
+          <ResourcePaneHost
+            view={view}
+            pane={paneCfg}
+            collapsed={collapsed}
+            width={paneW}
+            resizing={dragging}
+            filterOpen={popover === { library: "lib", history: "hist" }[view]}
             onOpenSearch={() => setSearchOpen(true)}
-            onClearSearch={() => paneCfg.onQuery({ target: { value: "" } })}
-            filterCount={paneCfg.filterCount}
-            filterOn={popover === { library: "lib", history: "hist" }[view] ||
-              paneCfg.filterCount > 0}
             onFilter={e => {
               popAnchor.current = e.currentTarget.getBoundingClientRect();
-              setPopover(p => {
+              setPopover(value => {
                 const key = { library: "lib", history: "hist" }[view];
-                return p === key ? null : key;
+                return value === key ? null : key;
               });
             }}
-            footer={paneCfg.footer} tokens={paneCfg.tokens}
-            listKey={view}>
-            {view === "library" && (
-              scanning && !sessions.length
-                ? <div style={{ padding: "34px 12px", textAlign: "center", color: "var(--tx5)",
-                    fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
-                    gap: 8 }}><Spinner /> {t("app:detail.scanningSessions")}</div>
-                : <LibraryList groups={libGroups}
-                    collapsed={collapsedGroups} onToggle={onToggleGroup}
-                    empty={libGroups.length === 0} onClear={clearLibF}
-                    selectedId={selId} multiSel={multiSel}
-                    onRowClick={onRowClick} onRowPin={onRowPin}
-                    onRowDelete={onRowDelete} onRowMore={onRowMore} />)}
-            {view === "history" && (
-              <HistoryList groups={histGroups} empty={histFiltered.length === 0}
-                onDelete={id => setHistDel(histItems.find(x => x._id === id))}
-                onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
-            {view === "askferry" && (
-              <AgentSessionList sessions={ferrySessions}
-                activeId={ferry.activeId} onOpen={ferry.openSession} onNew={ferry.newChat}
-                onPin={s => ferry.pin(s.session_id, !s.pinned).catch(ferry.reportError)}
-                onDelete={s => ferry.deleteSession(s.session_id).catch(ferry.reportError)}
-                onRename={setAgentRenameFor} />)}
-          </Pane>
+            library={{
+              scanning, sessions, scanningLabel: t("app:detail.scanningSessions"),
+              groups: libGroups, collapsedGroups, onToggleGroup, onClear: clearLibF,
+              selectedId: selId, multiSel, onRowClick, onRowPin, onRowDelete, onRowMore,
+            }}
+            history={{
+              groups: histGroups, filtered: histFiltered,
+              onDelete: id => setHistDel(histItems.find(item => item._id === id)),
+              onClear: () => {
+                setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" });
+                setHq("");
+              },
+            }}
+            agent={{
+              sessions: ferrySessions, activeId: ferry.activeId,
+              onOpen: ferry.openSession, onNew: ferry.newChat,
+              onPin: session => ferry.pin(session.session_id, !session.pinned).catch(ferry.reportError),
+              onDelete: session => ferry.deleteSession(session.session_id).catch(ferry.reportError),
+              onRename: setAgentRenameFor,
+            }}
+          />
         )}
         showDivider={Boolean(paneCfg && !collapsed)}
         resizing={dragging}
