@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class StateDatabase:
@@ -88,7 +88,14 @@ class StateDatabase:
                         history_id TEXT NOT NULL UNIQUE,
                         entry_json TEXT NOT NULL
                     );
-                    PRAGMA user_version = 5;
+                    CREATE TABLE session_summaries (
+                        tool TEXT NOT NULL,
+                        session_id TEXT NOT NULL,
+                        record_json TEXT NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        PRIMARY KEY(tool, session_id)
+                    );
+                    PRAGMA user_version = 6;
                     COMMIT;
                 """)
             if recover_interrupted:
@@ -334,6 +341,38 @@ class StateDatabase:
             ).fetchone()[0]
             connection.commit()
         return {"deleted": deleted, "id": history_id, "remaining": remaining}
+
+    def get_session_summary(self, tool: str, session_id: str) -> dict | None:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT record_json FROM session_summaries
+                WHERE tool = ? AND session_id = ?
+                """,
+                (tool, session_id),
+            ).fetchone()
+        return json.loads(row["record_json"]) if row is not None else None
+
+    def store_session_summary(self, record: dict, now: int) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO session_summaries(tool, session_id, record_json, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(tool, session_id) DO UPDATE SET
+                    record_json = excluded.record_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    record["tool"],
+                    record["id"],
+                    json.dumps(
+                        record, ensure_ascii=False, sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    now,
+                ),
+            )
 
     @staticmethod
     def _metadata_entry(row: sqlite3.Row | None) -> dict:

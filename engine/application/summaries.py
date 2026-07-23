@@ -7,43 +7,30 @@
 """
 
 import hashlib
-import json
-import os
-import tempfile
-import threading
+import time
 from pathlib import Path
 
 from ..domain.errors import SummaryBackboneMissingError
+from ..infrastructure.state_db import StateDatabase
+from .ports import current
 from .sessions import read_tree
 
-SUMMARIES = Path.home() / ".resume-harness" / "session-summaries.json"
-_LOCK = threading.RLock()
 MAX_DIGEST_CHARS = 4000
 
 
-def _load() -> dict:
-    try:
-        return json.loads(SUMMARIES.read_text())
-    except (OSError, json.JSONDecodeError):
-        return {}
+def _database() -> StateDatabase:
+    return StateDatabase(
+        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        recover_interrupted=False,
+    )
 
 
-def _write(data: dict) -> None:
-    SUMMARIES.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix="session-summaries-", suffix=".tmp",
-                                     dir=SUMMARIES.parent)
-    try:
-        with os.fdopen(fd, "w") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=1)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, SUMMARIES)
-        os.chmod(SUMMARIES, 0o600)
-    finally:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def get_backbone(tool: str, session_id: str) -> dict | None:
+    return _database().get_session_summary(tool, session_id)
 
 
 def _locator(message, index: int) -> str:
@@ -145,48 +132,48 @@ def build_backbone(tool: str, ref: str) -> dict:
         segment["hash"]: segment.pop("_source_text", "")
         for segment in segments
     }
-    key = f"{tool}:{session.source_id}"
-    with _LOCK:
-        data = _load()
-        record = data.get(key)
-        prior = {segment["hash"]: segment["digest"]
-                 for segment in (record or {}).get("segments", [])
-                 if segment.get("digest")}
-        for segment in segments:
-            if segment["hash"] in prior:
-                segment["digest"] = prior[segment["hash"]]
-        record = {"tool": tool, "id": session.source_id,
-                  "fingerprint": fingerprint, "segments": segments}
-        if data.get(key) != record:
-            data[key] = record
-            _write(data)
-        view = _view(record)
-        view["pending_sources"] = [
-            {"hash": segment["hash"], "text": source_by_hash[segment["hash"]]}
-            for segment in record["segments"]
-            if not segment.get("digest") and source_by_hash.get(segment["hash"])
-        ]
-        return view
+    database = _database()
+    previous = database.get_session_summary(tool, session.source_id)
+    prior = {
+        segment["hash"]: segment["digest"]
+        for segment in (previous or {}).get("segments", [])
+        if segment.get("digest")
+    }
+    for segment in segments:
+        if segment["hash"] in prior:
+            segment["digest"] = prior[segment["hash"]]
+    record = {
+        "tool": tool,
+        "id": session.source_id,
+        "fingerprint": fingerprint,
+        "segments": segments,
+    }
+    if previous != record:
+        database.store_session_summary(record, _now_ms())
+    view = _view(record)
+    view["pending_sources"] = [
+        {"hash": segment["hash"], "text": source_by_hash[segment["hash"]]}
+        for segment in record["segments"]
+        if not segment.get("digest") and source_by_hash.get(segment["hash"])
+    ]
+    return view
 
 
 def set_summaries(tool: str, session_id: str, digests: dict) -> dict:
     """agent-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
     编辑后仍存在的段稳健。"""
     updates = digests if isinstance(digests, dict) else {}
-    key = f"{tool}:{session_id}"
-    with _LOCK:
-        data = _load()
-        record = data.get(key)
-        if not record:
-            raise SummaryBackboneMissingError(
-                "请先调用 session_backbone 建立底座",
-                {"tool": tool, "id": session_id})
-        applied = 0
-        for segment in record["segments"]:
-            digest = updates.get(segment["hash"])
-            if isinstance(digest, str) and digest.strip():
-                segment["digest"] = digest.strip()[:MAX_DIGEST_CHARS]
-                applied += 1
-        data[key] = record
-        _write(data)
-        return {**_view(record), "applied": applied}
+    database = _database()
+    record = database.get_session_summary(tool, session_id)
+    if not record:
+        raise SummaryBackboneMissingError(
+            "请先调用 session_backbone 建立底座",
+            {"tool": tool, "id": session_id})
+    applied = 0
+    for segment in record["segments"]:
+        digest = updates.get(segment["hash"])
+        if isinstance(digest, str) and digest.strip():
+            segment["digest"] = digest.strip()[:MAX_DIGEST_CHARS]
+            applied += 1
+    database.store_session_summary(record, _now_ms())
+    return {**_view(record), "applied": applied}
