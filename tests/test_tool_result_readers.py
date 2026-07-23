@@ -262,7 +262,6 @@ def test_claude_preserves_error_and_multimodal_result(tmp_path):
     assert tool.result.blocks[1].mime_type == "image/png"
     assert tool.result.blocks[1].data == "Zml4dHVyZQ=="
     assert tool.result.blocks[2].metadata["tool_name"] == "fixture-tool"
-    assert tool.result.metadata == {}
 
 
 def test_claude_ignores_removed_ferry_tool_result_extension():
@@ -285,7 +284,6 @@ def test_claude_ignores_removed_ferry_tool_result_extension():
     assert result.status == "success"
     assert tool_result_text(result) == "native result"
     assert result.attachments == []
-    assert result.metadata == {}
 
 
 def test_claude_preserves_interrupted_result_without_error_flag(tmp_path):
@@ -463,10 +461,6 @@ def test_opencode_preserves_error_truncation_and_attachments():
     assert tool.result.stderr == "fixture failure"
     assert tool.result.exit_code == 17
     assert tool.result.truncated is True
-    assert tool.result.metadata["opencode_state"] == {
-        "title": "fixture result",
-        "raw": "fixture raw state",
-    }
     assert tool.result.attachments == [{
         "id": "fixture-file",
         "type": "file",

@@ -1,10 +1,7 @@
-"""规范化中间格式(canonical model)。
+"""规范化中间格式。
 
-设计要点(见 README「关键决策」):
-- 工具调用采用"单块"表示:input 与 output 合在一个 ToolCall 里
-  (读取时完成配对),writer 各自展开为目标家的配对/单条形态。
-- 每条消息保留 raw(源记录原文),保证往返可还原。
-- 所有有损转换都记入 Session.loss。
+Canonical Model 只保存 Ferry 使用的明确语义；原生记录由各 Adapter
+在边界内处理，无法表达的内容通过迁移损失报告。
 """
 import json
 from dataclasses import dataclass, field
@@ -47,7 +44,7 @@ class ToolResultBlock:
 
 @dataclass
 class ToolResult:
-    """Canonical result that retains status, streams and non-text blocks."""
+    """Canonical result with explicit status, streams and non-text blocks."""
     status: str = "unknown"
     blocks: list[ToolResultBlock] = field(default_factory=list)
     stdout: str | None = None
@@ -55,7 +52,6 @@ class ToolResult:
     exit_code: int | None = None
     truncated: bool | None = None
     attachments: list[Any] = field(default_factory=list)
-    metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.status not in TOOL_RESULT_STATUSES:

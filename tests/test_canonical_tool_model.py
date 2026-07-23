@@ -34,7 +34,6 @@ def test_tool_call_uses_one_structured_result_source():
         exit_code=0,
         truncated=False,
         attachments=[{"kind": "file", "name": "report.txt"}],
-        metadata={"duration_ms": 12},
     )
 
     call = ToolCall("tool", None, {}, result)

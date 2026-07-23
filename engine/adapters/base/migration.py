@@ -165,7 +165,6 @@ class MigrationTargetBase:
     tool_result_native_blocks = frozenset({"text"})
     tool_result_projected_blocks = frozenset({"json"})
     preserves_tool_result_attachments = False
-    preserves_tool_result_metadata = False
 
     def _with_result_fidelity(self, tool, decision: RenderDecision) -> RenderDecision:
         result = tool.result
@@ -206,10 +205,6 @@ class MigrationTargetBase:
                 fidelity = Fidelity.LOSSY
         if result.attachments and not self.preserves_tool_result_attachments:
             reasons.append("tool_result_attachments_dropped")
-            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
-                fidelity = Fidelity.LOSSY
-        if result.metadata and not self.preserves_tool_result_metadata:
-            reasons.append("tool_result_metadata_dropped")
             if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
                 fidelity = Fidelity.LOSSY
         if result.truncated is True:
