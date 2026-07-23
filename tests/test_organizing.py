@@ -113,7 +113,7 @@ def test_proposal_caches_by_content_fingerprint_and_has_sources(
 def test_reject_records_signal_without_changing_metadata(
         organization_environment):
     record = _seed("claude", "session-a", "一次性探索")
-    session_meta.set_entry("session-a", {"name": "原名"})
+    session_meta.set_entry("claude", "session-a", {"name": "原名"})
     proposal = organizing.propose([
         _target(record, {"name": "建议名", "dead_candidate": True}),
     ])
@@ -121,7 +121,7 @@ def test_reject_records_signal_without_changing_metadata(
     result = organizing.decide(proposal["proposal_id"], "reject")
 
     assert result["status"] == "rejected"
-    assert services.session_meta_list()["session-a"] == {"name": "原名"}
+    assert services.session_meta_list()["claude\0session-a"] == {"name": "原名"}
     assert _signals()[-1]["event"] == "rejected"
     assert organizing.SIGNALS.stat().st_mode & 0o777 == 0o600
 
@@ -151,7 +151,7 @@ def test_modify_then_approve_writes_only_local_metadata(
     result = organizing.decide(changed["proposal_id"], "approve")
 
     assert result["status"] == "approved"
-    assert services.session_meta_list()["session-a"] == {
+    assert services.session_meta_list()["claude\0session-a"] == {
         "name": "登录与认证",
         "summary": "完成登录和认证流程",
         "tags": ["认证", "前端"],
@@ -184,11 +184,36 @@ def test_cross_agent_cluster_is_approved_atomically(
 
     result = organizing.decide(proposal["proposal_id"], "approve")
 
-    assert set(result["applied"]) == {"session-claude", "session-codex"}
+    assert set(result["applied"]) == {
+        "claude\0session-claude", "codex\0session-codex",
+    }
     metadata = services.session_meta_list()
-    assert metadata["session-claude"]["cluster_id"] == "project:payments"
-    assert metadata["session-codex"]["cluster_id"] == "project:payments"
-    assert metadata["session-claude"]["cluster_name"] == "支付项目"
+    assert metadata["claude\0session-claude"]["cluster_id"] == "project:payments"
+    assert metadata["codex\0session-codex"]["cluster_id"] == "project:payments"
+    assert metadata["claude\0session-claude"]["cluster_name"] == "支付项目"
+
+
+def test_same_native_id_from_different_tools_keeps_metadata_and_cas_isolated(
+        organization_environment):
+    claude = _seed("claude", "shared-id", "分析需求")
+    codex = _seed("codex", "shared-id", "实现需求")
+    session_meta.set_entry("claude", "shared-id", {"name": "Claude 原名"})
+    session_meta.set_entry("codex", "shared-id", {"name": "Codex 原名"})
+
+    proposal = organizing.propose([
+        _target(claude, {"name": "Claude 新名"}),
+        _target(codex, {"name": "Codex 新名"}),
+    ])
+
+    assert [target["current"] for target in proposal["targets"]] == [
+        {"name": "Claude 原名"},
+        {"name": "Codex 原名"},
+    ]
+    organizing.decide(proposal["proposal_id"], "approve")
+    assert services.session_meta_list() == {
+        "claude\0shared-id": {"name": "Claude 新名"},
+        "codex\0shared-id": {"name": "Codex 新名"},
+    }
 
 
 def test_changed_fingerprint_invalidates_and_can_regenerate(
@@ -231,18 +256,18 @@ def test_metadata_cas_failure_does_not_partially_apply_cluster(
         organization_environment):
     first = _seed("claude", "session-a", "A")
     second = _seed("codex", "session-b", "B")
-    session_meta.set_entry("session-b", {"name": "before"})
+    session_meta.set_entry("codex", "session-b", {"name": "before"})
     proposal = organizing.propose([
         _target(first, {"cluster_id": "cluster:x"}),
         _target(second, {"cluster_id": "cluster:x"}),
     ])
-    session_meta.set_entry("session-b", {"name": "concurrent"})
+    session_meta.set_entry("codex", "session-b", {"name": "concurrent"})
 
     with pytest.raises(Exception):
         organizing.decide(proposal["proposal_id"], "approve")
 
-    assert "session-a" not in services.session_meta_list()
-    assert services.session_meta_list()["session-b"] == {"name": "concurrent"}
+    assert "claude\0session-a" not in services.session_meta_list()
+    assert services.session_meta_list()["codex\0session-b"] == {"name": "concurrent"}
 
 
 def test_invalid_source_is_retryable_without_persisting_failure(

@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class StateDatabase:
@@ -77,11 +77,13 @@ class StateDatabase:
                         updated_at INTEGER NOT NULL
                     );
                     CREATE TABLE session_metadata (
-                        session_id TEXT PRIMARY KEY,
+                        tool TEXT NOT NULL,
+                        session_id TEXT NOT NULL,
                         value_json TEXT NOT NULL,
-                        updated_at INTEGER NOT NULL
+                        updated_at INTEGER NOT NULL,
+                        PRIMARY KEY(tool, session_id)
                     );
-                    PRAGMA user_version = 3;
+                    PRAGMA user_version = 4;
                     COMMIT;
                 """)
             if recover_interrupted:
@@ -305,58 +307,69 @@ class StateDatabase:
             if value not in (None, False, "", [])
         }
 
+    @staticmethod
+    def metadata_key(tool: str, session_id: str) -> str:
+        return f"{tool}\0{session_id}"
+
     def list_session_metadata(self) -> dict[str, dict]:
         with self._lock, self._connect() as connection:
             rows = connection.execute(
-                "SELECT session_id, value_json FROM session_metadata"
+                "SELECT tool, session_id, value_json FROM session_metadata"
             ).fetchall()
-        return {row["session_id"]: json.loads(row["value_json"]) for row in rows}
+        return {
+            self.metadata_key(row["tool"], row["session_id"]): json.loads(row["value_json"])
+            for row in rows
+        }
 
-    def set_session_metadata(self, session_id: str, patch: dict, now: int) -> dict:
+    def set_session_metadata(
+            self, tool: str, session_id: str, patch: dict, now: int,
+    ) -> dict:
         return self.compare_and_set_session_metadata(
-            [(session_id, None, patch)], now,
-        )[session_id]
+            [(tool, session_id, None, patch)], now,
+        )[self.metadata_key(tool, session_id)]
 
     def compare_and_set_session_metadata(
-            self, changes: list[tuple[str, dict | None, dict]], now: int,
+            self, changes: list[tuple[str, str, dict | None, dict]], now: int,
     ) -> dict[str, dict] | None:
         """原子更新元数据；expected 为 None 时不进行 CAS。"""
         with self._lock, self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current: dict[str, dict] = {}
-            for session_id, expected, _patch in changes:
+            for tool, session_id, expected, _patch in changes:
+                key = self.metadata_key(tool, session_id)
                 row = connection.execute(
-                    "SELECT value_json FROM session_metadata WHERE session_id = ?",
-                    (session_id,),
+                    "SELECT value_json FROM session_metadata WHERE tool = ? AND session_id = ?",
+                    (tool, session_id),
                 ).fetchone()
                 value = self._metadata_entry(row)
                 if expected is not None and value != expected:
                     connection.rollback()
                     return None
-                current[session_id] = value
+                current[key] = value
 
             result: dict[str, dict] = {}
-            for session_id, _expected, patch in changes:
-                entry = self._merge_metadata(current[session_id], patch)
+            for tool, session_id, _expected, patch in changes:
+                key = self.metadata_key(tool, session_id)
+                entry = self._merge_metadata(current[key], patch)
                 if entry:
                     connection.execute(
                         """
-                        INSERT INTO session_metadata(session_id, value_json, updated_at)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(session_id) DO UPDATE SET
+                        INSERT INTO session_metadata(tool, session_id, value_json, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(tool, session_id) DO UPDATE SET
                             value_json = excluded.value_json,
                             updated_at = excluded.updated_at
                         """,
-                        (session_id, json.dumps(
+                        (tool, session_id, json.dumps(
                             entry, ensure_ascii=False, sort_keys=True,
                             separators=(",", ":"),
                         ), now),
                     )
                 else:
                     connection.execute(
-                        "DELETE FROM session_metadata WHERE session_id = ?",
-                        (session_id,),
+                        "DELETE FROM session_metadata WHERE tool = ? AND session_id = ?",
+                        (tool, session_id),
                     )
-                result[session_id] = entry
+                result[key] = entry
             connection.commit()
             return result

@@ -20,7 +20,7 @@ from ..domain.errors import (
     OrganizationProposalNotFoundError,
     OrganizationProposalStaleError,
 )
-from . import services, summaries
+from . import services, session_meta, summaries
 
 PROPOSALS = Path.home() / ".resume-harness" / "organization-proposals.json"
 SIGNALS = Path.home() / ".resume-harness" / "organization-signals.jsonl"
@@ -190,7 +190,7 @@ def _validated_target(target: dict, metadata: dict) -> dict:
         "tool": tool,
         "id": session_id,
         "fingerprint": fingerprint,
-        "current": metadata.get(session_id, {}),
+        "current": metadata.get(session_meta.key(tool, session_id), {}),
         "suggested": suggested,
         "sources": [{
             "segment_hash": source,
@@ -307,6 +307,7 @@ def decide(proposal_id: str, decision: str) -> dict:
                     {"tool": target["tool"], "id": target["id"]})
         try:
             applied = services.session_meta_compare_and_set_many([{
+                "tool": target["tool"],
                 "id": target["id"],
                 "expected": target["current"],
                 "patch": target["suggested"],

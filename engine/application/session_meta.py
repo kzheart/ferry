@@ -27,22 +27,31 @@ def list_all() -> dict:
     return _database().list_session_metadata()
 
 
-def set_entry(sid: str, patch: dict) -> dict:
-    return _database().set_session_metadata(sid, patch, _now_ms())
+def key(tool: str, session_id: str) -> str:
+    return StateDatabase.metadata_key(tool, session_id)
 
 
-def compare_and_set_entry(sid: str, expected: dict, patch: dict) -> dict:
+def set_entry(tool: str, session_id: str, patch: dict) -> dict:
+    return _database().set_session_metadata(tool, session_id, patch, _now_ms())
+
+
+def compare_and_set_entry(
+        tool: str, session_id: str, expected: dict, patch: dict,
+) -> dict:
     result = _database().compare_and_set_session_metadata(
-        [(sid, expected, patch)], _now_ms(),
+        [(tool, session_id, expected, patch)], _now_ms(),
     )
     if result is None:
         raise ConcurrentModificationError("会话元数据在审批后已变化")
-    return result[sid]
+    return result[key(tool, session_id)]
 
 
 def compare_and_set_entries(changes: list[dict]) -> dict:
     encoded = [
-        (change["id"], change.get("expected", {}), change.get("patch", {}))
+        (
+            change["tool"], change["id"],
+            change.get("expected", {}), change.get("patch", {}),
+        )
         for change in changes
     ]
     result = _database().compare_and_set_session_metadata(encoded, _now_ms())

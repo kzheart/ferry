@@ -11,6 +11,11 @@ export function sessionAttachment(session) {
 export const sessionAttachmentKey = attachment =>
   `${attachment.tool}\u0000${attachment.sessionId}`;
 
+export function sessionIdentity(session) {
+  const attachment = sessionAttachment(session);
+  return attachment ? sessionAttachmentKey(attachment) : "";
+}
+
 export function addSessionAttachment(list, candidate) {
   const attachment = sessionAttachment(candidate);
   if (!attachment) return list;
