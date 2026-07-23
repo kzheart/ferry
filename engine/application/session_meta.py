@@ -1,96 +1,51 @@
-"""会话元数据 sidecar:重命名 / 置顶 / 归档 / 标签,独立于会话文件存储。
+"""Python Engine 独占的会话元数据存储。
 
-按会话 id 记录,会话文件本身不做任何改写;条目全部字段清空时自动移除。
+Ferry 自有元数据位于 StateDatabase；不读取或迁移历史 JSON 文件。
 """
+from __future__ import annotations
 
-import json
-import os
-import tempfile
-import threading
+import time
 from pathlib import Path
 
-META = Path.home() / ".resume-harness" / "session-meta.json"
-_LOCK = threading.RLock()
+from ..domain.errors import ConcurrentModificationError
+from ..infrastructure.state_db import StateDatabase
+from .ports import current
 
 
-def _load() -> dict:
-    try:
-        return json.loads(META.read_text())
-    except (OSError, json.JSONDecodeError):
-        return {}
+def _database() -> StateDatabase:
+    path = Path(current().snapshot_dir()) / "ferry-state.sqlite3"
+    # 元数据调用不能把正在执行的 Operation 标为中断；该恢复动作仅由
+    # OperationService 重启时执行。
+    return StateDatabase(path, recover_interrupted=False)
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def list_all() -> dict:
-    return _load()
-
-
-def _write(data: dict) -> None:
-    META.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix="session-meta-", suffix=".tmp",
-                                     dir=META.parent)
-    try:
-        with os.fdopen(fd, "w") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=1)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, META)
-        os.chmod(META, 0o600)
-    finally:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-
-
-def _merged(data: dict, sid: str, patch: dict) -> dict:
-    entry = {**data.get(sid, {}), **patch}
-    entry = {k: v for k, v in entry.items() if v not in (None, False, "", [])}
-    if entry:
-        data[sid] = entry
-    else:
-        data.pop(sid, None)
-    return entry
+    return _database().list_session_metadata()
 
 
 def set_entry(sid: str, patch: dict) -> dict:
-    with _LOCK:
-        data = _load()
-        entry = _merged(data, sid, patch)
-        _write(data)
-        return entry
+    return _database().set_session_metadata(sid, patch, _now_ms())
 
 
 def compare_and_set_entry(sid: str, expected: dict, patch: dict) -> dict:
-    from ..domain.errors import ConcurrentModificationError
-
-    with _LOCK:
-        data = _load()
-        if data.get(sid, {}) != expected:
-            raise ConcurrentModificationError("会话元数据在审批后已变化")
-        entry = _merged(data, sid, patch)
-        _write(data)
-        if _load().get(sid, {}) != entry:
-            raise RuntimeError("元数据写入后校验失败")
-        return entry
+    result = _database().compare_and_set_session_metadata(
+        [(sid, expected, patch)], _now_ms(),
+    )
+    if result is None:
+        raise ConcurrentModificationError("会话元数据在审批后已变化")
+    return result[sid]
 
 
 def compare_and_set_entries(changes: list[dict]) -> dict:
-    """在一次原子替换中应用多会话元数据，供跨 Agent 整理提案使用。"""
-    from ..domain.errors import ConcurrentModificationError
-
-    with _LOCK:
-        data = _load()
-        for change in changes:
-            sid = change["id"]
-            if data.get(sid, {}) != change.get("expected", {}):
-                raise ConcurrentModificationError(
-                    "会话元数据在整理提案审批后已变化", {"id": sid})
-        result = {}
-        for change in changes:
-            sid = change["id"]
-            result[sid] = _merged(data, sid, change.get("patch", {}))
-        _write(data)
-        if any(_load().get(sid, {}) != entry
-               for sid, entry in result.items()):
-            raise RuntimeError("批量元数据写入后校验失败")
-        return result
+    encoded = [
+        (change["id"], change.get("expected", {}), change.get("patch", {}))
+        for change in changes
+    ]
+    result = _database().compare_and_set_session_metadata(encoded, _now_ms())
+    if result is None:
+        raise ConcurrentModificationError("会话元数据在整理提案审批后已变化")
+    return result

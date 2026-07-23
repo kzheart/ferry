@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.application import organizing, services, session_meta, summaries
+from engine.application import organizing, services, summaries
 from engine.domain.errors import (
     OrganizationProposalError,
     OrganizationProposalStaleError,
@@ -17,7 +17,6 @@ from engine.interfaces.rpc import rpc
 @pytest.fixture
 def organization_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
-    monkeypatch.setattr(session_meta, "META", tmp_path / "meta.json")
     monkeypatch.setattr(organizing, "PROPOSALS", tmp_path / "proposals.json")
     monkeypatch.setattr(organizing, "SIGNALS", tmp_path / "signals.jsonl")
     return tmp_path
