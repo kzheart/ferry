@@ -8,6 +8,7 @@ import {
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
 import type { AuthType } from "@earendil-works/pi-ai";
 import { AuthCoordinator } from "./auth-coordinator.js";
+import { createDelegationTool } from "./delegation-tool.js";
 import type { PersistedSession, SessionStore } from "./event-store.js";
 import { MemorySessionStore } from "./event-store.js";
 import type {
@@ -39,6 +40,11 @@ import {
   type FerryToolName,
   type ToolRequestContext,
 } from "./tool-port.js";
+import {
+  WorkflowRun,
+  type WorkflowEvent,
+  type WorkflowSpec,
+} from "./workflow.js";
 
 export interface AgentBackend {
   model: Model<string>;
@@ -150,7 +156,7 @@ export interface RuntimeOptions {
 }
 
 export const FERRY_SAFETY_PROMPT =
-  "You are Ferry's local assistant, working over the user's unified session history from Claude Code, Codex, and OpenCode. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and a native session_id. Sessions can be migrated between claude, codex, and opencode. Decide your own approach for each request.";
+  "You are Ferry's local assistant, working over the user's unified session history from Claude Code, Codex, and OpenCode. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and a native session_id. Sessions can be migrated between claude, codex, and opencode. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.";
 
 function systemPrompt(persona: string) {
   return persona.trim()
@@ -356,6 +362,7 @@ class RuntimeSession {
     private readonly resolvedPersona: string,
     private readonly resolvedTools: FerryToolName[],
     private readonly resolvedApplyPolicy: ApplyPolicy,
+    private readonly canDelegate: boolean,
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -373,25 +380,46 @@ class RuntimeSession {
         systemPrompt: systemPrompt(this.resolvedPersona),
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
-        tools: createFerryTools(
-          {
-            invoke: (name, args, context) =>
-              this.runtime.invokeTool(name, args, context),
-          },
-          () => {
-            if (!this.activeRunId)
-              throw new ProtocolError(
-                "no_active_run",
-                "tool call has no active run",
-              );
-            return {
-              sessionId: this.id,
-              runId: this.activeRunId,
-              applyPolicy: this.resolvedApplyPolicy,
-            };
-          },
-          this.resolvedTools,
-        ),
+        tools: [
+          ...createFerryTools(
+            {
+              invoke: (name, args, context) =>
+                this.runtime.invokeTool(name, args, context),
+            },
+            () => {
+              if (!this.activeRunId)
+                throw new ProtocolError(
+                  "no_active_run",
+                  "tool call has no active run",
+                );
+              return {
+                sessionId: this.id,
+                runId: this.activeRunId,
+                applyPolicy: this.resolvedApplyPolicy,
+              };
+            },
+            this.resolvedTools,
+          ),
+          ...(this.canDelegate
+            ? [
+                createDelegationTool((spec, onUpdate, signal) => {
+                  if (!this.activeRunId) {
+                    throw new ProtocolError(
+                      "no_active_run",
+                      "delegation has no active run",
+                    );
+                  }
+                  return this.runtime.runDelegatedWorkflow(
+                    this,
+                    this.activeRunId,
+                    spec,
+                    onUpdate,
+                    signal,
+                  );
+                }),
+              ]
+            : []),
+        ],
         messages: state?.messages ?? [],
       },
     });
@@ -482,6 +510,18 @@ class RuntimeSession {
 
   async waitForIdle() {
     await this.runPromise;
+  }
+
+  finalText() {
+    const message = [...this.agent.state.messages]
+      .reverse()
+      .find((item) => item.role === "assistant");
+    if (!message || message.role !== "assistant") return "";
+    return message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("")
+      .trim();
   }
 
   state() {
@@ -719,6 +759,7 @@ export class AgentRuntime {
             (FERRY_TOOL_NAMES as readonly string[]).includes(name),
         ),
         record.state.resolved_apply_policy ?? "auto",
+        true,
       );
       runtime.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -771,6 +812,8 @@ export class AgentRuntime {
     requestedId?: string,
     requestedModel?: ModelSelection,
     requestedRoleId = DEFAULT_ROLE_ID,
+    canDelegate = true,
+    toolOverride?: FerryToolName[],
   ) {
     const id = requestedId ?? this.newId();
     if (this.sessions.has(id))
@@ -806,8 +849,9 @@ export class AgentRuntime {
       selection,
       role.id,
       role.persona,
-      [...role.tools],
+      toolOverride ?? [...role.tools],
       role.apply_policy,
+      canDelegate,
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {
@@ -1282,6 +1326,77 @@ export class AgentRuntime {
 
   waitForIdle(sessionId: string) {
     return this.session(sessionId).waitForIdle();
+  }
+
+  async runDelegatedWorkflow(
+    parent: RuntimeSession,
+    parentRunId: string,
+    spec: WorkflowSpec,
+    onUpdate: (payload: unknown) => void,
+    signal?: AbortSignal,
+  ) {
+    let eventQueue = Promise.resolve();
+    const publish = (event: WorkflowEvent) => {
+      onUpdate(event);
+      const { type, ...payload } = event;
+      eventQueue = eventQueue.then(() =>
+        parent.emit(type, payload, parentRunId).then(() => undefined),
+      );
+    };
+    const workflow = new WorkflowRun(
+      spec,
+      async (task, context) => {
+        const childId = `wf_${this.newId()}`.slice(0, 128);
+        await this.createSession(childId, undefined, task.role_id, false, [
+          "session_search",
+          "session_read",
+          "usage",
+        ]);
+        const dependencyContext = Object.keys(context.dependency_results).length
+          ? `\n\nDependency results:\n${JSON.stringify(
+              context.dependency_results,
+            )}`
+          : "";
+        const instruction =
+          "Complete this delegated read-only task. Do not propose or execute mutations. " +
+          "Return a concise result for the parent agent.\n\n" +
+          task.instruction +
+          dependencyContext;
+        const abort = () => {
+          const child = this.sessions.get(childId);
+          if (child?.isRunning) child.abort();
+        };
+        context.signal.addEventListener("abort", abort, { once: true });
+        try {
+          await this.prompt(childId, instruction, [], task.instruction);
+          await this.waitForIdle(childId);
+          if (context.signal.aborted) throw new Error("task cancelled");
+          const output = this.session(childId).finalText();
+          if (!output) throw new Error("delegated agent returned no result");
+          return output;
+        } finally {
+          context.signal.removeEventListener("abort", abort);
+          const child = this.sessions.get(childId);
+          if (child?.isRunning) {
+            child.abort();
+            await child.waitForIdle();
+          }
+          if (this.sessions.has(childId)) await this.deleteSession(childId);
+        }
+      },
+      publish,
+      () => this.now().getTime(),
+    );
+    const abortWorkflow = () => workflow.cancel();
+    if (signal?.aborted) workflow.cancel();
+    else signal?.addEventListener("abort", abortWorkflow, { once: true });
+    try {
+      const result = await workflow.start();
+      await eventQueue;
+      return result;
+    } finally {
+      signal?.removeEventListener("abort", abortWorkflow);
+    }
   }
 
   async invokeTool(

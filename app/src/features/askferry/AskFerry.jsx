@@ -282,6 +282,32 @@ function ApprovalCard({ item, onApprove, onDismiss, onNavigate }) {
   );
 }
 
+function WorkflowCard({ item }) {
+  const { t } = useTranslation();
+  return (
+    <div className="fcard" style={{ padding: "10px 12px", display: "flex",
+      flexDirection: "column", gap: 7, maxWidth: 560 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>
+          {t("askferry:workflow.title")}</span>
+        <span style={{ fontSize: 10.5, color: "var(--tx5)" }}>
+          {t(`askferry:workflow.${item.status}`)}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {item.tasks.map(task => (
+          <span key={task.id} className="mono" title={task.error || ""}
+            style={{ padding: "3px 7px", borderRadius: 999,
+              background: "var(--chip)", fontSize: 10.5,
+              color: task.status === "failed" ? "var(--err-text)"
+                : task.status === "completed" ? "var(--ok)" : "var(--tx4)" }}>
+            {task.roleId} · {task.id} · {t(`askferry:workflow.${task.status}`)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ----- @ 提及菜单 -----
 function MentionMenu({ query, sessions, onPick }) {
   const q = query.toLowerCase();
@@ -330,6 +356,7 @@ function ChatItem({ item, sessionId, ferry, onNavigate }) {
     );
   }
   if (item.kind === "tool") return <ToolRow item={item} onNavigate={onNavigate} />;
+  if (item.kind === "workflow") return <WorkflowCard item={item} />;
   if (item.kind === "approval") {
     return <ApprovalCard item={item}
       onNavigate={onNavigate}

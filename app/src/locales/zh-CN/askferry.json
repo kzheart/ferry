@@ -27,6 +27,14 @@
     "runCancelled": "已停止",
     "runInterrupted": "运行被中断(Agent 进程重启),不会自动重放,可重新发送"
   },
+  "workflow": {
+    "title": "并行 Agent",
+    "running": "执行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消",
+    "skipped": "已跳过"
+  },
   "mode": {
     "manual": "手动",
     "auto": "自动",

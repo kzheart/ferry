@@ -35,6 +35,14 @@ const endRun = (log, items) => {
   log.runId = null;
 };
 
+const patchWorkflow = (items, runId, patch) => {
+  const index = items.findLastIndex(
+    item => item.kind === "workflow" && item.runId === runId,
+  );
+  if (index < 0) return;
+  items[index] = patch(items[index]);
+};
+
 export function applyEvent(log, ev) {
   if (typeof ev.seq === "number") {
     if (ev.seq <= log.latestSeq) return log;
@@ -106,6 +114,45 @@ export function applyEvent(log, ev) {
     case "operation.failed":
       items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
         runId: ev.run_id, status: "failed", error: p.error, auto: !!p.auto });
+      break;
+    case "workflow.started":
+      items.push({
+        kind: "workflow",
+        runId: ev.run_id,
+        status: "running",
+        taskCount: p.task_count || 0,
+        tasks: [],
+      });
+      break;
+    case "task.started":
+      patchWorkflow(items, ev.run_id, workflow => ({
+        ...workflow,
+        tasks: [
+          ...workflow.tasks.filter(task => task.id !== p.task_id),
+          { id: p.task_id, roleId: p.role_id, status: "running" },
+        ],
+      }));
+      break;
+    case "task.completed":
+    case "task.failed":
+    case "task.cancelled":
+    case "task.skipped":
+      patchWorkflow(items, ev.run_id, workflow => ({
+        ...workflow,
+        tasks: workflow.tasks.map(task => task.id === p.task_id
+          ? {
+              ...task,
+              status: ev.type.slice("task.".length),
+              ...(p.error ? { error: p.error } : {}),
+            }
+          : task),
+      }));
+      break;
+    case "workflow.completed":
+      patchWorkflow(items, ev.run_id, workflow => ({
+        ...workflow,
+        status: p.status || "completed",
+      }));
       break;
     case "run.completed":
       endRun(log, items);

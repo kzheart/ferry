@@ -27,6 +27,14 @@
     "runCancelled": "Stopped",
     "runInterrupted": "Run interrupted (agent restarted). It will not replay automatically; send again to retry."
   },
+  "workflow": {
+    "title": "Parallel agents",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "skipped": "Skipped"
+  },
   "mode": {
     "manual": "Manual",
     "auto": "Auto",
