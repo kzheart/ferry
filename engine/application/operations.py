@@ -80,6 +80,8 @@ class OperationService:
             return self._plan_edit(value)
         if value.get("kind") == "migration":
             return self._plan_migration(value)
+        if value.get("kind") == "metadata":
+            return self._plan_metadata(value)
         raise AgentRequestError(
             "operation kind 非法", {"kind": value.get("kind")},
         )
@@ -144,6 +146,35 @@ class OperationService:
             document_revision=None,
         )
 
+    def _plan_metadata(self, value: dict) -> dict:
+        operation_input = self._validate_metadata_input(value)
+        tool = operation_input["tool"]
+        ref = operation_input["ref"]
+        before_record = agent_tools._INDEX.resolve(tool, ref)
+        session_id = before_record.row.get("id")
+        if not isinstance(session_id, str) or not session_id:
+            raise AgentRequestError("会话缺少可用的 metadata id")
+        metadata_before = services.session_meta_list().get(session_id, {})
+        operation_input["session_id"] = session_id
+        operation_input["metadata_before"] = metadata_before
+        preview = {
+            "tool": tool,
+            "ref": ref,
+            "before": metadata_before,
+            "after_patch": operation_input["patch"],
+        }
+        after_record = agent_tools._INDEX.resolve(tool, ref)
+        if before_record.revision != after_record.revision:
+            raise ConcurrentModificationError(
+                "会话在生成操作计划时已变化，请重新计划"
+            )
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision=after_record.revision,
+            document_revision=None,
+        )
+
     def _store_plan(self, operation_input: dict, preview: dict, *,
                     base_revision: str,
                     document_revision: str | None) -> dict:
@@ -184,6 +215,8 @@ class OperationService:
                 result = self._apply_edit(operation)
             elif operation.kind == "migration":
                 result = self._apply_migration(operation)
+            elif operation.kind == "metadata":
+                result = self._apply_metadata(operation)
             else:
                 raise AgentRequestError(
                     "operation kind 非法", {"kind": operation.kind},
@@ -315,6 +348,51 @@ class OperationService:
             result["probe_model"] = probe_model
         return json.loads(_canonical(result))
 
+    @staticmethod
+    def _validate_metadata_input(value: dict) -> dict:
+        allowed = {"kind", "tool", "ref", "patch"}
+        unknown = set(value) - allowed
+        if unknown:
+            raise AgentRequestError(
+                "metadata operation 包含未知字段",
+                {"fields": sorted(unknown)},
+            )
+        tool = value.get("tool")
+        ref = value.get("ref")
+        patch = value.get("patch")
+        if not isinstance(tool, str) or not 1 <= len(tool) <= 64:
+            raise AgentRequestError("metadata tool 非法")
+        if (not isinstance(ref, str) or not 1 <= len(ref) <= 512
+                or any(ord(character) < 33 for character in ref)):
+            raise AgentRequestError("metadata ref 非法")
+        allowed_fields = {"name", "pinned", "archived", "tags"}
+        if not isinstance(patch, dict) or not patch or not set(patch) <= allowed_fields:
+            raise AgentRequestError("metadata patch 字段非法")
+        agent_tools._validate_json_shape(patch, max_depth=3, max_nodes=50)
+        if ("name" in patch and
+                (not isinstance(patch["name"], str)
+                 or len(patch["name"]) > 200)):
+            raise AgentRequestError("metadata name 非法")
+        for field in ("pinned", "archived"):
+            if field in patch and not isinstance(patch[field], bool):
+                raise AgentRequestError(f"metadata {field} 必须是 boolean")
+        if "tags" in patch:
+            tags = patch["tags"]
+            if (not isinstance(tags, list) or len(tags) > 20
+                    or not all(
+                        isinstance(tag, str) and 1 <= len(tag) <= 64
+                        for tag in tags
+                    )):
+                raise AgentRequestError("metadata tags 非法")
+        if len(_canonical(patch).encode()) > 4096:
+            raise AgentRequestError("metadata patch 超过 4 KiB")
+        return json.loads(_canonical({
+            "kind": "metadata",
+            "tool": tool,
+            "ref": ref,
+            "patch": patch,
+        }))
+
     def _apply_edit(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
@@ -385,6 +463,31 @@ class OperationService:
         if result.get("rolled_back") or structure.get("ok") is not True:
             raise RuntimeError("迁移写入后的结构校验失败，产物已回滚")
         return result
+
+    def _apply_metadata(self, operation: OperationPlan) -> dict:
+        params = operation.input()
+        try:
+            record = agent_tools._INDEX.resolve(
+                params["tool"], params["ref"],
+            )
+        except AgentReferenceError as error:
+            raise ConcurrentModificationError(
+                "会话在元数据计划生成后已变化，请重新计划"
+            ) from error
+        if record.revision != operation.base_revision:
+            raise ConcurrentModificationError(
+                "会话在元数据计划生成后已变化，请重新计划"
+            )
+        if record.row.get("id") != params["session_id"]:
+            raise ConcurrentModificationError(
+                "会话标识在元数据计划生成后已变化，请重新计划"
+            )
+        result = services.session_meta_compare_and_set(
+            params["session_id"],
+            params["metadata_before"],
+            params["patch"],
+        )
+        return {"metadata": result}
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
@@ -551,12 +654,22 @@ class OperationService:
     @staticmethod
     def _public_plan(operation: OperationPlan) -> dict:
         params = operation.input()
+        if operation.kind == "migration":
+            summary = (
+                f"将 {params['source_tool']} 会话迁移到 "
+                f"{params['target_tool']}"
+            )
+        elif operation.kind == "metadata":
+            summary = "修改会话元数据"
+        else:
+            summary = "修改原始会话（执行前自动创建可恢复快照）"
         return {
             "plan_id": operation.plan_id,
             "kind": operation.kind,
             "status": "planned",
             "preview": operation.preview(),
-            "risk": "high",
+            "summary": summary,
+            "risk": "low" if operation.kind == "metadata" else "high",
             "affected_refs": [params["ref"]],
             "base_revision": operation.base_revision,
             "document_revision": operation.document_revision,

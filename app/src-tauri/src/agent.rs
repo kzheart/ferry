@@ -231,7 +231,7 @@ fn complete_tool_request(
         if let Ok(operation) = outcome.clone() {
             let auto = allows_auto_apply(auto_policy(session_id), role_apply_policy);
             if auto {
-                match apply_routed_operation(resource_dir, &operation, run_id) {
+                match apply_routed_operation(resource_dir, &operation) {
                     Ok(result) => {
                         let _ = app.emit(
                             "ferry-agent-event",
@@ -377,7 +377,7 @@ fn execution_intent(args: &Map<String, Value>) -> Option<bool> {
 fn resolve_tool_request(
     name: &str,
     args: &Map<String, Value>,
-    run_id: &str,
+    _run_id: &str,
 ) -> Option<ToolRequestRoute> {
     let read = |method| ToolRequestRoute {
         method,
@@ -435,13 +435,13 @@ fn resolve_tool_request(
                     return None;
                 }
                 ToolRequestRoute {
-                    method: "agent_propose_metadata_change",
-                    params: json!({
+                    method: "operation.plan",
+                    params: json!({"input": {
+                        "kind": "metadata",
                         "tool": args.get("tool")?,
                         "ref": args.get("ref")?,
                         "patch": args.get("patch")?,
-                        "run_id": run_id,
-                    }),
+                    }}),
                     requires_approval: true,
                 }
             }
@@ -579,60 +579,21 @@ fn engine_value(resource_dir: &Path, method: &str, params: Value) -> Result<Valu
     }
 }
 
-fn approve_and_apply(
-    resource_dir: &Path,
-    operation_id: &str,
-    run_id: &str,
-) -> Result<Value, String> {
-    let approval = engine_value(
-        resource_dir,
-        "agent_operation_authorize",
-        json!({"operation_id": operation_id, "run_id": run_id}),
-    )?;
-    let token = approval
-        .get("approval_token")
-        .and_then(Value::as_str)
-        .ok_or("Engine 未返回审批凭证")?;
-    engine_value(
-        resource_dir,
-        "agent_operation_apply",
-        json!({"operation_id": operation_id, "run_id": run_id,
-               "approval_token": token}),
-    )
-}
-
 fn apply_operation_plan(resource_dir: &Path, plan_id: &str) -> Result<Value, String> {
     engine_value(resource_dir, "operation.apply", json!({"plan_id": plan_id}))
 }
 
-#[derive(Debug, PartialEq)]
-enum OperationApplyRoute<'a> {
-    Plan(&'a str),
-    Legacy(&'a str),
-}
-
-fn resolve_operation_apply_route(operation: &Value) -> Result<OperationApplyRoute<'_>, String> {
-    if let Some(plan_id) = operation.get("plan_id").and_then(Value::as_str) {
-        return Ok(OperationApplyRoute::Plan(plan_id));
-    }
+fn operation_plan_id(operation: &Value) -> Result<&str, String> {
     operation
-        .get("operation_id")
+        .get("plan_id")
         .and_then(Value::as_str)
-        .map(OperationApplyRoute::Legacy)
-        .ok_or_else(|| "Engine 未返回可审批的 operation 标识".to_owned())
+        .filter(|plan_id| plan_id.starts_with("op_"))
+        .ok_or_else(|| "Engine 未返回可审批的 operation plan_id".to_owned())
 }
 
-fn apply_routed_operation(
-    resource_dir: &Path,
-    operation: &Value,
-    run_id: &str,
-) -> Result<Value, String> {
-    match resolve_operation_apply_route(operation)? {
-        OperationApplyRoute::Plan(plan_id) => apply_operation_plan(resource_dir, plan_id),
-        OperationApplyRoute::Legacy(operation_id) => {
-            approve_and_apply(resource_dir, operation_id, run_id)
-        }
-    }
+fn apply_routed_operation(resource_dir: &Path, operation: &Value) -> Result<Value, String> {
+    let plan_id = operation_plan_id(operation)?;
+    apply_operation_plan(resource_dir, plan_id)
 }
 
 fn remember_auto_policy(request: &str) {
@@ -691,54 +652,6 @@ pub(crate) async fn agent_command(
     tauri::async_runtime::spawn_blocking(move || request_agent(&app, &resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub(crate) async fn agent_operation_detail(
-    app: tauri::AppHandle,
-    operation_id: String,
-) -> Result<Value, String> {
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || {
-        engine_value(
-            &resource_dir,
-            "agent_operation_detail",
-            json!({"operation_id": operation_id}),
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub(crate) async fn agent_operation_approve_and_apply(
-    app: tauri::AppHandle,
-    operation_id: String,
-    run_id: String,
-) -> Result<Value, String> {
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || {
-        approve_and_apply(&resource_dir, &operation_id, &run_id)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub(crate) async fn agent_operation_status(
-    app: tauri::AppHandle,
-    operation_id: String,
-) -> Result<Value, String> {
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || {
-        engine_value(
-            &resource_dir,
-            "agent_operation_status",
-            json!({"operation_id": operation_id}),
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
@@ -899,9 +812,17 @@ mod tests {
             "run-1",
         )
         .unwrap();
-        assert_eq!(metadata.method, "agent_propose_metadata_change");
+        assert_eq!(metadata.method, "operation.plan");
         assert!(metadata.requires_approval);
-        assert_eq!(metadata.params["run_id"], "run-1");
+        assert_eq!(
+            metadata.params,
+            json!({"input": {
+                "kind": "metadata",
+                "tool": "claude",
+                "ref": "fsr_a",
+                "patch": {"pinned": true},
+            }})
+        );
 
         assert_eq!(
             resolve_tool_request(
@@ -932,7 +853,7 @@ mod tests {
             None
         );
         assert_eq!(
-            resolve_tool_request("agent_operation_apply", &map(json!({})), ""),
+            resolve_tool_request("operation.apply", &map(json!({})), ""),
             None
         );
         assert_eq!(resolve_tool_request("shell", &map(json!({})), ""), None);
@@ -958,16 +879,13 @@ mod tests {
     }
 
     #[test]
-    fn operation_plans_apply_without_the_legacy_approval_token_route() {
+    fn operation_plans_require_a_plan_id() {
         assert_eq!(
-            resolve_operation_apply_route(&json!({"plan_id": "op_fixture"})).unwrap(),
-            OperationApplyRoute::Plan("op_fixture")
+            operation_plan_id(&json!({"plan_id": "op_fixture"})).unwrap(),
+            "op_fixture"
         );
-        assert_eq!(
-            resolve_operation_apply_route(&json!({"operation_id": "legacy_fixture"})).unwrap(),
-            OperationApplyRoute::Legacy("legacy_fixture")
-        );
-        assert!(resolve_operation_apply_route(&json!({})).is_err());
+        assert!(operation_plan_id(&json!({"id": "wrong_fixture"})).is_err());
+        assert!(operation_plan_id(&json!({})).is_err());
     }
 
     #[test]

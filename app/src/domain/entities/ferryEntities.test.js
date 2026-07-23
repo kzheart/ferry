@@ -18,11 +18,11 @@ test("maps search details to clickable Session entities", () => {
 
 test("maps migration, edit and usage details without stringifying them", () => {
   const migration = entitiesFromToolResult("migrate", { details: {
-    operation_id: "op_m", kind: "migration", affected_refs: ["fsr_a"],
+    plan_id: "op_m", kind: "migration", affected_refs: ["fsr_a"],
     preview: { source_tool: "claude", target_tool: "codex", loss: {} },
   } })[0];
   const edit = entitiesFromToolResult("session_edit", { details: {
-    operation_id: "op_e", kind: "edit", affected_refs: ["fsr_b"],
+    plan_id: "op_e", kind: "edit", affected_refs: ["fsr_b"],
     preview: { tool: "codex", changes: [{ locator: "fml_1" }] },
   } })[0];
   const usage = entitiesFromToolResult("usage", { details: {
@@ -63,7 +63,7 @@ test("unwraps auto-applied operation envelopes", () => {
   const entity = entitiesFromToolResult("migrate", { details: {
     status: "applied",
     operation: {
-      operation_id: "op_auto", kind: "migration", affected_refs: ["fsr_1"],
+      plan_id: "op_auto", kind: "migration", affected_refs: ["fsr_1"],
       preview: { source_tool: "claude", target_tool: "opencode" },
     },
     result: { saved_as: "/tmp/session.json" },

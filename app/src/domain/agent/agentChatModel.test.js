@@ -17,7 +17,7 @@ test("structured tool details survive event reduction and become entities", () =
   assert.equal(log.items[0].entities[0].title, "Ferry");
 });
 
-test("replay reconstructs an approval card from persisted tool details", () => {
+test("replay reconstructs an approval card from a persisted operation plan", () => {
   let log = applyEvent(emptyLog(), {
     type: "tool.started", timestamp: "2026-01-01T00:00:00Z", run_id: "run",
     payload: { tool_call_id: "call_1", name: "session_edit", args: {} },
@@ -26,12 +26,12 @@ test("replay reconstructs an approval card from persisted tool details", () => {
     type: "tool.completed", timestamp: "2026-01-01T00:00:01Z", run_id: "run",
     payload: { tool_call_id: "call_1", is_error: false, result: {
       text: "fallback", details: { status: "pending", operation: {
-        operation_id: "op_1", kind: "edit", preview: { changes: [] },
+        plan_id: "op_1", kind: "edit", preview: { changes: [] },
       } },
     } },
   });
   assert.equal(log.items[1].kind, "approval");
-  assert.equal(log.items[1].operation.operation_id, "op_1");
+  assert.equal(log.items[1].operation.plan_id, "op_1");
   assert.equal(log.items[1].status, "pending");
 });
 

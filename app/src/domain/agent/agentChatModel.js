@@ -27,8 +27,7 @@ const sealAssistant = items => {
   }
 };
 
-export const operationKey = operation =>
-  operation?.plan_id || operation?.operation_id || null;
+export const operationKey = operation => operation?.plan_id || null;
 
 const endRun = (log, items) => {
   sealAssistant(items);

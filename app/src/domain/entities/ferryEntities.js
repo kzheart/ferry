@@ -36,11 +36,11 @@ function migrationEntity(value) {
   const applied = isObject(value.result?.result) ? value.result.result : value.result;
   const ref = text(value.ref) || text(preview.ref) ||
     (Array.isArray(value.affected_refs) ? text(value.affected_refs[0]) : undefined);
-  if (!ref && !value.operation_id && !value.migration_id && !value.saved_as) return null;
+  if (!ref && !value.plan_id && !value.migration_id && !value.saved_as) return null;
   return {
     type: FERRY_ENTITY.migration,
-    key: `migration:${value.operation_id || value.migration_id || value.saved_as || ref}`,
-    id: text(value.operation_id) || text(value.migration_id),
+    key: `migration:${value.plan_id || value.migration_id || value.saved_as || ref}`,
+    id: text(value.plan_id) || text(value.migration_id),
     ref,
     sourceTool: text(value.source_tool) || text(preview.source_tool),
     targetTool: text(value.target_tool) || text(preview.target_tool),
@@ -60,12 +60,12 @@ function editEntity(value) {
   const applied = isObject(value.result?.result) ? value.result.result : value.result;
   const ref = text(value.ref) || text(preview.ref) ||
     (Array.isArray(value.affected_refs) ? text(value.affected_refs[0]) : undefined);
-  if (!ref && !value.operation_id && !value.edit_id) return null;
+  if (!ref && !value.plan_id && !value.edit_id) return null;
   const changes = Array.isArray(preview.changes) ? preview.changes : [];
   return {
     type: FERRY_ENTITY.edit,
-    key: `edit:${value.operation_id || value.edit_id || ref}`,
-    id: text(value.operation_id) || text(value.edit_id),
+    key: `edit:${value.plan_id || value.edit_id || ref}`,
+    id: text(value.plan_id) || text(value.edit_id),
     tool: text(value.tool) || text(preview.tool),
     ref,
     sessionId: text(value.session_id) || text(preview.session_id) ||

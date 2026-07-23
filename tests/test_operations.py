@@ -5,7 +5,7 @@ from threading import Barrier
 
 import pytest
 
-from engine.application import operations
+from engine.application import operations, services, session_meta
 from engine.application.ports import current
 from engine.domain.authoring import AssistantReply
 from engine.domain.errors import (
@@ -42,6 +42,17 @@ def _migration_plan(**overrides):
         "ref": _claude_ref(),
         "target_tool": "opencode",
         "probe": False,
+    }
+    value.update(overrides)
+    return operations.plan(value)
+
+
+def _metadata_plan(**overrides):
+    value = {
+        "kind": "metadata",
+        "tool": "claude",
+        "ref": _claude_ref(),
+        "patch": {"name": "新名称"},
     }
     value.update(overrides)
     return operations.plan(value)
@@ -97,6 +108,49 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     ]
     assert applied["result"]["snapshot"] == "snapshot-before-agent-edit"
     assert operations.status(plan["plan_id"])["status"] == "applied"
+
+
+def test_metadata_plan_applies_with_independent_cas(
+        agent_environment, monkeypatch):
+    metadata_path = agent_environment["root"].parent / "session-meta.json"
+    monkeypatch.setattr(session_meta, "META", metadata_path)
+    plan = _metadata_plan()
+
+    assert plan["kind"] == "metadata"
+    assert plan["risk"] == "low"
+    assert plan["preview"]["before"] == {}
+    assert plan["preview"]["after_patch"] == {"name": "新名称"}
+
+    applied = operations.apply(plan["plan_id"])
+
+    assert applied["result"]["metadata"] == {"name": "新名称"}
+    assert services.session_meta_list()["private-id"] == {"name": "新名称"}
+
+
+def test_metadata_plan_rejects_concurrent_metadata_change(
+        agent_environment, monkeypatch):
+    metadata_path = agent_environment["root"].parent / "session-meta.json"
+    monkeypatch.setattr(session_meta, "META", metadata_path)
+    plan = _metadata_plan()
+    services.session_meta_set("private-id", {"name": "并发名称"})
+
+    with pytest.raises(
+            ConcurrentModificationError, match="元数据在审批后已变化"):
+        operations.apply(plan["plan_id"])
+
+    assert operations.status(plan["plan_id"])["status"] == "failed"
+    assert services.session_meta_list()["private-id"] == {"name": "并发名称"}
+
+
+@pytest.mark.parametrize("patch", [
+    {},
+    {"unknown": True},
+    {"pinned": "yes"},
+    {"tags": [""]},
+])
+def test_metadata_plan_rejects_invalid_patch(agent_environment, patch):
+    with pytest.raises(AgentRequestError):
+        _metadata_plan(patch=patch)
 
 
 def test_replace_assistant_reply_plans_and_applies_as_edit(
