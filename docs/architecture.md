@@ -122,6 +122,15 @@ generated into the UI, Rust Host, Python Engine, and Ferry Runtime by
 only current built-in Agent identities and launch policy, never external Agent
 version ranges or compatibility status.
 
+`contracts/engine-methods.json` is the equivalent policy source for every
+Session Engine endpoint: WebView exposure, read/index/mutation classification,
+timeout class, and retry safety. It is generated into Rust and Python. The
+Rust host owns a correlation ID for every Engine request and multiplexes JSONL
+responses by that ID, so an individual caller never holds the process-manager
+lock while waiting. The Engine still executes requests serially today; a later
+read-pool change must first remove Python's process-global stdout redirection
+and keep index refreshes and mutations on their ordered lanes.
+
 ## Cross-platform boundary
 
 Windows support is retained. `app/src-tauri/src/platform/` is the initial Rust

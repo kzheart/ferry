@@ -1,13 +1,13 @@
 use crate::contracts::engine_methods::{self, RetryPolicy, TimeoutClass};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    mpsc, Mutex, OnceLock,
+    mpsc, Arc, Mutex, OnceLock,
 };
 use std::time::Duration;
 
@@ -21,10 +21,20 @@ fn is_known_agent(agent: &str) -> bool {
 }
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
+type PendingResult = Result<String, String>;
+type Pending = Arc<Mutex<HashMap<String, mpsc::Sender<PendingResult>>>>;
+
+#[derive(Clone)]
+struct EngineClient {
+    generation: u64,
+    stdin: Arc<Mutex<ChildStdin>>,
+    pending: Pending,
+}
+
 struct EngineProcess {
+    generation: u64,
     child: Child,
-    stdin: ChildStdin,
-    responses: mpsc::Receiver<Result<String, String>>,
+    client: EngineClient,
 }
 
 impl Drop for EngineProcess {
@@ -36,6 +46,7 @@ impl Drop for EngineProcess {
 
 static ENGINE: OnceLock<Mutex<Option<EngineProcess>>> = OnceLock::new();
 static ENGINE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static ENGINE_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 fn stamp_engine_request(request: &str) -> Result<(String, String), String> {
     let mut value: Value = serde_json::from_str(request)
@@ -71,43 +82,34 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut child = command
         .spawn()
         .map_err(|error| format!("启动引擎失败: {error}"))?;
-    let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
+    let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or("引擎 stdin 不可用")?));
     let stdout = child.stdout.take().ok_or("引擎 stdout 不可用")?;
-    let (sender, responses) = mpsc::channel();
+    let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
+    let reader_pending = pending.clone();
     std::thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    if sender.send(Ok(line.trim_end().to_owned())).is_err() {
-                        return;
-                    }
-                }
-                Err(error) => {
-                    let _ = sender.send(Err(format!("读取引擎失败: {error}")));
-                    return;
-                }
-            }
-        }
-        let _ = sender.send(Err("引擎进程已退出".to_owned()));
+        read_engine_output(BufReader::new(stdout), reader_pending);
     });
-    let mut engine = EngineProcess {
-        child,
+    let generation = ENGINE_GENERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let client = EngineClient {
+        generation,
         stdin,
-        responses,
+        pending,
     };
-    handshake(&mut engine)?;
+    let engine = EngineProcess {
+        generation,
+        child,
+        client,
+    };
+    handshake(&engine.client)?;
     Ok(engine)
 }
 
 /// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
 /// 在 release 下会让 PyInstaller onefile 多解压一整次,冷启动时间翻倍。
-fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
+fn handshake(engine: &EngineClient) -> Result<(), String> {
     let (request, request_id) = stamp_engine_request(r#"{"method":"health"}"#)?;
     let line = engine
-        .exchange(&request, Duration::from_secs(15))
+        .request(&request, Duration::from_secs(15))
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     validate_engine_response_id(&line, &request_id)
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
@@ -123,16 +125,108 @@ fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
     Ok(())
 }
 
-impl EngineProcess {
-    fn exchange(&mut self, request: &str, timeout: Duration) -> Result<String, String> {
-        self.stdin
-            .write_all(request.as_bytes())
-            .and_then(|_| self.stdin.write_all(b"\n"))
-            .and_then(|_| self.stdin.flush())
-            .map_err(|error| format!("写入引擎失败: {error}"))?;
-        self.responses
-            .recv_timeout(timeout)
-            .map_err(|error| format!("等待引擎响应失败: {error}"))?
+impl EngineClient {
+    fn request(&self, request: &str, timeout: Duration) -> Result<String, String> {
+        let value: Value = serde_json::from_str(request)
+            .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
+        let request_id = value
+            .get("request_id")
+            .and_then(Value::as_str)
+            .ok_or("Engine 请求缺少 request_id")?
+            .to_owned();
+        let (sender, receiver) = mpsc::channel();
+        self.pending
+            .lock()
+            .map_err(|_| "Engine pending 锁损坏".to_owned())?
+            .insert(request_id.clone(), sender);
+        if let Err(error) = write_engine_line(&self.stdin, request) {
+            self.pending
+                .lock()
+                .ok()
+                .and_then(|mut pending| pending.remove(&request_id));
+            return Err(error);
+        }
+        receiver.recv_timeout(timeout).map_err(|error| {
+            self.pending
+                .lock()
+                .ok()
+                .and_then(|mut pending| pending.remove(&request_id));
+            format!("等待引擎响应失败: {error}")
+        })?
+    }
+}
+
+fn write_engine_line(stdin: &Arc<Mutex<ChildStdin>>, line: &str) -> Result<(), String> {
+    let mut writer = stdin.lock().map_err(|_| "Engine stdin 锁损坏".to_owned())?;
+    writer
+        .write_all(line.as_bytes())
+        .and_then(|_| writer.write_all(b"\n"))
+        .and_then(|_| writer.flush())
+        .map_err(|error| format!("写入引擎失败: {error}"))
+}
+
+fn read_engine_output(mut stdout: impl BufRead, pending: Pending) {
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match stdout.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(error) => {
+                fail_engine_pending(&pending, format!("读取引擎失败: {error}"));
+                return;
+            }
+        }
+        let response = line.trim_end();
+        let request_id = serde_json::from_str::<Value>(response)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("request_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            });
+        let Some(request_id) = request_id else {
+            fail_engine_pending(&pending, "Engine 响应缺少 request_id".to_owned());
+            return;
+        };
+        if let Some(sender) = pending
+            .lock()
+            .ok()
+            .and_then(|mut waiters| waiters.remove(&request_id))
+        {
+            let _ = sender.send(Ok(response.to_owned()));
+        }
+    }
+    fail_engine_pending(&pending, "引擎进程已退出".to_owned());
+}
+
+fn fail_engine_pending(pending: &Pending, error: String) {
+    if let Ok(mut waiters) = pending.lock() {
+        for (_, sender) in waiters.drain() {
+            let _ = sender.send(Err(error.clone()));
+        }
+    }
+}
+
+fn engine_client(resource_dir: &Path) -> Result<EngineClient, String> {
+    let slot = ENGINE.get_or_init(|| Mutex::new(None));
+    let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
+    if guard.is_none() {
+        *guard = Some(spawn_engine(resource_dir)?);
+    }
+    Ok(guard.as_ref().expect("engine just ensured").client.clone())
+}
+
+fn invalidate_engine(generation: u64) {
+    let slot = ENGINE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = slot.lock() {
+        if guard
+            .as_ref()
+            .is_some_and(|engine| engine.generation == generation)
+        {
+            *guard = None;
+        }
     }
 }
 
@@ -142,15 +236,10 @@ pub(crate) fn engine_request_blocking(
 ) -> Result<String, String> {
     let (request, request_id) = stamp_engine_request(request)?;
     let timeout = request_timeout(&request);
-    let slot = ENGINE.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
     let mut last_error = String::new();
     for _attempt in 0..request_attempts(&request) {
-        if guard.is_none() {
-            *guard = Some(spawn_engine(resource_dir)?);
-        }
-        let engine = guard.as_mut().expect("engine just ensured");
-        let exchange = engine.exchange(&request, timeout).and_then(|line| {
+        let client = engine_client(resource_dir)?;
+        let exchange = client.request(&request, timeout).and_then(|line| {
             validate_engine_response_id(&line, &request_id)?;
             Ok(line)
         });
@@ -158,7 +247,7 @@ pub(crate) fn engine_request_blocking(
             Ok(line) => return Ok(line),
             Err(error) => {
                 last_error = error;
-                *guard = None; // Drop 会回收进程,下一轮重启
+                invalidate_engine(client.generation);
             }
         }
     }
@@ -764,13 +853,66 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        operation_plan_id_request, operation_plan_request, request_attempts, request_timeout,
-        stamp_engine_request, validate_engine_response_id, validate_operation_plan_input,
-        validate_plan_id, validate_public_engine_request, DeleteOperationPlanInput,
-        EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
-        MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
-        AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
+        operation_plan_id_request, operation_plan_request, read_engine_output, request_attempts,
+        request_timeout, stamp_engine_request, validate_engine_response_id,
+        validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
+        DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
+        MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
+        RestoreDeleteOperationPlanInput, AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
     };
+    use std::collections::HashMap;
+    use std::io::Cursor;
+    use std::sync::{mpsc, Arc, Mutex};
+
+    #[test]
+    fn engine_output_is_dispatched_by_request_id_even_when_responses_are_reordered() {
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let (first_sender, first_receiver) = mpsc::channel();
+        let (second_sender, second_receiver) = mpsc::channel();
+        pending
+            .lock()
+            .unwrap()
+            .insert("engine_first".to_owned(), first_sender);
+        pending
+            .lock()
+            .unwrap()
+            .insert("engine_second".to_owned(), second_sender);
+
+        read_engine_output(
+            Cursor::new(
+                b"{\"request_id\":\"engine_second\",\"ok\":true}\n{\"request_id\":\"engine_first\",\"ok\":true}\n",
+            ),
+            pending,
+        );
+
+        assert!(first_receiver
+            .recv()
+            .unwrap()
+            .unwrap()
+            .contains("engine_first"));
+        assert!(second_receiver
+            .recv()
+            .unwrap()
+            .unwrap()
+            .contains("engine_second"));
+    }
+
+    #[test]
+    fn malformed_engine_output_releases_all_waiting_requests() {
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let (sender, receiver) = mpsc::channel();
+        pending
+            .lock()
+            .unwrap()
+            .insert("engine_waiting".to_owned(), sender);
+
+        read_engine_output(Cursor::new(b"not-json\n"), pending);
+
+        assert_eq!(
+            receiver.recv().unwrap().unwrap_err(),
+            "Engine 响应缺少 request_id"
+        );
+    }
 
     #[test]
     fn sensitive_agent_methods_are_not_generic_rpc_methods() {
