@@ -3,15 +3,15 @@ import copy
 
 import pytest
 
-from engine.adapters import registry
 from engine.adapters.base.codec import select_span
 from engine.adapters.base.plugin import ToolManifest, ToolPlugin
+from engine.adapters.registry import AdapterRegistry, create_registry
 from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
 from engine.adapters.codex.codec import TURN_INDEX as CODEX_INDEX
 from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.application.sessions import session_json
 from engine.domain.authoring import AssistantReply
-from engine.domain.errors import CapabilityUnsupportedError
+from engine.domain.errors import CapabilityUnsupportedError, ToolUnknownError
 
 from test_authoring import (
     _compiler,
@@ -68,18 +68,26 @@ def test_missing_capability_reports_unsupported(capability):
     assert excinfo.value.params == {"tool": "fake", "capability": capability}
 
 
-def test_registry_accepts_fake_plugin():
-    registry.register(_fake_plugin)
-    try:
-        assert "fake" in registry.adapters()
-        assert registry.adapter("fake").id == "fake"
-    finally:
-        registry.unregister("fake")
-    assert "fake" not in registry.adapters()
+def test_registry_accepts_injected_fake_plugin():
+    registry = AdapterRegistry((_fake_plugin(),))
+    assert registry.ids() == ("fake",)
+    assert registry.get("fake").id == "fake"
 
 
-def test_registry_discovers_all_bundled_adapter_packages():
-    assert {"claude", "codex", "opencode"} <= set(registry.adapters())
+def test_registry_rejects_duplicate_adapter_ids():
+    with pytest.raises(ValueError, match="重复的 adapter id"):
+        AdapterRegistry((_fake_plugin(), _fake_plugin()))
+
+
+def test_registry_reports_unknown_adapter():
+    registry = AdapterRegistry((_fake_plugin(),))
+    with pytest.raises(ToolUnknownError) as excinfo:
+        registry.get("missing")
+    assert excinfo.value.code == "tool.unknown"
+
+
+def test_registry_explicitly_composes_all_bundled_adapters():
+    assert create_registry().ids() == ("claude", "codex", "opencode")
 
 
 @pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
