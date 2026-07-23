@@ -19,9 +19,6 @@ pub(crate) struct TerminalLaunch {
     #[serde(default)]
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     cwd: Option<String>,
-    #[serde(default)]
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    handoff_doc: Option<String>,
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -73,16 +70,12 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(target_os = "macos")]
 fn terminal_action(launch: &TerminalLaunch) -> String {
-    let mut action = launch
+    launch
         .args
         .iter()
         .fold(launch.executable.clone(), |acc, arg| {
             format!("{acc} {}", shell_quote(arg))
-        });
-    if let Some(doc) = launch.handoff_doc.as_deref() {
-        action = format!("{action} \"$(cat {})\"", shell_quote(doc));
-    }
-    action
+        })
 }
 
 #[cfg(target_os = "macos")]

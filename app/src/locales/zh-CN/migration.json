@@ -110,14 +110,11 @@
     "doneBoth": "迁移完成 · 结构验证与隔离探针通过",
     "doneStructure": "迁移完成 · 结构验证通过",
     "doneDesc": "{{n}} 条消息已写入 {{tool}},源会话保持不变。",
-    "handoffIn": "在 {{tool}} 中接续",
+    "continueIn": "在 {{tool}} 中继续",
     "openTerminal": "在终端打开",
     "failTitle": "迁移失败 · 验收未通过",
-    "failDesc": "已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,你可以改用上下文摘要继续。",
-    "failDescProbe": " · 探针模型 {{model}}",
-    "useHandoff": "使用上下文摘要继续",
-    "handoffBusy": "正在生成上下文摘要…",
-    "handoffPreview": "上下文摘要预览"
+    "failDesc": "已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,请修正问题后重试。",
+    "failDescProbe": " · 探针模型 {{model}}"
   },
   "sheet": {
     "title": "迁移会话",
@@ -141,8 +138,8 @@
     "probeNotRunDefault": "运行时探针未执行(默认关闭,可在设置中开启)",
     "probeNotRun": "未运行探针验收",
     "rollbackTitle": "回滚信息",
-    "rollbackDesc": "探针未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可重试或改用上下文摘要继续。",
-    "handoffIn": "交付 · 在 {{tool}} 中接续",
+    "rollbackDesc": "探针未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可修正问题后重试。",
+    "continueIn": "交付 · 在 {{tool}} 中继续",
     "delete": "删除这条记录"
   }
 }

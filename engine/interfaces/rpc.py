@@ -45,7 +45,6 @@ RPC_METHODS = {
         probe=p.get("probe", False), max_turn=p.get("max_turn"),
         probe_model=p.get("probe_model") or None,
         content_locale=p.get("content_locale")),
-    "handoff": lambda p: services.handoff(p["src"], p["ref"], p["dst"], cwd=p.get("cwd")),
     "edit_capabilities": lambda p: services.edit_capabilities(p["tool"]),
     "edit_preview": lambda p: services.edit_preview(p["ref"], p["ops"], tool=p.get("tool", "claude")),
     "edit_apply": lambda p: services.edit_apply(p["ref"], p["ops"], probe=p.get("probe", False),

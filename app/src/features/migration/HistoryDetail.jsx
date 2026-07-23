@@ -124,7 +124,7 @@ export default function HistoryDetail({ h, onDelete }) {
 
         {ok && h.resume && (
           <div style={{ marginTop: 14 }}>
-            <CmdRow cmd={h.resume} head={t("migration:history.handoffIn", { tool: TOOL_NAME[h.dst] })} />
+            <CmdRow cmd={h.resume} head={t("migration:history.continueIn", { tool: TOOL_NAME[h.dst] })} />
           </div>
         )}
       </div>

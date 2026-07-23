@@ -14,9 +14,6 @@ class OpenCodeLifecycle(BaseLifecycle):
     def resume_args(self, session_id):
         return ["-s", session_id]
 
-    def handoff_args(self):
-        return ["run"]
-
     def cleanup(self, session_id, _dest):
         try:
             tree = opencode_session.read(session_id)
