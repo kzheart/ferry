@@ -163,6 +163,33 @@ describe("bounded multi-agent workflow", () => {
     });
   });
 
+  it("fails a task that would exceed the total output budget", async () => {
+    const run = new WorkflowRun(
+      {
+        max_concurrency: 1,
+        max_output_chars: 1_000,
+        failure_policy: "continue",
+        tasks: [
+          { id: "first", role_id: "worker", instruction: "first" },
+          { id: "second", role_id: "worker", instruction: "second" },
+        ],
+      },
+      async (task) => (task.id === "first" ? "a".repeat(600) : "b".repeat(600)),
+    );
+
+    const result = await run.start();
+
+    expect(result.status).toBe("failed");
+    expect(result.tasks).toMatchObject([
+      { task_id: "first", status: "completed", output: "a".repeat(600) },
+      {
+        task_id: "second",
+        status: "failed",
+        error: "workflow output budget exceeded",
+      },
+    ]);
+  });
+
   it("rejects cycles, excessive depth and task budgets", async () => {
     await expect(
       new WorkflowRun(

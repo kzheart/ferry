@@ -21,6 +21,7 @@ export interface TaskGraph {
   max_concurrency?: number;
   max_depth?: number;
   task_timeout_ms?: number;
+  max_output_chars?: number;
   failure_policy?: WorkflowFailurePolicy;
 }
 
@@ -67,6 +68,7 @@ const MAX_CONCURRENCY = 8;
 const MAX_DEPTH = 8;
 const MAX_INSTRUCTION_CHARS = 20_000;
 const MAX_RESULT_CHARS = 40_000;
+const MAX_WORKFLOW_OUTPUT_CHARS = 200_000;
 const DEFAULT_TASK_TIMEOUT_MS = 5 * 60_000;
 
 function boundedInteger(
@@ -189,6 +191,13 @@ function validate(spec: WorkflowSpec) {
     30 * 60_000,
     "task_timeout_ms",
   );
+  const maxOutputChars = boundedInteger(
+    spec.max_output_chars,
+    MAX_WORKFLOW_OUTPUT_CHARS,
+    1_000,
+    MAX_WORKFLOW_OUTPUT_CHARS,
+    "max_output_chars",
+  );
   const failurePolicy = spec.failure_policy ?? "fail_fast";
   if (!["fail_fast", "continue"].includes(failurePolicy)) {
     throw new ProtocolError("invalid_workflow", "failure_policy is invalid");
@@ -197,6 +206,7 @@ function validate(spec: WorkflowSpec) {
     tasks: [...byId.values()],
     maxConcurrency,
     timeout,
+    maxOutputChars,
     failurePolicy,
   };
 }
@@ -246,6 +256,7 @@ export class Scheduler {
     let active = 0;
     let settled = false;
     let failed = false;
+    let outputChars = 0;
     this.onEvent({
       type: "workflow.started",
       task_count: config.tasks.length,
@@ -365,8 +376,13 @@ export class Scheduler {
               if (typeof output !== "string") {
                 throw new Error("task output must be a string");
               }
+              const boundedOutput = output.slice(0, MAX_RESULT_CHARS);
+              if (outputChars + boundedOutput.length > config.maxOutputChars) {
+                throw new Error("workflow output budget exceeded");
+              }
               state.status = "completed";
-              state.output = output.slice(0, MAX_RESULT_CHARS);
+              state.output = boundedOutput;
+              outputChars += state.output.length;
               outputs.set(task.id, state.output);
               this.onEvent({ type: "task.completed", task_id: task.id });
             })

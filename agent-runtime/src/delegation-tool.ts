@@ -28,6 +28,9 @@ const parameters = Type.Object(
   {
     tasks: Type.Array(task, { minItems: 1, maxItems: 32 }),
     max_concurrency: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 })),
+    max_output_chars: Type.Optional(
+      Type.Integer({ minimum: 1_000, maximum: 200_000 }),
+    ),
     failure_policy: Type.Optional(
       Type.Union([Type.Literal("fail_fast"), Type.Literal("continue")]),
     ),
