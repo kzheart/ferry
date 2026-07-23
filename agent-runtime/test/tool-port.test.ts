@@ -21,8 +21,15 @@ const tools = createFerryTools(
 const sessionEditSchema = tools.find(
   (tool) => tool.name === "session_edit",
 )!.parameters;
+const sessionEditTool = tools.find((tool) => tool.name === "session_edit")!;
 
 describe("session_edit schema", () => {
+  it("uses an object root accepted by function-tool providers", () => {
+    for (const tool of tools) {
+      expect(tool.parameters).toMatchObject({ type: "object" });
+    }
+  });
+
   it("accepts exactly one edit mode", () => {
     expect(
       Check(sessionEditSchema, {
@@ -48,36 +55,38 @@ describe("session_edit schema", () => {
     ).toBe(true);
   });
 
-  it("rejects both, neither, and dry_run on metadata patches", () => {
-    expect(
-      Check(sessionEditSchema, {
+  it("rejects ambiguous edit modes at the execution boundary", async () => {
+    const execute = (params: Record<string, unknown>) =>
+      sessionEditTool.execute("call", params, undefined, undefined);
+    await expect(
+      execute({
         tool: "codex",
         ref: "fsr_session",
       }),
-    ).toBe(false);
-    expect(
-      Check(sessionEditSchema, {
+    ).rejects.toThrow("requires exactly one");
+    await expect(
+      execute({
         tool: "codex",
         ref: "fsr_session",
         ops: [{ op: "delete-turn", turn: 1 }],
         patch: { pinned: true },
       }),
-    ).toBe(false);
-    expect(
-      Check(sessionEditSchema, {
+    ).rejects.toThrow("requires exactly one");
+    await expect(
+      execute({
         tool: "codex",
         ref: "fsr_session",
         patch: { pinned: true },
         dry_run: true,
       }),
-    ).toBe(false);
-    expect(
-      Check(sessionEditSchema, {
+    ).rejects.toThrow("dry_run is only valid");
+    await expect(
+      execute({
         tool: "codex",
         ref: "fsr_session",
         patch: { pinned: true },
         dry_run: false,
       }),
-    ).toBe(false);
+    ).rejects.toThrow("dry_run is only valid");
   });
 });

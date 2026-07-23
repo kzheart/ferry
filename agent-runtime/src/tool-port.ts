@@ -59,6 +59,7 @@ export interface ToolRequestContext {
   sessionId: string;
   runId: string;
   toolCallId: string;
+  applyPolicy?: "manual" | "auto";
   signal?: AbortSignal;
   onUpdate: (payload: unknown) => void;
 }
@@ -134,21 +135,15 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
-  session_edit: Type.Union([
-    Type.Object(
-      {
-        tool: Type.String({ minLength: 1, maxLength: 32 }),
-        ref: Type.String({ minLength: 1, maxLength: 512 }),
-        ops: editOps,
-        dry_run: Type.Optional(Type.Boolean()),
-      },
-      { additionalProperties: false },
-    ),
-    Type.Object(
-      {
-        tool: Type.String({ minLength: 1, maxLength: 32 }),
-        ref: Type.String({ minLength: 1, maxLength: 512 }),
-        patch: Type.Object(
+  // Function-tool providers require the root schema to be an object. Keep the
+  // ops/patch exclusivity at the execution boundary instead of a root anyOf.
+  session_edit: Type.Object(
+    {
+      tool: Type.String({ minLength: 1, maxLength: 32 }),
+      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      ops: Type.Optional(editOps),
+      patch: Type.Optional(
+        Type.Object(
           {
             name: Type.Optional(Type.String({ maxLength: 200 })),
             pinned: Type.Optional(Type.Boolean()),
@@ -159,10 +154,11 @@ const schemas = {
           },
           { additionalProperties: false },
         ),
-      },
-      { additionalProperties: false },
-    ),
-  ]),
+      ),
+      dry_run: Type.Optional(Type.Boolean()),
+    },
+    { additionalProperties: false },
+  ),
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
@@ -180,14 +176,25 @@ const descriptions: Record<FerryToolName, string> = {
 export function createFerryTools(
   port: FerryToolPort,
   getContext: () => Omit<ToolRequestContext, "toolCallId" | "onUpdate">,
+  allowedTools: readonly FerryToolName[] = FERRY_TOOL_NAMES,
 ): AgentTool[] {
-  return FERRY_TOOL_NAMES.map((name) => ({
+  return allowedTools.map((name) => ({
     name,
     label: name,
     description: descriptions[name],
     parameters: schemas[name],
     executionMode: "sequential",
     async execute(toolCallId, params, signal, onUpdate) {
+      if (name === "session_edit") {
+        const input = params as Record<string, unknown>;
+        const hasOps = input.ops !== undefined;
+        const hasPatch = input.patch !== undefined;
+        if (hasOps === hasPatch || (hasPatch && input.dry_run !== undefined)) {
+          throw new Error(
+            "session_edit requires exactly one of ops or patch; dry_run is only valid with ops",
+          );
+        }
+      }
       const active = getContext();
       const details = await port.invoke(
         name,

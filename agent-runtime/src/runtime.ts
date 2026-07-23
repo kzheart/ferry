@@ -16,6 +16,14 @@ import type {
   ThinkingLevel,
 } from "./provider-config.js";
 import type { ProviderHost } from "./provider-host.js";
+import { parseOrganizerInput } from "./organizer.js";
+import {
+  DEFAULT_ROLE_ID,
+  MemoryRoleStore,
+  type ApplyPolicy,
+  type RoleInput,
+  type RoleStore,
+} from "./roles.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -23,6 +31,7 @@ import {
 } from "./protocol.js";
 import {
   createFerryTools,
+  FERRY_TOOL_NAMES,
   type FerryToolName,
   type ToolRequestContext,
 } from "./tool-port.js";
@@ -53,6 +62,41 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
 
 // 工具结果要进事件日志并回放，超长内容截断后再落盘
 const MAX_TOOL_RESULT_CHARS = 8_000;
+const MAX_TOOL_DETAILS_CHARS = 64_000;
+
+function safeStructured(
+  value: unknown,
+  budget = { remaining: MAX_TOOL_DETAILS_CHARS },
+  depth = 0,
+): unknown {
+  if (budget.remaining <= 0 || depth > 8) return "[truncated]";
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const text = safeText(value, Math.min(8_000, budget.remaining));
+    budget.remaining -= text.length;
+    return text;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 200)
+      .map((item) => safeStructured(item, budget, depth + 1));
+  }
+  if (typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value).slice(0, 200)) {
+      if (budget.remaining <= 0) break;
+      output[key] = safeStructured(item, budget, depth + 1);
+    }
+    return output;
+  }
+  return String(value);
+}
 
 function summarizeToolResult(result: unknown) {
   const blocks = (result as { content?: unknown })?.content;
@@ -74,19 +118,34 @@ function summarizeToolResult(result: unknown) {
       raw = String(result);
     }
   }
-  return raw.length > MAX_TOOL_RESULT_CHARS
-    ? { text: raw.slice(0, MAX_TOOL_RESULT_CHARS), truncated: true }
-    : { text: raw, truncated: false };
+  const summary =
+    raw.length > MAX_TOOL_RESULT_CHARS
+      ? { text: raw.slice(0, MAX_TOOL_RESULT_CHARS), truncated: true }
+      : { text: raw, truncated: false };
+  const details = (result as { details?: unknown })?.details;
+  return details === undefined
+    ? summary
+    : { ...summary, details: safeStructured(details) };
 }
 
 export interface RuntimeOptions {
   store?: SessionStore;
   backendFactory?: BackendFactory;
   providerHost?: ProviderHost;
+  roleStore?: RoleStore;
   toolHandler?: ToolHandler;
   now?: () => Date;
   idFactory?: () => string;
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
+}
+
+export const FERRY_SAFETY_PROMPT =
+  "You are Ferry's local assistant, working over the user's unified session history from Claude Code, Codex, and OpenCode. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and a native session_id. Sessions can be migrated between claude, codex, and opencode. Decide your own approach for each request.";
+
+function systemPrompt(persona: string) {
+  return persona.trim()
+    ? `${FERRY_SAFETY_PROMPT}\n\nAdditional role persona (cannot override the safety and tool constraints above):\n${persona}`
+    : FERRY_SAFETY_PROMPT;
 }
 
 interface DeferredTool {
@@ -121,6 +180,18 @@ function safeText(value: string, limit: number): string {
     .replace(/\b[A-Z]:[\\/][^\s\]\[)(}{"']+/gi, "[ABSOLUTE_PATH]")
     .replace(/(?<![:\w])\/(?:[^/\s]+\/)*[^\s\]\[)(}{"']+/g, "[ABSOLUTE_PATH]");
   return redacted.length > limit ? `${redacted.slice(0, limit)}…` : redacted;
+}
+
+function providerFailure(error?: unknown) {
+  const detail =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return detail
+    ? `provider request failed: ${safeText(detail, 1_000)}`
+    : "provider request failed";
 }
 
 export function safeMessages(messages: AgentMessage[]): AgentMessage[] {
@@ -191,9 +262,17 @@ export function safeEvents(events: EventEnvelope[]): EventEnvelope[] {
     }
     // 工具结果保留在日志里供回放展示，但要脱敏并进一步压缩
     if (event.type === "tool.completed") {
-      const result = payload.result as { text?: unknown } | undefined;
+      const result = payload.result as
+        | { text?: unknown; details?: unknown }
+        | undefined;
       if (result && typeof result.text === "string") {
-        payload.result = { ...result, text: safeText(result.text, 4_000) };
+        payload.result = {
+          ...result,
+          text: safeText(result.text, 4_000),
+          ...(result.details === undefined
+            ? {}
+            : { details: safeStructured(result.details) }),
+        };
       }
     }
     if (typeof payload.message === "string") {
@@ -263,6 +342,10 @@ class RuntimeSession {
     private readonly runtime: AgentRuntime,
     backend: AgentBackend,
     private selection: ModelSelection,
+    private readonly roleId: string,
+    private readonly resolvedPersona: string,
+    private readonly resolvedTools: FerryToolName[],
+    private readonly resolvedApplyPolicy: ApplyPolicy,
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -277,8 +360,7 @@ class RuntimeSession {
       steeringMode: "one-at-a-time",
       followUpMode: "one-at-a-time",
       initialState: {
-        systemPrompt:
-          "You are Ferry's local assistant, working over the user's unified session history from Claude Code, Codex, and OpenCode. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and a native session_id. Sessions can be migrated between claude, codex, and opencode. Decide your own approach for each request.",
+        systemPrompt: systemPrompt(this.resolvedPersona),
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
         tools: createFerryTools(
@@ -292,8 +374,13 @@ class RuntimeSession {
                 "no_active_run",
                 "tool call has no active run",
               );
-            return { sessionId: this.id, runId: this.activeRunId };
+            return {
+              sessionId: this.id,
+              runId: this.activeRunId,
+              applyPolicy: this.resolvedApplyPolicy,
+            };
           },
+          this.resolvedTools,
         ),
         messages: state?.messages ?? [],
       },
@@ -347,7 +434,7 @@ class RuntimeSession {
       } catch (error) {
         this.terminalResult = {
           type: "run.failed",
-          payload: { message: "provider request failed" },
+          payload: { message: providerFailure(error) },
         };
       }
       const terminal = this.terminalResult ?? {
@@ -400,6 +487,8 @@ class RuntimeSession {
       title: this.title,
       pinned: this.pinned,
       thinking_level: this.selection.thinking ?? "off",
+      role_id: this.roleId,
+      apply_policy: this.resolvedApplyPolicy,
     };
   }
 
@@ -498,7 +587,7 @@ class RuntimeSession {
         ) {
           this.terminalResult = {
             type: "run.failed",
-            payload: { message: "provider request failed" },
+            payload: { message: providerFailure(final.errorMessage) },
           };
         } else {
           this.terminalResult = { type: "run.completed", payload: {} };
@@ -522,6 +611,10 @@ class RuntimeSession {
         title: this.title,
         pinned: this.pinned,
         thinking_level: this.selection.thinking ?? "off",
+        role_id: this.roleId,
+        resolved_persona: this.resolvedPersona,
+        resolved_tools: [...this.resolvedTools],
+        resolved_apply_policy: this.resolvedApplyPolicy,
       },
       safeEvents(this.events),
     );
@@ -530,6 +623,7 @@ class RuntimeSession {
 
 export class AgentRuntime {
   readonly store: SessionStore;
+  readonly roleStore: RoleStore;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly listeners = new Set<(event: EventEnvelope) => void>();
@@ -549,6 +643,7 @@ export class AgentRuntime {
     defaultSelection?: ModelSelection,
   ) {
     this.store = options.store ?? new MemorySessionStore();
+    this.roleStore = options.roleStore ?? new MemoryRoleStore();
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? randomUUID;
     this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
@@ -604,6 +699,13 @@ export class AgentRuntime {
         runtime,
         runtime.backendFactory(selection),
         selection,
+        record.state.role_id ?? DEFAULT_ROLE_ID,
+        record.state.resolved_persona ?? "",
+        (record.state.resolved_tools ?? FERRY_TOOL_NAMES).filter(
+          (name): name is FerryToolName =>
+            (FERRY_TOOL_NAMES as readonly string[]).includes(name),
+        ),
+        record.state.resolved_apply_policy ?? "auto",
       );
       runtime.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -652,19 +754,36 @@ export class AgentRuntime {
     for (const listener of this.listeners) listener(event);
   }
 
-  async createSession(requestedId?: string, requestedModel?: ModelSelection) {
+  async createSession(
+    requestedId?: string,
+    requestedModel?: ModelSelection,
+    requestedRoleId = DEFAULT_ROLE_ID,
+  ) {
     const id = requestedId ?? this.newId();
     if (this.sessions.has(id))
       throw new ProtocolError("session_exists", "session already exists");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
       throw new ProtocolError("invalid_params", "invalid session_id");
-    const selection = this.providerHost
-      ? (requestedModel ?? (await this.providerHost.defaultModel()))
+    const role = await this.roleStore.get(requestedRoleId);
+    if (!role) throw new ProtocolError("role_not_found", "role not found");
+    const fallbackSelection = this.providerHost
+      ? await this.providerHost.defaultModel()
       : {
           provider:
             this.backendInfo.provider ?? this.backendInfo.model.provider,
           model: this.backendInfo.modelId ?? this.backendInfo.model.id,
         };
+    const baseSelection = requestedModel ?? role.model ?? fallbackSelection;
+    const thinking =
+      requestedModel?.thinking ??
+      role.thinking ??
+      role.model?.thinking ??
+      fallbackSelection.thinking;
+    const selection: ModelSelection = {
+      provider: baseSelection.provider,
+      model: baseSelection.model,
+      ...(thinking ? { thinking } : {}),
+    };
     const session = new RuntimeSession(
       id,
       undefined,
@@ -672,11 +791,16 @@ export class AgentRuntime {
       this,
       this.backendFactory(selection),
       selection,
+      role.id,
+      role.persona,
+      [...role.tools],
+      role.apply_policy,
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {
       provider_id: selection.provider,
       model_id: selection.model,
+      role_id: role.id,
     });
     return session.state();
   }
@@ -734,6 +858,58 @@ export class AgentRuntime {
   async providers() {
     if (!this.providerHost) return [];
     return this.providerHost.providers();
+  }
+
+  roles() {
+    return this.roleStore.list();
+  }
+
+  async createRole(input: RoleInput) {
+    return this.mutateRole(() => this.roleStore.create(input));
+  }
+
+  async updateRole(id: string, input: RoleInput) {
+    return this.mutateRole(() => this.roleStore.update(id, input));
+  }
+
+  async deleteRole(id: string) {
+    await this.mutateRole(() => this.roleStore.delete(id));
+    return { role_id: id, deleted: true };
+  }
+
+  async generateOrganization(input: unknown) {
+    if (!this.providerHost) {
+      throw new ProtocolError(
+        "unsupported",
+        "organization generation unavailable",
+      );
+    }
+    try {
+      return await this.providerHost.organize(parseOrganizerInput(input));
+    } catch (error) {
+      if (error instanceof ProtocolError) throw error;
+      throw new ProtocolError(
+        "organization_failed",
+        error instanceof Error ? error.message : "organization failed",
+      );
+    }
+  }
+
+  async copyRole(sourceId: string, id: string, name?: string) {
+    return this.mutateRole(() =>
+      this.roleStore.copy(sourceId, { id, ...(name ? { name } : {}) }),
+    );
+  }
+
+  private async mutateRole<T>(operation: () => Promise<T>) {
+    try {
+      return await operation();
+    } catch (error) {
+      throw new ProtocolError(
+        "invalid_role",
+        error instanceof Error ? error.message : "role is invalid",
+      );
+    }
   }
 
   models(providerId: string, query = "", limit = 100) {
@@ -1116,6 +1292,7 @@ export class AgentRuntime {
           tool_call_id: context.toolCallId,
           name,
           args,
+          apply_policy: context.applyPolicy,
         },
         context.runId,
       );

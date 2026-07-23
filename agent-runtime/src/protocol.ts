@@ -6,6 +6,12 @@ export type CommandMethod =
   | "session.rename"
   | "session.pin"
   | "session.delete"
+  | "roles.list"
+  | "role.create"
+  | "role.update"
+  | "role.copy"
+  | "role.delete"
+  | "organization.generate"
   | "prompt"
   | "abort"
   | "steer"
@@ -94,6 +100,12 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "session.rename",
     "session.pin",
     "session.delete",
+    "roles.list",
+    "role.create",
+    "role.update",
+    "role.copy",
+    "role.delete",
+    "organization.generate",
     "prompt",
     "abort",
     "steer",

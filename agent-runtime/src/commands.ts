@@ -1,5 +1,6 @@
 import { parseThinkingLevel, type ThinkingLevel } from "./provider-config.js";
 import type { AgentRuntime } from "./runtime.js";
+import type { RoleInput } from "./roles.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -39,6 +40,12 @@ export async function dispatch(
             "provider_id and model_id must be provided together",
           );
         }
+        let createThinking: ThinkingLevel | undefined;
+        try {
+          createThinking = parseThinkingLevel(params.thinking);
+        } catch {
+          throw new ProtocolError("invalid_params", "thinking is invalid");
+        }
         result = await runtime.createSession(
           params.session_id === undefined
             ? undefined
@@ -48,7 +55,9 @@ export async function dispatch(
             : {
                 provider: requireString(params, "provider_id", 128),
                 model: requireString(params, "model_id", 512),
+                ...(createThinking ? { thinking: createThinking } : {}),
               },
+          optionalString(params, "role_id", 128),
         );
         break;
       case "session.rename":
@@ -70,6 +79,36 @@ export async function dispatch(
         result = await runtime.deleteSession(
           requireString(params, "session_id", 128),
         );
+        break;
+      case "roles.list":
+        result = await runtime.roles();
+        break;
+      case "role.create":
+        result = await runtime.createRole(requireRole(params));
+        break;
+      case "role.update":
+        result = await runtime.updateRole(
+          requireString(params, "role_id", 128),
+          requireRole(params),
+        );
+        break;
+      case "role.copy":
+        result = await runtime.copyRole(
+          requireString(params, "source_role_id", 128),
+          requireString(params, "role_id", 128),
+          optionalString(params, "name", 200),
+        );
+        break;
+      case "role.delete":
+        result = await runtime.deleteRole(
+          requireString(params, "role_id", 128),
+        );
+        break;
+      case "organization.generate":
+        result = await runtime.generateOrganization({
+          sessions: params.sessions,
+          locale: params.locale,
+        });
         break;
       case "prompt":
         result = await runtime.prompt(
@@ -317,6 +356,13 @@ function parseImages(value: unknown) {
     }
     return { type: "image" as const, data, mimeType };
   });
+}
+
+function requireRole(params: Record<string, unknown>): RoleInput {
+  if (!isObject(params.role)) {
+    throw new ProtocolError("invalid_params", "role must be an object");
+  }
+  return params.role as unknown as RoleInput;
 }
 
 // null 表示恢复「该 Provider 全部模型可见」
