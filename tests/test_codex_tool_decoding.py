@@ -1,7 +1,10 @@
 import json
 
+import pytest
+
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import writer as codex_writer
+from engine.domain.errors import AgentFormatChangedError
 from engine.domain.model import (
     Session,
     ToolCall,
@@ -39,7 +42,7 @@ def _tools(session):
     ]
 
 
-def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tmp_path):
+def test_current_function_and_custom_calls_coexist(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {
             "type": "function_call", "name": "exec_command",
@@ -61,9 +64,6 @@ def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tm
             "type": "custom_tool_call_output", "call_id": "custom-call",
             "output": "custom output",
         }},
-        {"type": "custom_tool_call", "name": "exec",
-         "input": 'tools.exec_command({"cmd":"pwd"})',
-         "call_id": "root-call"},
     ])
 
     function, custom = _tools(session)
@@ -73,6 +73,19 @@ def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tm
     assert custom.op == CanonicalOp.SHELL_EXEC
     assert custom.input == {"command": "printf custom"}
     assert tool_result_text(custom.result) == "custom output"
+
+
+def test_root_level_response_item_shape_fails_explicitly(tmp_path):
+    with pytest.raises(
+        AgentFormatChangedError,
+        match="codex 当前结构不匹配",
+    ):
+        _read(tmp_path, [{
+            "type": "custom_tool_call",
+            "name": "exec",
+            "input": 'tools.exec_command({"cmd":"pwd"})',
+            "call_id": "root-call",
+        }])
 
 
 def test_reader_keeps_native_records_out_of_the_canonical_session(tmp_path):
