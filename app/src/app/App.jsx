@@ -120,11 +120,9 @@ export default function App() {
   const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
   const migratedIds = useMemo(() => new Set(historyRows.map(h => h.source_id)), [historyRows]);
   const cur = selId ? byId[selId] : null;
-  const savedAsRef = useRef(null);
   const editing = useSessionEditing({ current: cur,
     runtimeProbe: !!settings.runtimeProbe, doScan,
-    onInplaceApplied: () => select(selId),
-    onSavedAs: result => savedAsRef.current?.(result) });
+    onInplaceApplied: () => select(selId) });
 
   useEffect(() => {
     const ids = new Set(sessions.map(session => `${session.tool}\0${session.id}`));
@@ -166,7 +164,7 @@ export default function App() {
   }, [sessions, cur, ferry.health?.credential, i18n.language]);
   const { ops, dirtyOps, setOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
+    editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit } = editing;
 
   // 清单水合(首启无缓存 / 引擎清单与缓存不一致)后,把"全选"态筛选器扩展到新全集
@@ -337,18 +335,6 @@ export default function App() {
     loadHistory();
     if (view === "library" && selId) refreshDetail();
   }, [ferry.mutationVersion]);
-
-  // 另存为新会话后从 toast 打开:扫描结果已含新会话则正常选中,否则按返回的路径直接读
-  savedAsRef.current = result => {
-    const id = result.session_id;
-    if (byId[id]) { select(id); return; }
-    setSelId(id); resetSelection();
-    setDetail({ id, data: null });
-    rpc("show", { tool: result.tool, ref: result.saved_as || id })
-      .then(data => setDetail(d => d?.id === id ? { ...d, data } : d))
-      .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
-    doScan();
-  };
 
   // ----- 会话删除(先落一份备份,可撤销) -----
   const undoDelete = async snapshot => {
@@ -1025,7 +1011,7 @@ export default function App() {
             scope={scope} setScope={detailActs.setScope}
             ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
             updateOp={detailActs.updateOp}
-            editCaps={editCaps} authoringCaps={authoringCaps}
+            editCaps={editCaps}
             startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
             onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
             onOpenMigrate={detailActs.onOpenMigrate}
@@ -1093,7 +1079,7 @@ export default function App() {
               scope={scope} setScope={detailActs.setScope}
               ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
               updateOp={detailActs.updateOp}
-              editCaps={editCaps} authoringCaps={authoringCaps}
+              editCaps={editCaps}
               startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
               onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
               onOpenMigrate={detailActs.onOpenMigrate}
@@ -1111,8 +1097,6 @@ export default function App() {
       {diff && <DiffSheet ops={dirtyOps} preview={diff.preview} loading={diff.loading} error={diff.error}
         onClose={() => setDiff(null)} />}
       {confirmApply && <ApplyConfirm ops={dirtyOps}
-        saveAs={dirtyOps.some(op => op.type === "assistant-reply") &&
-          !authoringCaps?.inplace && !!authoringCaps?.save_as}
         onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
       {searchOpen && paneCfg && (
         <SearchPalette
