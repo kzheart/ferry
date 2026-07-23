@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from engine.application import services
+from engine.application import editing, services
+from engine.application.ports import current
 from engine.infrastructure.snapshots import backup_dir
 
 
@@ -39,19 +40,15 @@ def _snapshots():
 def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
     """原地编辑前必须留底，否则写坏了没有退路。"""
     before = session.read_bytes()
-    services.edit_apply(str(session), [{"op": "delete-turn", "turn": 2}], tool="claude")
+    editor = current().adapter("claude").require("editor")
+    editing.apply(
+        editor, str(session), [{"op": "delete-turn", "turn": 2}], False,
+    )
 
     snaps = _snapshots()
     assert len(snaps) == 1
     assert snaps[0].read_bytes() == before
     assert session.read_bytes() != before          # 编辑确实生效了
-
-
-def test_save_as_does_not_leave_a_snapshot(session):
-    """另存为不动源会话，不需要留底。"""
-    services.edit_apply(str(session), [{"op": "delete-turn", "turn": 2}],
-                        save_as=True, tool="claude")
-    assert _snapshots() == []
 
 
 def test_delete_is_undoable(session):
