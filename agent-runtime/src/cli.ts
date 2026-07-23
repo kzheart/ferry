@@ -2,7 +2,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { AgentRuntime } from "./runtime.js";
-import { FileSessionStore } from "./event-store.js";
+import { EngineSessionStore } from "./engine-session-store.js";
 import { FileProviderConfigStore } from "./provider-config.js";
 import { FileRoleStore } from "./roles.js";
 import { ProviderHost } from "./provider-host.js";
@@ -26,7 +26,7 @@ async function main() {
     new FileProviderConfigStore(join(dataDirectory, "providers.json")),
   );
   const runtime = await AgentRuntime.create({
-    store: new FileSessionStore(join(dataDirectory, "sessions")),
+    storeFactory: (invoke) => new EngineSessionStore(invoke),
     roleStore: new FileRoleStore(join(dataDirectory, "roles.json")),
     providerHost,
     deferRestore: true,
