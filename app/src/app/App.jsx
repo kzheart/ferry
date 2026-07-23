@@ -1,9 +1,8 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { onMenu, openTerminal, revealPath, rpc,
+import { openTerminal, revealPath, rpc,
   operationApply, operationPlan,
-  preloadWindow, startWindowDrag, toggleWindowMaximize,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
@@ -33,6 +32,7 @@ import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
+import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -132,33 +132,11 @@ export default function App() {
     if (!selId && sessions.length) select(sessions[0].id);
   }, [sessions]);
 
-  // 原生菜单栏事件:经 ref 转发,回调始终拿到最新闭包
-  const menuActs = useRef({});
-  menuActs.current = {
-    settings: () => { setSettingsSection("prefs"); setSettingsOpen(true); },
-    "toggle-sidebar": () => setCollapsed(v => !v),
-    rescan: () => doScan(),
-  };
-  useEffect(() => {
-    let un;
-    onMenu(id => menuActs.current[id]?.()).then(u => { un = u; });
-    return () => un?.();
-  }, []);
-
-  // 透明窗口下内建拖拽区失效,手动补上:主键点在 data-tauri-drag-region 元素本体上才触发,
-  // 避免落到里面的按钮;双击标题栏切换最大化。窗口句柄需先预加载,否则同步栈里抓不到手势。
-  useEffect(() => {
-    preloadWindow();
-    const onDown = e => {
-      if (e.button !== 0) return;
-      const el = e.target;
-      if (!el?.hasAttribute?.("data-tauri-drag-region")) return;
-      if (e.detail === 2) toggleWindowMaximize();
-      else startWindowDrag();
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, []);
+  useDesktopChrome({
+    onOpenSettings: () => { setSettingsSection("prefs"); setSettingsOpen(true); },
+    onToggleSidebar: () => setCollapsed(value => !value),
+    onRescan: doScan,
+  });
 
   // ----- 会话元数据(重命名/置顶/归档/标签,sidecar 存储) -----
   useEffect(() => {
