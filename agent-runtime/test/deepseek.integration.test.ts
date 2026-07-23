@@ -41,7 +41,7 @@ describe("DeepSeek provider integration", () => {
       await runtime.createSession("deepseek-smoke");
       const { run_id } = await runtime.prompt(
         "deepseek-smoke",
-        '必须先调用 ferry_search_sessions（query 传 "test"）搜索会话，然后仅回复 FERRY_DEEPSEEK_OK。',
+        '必须先调用 session_search（query 传 "test"）搜索会话，然后仅回复 FERRY_DEEPSEEK_OK。',
       );
       await runtime.waitForIdle("deepseek-smoke");
 
@@ -55,7 +55,7 @@ describe("DeepSeek provider integration", () => {
       expect(
         events.filter((event) => event.type === "content.delta").length,
       ).toBeGreaterThan(0);
-      expect(calls).toEqual(["ferry_search_sessions"]);
+      expect(calls).toEqual(["session_search"]);
       expect(events.some((event) => event.type === "tool.completed")).toBe(
         true,
       );

@@ -810,6 +810,36 @@ def search_session_content(tool: str, opaque_ref: str, terms,
     })
 
 
+def session_read(tool: str, ref: str | None = None,
+                 session_id: str | None = None, terms=None, roles=None,
+                 from_message: int = 1, limit: int = 20,
+                 include_tool_outputs: bool = False,
+                 max_bytes: int = DEFAULT_CONTEXT_BYTES) -> dict:
+    """读取单个会话:内部消化 native id → ref 解析,并按有无 terms
+    在'读上下文分页'与'搜正文'之间分流,替代 resolve/context/content 三工具。"""
+    resolved_from_id = False
+    if ref is None:
+        if not session_id:
+            raise AgentRequestError(
+                "必须提供 ref 或 session_id", {"field": "ref"})
+        ref = resolve_session(tool, session_id)["ref"]
+        resolved_from_id = True
+    elif session_id:
+        raise AgentRequestError(
+            "ref 与 session_id 只能二选一", {"field": "ref"})
+    if terms is not None:
+        result = search_session_content(tool, ref, terms, roles=roles, limit=limit)
+        result["mode"] = "search"
+    else:
+        result = get_session_context(
+            tool, ref, from_message=from_message, limit=limit,
+            include_tool_outputs=include_tool_outputs, max_bytes=max_bytes)
+        result["mode"] = "context"
+    if resolved_from_id:
+        result["resolved_from_session_id"] = True
+    return result
+
+
 def get_usage(agents=None, projects=None, time_range=None) -> dict:
     allowed_agents = _string_set(agents, "agents", 8, 32)
     allowed_projects = {

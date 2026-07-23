@@ -147,11 +147,7 @@ fn request_timeout(request: &str) -> Duration {
     } else if matches!(
         method.as_deref(),
         Some(
-            "agent_search_sessions"
-                | "agent_resolve_session"
-                | "agent_get_session_context"
-                | "agent_search_session_content"
-                | "agent_get_usage"
+            "agent_search_sessions" | "agent_session_read" | "agent_get_usage"
         )
     ) {
         AGENT_LOOKUP_TIMEOUT
@@ -402,9 +398,7 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "edit_preview"
             | "session_meta_list"
             | "agent_search_sessions"
-            | "agent_resolve_session"
-            | "agent_get_session_context"
-            | "agent_search_session_content"
+            | "agent_session_read"
             | "agent_get_usage"
             | "agent_preview_migration"
             | "agent_preview_edit"

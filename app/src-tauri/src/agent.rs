@@ -353,11 +353,9 @@ fn structured_engine_error(envelope: &Value) -> String {
 
 fn tool_method(name: &str) -> Option<&'static str> {
     Some(match name {
-        "ferry_search_sessions" => "agent_search_sessions",
-        "ferry_resolve_session" => "agent_resolve_session",
-        "ferry_get_session_context" => "agent_get_session_context",
-        "ferry_search_session_content" => "agent_search_session_content",
-        "ferry_get_usage" => "agent_get_usage",
+        "session_search" => "agent_search_sessions",
+        "session_read" => "agent_session_read",
+        "usage" => "agent_get_usage",
         "ferry_preview_migration" => "agent_preview_migration",
         "ferry_preview_edit" => "agent_preview_edit",
         "ferry_propose_migration" => "agent_propose_migration",
@@ -661,12 +659,12 @@ mod tests {
     #[test]
     fn tool_gateway_is_an_exact_allowlist() {
         assert_eq!(
-            tool_method("ferry_resolve_session"),
-            Some("agent_resolve_session")
+            tool_method("session_read"),
+            Some("agent_session_read")
         );
         assert_eq!(
-            tool_method("ferry_search_session_content"),
-            Some("agent_search_session_content")
+            tool_method("session_search"),
+            Some("agent_search_sessions")
         );
         assert_eq!(
             tool_method("ferry_propose_edit"),

@@ -46,11 +46,9 @@ const editOps = Type.Array(
 );
 
 export const FERRY_TOOL_NAMES = [
-  "ferry_search_sessions",
-  "ferry_resolve_session",
-  "ferry_get_session_context",
-  "ferry_search_session_content",
-  "ferry_get_usage",
+  "session_search",
+  "session_read",
+  "usage",
   "ferry_preview_migration",
   "ferry_preview_edit",
   "ferry_propose_migration",
@@ -77,7 +75,7 @@ export interface FerryToolPort {
 }
 
 const schemas = {
-  ferry_search_sessions: Type.Object(
+  session_search: Type.Object(
     {
       query: Type.String({ minLength: 1, maxLength: 500 }),
       agents: Type.Optional(
@@ -91,17 +89,23 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
-  ferry_resolve_session: Type.Object(
+  session_read: Type.Object(
     {
       tool: Type.String({ minLength: 1, maxLength: 32 }),
-      session_id: Type.String({ minLength: 1, maxLength: 512 }),
-    },
-    { additionalProperties: false },
-  ),
-  ferry_get_session_context: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      ref: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+      session_id: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+      terms: Type.Optional(
+        Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
+          minItems: 1,
+          maxItems: 20,
+        }),
+      ),
+      roles: Type.Optional(
+        Type.Array(
+          Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+          { minItems: 1, maxItems: 2 },
+        ),
+      ),
       from_message: Type.Optional(Type.Integer({ minimum: 1 })),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
       include_tool_outputs: Type.Optional(Type.Boolean()),
@@ -111,25 +115,7 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
-  ferry_search_session_content: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      terms: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
-        minItems: 1,
-        maxItems: 20,
-      }),
-      roles: Type.Optional(
-        Type.Array(
-          Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
-          { minItems: 1, maxItems: 2 },
-        ),
-      ),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
-    },
-    { additionalProperties: false },
-  ),
-  ferry_get_usage: Type.Object(
+  usage: Type.Object(
     {
       agents: Type.Optional(
         Type.Array(Type.String({ maxLength: 32 }), { maxItems: 8 }),
@@ -196,15 +182,11 @@ const schemas = {
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
-  ferry_search_sessions:
+  session_search:
     "Search session metadata (title, project, source tool, and model). Returns fsr_ refs; it does not search message bodies or native session IDs.",
-  ferry_resolve_session:
-    "Resolve an exact native session ID from a Ferry attachment into a current fsr_ ref. Use this before reading or editing an attached session.",
-  ferry_get_session_context:
-    "Read a bounded, redacted page of messages from an indexed session. Paginate with next_from_message, not turn numbers. The response reports message_count, turn_count, and an fml_ locator on every message; only messages with editable=true may be rewritten. Copy locators exactly. ref must be an fsr_ value returned by ferry_search_sessions or ferry_resolve_session; never pass a native ID or path.",
-  ferry_search_session_content:
-    "Search visible text inside one resolved session without reading the whole transcript. Returns matching snippets and current fml_ message locators. Prefer this for targeted wording changes in long sessions. If a match has complete=false, read that message with ferry_get_session_context before replacing its full text.",
-  ferry_get_usage: "Get privacy-filtered aggregate usage.",
+  session_read:
+    "Read one indexed session. Provide either ref (an fsr_ value from session_search) or session_id (a native ID from a session attachment, resolved internally) — exactly one. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
+  usage: "Get privacy-filtered aggregate usage.",
   ferry_preview_migration: "Preview a session migration without writing data.",
   ferry_preview_edit:
     "Preview a session edit without writing data. For rewrite operations, use only fml_ locators returned by the latest context or content-search response. Batch all intended rewrites into one call.",

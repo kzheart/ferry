@@ -93,7 +93,7 @@ const streamFn: StreamFunction = (
       const call: ToolCall = {
         type: "toolCall",
         id: "tool-call-1",
-        name: "ferry_search_sessions",
+        name: "session_search",
         arguments: { query: "x" },
       };
       const partial = message([], "toolUse");

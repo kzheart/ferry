@@ -72,7 +72,7 @@ describe("AgentRuntime", () => {
     await runtime.waitForIdle("s1");
 
     const types = runtime.replay("s1", 0).map((event) => event.type);
-    expect(calls).toEqual(["ferry_search_sessions"]);
+    expect(calls).toEqual(["session_search"]);
     expect(types).toContain("tool.started");
     expect(types).toContain("tool.progress");
     expect(types).toContain("tool.completed");
@@ -128,7 +128,7 @@ describe("AgentRuntime", () => {
 
   it("ends a tool wait at the configured gateway deadline", async () => {
     const runtime = await createRuntime({
-      toolDeadlinesMs: { ferry_search_sessions: 5 },
+      toolDeadlinesMs: { session_search: 5 },
     });
     await runtime.createSession("s1");
     await runtime.prompt("s1", "tool:search");
