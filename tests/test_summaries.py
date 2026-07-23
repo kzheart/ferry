@@ -88,7 +88,7 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
         _msg("user", "改支付", "u1"),
         _msg("user", "改标题", "u2"),
     ])
-    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
     first = summaries.build_backbone("claude", "fsr_x")
     assert first["segment_count"] == 2
@@ -117,7 +117,7 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
 def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
     _use_database(tmp_path, monkeypatch)
     session = _session([_msg("user", "只此一轮", "u1")])
-    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
     first = summaries.build_backbone("claude", "fsr_x")
     again = summaries.build_backbone("claude", "fsr_x")
     assert first["fingerprint"] == again["fingerprint"]
@@ -131,7 +131,7 @@ def test_build_backbone_refreshes_structure_for_textless_message(
         _msg("assistant", "完成", "a1"),
         _msg("user", "改标题", "u2"),
     ])
-    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
     first = summaries.build_backbone("claude", "fsr_x")
     first_hash = first["segments"][0]["hash"]
@@ -153,7 +153,7 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
         _msg("user", "第一轮", "u1"),
         _msg("user", "第二轮", "u2"),
     ])
-    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
     first = summaries.build_backbone("claude", "fsr_x")
     second_hash = first["segments"][1]["hash"]

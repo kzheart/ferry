@@ -276,7 +276,7 @@ def test_search_never_exposes_storage_locations(agent_environment):
 
 def test_library_scan_issues_operation_refs(agent_environment):
     session = next(
-        item for item in scanning.scan()["sessions"]
+        item for item in scanning.scan(current())["sessions"]
         if item["tool"] == "claude"
     )
 

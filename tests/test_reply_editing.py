@@ -587,8 +587,8 @@ def test_session_asset_returns_image_only_on_demand(tmp_path, monkeypatch):
         ]}},
     ]
     session = _roundtrip("claude", data, tmp_path)
-    monkeypatch.setattr(sessions, "read_tree", lambda tool, ref: session)
-    assert sessions.session_asset("claude", "fixture", "u1:image:0") == {
+    monkeypatch.setattr(sessions, "read_tree", lambda tool, ref, ports: session)
+    assert sessions.session_asset("claude", "fixture", "u1:image:0", object()) == {
         "mime_type": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
         "filename": None,
     }
