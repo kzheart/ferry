@@ -48,6 +48,58 @@ def _messages(messages):
     return result
 
 
+def _context_compactions(session, messages):
+    turn = 0
+    turn_by_message = {}
+    for message in messages:
+        if message.role == "user":
+            turn += 1
+        if message.source_id:
+            turn_by_message[message.source_id] = turn
+
+    result = []
+    for sequence, compaction in enumerate(session.context_compactions, start=1):
+        result.append({
+            "id": compaction.id,
+            "source": compaction.source,
+            "sequence": sequence,
+            "after_turn": turn_by_message.get(compaction.after_message_id, 0),
+            "after_message_locator": compaction.after_message_id,
+            "event_locator": compaction.event_locator,
+            "created_at": compaction.created_at,
+            "trigger": compaction.trigger,
+            "state": compaction.state,
+            "summary": {
+                "status": compaction.summary_status,
+                "text": compaction.summary_text,
+                "locator": compaction.summary_message_id,
+            },
+            "tail": {
+                "status": compaction.tail_status,
+                "start_locator": compaction.tail_start_locator,
+                "start_message_index": compaction.tail_start_message_index,
+            },
+            "metrics": dict(compaction.metrics),
+        })
+    return result
+
+
+def _context_status(compactions):
+    if not compactions:
+        return {"state": "full", "compaction_count": 0,
+                "summary_status": "not_applicable"}
+    states = {item["state"] for item in compactions}
+    state = ("in_progress" if "in_progress" in states
+             else "incomplete" if "incomplete" in states
+             else "compacted")
+    latest = compactions[-1]
+    return {
+        "state": state,
+        "compaction_count": len(compactions),
+        "summary_status": latest["summary"]["status"],
+    }
+
+
 def session_json(session):
     children = [session_json(child) for child in session.children]
     edges = [{name: getattr(edge, name) for name in (
@@ -55,7 +107,17 @@ def session_json(session):
         "spawn_message_id", "result_message_id", "agent_id", "agent_path",
         "agent_type", "prompt", "status", "association", "confidence", "meta",
     )} for edge in session.agent_edges]
-    messages = _messages(session.messages)
+    internal_summary_ids = {
+        compaction.summary_message_id
+        for compaction in session.context_compactions
+        if compaction.summary_message_id
+    }
+    display_messages = [
+        message for message in session.messages
+        if message.source_id not in internal_summary_ids
+    ]
+    messages = _messages(display_messages)
+    context_compactions = _context_compactions(session, display_messages)
     turns = []
     current = None
     for message in messages:
@@ -78,6 +140,8 @@ def session_json(session):
         "root_id": session.root_id or session.source_id, "parent_id": session.parent_id,
         "agent_id": session.agent_id, "agent_path": session.agent_path,
         "agent_type": session.agent_type, "count": len(messages),
+        "context": _context_status(context_compactions),
+        "context_compactions": context_compactions,
         "child_count": len(children), "tree_count": 1 + sum(child["tree_count"] for child in children),
         "loss": list(session.loss), "messages": messages, "turns": turns,
         "children": children,

@@ -22,6 +22,23 @@
     "bigOutput": "大输出 {{size}}",
     "stepCount": "{{n}} 步"
   },
+  "context": {
+    "compactedCount": "已压缩 {{n}} 次",
+    "inProgress": "正在压缩上下文",
+    "summaryAvailable": "摘要可用",
+    "summaryProtected": "摘要受保护",
+    "summaryMissing": "摘要缺失",
+    "boundaryTitle": "上下文在此压缩",
+    "automatic": "自动",
+    "manual": "手动",
+    "triggerUnknown": "来源未标记",
+    "resumeHint": "恢复时使用压缩后的上下文与保留尾部",
+    "tailStartsAt": "尾部从原始第 {{n}} 条消息开始",
+    "tokenChange": "{{before}} → {{after}} tokens",
+    "protectedHint": "摘要已加密保存在原生会话中，Ferry 无法展示正文。",
+    "showSummary": "查看摘要",
+    "hideSummary": "收起摘要"
+  },
   "round": {
     "undoDelete": "撤销删除",
     "deleteTurn": "删除第 {{n}} 轮",

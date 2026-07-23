@@ -107,3 +107,36 @@ export function toRounds(messages, authoredTurns) {
   }
   return rounds;
 }
+
+export function toTimeline(rounds, compactions) {
+  const pending = new Map();
+  for (const compaction of compactions || []) {
+    const afterTurn = Number.isInteger(compaction.after_turn)
+      ? compaction.after_turn : 0;
+    pending.set(afterTurn, [...(pending.get(afterTurn) || []), compaction]);
+  }
+  const timeline = (pending.get(0) || []).map(compaction => ({
+    kind: "compaction", key: `compaction:${compaction.id}`, compaction,
+  }));
+  for (const round of rounds || []) {
+    timeline.push({ kind: "round", key: `round:${round.n}`, round });
+    for (const compaction of pending.get(round.n) || []) {
+      timeline.push({
+        kind: "compaction",
+        key: `compaction:${compaction.id}`,
+        compaction,
+      });
+    }
+  }
+  for (const [afterTurn, items] of pending) {
+    if (afterTurn <= (rounds?.length || 0)) continue;
+    for (const compaction of items) {
+      timeline.push({
+        kind: "compaction",
+        key: `compaction:${compaction.id}`,
+        compaction,
+      });
+    }
+  }
+  return timeline;
+}
