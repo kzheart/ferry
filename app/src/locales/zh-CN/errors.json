@@ -17,11 +17,9 @@
     "operation_unsupported_with_capability": "{{tool}} 不支持 {{capability}}",
     "operation_unsupported_with_operation": "{{tool}} 不支持操作 {{operation}}{{mode}}",
     "turn_out_of_range_with_count": "轮次超界: 请求第 {{requested_turn}} 轮，共 {{turn_count}} 轮",
-    "turn_out_of_range_invalid": "轮次必须是正整数"
-  },
-  "authoring": {
+    "turn_out_of_range_invalid": "轮次必须是正整数",
     "invalid_reply": "回复内容结构非法",
-    "subagent_not_supported": "包含子 Agent spawn/task，authoring 已拒绝"
+    "subagent_not_supported": "助手回复编辑不能新增或替换子 Agent 任务"
   },
   "snapshot": {
     "invalid_source": "备份来源非法,无法撤销"

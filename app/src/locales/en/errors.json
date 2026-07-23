@@ -17,11 +17,9 @@
     "operation_unsupported_with_capability": "{{tool}} does not support {{capability}}",
     "operation_unsupported_with_operation": "{{tool}} does not support operation {{operation}}{{mode}}",
     "turn_out_of_range_with_count": "Turn out of range: requested turn {{requested_turn}}, total {{turn_count}}",
-    "turn_out_of_range_invalid": "Turn must be a positive integer"
-  },
-  "authoring": {
+    "turn_out_of_range_invalid": "Turn must be a positive integer",
     "invalid_reply": "Reply content is structurally invalid",
-    "subagent_not_supported": "Contains sub-agent spawn/task, authoring rejected"
+    "subagent_not_supported": "Assistant reply editing cannot add or replace sub-agent tasks"
   },
   "snapshot": {
     "invalid_source": "Invalid backup source; cannot undo"
