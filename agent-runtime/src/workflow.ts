@@ -1,7 +1,7 @@
 import { ProtocolError } from "./protocol.js";
 
 export type WorkflowFailurePolicy = "fail_fast" | "continue";
-export type WorkflowTaskStatus =
+export type TaskStatus =
   | "pending"
   | "running"
   | "completed"
@@ -25,43 +25,39 @@ export interface TaskGraph {
   failure_policy?: WorkflowFailurePolicy;
 }
 
-export interface WorkflowTaskResult {
+export interface TaskResult {
   task_id: string;
   role_id: string;
-  status: WorkflowTaskStatus;
+  status: TaskStatus;
   output?: string;
   error?: string;
   started_at?: number;
   finished_at?: number;
 }
 
-export interface WorkflowResult {
+export interface SchedulerResult {
   status: "completed" | "failed" | "cancelled";
-  tasks: WorkflowTaskResult[];
+  tasks: TaskResult[];
 }
 
-export type WorkflowEvent =
+export type SchedulerEvent =
   | { type: "workflow.started"; task_count: number }
   | { type: "task.started"; task_id: string; role_id: string }
   | { type: "task.completed"; task_id: string }
   | { type: "task.failed"; task_id: string; error: string }
   | { type: "task.cancelled"; task_id: string }
   | { type: "task.skipped"; task_id: string; reason: string }
-  | { type: "workflow.completed"; status: WorkflowResult["status"] };
+  | { type: "workflow.completed"; status: SchedulerResult["status"] };
 
-export interface WorkflowTaskContext {
+export interface TaskExecutionContext {
   signal: AbortSignal;
   dependency_results: Readonly<Record<string, string>>;
 }
 
-export type WorkflowTaskExecutor = (
+export type TaskExecutor = (
   task: TaskNode,
-  context: WorkflowTaskContext,
+  context: TaskExecutionContext,
 ) => Promise<string>;
-
-/** 旧的工作流输入名称保留为当前调度图的领域别名。 */
-export type WorkflowTask = TaskNode;
-export type WorkflowSpec = TaskGraph;
 
 const MAX_TASKS = 32;
 const MAX_CONCURRENCY = 8;
@@ -90,7 +86,7 @@ function boundedInteger(
   return result;
 }
 
-function validate(spec: WorkflowSpec) {
+function validate(spec: TaskGraph) {
   if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) {
     throw new ProtocolError("invalid_workflow", "tasks must not be empty");
   }
@@ -98,7 +94,7 @@ function validate(spec: WorkflowSpec) {
     throw new ProtocolError("invalid_workflow", "task budget exceeded");
   }
   const ids = new Set<string>();
-  const byId = new Map<string, WorkflowTask>();
+  const byId = new Map<string, TaskNode>();
   for (const task of spec.tasks) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(task.id) || ids.has(task.id)) {
       throw new ProtocolError("invalid_workflow", "task id is invalid");
@@ -222,9 +218,9 @@ export class Scheduler {
   private started = false;
 
   constructor(
-    private readonly spec: WorkflowSpec,
-    private readonly executor: WorkflowTaskExecutor,
-    private readonly onEvent: (event: WorkflowEvent) => void = () => {},
+    private readonly spec: TaskGraph,
+    private readonly executor: TaskExecutor,
+    private readonly onEvent: (event: SchedulerEvent) => void = () => {},
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -233,7 +229,7 @@ export class Scheduler {
     for (const controller of this.taskControllers.values()) controller.abort();
   }
 
-  async start(): Promise<WorkflowResult> {
+  async start(): Promise<SchedulerResult> {
     if (this.started) {
       throw new ProtocolError(
         "workflow_already_started",
@@ -242,7 +238,7 @@ export class Scheduler {
     }
     this.started = true;
     const config = validate(this.spec);
-    const states = new Map<string, WorkflowTaskResult>(
+    const states = new Map<string, TaskResult>(
       config.tasks.map((task) => [
         task.id,
         {
@@ -262,7 +258,7 @@ export class Scheduler {
       task_count: config.tasks.length,
     });
 
-    const final = await new Promise<WorkflowResult>((resolve) => {
+    const final = await new Promise<SchedulerResult>((resolve) => {
       const finish = () => {
         if (settled || active > 0) return;
         const pending = [...states.values()].some(
@@ -431,6 +427,3 @@ export class Scheduler {
     return final;
   }
 }
-
-/** 一个工作流运行持有图、取消树和结果汇聚；调度由 Scheduler 实现。 */
-export class WorkflowRun extends Scheduler {}
