@@ -203,8 +203,6 @@ def _new_ordered_id(prefix: str, ordinal: int) -> str:
 
 def _opencode_result(state: dict) -> ToolResult:
     metadata = _clone(state.get("metadata") or {})
-    canonical = metadata.pop("canonicalToolResult", None)
-    canonical = canonical if isinstance(canonical, dict) else {}
     if isinstance(state.get("status"), str):
         metadata["source_status"] = state["status"]
     native_state = {
@@ -216,30 +214,13 @@ def _opencode_result(state: dict) -> ToolResult:
     }
     if native_state:
         metadata["opencode_state"] = native_state
-    status = normalize_tool_result_status(
-        canonical.get("status") or state.get("status"))
+    status = normalize_tool_result_status(state.get("status"))
     if metadata.get("interrupted") is True:
         status = "interrupted"
 
     output = state.get("output")
     blocks = []
-    canonical_blocks = canonical.get("blocks")
-    if isinstance(canonical_blocks, list):
-        for item in canonical_blocks:
-            if not isinstance(item, dict):
-                blocks.append(ToolResultBlock("json", data=item))
-                continue
-            kind = item.get("kind")
-            if kind not in {"text", "json", "image", "file", "tool_reference"}:
-                kind = "json"
-                item = {"data": item}
-            blocks.append(ToolResultBlock(
-                kind, text=item.get("text", ""), data=item.get("data"),
-                mime_type=item.get("mime_type"),
-                filename=item.get("filename"), uri=item.get("uri"),
-                metadata=item.get("metadata") or {},
-            ))
-    elif isinstance(output, str):
+    if isinstance(output, str):
         if output:
             blocks.append(ToolResultBlock("text", text=output))
     elif output is not None:
@@ -247,9 +228,9 @@ def _opencode_result(state: dict) -> ToolResult:
 
     error = state.get("error")
     if isinstance(error, str) and error:
-        if (not isinstance(canonical_blocks, list) and
-                not any(block.kind == "text" and block.text == error
-                        for block in blocks)):
+        if not any(
+            block.kind == "text" and block.text == error for block in blocks
+        ):
             blocks.append(ToolResultBlock(
                 "text", text=error, metadata={"stream": "error"},
             ))
@@ -259,7 +240,7 @@ def _opencode_result(state: dict) -> ToolResult:
     attachments = _clone(state.get("attachments") or [])
     if not isinstance(attachments, list):
         attachments = [attachments]
-    for attachment in attachments if not isinstance(canonical_blocks, list) else []:
+    for attachment in attachments:
         if not isinstance(attachment, dict):
             blocks.append(ToolResultBlock("json", data=attachment,
                                           metadata={"attachment": True}))
@@ -1034,19 +1015,6 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             }.get(result.status if result else "", "completed")
             native_metadata = dict(metadata)
             if result is not None:
-                native_metadata.update(result.metadata)
-                native_metadata["canonicalToolResult"] = {
-                    "status": result.status,
-                    "blocks": [{
-                        "kind": block.kind,
-                        "text": block.text,
-                        "data": block.data,
-                        "mime_type": block.mime_type,
-                        "filename": block.filename,
-                        "uri": block.uri,
-                        "metadata": block.metadata,
-                    } for block in result.blocks],
-                }
                 if result.exit_code is not None:
                     native_metadata["exit"] = result.exit_code
                 if result.truncated is not None:

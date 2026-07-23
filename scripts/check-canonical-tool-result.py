@@ -10,6 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT / "engine" / "domain" / "model.py"
 FORBIDDEN_TOOL_CALL_FIELDS = {"output", "status", "tool_result"}
 FORBIDDEN_METHODS = {"from_legacy", "legacy_output", "set_result"}
+FORBIDDEN_PRIVATE_FIELDS = (
+    "canonical" + "ToolResult",
+    "canonical_" + "blocks",
+    "canonical_" + "metadata",
+)
 
 
 def violations() -> list[str]:
@@ -40,6 +45,14 @@ def violations() -> list[str]:
                     and statement.name in FORBIDDEN_METHODS
                 ):
                     found.append(f"ToolResult.{statement.name}()")
+    for path in (ROOT / "engine").rglob("*.py"):
+        text = path.read_text(errors="replace")
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for field in FORBIDDEN_PRIVATE_FIELDS:
+                if field in line:
+                    found.append(
+                        f"{path.relative_to(ROOT)}:{line_number}: {field}"
+                    )
     return found
 
 

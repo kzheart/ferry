@@ -11,6 +11,10 @@ class ClaudeMigrationTarget(MigrationTargetBase):
     tool = "claude"
     tool_fidelity = OP_FIDELITY
     tool_result_statuses = frozenset({"success", "error", "interrupted"})
+    tool_result_native_blocks = frozenset({
+        "text", "image", "tool_reference",
+    })
+    tool_result_projected_blocks = frozenset({"json", "file"})
 
     def preview_tool(self, tool, session, message=None):
         if not has_valid_tool_input(tool.op, tool.input):

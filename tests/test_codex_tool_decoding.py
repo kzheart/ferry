@@ -1,7 +1,14 @@
 import json
 
 from engine.adapters.codex import reader as codex_reader
-from engine.domain.model import Session, tool_result_text
+from engine.adapters.codex import writer as codex_writer
+from engine.domain.model import (
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+    tool_result_text,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -66,6 +73,61 @@ def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tm
     assert custom.op == CanonicalOp.SHELL_EXEC
     assert custom.input == {"command": "printf custom"}
     assert tool_result_text(custom.result) == "custom output"
+
+
+def test_private_result_extensions_are_not_rehydrated(tmp_path):
+    session = _read(tmp_path, [
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec",
+            "input": 'tools.exec_command({"cmd":"printf current"})',
+            "call_id": "custom-call",
+        }},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "call_id": "custom-call",
+            "output": json.dumps([{
+                "type": "input_text",
+                "text": json.dumps({
+                    "status": "success",
+                    "output": "current output",
+                    "canonical_blocks": [{
+                        "kind": "json",
+                        "data": {"private": True},
+                    }],
+                    "canonical_metadata": {"private": True},
+                }),
+            }]),
+        }},
+    ])
+
+    tool, = _tools(session)
+    assert tool_result_text(tool.result) == "current output"
+    assert [block.kind for block in tool.result.blocks] == ["text"]
+    assert tool.result.metadata == {}
+
+
+def test_writer_emits_only_current_native_result_fields():
+    result = ToolResult(
+        status="error",
+        blocks=[
+            ToolResultBlock("text", text="visible"),
+            ToolResultBlock("json", data={"not": "native"}),
+        ],
+        stdout="stdout",
+        stderr="stderr",
+        exit_code=7,
+        truncated=True,
+        metadata={"private": True},
+    )
+    tool = ToolCall("exec", CanonicalOp.SHELL_EXEC, {"command": "false"}, result)
+
+    assert codex_writer._result_payload(tool, "unused") == {
+        "status": "error",
+        "output": 'visible\n{"not":"native"}',
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "exit_code": 7,
+        "truncated": True,
+    }
 
 
 def test_current_remote_function_call_stays_an_opaque_tool(tmp_path):

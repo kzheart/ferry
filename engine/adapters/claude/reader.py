@@ -163,8 +163,6 @@ def _result_blocks(content) -> list[ToolResultBlock]:
 
 def _tool_result(block: dict, native=None) -> ToolResult:
     native = native if isinstance(native, dict) else {}
-    canonical = native.get("canonicalToolResult")
-    canonical = canonical if isinstance(canonical, dict) else {}
     exit_code = native.get("exit_code")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         exit_code = None
@@ -173,44 +171,13 @@ def _tool_result(block: dict, native=None) -> ToolResult:
         truncated = None
     stdout = native.get("stdout")
     stderr = native.get("stderr")
-    metadata = dict(canonical.get("metadata") or {})
-    metadata["claude_native_result"] = {
-        key: value for key, value in native.items()
-        if key != "canonicalToolResult"
-    }
-    metadata["claude_tool_result"] = {
-        key: value for key, value in block.items() if key != "content"
-    }
-    attachments = canonical.get("attachments")
-    if not isinstance(attachments, list):
-        attachments = []
-    blocks = _result_blocks(block.get("content"))
-    canonical_blocks = canonical.get("blocks")
-    if isinstance(canonical_blocks, list):
-        blocks = []
-        for item in canonical_blocks:
-            if not isinstance(item, dict):
-                blocks.append(ToolResultBlock("json", data=item))
-                continue
-            kind = item.get("kind")
-            if kind not in {"text", "json", "image", "file", "tool_reference"}:
-                kind = "json"
-                item = {"data": item}
-            blocks.append(ToolResultBlock(
-                kind, text=item.get("text", ""), data=item.get("data"),
-                mime_type=item.get("mime_type"),
-                filename=item.get("filename"), uri=item.get("uri"),
-                metadata=item.get("metadata") or {},
-            ))
     return ToolResult(
-        status=canonical.get("status") or _result_status(block, native),
-        blocks=blocks,
+        status=_result_status(block, native),
+        blocks=_result_blocks(block.get("content")),
         stdout=stdout if isinstance(stdout, str) else None,
         stderr=stderr if isinstance(stderr, str) else None,
         exit_code=exit_code,
         truncated=truncated,
-        attachments=attachments,
-        metadata=metadata,
     )
 
 

@@ -322,17 +322,15 @@ def _parse_result(raw) -> ToolResult:
             if isinstance(inner, dict) and any(
                     key in inner for key in (
                         "output", "stdout", "stderr", "exit_code", "status",
-                        "truncated", "attachments", "canonical_blocks")):
+                        "truncated", "attachments")):
                 structured_envelope = True
                 output = inner.get("output")
-                canonical_blocks = inner.get("canonical_blocks")
                 stdout_value = inner.get("stdout", output)
                 if isinstance(stdout_value, str):
                     stdout = stdout_value
-                if isinstance(output, str) and output and not isinstance(
-                        canonical_blocks, list):
+                if isinstance(output, str) and output:
                     blocks.append(ToolResultBlock("text", text=output))
-                elif output is not None and not isinstance(canonical_blocks, list):
+                elif output is not None:
                     blocks.append(ToolResultBlock("json", data=output))
                 if isinstance(inner.get("stderr"), str):
                     stderr = inner["stderr"]
@@ -343,36 +341,7 @@ def _parse_result(raw) -> ToolResult:
                     truncated = inner["truncated"]
                 if isinstance(inner.get("attachments"), list):
                     attachments = inner["attachments"]
-                if isinstance(canonical_blocks, list):
-                    for item in canonical_blocks:
-                        if not isinstance(item, dict):
-                            blocks.append(ToolResultBlock("json", data=item))
-                            continue
-                        block_kind = item.get("kind")
-                        if block_kind not in {
-                                "text", "json", "image", "file", "tool_reference"}:
-                            block_kind = "json"
-                            item = {"data": item}
-                        blocks.append(ToolResultBlock(
-                            block_kind,
-                            text=item.get("text", ""),
-                            data=item.get("data"),
-                            mime_type=item.get("mime_type"),
-                            filename=item.get("filename"),
-                            uri=item.get("uri"),
-                            metadata=item.get("metadata") or {},
-                        ))
                 explicit_status = inner.get("status")
-                metadata.update({
-                    key: value for key, value in inner.items()
-                    if key not in {
-                        "output", "stdout", "stderr", "exit_code", "status",
-                        "truncated", "attachments", "canonical_blocks",
-                    }
-                })
-                canonical_metadata = metadata.pop("canonical_metadata", None)
-                if isinstance(canonical_metadata, dict):
-                    metadata.update(canonical_metadata)
             elif text:
                 blocks.append(ToolResultBlock(
                     "text", text=text,

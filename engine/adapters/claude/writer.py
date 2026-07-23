@@ -128,20 +128,6 @@ def _claude_result(tool) -> tuple[str | list, dict]:
         "status": result.status,
         "interrupted": result.status == "interrupted",
         "isImage": any(block.kind == "image" for block in result.blocks),
-        "canonicalToolResult": {
-            "status": result.status,
-            "attachments": result.attachments,
-            "metadata": result.metadata,
-            "blocks": [{
-                "kind": block.kind,
-                "text": block.text,
-                "data": block.data,
-                "mime_type": block.mime_type,
-                "filename": block.filename,
-                "uri": block.uri,
-                "metadata": block.metadata,
-            } for block in result.blocks],
-        },
     }
     if result.stdout is not None:
         native["stdout"] = result.stdout
