@@ -219,7 +219,7 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
         } else {
             "python3"
         });
-        command.args(["-m", "engine.api"]);
+        command.args(["-m", "engine.interfaces.cli"]);
         command.current_dir(repo_root());
         Ok(command)
     }

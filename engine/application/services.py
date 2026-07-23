@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """GUI 结构化接口层:全部函数返回可 JSON 序列化的 dict/list。
 
-既可 import(gui/server.py 直接调用),也可命令行调试:
-    python3 -m engine.api scan
-    python3 -m engine.api show claude <sid>
-    python3 -m engine.api history / env
+既可由 interfaces/rpc.py 调用，也可通过 CLI 调试:
+    python3 -m engine.interfaces.cli scan
+    python3 -m engine.interfaces.cli show claude <sid>
+    python3 -m engine.interfaces.cli history / env
 """
 import json
 import time
