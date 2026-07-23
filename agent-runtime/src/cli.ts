@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { AgentRuntime } from "./runtime.js";
 import { FileSessionStore } from "./event-store.js";
 import { FileProviderConfigStore } from "./provider-config.js";
+import { FileRoleStore } from "./roles.js";
 import { ProviderHost } from "./provider-host.js";
 import { dispatch } from "./commands.js";
 import {
@@ -26,6 +27,7 @@ async function main() {
   );
   const runtime = await AgentRuntime.create({
     store: new FileSessionStore(join(dataDirectory, "sessions")),
+    roleStore: new FileRoleStore(join(dataDirectory, "roles.json")),
     providerHost,
   });
   runtime.subscribe(write);

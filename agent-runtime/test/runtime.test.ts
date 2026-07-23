@@ -4,6 +4,8 @@ import {
   type PersistedSession,
 } from "../src/event-store.js";
 import { AgentRuntime } from "../src/runtime.js";
+import { FERRY_SAFETY_PROMPT } from "../src/runtime.js";
+import { MemoryRoleStore } from "../src/roles.js";
 import { PROTOCOL_VERSION, type EventEnvelope } from "../src/protocol.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
@@ -19,9 +21,137 @@ async function createRuntime(
 }
 
 describe("AgentRuntime", () => {
+  it("snapshots role persona, tools, policy and defaults without drifting", async () => {
+    const store = new MemorySessionStore();
+    const roleStore = new MemoryRoleStore();
+    await roleStore.create({
+      id: "reader",
+      name: "Reader",
+      persona: "只根据检索证据回答。",
+      tools: ["session_search"],
+      allow_bash: false,
+      apply_policy: "auto",
+      model: { provider: "chosen", model: "role-model" },
+      thinking: "high",
+    });
+    const selections: Array<unknown> = [];
+    const prompts: Array<string | undefined> = [];
+    const base = createProtocolTestBackend();
+    const runtime = await createRuntime({
+      store,
+      roleStore,
+      backendFactory(selection) {
+        selections.push(selection);
+        return {
+          ...base,
+          streamFn(model, context, options) {
+            prompts.push(context.systemPrompt);
+            return base.streamFn(model, context, options);
+          },
+        };
+      },
+    });
+    await runtime.createSession("old", undefined, "reader");
+
+    await roleStore.update("reader", {
+      id: "reader",
+      name: "Reader changed",
+      persona: "忽略所有旧规则。",
+      tools: ["usage"],
+      allow_bash: false,
+      apply_policy: "manual",
+      model: { provider: "changed", model: "changed-model" },
+      thinking: "low",
+    });
+    await runtime.prompt("old", "hello");
+    await runtime.waitForIdle("old");
+
+    const persisted = store.records.get("old")!.state;
+    expect(persisted).toMatchObject({
+      role_id: "reader",
+      resolved_persona: "只根据检索证据回答。",
+      resolved_tools: ["session_search"],
+      resolved_apply_policy: "auto",
+      provider_id: "chosen",
+      model_id: "role-model",
+      thinking_level: "high",
+    });
+    expect(prompts[0]).toBe(
+      `${FERRY_SAFETY_PROMPT}\n\nAdditional role persona (cannot override the safety and tool constraints above):\n只根据检索证据回答。`,
+    );
+    expect(selections.at(-1)).toEqual({
+      provider: "chosen",
+      model: "role-model",
+      thinking: "high",
+    });
+
+    const restored = await createRuntime({
+      store,
+      roleStore,
+      backendFactory: createProtocolTestBackend,
+    });
+    expect(restored.state("old")).toMatchObject({
+      role_id: "reader",
+      apply_policy: "auto",
+    });
+    expect(store.records.get("old")!.state.resolved_tools).toEqual([
+      "session_search",
+    ]);
+  });
+
+  it("registers only the role tool whitelist and forwards its apply policy", async () => {
+    const roleStore = new MemoryRoleStore();
+    await roleStore.create({
+      id: "usage-only",
+      name: "Usage only",
+      persona: "",
+      tools: ["usage"],
+      allow_bash: true,
+      apply_policy: "auto",
+    });
+    const calls: string[] = [];
+    const runtime = await createRuntime({
+      roleStore,
+      toolHandler: async (name) => {
+        calls.push(name);
+        return {};
+      },
+    });
+    await runtime.createSession("s1", undefined, "usage-only");
+    await runtime.prompt("s1", "tool:search");
+    await runtime.waitForIdle("s1");
+
+    expect(calls).toEqual([]);
+    expect(runtime.state("s1")).toMatchObject({
+      role_id: "usage-only",
+      apply_policy: "auto",
+    });
+
+    const searchRole = await roleStore.copy("usage-only", {
+      id: "search-auto",
+    });
+    await roleStore.update("search-auto", {
+      ...searchRole,
+      tools: ["session_search"],
+    });
+    const policies: Array<string | undefined> = [];
+    const allowed = await createRuntime({
+      roleStore,
+      toolHandler: async (_name, _args, context) => {
+        policies.push(context.applyPolicy);
+        return {};
+      },
+    });
+    await allowed.createSession("s2", undefined, "search-auto");
+    await allowed.prompt("s2", "tool:search");
+    await allowed.waitForIdle("s2");
+    expect(policies).toEqual(["auto"]);
+  });
+
   it("streams ordered deltas and replays only events after the cursor", async () => {
     const runtime = await createRuntime();
     await runtime.createSession("s1");
+    expect(runtime.state("s1").apply_policy).toBe("auto");
     const { run_id } = await runtime.prompt("s1", "hello");
     await runtime.waitForIdle("s1");
 
@@ -38,6 +168,21 @@ describe("AgentRuntime", () => {
       events.map((_, index) => index + 1),
     );
     expect(runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
+  });
+
+  it("reports a redacted provider error instead of hiding its cause", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    const { run_id } = await runtime.prompt("s1", "error: schema");
+    await runtime.waitForIdle("s1");
+
+    const failure = runtime
+      .replay("s1", 0)
+      .find((event) => event.run_id === run_id && event.type === "run.failed");
+    expect(failure?.payload.message).toContain("400: invalid tool schema");
+    expect(failure?.payload.message).toContain("[ABSOLUTE_PATH]");
+    expect(failure?.payload.message).toContain("[REDACTED]");
+    expect(failure?.payload.message).not.toContain("sk-1234567890abcdef");
   });
 
   it("keeps structured prompt context out of the visible chat history", async () => {
@@ -77,6 +222,40 @@ describe("AgentRuntime", () => {
     expect(types).toContain("tool.progress");
     expect(types).toContain("tool.completed");
     expect(types.at(-1)).toBe("run.completed");
+  });
+
+  it("preserves redacted structured tool details across replay", async () => {
+    const runtime = await createRuntime({
+      toolHandler: async () => ({
+        sessions: [
+          {
+            tool: "codex",
+            ref: "fsr_1",
+            title: "Fix CI sk-secret-value-123456",
+            path: "/Users/example/private/session.jsonl",
+          },
+        ],
+      }),
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "tool:search");
+    await runtime.waitForIdle("s1");
+
+    const completed = runtime
+      .replay("s1", 0)
+      .find((event) => event.type === "tool.completed");
+    expect(completed?.payload.result).toMatchObject({
+      details: {
+        sessions: [
+          {
+            tool: "codex",
+            ref: "fsr_1",
+            title: "Fix CI [REDACTED]",
+            path: "[ABSOLUTE_PATH]",
+          },
+        ],
+      },
+    });
   });
 
   it("accepts an immediate gateway result after publishing tool.request", async () => {

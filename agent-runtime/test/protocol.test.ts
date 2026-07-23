@@ -51,4 +51,59 @@ describe("JSONL protocol", () => {
       error: { code: "invalid_params" },
     });
   });
+
+  it("exposes role CRUD and resolves role_id during session.create", async () => {
+    const runtime = await AgentRuntime.create({
+      backendFactory: createProtocolTestBackend,
+    });
+    const role = {
+      id: "reader",
+      name: "Reader",
+      persona: "Read only.",
+      tools: ["session_search", "session_read"],
+      allow_bash: false,
+      apply_policy: "manual",
+    };
+    const created = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "role-create",
+        method: "role.create",
+        params: { role },
+      }),
+    );
+    expect(created).toMatchObject({
+      ok: true,
+      result: { id: "reader", builtin: false },
+    });
+
+    const session = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "session-create",
+        method: "session.create",
+        params: { session_id: "s1", role_id: "reader" },
+      }),
+    );
+    expect(session).toMatchObject({
+      ok: true,
+      result: { session_id: "s1", role_id: "reader" },
+    });
+
+    const denied = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "role-delete",
+        method: "role.delete",
+        params: { role_id: "default" },
+      }),
+    );
+    expect(denied).toMatchObject({
+      ok: false,
+      error: { code: "invalid_role" },
+    });
+  });
 });

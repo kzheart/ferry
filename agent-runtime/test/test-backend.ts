@@ -109,6 +109,15 @@ const streamFn: StreamFunction = (
       stream.push({ type: "done", reason: "toolUse", message: complete });
       return;
     }
+    if (prompt.startsWith("error:")) {
+      const failed = {
+        ...message([], "error"),
+        errorMessage:
+          "400: invalid tool schema at /Users/private/config sk-1234567890abcdef",
+      };
+      stream.push({ type: "error", reason: "error", error: failed });
+      return;
+    }
     if (prompt.startsWith("slow:")) await delay(40, options?.signal);
     if (options?.signal?.aborted) {
       const aborted = {

@@ -28,6 +28,10 @@ export interface PersistedSession {
   title?: string | null;
   pinned?: boolean;
   thinking_level?: string;
+  role_id?: string;
+  resolved_persona?: string;
+  resolved_tools?: string[];
+  resolved_apply_policy?: "manual" | "auto";
 }
 
 type SessionMetadata = Omit<PersistedSession, "messages" | "next_seq">;

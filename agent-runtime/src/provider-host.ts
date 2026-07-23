@@ -17,6 +17,11 @@ import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { dirname, join } from "node:path";
 import { FileModelsStore } from "./model-catalog-store.js";
 import {
+  organizerPrompt,
+  validateOrganizerResult,
+  type OrganizerInput,
+} from "./organizer.js";
+import {
   FileProviderConfigStore,
   type CustomModelConfig,
   type CustomProviderConfig,
@@ -280,6 +285,43 @@ export class ProviderHost {
         model: model.id,
         latency_ms: Date.now() - started,
       };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async organize(input: OrganizerInput, selection?: ModelSelection) {
+    const selected = selection ?? (await this.defaultModel());
+    const model = this.model(selected);
+    if (!(await this.isConfigured(selected.provider))) {
+      throw new Error("provider is not configured");
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const message = await this.models.completeSimple(
+        model,
+        {
+          systemPrompt:
+            "You return strictly validated JSON for Ferry's local session organizer.",
+          messages: [
+            {
+              role: "user",
+              content: organizerPrompt(input),
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        { maxTokens: 8_000, signal: controller.signal },
+      );
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        throw new Error(message.errorMessage ?? "organizer request failed");
+      }
+      const text = message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+      return validateOrganizerResult(text, input);
     } finally {
       clearTimeout(timer);
     }
