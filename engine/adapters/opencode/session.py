@@ -280,7 +280,6 @@ def _opencode_result(state: dict) -> ToolResult:
         exit_code=exit_code,
         truncated=truncated,
         attachments=attachments,
-        metadata=metadata,
     )
 
 def _db_conn():

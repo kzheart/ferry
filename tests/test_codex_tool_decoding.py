@@ -159,7 +159,6 @@ def test_private_result_extensions_are_not_rehydrated(tmp_path):
     tool, = _tools(session)
     assert tool_result_text(tool.result) == "current output"
     assert [block.kind for block in tool.result.blocks] == ["text"]
-    assert tool.result.metadata == {}
 
 
 def test_writer_emits_only_current_native_result_fields():
@@ -173,7 +172,6 @@ def test_writer_emits_only_current_native_result_fields():
         stderr="stderr",
         exit_code=7,
         truncated=True,
-        metadata={"private": True},
     )
     tool = ToolCall("exec", CanonicalOp.SHELL_EXEC, {"command": "false"}, result)
 

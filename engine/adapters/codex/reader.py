@@ -307,7 +307,6 @@ def _parse_result(raw) -> ToolResult:
     exit_code = None
     truncated = None
     attachments = []
-    metadata = {}
     explicit_status = None
     structured_envelope = False
     try:
@@ -399,7 +398,6 @@ def _parse_result(raw) -> ToolResult:
     return ToolResult(
         status=status, blocks=blocks, stdout=stdout, stderr=stderr,
         exit_code=exit_code, truncated=truncated, attachments=attachments,
-        metadata=metadata,
     )
 
 

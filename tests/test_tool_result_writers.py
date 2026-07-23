@@ -38,7 +38,6 @@ def _source_session(status="error"):
         truncated=False,
         attachments=[{"type": "file", "filename": "report.txt",
                       "url": "file:///tmp/report.txt"}],
-        metadata={"trace": "fixture"},
     )
     tool = ToolCall(
         "shell", CanonicalOp.SHELL_EXEC, {"command": "printf test"}, result,
@@ -117,10 +116,8 @@ def test_structured_error_result_projects_to_each_native_shape(
     assert result.truncated is False
     if roundtrip is _roundtrip_opencode:
         assert result.attachments[0]["filename"] == "report.txt"
-        assert result.metadata.get("trace") is None
     else:
         assert result.attachments == []
-        assert result.metadata.get("trace") is None
 
 
 def test_claude_writer_does_not_emit_ferry_tool_result_extension():
@@ -177,7 +174,6 @@ def test_unrepresentable_result_data_is_reported_as_migration_loss(
 
     assert decision.fidelity == "lossy"
     assert block_reason in decision.reason_codes
-    assert "tool_result_metadata_dropped" in decision.reason_codes
 
 
 def test_claude_writer_roundtrip_does_not_turn_interruption_into_error(tmp_path):
