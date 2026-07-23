@@ -19,7 +19,10 @@ export function useAskFerry() {
   const [mode, setModeState] = useState(() => localStorage.getItem(MODE_KEY) || "auto");
   const [auth, setAuth] = useState(null);
   const [models, setModels] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [selectedRoleId, setSelectedRoleId] = useState("default");
   const [lastError, setLastError] = useState(null);
+  const [mutationVersion, setMutationVersion] = useState(0);
 
   const logsRef = useRef(logs); logsRef.current = logs;
   const activeRef = useRef(activeId); activeRef.current = activeId;
@@ -46,6 +49,8 @@ export function useAskFerry() {
     try {
       const result = await operationApproveAndApply(opId, item.runId || "");
       mutateLog(sessionId, log => patchApproval(log, opId, { status: "applied", result, auto }));
+      setMutationVersion(value => value + 1);
+      return result;
     } catch (error) {
       mutateLog(sessionId, log =>
         patchApproval(log, opId, { status: "failed", error: String(error), auto }));
@@ -114,6 +119,7 @@ export function useAskFerry() {
               updated_at: ev.timestamp || s.updated_at }
           : s));
       }
+      if (ev.type === "operation.applied") setMutationVersion(value => value + 1);
     }).then(u => { un = u; });
     return () => un?.();
   }, [available]);
@@ -122,10 +128,15 @@ export function useAskFerry() {
   const refresh = useCallback(async () => {
     if (!available) return;
     try {
-      const [h, list] = await Promise.all([
-        agentCommand("health"), agentCommand("sessions.list")]);
+      const [h, list, roleList] = await Promise.all([
+        agentCommand("health"), agentCommand("sessions.list"),
+        agentCommand("roles.list")]);
       setHealth(h);
       setSessions(list || []);
+      setRoles(roleList || []);
+      if (!(roleList || []).some(role => role.id === selectedRoleId)) {
+        setSelectedRoleId("default");
+      }
     } catch (error) {
       setLastError(error);
     }
@@ -176,7 +187,9 @@ export function useAskFerry() {
   const send = useCallback(async (text, displayText = text) => {
     let sid = activeRef.current;
     if (!sid) {
-      const state = await agentCommand("session.create", {});
+      const state = await agentCommand("session.create", {
+        role_id: selectedRoleId,
+      });
       sid = state.session_id;
       const log = { ...emptyLog(), provider: state.provider_id, model: state.model_id };
       setLogs(prev => ({ ...prev, [sid]: log }));
@@ -195,7 +208,38 @@ export function useAskFerry() {
       if (title) rename(sid, title).catch(() => {});
     }
     return sid;
-  }, [rename, sessions]);
+  }, [rename, selectedRoleId, sessions]);
+
+  const reloadRoles = useCallback(async () => {
+    const list = await agentCommand("roles.list");
+    setRoles(list || []);
+    if (!(list || []).some(role => role.id === selectedRoleId)) {
+      setSelectedRoleId("default");
+    }
+    return list || [];
+  }, [selectedRoleId]);
+  const createRole = useCallback(async role => {
+    const result = await agentCommand("role.create", { role });
+    await reloadRoles();
+    return result;
+  }, [reloadRoles]);
+  const updateRole = useCallback(async role => {
+    const result = await agentCommand("role.update", { role_id: role.id, role });
+    await reloadRoles();
+    return result;
+  }, [reloadRoles]);
+  const copyRole = useCallback(async (sourceRoleId, roleId, name) => {
+    const result = await agentCommand("role.copy", {
+      source_role_id: sourceRoleId, role_id: roleId, name,
+    });
+    await reloadRoles();
+    return result;
+  }, [reloadRoles]);
+  const deleteRole = useCallback(async roleId => {
+    const result = await agentCommand("role.delete", { role_id: roleId });
+    await reloadRoles();
+    return result;
+  }, [reloadRoles]);
 
   const steer = useCallback((text, displayText = text) =>
     agentCommand("steer", { session_id: activeRef.current, text,
@@ -251,10 +295,12 @@ export function useAskFerry() {
 
   const activeLog = activeId ? logs[activeId] : null;
   return {
-    available, health, sessions, activeId, activeLog, mode, auth, models,
+    available, health, sessions, activeId, activeLog, mode, auth, models, mutationVersion,
+    roles, selectedRoleId, setSelectedRoleId,
     lastError, clearError: () => setLastError(null), reportError: setLastError,
     refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
+    reloadRoles, createRole, updateRole, copyRole, deleteRole,
     startLogin, respondLogin, cancelLogin, clearAuth,
   };
 }

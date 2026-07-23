@@ -155,6 +155,7 @@ const SETTINGS_GLYPH = {
   updates: '<path d="M9 3.1v8.2m0 0 3-3m-3 3-3-3M4 14.4h10" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>',
   models: '<path d="M9 2.2 15 5.6 9 9 3 5.6 9 2.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m3 9 6 3.4L15 9M3 12.4l6 3.4 6-3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
   providers: '<rect x="4.6" y="4.6" width="8.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="7.3" y="7.3" width="3.4" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 2.4v2.2M11 2.4v2.2M7 13.4v2.2M11 13.4v2.2M2.4 7h2.2M2.4 11h2.2M13.4 7h2.2M13.4 11h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+  roles: '<circle cx="9" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.8 15.2c.6-3 2.3-4.5 5.2-4.5s4.6 1.5 5.2 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
 };
 
 export const SetGlyph = ({ name, color = "var(--tx3b)" }) =>

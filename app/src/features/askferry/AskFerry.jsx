@@ -11,6 +11,8 @@ import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../../domain/sessions/sessionAttachment.js";
+import { entitiesFromToolResult } from "../../domain/entities/ferryEntities.js";
+import EntityCards from "./EntityCards.jsx";
 
 const fmtDur = (a, b) => {
   if (!a || !b) return "";
@@ -32,7 +34,7 @@ const preStyle = { margin: 0, padding: "8px 12px", fontSize: 11, lineHeight: 1.5
 const secLabel = { fontSize: 10.5, color: "var(--tx5)", margin: "0 0 3px 2px" };
 
 // ----- 工具调用:一行安静的灰字,点击展开参数与结果 -----
-const ToolRow = memo(function ToolRow({ item }) {
+const ToolRow = memo(function ToolRow({ item, onNavigate }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const level = TOOL_LEVEL[item.name] || "read";
@@ -76,6 +78,7 @@ const ToolRow = memo(function ToolRow({ item }) {
           )}
         </div>
       )}
+      <EntityCards entities={item.entities} onNavigate={onNavigate} />
     </div>
   );
 });
@@ -93,7 +96,7 @@ function Countdown({ until }) {
 
 // ----- 审批卡:白底细线卡片,状态只通过左侧色点表达 -----
 const KIND_KEYS = { migration: "kindMigration", edit: "kindEdit", metadata: "kindMetadata" };
-function ApprovalCard({ item, onApprove, onDismiss }) {
+function ApprovalCard({ item, onApprove, onDismiss, onNavigate }) {
   const { t } = useTranslation();
   const op = item.operation || {};
   const applied = item.status === "applied";
@@ -106,6 +109,12 @@ function ApprovalCard({ item, onApprove, onDismiss }) {
     : item.status === "applying" ? t("askferry:approval.applying")
     : item.status === "dismissed" ? t("askferry:approval.dismissed")
     : t(`askferry:approval.${KIND_KEYS[op.kind] || "kindGeneric"}`);
+  const entities = op.kind === "migration" || op.kind === "edit"
+    ? entitiesFromToolResult(
+        op.kind === "migration" ? "migrate" : "session_edit",
+        { details: { ...op, result: item.result } },
+      )
+    : [];
   return (
     <div className="fcard" style={{ padding: "12px 14px", display: "flex",
       flexDirection: "column", gap: 8, maxWidth: 560 }}>
@@ -120,6 +129,7 @@ function ApprovalCard({ item, onApprove, onDismiss }) {
       {op.summary && (
         <div className="selectable" style={{ fontSize: 12.5, color: "var(--tx2)", lineHeight: 1.55 }}>
           {op.summary}</div>)}
+      <EntityCards entities={entities} onNavigate={onNavigate} />
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--tx4)" }}>
         {Array.isArray(op.affected_refs) && (
           <span>{t("askferry:approval.affected", { n: op.affected_refs.length })}</span>)}
@@ -170,7 +180,7 @@ function MentionMenu({ query, sessions, onPick }) {
 }
 
 // ----- 消息项分发 -----
-function ChatItem({ item, sessionId, ferry }) {
+function ChatItem({ item, sessionId, ferry, onNavigate }) {
   const { t } = useTranslation();
   if (item.kind === "user") {
     return (
@@ -190,9 +200,10 @@ function ChatItem({ item, sessionId, ferry }) {
       </div>
     );
   }
-  if (item.kind === "tool") return <ToolRow item={item} />;
+  if (item.kind === "tool") return <ToolRow item={item} onNavigate={onNavigate} />;
   if (item.kind === "approval") {
     return <ApprovalCard item={item}
+      onNavigate={onNavigate}
       onApprove={() => ferry.approve(sessionId, item)}
       onDismiss={() => ferry.dismiss(sessionId, item)} />;
   }
@@ -236,6 +247,45 @@ function ModeMenu({ mode, onPick, onClose }) {
               {desc}</div>
           </div>
         ))}
+      </div>
+    </>
+  );
+}
+
+function RoleMenu({ ferry, onClose, onManage }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 29 }} />
+      <div style={{ ...menuShell, width: 250 }}>
+        {(ferry.roles || []).map(role => (
+          <button key={role.id} type="button" className="hov-item"
+            onMouseDown={event => {
+              event.preventDefault();
+              ferry.setSelectedRoleId(role.id);
+              onClose();
+            }}
+            style={{ ...menuRow, width: "100%", border: "none",
+              background: role.id === ferry.selectedRoleId ? "var(--acc-soft5)" : "transparent",
+              fontFamily: "inherit", textAlign: "left" }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 12.5, fontWeight: 600,
+                color: "var(--tx1)" }}>{role.name}</span>
+              <span style={{ display: "block", fontSize: 10.5, color: "var(--tx5)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {role.description || role.tools?.join(" · ")}
+              </span>
+            </span>
+            {role.id === ferry.selectedRoleId && <CheckIcon size={12} />}
+          </button>
+        ))}
+        <div style={menuDivider} />
+        <button type="button" className="hov-item"
+          onMouseDown={event => { event.preventDefault(); onManage(); onClose(); }}
+          style={{ ...menuRow, width: "100%", border: "none", background: "transparent",
+            fontFamily: "inherit", fontSize: 12, color: "var(--tx2)" }}>
+          {t("askferry:role.manage")}
+        </button>
       </div>
     </>
   );
@@ -352,6 +402,7 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
   health, autoFocus, attachments, onRemoveAttachment }) {
   const { t } = useTranslation();
   const [modeOpen, setModeOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const hasContent = !!text.trim() || attachments.length > 0;
   const canSend = hasContent && ferry.available;
@@ -411,6 +462,20 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
             </button>
           </div>
           <div style={{ position: "relative" }}>
+            {roleOpen && (
+              <RoleMenu ferry={ferry} onClose={() => setRoleOpen(false)}
+                onManage={() => onOpenConfig("roles")} />)}
+            <button className="chat-ghost-btn" disabled={!!ferry.activeId}
+              title={ferry.activeId ? t("askferry:role.snapshotLocked") : undefined}
+              onClick={() => setRoleOpen(value => !value)}>
+              {(ferry.roles || []).find(role => role.id ===
+                (ferry.activeId
+                  ? ferry.sessions.find(session => session.session_id === ferry.activeId)?.role_id
+                  : ferry.selectedRoleId))?.name || t("askferry:role.default")}
+              <Caret size={8} open={false} />
+            </button>
+          </div>
+          <div style={{ position: "relative" }}>
             {modelOpen && !needsSetup && (
               <ModelMenu ferry={ferry} health={health} onManage={() => onOpenConfig("models")}
                 onClose={() => setModelOpen(false)} />)}
@@ -450,7 +515,7 @@ function Composer({ ferry, text, setTextValue, taRef, mention, scanSessions,
 
 // ----- 主视图 -----
 export default function AskFerry({ ferry, scanSessions, onOpenConfig,
-  attachments, onAttachmentsChange }) {
+  attachments, onAttachmentsChange, onNavigate }) {
   const { t } = useTranslation();
   const { activeId, activeLog, mode, health } = ferry;
   const activeSession = activeId
@@ -621,7 +686,8 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
             <div style={{ maxWidth: 680, margin: "0 auto", display: "flex",
               flexDirection: "column", gap: 14 }}>
               {items.map((item, i) => (
-                <ChatItem key={i} item={item} sessionId={activeId} ferry={ferry} />))}
+                <ChatItem key={i} item={item} sessionId={activeId} ferry={ferry}
+                  onNavigate={onNavigate} />))}
             </div>
           </div>
 

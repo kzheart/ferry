@@ -520,7 +520,8 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
-  onOpenMigrate, onRefresh, refreshing, onResume, editCaps, authoringCaps }) {
+  onOpenMigrate, onRefresh, refreshing, onResume, editCaps, authoringCaps,
+  navigationTarget }) {
   const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const timeline = useMemo(
@@ -533,6 +534,14 @@ export default memo(function SessionDetail({ meta, data, error,
   const [copied, setCopied] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
+
+  useEffect(() => {
+    if (!data || navigationTarget?.view !== "library") return;
+    const round = Number(navigationTarget.turn);
+    if (!Number.isFinite(round) || round < 1) return;
+    requestAnimationFrame(() => document.querySelector(`[data-round="${round}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [data, navigationTarget]);
 
   const roundSize = r => (r.user?.length || 0) + r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
