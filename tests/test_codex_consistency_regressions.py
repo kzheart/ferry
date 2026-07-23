@@ -84,7 +84,7 @@ def test_codex_writer_preserves_message_time_and_spawn_position(tmp_path, monkey
     assert assistant["payload"]["id"].startswith("msg_")
     assert "id" not in messages[0]["payload"]
     assistant_index = records.index(assistant)
-    assert records[assistant_index + 1]["payload"]["type"] == "custom_tool_call"
+    assert records[assistant_index + 1]["payload"]["type"] == "function_call"
     assert records[assistant_index + 1]["payload"]["name"] == "spawn_agent"
     assert records[assistant_index + 1]["payload"]["status"] == "in_progress"
 

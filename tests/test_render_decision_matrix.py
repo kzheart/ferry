@@ -83,7 +83,7 @@ def _codex_has_native_tool(session, target):
     )
     return any(
         (record.get("payload") or {}).get("type") in {
-            "custom_tool_call"}
+            "custom_tool_call", "function_call"}
         for record in records
     )
 

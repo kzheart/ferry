@@ -406,9 +406,9 @@ def _child_link_records(parent: Session, child: Session, child_id: str,
     prompt = edge.prompt if edge else ""
     agent_type = (edge.agent_type if edge and edge.agent_type else
                   child.agent_type)
-    input_value = {"message": prompt}
+    arguments = {"message": prompt}
     if agent_type:
-        input_value["agent_type"] = agent_type
+        arguments["agent_type"] = agent_type
     now = _timestamp(created_at)
     status = _edge_status(edge)
     call_status = "completed" if status == "closed" else "in_progress"
@@ -416,11 +416,13 @@ def _child_link_records(parent: Session, child: Session, child_id: str,
         "timestamp": now,
         "type": "response_item",
         "payload": {
-            "type": "custom_tool_call",
-            "id": "ctc_" + secrets.token_hex(25),
+            "type": "function_call",
+            "id": "fc_" + secrets.token_hex(25),
             "name": "spawn_agent",
-            "input": json.dumps(input_value, ensure_ascii=False),
+            "arguments": json.dumps(arguments, ensure_ascii=False),
             "call_id": call_id,
+            # response_item 使用 Responses API 的状态枚举；SQLite 的
+            # thread_spawn_edges 则使用 open/closed，二者不能混写。
             "status": call_status,
         },
     }
@@ -439,13 +441,10 @@ def _child_link_records(parent: Session, child: Session, child_id: str,
         "timestamp": now,
         "type": "response_item",
         "payload": {
-            "type": "custom_tool_call_output",
+            "type": "function_call_output",
             "call_id": call_id,
-            "output": json.dumps([{
-                "type": "input_text",
-                "text": json.dumps({"task_name": agent_path},
-                                   ensure_ascii=False),
-            }], ensure_ascii=False),
+            "output": json.dumps({"task_name": agent_path},
+                                  ensure_ascii=False),
         },
     }
     agent_message = {
