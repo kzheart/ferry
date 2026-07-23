@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..base.migration import MigrationTargetBase, linked_agent_edge
+from ...domain.model import tool_result_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from .session import OP_FIDELITY, write
 
@@ -20,7 +21,8 @@ class OpenCodeMigrationTarget(MigrationTargetBase):
             supported = {"description", "prompt", "subagent_type"}
             ignored = set(tool.input) - supported
             return {"kind": "tool", "name": "task", "input": tool.input,
-                    "output": tool.output or "", "conversion": "native",
+                    "output": tool_result_text(tool.result),
+                    "conversion": "native",
                     "_consumed_fields": set(tool.input) - ignored,
                     "_ignored_fields": ignored,
                     "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}
@@ -30,7 +32,8 @@ class OpenCodeMigrationTarget(MigrationTargetBase):
                 return None
             return {
                 "kind": "tool", "name": tool.input["name"],
-                "input": tool.input["input"], "output": tool.output or "",
+                "input": tool.input["input"],
+                "output": tool_result_text(tool.result),
                 "conversion": "native", "_fidelity": "exact",
                 "_consumed_fields": set(tool.input),
             }
@@ -98,7 +101,8 @@ class OpenCodeMigrationTarget(MigrationTargetBase):
             return None
         ignored = set(tool.input) - supported
         return {"kind": "tool", "name": name, "input": convert(tool.input),
-                "output": tool.output or "", "conversion": "native",
+                "output": tool_result_text(tool.result),
+                "conversion": "native",
                 "_consumed_fields": set(tool.input) - ignored,
                 "_ignored_fields": ignored,
                 "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}

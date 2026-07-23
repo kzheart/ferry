@@ -9,6 +9,8 @@ import contextvars
 import json
 from contextlib import contextmanager
 
+from ...domain.model import tool_result_text
+
 DEFAULT_TEMPLATE = "historical-tool-call-v1"
 # 降级叙述固定写英文：目标 Agent 读的是上下文而非界面文案，英文最通用，
 # 也避免用户界面语言影响已写入目标会话的内容。
@@ -49,6 +51,6 @@ def narrate(tool, locale: str | None = None,
     template = template or active_template or DEFAULT_TEMPLATE
     source = json.dumps(tool.input, ensure_ascii=False)[:500] \
         if isinstance(tool.input, dict) else str(tool.input)[:500]
-    output = (tool.output or _EMPTY_OUTPUT[locale])[:2000]
+    output = (tool_result_text(tool.result) or _EMPTY_OUTPUT[locale])[:2000]
     return _TEMPLATES[(template, locale)].format(
         name=tool.name, input=source, output=output)

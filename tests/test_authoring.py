@@ -19,6 +19,7 @@ from engine.application.editing import apply_mutation
 from engine.application.sessions import session_json
 from engine.domain.authoring import AssistantReply
 from engine.domain.errors import ConcurrentModificationError
+from engine.domain.model import tool_result_text
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -101,7 +102,7 @@ def _items(session):
                     tool_input = tool_input.get("input", tool_input)
                 result.append({"kind": "tool", "name": name,
                                "input": tool_input,
-                               "output": block.tool.output})
+                               "output": tool_result_text(block.tool.result)})
     return result
 
 

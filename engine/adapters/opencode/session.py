@@ -29,6 +29,7 @@ from ...domain.model import (
     ToolResult,
     ToolResultBlock,
     normalize_tool_result_status,
+    tool_result_text,
 )
 from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
@@ -510,8 +511,6 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                     name=p.get("tool", "?"),
                     op=op,
                     input=inp,
-                    output="",
-                    meta=_clone(st.get("metadata") or {}),
                     source_call_id=p.get("callID"),
                     started_at=(st.get("time") or {}).get("start"),
                     ended_at=(st.get("time") or {}).get("end"),
@@ -657,10 +656,13 @@ def _write_shell_exec(add_tool_part, tool) -> bool:
         native_input["timeout"] = inputs["timeout_ms"]
     if "background" in inputs:
         native_input["run_in_background"] = inputs["background"]
+    output = tool_result_text(tool.result)
     return add_tool_part(
-        "bash", native_input, tool.output, command,
-        {"output": tool.output, "exit": tool.meta.get("exit", 0) or 0,
-         "truncated": False}, tool)
+        "bash", native_input, output, command,
+        {"output": output,
+         "exit": tool.result.exit_code
+         if tool.result and tool.result.exit_code is not None else 0,
+         "truncated": bool(tool.result and tool.result.truncated)}, tool)
 
 
 def _write_fs_read(add_tool_part, tool) -> bool:
@@ -671,8 +673,9 @@ def _write_fs_read(add_tool_part, tool) -> bool:
     native_input = {"filePath": path}
     native_input.update({key: inputs[key] for key in ("offset", "limit")
                          if key in inputs})
-    return add_tool_part("read", native_input, tool.output, path,
-                         {"truncated": False}, tool)
+    return add_tool_part(
+        "read", native_input, tool_result_text(tool.result), path,
+        {"truncated": bool(tool.result and tool.result.truncated)}, tool)
 
 
 def _write_fs_write(add_tool_part, tool) -> bool:
@@ -682,7 +685,7 @@ def _write_fs_write(add_tool_part, tool) -> bool:
         return False
     return add_tool_part(
         "write", {"filePath": path, "content": inputs.get("content", "")},
-        tool.output or "Wrote file successfully.", path,
+        tool_result_text(tool.result) or "Wrote file successfully.", path,
         {"filepath": path, "exists": False, "truncated": False,
          "diagnostics": {}}, tool)
 
@@ -695,7 +698,8 @@ def _write_fs_edit(add_tool_part, tool) -> bool:
     return add_tool_part(
         "edit", {"filePath": path, "oldString": inputs.get("old", ""),
                  "newString": inputs.get("new", "")},
-        tool.output or "Edited file.", path, {"truncated": False}, tool)
+        tool_result_text(tool.result) or "Edited file.", path,
+        {"truncated": False}, tool)
 
 
 def _write_fs_patch(add_tool_part, tool) -> bool:
@@ -704,7 +708,8 @@ def _write_fs_patch(add_tool_part, tool) -> bool:
     if not patch:
         return False
     return add_tool_part(
-        "apply_patch", {"patchText": patch}, tool.output or "Applied patch.",
+        "apply_patch", {"patchText": patch},
+        tool_result_text(tool.result) or "Applied patch.",
         "apply patch", {"truncated": False}, tool)
 
 
@@ -718,8 +723,9 @@ def _write_fs_search(add_tool_part, tool) -> bool:
         native_input["path"] = inputs["path"]
     if "glob" in inputs:
         native_input["include"] = inputs["glob"]
-    return add_tool_part("grep", native_input, tool.output, str(query),
-                         {"truncated": False}, tool)
+    return add_tool_part(
+        "grep", native_input, tool_result_text(tool.result), str(query),
+        {"truncated": False}, tool)
 
 
 def _write_fs_glob(add_tool_part, tool) -> bool:
@@ -730,8 +736,9 @@ def _write_fs_glob(add_tool_part, tool) -> bool:
     native_input = {"pattern": pattern}
     if "path" in inputs:
         native_input["path"] = inputs["path"]
-    return add_tool_part("glob", native_input, tool.output, str(pattern),
-                         {"truncated": False}, tool)
+    return add_tool_part(
+        "glob", native_input, tool_result_text(tool.result), str(pattern),
+        {"truncated": False}, tool)
 
 
 def _write_web_fetch(add_tool_part, tool) -> bool:
@@ -744,8 +751,9 @@ def _write_web_fetch(add_tool_part, tool) -> bool:
         native_input["format"] = inputs["format"]
     if "timeout_ms" in inputs:
         native_input["timeout"] = inputs["timeout_ms"]
-    return add_tool_part("webfetch", native_input, tool.output, str(url),
-                         {"truncated": False}, tool)
+    return add_tool_part(
+        "webfetch", native_input, tool_result_text(tool.result), str(url),
+        {"truncated": False}, tool)
 
 
 def _write_web_search(add_tool_part, tool) -> bool:
@@ -756,8 +764,9 @@ def _write_web_search(add_tool_part, tool) -> bool:
     native_input = {"query": query}
     if "num_results" in inputs:
         native_input["numResults"] = inputs["num_results"]
-    return add_tool_part("websearch", native_input, tool.output, str(query),
-                         {"truncated": False}, tool)
+    return add_tool_part(
+        "websearch", native_input, tool_result_text(tool.result), str(query),
+        {"truncated": False}, tool)
 
 
 def _write_tool_invoke(add_tool_part, tool) -> bool:
@@ -766,8 +775,9 @@ def _write_tool_invoke(add_tool_part, tool) -> bool:
     native_input = inputs.get("input")
     if not name or not isinstance(native_input, (dict, str)):
         return False
-    return add_tool_part(str(name), native_input, tool.output, str(name),
-                         {"historical": True, "truncated": False}, tool)
+    return add_tool_part(
+        str(name), native_input, tool_result_text(tool.result), str(name),
+        {"historical": True, "truncated": False}, tool)
 
 
 OP_WRITERS = {

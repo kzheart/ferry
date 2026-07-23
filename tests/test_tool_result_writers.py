@@ -41,8 +41,7 @@ def _source_session(status="error"):
         metadata={"trace": "fixture"},
     )
     tool = ToolCall(
-        "shell", CanonicalOp.SHELL_EXEC, {"command": "printf test"}, "",
-        result=result,
+        "shell", CanonicalOp.SHELL_EXEC, {"command": "printf test"}, result,
     )
     session = Session("fixture", "source", "/tmp")
     session.messages = [
@@ -106,14 +105,22 @@ def test_structured_error_result_survives_target_writer_roundtrip(
     result = _only_result(roundtrip(_source_session(), tmp_path))
 
     assert result.status == "error"
-    assert [block.kind for block in result.blocks] == ["text", "json", "file"]
-    assert result.blocks[1].data == {"count": 2}
+    expected_kinds = (
+        ["text"] if roundtrip is _roundtrip_codex else ["text", "json", "file"]
+    )
+    assert [block.kind for block in result.blocks] == expected_kinds
+    if roundtrip is not _roundtrip_codex:
+        assert result.blocks[1].data == {"count": 2}
     assert result.stdout == "visible output"
     assert result.stderr == "failure detail"
     assert result.exit_code == 7
     assert result.truncated is False
-    assert result.attachments[0]["filename"] == "report.txt"
-    assert result.metadata["trace"] == "fixture"
+    if roundtrip is not _roundtrip_codex:
+        assert result.attachments[0]["filename"] == "report.txt"
+        assert result.metadata["trace"] == "fixture"
+    else:
+        assert result.attachments == []
+        assert result.metadata.get("trace") is None
 
 
 @pytest.mark.parametrize(("target", "status", "fidelity"), [

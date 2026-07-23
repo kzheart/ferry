@@ -4,7 +4,9 @@ from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.application import services
 from engine.domain.events import event
-from engine.domain.model import AgentEdge, Block, ImageAsset, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge, Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -13,7 +15,8 @@ def test_dry_run_returns_target_session_preview_without_mutating_source(monkeypa
     session.messages = [Message("assistant", [
         Block("text", "I inspected the file."),
         Block("tool", tool=ToolCall("Read", CanonicalOp.FS_READ,
-                                    {"file_path": "README.md"}, "contents")),
+                                    {"file_path": "README.md"},
+                                    text_tool_result("contents"))),
     ])]
     target = CodexMigrationTarget()
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
@@ -50,7 +53,7 @@ def test_unlinked_claude_agent_call_is_previewed_as_historical_text():
     session.messages = [Message("assistant", [Block("tool", tool=ToolCall(
         "spawn_agent", CanonicalOp.AGENT_SPAWN,
         {"description": "review", "prompt": "Review this", "subagent_type": "general"},
-        "done"))])]
+        text_tool_result("done")))])]
 
     preview = ClaudeMigrationTarget().preview(session)
 
@@ -117,7 +120,7 @@ def test_agent_preview_does_not_match_missing_call_ids_but_can_use_message_link(
     message = Message("assistant", [Block("tool", tool=ToolCall(
         "spawn_agent", CanonicalOp.AGENT_SPAWN,
         {"description": "review", "prompt": "Review", "subagent_type": "general"},
-        "done"))], source_id="message-1")
+        text_tool_result("done")))], source_id="message-1")
     session.messages = [message]
 
     claude_preview = ClaudeMigrationTarget().preview(session)
@@ -155,7 +158,7 @@ def test_preview_reports_every_unconsumed_tool_field_with_a_reason():
         "Bash", CanonicalOp.SHELL_EXEC,
         {"command": "pwd", "workdir": "/tmp/project",
          "timeout_ms": 5000, "background": True},
-        "done",
+        text_tool_result("done"),
     ))])]
 
     preview = CodexMigrationTarget().preview(session)

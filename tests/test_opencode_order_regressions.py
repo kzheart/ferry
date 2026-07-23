@@ -3,7 +3,14 @@ from types import SimpleNamespace
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.opencode.codec import CODEC, TURN_INDEX
 from engine.domain.authoring import AssistantReply, TextItem, ToolItem
-from engine.domain.model import AgentEdge, Block, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge,
+    Block,
+    Message,
+    Session,
+    ToolCall,
+    ToolResult,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -102,7 +109,8 @@ def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(
     root.messages = [
         Message("user", [Block("text", "before")], source_id="u1", created_at=100),
         Message("assistant", [Block("tool", tool=ToolCall(
-            "Task", CanonicalOp.AGENT_SPAWN, {"prompt": "review"}, "",
+            "Task", CanonicalOp.AGENT_SPAWN, {"prompt": "review"},
+            result=ToolResult(status="success"),
             source_call_id="call-task"))], source_id="spawn-message", created_at=200),
         Message("user", [Block("text", "after")], source_id="u2", created_at=300),
         Message("assistant", [Block("text", "done")], source_id="a2", created_at=400),

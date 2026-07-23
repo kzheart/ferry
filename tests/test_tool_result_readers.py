@@ -1,5 +1,6 @@
 import json
 
+from engine.domain.model import tool_result_text
 from engine.adapters.claude.reader import (
     _agent_id,
     _norm_input as norm_claude_input,
@@ -244,8 +245,7 @@ def test_claude_preserves_error_and_multimodal_result(tmp_path):
     ])
 
     tool = _tool(_read_transcript(path))
-    assert tool.status == "error"
-    assert tool.output == "fixture error"
+    assert tool_result_text(tool.result) == "fixture error"
     assert tool.result.status == "error"
     assert tool.result.stdout == "fixture stdout"
     assert tool.result.stderr == "fixture stderr"
@@ -295,7 +295,6 @@ def test_claude_preserves_interrupted_result_without_error_flag(tmp_path):
     ])
 
     tool = _tool(_read_transcript(path))
-    assert tool.status == "interrupted"
     assert tool.result.status == "interrupted"
 
 
@@ -386,8 +385,7 @@ def test_opencode_preserves_bash_and_read_options():
         "offset": 5,
         "limit": 10,
     }
-    assert tools[0].status == "success"
-    assert tools[0].result.metadata["source_status"] == "completed"
+    assert tools[0].result.status == "success"
 
 
 def test_opencode_preserves_error_truncation_and_attachments():
@@ -431,8 +429,7 @@ def test_opencode_preserves_error_truncation_and_attachments():
 
     session, _ = _parse_session(data)
     tool = _tool(session)
-    assert tool.status == "error"
-    assert tool.output == "fixture failure"
+    assert tool_result_text(tool.result) == "fixture failure"
     assert tool.result.status == "error"
     assert tool.result.stderr == "fixture failure"
     assert tool.result.exit_code == 17

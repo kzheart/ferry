@@ -101,10 +101,6 @@ def _norm_input(name: str, inp: dict | str) -> dict | str:
     return inp
 
 
-def _result_text(block) -> str:
-    return _tool_result(block).legacy_output()
-
-
 def _result_status(block: dict, native: dict) -> str:
     if block.get("is_error") is True or native.get("success") is False:
         return "error"
@@ -414,7 +410,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 tool = ToolCall(
                     name=name, op=op,
                     input=canonical_input,
-                    output="", source_call_id=item.get("id"),
+                    source_call_id=item.get("id"),
                     meta={"claude_input": source_input})
                 pending[item.get("id")] = tool
                 blocks.append(Block("tool", tool=tool))
@@ -426,9 +422,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                     continue
                 tool.source_result_id = record.get("uuid")
                 result = record.get("toolUseResult")
-                if isinstance(result, dict):
-                    tool.meta.update(result)
-                tool.set_result(_tool_result(item, result))
+                tool.result = _tool_result(item, result)
             else:
                 session.lose("migration.unknown_block_dropped", kind=kind)
         if result_carrier and not any(
