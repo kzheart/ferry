@@ -6,7 +6,7 @@
     {"name": "env", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "parallel-read"},
     {"name": "resume", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "serial"},
     {"name": "models", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "parallel-read"},
-    {"name": "history", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "serial"},
+    {"name": "history", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "parallel-read"},
     {"name": "history_delete", "kind": "mutation", "public": true, "timeout": "normal", "retry": "never", "dispatch": "serial"},
     {"name": "pricing", "kind": "index-refresh", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "serial"},
     {"name": "show", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read", "dispatch": "serial"},
