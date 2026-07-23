@@ -149,3 +149,10 @@ class AgentRequestError(DomainError, ValueError):
 class AgentApprovalError(DomainError, ValueError):
     code = "agent.approval_invalid"
     category = "permission"
+
+
+class SummaryBackboneMissingError(DomainError, ValueError):
+    """尚未为该会话建立摘要底座，无法写回蒸馏摘要。"""
+
+    code = "summary.backbone_missing"
+    category = "not-found"
