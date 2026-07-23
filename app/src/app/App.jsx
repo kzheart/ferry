@@ -125,7 +125,7 @@ export default function App() {
   const { ops, dirtyOps, setOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
-    removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit } = editing;
+    removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
 
   // 清单水合(首启无缓存 / 引擎清单与缓存不一致)后,把"全选"态筛选器扩展到新全集
   useEffect(() => onToolsHydrated(() => {
@@ -632,7 +632,7 @@ export default function App() {
   const detailFns = useRef({});
   detailFns.current = {
     discardAll: () => setOps([]),
-    setScope, addOp, removeOp, updateOp, startReplyEdit, authoringError,
+    setScope, addOp, removeOp, updateOp, startReplyEdit, replyEditError,
     openDiff, apply: prepareApply,
     openMigrate: sc => setMig({ scope: sc ?? scope }),
     refresh: refreshDetail,
@@ -656,7 +656,7 @@ export default function App() {
     removeOp: (...a) => detailFns.current.removeOp(...a),
     updateOp: (...a) => detailFns.current.updateOp(...a),
     startReplyEdit: (...a) => detailFns.current.startReplyEdit(...a),
-    authoringError: (...a) => detailFns.current.authoringError(...a),
+    replyEditError: (...a) => detailFns.current.replyEditError(...a),
     onOpenDiff: () => detailFns.current.openDiff(),
     onApply: () => detailFns.current.apply(),
     onOpenMigrate: sc => detailFns.current.openMigrate(sc),
@@ -986,7 +986,7 @@ export default function App() {
             ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
             updateOp={detailActs.updateOp}
             editCaps={editCaps}
-            startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
+            startReplyEdit={detailActs.startReplyEdit} replyEditError={detailActs.replyEditError}
             onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
             onOpenMigrate={detailActs.onOpenMigrate}
             navigationTarget={navigationTarget}
@@ -1054,7 +1054,7 @@ export default function App() {
               ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
               updateOp={detailActs.updateOp}
               editCaps={editCaps}
-              startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
+              startReplyEdit={detailActs.startReplyEdit} replyEditError={detailActs.replyEditError}
               onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
               onOpenMigrate={detailActs.onOpenMigrate}
               navigationTarget={navigationTarget}

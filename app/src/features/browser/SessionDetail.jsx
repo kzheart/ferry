@@ -287,7 +287,7 @@ function ToolCard({ t, tt, open, onToggle }) {
 
 function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
-  replyOp, canAuthor, authoringBlocked, onStartReply, onUpdateReply, onCancelReply,
+  replyOp, canEditReply, replyEditBlocked, onStartReply, onUpdateReply, onCancelReply,
   scopeOn, onScope, onClearScope, onMigrateScope, scopeStats, onOpenImages }) {
   const { t: tt } = useTranslation();
   const [open, setOpen] = useState({});
@@ -417,7 +417,7 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
             )}
           </div>
         )}
-        {!replyOp && (aiText || (canAuthor && !deleted)) && (
+        {!replyOp && (aiText || (canEditReply && !deleted)) && (
           <div style={{ margin: aiText ? "10px 0 0" : "6px 0 0" }}>
             {aiText && <div className="fdel-text"><Markdown text={aiText} /></div>}
             <div className="fhact" style={{ display: "flex", gap: 3, marginTop: 4 }}>
@@ -425,9 +425,9 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                 <IconBtn title={copied ? tt("browser:round.copiedAi") : tt("browser:round.copyAi")} onClick={copyAi}>
                   {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
               )}
-              {canAuthor && !deleted && (
-                <IconBtn onClick={onStartReply} disabled={authoringBlocked}
-                  title={authoringBlocked ? tt("browser:replyEditor.blockedHint") : tt("browser:replyEditor.startHint")}>
+              {canEditReply && !deleted && (
+                <IconBtn onClick={onStartReply} disabled={replyEditBlocked}
+                  title={replyEditBlocked ? tt("browser:replyEditor.blockedHint") : tt("browser:replyEditor.startHint")}>
                   <PencilIcon /></IconBtn>
               )}
             </div>
@@ -519,7 +519,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
-  startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
+  startReplyEdit, replyEditError, onOpenDiff, onApply, applying, onDiscardAll,
   onOpenMigrate, onRefresh, refreshing, onResume, editCaps,
   navigationTarget }) {
   const { t: tt } = useTranslation();
@@ -529,7 +529,7 @@ export default memo(function SessionDetail({ meta, data, error,
     [rounds, data?.context_compactions],
   );
   const canEdit = !!editCaps?.inplace;
-  const canAuthor = editCaps?.operation_modes
+  const canEditReply = editCaps?.operation_modes
     ?.["replace-assistant-reply"]?.includes("inplace") === true;
   const canMigrate = toolHasCapability(meta.tool, "migrate-source");
   const [copied, setCopied] = useState(false);
@@ -637,14 +637,15 @@ export default memo(function SessionDetail({ meta, data, error,
             return (
             <Round key={item.key} r={r} editable={canEdit}
               delOp={opFor(r.n, "delete")} rewOp={opFor(r.n, "rewrite")}
-              replyOp={opFor(r.n, "assistant-reply")} canAuthor={canAuthor && !!r.authoring}
-              authoringBlocked={ops.length > 0 && !opFor(r.n, "assistant-reply")}
+              replyOp={opFor(r.n, "assistant-reply")}
+              canEditReply={canEditReply && !!r.assistantReply}
+              replyEditBlocked={ops.length > 0 && !opFor(r.n, "assistant-reply")}
               onDelete={() => addOp("delete", r)}
               onUndoDelete={() => { const o = opFor(r.n, "delete"); if (o) removeOp(o.id); }}
               onRewrite={() => addOp("rewrite", r)}
               onUpdateRewrite={text => { const o = opFor(r.n, "rewrite"); if (o) updateOp(o.id, { text }); }}
               onCancelRewrite={() => { const o = opFor(r.n, "rewrite"); if (o) removeOp(o.id); }}
-              onStartReply={() => startReplyEdit(r.authoring)}
+              onStartReply={() => startReplyEdit(r.assistantReply)}
               onUpdateReply={items => { const o = opFor(r.n, "assistant-reply");
                 if (o) updateOp(o.id, { items }); }}
               onCancelReply={() => { const o = opFor(r.n, "assistant-reply"); if (o) removeOp(o.id); }}
@@ -664,7 +665,7 @@ export default memo(function SessionDetail({ meta, data, error,
       {dirtyOps.length > 0 && (
         <PendingBar ops={dirtyOps} removeOp={removeOp}
           onOpenDiff={onOpenDiff} onApply={onApply} applying={applying}
-          invalid={authoringError(dirtyOps.find(op => op.type === "assistant-reply"))}
+          invalid={replyEditError(dirtyOps.find(op => op.type === "assistant-reply"))}
           onDiscardAll={onDiscardAll} />
       )}
       {previewImages && <ImagePreview key={previewImages[0]?.id} images={previewImages}
