@@ -32,6 +32,7 @@ def test_only_declared_pure_reads_can_use_parallel_dispatch():
         "version",
         "env",
         "models",
+        "history",
         "edit_capabilities",
         "session_meta_list",
     }

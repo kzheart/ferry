@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class StateDatabase:
@@ -83,7 +83,12 @@ class StateDatabase:
                         updated_at INTEGER NOT NULL,
                         PRIMARY KEY(tool, session_id)
                     );
-                    PRAGMA user_version = 4;
+                    CREATE TABLE migration_history (
+                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                        history_id TEXT NOT NULL UNIQUE,
+                        entry_json TEXT NOT NULL
+                    );
+                    PRAGMA user_version = 5;
                     COMMIT;
                 """)
             if recover_interrupted:
@@ -294,6 +299,41 @@ class StateDatabase:
                 (status, now, recovery_id, expected),
             ).rowcount
             return changed == 1
+
+    def append_migration_history(self, history_id: str, entry: dict) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO migration_history(history_id, entry_json) VALUES (?, ?)",
+                (
+                    history_id,
+                    json.dumps(
+                        entry, ensure_ascii=False, sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+
+    def list_migration_history(self) -> list[dict]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT history_id, entry_json FROM migration_history ORDER BY sequence DESC"
+            ).fetchall()
+        return [
+            {**json.loads(row["entry_json"]), "id": row["history_id"]}
+            for row in rows
+        ]
+
+    def delete_migration_history(self, history_id: str) -> dict:
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            deleted = connection.execute(
+                "DELETE FROM migration_history WHERE history_id = ?", (history_id,)
+            ).rowcount == 1
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM migration_history"
+            ).fetchone()[0]
+            connection.commit()
+        return {"deleted": deleted, "id": history_id, "remaining": remaining}
 
     @staticmethod
     def _metadata_entry(row: sqlite3.Row | None) -> dict:

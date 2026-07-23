@@ -96,9 +96,11 @@ External Claude, Codex, and OpenCode stores remain external sources of truth.
 Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
 
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
-currently version 4 and owns immutable operation plans, operation audit,
-delete-recovery handles, and session metadata. Session metadata is identified
-by the exact `(tool, native_session_id)` pair, never by a bare native ID. The
+currently version 5 and owns immutable operation plans, operation audit,
+delete-recovery handles, session metadata, and migration history. Session
+metadata is identified by the exact `(tool, native_session_id)` pair, never by
+a bare native ID. Migration history has a database-generated immutable ID and
+is listed in append order from newest to oldest. The
 database uses WAL plus `BEGIN IMMEDIATE` for every state transition and
 metadata CAS. A schema other than the exact current version fails at startup;
 old JSON metadata and older SQLite schemas are not read or migrated.
@@ -107,10 +109,10 @@ The UI uses the same pair as its local session identity for list keys,
 selection, multi-selection, context menus, and detail caching. Native session
 IDs remain adapter data and must never become cross-tool UI identifiers.
 
-Other Ferry-owned stores (migration history, summaries, organization proposals,
-and Runtime conversation event logs) have not yet been consolidated. They must
-continue to be accessed only by their designated process until they move into
-the Python-owned SQLite boundary; Rust and Ferry Runtime never open
+Other Ferry-owned stores (summaries, organization proposals, and Runtime
+conversation event logs) have not yet been consolidated. They must continue to
+be accessed only by their designated process until they move into the
+Python-owned SQLite boundary; Rust and Ferry Runtime never open
 `ferry-state.sqlite3` directly.
 
 The SQLite boundary follows these rules:
