@@ -27,6 +27,7 @@ def resolve(ref: str) -> Path:
 
 class CodexBackend(EditBackend):
     name = "codex"
+    operations = ("delete-turn", "rewrite", "replace-assistant-reply")
 
     def __init__(self, store_factory=None):
         self._store_factory = store_factory
@@ -63,6 +64,10 @@ class CodexBackend(EditBackend):
             else:
                 raise OperationUnsupportedError("codex", kind)
         return notes
+
+    def replace_reply(self, doc, turn, reply):
+        span = select_span(TURN_INDEX.turns(doc.data), turn)
+        return CODEC.replace_reply(doc, span, reply)
 
     def validate(self, doc):
         calls, outputs = set(), set()

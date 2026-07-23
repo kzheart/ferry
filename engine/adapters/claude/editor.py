@@ -12,6 +12,7 @@ from .codec import CODEC, TURN_INDEX
 
 class ClaudeBackend(EditBackend):
     name = "claude"
+    operations = ("delete-turn", "rewrite", "replace-assistant-reply")
 
     def load(self, ref):
         path = claude_edit.resolve(ref)
@@ -33,6 +34,10 @@ class ClaudeBackend(EditBackend):
             else:
                 raise OperationUnsupportedError("claude", kind)
         return notes
+
+    def replace_reply(self, doc, turn, reply):
+        span = select_span(TURN_INDEX.turns(doc.data), turn)
+        return CODEC.replace_reply(doc, span, reply)
 
     def validate(self, doc):
         claude_edit.check_invariants(doc.data)

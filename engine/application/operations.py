@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..domain.authoring import AssistantReply
+from ..domain.edit import AssistantReply
 from ..domain.errors import (
     AgentReferenceError,
     AgentRequestError,
@@ -521,11 +521,11 @@ class OperationService:
         plugin = current().adapter(params["tool"])
         editor = plugin.require("editor")
         native_ops = self._resolve_ops(record, params["ops"])
-        compiler = self._require_inplace_support(
-            plugin, editor, native_ops,
-        )
+        self._require_inplace_support(plugin, editor, native_ops)
         try:
-            if compiler is None:
+            if not any(
+                op["op"] == "replace-assistant-reply" for op in native_ops
+            ):
                 from .editing import apply
                 result, doc, snapshot = apply(
                     editor,
@@ -537,7 +537,7 @@ class OperationService:
                 result, doc, snapshot = apply_mutation(
                     editor,
                     record.canonical_ref,
-                    self._mutate(editor, compiler, native_ops),
+                    self._mutate(editor, native_ops),
                     expected_revision=operation.document_revision,
                 )
         except LocatorStaleError as error:
@@ -651,7 +651,7 @@ class OperationService:
         agent_tools._validate_json_shape(ops)
         ordinary = []
         normalized = []
-        authored_turns = []
+        replaced_turns = []
         for op in ops:
             if not isinstance(op, dict):
                 raise AgentRequestError("每个 edit op 必须是 object")
@@ -673,12 +673,12 @@ class OperationService:
                 )
             reply = AssistantReply.from_dict(op["reply"])
             turn_key = (type(turn).__name__, turn)
-            if turn_key in authored_turns:
+            if turn_key in replaced_turns:
                 raise AgentRequestError(
                     "同一轮次不能在一次编辑中重复替换",
                     {"field": "ops.turn"},
                 )
-            authored_turns.append(turn_key)
+            replaced_turns.append(turn_key)
             normalized.append({
                 "op": "replace-assistant-reply",
                 "turn": turn,
@@ -703,7 +703,7 @@ class OperationService:
         ordinary = [
             op for op in ops if op["op"] != "replace-assistant-reply"
         ]
-        authored = [
+        replacements = [
             op for op in ops if op["op"] == "replace-assistant-reply"
         ]
         modes = editor.capabilities().get("operation_modes", {})
@@ -715,22 +715,21 @@ class OperationService:
             raise OperationUnsupportedError(
                 plugin.id, operation_names, "inplace",
             )
-        if not authored:
-            return None
-        compiler = plugin.require("authoring")
-        if not compiler.capabilities().get("inplace"):
+        if replacements and "inplace" not in modes.get(
+            "replace-assistant-reply", []
+        ):
             raise OperationUnsupportedError(
-                compiler.name, "replace-assistant-reply", "inplace",
+                plugin.id, "replace-assistant-reply", "inplace",
             )
-        return compiler
+        return editor
 
     @staticmethod
-    def _mutate(editor, compiler, ops: list[dict]):
+    def _mutate(editor, ops: list[dict]):
         def mutate(doc):
             changes = []
             for op in ops:
                 if op["op"] == "replace-assistant-reply":
-                    changes.extend(compiler.replace(
+                    changes.extend(editor.replace_reply(
                         doc,
                         op["turn"],
                         AssistantReply.from_dict(op["reply"]),
@@ -749,14 +748,14 @@ class OperationService:
         plugin = current().adapter(record.tool)
         editor = plugin.require("editor")
         native_ops = self._resolve_ops(record, ops)
-        compiler = self._require_inplace_support(
+        self._require_inplace_support(
             plugin, editor, native_ops,
         )
         try:
             result = preview_mutation(
                 editor,
                 record.canonical_ref,
-                self._mutate(editor, compiler, native_ops),
+                self._mutate(editor, native_ops),
                 loader=getattr(editor, "load_preview", None),
             )
         except LocatorStaleError as error:
@@ -770,10 +769,9 @@ class OperationService:
             "before": agent_tools._bounded_json(result["before"], 12 * 1024),
             "after": agent_tools._bounded_json(result["after"], 12 * 1024),
             "changes": agent_tools._bounded_json(result["changes"], 12 * 1024),
-            "capabilities": agent_tools._bounded_json({
-                "editing": editor.capabilities(),
-                "authoring": compiler.capabilities(),
-            }, 12 * 1024),
+            "capabilities": agent_tools._bounded_json(
+                editor.capabilities(), 12 * 1024
+            ),
         })
 
     @staticmethod

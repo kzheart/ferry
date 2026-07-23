@@ -5,19 +5,17 @@ from pathlib import Path
 import pytest
 
 from engine.adapters.base.editing import EditDocument
-from engine.adapters.claude.authoring import ClaudeAuthoringCompiler
+from engine.adapters.claude.editor import ClaudeBackend
 from engine.adapters.claude.editing import check_invariants
 from engine.adapters.claude.reader import read as read_claude
-from engine.adapters.codex.authoring import CodexAuthoringCompiler
 from engine.adapters.codex.editor import CodexBackend
 from engine.adapters.codex.reader import read as read_codex
-from engine.adapters.opencode.authoring import OpenCodeAuthoringCompiler
 from engine.adapters.opencode.editor import OpenCodeBackend
 from engine.adapters.opencode.probe import OpenCodeVerifier
 from engine.adapters.opencode.session import _parse_session
 from engine.application.editing import apply_mutation
 from engine.application.sessions import session_json
-from engine.domain.authoring import AssistantReply
+from engine.domain.edit import AssistantReply
 from engine.domain.errors import ConcurrentModificationError
 from engine.domain.model import tool_result_text
 from engine.domain.tool_ops import CanonicalOp
@@ -54,10 +52,8 @@ def _native(tool, case="case-01-plain"):
     return _opencode_payload(case)
 
 
-def _compiler(tool):
-    return {"claude": ClaudeAuthoringCompiler,
-            "codex": CodexAuthoringCompiler,
-            "opencode": OpenCodeAuthoringCompiler}[tool]()
+def _editor(tool):
+    return {"claude": ClaudeBackend, "codex": CodexBackend}[tool]()
 
 
 def _document(tool, data):
@@ -106,25 +102,25 @@ def _items(session):
     return result
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_pure_text_replacement_roundtrips(tool, tmp_path):
     doc = _document(tool, _native(tool))
     reply = AssistantReply.from_dict({"items": [{"kind": "text", "text": "new reply"}]})
 
-    _compiler(tool).replace(doc, 1, reply)
+    _editor(tool).replace_reply(doc, 1, reply)
 
     _validate(tool, doc.data)
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == reply.to_dict()["items"]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_tool_insertion_generates_native_pairs_and_foreign_keys(tool, tmp_path):
     doc = _document(tool, _native(tool))
     reply = AssistantReply.from_dict({"items": [{
         "kind": "tool", "name": "lookup", "input": {"query": "x"}, "output": "found",
     }]})
 
-    _compiler(tool).replace(doc, 1, reply)
+    _editor(tool).replace_reply(doc, 1, reply)
     _validate(tool, doc.data)
 
     if tool == "claude":
@@ -141,16 +137,10 @@ def test_tool_insertion_generates_native_pairs_and_foreign_keys(tool, tmp_path):
         outputs = [row["payload"]["call_id"] for row in doc.data
                    if (row.get("payload") or {}).get("type") == "function_call_output"]
         assert calls == outputs and calls[0].startswith("call_")
-    else:
-        message = doc.data["messages"][1]
-        part = message["parts"][0]
-        assert part["messageID"] == message["info"]["id"]
-        assert part["sessionID"] == doc.data["info"]["id"]
-        assert part["callID"].startswith("call_")
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == reply.to_dict()["items"]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_text_tool_text_order_roundtrips(tool, tmp_path):
     value = {"items": [
         {"kind": "text", "text": "before"},
@@ -160,29 +150,29 @@ def test_text_tool_text_order_roundtrips(tool, tmp_path):
     reply = AssistantReply.from_dict(value)
     doc = _document(tool, _native(tool))
 
-    _compiler(tool).replace(doc, 1, reply)
+    _editor(tool).replace_reply(doc, 1, reply)
 
     _validate(tool, doc.data)
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == value["items"]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_string_tool_input_roundtrips(tool, tmp_path):
     value = {"items": [{"kind": "tool", "name": "opaque",
                         "input": "raw input", "output": "raw output"}]}
     doc = _document(tool, _native(tool))
 
-    _compiler(tool).replace(doc, 1, AssistantReply.from_dict(value))
+    _editor(tool).replace_reply(doc, 1, AssistantReply.from_dict(value))
 
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == value["items"]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_replacement_deletes_existing_tools(tool, tmp_path):
     doc = _document(tool, _native(tool, "case-02-tools"))
     reply = AssistantReply.from_dict({"items": [{"kind": "text", "text": "no tools"}]})
 
-    _compiler(tool).replace(doc, 1, reply)
+    _editor(tool).replace_reply(doc, 1, reply)
 
     _validate(tool, doc.data)
     session = _roundtrip(tool, doc.data, tmp_path)
@@ -200,16 +190,17 @@ def test_invalid_or_structural_input_is_rejected(value):
         AssistantReply.from_dict(value)
 
 
-def test_turn_bounds_and_opencode_mode_are_explicit():
+def test_turn_bounds_and_opencode_capability_are_explicit():
     reply = AssistantReply.from_dict({"items": [{"kind": "text", "text": "x"}]})
-    compiler = ClaudeAuthoringCompiler()
+    editor = ClaudeBackend()
     with pytest.raises(ValueError, match="轮次超界"):
-        compiler.replace(_document("claude", _native("claude")), 2, reply)
-    assert OpenCodeAuthoringCompiler().capabilities()["operation_modes"] == {
-        "replace-assistant-reply": []}
+        editor.replace_reply(_document("claude", _native("claude")), 2, reply)
+    assert "replace-assistant-reply" not in OpenCodeBackend().capabilities()[
+        "operations"
+    ]
 
 
-def test_show_dto_exposes_ordered_authoring_draft(tmp_path):
+def test_show_dto_exposes_ordered_reply_draft(tmp_path):
     session = _roundtrip("claude", _native("claude", "case-02-tools"), tmp_path)
     dto = session_json(session)
 
@@ -343,7 +334,7 @@ def test_claude_retained_records_keep_order_and_valid_parents():
     doc = _document("claude", records)
     reply = AssistantReply.from_dict({"items": [{"kind": "text", "text": "new"}]})
 
-    ClaudeAuthoringCompiler().replace(doc, "user-1", reply)
+    ClaudeBackend().replace_reply(doc, "user-1", reply)
 
     types = [record["type"] for record in doc.data]
     assert types.index("progress") < types.index("assistant") < types.index("file-history-snapshot")
@@ -360,7 +351,7 @@ def test_claude_text_before_tool_is_one_assistant_message():
         {"kind": "text", "text": "finished"},
     ]})
 
-    ClaudeAuthoringCompiler().replace(doc, 1, reply)
+    ClaudeBackend().replace_reply(doc, 1, reply)
 
     authored = doc.data[1:]
     assert [item["type"] for item in authored[0]["message"]["content"]] == [
@@ -388,7 +379,7 @@ def test_codex_preserves_reasoning_unknown_items_and_event_positions():
     records.extend(preserved + [old_reply] + trailing)
     doc = _document("codex", records)
 
-    CodexAuthoringCompiler().replace(
+    CodexBackend().replace_reply(
         doc, "record:2", AssistantReply.from_dict(
             {"items": [{"kind": "text", "text": "authored"}]}))
 
@@ -420,30 +411,30 @@ def test_codex_reader_flushes_incomplete_tool_before_next_user(tmp_path):
         {"kind": "text", "text": "answer"}]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
-def test_dto_turn_locator_selects_same_compiler_turn(tool, tmp_path):
+@pytest.mark.parametrize("tool", ["claude", "codex"])
+def test_dto_turn_locator_selects_same_editor_turn(tool, tmp_path):
     data = _native(tool)
     locator = session_json(_roundtrip(tool, data, tmp_path))["turns"][0]["turn_locator"]
     doc = _document(tool, data)
 
-    _compiler(tool).replace(doc, locator, AssistantReply.from_dict(
+    _editor(tool).replace_reply(doc, locator, AssistantReply.from_dict(
         {"items": [{"kind": "text", "text": "by locator"}]}))
 
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == [
         {"kind": "text", "text": "by locator"}]
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
-def test_authored_agent_spawn_is_rejected(tool):
+@pytest.mark.parametrize("tool", ["claude", "codex"])
+def test_replacement_agent_spawn_is_rejected(tool):
     doc = _document(tool, _native(tool))
     reply = AssistantReply.from_dict({"items": [{"kind": "tool", "name": "spawn_agent",
                                                   "input": {}, "output": "done"}]})
 
     with pytest.raises(ValueError, match="会话树"):
-        _compiler(tool).replace(doc, 1, reply)
+        _editor(tool).replace_reply(doc, 1, reply)
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("tool", ["claude", "codex"])
 def test_existing_agent_spawn_is_rejected(tool):
     data = _native(tool, "case-02-tools")
     if tool == "claude":
@@ -454,13 +445,13 @@ def test_existing_agent_spawn_is_rejected(tool):
         data["messages"][1]["parts"][0]["tool"] = "task"
 
     with pytest.raises(ValueError, match="目标回复包含"):
-        _compiler(tool).replace(
+        _editor(tool).replace_reply(
             _document(tool, data), 1,
             AssistantReply.from_dict({"items": [{"kind": "text", "text": "safe"}]}))
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
-def test_hidden_user_carriers_do_not_change_dto_or_compiler_turns(tool, tmp_path):
+@pytest.mark.parametrize("tool", ["claude", "codex"])
+def test_hidden_user_carriers_do_not_change_dto_or_editor_turns(tool, tmp_path):
     if tool == "claude":
         data = [
             {"type": "user", "uuid": "u1", "parentUuid": None,
@@ -508,7 +499,7 @@ def test_hidden_user_carriers_do_not_change_dto_or_compiler_turns(tool, tmp_path
     assert len(dto["turns"]) == 2
     doc = _document(tool, data)
 
-    _compiler(tool).replace(
+    _editor(tool).replace_reply(
         doc, dto["turns"][1]["turn_locator"],
         AssistantReply.from_dict({"items": [{"kind": "text", "text": "new2"}]}))
 
@@ -557,7 +548,7 @@ def test_claude_ismeta_image_companion_not_a_turn(tmp_path):
     assert spans[0].end == 3
 
     doc = _document("claude", data)
-    _compiler("claude").replace(
+    _editor("claude").replace_reply(
         doc, dto["turns"][0]["turn_locator"],
         AssistantReply.from_dict({"items": [{"kind": "text", "text": "新回复"}]}))
     assert [item["text"] for item in _items(_roundtrip("claude", doc.data, tmp_path))

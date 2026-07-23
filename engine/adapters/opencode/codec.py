@@ -4,17 +4,9 @@
 """
 from __future__ import annotations
 
-import copy
-import secrets
-import time
-
-from ...domain.authoring import TextItem
 from ...domain.events import event
 from ...domain.errors import LocatorStaleError, OperationUnsupportedError
 from ...domain.reasoning import visible_text
-from ..base.authoring import (
-    reject_authored_spawn, reject_target_spawn, replace_at_first,
-)
 from ..base.codec import TurnSpan
 
 
@@ -23,10 +15,6 @@ def _visible(message) -> bool:
                (part.get("type") == "reasoning" and
                 visible_text(part.get("text")) is not None)
                for part in message.get("parts", []))
-
-
-def _new_id(prefix):
-    return f"{prefix}_{secrets.token_hex(6)}{secrets.token_urlsafe(12)[:14]}"
 
 
 class OpenCodeTurnIndex:
@@ -48,60 +36,6 @@ class OpenCodeTurnIndex:
 
 
 class OpenCodeEditCodec:
-    def replace_reply(self, doc, span: TurnSpan, reply) -> list[str]:
-        messages = doc.data.get("messages", [])
-        sid = (doc.data.get("info") or {}).get("id")
-        user_id = messages[span.start]["info"].get("id")
-        old = messages[span.start + 1:span.end]
-        reject_authored_spawn(reply)
-        if any(part.get("type") == "tool" and part.get("tool") == "task"
-               for message in old for part in message.get("parts", [])):
-            reject_target_spawn("opencode")
-        old_assistant = next((message for message in old
-                              if (message.get("info") or {}).get("role") == "assistant"), None)
-        info = copy.deepcopy((old_assistant or {}).get("info") or {})
-        mid = _new_id("msg")
-        info.update({"id": mid, "sessionID": sid, "parentID": user_id,
-                     "role": "assistant", "finish": "stop"})
-        now = int(time.time() * 1000)
-        source_time = info.get("time") if isinstance(info.get("time"), dict) else {}
-        user_info = messages[span.start].get("info") or {}
-        user_time = user_info.get("time") if isinstance(user_info.get("time"), dict) else {}
-        anchor = source_time.get("created")
-        if not isinstance(anchor, int):
-            anchor = user_time.get("created")
-            if isinstance(anchor, int):
-                anchor += 1
-        if not isinstance(anchor, int):
-            anchor = now
-        completed = source_time.get("completed")
-        info["time"] = {
-            "created": anchor,
-            "completed": completed if isinstance(completed, int) and
-            completed >= anchor else anchor,
-        }
-        parts = []
-        for item in reply.items:
-            common = {"id": _new_id("prt"), "messageID": mid, "sessionID": sid}
-            if isinstance(item, TextItem):
-                parts.append({**common, "type": "text", "text": item.text})
-            else:
-                info["finish"] = "tool-calls" if item is reply.items[-1] else info["finish"]
-                parts.append({**common, "type": "tool", "tool": item.name,
-                              "callID": "call_" + secrets.token_urlsafe(18)[:24],
-                              "state": {"status": "completed",
-                                        "input": copy.deepcopy(item.input),
-                                        "output": item.output, "metadata": {},
-                                        "time": {"start": anchor,
-                                                 "end": anchor}}})
-        def is_reply(message):
-            return (message.get("info") or {}).get("role") == "assistant"
-
-        messages[span.start + 1:span.end] = replace_at_first(
-            old, is_reply, [{"info": info, "parts": parts}])
-        return [event("edit.reply_replaced", turn=span.ordinal,
-                      items=len(reply.items))]
-
     def delete_turn(self, doc, span: TurnSpan) -> list[str]:
         messages = doc.data.get("messages", [])
         user_id = messages[span.start]["info"].get("id")

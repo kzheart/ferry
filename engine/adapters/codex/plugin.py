@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
-from .authoring import CodexAuthoringCompiler
 from .editor import CodexBackend, resolve
 from .lifecycle import CodexLifecycle
 from .migration import CodexMigrationTarget
@@ -29,7 +28,6 @@ def build() -> ToolPlugin:
                        fingerprint=fingerprint, agent_fingerprint=agent_fingerprint),
         migration_target=CodexMigrationTarget(),
         editor=CodexBackend(),
-        authoring=CodexAuthoringCompiler(),
         verifier=CodexVerifier(),
         lifecycle=CodexLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),

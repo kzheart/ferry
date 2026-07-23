@@ -1,8 +1,4 @@
-from types import SimpleNamespace
-
 from engine.adapters.opencode import session as opencode_session
-from engine.adapters.opencode.codec import CODEC, TURN_INDEX
-from engine.domain.authoring import AssistantReply, TextItem, ToolItem
 from engine.domain.model import (
     AgentEdge,
     Block,
@@ -70,31 +66,6 @@ def test_raw_remap_makes_tied_messages_and_parts_stably_ordered():
     metadata = parts[1]["state"]["metadata"]
     assert metadata == {"parentSessionId": "new-session",
                         "sessionId": "new-child"}
-
-
-def test_replace_reply_keeps_the_original_turn_timestamp():
-    payload = {
-        "info": {"id": "session"},
-        "messages": [
-            _message("u1", "user", 100),
-            _message("a1", "assistant", 110, completed=120),
-            _message("u2", "user", 200),
-            _message("a2", "assistant", 210, completed=220),
-        ],
-    }
-    doc = SimpleNamespace(data=payload)
-    first_turn = TURN_INDEX.turns(payload)[0]
-
-    CODEC.replace_reply(doc, first_turn, AssistantReply((
-        TextItem("replacement"), ToolItem("read", {"filePath": "/tmp/a"}, "ok"),
-    )))
-
-    replacement = doc.data["messages"][1]
-    assert replacement["info"]["time"] == {"created": 110, "completed": 120}
-    tool = replacement["parts"][1]
-    assert tool["state"]["time"] == {"start": 110, "end": 110}
-    assert [message["info"]["time"]["created"]
-            for message in doc.data["messages"]] == [100, 110, 200, 210]
 
 
 def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(

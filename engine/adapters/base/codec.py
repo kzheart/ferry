@@ -1,7 +1,7 @@
 """统一轮次解析契约：TurnIndex（读侧）与 NativeEditCodec（写侧）。
 
 每个 Agent 只允许存在一份原生会话解析实现；reader、delete-turn、
-rewrite、authoring 全部消费同一个 TurnIndex，避免语义漂移。
+rewrite、replace-reply 全部消费同一个 TurnIndex，避免语义漂移。
 """
 from __future__ import annotations
 

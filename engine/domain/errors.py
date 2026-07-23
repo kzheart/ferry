@@ -148,12 +148,12 @@ class OperationUnsupportedError(DomainError, ValueError):
 
 
 class InvalidReplyError(DomainError, ValueError):
-    code = "authoring.invalid_reply"
+    code = "edit.invalid_reply"
     category = "validation"
 
 
 class SubagentNotSupportedError(DomainError, ValueError):
-    code = "authoring.subagent_not_supported"
+    code = "edit.subagent_not_supported"
     category = "unsupported"
 
 

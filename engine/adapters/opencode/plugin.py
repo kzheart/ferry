@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
-from .authoring import OpenCodeAuthoringCompiler
 from .editor import OpenCodeBackend
 from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
@@ -30,7 +29,6 @@ def build() -> ToolPlugin:
                        agent_read=read_preview),
         migration_target=OpenCodeMigrationTarget(),
         editor=OpenCodeBackend(),
-        authoring=OpenCodeAuthoringCompiler(),
         verifier=OpenCodeVerifier(),
         lifecycle=OpenCodeLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),

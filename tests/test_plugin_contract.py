@@ -10,11 +10,11 @@ from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
 from engine.adapters.codex.codec import TURN_INDEX as CODEX_INDEX
 from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.application.sessions import session_json
-from engine.domain.authoring import AssistantReply
+from engine.domain.edit import AssistantReply
 from engine.domain.errors import CapabilityUnsupportedError, ToolUnknownError
 
-from test_authoring import (
-    _compiler,
+from test_reply_editing import (
+    _editor,
     _document,
     _items,
     _native,
@@ -58,7 +58,7 @@ def test_readonly_fake_plugin_satisfies_contract():
 
 @pytest.mark.parametrize("capability", [
     "migration_source", "migration_target", "editor",
-    "authoring", "verifier", "lifecycle", "models",
+    "verifier", "lifecycle", "models",
 ])
 def test_missing_capability_reports_unsupported(capability):
     plugin = _fake_plugin()
@@ -90,9 +90,9 @@ def test_registry_explicitly_composes_all_bundled_adapters():
     assert create_registry().ids() == ("claude", "codex", "opencode")
 
 
-@pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])
-def test_turn_locator_consistent_across_read_author_delete(tool, tmp_path):
-    """reader 展示的 turn locator == authoring 替换的原生 turn
+@pytest.mark.parametrize("tool", ["claude", "codex"])
+def test_turn_locator_consistent_across_read_replace_delete(tool, tmp_path):
+    """reader 展示的 turn locator == 编辑器替换的原生 turn
     == delete-turn 删除的原生 turn。"""
     data = _native(tool, "case-02-tools")
     dto = session_json(_roundtrip(tool, data, tmp_path))
@@ -104,17 +104,17 @@ def test_turn_locator_consistent_across_read_author_delete(tool, tmp_path):
     assert [span.locator for span in spans] == \
         [turn["turn_locator"] for turn in dto["turns"]]
 
-    # authoring 按 DTO locator 替换的轮次 == TurnIndex 按 ordinal 选中的轮次
+    # 编辑器按 DTO locator 替换的轮次 == TurnIndex 按 ordinal 选中的轮次
     locator = dto["turns"][0]["turn_locator"]
     assert select_span(spans, locator) == select_span(spans, 1)
 
-    # 用 locator 与用 ordinal 做 authoring 替换，产物一致
+    # 用 locator 与用 ordinal 做回复替换，产物一致
     reply = AssistantReply.from_dict(
         {"items": [{"kind": "text", "text": "replaced"}]})
     by_locator = _document(tool, copy.deepcopy(data))
     by_ordinal = _document(tool, copy.deepcopy(data))
-    _compiler(tool).replace(by_locator, locator, reply)
-    _compiler(tool).replace(by_ordinal, 1, reply)
+    _editor(tool).replace_reply(by_locator, locator, reply)
+    _editor(tool).replace_reply(by_ordinal, 1, reply)
     dir_a, dir_b = tmp_path / "a", tmp_path / "b"
     dir_a.mkdir()
     dir_b.mkdir()
@@ -122,21 +122,14 @@ def test_turn_locator_consistent_across_read_author_delete(tool, tmp_path):
         _items(_roundtrip(tool, by_ordinal.data, dir_b))
 
     # delete-turn 删除的正是同一原生区间
-    if tool == "opencode":
-        messages = doc.data["messages"]
-        span = select_span(spans, locator)
-        from engine.adapters.opencode.codec import CODEC
-        CODEC.delete_turn(doc, span)
-        removed = [m for m in messages if m not in doc.data["messages"]]
-        assert messages[span.start] in removed
-    else:
-        codec = __import__(f"engine.adapters.{tool}.codec",
-                           fromlist=["CODEC"]).CODEC
-        span = select_span(spans, locator)
-        before = list(doc.data)
-        codec.delete_turn(doc, span)
-        assert doc.data == before[:span.start] + before[span.end:] or \
-            len(doc.data) == len(before) - (span.end - span.start)
+    codec = __import__(
+        f"engine.adapters.{tool}.codec", fromlist=["CODEC"]
+    ).CODEC
+    span = select_span(spans, locator)
+    before = list(doc.data)
+    codec.delete_turn(doc, span)
+    assert doc.data == before[:span.start] + before[span.end:] or \
+        len(doc.data) == len(before) - (span.end - span.start)
 
 
 @pytest.mark.parametrize("tool", ["claude", "codex", "opencode"])

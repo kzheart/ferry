@@ -8,11 +8,14 @@ import json
 import secrets
 from datetime import datetime, timezone
 
-from ...domain.authoring import TextItem
+from ...domain.edit import TextItem
 from ...domain.events import event
 from ...domain.errors import LocatorStaleError, OperationUnsupportedError
-from ..base.authoring import (
-    is_spawn_name, reject_authored_spawn, reject_target_spawn, replace_at_first,
+from ..base.editing import (
+    is_spawn_name,
+    reject_replacement_spawn,
+    reject_target_spawn,
+    replace_at_first,
 )
 from ..base.codec import TurnSpan
 from . import native as codex_native
@@ -70,7 +73,7 @@ class CodexEditCodec:
     def replace_reply(self, doc, span: TurnSpan, reply) -> list[str]:
         records = doc.data
         old = records[span.start + 1:span.end]
-        reject_authored_spawn(reply)
+        reject_replacement_spawn(reply)
         if any(_is_spawn(record) for record in old):
             reject_target_spawn("codex")
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

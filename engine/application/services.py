@@ -347,9 +347,6 @@ def edit_capabilities(tool: str) -> dict:
         for operation, modes in capabilities.get("operation_modes", {}).items()
         if "inplace" in modes
     }
-    authoring = plugin.require("authoring")
-    if authoring.capabilities().get("inplace"):
-        operation_modes["replace-assistant-reply"] = ["inplace"]
     return {
         "tool": tool,
         "operations": sorted(operation_modes),

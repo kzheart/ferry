@@ -4,7 +4,6 @@ from __future__ import annotations
 from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
 from . import editing as claude_edit
-from .authoring import ClaudeAuthoringCompiler
 from .editor import ClaudeBackend
 from .lifecycle import ClaudeLifecycle
 from .migration import ClaudeMigrationTarget
@@ -30,7 +29,6 @@ def build() -> ToolPlugin:
                        fingerprint=fingerprint, agent_fingerprint=agent_fingerprint),
         migration_target=ClaudeMigrationTarget(),
         editor=ClaudeBackend(),
-        authoring=ClaudeAuthoringCompiler(),
         verifier=ClaudeVerifier(),
         lifecycle=ClaudeLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),

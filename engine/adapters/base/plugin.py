@@ -15,7 +15,6 @@ CAP_BROWSE = "browse"
 CAP_MIGRATE_SOURCE = "migrate-source"
 CAP_MIGRATE_TARGET = "migrate-target"
 CAP_EDIT = "edit"
-CAP_AUTHOR = "author"
 CAP_INPLACE = "inplace"
 CAP_VERIFIED = "verified"
 
@@ -81,6 +80,8 @@ class SessionEditor(Protocol):
 
     def apply_ops(self, doc, ops: list[dict]) -> list: ...
 
+    def replace_reply(self, doc, turn, reply) -> list: ...
+
     def validate(self, doc) -> None: ...
 
     def stats(self, doc) -> dict: ...
@@ -92,15 +93,6 @@ class SessionEditor(Protocol):
     def restore_snapshot(self, snapshot, doc) -> None: ...
 
     def saved_revision(self, result: dict, doc) -> str: ...
-
-
-@runtime_checkable
-class ReplyAuthor(Protocol):
-    name: str
-
-    def capabilities(self) -> dict: ...
-
-    def replace(self, doc, turn, reply) -> list: ...
 
 
 @runtime_checkable
@@ -141,7 +133,6 @@ class ToolPlugin:
     migration_source: MigrationSource | None = None
     migration_target: MigrationTarget | None = None
     editor: SessionEditor | None = None
-    authoring: ReplyAuthor | None = None
     verifier: SessionVerifier | None = None
     lifecycle: SessionLifecycle | None = None
     models: ModelCatalog | None = None
@@ -158,10 +149,7 @@ class ToolPlugin:
             caps.append(CAP_MIGRATE_TARGET)
         if self.editor is not None:
             caps.append(CAP_EDIT)
-        if self.authoring is not None:
-            caps.append(CAP_AUTHOR)
-        if (self.editor is not None and self.editor.capabilities().get("inplace")) or \
-                (self.authoring is not None and self.authoring.capabilities().get("inplace")):
+        if self.editor is not None and self.editor.capabilities().get("inplace"):
             caps.append(CAP_INPLACE)
         if self.verifier is not None:
             caps.append(CAP_VERIFIED)

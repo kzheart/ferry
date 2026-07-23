@@ -1,6 +1,6 @@
 """Claude 原生会话的唯一轮次解析与编辑编解码。
 
-reader DTO、delete-turn、rewrite、authoring 全部消费本模块的
+reader DTO、delete-turn、rewrite、replace-reply 全部消费本模块的
 ``TURN_INDEX``；轮次定义：非 sidechain、非 isMeta、非 tool_result
 载体、且含可见内容的用户消息，到下一条这样的消息之前。
 """
@@ -11,12 +11,15 @@ import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from ...domain.authoring import TextItem
+from ...domain.edit import TextItem
 from ...domain.events import event
 from ...domain.errors import LocatorStaleError, OperationUnsupportedError
 from ...domain.reasoning import visible_text
-from ..base.authoring import (
-    is_spawn_name, reject_authored_spawn, reject_target_spawn, replace_at_first,
+from ..base.editing import (
+    is_spawn_name,
+    reject_replacement_spawn,
+    reject_target_spawn,
+    replace_at_first,
 )
 from ..base.codec import TurnSpan
 from .editing import relink
@@ -96,7 +99,7 @@ class ClaudeEditCodec:
     def replace_reply(self, doc, span: TurnSpan, reply) -> list[str]:
         records = doc.data
         old = records[span.start + 1:span.end]
-        reject_authored_spawn(reply)
+        reject_replacement_spawn(reply)
         if any(is_spawn_name(item.get("name")) for record in old
                if _is_reply_record(record)
                for item in ((record.get("message") or {}).get("content") or [])
