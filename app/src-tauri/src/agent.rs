@@ -159,6 +159,14 @@ fn read_agent_output(
             continue;
         };
         if value.get("type").is_some() {
+            if value.get("type").and_then(Value::as_str) == Some("engine.request") {
+                let worker_resource = resource_dir.clone();
+                let worker_stdin = stdin.clone();
+                std::thread::spawn(move || {
+                    complete_engine_request(&worker_resource, &worker_stdin, &value)
+                });
+                continue;
+            }
             if matches!(
                 value.get("type").and_then(Value::as_str),
                 Some("run.completed" | "run.failed" | "run.cancelled")
@@ -276,6 +284,15 @@ fn complete_tool_request(
             }
         }
     }
+    send_gateway_result(stdin, session_id, request_id, outcome);
+}
+
+fn send_gateway_result(
+    stdin: &Arc<Mutex<ChildStdin>>,
+    session_id: &str,
+    request_id: &str,
+    outcome: Result<Value, String>,
+) {
     let params = match outcome {
         Ok(result) => json!({
             "request_id": request_id,
@@ -297,6 +314,43 @@ fn complete_tool_request(
         "params": params,
     });
     let _ = write_line(stdin, &command.to_string());
+}
+
+fn complete_engine_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, event: &Value) {
+    let session_id = event
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let payload = event.get("payload").and_then(Value::as_object);
+    let request_id = payload
+        .and_then(|value| value.get("request_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let method = payload
+        .and_then(|value| value.get("method"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let params = payload
+        .and_then(|value| value.get("params"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let outcome = if is_organization_engine_method(method) {
+        engine_value(resource_dir, method, params)
+    } else {
+        Err("engine.method_not_allowed".to_owned())
+    };
+    send_gateway_result(stdin, session_id, request_id, outcome);
+}
+
+fn is_organization_engine_method(method: &str) -> bool {
+    matches!(
+        method,
+        "session_backbone"
+            | "session_summaries_set"
+            | "organization_digest_context"
+            | "organization_proposals_list"
+            | "organization_propose"
+    )
 }
 
 fn route_tool(
@@ -500,7 +554,7 @@ fn request_agent(
                 .and_then(Value::as_str)
                 .map(str::to_owned)
         })
-        .filter(|method| method == "organization.generate")
+        .filter(|method| method == "organization.start")
         .map(|_| ORGANIZATION_TIMEOUT)
         .unwrap_or(COMMAND_TIMEOUT);
     let result = guard
@@ -534,7 +588,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "role.update"
             | "role.copy"
             | "role.delete"
-            | "organization.generate"
+            | "organization.start"
             | "prompt"
             | "abort"
             | "steer"
@@ -893,6 +947,21 @@ mod tests {
         let request = json!({"protocol": AGENT_PROTOCOL, "id": "x",
                              "method": "tool.result", "params": {}});
         assert!(validate_public_command(&request.to_string()).is_err());
+    }
+
+    #[test]
+    fn organization_engine_gateway_is_an_exact_allowlist() {
+        for method in [
+            "session_backbone",
+            "session_summaries_set",
+            "organization_digest_context",
+            "organization_proposals_list",
+            "organization_propose",
+        ] {
+            assert!(is_organization_engine_method(method));
+        }
+        assert!(!is_organization_engine_method("operation.apply"));
+        assert!(!is_organization_engine_method("session_delete"));
     }
 
     #[test]

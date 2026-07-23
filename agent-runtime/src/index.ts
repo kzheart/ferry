@@ -1,6 +1,7 @@
 export * from "./commands.js";
 export * from "./auth-coordinator.js";
 export * from "./model-catalog-store.js";
+export * from "./organization-workflow.js";
 export * from "./provider-config.js";
 export * from "./provider-host.js";
 export * from "./event-store.js";

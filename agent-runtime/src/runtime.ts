@@ -18,6 +18,10 @@ import type {
 import type { ProviderHost } from "./provider-host.js";
 import { parseOrganizerInput } from "./organizer.js";
 import {
+  runOrganizationWorkflow,
+  type OrganizationEngineMethod,
+} from "./organization-workflow.js";
+import {
   DEFAULT_ROLE_ID,
   MemoryRoleStore,
   type ApplyPolicy,
@@ -49,6 +53,11 @@ export type ToolHandler = (
   name: FerryToolName,
   args: Record<string, unknown>,
   context: ToolRequestContext,
+) => Promise<unknown>;
+export type EngineHandler = (
+  method: OrganizationEngineMethod,
+  params: Record<string, unknown>,
+  workflowId: string,
 ) => Promise<unknown>;
 
 // 新增工具时 TypeScript 会强制补齐策略；长任务不能被短读取工具的截止时间误伤。
@@ -134,6 +143,7 @@ export interface RuntimeOptions {
   providerHost?: ProviderHost;
   roleStore?: RoleStore;
   toolHandler?: ToolHandler;
+  engineHandler?: EngineHandler;
   now?: () => Date;
   idFactory?: () => string;
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
@@ -628,9 +638,11 @@ export class AgentRuntime {
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly listeners = new Set<(event: EventEnvelope) => void>();
   private readonly pendingTools = new Map<string, DeferredTool>();
+  private readonly organizationRuns = new Map<string, Promise<unknown>>();
   private readonly backendFactory: BackendFactory;
   private readonly providerHost: ProviderHost | undefined;
   private readonly toolHandler: ToolHandler | undefined;
+  private readonly engineHandler: EngineHandler | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
   private readonly auth: AuthCoordinator | undefined;
@@ -648,6 +660,7 @@ export class AgentRuntime {
     this.idFactory = options.idFactory ?? randomUUID;
     this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
     this.toolHandler = options.toolHandler;
+    this.engineHandler = options.engineHandler;
     this.providerHost = options.providerHost;
     this.backendFactory = backendFactory;
     this.backendInfo = this.backendFactory(defaultSelection);
@@ -877,15 +890,43 @@ export class AgentRuntime {
     return { role_id: id, deleted: true };
   }
 
-  async generateOrganization(input: unknown) {
+  async startOrganization(input: unknown) {
     if (!this.providerHost) {
       throw new ProtocolError(
         "unsupported",
         "organization generation unavailable",
       );
     }
+    let key: string;
     try {
-      return await this.providerHost.organize(parseOrganizerInput(input));
+      key = JSON.stringify(input);
+    } catch {
+      throw new ProtocolError(
+        "invalid_params",
+        "organization input is invalid",
+      );
+    }
+    const running = this.organizationRuns.get(key);
+    if (running) return running;
+    const task = this.runOrganization(input).finally(() => {
+      this.organizationRuns.delete(key);
+    });
+    this.organizationRuns.set(key, task);
+    return task;
+  }
+
+  private async runOrganization(input: unknown) {
+    try {
+      const workflowId = this.newId();
+      return await runOrganizationWorkflow(
+        input,
+        workflowId,
+        {
+          invoke: (method, params, id) =>
+            this.invokeOrganizationEngine(method, params, id),
+        },
+        (value) => this.providerHost!.organize(parseOrganizerInput(value)),
+      );
     } catch (error) {
       if (error instanceof ProtocolError) throw error;
       throw new ProtocolError(
@@ -1304,6 +1345,44 @@ export class AgentRuntime {
         error instanceof Error ? error : new Error("tool request failed"),
       );
     }
+    return result;
+  }
+
+  private async invokeOrganizationEngine(
+    method: OrganizationEngineMethod,
+    params: Record<string, unknown>,
+    workflowId: string,
+  ) {
+    if (this.engineHandler) {
+      return this.engineHandler(method, params, workflowId);
+    }
+    const requestId = this.newId();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const result = new Promise<unknown>((resolve, reject) => {
+      const cleanup = () => {
+        if (timeout) clearTimeout(timeout);
+      };
+      this.pendingTools.set(requestId, {
+        sessionId: workflowId,
+        resolve,
+        reject,
+        cleanup,
+      });
+      timeout = setTimeout(() => {
+        if (!this.pendingTools.delete(requestId)) return;
+        cleanup();
+        reject(new Error("organization engine gateway timed out"));
+      }, 125_000);
+    });
+    this.publish({
+      protocol: PROTOCOL_VERSION,
+      session_id: workflowId,
+      run_id: workflowId,
+      seq: this.runtimeSequence++,
+      timestamp: this.now().toISOString(),
+      type: "engine.request",
+      payload: { request_id: requestId, method, params },
+    });
     return result;
   }
 

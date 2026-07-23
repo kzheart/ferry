@@ -104,8 +104,8 @@ export async function dispatch(
           requireString(params, "role_id", 128),
         );
         break;
-      case "organization.generate":
-        result = await runtime.generateOrganization({
+      case "organization.start":
+        result = await runtime.startOrganization({
           sessions: params.sessions,
           locale: params.locale,
         });

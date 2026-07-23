@@ -11,7 +11,7 @@ export type CommandMethod =
   | "role.update"
   | "role.copy"
   | "role.delete"
-  | "organization.generate"
+  | "organization.start"
   | "prompt"
   | "abort"
   | "steer"
@@ -105,7 +105,7 @@ export function parseCommand(input: unknown): CommandEnvelope {
     "role.update",
     "role.copy",
     "role.delete",
-    "organization.generate",
+    "organization.start",
     "prompt",
     "abort",
     "steer",
