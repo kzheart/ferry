@@ -58,7 +58,7 @@ export default function App() {
   // ----- 导航与选中 -----
   const [view, setView] = useState(
     () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
-  const [selId, setSelId] = useState(null);
+  const [selId, setSelId] = useState(null); // UI 内部会话身份: tool + native id
   const [selHist, setSelHist] = useState(null);
   const [detail, setDetail] = useState(null);   // {id, data, error}
   const [refreshing, setRefreshing] = useState(false);
@@ -91,13 +91,13 @@ export default function App() {
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
   const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
-  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, id, multi?}
+  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
   const [delConfirm, setDelConfirm] = useState(null);
   const [histDel, setHistDel] = useState(null);
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
   const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
-  const [tagFor, setTagFor] = useState(null);       // {ids} 待编辑标签的会话
-  const [multiSel, setMultiSel] = useState([]);     // 多选中的会话 id
+  const [tagFor, setTagFor] = useState(null);       // {sessions} 待编辑标签的会话
+  const [multiSel, setMultiSel] = useState([]);     // 多选中的会话 UI 身份
   const [metaMap, setMetaMap] = useState({});       // 会话元数据 sidecar
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
@@ -115,9 +115,18 @@ export default function App() {
   const visibleIds = useRef({});
 
   const sessions = scan?.sessions || [];
-  const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
-  const migratedIds = useMemo(() => new Set(historyRows.map(h => h.source_id)), [historyRows]);
-  const cur = selId ? byId[selId] : null;
+  const byKey = useMemo(
+    () => Object.fromEntries(sessions.map(s => [sessionIdentity(s), s])),
+    [sessions],
+  );
+  const migratedSessionKeys = useMemo(
+    () => new Set(historyRows.map(history => sessionIdentity({
+      tool: history.src,
+      id: history.source_id,
+    })).filter(Boolean)),
+    [historyRows],
+  );
+  const cur = selId ? byKey[selId] : null;
   const editing = useSessionEditing({ current: cur,
     runtimeProbe: !!settings.runtimeProbe, doScan,
     onInplaceApplied: () => select(selId) });
@@ -129,7 +138,7 @@ export default function App() {
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
-    if (!selId && sessions.length) select(sessions[0].id);
+    if (!selId && sessions.length) select(sessionIdentity(sessions[0]));
   }, [sessions]);
 
   useDesktopChrome({
@@ -172,39 +181,43 @@ export default function App() {
     if (c.size > 30) c.delete(c.keys().next().value);
   };
 
-  const select = id => {
-    setSelId(id); resetSelection();
-    const s = byId[id] || sessions.find(x => x.id === id);
+  const select = key => {
+    setSelId(key); resetSelection();
+    const s = byKey[key] || sessions.find(x => sessionIdentity(x) === key);
     if (!s) return;
-    setDetail({ id, data: detailCache.current.get(id) || null });
+    setDetail({ id: key, data: detailCache.current.get(key) || null });
     rpc("show", { tool: s.tool, ref: sessionRef(s) })
-      .then(data => { cacheDetail(id, data);
-        setDetail(d => d?.id === id ? { ...d, data } : d); })
-      .catch(e => setDetail(d => d?.id === id ? { ...d, error: e.message } : d));
+      .then(data => { cacheDetail(key, data);
+        setDetail(d => d?.id === key ? { ...d, data } : d); })
+      .catch(e => setDetail(d => d?.id === key ? { ...d, error: e.message } : d));
     loadCapabilities(s.tool);
   };
 
   // 把实体对应的会话装入选中态与详情缓存,不切换主视图。返回装入的会话 id。
   const loadEntitySession = (action, entity) => {
     const candidate = sessions.find(session =>
-      (action.sessionId && session.id === action.sessionId) ||
+      (action.sessionId && session.tool === action.tool && session.id === action.sessionId) ||
       (action.ref && sessionRef(session) === action.ref) ||
       (entity?.title && session.tool === action.tool &&
         session.title === entity.title &&
         (!entity.project || repoOf(session.dir) === entity.project)));
-    if (candidate) { select(candidate.id); return candidate.id; }
+    if (candidate) {
+      const key = sessionIdentity(candidate);
+      select(key);
+      return key;
+    }
     if (action.tool && (action.ref || action.sessionId)) {
-      const id = action.sessionId || action.ref;
-      setSelId(id); resetSelection();
-      setDetail({ id, data: null });
+      const key = sessionIdentity({ tool: action.tool, id: action.sessionId || action.ref });
+      setSelId(key); resetSelection();
+      setDetail({ id: key, data: null });
       rpc("show", { tool: action.tool, ref: action.ref || action.sessionId })
         .then(data => setDetail(current =>
-          current?.id === id ? { ...current, data } : current))
+          current?.id === key ? { ...current, data } : current))
         .catch(error => setDetail(current =>
-          current?.id === id ? { ...current, error: error.message } : current));
+          current?.id === key ? { ...current, error: error.message } : current));
       loadCapabilities(action.tool);
       doScan();
-      return id;
+      return key;
     }
     return null;
   };
@@ -245,7 +258,7 @@ export default function App() {
 
   // 刷新当前会话:只重读这一个会话的正文,不触发全量扫描
   const refreshDetail = async () => {
-    const s = selId && (byId[selId] || sessions.find(x => x.id === selId));
+    const s = selId && (byKey[selId] || sessions.find(x => sessionIdentity(x) === selId));
     if (!s || refreshing) return;
     setRefreshing(true);
     try {
@@ -290,8 +303,9 @@ export default function App() {
         ref: operationRef(s),
       });
       const r = (await operationApply(plan.plan_id)).result;
-      detailCache.current.delete(s.id);
-      if (selId === s.id) { setSelId(null); setDetail(null); }
+      const key = sessionIdentity(s);
+      detailCache.current.delete(key);
+      if (selId === key) { setSelId(null); setDetail(null); }
       doScan();
       setToast({ kind: "ok", title: t("app:toast.deleteDone"),
         desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
@@ -319,11 +333,11 @@ export default function App() {
           ref: operationRef(s),
         });
         await operationApply(plan.plan_id);
-        detailCache.current.delete(s.id);
+        detailCache.current.delete(sessionIdentity(s));
         done++;
       } catch { fail++; }
     }
-    if (targets.some(s => s.id === selId)) { setSelId(null); setDetail(null); }
+    if (targets.some(s => sessionIdentity(s) === selId)) { setSelId(null); setDetail(null); }
     setMultiSel([]); doScan();
     setToast(fail
       ? { kind: "fail", title: t("app:toast.batchPartialFail"), desc: t("app:toast.batchPartialFailDesc", { done, fail }) }
@@ -331,9 +345,9 @@ export default function App() {
           desc: t("app:toast.batchDoneDesc", { done }) });
   };
 
-  const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
+  const ctxSess = ctxMenu ? byKey[ctxMenu.key] : null;
   const ctxMeta = ctxSess ? metaFor(ctxSess) : {};
-  const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
+  const multiSess = multiSel.map(key => byKey[key]).filter(Boolean);
   const addToAgent = session => {
     setAgentAttachments(list => addSessionAttachment(list, session));
     setView("askferry");
@@ -360,7 +374,7 @@ export default function App() {
         .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
     ...(toolHasCapability(ctxSess.tool, "migrate-source") ? [{
       label: t("app:ctx.migrateTo"), onClick: () => {
-        if (ctxSess.id !== selId) select(ctxSess.id);
+        if (sessionIdentity(ctxSess) !== selId) select(sessionIdentity(ctxSess));
         setMig({ scope: null }); },
     }] : []),
     { sep: true },
@@ -415,7 +429,7 @@ export default function App() {
         if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
         if (e.key === "Backspace" || e.key === "Delete") {
           e.preventDefault();
-          if (multiSel.length > 1) setBatchDel(multiSel.map(id => byId[id]).filter(Boolean));
+          if (multiSel.length > 1) setBatchDel(multiSel.map(key => byKey[key]).filter(Boolean));
           else askDelete(cur);
           return;
         }
@@ -548,50 +562,50 @@ export default function App() {
 
   // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
   const rowHandlers = useRef({});
-  rowHandlers.current.click = (id, e) => {
+  rowHandlers.current.click = (key, e) => {
     if (e.metaKey || e.ctrlKey) {           // ⌘点击:切换多选
       setMultiSel(sel => {
         const base = sel.length ? sel : (selId ? [selId] : []);
-        return base.includes(id)
-          ? base.filter(x => x !== id) : [...base, id];
+        return base.includes(key)
+          ? base.filter(x => x !== key) : [...base, key];
       });
       return;
     }
     if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
       const ids = visibleIds.current.library || [];
-      const a = ids.indexOf(selId), b = ids.indexOf(id);
+      const a = ids.indexOf(selId), b = ids.indexOf(key);
       if (a >= 0 && b >= 0) {
         setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
         return;
       }
     }
-    setMultiSel([]); select(id);
+    setMultiSel([]); select(key);
   };
   // 更多按钮锚定在按钮下方;右键则锚定在指针位置
-  rowHandlers.current.more = (id, e) => {
+  rowHandlers.current.more = (key, e) => {
     const pos = e.type === "contextmenu"
       ? { x: e.clientX, y: e.clientY }
       : (() => {
           const rect = e.currentTarget.getBoundingClientRect();
           return { x: rect.right - 208, y: rect.bottom + 4 };
         })();
-    if (multiSel.length > 1 && multiSel.includes(id)) {
-      setCtxMenu({ ...pos, id, multi: true });
+    if (multiSel.length > 1 && multiSel.includes(key)) {
+      setCtxMenu({ ...pos, key, multi: true });
       return;
     }
     setMultiSel([]);
-    if (id !== selId) select(id);
-    setCtxMenu({ ...pos, id });
+    if (key !== selId) select(key);
+    setCtxMenu({ ...pos, key });
   };
-  rowHandlers.current.pin = id => {
-    const session = byId[id];
+  rowHandlers.current.pin = key => {
+    const session = byKey[key];
     if (session) setMetaFor(session, { pinned: !metaFor(session).pinned });
   };
-  rowHandlers.current.delete = id => { const s = byId[id]; if (s) askDelete(s); };
-  const onRowClick = useCallback((id, e) => rowHandlers.current.click(id, e), []);
-  const onRowMore = useCallback((id, e) => rowHandlers.current.more(id, e), []);
-  const onRowPin = useCallback(id => rowHandlers.current.pin(id), []);
-  const onRowDelete = useCallback(id => rowHandlers.current.delete(id), []);
+  rowHandlers.current.delete = key => { const s = byKey[key]; if (s) askDelete(s); };
+  const onRowClick = useCallback((key, e) => rowHandlers.current.click(key, e), []);
+  const onRowMore = useCallback((key, e) => rowHandlers.current.more(key, e), []);
+  const onRowPin = useCallback(key => rowHandlers.current.pin(key), []);
+  const onRowDelete = useCallback(key => rowHandlers.current.delete(key), []);
 
   // 详情区回调:同样经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会
   // 因侧边栏交互(展开分组/多选/悬停)产生的新闭包全量重渲染整条时间线
@@ -639,15 +653,17 @@ export default function App() {
     const tags = m.tags || [];
     return {
       tool: s.tool, bucket: bucketOf(s.updated), repo: repoOf(s.dir), tags,
-      pinned: !!m.pinned, sub: (s.tree_count || 1) > 1, mig: migratedIds.has(s.id),
+      pinned: !!m.pinned, sub: (s.tree_count || 1) > 1,
+      mig: migratedSessionKeys.has(sessionIdentity(s)),
       hay: `${s.title || ""}\n${m.name || ""}\n${tags.join("\n")}\n${s.dir || ""}\n${s.id}`.toLowerCase(),
-      row: { id: s.id, title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
+      row: { key: sessionIdentity(s), id: s.id,
+        title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
         dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
         pinned: !!m.pinned, tags: m.tags,
         hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
-        hasMig: migratedIds.has(s.id) },
+        hasMig: migratedSessionKeys.has(sessionIdentity(s)) },
     };
-  }), [sessions, metaMap, migratedIds, t]);
+  }), [sessions, metaMap, migratedSessionKeys, t]);
 
   const libGroups = useMemo(() => {
     const timeBuckets = { all: [...BUCKETS], today: ["today"],
@@ -680,7 +696,7 @@ export default function App() {
   const onToggleGroup = useCallback(key =>
     setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })), []);
   visibleIds.current.library = libGroups.filter(g => !(collapsedGroups[g.key] ?? false))
-    .flatMap(g => g.rows.map(r => r.id));
+    .flatMap(g => g.rows.map(r => r.key));
 
   const libTokens = [];
   if (libF.src.length < TOOLS.length) libF.src.forEach(tool => libTokens.push({ label: TOOL_NAME[tool],
@@ -1054,8 +1070,8 @@ export default function App() {
                 id: h.id, title: h.title, tool: h.tool, meta: `${h.from} → ${h.to}`,
                 onClick: () => setSelHist(h.id) }))
             : libGroups.flatMap(g => g.rows).map(r => ({
-                id: r.id, title: r.title, tool: r.tool, meta: r.repo,
-                onClick: () => { setMultiSel([]); select(r.id); } }))
+                id: r.key, title: r.title, tool: r.tool, meta: r.repo,
+                onClick: () => { setMultiSel([]); select(r.key); } }))
           ).slice(0, 60)}
           onClose={() => setSearchOpen(false)} />)}
       {ctxMenu && ctxItems && (
