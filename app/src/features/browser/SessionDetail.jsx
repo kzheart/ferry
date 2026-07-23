@@ -11,6 +11,9 @@ import Markdown from "../../components/ui/Markdown.jsx";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
 const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」
+const LONG_TEXT = 800;  // 超过此长度(或行数)的消息默认折叠
+const LONG_LINES = 12;
+const FOLD_MAX_H = 250;
 
 const withoutImagePlaceholders = text => String(text || "")
   .replace(/\s*\[Image #\d+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -128,6 +131,34 @@ function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
     <button title={title} onClick={onClick} {...rest}
       className={`ficon-btn${danger ? " danger" : ""}${accent ? " accent" : ""}`}
       style={style}>{children}</button>
+  );
+}
+
+// 过长的消息默认折叠,点击展开;fade 为折叠时渐隐遮罩贴合的背景色
+function Foldable({ text, fade, children }) {
+  const { t: tt } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const long = text.length > LONG_TEXT ||
+    (text.match(/\n/g)?.length || 0) > LONG_LINES;
+  if (!long) return children;
+  return (
+    <>
+      <div style={{ position: "relative", overflow: "hidden",
+        maxHeight: open ? undefined : FOLD_MAX_H }}>
+        {children}
+        {!open && (
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 52,
+            pointerEvents: "none", background: `linear-gradient(to bottom, transparent, ${fade})` }} />
+        )}
+      </div>
+      <button type="button" onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6, padding: 0,
+          border: "none", background: "transparent", color: "var(--tx4)", fontFamily: "inherit",
+          fontSize: 11, fontWeight: 600, cursor: "default" }}>
+        <Caret open={open} size={9} />
+        {open ? tt("browser:round.collapse") : tt("browser:round.expand", { n: text.length })}
+      </button>
+    </>
   );
 }
 
@@ -259,9 +290,11 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
                 title={rewOp && !deleted ? tt("browser:round.clickToEdit") : undefined}
                 style={{ maxWidth: "82%", background: "var(--fill4)", color: "var(--tx1b)",
                   padding: "9px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
-                  whiteSpace: "pre-wrap", overflowWrap: "break-word",
+                  overflowWrap: "break-word",
                   cursor: rewOp && !deleted ? "text" : undefined }}>
-                {shownUserText.slice(0, 4000)}
+                <Foldable text={shownUserText} fade="var(--fill4)">
+                  <div style={{ whiteSpace: "pre-wrap" }}>{shownUserText.slice(0, 4000)}</div>
+                </Foldable>
                 {rewOp && !deleted && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
                     color: ACCENT, fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>

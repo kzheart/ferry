@@ -30,6 +30,8 @@
     "confirmRewrite": "Confirm rewrite ⌘↵",
     "rewritten": "Edited",
     "clickToEdit": "Click to continue editing",
+    "expand": "Expand ({{n}} chars)",
+    "collapse": "Collapse",
     "imagesCount": "{{n}} images",
     "viewImages": "View {{n}} image(s)",
     "openImages": "View {{n}} images",
