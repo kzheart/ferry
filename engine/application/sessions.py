@@ -2,7 +2,17 @@
 
 from ..adapters.base.migration import assemble_tree
 from ..domain.errors import SessionAssetNotFoundError
+from ..domain.tool_ops import CanonicalOp
 from .ports import current
+
+
+def _tool_view(call):
+    value = call.input if isinstance(call.input, dict) else str(call.input)
+    name = call.name
+    if call.op == CanonicalOp.TOOL_INVOKE and isinstance(call.input, dict):
+        name = str(call.input.get("name") or name)
+        value = call.input.get("input", value)
+    return name, value
 
 
 def read_tree(tool_name: str, ref: str):
@@ -20,8 +30,8 @@ def _messages(messages):
                 blocks.append({"kind": "text", "text": block.text, "size": len(block.text)})
             elif block.kind == "tool":
                 call = block.tool
-                value = call.input if isinstance(call.input, dict) else str(call.input)
-                blocks.append({"kind": "tool", "name": call.name, "op": call.op,
+                name, value = _tool_view(call)
+                blocks.append({"kind": "tool", "name": name, "op": call.op,
                     "input": value, "output": call.output, "size": len(call.output or "")})
             elif block.kind == "image" and block.image:
                 blocks.append({"kind": "image", "image": {
@@ -43,7 +53,8 @@ def session_json(session):
     edges = [{name: getattr(edge, name) for name in (
         "parent_session_id", "child_session_id", "source_call_id",
         "spawn_message_id", "result_message_id", "agent_id", "agent_path",
-        "agent_type", "prompt", "status", "meta")} for edge in session.agent_edges]
+        "agent_type", "prompt", "status", "association", "confidence", "meta",
+    )} for edge in session.agent_edges]
     messages = _messages(session.messages)
     turns = []
     current = None

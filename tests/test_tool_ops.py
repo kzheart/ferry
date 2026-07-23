@@ -26,6 +26,17 @@ def _valid_input(op):
         CanonicalOp.FS_READ: {"file_path": "/work/file"},
         CanonicalOp.FS_WRITE: {"file_path": "/work/file", "content": ""},
         CanonicalOp.FS_EDIT: {"file_path": "/work/file", "old": "", "new": ""},
+        CanonicalOp.FS_PATCH: {
+            "operations": [{"operation": "update", "path": "/work/file"}],
+            "raw_patch": "*** Begin Patch\n*** End Patch",
+        },
+        CanonicalOp.FS_SEARCH: {"query": "needle"},
+        CanonicalOp.FS_GLOB: {"pattern": "*.py"},
+        CanonicalOp.WEB_FETCH: {"url": "https://example.com"},
+        CanonicalOp.WEB_SEARCH: {"query": "example"},
+        CanonicalOp.TOOL_INVOKE: {
+            "namespace": "mcp", "name": "lookup", "input": {"query": "x"},
+        },
         CanonicalOp.AGENT_SPAWN: {
             "description": "delegate", "prompt": "review", "subagent_type": "general",
         },
@@ -76,3 +87,19 @@ def test_unknown_operation_is_always_a_degradation():
 def test_invalid_input_is_a_degradation_even_for_a_supported_operation():
     call = ToolCall(name="test", op=CanonicalOp.FS_READ, input={}, output="")
     assert ClaudeMigrationTarget().classify_tool_call(call) == "degrade"
+
+
+def test_unknown_explicit_result_is_narrated_instead_of_fabricating_success():
+    from engine.domain.model import Session, ToolResult
+
+    call = ToolCall(
+        name="Read", op=CanonicalOp.FS_READ,
+        input={"file_path": "/work/file"}, output="contents",
+        result=ToolResult(status="unknown"),
+    )
+    decision = ClaudeMigrationTarget().evaluate_tool(
+        call, Session("codex", "source", "/work"))
+
+    assert decision.fidelity == "narrated"
+    assert decision.rendered is None
+    assert decision.reason_code == "unknown_result_status"

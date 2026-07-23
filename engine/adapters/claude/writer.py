@@ -13,17 +13,44 @@ from ..base.narration import narrate
 GOLDEN = resource_path("golden", "claude")
 
 OP_WRITERS = {
-    CanonicalOp.SHELL_EXEC: ("Bash", lambda i: {"command": i.get("command", "")}),
+    CanonicalOp.SHELL_EXEC: ("Bash", lambda i: {
+        "command": i.get("command", ""),
+        **({"timeout": i["timeout_ms"]} if "timeout_ms" in i else {}),
+        **({"run_in_background": i["background"]} if "background" in i else {}),
+    }),
     CanonicalOp.FS_WRITE: ("Write", lambda i: {"file_path": i.get("file_path", ""),
                                                  "content": i.get("content", "")}),
-    CanonicalOp.FS_READ: ("Read", lambda i: {"file_path": i.get("file_path", "")}),
+    CanonicalOp.FS_READ: ("Read", lambda i: {
+        "file_path": i.get("file_path", ""),
+        **{key: i[key] for key in ("offset", "limit") if key in i},
+    }),
     CanonicalOp.FS_EDIT: ("Edit", lambda i: {"file_path": i.get("file_path", ""),
                                                "old_string": i.get("old", ""),
-                                               "new_string": i.get("new", "")}),
+                                               "new_string": i.get("new", ""),
+                                               **({"replace_all": i["replace_all"]}
+                                                  if "replace_all" in i else {})}),
+    CanonicalOp.FS_SEARCH: ("Grep", lambda i: {
+        "pattern": i.get("query", ""),
+        **({"path": i["path"]} if "path" in i else {}),
+        **({"glob": i["glob"]} if "glob" in i else {}),
+    }),
+    CanonicalOp.FS_GLOB: ("Glob", lambda i: {
+        "pattern": i.get("pattern", ""),
+        **({"path": i["path"]} if "path" in i else {}),
+    }),
+    CanonicalOp.WEB_FETCH: ("WebFetch", lambda i: {
+        "url": i.get("url", ""),
+        "prompt": i.get("prompt", "Fetch this URL and preserve its relevant content."),
+    }),
+    CanonicalOp.WEB_SEARCH: ("WebSearch", lambda i: {
+        "query": i.get("query", ""),
+    }),
 }
 
 OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
     CanonicalOp.AGENT_SPAWN: "native",
+    CanonicalOp.FS_PATCH: "degrade",
+    CanonicalOp.TOOL_INVOKE: "degrade",
 }
 
 
@@ -51,6 +78,69 @@ def _load_templates():
 
 def _clone(value):
     return json.loads(json.dumps(value))
+
+
+def _result_block_payload(block) -> dict:
+    if block.kind == "text":
+        return {"type": "text", "text": block.text}
+    if block.kind == "image" and block.data is not None:
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": block.mime_type or "application/octet-stream",
+                "data": block.data,
+            },
+        }
+    if block.kind == "tool_reference":
+        return {"type": "tool_reference", **block.metadata}
+    value = {
+        "kind": block.kind, "data": block.data, "mime_type": block.mime_type,
+        "filename": block.filename, "uri": block.uri,
+        "metadata": block.metadata,
+    }
+    return {"type": "text", "text": json.dumps(value, ensure_ascii=False)}
+
+
+def _claude_result(tool) -> tuple[str | list, dict]:
+    result = tool.result
+    if result is None:
+        return tool.output or "", {
+            "status": tool.status or "unknown",
+            "stdout": tool.meta.get("stdout", tool.output or ""),
+            "stderr": tool.meta.get("stderr", ""),
+            "interrupted": bool(tool.meta.get("interrupted")),
+            "isImage": False,
+        }
+    content = [_result_block_payload(block) for block in result.blocks]
+    native = {
+        "status": result.status,
+        "interrupted": result.status == "interrupted",
+        "isImage": any(block.kind == "image" for block in result.blocks),
+        "canonicalToolResult": {
+            "status": result.status,
+            "attachments": result.attachments,
+            "metadata": result.metadata,
+            "blocks": [{
+                "kind": block.kind,
+                "text": block.text,
+                "data": block.data,
+                "mime_type": block.mime_type,
+                "filename": block.filename,
+                "uri": block.uri,
+                "metadata": block.metadata,
+            } for block in result.blocks],
+        },
+    }
+    if result.stdout is not None:
+        native["stdout"] = result.stdout
+    if result.stderr is not None:
+        native["stderr"] = result.stderr
+    if result.exit_code is not None:
+        native["exit_code"] = result.exit_code
+    if result.truncated is not None:
+        native["truncated"] = result.truncated
+    return content, native
 
 
 def _agent_ids(session: Session) -> dict[str, str]:
@@ -159,7 +249,8 @@ def _edge_for_tool(session: Session, tool) -> AgentEdge | None:
 
 def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                      agent_map: dict[str, str], source_uuids: dict[str, str],
-                     fork_parent: str | None = None) -> list[dict]:
+                     fork_parent: str | None = None,
+                     tool_decider=None) -> list[dict]:
     records, parent = [], None
     agent_id = agent_map.get(session.source_id)
     timestamp = time.time() - len(session.messages) * 2
@@ -220,6 +311,9 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
             native_name = "Agent"
             native_input = _clone(tool.input) if isinstance(tool.input, dict) else {}
             emitted_children.add(edge.child_session_id)
+        elif tool.op == CanonicalOp.TOOL_INVOKE:
+            native_name = str(tool.input["name"])
+            native_input = _clone(tool.input["input"])
         else:
             native_name, convert = OP_WRITERS[tool.op]
             native_input = convert(tool.input)
@@ -236,21 +330,24 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
         elif edge and edge.spawn_message_id:
             source_uuids[edge.spawn_message_id] = assistant["uuid"]
 
+        result_content, native_result = _claude_result(tool)
         user = base("user")
         user["message"] = {"role": "user", "content": [{
             "type": "tool_result", "tool_use_id": use_id,
-            "content": tool.output or ""}]}
+            "content": result_content,
+            **({"is_error": True} if tool.result and
+               tool.result.status == "error" else {}),
+        }]}
         if native_name == "Bash":
-            user["toolUseResult"] = {
-                "stdout": tool.meta.get("stdout", tool.output or ""),
-                "stderr": tool.meta.get("stderr", ""),
-                "interrupted": False, "isImage": False}
+            user["toolUseResult"] = native_result
         elif edge:
             old_agent = edge.child_session_id
             result = _clone(edge.meta.get("toolUseResult", {}))
             result.update({"agentId": agent_map.get(old_agent, old_agent),
                            "status": edge.status or result.get("status", "completed")})
             user["toolUseResult"] = result
+        elif tool.result is not None:
+            user["toolUseResult"] = native_result
         records.append(user)
 
     for message in session.messages:
@@ -260,18 +357,29 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                 texts.append(block.text)
             elif block.kind == "tool" and block.tool:
                 tool = block.tool
-                native = (tool.op in OP_WRITERS and
-                          has_valid_tool_input(tool.op, tool.input)) \
-                    or ((tool.op == CanonicalOp.AGENT_SPAWN or tool.name == "Agent") and
+                decision = tool_decider(
+                    tool, session, message) if tool_decider else None
+                native = decision.rendered is not None if decision is not None else (
+                    (tool.op in OP_WRITERS and
+                     has_valid_tool_input(tool.op, tool.input))
+                    or ((tool.op == CanonicalOp.AGENT_SPAWN or
+                         tool.name == "Agent") and
                         has_valid_tool_input(tool.op, tool.input) and
-                        _edge_for_tool(session, tool))
+                        _edge_for_tool(session, tool)))
                 if native:
                     if texts:
                         add_text(message, "\n\n".join(texts))
                         texts = []
                     add_tool(message, tool)
                 else:
-                    session.lose("migration.tool_degraded", tool_name=tool.name)
+                    params = {"tool_name": tool.name}
+                    if decision is not None:
+                        params.update({
+                            "fidelity": decision.fidelity,
+                            "reason_codes": list(decision.reason_codes),
+                            "ignored_fields": sorted(decision.ignored_fields),
+                        })
+                    session.lose("migration.tool_degraded", **params)
                     texts.append(narrate(tool))
         if texts:
             add_text(message, "\n\n".join(texts))
@@ -307,7 +415,8 @@ def _write_jsonl(path: Path, records: list[dict]):
 
 
 def write(sess: Session, cwd: str | None = None,
-          dest_root: str | Path | None = None) -> tuple[str, Path]:
+          dest_root: str | Path | None = None,
+          tool_decider=None) -> tuple[str, Path]:
     """写出会话树，返回根会话的新 ID 与主 JSONL 路径。"""
     templates = _load_templates()
     sid = str(uuid.uuid4())
@@ -345,7 +454,8 @@ def write(sess: Session, cwd: str | None = None,
 
         source_uuids = {}
         root_records = _generated_lines(
-            sess, sid, cwd, templates, agent_map, source_uuids)
+            sess, sid, cwd, templates, agent_map, source_uuids,
+            tool_decider=tool_decider)
         _write_jsonl(main_path, root_records)
         created.append(main_path)
         edges = {edge.child_session_id: edge for node in sess.walk()
@@ -359,7 +469,8 @@ def write(sess: Session, cwd: str | None = None,
                 fork_parent = root_records[-1].get("uuid")
                 child.lose("migration.fork_parent_fallback")
             records = _generated_lines(child, sid, child.cwd or cwd, templates,
-                                       agent_map, source_uuids, fork_parent)
+                                       agent_map, source_uuids, fork_parent,
+                                       tool_decider)
             new_agent = agent_map.get(child.source_id)
             child_path = _child_path(destination, sid, child, new_agent)
             _write_jsonl(child_path, records)

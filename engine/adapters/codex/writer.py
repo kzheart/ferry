@@ -8,6 +8,7 @@
 """
 import json
 import secrets
+import shlex
 import time
 import uuid
 from datetime import datetime, timezone
@@ -86,9 +87,52 @@ def _msg(tpl, role: str, text: str, created_at: str | int | None = None) -> dict
     return rec
 
 
+def _result_payload(tool, output: str, exit_code=None) -> dict:
+    result = tool.result
+    if result is None:
+        payload = {"output": output}
+        code = tool.meta.get("exit_code", tool.meta.get("exit", exit_code))
+        if isinstance(code, int) and not isinstance(code, bool):
+            payload["exit_code"] = code
+        if isinstance(tool.meta.get("stderr"), str):
+            payload["stderr"] = tool.meta["stderr"]
+        if isinstance(tool.meta.get("truncated"), bool):
+            payload["truncated"] = tool.meta["truncated"]
+        return payload
+    payload = {
+        "status": result.status,
+        "output": result.legacy_output(),
+        "canonical_blocks": [
+            {
+                "kind": block.kind,
+                "text": block.text,
+                "data": block.data,
+                "mime_type": block.mime_type,
+                "filename": block.filename,
+                "uri": block.uri,
+                "metadata": block.metadata,
+            }
+            for block in result.blocks
+        ],
+        "attachments": result.attachments,
+    }
+    if result.stdout is not None:
+        payload["stdout"] = result.stdout
+    if result.stderr is not None:
+        payload["stderr"] = result.stderr
+    if result.exit_code is not None:
+        payload["exit_code"] = result.exit_code
+    if result.truncated is not None:
+        payload["truncated"] = result.truncated
+    if result.metadata:
+        payload["canonical_metadata"] = result.metadata
+    return payload
+
+
 def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code,
                started_at: str | int | None = None,
-               ended_at: str | int | None = None) -> list:
+               ended_at: str | int | None = None,
+               result_payload: dict | None = None) -> list:
     call = _clone(tpl["response_item.custom_tool_call"])
     out = _clone(tpl["response_item.custom_tool_call_output"])
     call_id = "call_" + secrets.token_urlsafe(18)[:24]
@@ -102,11 +146,17 @@ def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code,
                        "yield_time_ms": 10000, "max_output_tokens": 1000})
     cp["input"] = (f"const r = await tools.exec_command({args});\n"
                    "text(JSON.stringify(r));\n")
-    inner = json.dumps({"chunk_id": secrets.token_hex(3),
-                        "wall_time_seconds": 0.01,
-                        "exit_code": exit_code if exit_code is not None else 0,
-                        "original_token_count": max(1, len(stdout) // 4),
-                        "output": stdout})
+    inner_value = {
+        "chunk_id": secrets.token_hex(3),
+        "wall_time_seconds": 0.01,
+        "original_token_count": max(1, len(stdout) // 4),
+        "output": stdout,
+    }
+    if exit_code is not None:
+        inner_value["exit_code"] = exit_code
+    if result_payload:
+        inner_value.update(result_payload)
+    inner = json.dumps(inner_value, ensure_ascii=False)
     op["id"] = "fco_" + _uuid7()
     op["output"] = json.dumps([
         {"type": "input_text",
@@ -116,30 +166,37 @@ def _exec_pair(tpl, cmd: str, workdir: str, stdout: str, exit_code,
     return [call, out]
 
 
-def _apply_patch_pair(tpl, patch: str, output: str = "{}") -> list:
+def _apply_patch_pair(tpl, patch: str, output: str = "{}",
+                      result_payload: dict | None = None) -> list:
     call, outrec = _exec_pair(tpl, "", "", "{}", 0)
     call["payload"]["input"] = (f"const patch = {json.dumps(patch)};\n"
                                 "text(await tools.apply_patch(patch));\n")
+    payload = result_payload or {"output": output}
     outrec["payload"]["output"] = json.dumps([
         {"type": "input_text",
          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"},
-        {"type": "input_text", "text": output}])
+        {"type": "input_text", "text": json.dumps(payload, ensure_ascii=False)}])
     return [call, outrec]
 
 
 def _write_shell_exec(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("command"):
-        return _exec_pair(tpl, i["command"], cwd,
-                          t.meta.get("stdout", t.output), None,
-                          t.started_at, t.ended_at)
+        return _exec_pair(tpl, i["command"], i.get("workdir") or cwd,
+                          t.meta.get("stdout", t.output),
+                          t.meta.get("exit_code"),
+                          t.started_at, t.ended_at,
+                          _result_payload(t, t.output))
 
 
 def _write_fs_read(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("file_path"):
-        return _exec_pair(tpl, f"cat {i['file_path']}", cwd, t.output or "", 0,
-                          t.started_at, t.ended_at)
+        command = f"cat {shlex.quote(str(i['file_path']))}"
+        return _exec_pair(tpl, command, cwd, t.output or "",
+                          t.tool_result.exit_code,
+                          t.started_at, t.ended_at,
+                          _result_payload(t, t.output))
     return None
 
 
@@ -149,7 +206,8 @@ def _write_fs_write(tpl, t, _cwd) -> list | None:
         body = str(i.get("content", ""))
         patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
             i["file_path"], "\n".join("+" + l for l in body.splitlines()))
-        return _apply_patch_pair(tpl, patch)
+        return _apply_patch_pair(tpl, patch, t.output or "{}",
+                                 _result_payload(t, t.output))
     return None
 
 
@@ -161,8 +219,48 @@ def _write_fs_edit(tpl, t, _cwd) -> list | None:
                           + ["+" + l for l in str(i.get("new", "")).splitlines()])
         patch = "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch".format(
             i["file_path"], hunk)
-        return _apply_patch_pair(tpl, patch)
+        return _apply_patch_pair(tpl, patch, t.output or "{}",
+                                 _result_payload(t, t.output))
     return None
+
+
+def _write_fs_patch(tpl, t, _cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    patch = i.get("raw_patch")
+    if not patch:
+        return None
+    return _apply_patch_pair(tpl, str(patch), t.output or "{}",
+                             _result_payload(t, t.output))
+
+
+def _write_fs_search(tpl, t, cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    query = i.get("query")
+    if not query:
+        return None
+    command = ["rg", "--line-number", "--color", "never"]
+    if i.get("glob"):
+        command.extend(["-g", str(i["glob"])])
+    command.extend(["--", str(query), str(i.get("path") or ".")])
+    quoted = " ".join(shlex.quote(part) for part in command)
+    return _exec_pair(tpl, quoted, i.get("workdir") or cwd,
+                      t.output or "", t.tool_result.exit_code,
+                      t.started_at, t.ended_at,
+                      _result_payload(t, t.output))
+
+
+def _write_fs_glob(tpl, t, cwd) -> list | None:
+    i = t.input if isinstance(t.input, dict) else {}
+    pattern = i.get("pattern")
+    if not pattern:
+        return None
+    command = ["rg", "--files", "-g", str(pattern), "--",
+               str(i.get("path") or ".")]
+    quoted = " ".join(shlex.quote(part) for part in command)
+    return _exec_pair(tpl, quoted, cwd, t.output or "",
+                      t.tool_result.exit_code,
+                      t.started_at, t.ended_at,
+                      _result_payload(t, t.output))
 
 
 OP_WRITERS = {
@@ -170,12 +268,20 @@ OP_WRITERS = {
     CanonicalOp.FS_READ: _write_fs_read,
     CanonicalOp.FS_WRITE: _write_fs_write,
     CanonicalOp.FS_EDIT: _write_fs_edit,
+    CanonicalOp.FS_PATCH: _write_fs_patch,
+    CanonicalOp.FS_SEARCH: _write_fs_search,
+    CanonicalOp.FS_GLOB: _write_fs_glob,
 }
 
 OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
     # Codex has no native read tool. Rendering it as `cat` preserves content
     # but changes the tool semantics, so migration preview must disclose it.
     CanonicalOp.FS_READ: "degrade",
+    CanonicalOp.FS_SEARCH: "degrade",
+    CanonicalOp.FS_GLOB: "degrade",
+    CanonicalOp.WEB_FETCH: "degrade",
+    CanonicalOp.WEB_SEARCH: "degrade",
+    CanonicalOp.TOOL_INVOKE: "degrade",
     CanonicalOp.AGENT_SPAWN: "native",
 }
 
@@ -200,7 +306,8 @@ def _native_records(tpl, t, cwd,
 
 def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                      parent_id: str | None, depth: int,
-                     agent_path: str | None, child_links: dict[str, list]) -> list[dict]:
+                     agent_path: str | None, child_links: dict[str, list],
+                     tool_decider=None) -> list[dict]:
     now = _timestamp(next((message.created_at for message in sess.messages
                            if message.created_at is not None), None))
     meta = _clone(tpl["session_meta"])
@@ -247,9 +354,19 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                 texts.append(text)
             elif b.kind == "tool":
                 t = b.tool
+                decision = tool_decider(t, sess, m) if tool_decider else None
                 if t.op == CanonicalOp.AGENT_SPAWN:
+                    if decision is not None and decision.rendered is None:
+                        sess.lose(
+                            "migration.tool_degraded", tool_name=t.name,
+                            fidelity=decision.fidelity,
+                            reason_codes=list(decision.reason_codes),
+                            ignored_fields=sorted(decision.ignored_fields))
+                        texts.append(narrate(t))
                     continue
-                native = _native_records(tpl, t, cwd, m.created_at)
+                native = (_native_records(tpl, t, cwd, m.created_at)
+                          if decision is None or decision.rendered is not None
+                          else None)
                 if native:
                     if texts:
                         out_lines.append(_msg(tpl, role, "\n\n".join(texts),
@@ -257,7 +374,14 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                         texts = []
                     out_lines += native
                 else:
-                    sess.lose("migration.tool_degraded", tool_name=t.name)
+                    params = {"tool_name": t.name}
+                    if decision is not None:
+                        params.update({
+                            "fidelity": decision.fidelity,
+                            "reason_codes": list(decision.reason_codes),
+                            "ignored_fields": sorted(decision.ignored_fields),
+                        })
+                    sess.lose("migration.tool_degraded", **params)
                     texts.append(narrate(t))
         if texts:
             out_lines.append(_msg(tpl, role, "\n\n".join(texts), m.created_at))
@@ -374,7 +498,8 @@ def _destination(sessions_dir: Path, sid: str, ordinal: int) -> Path:
 
 def write(sess: Session, cwd: str | None = None,
           sessions_dir: str | Path | None = None,
-          state_db: str | Path | None = None) -> tuple[str, Path]:
+          state_db: str | Path | None = None,
+          tool_decider=None) -> tuple[str, Path]:
     """写出整棵 rollout 树,返回根会话的 (session_id, 文件路径)。"""
     tpl = _load_templates()
     root_id = _uuid7()
@@ -419,7 +544,7 @@ def write(sess: Session, cwd: str | None = None,
                     node, child, ids[id(child)], agent_paths[id(child)], created_at))
         records = _session_records(tpl, node, node_cwd, sid, root_id,
                                    ids[id(parent)] if parent else None,
-                                   depth, agent_path, child_links)
+                                   depth, agent_path, child_links, tool_decider)
         dest = _destination(output_root, sid, ordinal)
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".tmp")
