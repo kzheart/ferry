@@ -11,11 +11,9 @@ export const emptyLog = () => ({
 
 // 工具权限等级:审批卡与工具行徽章按这里着色
 export const TOOL_LEVEL = {
-  ferry_search_sessions: "read",
-  ferry_resolve_session: "read",
-  ferry_get_session_context: "read",
-  ferry_search_session_content: "read",
-  ferry_get_usage: "read",
+  session_search: "read",
+  session_read: "read",
+  usage: "read",
   ferry_preview_migration: "preview",
   ferry_preview_edit: "preview",
   ferry_propose_migration: "mutate",

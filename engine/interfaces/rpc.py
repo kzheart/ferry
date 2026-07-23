@@ -55,16 +55,12 @@ RPC_METHODS = {
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),
-    "agent_resolve_session": lambda p: agent_tools.resolve_session(
-        p["tool"], p["session_id"]),
-    "agent_get_session_context": lambda p: agent_tools.get_session_context(
-        p["tool"], p["ref"], from_message=p.get("from_message", 1),
-        limit=p.get("limit", 20),
+    "agent_session_read": lambda p: agent_tools.session_read(
+        p["tool"], ref=p.get("ref"), session_id=p.get("session_id"),
+        terms=p.get("terms"), roles=p.get("roles"),
+        from_message=p.get("from_message", 1), limit=p.get("limit", 20),
         include_tool_outputs=p.get("include_tool_outputs", False),
         max_bytes=p.get("max_bytes", agent_tools.DEFAULT_CONTEXT_BYTES)),
-    "agent_search_session_content": lambda p: agent_tools.search_session_content(
-        p["tool"], p["ref"], p["terms"], roles=p.get("roles"),
-        limit=p.get("limit", 20)),
     "agent_get_usage": lambda p: agent_tools.get_usage(
         agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range")),

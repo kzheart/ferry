@@ -222,6 +222,28 @@ def test_native_session_id_resolves_to_scoped_reference(agent_environment):
         agent_tools.resolve_session("claude", "bad\nid")
 
 
+def test_session_read_merges_resolve_context_and_content(agent_environment):
+    # native session_id 直接读:内部完成 resolve → ref,默认走上下文分页
+    by_id = agent_tools.session_read("claude", session_id="private-id")
+    assert by_id["tool"] == "claude"
+    assert by_id["mode"] == "context"
+    assert by_id["resolved_from_session_id"] is True
+    assert by_id["ref"].startswith("fsr_")
+
+    # 显式 ref + terms:切到正文搜索,返回 matches
+    ref = by_id["ref"]
+    searched = agent_tools.session_read("claude", ref=ref, terms=["支付"])
+    assert searched["mode"] == "search"
+    assert "matches" in searched
+    assert "resolved_from_session_id" not in searched
+
+    # ref/session_id 二选一约束
+    with pytest.raises(AgentRequestError):
+        agent_tools.session_read("claude")
+    with pytest.raises(AgentRequestError):
+        agent_tools.session_read("claude", ref=ref, session_id="private-id")
+
+
 def test_only_current_index_refs_are_accepted(agent_environment):
     ref = _claude_ref()
     with pytest.raises(AgentReferenceError):
@@ -405,7 +427,7 @@ def test_usage_is_aggregated_without_raw_session_data(agent_environment):
 
 def test_agent_rpc_returns_stable_structured_errors(agent_environment):
     response = rpc(json.dumps({
-        "method": "agent_get_session_context", "request_id": "agent-1",
+        "method": "agent_session_read", "request_id": "agent-1",
         "params": {"tool": "claude", "ref": "/tmp/not-issued.jsonl"},
     }))
     assert response["ok"] is False
