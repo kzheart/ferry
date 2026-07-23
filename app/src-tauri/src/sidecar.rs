@@ -145,10 +145,8 @@ fn request_timeout(request: &str) -> Duration {
             ENGINE_COMMIT_TIMEOUT
         }
     } else if matches!(
-        method.as_deref(),
-        Some(
-            "agent_search_sessions" | "agent_session_read" | "agent_get_usage"
-        )
+        method,
+        Some("agent_search_sessions" | "agent_session_read" | "agent_get_usage")
     ) {
         AGENT_LOOKUP_TIMEOUT
     } else {

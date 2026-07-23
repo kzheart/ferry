@@ -7,4 +7,6 @@ dist/
 app/src-tauri/binaries/
 docs/*
 !docs/screenshots/
+!docs/architecture.md
+!docs/refactoring-roadmap.md
 scripts/demo/

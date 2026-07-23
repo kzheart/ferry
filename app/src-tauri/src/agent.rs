@@ -435,7 +435,12 @@ fn request_agent(
     }
     let timeout = serde_json::from_str::<Value>(request)
         .ok()
-        .and_then(|value| value.get("method").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|value| {
+            value
+                .get("method")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .filter(|method| method == "organization.generate")
         .map(|_| ORGANIZATION_TIMEOUT)
         .unwrap_or(COMMAND_TIMEOUT);

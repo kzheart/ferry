@@ -147,7 +147,7 @@ Ferry reads your agents' local session stores directly. Nothing is uploaded, and
 
 ## Development
 
-**Prerequisites**: Node.js 20+, Rust (stable), Python 3.12
+**Prerequisites**: Node.js 22.19+, Rust (stable), Python 3.12
 
 The engine ships as a PyInstaller sidecar alongside the Tauri shell.
 
@@ -174,13 +174,17 @@ cd app && npm run tauri build
 
 | Layer | Technology | Role |
 | --- | --- | --- |
-| **Shell** | Tauri v2 (Rust) | Native window, menu bar, system tray, process management, in-app updates |
-| **Frontend** | React 18 + Vite 6 | Session browser, search, editing, migration UI |
-| **Engine** | Python 3.12 (PyInstaller sidecar) | Session scanning, read/write, migration logic, usage analytics |
+| **Desktop host** | Tauri v2 (Rust) | Native capabilities, process supervision, IPC, approval, and event routing |
+| **Frontend** | React 18 + Vite 6 | Presentation, local interaction state, workflow progress, and approvals |
+| **Session Engine** | Python 3.12 (PyInstaller sidecar) | Current native session formats, queries, operations, snapshots, and validation |
+| **Ferry Runtime** | Node.js 22 + TypeScript | Providers, roles, conversations, LLM workflows, and Ferry agent execution |
 
-The Tauri shell communicates with the Python engine via JSON-RPC over stdin/stdout.
-Each coding agent is supported through a [plugin interface](./engine/adapters/base/plugin.py)
-that abstracts session formats into a canonical model.
+The Rust host supervises the Python Session Engine and Node.js Ferry Runtime as
+separate sidecars. External coding tools are session sources; Ferry agents are
+LLM workers and are modeled separately.
+
+See [the architecture source of truth](./docs/architecture.md) and the
+[refactoring roadmap](./docs/refactoring-roadmap.md).
 
 ## License
 
