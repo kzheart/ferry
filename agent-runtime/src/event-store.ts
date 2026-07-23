@@ -34,7 +34,9 @@ export interface PersistedSession {
   resolved_apply_policy?: "manual" | "auto";
 }
 
-type SessionMetadata = Omit<PersistedSession, "messages" | "next_seq">;
+export type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
+
+type SessionRecordMetadata = Omit<PersistedSession, "messages" | "next_seq">;
 
 type SessionRecord =
   | {
@@ -42,7 +44,7 @@ type SessionRecord =
       type: "session.meta";
       session_id: string;
       timestamp: string;
-      state: SessionMetadata;
+      state: SessionRecordMetadata;
     }
   | {
       version: typeof STORE_VERSION;
@@ -81,8 +83,15 @@ export interface SessionStore {
   loadAll(): Promise<
     Array<{ state: PersistedSession; events: EventEnvelope[] }>
   >;
-  save(state: PersistedSession, events: EventEnvelope[]): Promise<void>;
+  commit(update: SessionCommit): Promise<void>;
   delete(sessionId: string): Promise<void>;
+}
+
+export interface SessionCommit {
+  metadata: PersistedSessionMetadata;
+  messages: Array<{ ordinal: number; message: AgentMessage }>;
+  events: EventEnvelope[];
+  timestamp: string;
 }
 
 export class MemorySessionStore implements SessionStore {
@@ -95,8 +104,28 @@ export class MemorySessionStore implements SessionStore {
     return [...this.records.values()].map((record) => structuredClone(record));
   }
 
-  async save(state: PersistedSession, events: EventEnvelope[]) {
-    this.records.set(state.session_id, structuredClone({ state, events }));
+  async commit(update: SessionCommit) {
+    const snapshot = structuredClone(update);
+    const existing = this.records.get(snapshot.metadata.session_id);
+    const messages = new Map<number, AgentMessage>(
+      existing?.state.messages.map((message, ordinal) => [ordinal, message]),
+    );
+    const events = new Map<number, EventEnvelope>(
+      existing?.events.map((event) => [event.seq, event]),
+    );
+    for (const record of snapshot.messages) {
+      messages.set(record.ordinal, record.message);
+    }
+    for (const event of snapshot.events) events.set(event.seq, event);
+    this.records.set(snapshot.metadata.session_id, {
+      state: {
+        ...snapshot.metadata,
+        messages: [...messages.entries()]
+          .sort(([left], [right]) => left - right)
+          .map(([, message]) => message),
+      },
+      events: [...events.values()].sort((left, right) => left.seq - right.seq),
+    });
   }
 
   async delete(sessionId: string) {
@@ -134,16 +163,22 @@ export class FileSessionStore implements SessionStore {
       });
       this.index.set(
         restored.state.session_id,
-        indexEntry(restored.state, restored.events),
+        indexEntry(
+          restored.state,
+          undefined,
+          restored.events,
+          this.cursors.get(restored.state.session_id)!,
+          restored.events.at(-1)?.timestamp ?? new Date().toISOString(),
+        ),
       );
     }
     await this.writeIndex();
     return records;
   }
 
-  async save(state: PersistedSession, events: EventEnvelope[]) {
-    const snapshot = structuredClone({ state, events });
-    const id = snapshot.state.session_id;
+  async commit(update: SessionCommit) {
+    const snapshot = structuredClone(update);
+    const id = snapshot.metadata.session_id;
     sessionFilename(id);
     await this.enqueue(id, async () => {
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -152,7 +187,7 @@ export class FileSessionStore implements SessionStore {
         messageCount: 0,
         metadata: "",
       };
-      const metadata = metadataOf(snapshot.state);
+      const metadata = metadataOf(snapshot.metadata);
       const metadataJson = JSON.stringify(metadata);
       const records: SessionRecord[] = [];
       if (metadataJson !== cursor.metadata) {
@@ -160,38 +195,28 @@ export class FileSessionStore implements SessionStore {
           version: STORE_VERSION,
           type: "session.meta",
           session_id: id,
-          timestamp:
-            snapshot.events.at(-1)?.timestamp ?? new Date().toISOString(),
+          timestamp: snapshot.timestamp,
           state: metadata,
         });
       }
 
-      const finalizedMessages = finalizedMessageCount(
-        snapshot.state,
-        snapshot.events,
+      const messages = snapshot.messages.filter(
+        (record) => record.ordinal >= cursor.messageCount,
       );
-      for (
-        let ordinal = cursor.messageCount;
-        ordinal < finalizedMessages;
-        ordinal += 1
-      ) {
+      for (const record of messages) {
         records.push({
           version: STORE_VERSION,
           type: "message",
           session_id: id,
-          ordinal,
-          message: snapshot.state.messages[ordinal]!,
+          ordinal: record.ordinal,
+          message: record.message,
         });
       }
 
-      const committableSeq = committableEventSeq(
-        snapshot.state,
-        snapshot.events,
+      const events = snapshot.events.filter(
+        (event) => event.seq > cursor.eventSeq,
       );
-      const newEvents = snapshot.events.filter(
-        (event) => event.seq > cursor.eventSeq && event.seq <= committableSeq,
-      );
-      for (const event of newEvents) {
+      for (const event of events) {
         records.push({
           version: STORE_VERSION,
           type: "event",
@@ -209,18 +234,22 @@ export class FileSessionStore implements SessionStore {
       );
       await chmod(target, 0o600);
       const nextCursor = {
-        eventSeq: newEvents.at(-1)?.seq ?? cursor.eventSeq,
-        messageCount: Math.max(cursor.messageCount, finalizedMessages),
+        eventSeq: events.at(-1)?.seq ?? cursor.eventSeq,
+        messageCount: Math.max(
+          cursor.messageCount,
+          ...messages.map((record) => record.ordinal + 1),
+        ),
         metadata: metadataJson,
       };
       this.cursors.set(id, nextCursor);
       this.index.set(
         id,
         indexEntry(
-          snapshot.state,
-          snapshot.events,
-          nextCursor.eventSeq,
-          nextCursor.messageCount,
+          snapshot.metadata,
+          this.index.get(id),
+          events,
+          nextCursor,
+          snapshot.timestamp,
         ),
       );
       await this.writeIndex();
@@ -273,7 +302,7 @@ export class FileSessionStore implements SessionStore {
   }
 
   private restore(records: SessionRecord[]) {
-    let metadata: SessionMetadata | undefined;
+    let metadata: SessionRecordMetadata | undefined;
     const messages = new Map<number, AgentMessage>();
     const events: EventEnvelope[] = [];
     for (const record of records) {
@@ -334,29 +363,9 @@ export class FileSessionStore implements SessionStore {
   }
 }
 
-function metadataOf(state: PersistedSession): SessionMetadata {
-  const { messages: _messages, next_seq: _nextSeq, ...metadata } = state;
+function metadataOf(state: PersistedSessionMetadata): SessionRecordMetadata {
+  const { next_seq: _nextSeq, ...metadata } = state;
   return metadata;
-}
-
-function finalizedMessageCount(
-  state: PersistedSession,
-  events: EventEnvelope[],
-) {
-  const lastMessage = state.messages.at(-1);
-  const lastEvent = events.at(-1);
-  return state.status === "running" &&
-    lastEvent?.type === "content.delta" &&
-    lastMessage?.role === "assistant"
-    ? state.messages.length - 1
-    : state.messages.length;
-}
-
-function committableEventSeq(state: PersistedSession, events: EventEnvelope[]) {
-  if (state.status === "idle") return events.at(-1)?.seq ?? 0;
-  let index = events.length - 1;
-  while (index >= 0 && events[index]!.type === "content.delta") index -= 1;
-  return events[index]?.seq ?? 0;
 }
 
 function sessionFilename(sessionId: string) {
@@ -367,12 +376,13 @@ function sessionFilename(sessionId: string) {
 }
 
 function indexEntry(
-  state: PersistedSession,
+  state: PersistedSessionMetadata,
+  previous: SessionIndexEntry | undefined,
   events: EventEnvelope[],
-  latestSeq = events.at(-1)?.seq ?? 0,
-  messageCount = state.messages.length,
+  cursor: SessionCursor,
+  timestamp: string,
 ): SessionIndexEntry {
-  const committed = events.filter((event) => event.seq <= latestSeq);
+  const latest = events.at(-1);
   return {
     session_id: state.session_id,
     title: state.title ?? null,
@@ -380,9 +390,9 @@ function indexEntry(
     provider_id: state.provider_id,
     model_id: state.model_id,
     status: state.status,
-    created_at: committed[0]?.timestamp ?? null,
-    updated_at: committed.at(-1)?.timestamp ?? null,
-    message_count: messageCount,
-    latest_seq: latestSeq,
+    created_at: previous?.created_at ?? latest?.timestamp ?? timestamp,
+    updated_at: latest?.timestamp ?? timestamp,
+    message_count: cursor.messageCount,
+    latest_seq: cursor.eventSeq,
   };
 }
