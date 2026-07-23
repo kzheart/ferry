@@ -14,11 +14,8 @@ export const TOOL_LEVEL = {
   session_search: "read",
   session_read: "read",
   usage: "read",
-  ferry_preview_migration: "preview",
-  ferry_preview_edit: "preview",
-  ferry_propose_migration: "mutate",
-  ferry_propose_edit: "mutate",
-  ferry_propose_metadata_change: "mutate",
+  migrate: "mutate",
+  session_edit: "mutate",
 };
 
 const sealAssistant = items => {
