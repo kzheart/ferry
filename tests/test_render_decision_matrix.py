@@ -6,7 +6,9 @@ from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
-from engine.domain.model import Block, Message, Session, ToolCall
+from engine.domain.model import (
+    Block, Message, Session, ToolCall, text_tool_result,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -55,7 +57,7 @@ def _input(op, namespace):
 def _session(op, namespace):
     session = Session("fixture", "source", "/tmp")
     session.messages = [Message("assistant", [Block("tool", tool=ToolCall(
-        op, op, _input(op, namespace), "output",
+        op, op, _input(op, namespace), text_tool_result("output"),
     ))])]
     return session
 

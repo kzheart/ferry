@@ -7,7 +7,9 @@ import pytest
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.writer import write
-from engine.domain.model import AgentEdge, Block, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge, Block, Message, Session, ToolCall, text_tool_result,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -66,7 +68,8 @@ def test_codex_writer_handles_empty_and_tool_only_sessions(tmp_path, monkeypatch
 
     tool_only = Session("claude", "tool-only", str(tmp_path))
     tool_only.messages = [Message("assistant", [Block("tool", tool=ToolCall(
-        name="Bash", op=CanonicalOp.SHELL_EXEC, input={"command": "pwd"}, output="/tmp",
+        name="Bash", op=CanonicalOp.SHELL_EXEC, input={"command": "pwd"},
+        result=text_tool_result("/tmp"),
     ))], source_id="tool-message")]
     _tool_id, tool_path = write(tool_only, sessions_dir=sessions)
     restored = codex_reader.read(str(tool_path), sessions_dir=sessions)

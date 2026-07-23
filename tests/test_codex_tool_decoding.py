@@ -1,7 +1,7 @@
 import json
 
 from engine.adapters.codex import reader as codex_reader
-from engine.domain.model import Session
+from engine.domain.model import Session, tool_result_text
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -62,10 +62,10 @@ def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tm
     function, custom = _tools(session)
     assert function.op == CanonicalOp.SHELL_EXEC
     assert function.input == {"command": "pwd", "workdir": "/workspace"}
-    assert function.output == "function output"
+    assert tool_result_text(function.result) == "function output"
     assert custom.op == CanonicalOp.SHELL_EXEC
     assert custom.input == {"command": "printf custom"}
-    assert custom.output == "custom output"
+    assert tool_result_text(custom.result) == "custom output"
 
 
 def test_current_remote_function_call_stays_an_opaque_tool(tmp_path):

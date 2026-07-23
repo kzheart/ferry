@@ -21,7 +21,9 @@ from engine.domain.errors import (
     ConcurrentModificationError,
     LocatorStaleError,
 )
-from engine.domain.model import Block, ImageAsset, Message, Session, ToolCall
+from engine.domain.model import (
+    Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
+)
 from engine.interfaces.rpc import rpc
 
 
@@ -134,7 +136,7 @@ def _session():
                 Block("text", "回答一"),
                 Block("tool", tool=ToolCall(
                     "shell", "shell.exec", {"command": "cat /etc/passwd"},
-                    "Bearer very-secret-token-value", status="completed")),
+                    text_tool_result("Bearer very-secret-token-value"))),
                 Block("image", image=ImageAsset(
                     "image-1", "image/png", "BASE64_PRIVATE",
                     "/tmp/ghp_abcdefghijklmnopqrstuvwxyz.png")),

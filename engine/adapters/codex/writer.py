@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...domain.model import Session
+from ...domain.model import Session, tool_result_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ..base.narration import narrate
 from .native_schema import templates
@@ -74,31 +74,10 @@ def _msg(tpl, role: str, text: str, created_at: str | int | None = None) -> dict
 def _result_payload(tool, output: str, exit_code=None) -> dict:
     result = tool.result
     if result is None:
-        payload = {"output": output}
-        code = tool.meta.get("exit_code", tool.meta.get("exit", exit_code))
-        if isinstance(code, int) and not isinstance(code, bool):
-            payload["exit_code"] = code
-        if isinstance(tool.meta.get("stderr"), str):
-            payload["stderr"] = tool.meta["stderr"]
-        if isinstance(tool.meta.get("truncated"), bool):
-            payload["truncated"] = tool.meta["truncated"]
-        return payload
+        return {"output": output}
     payload = {
         "status": result.status,
-        "output": result.legacy_output(),
-        "canonical_blocks": [
-            {
-                "kind": block.kind,
-                "text": block.text,
-                "data": block.data,
-                "mime_type": block.mime_type,
-                "filename": block.filename,
-                "uri": block.uri,
-                "metadata": block.metadata,
-            }
-            for block in result.blocks
-        ],
-        "attachments": result.attachments,
+        "output": tool_result_text(result),
     }
     if result.stdout is not None:
         payload["stdout"] = result.stdout
@@ -108,8 +87,6 @@ def _result_payload(tool, output: str, exit_code=None) -> dict:
         payload["exit_code"] = result.exit_code
     if result.truncated is not None:
         payload["truncated"] = result.truncated
-    if result.metadata:
-        payload["canonical_metadata"] = result.metadata
     return payload
 
 
@@ -166,21 +143,28 @@ def _apply_patch_pair(tpl, patch: str, output: str = "{}",
 def _write_shell_exec(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("command"):
+        output = tool_result_text(t.result)
+        stdout = (
+            t.result.stdout
+            if t.result and t.result.stdout is not None
+            else output
+        )
+        exit_code = t.result.exit_code if t.result else None
         return _exec_pair(tpl, i["command"], i.get("workdir") or cwd,
-                          t.meta.get("stdout", t.output),
-                          t.meta.get("exit_code"),
+                          stdout, exit_code,
                           t.started_at, t.ended_at,
-                          _result_payload(t, t.output))
+                          _result_payload(t, output))
 
 
 def _write_fs_read(tpl, t, cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("file_path"):
         command = f"cat {shlex.quote(str(i['file_path']))}"
-        return _exec_pair(tpl, command, cwd, t.output or "",
-                          t.tool_result.exit_code,
+        output = tool_result_text(t.result)
+        return _exec_pair(tpl, command, cwd, output,
+                          t.result.exit_code if t.result else None,
                           t.started_at, t.ended_at,
-                          _result_payload(t, t.output))
+                          _result_payload(t, output))
     return None
 
 
@@ -190,8 +174,9 @@ def _write_fs_write(tpl, t, _cwd) -> list | None:
         body = str(i.get("content", ""))
         patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
             i["file_path"], "\n".join("+" + l for l in body.splitlines()))
-        return _apply_patch_pair(tpl, patch, t.output or "{}",
-                                 _result_payload(t, t.output))
+        output = tool_result_text(t.result) or "{}"
+        return _apply_patch_pair(tpl, patch, output,
+                                 _result_payload(t, output))
     return None
 
 
@@ -203,8 +188,9 @@ def _write_fs_edit(tpl, t, _cwd) -> list | None:
                           + ["+" + l for l in str(i.get("new", "")).splitlines()])
         patch = "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch".format(
             i["file_path"], hunk)
-        return _apply_patch_pair(tpl, patch, t.output or "{}",
-                                 _result_payload(t, t.output))
+        output = tool_result_text(t.result) or "{}"
+        return _apply_patch_pair(tpl, patch, output,
+                                 _result_payload(t, output))
     return None
 
 
@@ -213,8 +199,9 @@ def _write_fs_patch(tpl, t, _cwd) -> list | None:
     patch = i.get("raw_patch")
     if not patch:
         return None
-    return _apply_patch_pair(tpl, str(patch), t.output or "{}",
-                             _result_payload(t, t.output))
+    output = tool_result_text(t.result) or "{}"
+    return _apply_patch_pair(tpl, str(patch), output,
+                             _result_payload(t, output))
 
 
 def _write_fs_search(tpl, t, cwd) -> list | None:
@@ -227,10 +214,11 @@ def _write_fs_search(tpl, t, cwd) -> list | None:
         command.extend(["-g", str(i["glob"])])
     command.extend(["--", str(query), str(i.get("path") or ".")])
     quoted = " ".join(shlex.quote(part) for part in command)
+    output = tool_result_text(t.result)
     return _exec_pair(tpl, quoted, i.get("workdir") or cwd,
-                      t.output or "", t.tool_result.exit_code,
+                      output, t.result.exit_code if t.result else None,
                       t.started_at, t.ended_at,
-                      _result_payload(t, t.output))
+                      _result_payload(t, output))
 
 
 def _write_fs_glob(tpl, t, cwd) -> list | None:
@@ -241,10 +229,11 @@ def _write_fs_glob(tpl, t, cwd) -> list | None:
     command = ["rg", "--files", "-g", str(pattern), "--",
                str(i.get("path") or ".")]
     quoted = " ".join(shlex.quote(part) for part in command)
-    return _exec_pair(tpl, quoted, cwd, t.output or "",
-                      t.tool_result.exit_code,
+    output = tool_result_text(t.result)
+    return _exec_pair(tpl, quoted, cwd, output,
+                      t.result.exit_code if t.result else None,
                       t.started_at, t.ended_at,
-                      _result_payload(t, t.output))
+                      _result_payload(t, output))
 
 
 OP_WRITERS = {

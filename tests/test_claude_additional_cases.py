@@ -1,7 +1,15 @@
 import json
 
 from engine.adapters.claude.writer import write
-from engine.domain.model import AgentEdge, Block, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge,
+    Block,
+    Message,
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -15,7 +23,11 @@ def test_claude_child_forks_from_agent_call_after_text_in_same_message(tmp_path)
                 "task", CanonicalOp.AGENT_SPAWN,
                 {"description": "review", "prompt": "check it",
                  "subagent_type": "general"},
-                "review complete", source_call_id="call-1")),
+                result=ToolResult(
+                    status="success",
+                    blocks=[ToolResultBlock("text", text="review complete")],
+                ),
+                source_call_id="call-1")),
         ], source_id="spawn-message"),
     ]
     child = Session("opencode", "child", str(tmp_path), parent_id="root")

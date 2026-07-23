@@ -4,6 +4,7 @@ from __future__ import annotations
 import shlex
 
 from ..base.migration import MigrationTargetBase, linked_agent_edge
+from ...domain.model import tool_result_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from .writer import OP_FIDELITY, write
 
@@ -21,7 +22,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             ignored = set(inputs) - supported
             return {"kind": "tool", "name": "exec", "input": {
                 "cmd": inputs["command"], "workdir": inputs.get("workdir", session.cwd)},
-                "output": tool.output or "", "conversion": "native",
+                "output": tool_result_text(tool.result), "conversion": "native",
                 "_consumed_fields": set(inputs) - ignored,
                 "_ignored_fields": ignored,
                 "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}
@@ -30,7 +31,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             return {"kind": "tool", "name": "exec", "input": {
                 "cmd": f"cat {shlex.quote(str(inputs['file_path']))}",
                 "workdir": session.cwd},
-                "output": tool.output or "", "conversion": "transformed",
+                "output": tool_result_text(tool.result), "conversion": "transformed",
                 "_consumed_fields": {"file_path"},
                 "_ignored_fields": ignored,
                 "_fidelity": "lossy" if ignored else "transformed",
@@ -42,7 +43,7 @@ class CodexMigrationTarget(MigrationTargetBase):
                          {"file_path", "old", "new"})
             ignored = set(inputs) - supported
             return {"kind": "tool", "name": "apply_patch", "input": inputs,
-                    "output": tool.output or "", "conversion": "native",
+                    "output": tool_result_text(tool.result), "conversion": "native",
                     "_consumed_fields": set(inputs) - ignored,
                     "_ignored_fields": ignored,
                     "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}
@@ -53,7 +54,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             return {
                 "kind": "tool", "name": "apply_patch",
                 "input": {"patch": inputs["raw_patch"]},
-                "output": tool.output or "", "conversion": "native",
+                "output": tool_result_text(tool.result), "conversion": "native",
                 "_consumed_fields": set(inputs) - ignored,
                 "_ignored_fields": ignored,
                 "_reason_codes": ("unsupported_tool_fields",) if ignored else (),
@@ -71,7 +72,7 @@ class CodexMigrationTarget(MigrationTargetBase):
                     "cmd": " ".join(shlex.quote(part) for part in command),
                     "workdir": session.cwd,
                 },
-                "output": tool.output or "", "conversion": "transformed",
+                "output": tool_result_text(tool.result), "conversion": "transformed",
                 "_consumed_fields": set(inputs) - ignored,
                 "_ignored_fields": ignored,
                 "_fidelity": "lossy" if ignored else "transformed",
@@ -88,7 +89,7 @@ class CodexMigrationTarget(MigrationTargetBase):
                     "cmd": " ".join(shlex.quote(part) for part in command),
                     "workdir": session.cwd,
                 },
-                "output": tool.output or "", "conversion": "transformed",
+                "output": tool_result_text(tool.result), "conversion": "transformed",
                 "_consumed_fields": set(inputs) - ignored,
                 "_ignored_fields": ignored,
                 "_fidelity": "lossy" if ignored else "transformed",
@@ -101,7 +102,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             supported = {"description", "prompt", "subagent_type"}
             ignored = set(inputs) - supported
             return {"kind": "tool", "name": "spawn_agent", "input": inputs,
-                    "output": tool.output or "", "conversion": "native",
+                    "output": tool_result_text(tool.result), "conversion": "native",
                     "_consumed_fields": set(inputs) - ignored,
                     "_ignored_fields": ignored,
                     "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}

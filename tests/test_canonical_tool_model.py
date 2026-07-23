@@ -9,6 +9,7 @@ from engine.domain.model import (
     ToolResult,
     ToolResultBlock,
     normalize_tool_result_status,
+    tool_result_text,
 )
 from engine.domain.tool_ops import (
     CANONICAL_OPS,
@@ -18,19 +19,7 @@ from engine.domain.tool_ops import (
 )
 
 
-def test_legacy_output_remains_a_string_and_tracks_late_reader_pairing():
-    call = ToolCall("Read", CanonicalOp.FS_READ, {"file_path": "safe.txt"}, "")
-
-    call.output = "paired later"
-
-    assert call.output == "paired later"
-    assert call.tool_result.status == "unknown"
-    assert call.tool_result.blocks == [
-        ToolResultBlock("text", text="paired later"),
-    ]
-
-
-def test_structured_result_can_be_passed_as_output_with_legacy_access():
+def test_tool_call_uses_one_structured_result_source():
     result = ToolResult(
         status="completed",
         blocks=[
@@ -51,64 +40,33 @@ def test_structured_result_can_be_passed_as_output_with_legacy_access():
 
     call = ToolCall("tool", None, {}, result)
 
-    assert call.output == 'done\n{"count":2}'
     assert call.result is result
-    assert call.tool_result is result
-    assert call.status == "success"
-    assert call.tool_result.blocks[2].kind == "image"
+    assert tool_result_text(call.result) == 'done\n{"count":2}'
+    assert call.result.status == "success"
+    assert call.result.blocks[2].kind == "image"
 
 
-def test_explicit_result_keeps_empty_legacy_output_usable():
-    call = ToolCall(
-        "tool",
-        None,
-        {},
-        "",
-        result=ToolResult(
-            status="error",
-            blocks=[ToolResultBlock("text", text="failed")],
-        ),
-    )
+def test_none_result_means_unpaired_call():
+    call = ToolCall("tool", None, {})
 
-    assert call.output == "failed"
-    assert call.status == "error"
+    assert call.result is None
+    assert tool_result_text(call.result) == ""
 
 
-def test_set_result_updates_the_legacy_view_and_status():
-    call = ToolCall("tool", None, {}, "old", status="pending")
-
-    call.set_result(ToolResult(
+def test_reader_can_pair_a_result_without_mirrored_fields():
+    call = ToolCall("tool", None, {})
+    call.result = ToolResult(
         status="interrupted",
         blocks=[ToolResultBlock("text", text="stopped")],
-    ))
-
-    assert call.output == "stopped"
-    assert call.status == "interrupted"
-    assert call.result is call.tool_result
-
-
-def test_legacy_result_extracts_known_metadata_without_dropping_it():
-    metadata = {
-        "stdout": "out",
-        "stderr": "err",
-        "exit": 7,
-        "truncated": True,
-        "attachments": [{"name": "log.txt"}],
-        "native_field": "preserved",
-    }
-
-    result = ToolResult.from_legacy(
-        "legacy text", status="failed", metadata=metadata,
     )
 
-    assert result.status == "error"
-    assert result.stdout == "out"
-    assert result.stderr == "err"
-    assert result.exit_code == 7
-    assert result.truncated is True
-    assert result.attachments == [{"name": "log.txt"}]
-    assert result.metadata == metadata
-    assert result.legacy_output() == "legacy text"
+    assert call.result.status == "interrupted"
+    assert tool_result_text(call.result) == "stopped"
+
+
+def test_tool_call_rejects_a_text_result_shortcut():
+    with pytest.raises(TypeError, match="ToolResult"):
+        ToolCall("tool", None, {}, "text")
 
 
 @pytest.mark.parametrize("status", sorted(TOOL_RESULT_STATUSES))

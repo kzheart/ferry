@@ -9,7 +9,9 @@ from engine.adapters.claude.writer import write as write_claude
 from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import session as opencode_session
-from engine.domain.model import Block, Message, RawRecord, Session, ToolCall
+from engine.domain.model import (
+    Block, Message, RawRecord, Session, ToolCall, text_tool_result,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -145,9 +147,14 @@ def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
     root = Session("claude", "tools-root", str(tmp_path), title="tools")
     root.messages = [
         Message("user", [Block("text", "run tools")]),
-        Message("assistant", [Block("tool", tool=ToolCall(
-            name="Bash", op=CanonicalOp.SHELL_EXEC,
-            input={"command": "pwd"}, output="/tmp"))]),
+        Message("assistant", [
+            Block("tool", tool=ToolCall(
+                name="Bash",
+                op=CanonicalOp.SHELL_EXEC,
+                input={"command": "pwd"},
+                result=text_tool_result("/tmp"),
+            )),
+        ]),
     ]
 
     opencode_session.write(root, cwd=str(tmp_path))

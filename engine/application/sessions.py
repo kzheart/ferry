@@ -2,6 +2,7 @@
 
 from ..adapters.base.migration import assemble_tree
 from ..domain.errors import SessionAssetNotFoundError
+from ..domain.model import tool_result_text
 from ..domain.tool_ops import CanonicalOp
 from .ports import current
 
@@ -31,8 +32,9 @@ def _messages(messages):
             elif block.kind == "tool":
                 call = block.tool
                 name, value = _tool_view(call)
+                output = tool_result_text(call.result)
                 blocks.append({"kind": "tool", "name": name, "op": call.op,
-                    "input": value, "output": call.output, "size": len(call.output or "")})
+                    "input": value, "output": output, "size": len(output)})
             elif block.kind == "image" and block.image:
                 blocks.append({"kind": "image", "image": {
                     "id": block.image.id, "mime_type": block.image.mime_type,

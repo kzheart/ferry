@@ -3,7 +3,9 @@ import sqlite3
 
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex.writer import write
-from engine.domain.model import AgentEdge, Block, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge, Block, Message, Session, ToolCall, text_tool_result,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -122,7 +124,8 @@ def test_codex_writer_uses_parent_message_time_for_tools_without_own_time(tmp_pa
     root.messages = [Message(
         "assistant",
         [Block("tool", tool=ToolCall(
-            "Bash", CanonicalOp.SHELL_EXEC, {"command": "pwd"}, "/tmp"))],
+            "Bash", CanonicalOp.SHELL_EXEC, {"command": "pwd"},
+            text_tool_result("/tmp")))],
         source_id="tool-message",
         created_at="2026-07-22T04:17:28.433Z",
     )]

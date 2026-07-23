@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..domain.errors import AgentReferenceError, AgentRequestError, LocatorStaleError
+from ..domain.model import tool_result_text
 from ..domain.usage import add_tokens, empty_tokens
 from .ports import current
 
@@ -682,14 +683,14 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                     message_clipped = True
                     omitted_bytes += len(original.encode("utf-8")) - len(value.encode("utf-8"))
             elif block.kind == "tool" and block.tool:
+                result = block.tool.result
                 item = {"kind": "tool", "name": _redact(block.tool.name, 120),
                         "op": _redact(str(block.tool.op), 120) if block.tool.op else None,
-                        "status": _redact(str(block.tool.status), 80)
-                        if block.tool.status else None,
+                        "status": _redact(result.status, 80) if result else None,
                         "input": "[omitted]", "output": "[omitted]"}
                 clipped = False
                 if include_tool_outputs and remaining:
-                    output = _redact(block.tool.output or "")
+                    output = _redact(tool_result_text(result))
                     value, remaining, output_clipped = _take(output, remaining)
                     item["output"] = value
                     clipped = clipped or output_clipped

@@ -15,6 +15,7 @@ from ...domain.model import (
     ToolResult,
     ToolResultBlock,
     normalize_tool_result_status,
+    tool_result_text,
 )
 from ...domain.reasoning import codex_summary_text
 from ...domain.tool_ops import CanonicalOp
@@ -201,7 +202,6 @@ def _patch_call(patch_text: str) -> ToolCall:
         name="apply_patch",
         op=_FS_PATCH,
         input={"operations": _patch_changes(patch_text), "raw_patch": patch_text},
-        output="",
     )
 
 
@@ -236,7 +236,7 @@ def _opaque_call(name: str, native_input, *, calls=()) -> ToolCall:
         input_value["children"] = [
             _input_summary(call_name, argument) for call_name, argument in calls
         ]
-    return ToolCall(name=name, op=_TOOL_INVOKE, input=input_value, output="")
+    return ToolCall(name=name, op=_TOOL_INVOKE, input=input_value)
 
 
 def _shell_input(args: dict) -> dict | None:
@@ -278,7 +278,7 @@ def _parse_call(payload, sess) -> ToolCall:
         shell_input = _shell_input(args) if isinstance(args, dict) else None
         if shell_input is not None:
             return ToolCall(name="exec", op=CanonicalOp.SHELL_EXEC,
-                            input=shell_input, output="")
+                            input=shell_input)
     elif call_name == "apply_patch":
         patch_text = _extract_patch_text(src, argument)
         if patch_text is not None:
@@ -421,11 +421,6 @@ def _parse_result(raw) -> ToolResult:
     )
 
 
-def _parse_output(raw) -> str:
-    """Legacy textual view retained for callers outside the canonical reader."""
-    return _parse_result(raw).legacy_output()
-
-
 def _json_args(raw) -> dict | str:
     if isinstance(raw, dict):
         return raw
@@ -467,10 +462,8 @@ def _function_call(payload: dict) -> ToolCall:
             name="spawn_agent",
             op=CanonicalOp.AGENT_SPAWN,
             input=_spawn_input(args),
-            output="",
             meta={"source_id": payload.get("id")},
             source_call_id=payload.get("call_id"),
-            status=payload.get("status"),
         )
     if name in _LOCAL_SHELL_NAMES and isinstance(args, dict):
         shell_input = _shell_input(args)
@@ -479,9 +472,7 @@ def _function_call(payload: dict) -> ToolCall:
                 name=name,
                 op=CanonicalOp.SHELL_EXEC,
                 input=shell_input,
-                output="",
                 source_call_id=payload.get("call_id"),
-                status=payload.get("status"),
             )
     return ToolCall(
         name=name,
@@ -491,9 +482,7 @@ def _function_call(payload: dict) -> ToolCall:
             "name": name,
             "input": args,
         },
-        output="",
         source_call_id=payload.get("call_id"),
-        status=payload.get("status"),
     )
 
 
@@ -754,9 +743,8 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 tc = _function_call(p)
             elif p.get("name") == "spawn_agent":
                 tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                              input=_spawn_input(_json_args(p.get("input", ""))), output="",
-                              meta={"source_id": p.get("id")},
-                              status=p.get("status"))
+                              input=_spawn_input(_json_args(p.get("input", ""))),
+                              meta={"source_id": p.get("id")})
             else:
                 tc = _parse_call(p, sess)
             tc.source_call_id = p.get("call_id")
@@ -771,7 +759,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         elif pt in ("custom_tool_call_output", "function_call_output"):
             tc = pending.pop(p.get("call_id"), None)
             if tc is not None:
-                tc.set_result(_parse_result(p.get("output", "")))
+                tc.result = _parse_result(p.get("output", ""))
                 tc.source_result_id = p.get("id")
             else:
                 sess.lose("session.orphan_tool_result", call_id=p.get("call_id"))
@@ -805,7 +793,10 @@ def _spawn_calls(sess: Session) -> list[ToolCall]:
 
 def _contains_identity(tool: ToolCall, child: Session) -> bool:
     values = [child.source_id, child.agent_id, child.agent_path]
-    haystack = json.dumps({"input": tool.input, "output": tool.output},
+    haystack = json.dumps({
+        "input": tool.input,
+        "output": tool_result_text(tool.result),
+    },
                           ensure_ascii=False)
     return any(value and value in haystack for value in values)
 
@@ -855,8 +846,10 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
             agent_path=child.agent_path,
             agent_type=child.agent_type,
             prompt=prompt,
-            status=(_canonical_edge_status(matched.status) if matched else None) or
-                   edge_statuses.get(child.source_id),
+            status=(
+                _canonical_edge_status(matched.result.status)
+                if matched and matched.result else None
+            ) or edge_statuses.get(child.source_id),
             association=(
                 "spawn-call" if matched else
                 child.meta.get("parent_association", "parent-metadata")),

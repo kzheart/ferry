@@ -10,7 +10,7 @@ from engine.adapters.codex.writer import OP_WRITERS as CODEX_WRITERS
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
 from engine.adapters.opencode.session import OP_FIDELITY as OPENCODE_FIDELITY
 from engine.adapters.opencode.session import OP_WRITERS as OPENCODE_WRITERS
-from engine.domain.model import ToolCall
+from engine.domain.model import ToolCall, text_tool_result
 from engine.domain.tool_ops import (
     CANONICAL_OPS, CanonicalOp, TOOL_OP_SPECS, has_valid_tool_input,
 )
@@ -75,17 +75,17 @@ def test_every_writer_mapping_has_a_fidelity_verdict(writers, fidelity):
 ])
 @pytest.mark.parametrize("op", sorted(CANONICAL_OPS))
 def test_migration_preview_uses_the_full_target_mapping_matrix(target, fidelity, op):
-    call = ToolCall(name="test", op=op, input=_valid_input(op), output="")
+    call = ToolCall(name="test", op=op, input=_valid_input(op))
     assert target.classify_tool_call(call) == fidelity[op]
 
 
 def test_unknown_operation_is_always_a_degradation():
-    call = ToolCall(name="test", op="web.fetch", input={}, output="")
+    call = ToolCall(name="test", op="web.fetch", input={})
     assert ClaudeMigrationTarget().classify_tool_call(call) == "degrade"
 
 
 def test_invalid_input_is_a_degradation_even_for_a_supported_operation():
-    call = ToolCall(name="test", op=CanonicalOp.FS_READ, input={}, output="")
+    call = ToolCall(name="test", op=CanonicalOp.FS_READ, input={})
     assert ClaudeMigrationTarget().classify_tool_call(call) == "degrade"
 
 
@@ -94,8 +94,8 @@ def test_unknown_explicit_result_is_narrated_instead_of_fabricating_success():
 
     call = ToolCall(
         name="Read", op=CanonicalOp.FS_READ,
-        input={"file_path": "/work/file"}, output="contents",
-        result=ToolResult(status="unknown"),
+        input={"file_path": "/work/file"},
+        result=text_tool_result("contents", status="unknown"),
     )
     decision = ClaudeMigrationTarget().evaluate_tool(
         call, Session("codex", "source", "/work"))

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...domain.events import event
+from ...domain.model import tool_result_text
 from ...domain.tool_ops import has_valid_tool_input
 from .narration import narrate
 
@@ -300,8 +301,9 @@ class MigrationTargetBase:
         """返回目标端可见的工具块；None 表示会降级成历史叙述。"""
         if self.classify_tool_call(tool) != "native":
             return None
+        output = tool_result_text(tool.result)
         return {"kind": "tool", "name": tool.name, "input": tool.input,
-                "output": tool.output or "", "conversion": "native"}
+                "output": output, "conversion": "native"}
 
     def preview(self, session, cwd: str | None = None) -> dict:
         """构建写入前可展示的目标会话语义，不修改 session 或目标存储。"""
@@ -320,7 +322,10 @@ class MigrationTargetBase:
                     "truncated": len(text) > limit, "char_count": len(text)}
 
         def tool_source(tool) -> dict:
-            payload = {"input": tool.input, "output": tool.output or ""}
+            payload = {
+                "input": tool.input,
+                "output": tool_result_text(tool.result),
+            }
             return snapshot(payload, "tool", tool.name)
 
         def add_difference(*, diff_id, kind, reason_code, value, node_key,

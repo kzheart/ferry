@@ -54,8 +54,8 @@ class ToolResultBlock:
         if self.kind not in TOOL_RESULT_BLOCK_KINDS:
             raise ValueError(f"unsupported tool result block kind: {self.kind}")
 
-    def legacy_text(self) -> str:
-        """Return the textual compatibility view used by legacy writers."""
+    def text_projection(self) -> str:
+        """Project a block to text for text-only consumers."""
         if self.text:
             return self.text
         if self.kind == "json" and self.data is not None:
@@ -92,45 +92,20 @@ class ToolResult:
         if self.truncated is not None and not isinstance(self.truncated, bool):
             raise TypeError("truncated must be a boolean or None")
 
-    @classmethod
-    def from_legacy(
-        cls,
-        output: str | None,
-        *,
-        status: str | None = None,
-        metadata: dict | None = None,
-    ) -> "ToolResult":
-        """Construct a structured result without losing a legacy output/meta pair."""
-        legacy_meta = dict(metadata or {})
-        text = output or ""
-        blocks = [ToolResultBlock("text", text=text)] if text else []
-        exit_code = legacy_meta.get("exit_code", legacy_meta.get("exit"))
-        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
-            exit_code = None
-        truncated = legacy_meta.get("truncated")
-        if not isinstance(truncated, bool):
-            truncated = None
-        attachments = legacy_meta.get("attachments")
-        if not isinstance(attachments, list):
-            attachments = []
-        stdout = legacy_meta.get("stdout")
-        stderr = legacy_meta.get("stderr")
-        return cls(
-            status=status or "unknown",
-            blocks=blocks,
-            stdout=stdout if isinstance(stdout, str) else None,
-            stderr=stderr if isinstance(stderr, str) else None,
-            exit_code=exit_code,
-            truncated=truncated,
-            attachments=list(attachments),
-            metadata=legacy_meta,
-        )
 
-    def legacy_output(self) -> str:
-        """Flatten text/JSON blocks for adapters that still consume a string."""
-        return "\n".join(
-            text for block in self.blocks if (text := block.legacy_text())
-        )
+def tool_result_text(result: ToolResult | None) -> str:
+    """Project a structured result to text without creating another data source."""
+    if result is None:
+        return ""
+    return "\n".join(
+        text for block in result.blocks if (text := block.text_projection())
+    )
+
+
+def text_tool_result(text: str, *, status: str = "success", **fields) -> ToolResult:
+    """Build a structured result for native tools that emit plain text."""
+    blocks = [ToolResultBlock("text", text=text)] if text else []
+    return ToolResult(status=status, blocks=blocks, **fields)
 
 
 @dataclass
@@ -148,47 +123,16 @@ class ToolCall:
     name: str                    # 源工具名(Bash / exec / bash ...)
     op: str | None               # 规范操作(shell.exec 等);None = 无映射,降级
     input: dict | str            # 源参数(已解析)
-    output: str | ToolResult     # 结果文本；也接受新的结构化结果
-    meta: dict = field(default_factory=dict)   # exit_code 等结构化补充
+    result: ToolResult | None = None
+    meta: dict = field(default_factory=dict)
     source_call_id: str | None = None
     source_result_id: str | None = None
-    status: str | None = None
     started_at: str | int | None = None
     ended_at: str | int | None = None
-    result: ToolResult | None = None
 
     def __post_init__(self):
-        if isinstance(self.output, ToolResult):
-            if self.result is not None and self.result is not self.output:
-                raise ValueError("output and result contain different ToolResult values")
-            self.result = self.output
-            self.output = self.result.legacy_output()
-        elif self.output is None:
-            self.output = ""
-        elif not isinstance(self.output, str):
-            self.output = str(self.output)
-
-        if self.result is not None:
-            self.output = self.result.legacy_output()
-            if self.status is None:
-                self.status = self.result.status
-
-    @property
-    def tool_result(self) -> ToolResult:
-        """Return an explicit result or a fresh view of the current legacy fields."""
-        if self.result is not None:
-            return self.result
-        return ToolResult.from_legacy(
-            self.output, status=self.status, metadata=self.meta,
-        )
-
-    def set_result(self, result: ToolResult) -> None:
-        """Install a structured result and keep legacy consumers operational."""
-        if not isinstance(result, ToolResult):
-            raise TypeError("result must be a ToolResult")
-        self.result = result
-        self.output = result.legacy_output()
-        self.status = result.status
+        if self.result is not None and not isinstance(self.result, ToolResult):
+            raise TypeError("result must be a ToolResult or None")
 
 
 @dataclass

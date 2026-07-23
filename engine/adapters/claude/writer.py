@@ -5,7 +5,13 @@ import time
 import uuid
 from pathlib import Path
 
-from ...domain.model import AgentEdge, Session, ToolCall
+from ...domain.model import (
+    AgentEdge,
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+)
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ..base.narration import narrate
 from .native_schema import templates
@@ -110,11 +116,11 @@ def _result_block_payload(block) -> dict:
 def _claude_result(tool) -> tuple[str | list, dict]:
     result = tool.result
     if result is None:
-        return tool.output or "", {
-            "status": tool.status or "unknown",
-            "stdout": tool.meta.get("stdout", tool.output or ""),
-            "stderr": tool.meta.get("stderr", ""),
-            "interrupted": bool(tool.meta.get("interrupted")),
+        return "", {
+            "status": "unknown",
+            "stdout": "",
+            "stderr": "",
+            "interrupted": False,
             "isImage": False,
         }
     content = [_result_block_payload(block) for block in result.blocks]
@@ -409,7 +415,10 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
             input={"description": child.title or "migrated subagent",
                    "prompt": edge.prompt,
                    "subagent_type": edge.agent_type or child.agent_type or "general"},
-            output=result)
+            result=ToolResult(
+                status="success",
+                blocks=[ToolResultBlock("text", text=result)] if result else [],
+            ))
         add_tool(None, tool, edge)
     return records
 

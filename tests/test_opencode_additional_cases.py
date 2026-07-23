@@ -5,7 +5,14 @@ import pytest
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.opencode.codec import CODEC, TURN_INDEX
 from engine.domain.authoring import AssistantReply, TextItem
-from engine.domain.model import AgentEdge, Block, Message, Session, ToolCall
+from engine.domain.model import (
+    AgentEdge,
+    Block,
+    Message,
+    Session,
+    ToolCall,
+    ToolResult,
+)
 from engine.domain.tool_ops import CanonicalOp
 
 
@@ -39,7 +46,8 @@ def _tree_with_children(tmp_path, count=2):
             "root", child_id, source_call_id=call_id,
             spawn_message_id="spawn", prompt=f"prompt-{index}"))
         calls.append(Block("tool", tool=ToolCall(
-            "Task", CanonicalOp.AGENT_SPAWN, {"prompt": f"prompt-{index}"}, "",
+            "Task", CanonicalOp.AGENT_SPAWN, {"prompt": f"prompt-{index}"},
+            result=ToolResult(status="success"),
             source_call_id=call_id)))
     root.messages = [
         Message("user", [Block("text", "before")], source_id="u1", created_at=100),

@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from ..domain.errors import SnapshotInvalidSourceError
+from ..domain.model import tool_result_text
 from . import verification as probe_mod
 from ..adapters.base import narration
 from .ports import current
@@ -270,7 +271,7 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
                 t = b.tool
                 inp = json.dumps(t.input, ensure_ascii=False)[:200] \
                     if isinstance(t.input, dict) else str(t.input)[:200]
-                out_clip = (t.output or "").strip()[:300]
+                out_clip = tool_result_text(t.result).strip()[:300]
                 lines.append(f"- 工具 `{t.name}` {inp}\n  结果: {out_clip}")
         lines.append("")
     doc_dir = Path.home() / ".resume-harness" / "handoff"
