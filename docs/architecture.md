@@ -127,9 +127,11 @@ Session Engine endpoint: WebView exposure, read/index/mutation classification,
 timeout class, and retry safety. It is generated into Rust and Python. The
 Rust host owns a correlation ID for every Engine request and multiplexes JSONL
 responses by that ID, so an individual caller never holds the process-manager
-lock while waiting. The Engine still executes requests serially today; a later
-read-pool change must first remove Python's process-global stdout redirection
-and keep index refreshes and mutations on their ordered lanes.
+lock while waiting. The Engine uses a bounded four-worker lane only for the
+contract's explicitly declared pure reads; index refreshes, native-session
+reads, JSON-backed stores, and every mutation remain on the ordered serial
+lane. Protocol output has a single writer, so parallel responses may be
+out-of-order but are always correlated by `request_id`.
 
 ## Cross-platform boundary
 

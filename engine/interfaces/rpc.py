@@ -1,10 +1,8 @@
 """版本 2 RPC 契约与调度：结构化错误 envelope。"""
 
-import contextlib
 import json
 import logging
 import os
-import sys
 
 from ..application import services
 from ..application import agent_tools
@@ -95,8 +93,7 @@ def rpc(request: str) -> dict:
         if fn is None:
             raise UnknownMethodError(method)
         try:
-            with contextlib.redirect_stdout(sys.stderr):
-                result = fn(req.get("params") or {})
+            result = fn(req.get("params") or {})
         except KeyError as error:
             raise MissingParamError(str(error.args[0])) from error
         return {"protocol": PROTOCOL, "ok": True, "result": result,

@@ -1,4 +1,7 @@
-from engine.contracts.engine_methods import ENGINE_METHOD_POLICIES
+from engine.contracts.engine_methods import (
+    ENGINE_METHOD_POLICIES,
+    PARALLEL_READ_METHOD_NAMES,
+)
 from engine.interfaces.rpc import RPC_METHODS
 
 
@@ -21,3 +24,18 @@ def test_commit_and_agent_lookup_policies_are_explicit():
     for method in ("agent_search_sessions", "agent_session_read", "agent_get_usage"):
         assert ENGINE_METHOD_POLICIES[method]["timeout"] == "lookup"
         assert ENGINE_METHOD_POLICIES[method]["retry"] == "never"
+
+
+def test_only_declared_pure_reads_can_use_parallel_dispatch():
+    assert PARALLEL_READ_METHOD_NAMES == {
+        "health",
+        "version",
+        "env",
+        "models",
+        "edit_capabilities",
+        "session_meta_list",
+    }
+    assert all(
+        ENGINE_METHOD_POLICIES[method]["kind"] == "read"
+        for method in PARALLEL_READ_METHOD_NAMES
+    )
