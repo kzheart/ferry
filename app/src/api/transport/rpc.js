@@ -24,18 +24,6 @@ async function callEngine(command, method, params) {
 
 export const rpc = (method, params) => callEngine("engine_rpc", method, params);
 
-async function nativeMigration(command, input) {
-  let raw;
-  try {
-    raw = await invoke(command, { input });
-  } catch (error) {
-    throwEngineError(typeof error === "string" ? error : (error?.message || String(error)));
-  }
-  const response = JSON.parse(raw);
-  if (!response.ok) throwEngineError(response.error);
-  return response.result;
-}
-
 async function nativeOperation(command, args) {
   let raw;
   try {
@@ -59,24 +47,6 @@ export const operationStatus = planId =>
 
 export const operationCancel = planId =>
   nativeOperation("operation_cancel", { planId });
-
-const migrationInput = params => ({
-  src: params.src,
-  dst: params.dst,
-  reference: params.ref,
-  maxTurn: params.max_turn,
-  probe: !!params.probe,
-  probeModel: params.probe_model,
-});
-
-// 桌面端迁移经受限原生命令进入引擎；浏览器预览仍走同一 HTTP RPC。
-export const migrationPreview = params => inTauri()
-  ? nativeMigration("migration_preview", migrationInput(params))
-  : callEngine("engine_rpc", "migrate", { ...params, dry_run: true });
-
-export const migrationCommit = params => inTauri()
-  ? nativeMigration("migration_commit", migrationInput(params))
-  : callEngine("engine_rpc", "migrate", { ...params, dry_run: false });
 
 // 启动描述符仍由引擎生成；终端偏好只决定原生层用哪个应用承载它。
 export const openTerminal = (launch, terminalApp = "auto") =>

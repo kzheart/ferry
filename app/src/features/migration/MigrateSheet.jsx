@@ -1,7 +1,7 @@
 // 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { migrationCommit, migrationPreview, openTerminal, rpc } from "../../api/transport/rpc.js";
+import { operationApply, operationPlan, openTerminal, rpc } from "../../api/transport/rpc.js";
 import { TOOL_NAME, toolsWithCapability } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
@@ -9,6 +9,11 @@ import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../api/contract/events.js";
 import MigrationSessionPreview from "./MigrationSessionPreview.jsx";
+import {
+  matchingMigrationPlan,
+  migrationPlanInput,
+  migrationPlanKey,
+} from "./migrationOperation.js";
 
 const ORDER = ["target", "impact", "preview", "confirm", "result"];
 
@@ -97,7 +102,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0] || "");
   const [probeOn, setProbeOn] = useState(!!defaultProbe);
-  const [dry, setDry] = useState(null);        // { [target]: result }
+  const [planned, setPlanned] = useState(null);
   const [dryErr, setDryErr] = useState(null);
   const [dryBusy, setDryBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -109,25 +114,65 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
   const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
   const doneRef = useRef(false);
+  const plannedRef = useRef(null);
+  const planRequest = useRef(0);
   const ref = sessionRef(meta);
 
-  const d = dry?.[target];
   const scopeLabel = scope ? t("migration:target.scopeToTurn", { n: scope }) : t("migration:target.scopeFull");
   const resolvedProbeModel = (probeCustom[target] || "").trim()
     || (probeModel[target] || "").trim()
     || undefined;
+  const inputFor = (tgt = target) => migrationPlanInput({
+    sourceTool: meta.tool,
+    ref,
+    targetTool: tgt,
+    maxTurn: scope || undefined,
+    probe: probeOn,
+    probeModel: tgt === target ? resolvedProbeModel : undefined,
+  });
+  const currentInput = inputFor();
+  const currentPlan = matchingMigrationPlan(planned, currentInput);
+  const previewPlan = currentPlan || (
+    planned?.input?.source_tool === currentInput.source_tool
+    && planned.input.ref === currentInput.ref
+    && planned.input.target_tool === currentInput.target_tool
+    && planned.input.max_turn === currentInput.max_turn
+      ? planned.plan : null
+  );
+  const d = previewPlan?.preview;
   const errorMessage = error => String(error?.message || error || t("errors:fallback"));
 
+  const rememberPlan = (key, input, plan) => {
+    const value = { key, input, plan };
+    plannedRef.current = value;
+    setPlanned(value);
+    return plan;
+  };
+
+  const ensurePlan = async input => {
+    const cached = matchingMigrationPlan(plannedRef.current, input);
+    if (cached) return cached;
+    const plan = await operationPlan(input);
+    return rememberPlan(migrationPlanKey(input), input, plan);
+  };
+
   const loadDry = async tgt => {
-    if (dryBusy) return;
+    const request = ++planRequest.current;
+    const input = inputFor(tgt);
     setDryErr(null);
     setDryBusy(true);
     try {
-      const r = await migrationPreview({ src: meta.tool, dst: tgt, ref,
-        max_turn: scope || undefined });
-      setDry(prev => ({ ...prev, [tgt]: r }));
-    } catch (e) { setDryErr(errorMessage(e)); }
-    finally { setDryBusy(false); }
+      const cached = matchingMigrationPlan(plannedRef.current, input);
+      if (!cached) {
+        const plan = await operationPlan(input);
+        if (request === planRequest.current)
+          rememberPlan(migrationPlanKey(input), input, plan);
+      }
+    } catch (e) {
+      if (request === planRequest.current) setDryErr(errorMessage(e));
+    } finally {
+      if (request === planRequest.current) setDryBusy(false);
+    }
   };
 
   const loadModels = async tgt => {
@@ -148,7 +193,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   }, [step, target]);
 
   const next = () => {
-    if (step === "target") { if (!dry?.[target]) loadDry(target); setStep("impact"); }
+    if (step === "target") { if (!currentPlan) loadDry(target); setStep("impact"); }
     else if (step === "impact") setStep("preview");
     else if (step === "preview") { loadModels(target); setStep("confirm"); }
     else if (step === "confirm") execute();
@@ -164,11 +209,9 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     setWroteFirst(false);
     setTimeout(() => setWroteFirst(true), 1500);
     try {
-      const r = await migrationCommit({ src: meta.tool, dst: target, ref,
-        max_turn: scope || undefined,
-        probe: probeOn,
-        probe_model: probeOn ? resolvedProbeModel : undefined });
-      setResult(r);
+      const plan = await ensurePlan(currentInput);
+      const applied = await operationApply(plan.plan_id);
+      setResult(applied.result);
     } catch (e) { setError(errorMessage(e)); }
     setStep("result");
     if (!doneRef.current) { doneRef.current = true; onDone?.(); }
