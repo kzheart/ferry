@@ -17,9 +17,6 @@ class BaseLifecycle:
     def resume_args(self, session_id: str) -> list[str]:
         raise NotImplementedError
 
-    def handoff_args(self) -> list[str]:
-        return []
-
     def resume_descriptor(self, session_id: str, cwd: str) -> dict:
         """终端启动描述符：executable 必须命中 manifest 白名单。"""
         args = self.resume_args(session_id)
@@ -27,13 +24,6 @@ class BaseLifecycle:
                 "executable": self.executable, "args": args,
                 "display_command": f"cd {cwd} && " +
                                    " ".join([self.executable, *args])}
-
-    def handoff_descriptor(self, cwd: str, doc: str) -> dict:
-        args = self.handoff_args()
-        head = " ".join([self.executable, *args])
-        return {"tool": self.tool, "cwd": cwd, "handoff_doc": doc,
-                "executable": self.executable, "args": args,
-                "display_command": f'cd {cwd} && {head} "$(cat {doc})"'}
 
     def cleanup(self, session_id: str, dest) -> None:
         raise NotImplementedError

@@ -1,7 +1,7 @@
-// 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果(成功/失败+摘要兜底)
+// 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { migrationCommit, migrationHandoff, migrationPreview, openTerminal, rpc } from "../../api/transport/rpc.js";
+import { migrationCommit, migrationPreview, openTerminal, rpc } from "../../api/transport/rpc.js";
 import { TOOL_NAME, toolsWithCapability } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
@@ -103,8 +103,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [wroteFirst, setWroteFirst] = useState(false);
-  const [handoff, setHandoff] = useState(null);
-  const [handoffBusy, setHandoffBusy] = useState(false);
   const [modelCatalog, setModelCatalog] = useState({}); // { [tool]: catalog }
   const [modelLoad, setModelLoad] = useState({});
   const [modelErr, setModelErr] = useState({});
@@ -174,15 +172,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     } catch (e) { setError(errorMessage(e)); }
     setStep("result");
     if (!doneRef.current) { doneRef.current = true; onDone?.(); }
-  };
-
-  const doHandoff = async () => {
-    if (handoff) return;
-    setHandoffBusy(true);
-    try {
-      setHandoff(await migrationHandoff({ src: meta.tool, dst: target, ref }));
-    } catch (e) { setError(errorMessage(e)); }
-    setHandoffBusy(false);
   };
 
   const ok = result && !probeFailed(result.probe) && result.session_id;
@@ -344,7 +333,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
             {t("migration:result.doneDesc", { n: result.msg_count, tool: TOOL_NAME[target] })}</div>
         </div>
         <div style={{ marginTop: 18 }}>
-          <CmdRow cmd={result.resume} head={t("migration:result.handoffIn", { tool: TOOL_NAME[target] })} />
+          <CmdRow cmd={result.resume} head={t("migration:result.continueIn", { tool: TOOL_NAME[target] })} />
         </div>
         <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12 }}
           onClick={() => openTerminal(result.resume, terminalApp)}>{t("migration:result.openTerminal")}</button>
@@ -378,25 +367,6 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
             )}
           </div>
         </div>
-        <button className="fbtn" style={{ width: "100%", height: 36, marginTop: 14, fontSize: 13 }}
-          onClick={doHandoff} disabled={handoffBusy}>
-          {handoffBusy ? t("migration:result.handoffBusy") : t("migration:result.useHandoff")}</button>
-        {handoff && (
-          <div style={{ marginTop: 12, border: "1px solid var(--line3)", borderRadius: 10,
-            overflow: "hidden" }}>
-            <div style={{ padding: "9px 13px", background: "var(--fill2)", borderBottom: "1px solid var(--line5)",
-              fontSize: 11, color: "var(--tx4)", fontWeight: 600 }}>{t("migration:result.handoffPreview")}</div>
-            <div className="fscroll selectable" style={{ padding: "12px 14px", fontSize: 12,
-              color: "var(--tx2b)", lineHeight: 1.6, maxHeight: 180, overflowY: "auto",
-              whiteSpace: "pre-wrap" }}>{handoff.preview}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px",
-              borderTop: "1px solid var(--line6)", background: "var(--fill)" }}>
-              <code className="mono selectable" style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{handoff.command}</code>
-              <button className="fbtn" onClick={() => openTerminal(handoff.command, terminalApp)}>{t("migration:result.openTerminal")}</button>
-            </div>
-          </div>
-        )}
       </>
     );
   }

@@ -12,7 +12,6 @@ import time
 from pathlib import Path
 
 from ..domain.errors import SnapshotInvalidSourceError
-from ..domain.model import tool_result_text
 from . import verification as probe_mod
 from ..adapters.base import narration
 from .ports import current
@@ -242,45 +241,6 @@ def _shape_nodes(shape):
 
 def _cleanup_artifact(dst: str, sid: str, dest):
     adapter(dst).require("lifecycle").cleanup(sid, dest)
-
-
-def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
-    """降级迁移:把会话渲染成上下文摘要文档 + 目标工具的开始命令。
-
-    原生迁移不可行时的兜底(F22)。摘要是确定性浓缩,不逐轮还原。
-    """
-    impl = adapter(src)
-    path = impl.browser.resolve_ref(ref)
-    sess = impl.browser.read(path)
-    target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
-    lines = [f"# 会话接力摘要(来自 {src})",
-             f"- 源会话: {sess.source_id}",
-             f"- 工作目录: {target_cwd}", "",
-             "以下是此前对话的浓缩记录。请把它当作已经发生的上下文,"
-             "直接从这里继续工作,不要重做已完成的步骤。", ""]
-    turn = 0
-    for m in sess.messages:
-        if m.role == "user":
-            turn += 1
-            lines.append(f"## 第 {turn} 轮")
-        who = "用户" if m.role == "user" else "助手"
-        for b in m.blocks:
-            if b.kind == "text" and b.text.strip():
-                lines.append(f"**{who}**: {b.text[:800]}")
-            elif b.kind == "tool":
-                t = b.tool
-                inp = json.dumps(t.input, ensure_ascii=False)[:200] \
-                    if isinstance(t.input, dict) else str(t.input)[:200]
-                out_clip = tool_result_text(t.result).strip()[:300]
-                lines.append(f"- 工具 `{t.name}` {inp}\n  结果: {out_clip}")
-        lines.append("")
-    doc_dir = Path.home() / ".resume-harness" / "handoff"
-    doc_dir.mkdir(parents=True, exist_ok=True)
-    doc = doc_dir / f"{sess.source_id}.md"
-    doc.write_text("\n".join(lines))
-    return {"doc": str(doc), "preview": "\n".join(lines)[:3000],
-            "command": adapter(dst).require("lifecycle")
-                       .handoff_descriptor(target_cwd, str(doc))}
 
 
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------

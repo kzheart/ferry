@@ -354,24 +354,6 @@ pub(crate) async fn migration_commit(
     migration_engine_request(app, input, false).await
 }
 
-#[tauri::command]
-pub(crate) async fn migration_handoff(
-    app: tauri::AppHandle,
-    input: MigrationInput,
-) -> Result<String, String> {
-    validate_migration_input(&input)?;
-    let request = serde_json::to_string(&json!({
-        "method": "handoff",
-        "params": { "src": input.src, "dst": input.dst, "ref": input.reference }
-    }))
-    .map_err(|error| error.to_string())?;
-    use tauri::Manager;
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
 fn validate_public_engine_request(request: &str) -> Result<(), String> {
     let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;

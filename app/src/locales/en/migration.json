@@ -110,14 +110,11 @@
     "doneBoth": "Migration complete · structure validation and isolated probe passed",
     "doneStructure": "Migration complete · structure validation passed",
     "doneDesc": "{{n}} messages written to {{tool}}, source session unchanged.",
-    "handoffIn": "Continue in {{tool}}",
+    "continueIn": "Continue in {{tool}}",
     "openTerminal": "Open in terminal",
     "failTitle": "Migration failed · verification did not pass",
-    "failDesc": "Rolled back automatically, no artifacts kept in {{tool}}. Source session intact; you can retry or continue with a context summary.",
-    "failDescProbe": " · probe model {{model}}",
-    "useHandoff": "Continue with context summary",
-    "handoffBusy": "Generating context summary…",
-    "handoffPreview": "Context summary preview"
+    "failDesc": "Rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
+    "failDescProbe": " · probe model {{model}}"
   },
   "sheet": {
     "title": "Migrate session",
@@ -141,8 +138,8 @@
     "probeNotRunDefault": "Runtime probe not executed (off by default, can be enabled in settings)",
     "probeNotRun": "Probe verification not run",
     "rollbackTitle": "Rollback info",
-    "rollbackDesc": "Probe did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. Source session intact; you can retry or continue with a context summary.",
-    "handoffIn": "Delivered · continue in {{tool}}",
+    "rollbackDesc": "Probe did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
+    "continueIn": "Delivered · continue in {{tool}}",
     "delete": "Delete this record"
   }
 }

@@ -54,10 +54,6 @@ export const migrationCommit = params => inTauri()
   ? nativeMigration("migration_commit", migrationInput(params))
   : callEngine("engine_rpc", "migrate", { ...params, dry_run: false });
 
-export const migrationHandoff = params => inTauri()
-  ? nativeMigration("migration_handoff", migrationInput(params))
-  : callEngine("engine_rpc", "handoff", params);
-
 // 启动描述符仍由引擎生成；终端偏好只决定原生层用哪个应用承载它。
 export const openTerminal = (launch, terminalApp = "auto") =>
   inTauri() ? invoke("open_terminal", { launch, terminalApp }) : Promise.resolve();
