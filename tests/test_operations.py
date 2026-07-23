@@ -35,6 +35,18 @@ def _plan(ops=None, probe=False):
     })
 
 
+def _migration_plan(**overrides):
+    value = {
+        "kind": "migration",
+        "source_tool": "claude",
+        "ref": _claude_ref(),
+        "target_tool": "opencode",
+        "probe": False,
+    }
+    value.update(overrides)
+    return operations.plan(value)
+
+
 class ReplyCompiler:
     name = "claude"
 
@@ -240,6 +252,137 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
     assert calls == [(True, "snapshot-before-agent-edit")]
 
 
+def test_migration_plan_and_apply_reuse_current_migration_service(
+        agent_environment, monkeypatch):
+    calls = []
+
+    def migrate(src, dst, ref, **kwargs):
+        calls.append((src, dst, ref, kwargs))
+        if kwargs.get("dry_run"):
+            return {
+                "dry_run": True,
+                "src": src,
+                "dst": dst,
+                "loss": {"degrade": 1},
+                "preview": {"target_tool": dst, "root": {"messages": []}},
+            }
+        return {
+            "src": src,
+            "dst": dst,
+            "session_id": "migrated",
+            "validation": {
+                "structure": {"ok": True, "detail": "ok"},
+                "runtime": {"status": "passed"},
+            },
+        }
+
+    monkeypatch.setattr(operations.services, "migrate", migrate)
+    plan = _migration_plan(
+        max_turn=3,
+        probe=True,
+        probe_model="provider/model",
+    )
+
+    assert plan["kind"] == "migration"
+    assert plan["document_revision"] is None
+    assert plan["preview"]["loss"] == {"degrade": 1}
+    assert plan["preview"]["preview"]["target_tool"] == "opencode"
+    assert calls[0][2] == str(agent_environment["transcript"])
+    assert calls[0][3]["dry_run"] is True
+    assert calls[0][3]["max_turn"] == 3
+    assert calls[0][3]["probe"] is True
+    assert calls[0][3]["probe_model"] == "provider/model"
+    assert calls[0][3]["_session"].source_id == "private-source-id"
+
+    applied = operations.apply(plan["plan_id"])
+
+    assert applied["status"] == "applied"
+    assert applied["result"]["session_id"] == "migrated"
+    assert calls[1][2] == str(agent_environment["transcript"])
+    assert "dry_run" not in calls[1][3]
+    assert calls[1][3]["max_turn"] == 3
+    assert calls[1][3]["probe"] is True
+    assert calls[1][3]["probe_model"] == "provider/model"
+    assert operations.status(plan["plan_id"])["status"] == "applied"
+
+
+def test_migration_apply_rejects_changed_source_revision(
+        agent_environment, monkeypatch):
+    calls = []
+
+    def migrate(src, dst, ref, **kwargs):
+        calls.append(kwargs)
+        return {
+            "dry_run": True,
+            "preview": {},
+            "loss": {},
+        }
+
+    monkeypatch.setattr(operations.services, "migrate", migrate)
+    plan = _migration_plan()
+    agent_environment["claude_browser"].fingerprint_value = "changed"
+
+    with pytest.raises(ConcurrentModificationError):
+        operations.apply(plan["plan_id"])
+
+    assert len(calls) == 1
+    assert operations.status(plan["plan_id"])["status"] == "failed"
+
+
+@pytest.mark.parametrize("actual", [
+    {
+        "rolled_back": True,
+        "validation": {"structure": {"ok": False}},
+    },
+    {
+        "validation": {"structure": {"ok": False}},
+    },
+])
+def test_migration_failed_validation_marks_operation_failed(
+        agent_environment, monkeypatch, actual):
+    def migrate(_src, _dst, _ref, **kwargs):
+        if kwargs.get("dry_run"):
+            return {"dry_run": True, "preview": {}, "loss": {}}
+        return actual
+
+    monkeypatch.setattr(operations.services, "migrate", migrate)
+    plan = _migration_plan()
+
+    with pytest.raises(RuntimeError, match="结构校验失败"):
+        operations.apply(plan["plan_id"])
+
+    status = operations.status(plan["plan_id"])
+    assert status["status"] == "failed"
+    assert status["error_type"] == "RuntimeError"
+
+
+def test_migration_plan_rejects_source_change_during_preview(
+        agent_environment, monkeypatch):
+    def migrate(_src, _dst, _ref, **_kwargs):
+        agent_environment["claude_browser"].fingerprint_value = "changed"
+        return {"dry_run": True, "preview": {}, "loss": {}}
+
+    monkeypatch.setattr(operations.services, "migrate", migrate)
+
+    with pytest.raises(ConcurrentModificationError):
+        _migration_plan()
+
+
+@pytest.mark.parametrize("patch", [
+    {"unexpected": True},
+    {"source_tool": ""},
+    {"target_tool": ""},
+    {"max_turn": True},
+    {"max_turn": 0},
+    {"probe": "yes"},
+    {"probe_model": ""},
+])
+def test_migration_plan_rejects_invalid_current_input(
+        agent_environment, patch):
+    with pytest.raises(AgentRequestError):
+        _migration_plan(**patch)
+
+
 def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
     calls = []
     monkeypatch.setattr(
@@ -370,13 +513,10 @@ def test_expired_plan_cannot_be_applied(
     assert agent_environment["editor"].commits == 0
 
 
-def test_only_inplace_edit_is_supported(agent_environment):
-    with pytest.raises(AgentRequestError, match="仅支持 edit"):
+def test_unknown_operation_kind_is_rejected(agent_environment):
+    with pytest.raises(AgentRequestError, match="kind 非法"):
         operations.plan({
-            "kind": "migration",
-            "tool": "claude",
-            "ref": _claude_ref(),
-            "ops": [],
+            "kind": "unknown",
         })
 
 

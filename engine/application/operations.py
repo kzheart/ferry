@@ -1,4 +1,4 @@
-"""统一写操作计划；首个垂直切片仅支持原地编辑。"""
+"""统一写操作计划。"""
 from __future__ import annotations
 
 import hashlib
@@ -48,7 +48,7 @@ class OperationPlan:
     input_digest: str
     preview_digest: str
     base_revision: str
-    document_revision: str
+    document_revision: str | None
     created_at: int
     expires_at: int
 
@@ -74,6 +74,17 @@ class OperationService:
         self._lock = threading.RLock()
 
     def plan(self, value: dict) -> dict:
+        if not isinstance(value, dict):
+            raise AgentRequestError("operation input 必须是 object")
+        if value.get("kind") == "edit":
+            return self._plan_edit(value)
+        if value.get("kind") == "migration":
+            return self._plan_migration(value)
+        raise AgentRequestError(
+            "operation kind 非法", {"kind": value.get("kind")},
+        )
+
+    def _plan_edit(self, value: dict) -> dict:
         operation_input = self._validate_edit_input(value)
         tool = operation_input["tool"]
         ref = operation_input["ref"]
@@ -93,18 +104,61 @@ class OperationService:
             raise self._public_locator_error(operation_input["ops"]) from error
         self._require_inplace_support(plugin, editor, native_ops)
 
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision=after.revision,
+            document_revision=str(preview["revision"]),
+        )
+
+    def _plan_migration(self, value: dict) -> dict:
+        operation_input = self._validate_migration_input(value)
+        source_tool = operation_input["source_tool"]
+        ref = operation_input["ref"]
+        before = agent_tools._INDEX.resolve(source_tool, ref)
+        session = agent_tools._read_record(before)
+        preview = services.migrate(
+            source_tool,
+            operation_input["target_tool"],
+            before.canonical_ref,
+            dry_run=True,
+            probe=operation_input["probe"],
+            max_turn=operation_input.get("max_turn"),
+            probe_model=operation_input.get("probe_model"),
+            _session=session,
+        )
+        try:
+            after = agent_tools._INDEX.resolve(source_tool, ref)
+        except AgentReferenceError as error:
+            raise ConcurrentModificationError(
+                "会话在生成操作计划时已变化，请重新计划"
+            ) from error
+        if before.revision != after.revision:
+            raise ConcurrentModificationError(
+                "会话在生成操作计划时已变化，请重新计划"
+            )
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision=after.revision,
+            document_revision=None,
+        )
+
+    def _store_plan(self, operation_input: dict, preview: dict, *,
+                    base_revision: str,
+                    document_revision: str | None) -> dict:
         input_json = _canonical(operation_input)
         preview_json = _canonical(preview)
         now = _now_ms()
         operation = OperationPlan(
             plan_id="op_" + secrets.token_urlsafe(18),
-            kind="edit",
+            kind=operation_input["kind"],
             input_json=input_json,
             preview_json=preview_json,
             input_digest=_digest_json(input_json),
             preview_digest=_digest_json(preview_json),
-            base_revision=after.revision,
-            document_revision=str(preview["revision"]),
+            base_revision=base_revision,
+            document_revision=document_revision,
             created_at=now,
             expires_at=now + PLAN_TTL_MS,
         )
@@ -126,7 +180,14 @@ class OperationService:
             state.updated_at = _now_ms()
 
         try:
-            result = self._apply_edit(operation)
+            if operation.kind == "edit":
+                result = self._apply_edit(operation)
+            elif operation.kind == "migration":
+                result = self._apply_migration(operation)
+            else:
+                raise AgentRequestError(
+                    "operation kind 非法", {"kind": operation.kind},
+                )
         except Exception as error:
             with self._lock:
                 state.status = "failed"
@@ -178,10 +239,11 @@ class OperationService:
 
     @staticmethod
     def _validate_edit_input(value) -> dict:
-        if not isinstance(value, dict) or value.get("kind") != "edit":
+        allowed = {"kind", "tool", "ref", "ops", "probe"}
+        if set(value) - allowed:
             raise AgentRequestError(
-                "当前 operation 仅支持 edit", {"kind": value.get("kind")
-                if isinstance(value, dict) else None},
+                "edit operation 包含未知字段",
+                {"fields": sorted(set(value) - allowed)},
             )
         tool, ref, ops = value.get("tool"), value.get("ref"), value.get("ops")
         probe = value.get("probe", False)
@@ -198,6 +260,60 @@ class OperationService:
             "kind": "edit", "tool": tool, "ref": ref, "ops": ops,
             "probe": probe,
         }))
+
+    @staticmethod
+    def _validate_migration_input(value: dict) -> dict:
+        allowed = {
+            "kind", "source_tool", "ref", "target_tool",
+            "max_turn", "probe", "probe_model",
+        }
+        unknown = set(value) - allowed
+        if unknown:
+            raise AgentRequestError(
+                "migration operation 包含未知字段",
+                {"fields": sorted(unknown)},
+            )
+        source_tool = value.get("source_tool")
+        target_tool = value.get("target_tool")
+        ref = value.get("ref")
+        if not isinstance(source_tool, str) or not 1 <= len(source_tool) <= 64:
+            raise AgentRequestError("migration source_tool 非法")
+        if not isinstance(target_tool, str) or not 1 <= len(target_tool) <= 64:
+            raise AgentRequestError("migration target_tool 非法")
+        adapters = current().adapters()
+        if source_tool not in adapters or target_tool not in adapters:
+            raise AgentRequestError("migration Agent 非法")
+        if source_tool == target_tool:
+            raise AgentRequestError("migration 源和目标不能相同")
+        if (not isinstance(ref, str) or not 1 <= len(ref) <= 512
+                or any(ord(character) < 33 for character in ref)):
+            raise AgentRequestError("migration ref 非法")
+        probe = value.get("probe", False)
+        if not isinstance(probe, bool):
+            raise AgentRequestError("migration probe 必须是布尔值")
+        max_turn = value.get("max_turn")
+        if max_turn is not None and (
+                isinstance(max_turn, bool) or not isinstance(max_turn, int)
+                or not 1 <= max_turn <= 1_000_000):
+            raise AgentRequestError("migration max_turn 非法")
+        probe_model = value.get("probe_model")
+        if probe_model is not None and (
+                not isinstance(probe_model, str)
+                or not 1 <= len(probe_model) <= 512
+                or any(ord(character) < 32 for character in probe_model)):
+            raise AgentRequestError("migration probe_model 非法")
+        result = {
+            "kind": "migration",
+            "source_tool": source_tool,
+            "ref": ref,
+            "target_tool": target_tool,
+            "probe": probe,
+        }
+        if max_turn is not None:
+            result["max_turn"] = max_turn
+        if probe_model is not None:
+            result["probe_model"] = probe_model
+        return json.loads(_canonical(result))
 
     def _apply_edit(self, operation: OperationPlan) -> dict:
         params = operation.input()
@@ -240,6 +356,35 @@ class OperationService:
         return services._finish_mutation(
             params["tool"], editor, result, doc, snapshot, params["probe"],
         )
+
+    def _apply_migration(self, operation: OperationPlan) -> dict:
+        params = operation.input()
+        try:
+            record = agent_tools._INDEX.resolve(
+                params["source_tool"], params["ref"],
+            )
+        except AgentReferenceError as error:
+            raise ConcurrentModificationError(
+                "会话在迁移计划生成后已变化，请重新计划"
+            ) from error
+        if record.revision != operation.base_revision:
+            raise ConcurrentModificationError(
+                "会话在迁移计划生成后已变化，请重新计划"
+            )
+        session = agent_tools._read_record(record)
+        result = services.migrate(
+            params["source_tool"],
+            params["target_tool"],
+            record.canonical_ref,
+            probe=params["probe"],
+            max_turn=params.get("max_turn"),
+            probe_model=params.get("probe_model"),
+            _session=session,
+        )
+        structure = result.get("validation", {}).get("structure", {})
+        if result.get("rolled_back") or structure.get("ok") is not True:
+            raise RuntimeError("迁移写入后的结构校验失败，产物已回滚")
+        return result
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
