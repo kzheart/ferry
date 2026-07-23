@@ -71,7 +71,7 @@ function MigrationCard({ entity, onNavigate }) {
         </span>
         <span aria-hidden style={{ color: "var(--tx5)" }}>›</span>
       </span>
-      {entity.preview?.loss && <LossCols loss={entity.preview.loss} />}
+      {entity.preview?.loss && <LossCols loss={entity.preview.loss} compact />}
     </div>
   );
 }

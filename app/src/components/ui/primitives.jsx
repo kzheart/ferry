@@ -60,7 +60,8 @@ function LossGroup({ kind, count, items, t }) {
 }
 
 // 迁移影响卡(迁移预演 / 迁移历史共用):占比条 + 图例 + 分组明细
-export function LossCols({ loss }) {
+// compact:聊天流里的缩略形态,只留占比条 + 图例,分组明细留到差异视图看
+export function LossCols({ loss, compact = false }) {
   const { t } = useTranslation();
   if (!loss) return null;
   const n = { keep: loss.native || 0, down: loss.degrade || 0, drop: loss.drop || 0 };
@@ -70,8 +71,8 @@ export function LossCols({ loss }) {
   const drop = n.drop ? clipList(renderEvents(loss.drop_details), 4, t) : [];
 
   return (
-    <div className="fcard">
-      <div style={{ padding: "13px 14px 12px" }}>
+    <div className={compact ? undefined : "fcard"}>
+      <div style={{ padding: compact ? "10px 12px" : "13px 14px 12px" }}>
         {/* 占比条:量级差两个数量级时也要看得见,故给最小宽度 */}
         <div style={{ display: "flex", gap: 2, height: 6, borderRadius: 3, overflow: "hidden",
           background: "var(--fill4)" }}>
@@ -91,9 +92,10 @@ export function LossCols({ loss }) {
             {t("overlays:loss.totalBlocks", { n: total })}</span>
         </div>
       </div>
-      <LossGroup kind="keep" items={[t("overlays:loss.keepRoles"), t("overlays:loss.keepRefs")]} t={t} />
-      {n.down > 0 && <LossGroup kind="down" count={n.down} items={down} t={t} />}
-      {n.drop > 0 && <LossGroup kind="drop" count={n.drop} items={drop} t={t} />}
+      {!compact && (
+        <LossGroup kind="keep" items={[t("overlays:loss.keepRoles"), t("overlays:loss.keepRefs")]} t={t} />)}
+      {!compact && n.down > 0 && <LossGroup kind="down" count={n.down} items={down} t={t} />}
+      {!compact && n.drop > 0 && <LossGroup kind="drop" count={n.drop} items={drop} t={t} />}
     </div>
   );
 }

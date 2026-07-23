@@ -102,6 +102,17 @@
     "openInLibrary": "Open in library",
     "close": "Close"
   },
+  "trace": {
+    "verb": {
+      "session_search": "Searched sessions",
+      "session_read": "Read session",
+      "usage": "Usage",
+      "migrate": "Migrate",
+      "session_edit": "Edit session"
+    },
+    "hits": "{{n}} sessions found",
+    "usage": "{{n}} tokens · {{s}} sessions"
+  },
   "model": {
     "pick": "Pick a model",
     "setup": "Set up a model",
