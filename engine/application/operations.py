@@ -7,6 +7,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..domain.authoring import AssistantReply
 from ..domain.errors import (
@@ -19,6 +20,7 @@ from ..domain.errors import (
 from . import agent_tools, services
 from .editing import apply_mutation, preview_mutation
 from .ports import current
+from ..infrastructure.state_db import StateDatabase
 
 
 PLAN_TTL_MS = 10 * 60 * 1000
@@ -69,9 +71,16 @@ class OperationState:
 
 class OperationService:
     def __init__(self):
-        self._plans: dict[str, OperationPlan] = {}
-        self._states: dict[str, OperationState] = {}
         self._lock = threading.RLock()
+        self._database_instance: StateDatabase | None = None
+        self._database_path: Path | None = None
+
+    def _database(self) -> StateDatabase:
+        path = Path(current().snapshot_dir()) / "ferry-state.sqlite3"
+        if self._database_instance is None or self._database_path != path:
+            self._database_instance = StateDatabase(path)
+            self._database_path = path
+        return self._database_instance
 
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
@@ -192,8 +201,7 @@ class OperationService:
             expires_at=now + PLAN_TTL_MS,
         )
         with self._lock:
-            self._plans[operation.plan_id] = operation
-            self._states[operation.plan_id] = OperationState(updated_at=now)
+            self._database().store_plan(operation, now)
         return self._public_plan(operation)
 
     def apply(self, plan_id: str) -> dict:
@@ -205,8 +213,12 @@ class OperationService:
                     "operation plan 当前状态不可执行",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            state.status = "applying"
-            state.updated_at = _now_ms()
+            if not self._database().claim(plan_id, _now_ms()):
+                _operation, current_state = self._get(plan_id)
+                raise AgentRequestError(
+                    "operation plan 当前状态不可执行",
+                    {"plan_id": plan_id, "status": current_state.status},
+                )
 
         try:
             if operation.kind == "edit":
@@ -221,16 +233,16 @@ class OperationService:
                 )
         except Exception as error:
             with self._lock:
-                state.status = "failed"
-                state.error_type = type(error).__name__
-                state.updated_at = _now_ms()
+                self._database().fail(
+                    plan_id, type(error).__name__, _now_ms(),
+                )
             raise
 
         result_json = _canonical(result)
         with self._lock:
-            state.status = "applied"
-            state.result_json = result_json
-            state.updated_at = _now_ms()
+            self._database().finish(
+                plan_id, result_json, _digest_json(result_json), _now_ms(),
+            )
         return {
             "plan_id": plan_id,
             "status": "applied",
@@ -264,9 +276,17 @@ class OperationService:
                     "仅 planned operation 可以取消",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            state.status = "cancelled"
-            state.updated_at = _now_ms()
-            return {"plan_id": plan_id, "status": state.status}
+            if not self._database().cancel(plan_id, _now_ms()):
+                raise AgentRequestError(
+                    "operation plan 当前状态不可取消",
+                    {"plan_id": plan_id},
+                )
+            return {"plan_id": plan_id, "status": "cancelled"}
+
+    def audit(self, plan_id: str) -> list[dict]:
+        with self._lock:
+            self._get(plan_id)
+            return self._database().audit(plan_id)
 
     @staticmethod
     def _validate_edit_input(value) -> dict:
@@ -637,15 +657,32 @@ class OperationService:
     def _get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
         if not isinstance(plan_id, str) or not plan_id.startswith("op_"):
             raise AgentRequestError("plan_id 非法")
-        operation = self._plans.get(plan_id)
-        state = self._states.get(plan_id)
-        if operation is None or state is None:
+        row = self._database().get(plan_id)
+        if row is None:
             raise AgentRequestError("operation plan 不存在或已因重启失效")
+        operation = OperationPlan(
+            plan_id=row["plan_id"],
+            kind=row["kind"],
+            input_json=row["input_json"],
+            preview_json=row["preview_json"],
+            input_digest=row["input_digest"],
+            preview_digest=row["preview_digest"],
+            base_revision=row["base_revision"],
+            document_revision=row["document_revision"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+        )
+        state = OperationState(
+            status=row["status"],
+            result_json=row["result_json"],
+            error_type=row["error_type"],
+            updated_at=row["updated_at"],
+        )
         return operation, state
 
-    @staticmethod
-    def _expire(operation: OperationPlan, state: OperationState) -> None:
+    def _expire(self, operation: OperationPlan, state: OperationState) -> None:
         if state.status == "planned" and operation.expires_at < _now_ms():
+            self._database().expire(operation.plan_id, _now_ms())
             state.status = "expired"
             state.updated_at = _now_ms()
 
@@ -700,3 +737,7 @@ def status(plan_id: str) -> dict:
 
 def cancel(plan_id: str) -> dict:
     return _SERVICE.cancel(plan_id)
+
+
+def audit(plan_id: str) -> list[dict]:
+    return _SERVICE.audit(plan_id)
