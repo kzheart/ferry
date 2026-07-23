@@ -44,9 +44,6 @@ pub fn run() {
             sidecar::operation_status,
             sidecar::operation_cancel,
             agent::agent_command,
-            agent::agent_operation_detail,
-            agent::agent_operation_approve_and_apply,
-            agent::agent_operation_status,
             terminal::open_terminal,
             reveal::reveal_path
         ])

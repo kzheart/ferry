@@ -43,12 +43,6 @@ export async function onAgentEvent(handler) {
   return listen("ferry-agent-event", e => handler(e.payload));
 }
 
-export const operationDetail = operationId =>
-  invoke("agent_operation_detail", { operationId });
-
-export const operationApproveAndApply = (operationId, runId) =>
-  invoke("agent_operation_approve_and_apply", { operationId, runId });
-
 export const operationPlanApply = planId =>
   invoke("operation_apply", { planId }).then(raw => {
     const response = JSON.parse(raw);
@@ -58,6 +52,3 @@ export const operationPlanApply = planId =>
     );
     return response.result;
   });
-
-export const operationStatus = operationId =>
-  invoke("agent_operation_status", { operationId });

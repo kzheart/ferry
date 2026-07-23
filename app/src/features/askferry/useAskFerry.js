@@ -2,7 +2,7 @@
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentAvailable, agentCommand, onAgentEvent,
-  operationApproveAndApply, operationPlanApply } from "../../api/agent/agentClient.js";
+  operationPlanApply } from "../../api/agent/agentClient.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "../../domain/agent/agentChatModel.js";
 
@@ -47,9 +47,7 @@ export function useAskFerry() {
     if (!opId) return;
     mutateLog(sessionId, log => patchApproval(log, opId, { status: "applying", auto }));
     try {
-      const result = item.operation?.plan_id
-        ? await operationPlanApply(item.operation.plan_id)
-        : await operationApproveAndApply(opId, item.runId || "");
+      const result = await operationPlanApply(opId);
       mutateLog(sessionId, log => patchApproval(log, opId, { status: "applied", result, auto }));
       setMutationVersion(value => value + 1);
       return result;

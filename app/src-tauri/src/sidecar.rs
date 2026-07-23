@@ -131,7 +131,7 @@ fn request_timeout(request: &str) -> Duration {
     let method = value
         .as_ref()
         .and_then(|value| value.get("method").and_then(Value::as_str));
-    if matches!(method, Some("agent_operation_apply" | "operation.apply")) {
+    if matches!(method, Some("operation.apply")) {
         ENGINE_COMMIT_TIMEOUT
     } else if matches!(
         method,
@@ -265,6 +265,8 @@ pub(crate) enum OperationPlanInput {
     Edit(EditOperationPlanInput),
     #[serde(rename = "migration")]
     Migration(MigrationOperationPlanInput),
+    #[serde(rename = "metadata")]
+    Metadata(MetadataOperationPlanInput),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -291,6 +293,28 @@ pub(crate) struct MigrationOperationPlanInput {
     probe: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     probe_model: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MetadataOperationPlanInput {
+    tool: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    patch: MetadataPatch,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MetadataPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pinned: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    archived: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tags: Option<Vec<String>>,
 }
 
 fn validate_bounded_json(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
@@ -512,10 +536,50 @@ fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Re
     Ok(())
 }
 
+fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Result<(), String> {
+    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+        return Err("Metadata Operation Agent 标识无效".to_owned());
+    }
+    if !(8..=128).contains(&input.reference.len())
+        || !input.reference.starts_with("fsr_")
+        || !input
+            .reference
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("Metadata Operation ref 不是有效 opaque ref".to_owned());
+    }
+    let patch = &input.patch;
+    if patch.name.is_none()
+        && patch.pinned.is_none()
+        && patch.archived.is_none()
+        && patch.tags.is_none()
+    {
+        return Err("Metadata Operation patch 不能为空".to_owned());
+    }
+    if patch
+        .name
+        .as_ref()
+        .is_some_and(|name| name.chars().count() > 200)
+    {
+        return Err("Metadata Operation name 过长".to_owned());
+    }
+    if patch.tags.as_ref().is_some_and(|tags| {
+        tags.len() > 20
+            || tags
+                .iter()
+                .any(|tag| tag.is_empty() || tag.chars().count() > 64)
+    }) {
+        return Err("Metadata Operation tags 无效".to_owned());
+    }
+    Ok(())
+}
+
 fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     match input {
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
+        OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
     }
 }
 
@@ -540,7 +604,7 @@ fn operation_plan_request(input: &OperationPlanInput) -> Result<String, String> 
     .map_err(|error| error.to_string())
 }
 
-fn operation_id_request(method: &'static str, plan_id: &str) -> Result<String, String> {
+fn operation_plan_id_request(method: &'static str, plan_id: &str) -> Result<String, String> {
     validate_plan_id(plan_id)?;
     if !matches!(
         method,
@@ -583,7 +647,7 @@ pub(crate) async fn operation_apply(
     app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<String, String> {
-    operation_engine_request(app, operation_id_request("operation.apply", &plan_id)?).await
+    operation_engine_request(app, operation_plan_id_request("operation.apply", &plan_id)?).await
 }
 
 #[tauri::command]
@@ -591,7 +655,11 @@ pub(crate) async fn operation_status(
     app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<String, String> {
-    operation_engine_request(app, operation_id_request("operation.status", &plan_id)?).await
+    operation_engine_request(
+        app,
+        operation_plan_id_request("operation.status", &plan_id)?,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -599,7 +667,11 @@ pub(crate) async fn operation_cancel(
     app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<String, String> {
-    operation_engine_request(app, operation_id_request("operation.cancel", &plan_id)?).await
+    operation_engine_request(
+        app,
+        operation_plan_id_request("operation.cancel", &plan_id)?,
+    )
+    .await
 }
 
 fn validate_public_engine_request(request: &str) -> Result<(), String> {
@@ -627,8 +699,6 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "agent_search_sessions"
             | "agent_session_read"
             | "agent_get_usage"
-            | "agent_preview_migration"
-            | "agent_preview_edit"
     ) {
         return Err("该 Engine 方法不允许从通用前端 RPC 调用".to_owned());
     }
@@ -638,15 +708,15 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        operation_id_request, operation_plan_request, request_attempts, request_timeout,
+        operation_plan_id_request, operation_plan_request, request_attempts, request_timeout,
         validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
-        EditOperationPlanInput, MigrationOperationPlanInput, OperationPlanInput,
-        AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
+        EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
+        MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
+        ENGINE_COMMIT_TIMEOUT,
     };
 
     #[test]
     fn sensitive_agent_methods_are_not_generic_rpc_methods() {
-        assert!(validate_public_engine_request(r#"{"method":"agent_operation_apply"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"operation.apply"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"operation.plan"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"operation.status"}"#).is_err());
@@ -661,10 +731,6 @@ mod tests {
 
     #[test]
     fn mutation_commit_is_not_killed_by_normal_rpc_timeout() {
-        assert_eq!(
-            request_timeout(r#"{"method":"agent_operation_apply"}"#),
-            ENGINE_COMMIT_TIMEOUT
-        );
         assert_eq!(
             request_timeout(r#"{"method":"operation.apply"}"#),
             ENGINE_COMMIT_TIMEOUT
@@ -731,9 +797,9 @@ mod tests {
     }
 
     #[test]
-    fn operation_id_requests_cannot_override_the_engine_method() {
+    fn operation_plan_id_requests_cannot_override_the_engine_method() {
         for method in ["operation.apply", "operation.status", "operation.cancel"] {
-            let request = operation_id_request(method, "op_fixture-123").unwrap();
+            let request = operation_plan_id_request(method, "op_fixture-123").unwrap();
             let value: serde_json::Value = serde_json::from_str(&request).unwrap();
             assert_eq!(
                 value.get("method").and_then(serde_json::Value::as_str),
@@ -753,7 +819,7 @@ mod tests {
                 Some(1)
             );
         }
-        assert!(operation_id_request("show", "op_fixture-123").is_err());
+        assert!(operation_plan_id_request("show", "op_fixture-123").is_err());
     }
 
     #[test]
@@ -787,6 +853,36 @@ mod tests {
             probe: true,
             probe_model: Some("gpt-5".to_owned()),
         }
+    }
+
+    #[test]
+    fn operation_accepts_strict_tagged_metadata_input() {
+        let input = OperationPlanInput::Metadata(MetadataOperationPlanInput {
+            tool: "claude".to_owned(),
+            reference: "fsr_fixture".to_owned(),
+            patch: MetadataPatch {
+                name: Some("新名称".to_owned()),
+                pinned: Some(true),
+                archived: None,
+                tags: Some(vec!["ferry".to_owned()]),
+            },
+        });
+        assert!(validate_operation_plan_input(&input).is_ok());
+
+        let request = operation_plan_request(&input).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value
+                .pointer("/params/input/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("metadata")
+        );
+        assert_eq!(
+            value
+                .pointer("/params/input/patch/pinned")
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
     }
 
     #[test]

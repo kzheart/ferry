@@ -11,14 +11,10 @@ import pytest
 from engine.adapters.base.plugin import ToolManifest, ToolPlugin
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
-from engine.application import agent_mutations
-from engine.application import services, session_meta
 from engine.application.ports import ApplicationPorts, configure, current
 from engine.domain.errors import (
-    AgentApprovalError,
     AgentReferenceError,
     AgentRequestError,
-    ConcurrentModificationError,
     LocatorStaleError,
 )
 from engine.domain.model import (
@@ -183,11 +179,9 @@ def agent_environment(tmp_path):
         snapshot_dir=lambda: tmp_path, version="test",
     ))
     agent_tools.reset_index()
-    agent_mutations.reset_gateway()
     yield {"root": root, "transcript": transcript, "editor": editor,
            "claude_browser": claude.browser, "opencode_browser": opencode_browser}
     agent_tools.reset_index()
-    agent_mutations.reset_gateway()
     configure(previous)
 
 
@@ -530,94 +524,3 @@ def test_previews_are_narrow_and_do_not_write(agent_environment):
     assert agent_environment["editor"].load_calls == 0
     assert agent_environment["editor"].preview_load_calls == 1
     assert "saved_as" not in edit
-
-
-def test_mutation_requires_bound_one_time_approval(agent_environment):
-    ref = _claude_ref()
-    proposal = agent_mutations.propose_edit(
-        "claude", ref, ops=[{"op": "delete-turn", "turn": 1}],
-        run_id="run-1")
-    operation_id = proposal["operation_id"]
-    assert proposal["parameter_hash"]
-    assert proposal["risk"] == "high"
-    detail = agent_mutations.detail(operation_id)
-    assert detail["params"]["ops"] == [{"op": "delete-turn", "turn": 1}]
-    assert detail["parameter_hash"] == proposal["parameter_hash"]
-
-    with pytest.raises(AgentApprovalError):
-        agent_mutations.apply(operation_id, "run-1", "invalid")
-    with pytest.raises(AgentApprovalError, match="发起 run"):
-        agent_mutations.authorize(operation_id, "run-other")
-    approval = agent_mutations.authorize(operation_id, "run-1")
-    with pytest.raises(AgentApprovalError):
-        agent_mutations.apply(
-            operation_id, "different-run", approval["approval_token"])
-
-    result = agent_mutations.apply(
-        operation_id, "run-1", approval["approval_token"])
-    assert result["status"] == "applied"
-    assert result["result"]["session"]["ref"].startswith("fsr_")
-    assert result["result"]["snapshot"] == "snapshot-before-agent-edit"
-    assert agent_environment["editor"].commits == 1
-    with pytest.raises(AgentApprovalError):
-        agent_mutations.apply(
-            operation_id, "run-1", approval["approval_token"])
-    agent_mutations.reset_gateway()
-    assert agent_mutations.status(operation_id)["status"] == "applied"
-
-    audit = (agent_environment["root"].parent /
-             "agent-operation-audit.jsonl").read_text()
-    assert approval["approval_token"] not in audit
-    assert '"event":"proposed"' in audit
-    assert '"event":"applied"' in audit
-
-
-def test_mutation_audit_never_persists_raw_edit_content(agent_environment):
-    secret = "Bearer mutation-secret-credential"
-    context = agent_tools.get_session_context(
-        "claude", _claude_ref(), from_message=1, limit=2)
-    locator = next(item["locator"] for item in context["messages"]
-                   if item["role"] == "user" and item["editable"])
-    agent_mutations.propose_edit(
-        "claude", _claude_ref(),
-        ops=[{"op": "rewrite", "locator": locator, "text": secret}],
-        run_id="run-secret")
-    audit = (agent_environment["root"].parent /
-             "agent-operation-audit.jsonl").read_text()
-    assert secret not in audit
-    assert "mutation-secret-credential" not in audit
-
-
-def test_metadata_proposal_has_independent_cas(agent_environment, monkeypatch):
-    metadata_path = agent_environment["root"].parent / "session-meta.json"
-    monkeypatch.setattr(session_meta, "META", metadata_path)
-    proposal = agent_mutations.propose_metadata_change(
-        "claude", _claude_ref(), {"name": "approved-name"}, "run-meta")
-    services.session_meta_set("private-id", {"name": "concurrent-name"})
-    approval = agent_mutations.authorize(proposal["operation_id"], "run-meta")
-    with pytest.raises(ConcurrentModificationError, match="元数据在审批后已变化"):
-        agent_mutations.apply(
-            proposal["operation_id"], "run-meta", approval["approval_token"])
-    assert services.session_meta_list()["private-id"]["name"] == "concurrent-name"
-
-
-def test_mutation_rejects_stale_revision_and_restart(agent_environment):
-    ref = _claude_ref()
-    proposal = agent_mutations.propose_edit(
-        "claude", ref, ops=[{"op": "delete-turn", "turn": 1}],
-        run_id="run-2")
-    approval = agent_mutations.authorize(proposal["operation_id"], "run-2")
-    agent_environment["claude_browser"].fingerprint_value = "changed"
-    with pytest.raises(AgentReferenceError):
-        agent_mutations.apply(
-            proposal["operation_id"], "run-2", approval["approval_token"])
-
-    agent_environment["claude_browser"].fingerprint_value = "fingerprint-1"
-    second = agent_mutations.propose_edit(
-        "claude", _claude_ref(), ops=[{"op": "delete-turn", "turn": 1}],
-        run_id="run-3")
-    second_approval = agent_mutations.authorize(second["operation_id"], "run-3")
-    agent_mutations.reset_gateway()
-    with pytest.raises(AgentApprovalError, match="重启失效"):
-        agent_mutations.apply(
-            second["operation_id"], "run-3", second_approval["approval_token"])
