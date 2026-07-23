@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ...infrastructure import executables, probes
+from . import session as rw_opencode
 
 
 def _probe(session_id, cwd, model=None):
@@ -28,12 +29,28 @@ class OpenCodeVerifier:
 
     def probe_edited(self, editor, doc, result, model=None):
         authored = editor.load(result["session_id"])
-        shadow = editor.save_copy(authored)
+        tree = authored.tree
+        cwd = doc.data.get("info", {}).get("directory") or "."
+        shadow_id, _ = rw_opencode.write(
+            tree,
+            cwd=cwd,
+            native_payloads={
+                tree.source_id: rw_opencode._clone(authored.data),
+            },
+        )
         try:
-            cwd = doc.data.get("info", {}).get("directory") or "."
-            rep = _probe(shadow["session_id"], cwd, model)
+            rep = _probe(shadow_id, cwd, model)
             rep["isolation"] = {"kind": "shadow_session",
-                                "id": shadow["session_id"], "cleaned": True}
+                                "id": shadow_id, "cleaned": True}
             return rep
         finally:
-            editor.discard(shadow)
+            try:
+                shadow = rw_opencode.read(shadow_id)
+                ids = [
+                    node.source_id
+                    for node in reversed(list(shadow.walk()))
+                ]
+            except Exception:
+                ids = [shadow_id]
+            for session_id in ids:
+                rw_opencode._oc(["session", "delete", session_id])

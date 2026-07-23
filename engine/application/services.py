@@ -305,17 +305,14 @@ def session_undelete(snapshot: str) -> dict:
 
 # ---------- 会话编辑(可扩展原生后端) ----------
 
-def _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as):
+def _finish_mutation(tool, impl, result, doc, snapshot, probe):
     if not probe:
         return result
     rep = _probe_edited(tool, impl, doc, result)
     result["probe"] = rep
     if rep["status"] == "passed":
         return result
-    if save_as:
-        impl.discard(result)
-        result.update(ok=False, error="隔离探针未通过,已删除新副本,原会话未受影响")
-    elif snapshot:
+    if snapshot:
         impl.restore_snapshot(snapshot, doc)
         result.update(ok=False, error="隔离探针未通过,已自动还原快照")
     return result
@@ -331,7 +328,7 @@ def edit_capabilities(tool: str) -> dict:
         if "inplace" in modes
     }
     authoring = plugin.require("authoring")
-    if authoring.supports_mode(False):
+    if authoring.capabilities().get("inplace"):
         operation_modes["replace-assistant-reply"] = ["inplace"]
     return {
         "tool": tool,

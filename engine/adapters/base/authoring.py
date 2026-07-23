@@ -16,19 +16,15 @@ SPAWN_TOOL_NAMES = {"agent", "spawn_agent", "task"}
 class AuthoringCompiler(ABC):
     name: str
     inplace = True
-    save_as = True
 
     def capabilities(self) -> dict:
-        modes = (["inplace"] if self.inplace else []) + (["saveas"] if self.save_as else [])
         return {"tool": self.name, "operation": "replace-assistant-reply",
                 "item_kinds": ["text", "tool"], "ordered": True,
                 "tool_fields": ["name", "input", "output"],
                 "turn_selectors": ["ordinal", "locator"],
-                "inplace": self.inplace, "save_as": self.save_as,
-                "operation_modes": {"replace-assistant-reply": modes}}
-
-    def supports_mode(self, save_as: bool) -> bool:
-        return self.save_as if save_as else self.inplace
+                "inplace": self.inplace,
+                "operation_modes": {"replace-assistant-reply":
+                    ["inplace"] if self.inplace else []}}
 
     @abstractmethod
     def replace(self, doc, turn: int, reply: AssistantReply) -> list[str]: ...

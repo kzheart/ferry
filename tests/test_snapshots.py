@@ -42,7 +42,7 @@ def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
     before = session.read_bytes()
     editor = current().adapter("claude").require("editor")
     editing.apply(
-        editor, str(session), [{"op": "delete-turn", "turn": 2}], False,
+        editor, str(session), [{"op": "delete-turn", "turn": 2}],
     )
 
     snaps = _snapshots()

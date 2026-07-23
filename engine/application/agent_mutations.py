@@ -261,12 +261,11 @@ def _apply_operation(operation: Operation) -> dict:
         try:
             result, doc, snapshot = apply(
                 editor, record.canonical_ref, native_ops,
-                params["save_as"], expected_revision=params["document_revision"])
+                expected_revision=params["document_revision"])
         except LocatorStaleError as error:
             raise agent_tools._public_locator_error(params["ops"]) from error
         finished = services._finish_mutation(
-            params["tool"], editor, result, doc, snapshot, False,
-            params["save_as"])
+            params["tool"], editor, result, doc, snapshot, False)
         session_id = finished.get("session_id")
         if isinstance(session_id, str) and session_id:
             try:
@@ -309,10 +308,12 @@ def propose_edit(tool: str, ref: str, *, ops, run_id: str) -> dict:
     record = agent_tools._INDEX.resolve(tool, ref)
     plugin = current().adapter(tool)
     native_ops = agent_tools.resolve_edit_ops(record, ops)
-    if not plugin.require("editor").supports_mode(native_ops, False):
+    modes = plugin.require("editor").capabilities().get(
+        "operation_modes", {})
+    if not all("inplace" in modes.get(op["op"], []) for op in native_ops):
         operations = ",".join(sorted({op["op"] for op in ops}))
         raise OperationUnsupportedError(tool, operations, "inplace")
-    params = {"tool": tool, "ref": ref, "ops": ops, "save_as": False,
+    params = {"tool": tool, "ref": ref, "ops": ops,
               "document_revision": preview["revision"]}
     return _GATEWAY.propose("edit", params, preview, record.revision, run_id)
 

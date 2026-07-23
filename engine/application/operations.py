@@ -226,7 +226,6 @@ class OperationService:
                     editor,
                     record.canonical_ref,
                     native_ops,
-                    False,
                     expected_revision=operation.document_revision,
                 )
             else:
@@ -234,13 +233,12 @@ class OperationService:
                     editor,
                     record.canonical_ref,
                     self._mutate(editor, compiler, native_ops),
-                    False,
                     expected_revision=operation.document_revision,
                 )
         except LocatorStaleError as error:
             raise self._public_locator_error(params["ops"]) from error
         return services._finish_mutation(
-            params["tool"], editor, result, doc, snapshot, params["probe"], False,
+            params["tool"], editor, result, doc, snapshot, params["probe"],
         )
 
     @staticmethod
@@ -305,7 +303,9 @@ class OperationService:
         authored = [
             op for op in ops if op["op"] == "replace-assistant-reply"
         ]
-        if ordinary and not editor.supports_mode(ordinary, False):
+        modes = editor.capabilities().get("operation_modes", {})
+        if ordinary and not all(
+                "inplace" in modes.get(op["op"], []) for op in ordinary):
             operation_names = ",".join(
                 sorted({item["op"] for item in ordinary})
             )
@@ -315,7 +315,7 @@ class OperationService:
         if not authored:
             return None
         compiler = plugin.require("authoring")
-        if not compiler.supports_mode(False):
+        if not compiler.capabilities().get("inplace"):
             raise OperationUnsupportedError(
                 compiler.name, "replace-assistant-reply", "inplace",
             )

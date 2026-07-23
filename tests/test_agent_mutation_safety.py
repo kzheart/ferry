@@ -42,11 +42,11 @@ def test_migration_cleans_artifact_when_post_write_audit_fails(monkeypatch):
     assert cleaned == [("codex", "new-session", "/tmp/new-session")]
 
 
-class CopyEditor:
+class InplaceEditor:
     name = "fake"
 
     def __init__(self):
-        self.discarded = False
+        self.restored = False
 
     def load(self, _ref):
         return type("Doc", (), {"revision": "r1"})()
@@ -57,23 +57,26 @@ class CopyEditor:
     def validate(self, _doc):
         pass
 
-    def save_copy(self, _doc):
-        return {"session_id": "copy"}
+    def snapshot(self, _doc, extra=None):
+        return "snapshot"
+
+    def commit(self, _doc):
+        return {"session_id": "source"}
 
     def saved_revision(self, _result, _doc):
         raise RuntimeError("write verification failed")
 
-    def discard(self, result):
-        self.discarded = True
+    def restore_snapshot(self, _snapshot, _doc):
+        self.restored = True
 
 
-def test_failed_save_copy_verification_discards_artifact():
-    editor = CopyEditor()
+def test_failed_inplace_verification_restores_snapshot():
+    editor = InplaceEditor()
 
     def mutate(_doc):
         return []
 
     with pytest.raises(RuntimeError, match="verification failed"):
-        editing.apply_mutation(editor, "source", mutate, save_as=True,
-                               expected_revision="r1")
-    assert editor.discarded is True
+        editing.apply_mutation(
+            editor, "source", mutate, expected_revision="r1")
+    assert editor.restored is True

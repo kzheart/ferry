@@ -1,4 +1,4 @@
-"""OpenCode 会话编辑后端：经官方 HTTP API 原地更新或整树另存。"""
+"""OpenCode 会话编辑后端：经官方 HTTP API 原地更新。"""
 from __future__ import annotations
 
 import json
@@ -7,11 +7,10 @@ from pathlib import Path
 
 from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
 from ...infrastructure.snapshots import snapshot_payload
-from ..base.codec import positive_turn, select_span
 from ..base.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import session as rw_opencode
-from .codec import CODEC, TURN_INDEX
+from .codec import CODEC
 
 
 @dataclass(slots=True)
@@ -33,11 +32,9 @@ class OpenCodeBackend(EditBackend):
 
     def capabilities(self):
         result = super().capabilities()
-        result["operation_modes"] = {
-            "rewrite": ["inplace", "saveas"],
-            # OpenCode 当前没有批量事务 API，整轮删除只能另存。
-            "delete-turn": ["saveas"],
-        }
+        result["operations"] = ["rewrite"]
+        result["operation_roles"] = {"rewrite": ["user", "assistant"]}
+        result["operation_modes"] = {"rewrite": ["inplace"]}
         return result
 
     def load(self, ref):
@@ -67,9 +64,8 @@ class OpenCodeBackend(EditBackend):
         for op in ops:
             kind = op["op"]
             if kind == "delete-turn":
-                span = select_span(TURN_INDEX.turns(doc.data),
-                                   positive_turn(int(op["turn"])))
-                notes.extend(CODEC.delete_turn(doc, span))
+                raise OperationUnsupportedError(
+                    "opencode", "delete-turn", "inplace")
             elif kind == "rewrite":
                 locator = op.get("locator") or op.get("uuid") or ""
                 notes.extend(CODEC.rewrite_message(doc, locator, op["text"]))
@@ -154,7 +150,7 @@ class OpenCodeBackend(EditBackend):
         before_messages = {m["info"].get("id") for m in original.get("messages", [])}
         after_messages = {m["info"].get("id") for m in doc.data.get("messages", [])}
         if before_messages != after_messages or set(before) != set(after):
-            raise ValueError("OpenCode 删除整轮需要官方批量事务 API，请改用另存为")
+            raise ValueError("OpenCode 当前不支持安全原地删除整轮")
         changed = [(part_id, after[part_id][0], before[part_id][1], after[part_id][1])
                    for part_id in before if before[part_id][1] != after[part_id][1]]
         cwd = doc.data.get("info", {}).get("directory") or "."
@@ -184,28 +180,7 @@ class OpenCodeBackend(EditBackend):
                 "resume": f"cd {cwd} && opencode -s {doc.ref}",
                 "updated_parts": len(changed)}
 
-    def save_copy(self, doc):
-        cwd = doc.data["info"].get("directory") or "."
-        tree = doc.tree
-        new_sid, dest = rw_opencode.write(
-            tree,
-            cwd=cwd,
-            native_payloads={tree.source_id: rw_opencode._clone(doc.data)},
-        )
-        return {"session_id": new_sid, "saved_as": str(dest),
-                "tree_count": sum(1 for _ in tree.walk()),
-                "resume": f"cd {cwd} && opencode -s {new_sid}"}
-
     def saved_revision(self, result, doc):
         payload = rw_opencode._oc_export(result["session_id"])
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
         return hash_bytes(raw)
-
-    def discard(self, result):
-        try:
-            tree = rw_opencode.read(result["session_id"])
-            ids = [node.source_id for node in reversed(list(tree.walk()))]
-        except Exception:
-            ids = [result["session_id"]]
-        for sid in ids:
-            rw_opencode._oc(["session", "delete", sid])

@@ -206,7 +206,7 @@ def test_turn_bounds_and_opencode_mode_are_explicit():
     with pytest.raises(ValueError, match="轮次超界"):
         compiler.replace(_document("claude", _native("claude")), 2, reply)
     assert OpenCodeAuthoringCompiler().capabilities()["operation_modes"] == {
-        "replace-assistant-reply": ["saveas"]}
+        "replace-assistant-reply": []}
 
 
 def test_show_dto_exposes_ordered_authoring_draft(tmp_path):
@@ -255,7 +255,7 @@ def test_cas_conflict_never_restores_stale_snapshot():
     editor = _TransactionEditor(ConcurrentModificationError)
 
     with pytest.raises(ConcurrentModificationError):
-        apply_mutation(editor, "source", lambda doc: [], save_as=False)
+        apply_mutation(editor, "source", lambda doc: [])
 
     assert editor.restored is False
 
@@ -264,7 +264,7 @@ def test_non_cas_commit_failure_still_restores_snapshot():
     editor = _TransactionEditor(RuntimeError)
 
     with pytest.raises(RuntimeError):
-        apply_mutation(editor, "source", lambda doc: [], save_as=False)
+        apply_mutation(editor, "source", lambda doc: [])
 
     assert editor.restored is True
 
@@ -272,8 +272,7 @@ def test_non_cas_commit_failure_still_restores_snapshot():
 def test_success_revision_identifies_authored_result():
     editor = _TransactionEditor()
 
-    result, _, _ = apply_mutation(
-        editor, "source", lambda doc: [], save_as=False)
+    result, _, _ = apply_mutation(editor, "source", lambda doc: [])
 
     assert result["revision"] == "sha256:authored"
     assert result["revision"] != "before"
@@ -281,24 +280,42 @@ def test_success_revision_identifies_authored_result():
 
 def test_opencode_probe_clones_authored_result(monkeypatch):
     loaded = []
-    discarded = []
+    deleted = []
+    tree = type("Tree", (), {"source_id": "authored-copy"})()
+    shadow_tree = type(
+        "ShadowTree",
+        (),
+        {"walk": lambda self: [
+            type("Node", (), {"source_id": "probe-shadow"})(),
+        ]},
+    )()
 
     class Editor:
         def load(self, ref):
             loaded.append(ref)
-            return type("Doc", (), {"ref": ref})()
-
-        def save_copy(self, doc):
-            assert doc.ref == "authored-copy"
-            return {"session_id": "probe-shadow"}
-
-        def discard(self, result):
-            discarded.append(result["session_id"])
+            return type(
+                "Doc",
+                (),
+                {"ref": ref, "tree": tree,
+                 "data": {"info": {"id": ref}}},
+            )()
 
     monkeypatch.setattr(
         "engine.adapters.opencode.probe._probe",
         lambda sid, cwd, model: {"status": "passed", "code": None,
                                  "params": {}, "diagnostic": {}})
+    monkeypatch.setattr(
+        "engine.adapters.opencode.probe.rw_opencode.write",
+        lambda authored_tree, **kwargs: ("probe-shadow", "unused"),
+    )
+    monkeypatch.setattr(
+        "engine.adapters.opencode.probe.rw_opencode.read",
+        lambda _sid: shadow_tree,
+    )
+    monkeypatch.setattr(
+        "engine.adapters.opencode.probe.rw_opencode._oc",
+        lambda args: deleted.append(args),
+    )
     doc = type("Doc", (), {"ref": "original",
                             "data": {"info": {"directory": "/work"}}})()
 
@@ -309,7 +326,7 @@ def test_opencode_probe_clones_authored_result(monkeypatch):
     assert report["isolation"] == {"kind": "shadow_session",
                                    "id": "probe-shadow", "cleaned": True}
     assert loaded == ["authored-copy"]
-    assert discarded == ["probe-shadow"]
+    assert deleted == [["session", "delete", "probe-shadow"]]
 
 
 def test_claude_retained_records_keep_order_and_valid_parents():

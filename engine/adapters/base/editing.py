@@ -1,6 +1,6 @@
 """格式无关的会话编辑契约与通用事务工具。
 
-通用层只编排 preview/apply/save-as；每个 Agent 包内实现自己的
+通用层只编排 preview/apply；每个 Agent 包内实现自己的
 ``EditBackend``，公共模块不 import 任何具体 Agent 实现。
 """
 from __future__ import annotations
@@ -28,24 +28,17 @@ class EditBackend(ABC):
 
     name: str
     inplace = True
-    save_as = True
     probe = True
 
     def capabilities(self) -> dict:
         operations = ["delete-turn", "rewrite"]
         return {"tool": self.name, "operations": operations,
-            "inplace": self.inplace, "save_as": self.save_as,
+            "inplace": self.inplace,
             "probe": self.probe,
             "operation_roles": {"rewrite": ["user", "assistant"],
                                 "delete-turn": ["turn"]},
-            "operation_modes": {op: (["inplace"] if self.inplace else []) +
-                                (["saveas"] if self.save_as else [])
+            "operation_modes": {op: (["inplace"] if self.inplace else [])
                                 for op in operations}}
-
-    def supports_mode(self, ops: list[dict], save_as: bool) -> bool:
-        mode = "saveas" if save_as else "inplace"
-        modes = self.capabilities().get("operation_modes", {})
-        return all(mode in modes.get(op.get("op"), []) for op in ops)
 
     @abstractmethod
     def load(self, ref: str) -> EditDocument: ...
@@ -62,18 +55,12 @@ class EditBackend(ABC):
     @abstractmethod
     def commit(self, doc: EditDocument) -> dict: ...
 
-    @abstractmethod
-    def save_copy(self, doc: EditDocument) -> dict: ...
-
     def snapshot(self, doc: EditDocument, reason_code="snapshot.before_edit",
                  extra: dict | None = None) -> Path | None:
         return None
 
     def restore_snapshot(self, snapshot: Path, doc: EditDocument) -> None:
         raise NotImplementedError
-
-    def discard(self, result: dict) -> None:
-        pass
 
     def saved_revision(self, result: dict, doc: EditDocument) -> str:
         path = Path(result.get("saved_as", ""))

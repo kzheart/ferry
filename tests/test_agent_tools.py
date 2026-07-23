@@ -97,21 +97,18 @@ class Editor:
         pass
 
     def capabilities(self):
-        return {"inplace": True, "operations": ["delete-turn"]}
-
-    def supports_mode(self, _ops, _save_as):
-        return True
+        return {
+            "inplace": True,
+            "operations": ["delete-turn", "rewrite"],
+            "operation_modes": {
+                "delete-turn": ["inplace"],
+                "rewrite": ["inplace"],
+            },
+        }
 
     def commit(self, _doc):
         self.commits += 1
         return {"session_id": "private-id"}
-
-    def save_copy(self, _doc):
-        self.commits += 1
-        return {"session_id": "edited-copy"}
-
-    def discard(self, _result):
-        pass
 
     def snapshot(self, _doc, reason_code="snapshot.before_edit", extra=None):
         return "snapshot-before-agent-edit"

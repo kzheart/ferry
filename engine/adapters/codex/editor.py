@@ -100,7 +100,7 @@ class CodexBackend(EditBackend):
 
     def commit(self, doc):
         if isinstance(doc.context, codex_native.CodexClosure) and doc.context.pruned_ids:
-            raise ValueError("该轮包含 Codex 子 Agent，会话树编辑必须使用另存为")
+            raise ValueError("该轮包含 Codex 子 Agent，不支持安全原地编辑")
         if hash_bytes(doc.handle.read_bytes()) != doc.revision:
             raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
         write_jsonl(doc.handle, doc.data)
@@ -109,13 +109,3 @@ class CodexBackend(EditBackend):
         sid = meta["id"]
         return {"session_id": sid, "saved_as": str(doc.handle),
                 "resume": f"codex resume {sid}"}
-
-    def save_copy(self, doc):
-        if not isinstance(doc.context, codex_native.CodexClosure):
-            raise ValueError("Codex 原生会话树未加载")
-        return codex_native.clone_tree(doc.context, doc.data)
-
-    def discard(self, result):
-        path = Path(result.get("saved_as", "."))
-        store = codex_native.CodexStore.for_rollout(path)
-        codex_native.discard_tree(result, store)
