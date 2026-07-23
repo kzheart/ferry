@@ -41,11 +41,7 @@ import {
   type FerryToolName,
   type ToolRequestContext,
 } from "./tool-port.js";
-import {
-  WorkflowRun,
-  type WorkflowEvent,
-  type WorkflowSpec,
-} from "./workflow.js";
+import { Scheduler, type SchedulerEvent, type TaskGraph } from "./workflow.js";
 
 export interface AgentBackend {
   model: Model<string>;
@@ -1391,19 +1387,19 @@ export class AgentRuntime {
   async runDelegatedWorkflow(
     parent: RuntimeSession,
     parentRunId: string,
-    spec: WorkflowSpec,
+    spec: TaskGraph,
     onUpdate: (payload: unknown) => void,
     signal?: AbortSignal,
   ) {
     let eventQueue = Promise.resolve();
-    const publish = (event: WorkflowEvent) => {
+    const publish = (event: SchedulerEvent) => {
       onUpdate(event);
       const { type, ...payload } = event;
       eventQueue = eventQueue.then(() =>
         parent.emit(type, payload, parentRunId).then(() => undefined),
       );
     };
-    const workflow = new WorkflowRun(
+    const scheduler = new Scheduler(
       spec,
       async (task, context) => {
         const childId = `wf_${this.newId()}`.slice(0, 128);
@@ -1447,11 +1443,11 @@ export class AgentRuntime {
       publish,
       () => this.now().getTime(),
     );
-    const abortWorkflow = () => workflow.cancel();
-    if (signal?.aborted) workflow.cancel();
+    const abortWorkflow = () => scheduler.cancel();
+    if (signal?.aborted) scheduler.cancel();
     else signal?.addEventListener("abort", abortWorkflow, { once: true });
     try {
-      const result = await workflow.start();
+      const result = await scheduler.start();
       await eventQueue;
       return result;
     } finally {
