@@ -13,6 +13,7 @@ use crate::sidecar::engine_request_blocking;
 const AGENT_PROTOCOL: &str = "ferry-agent/v1";
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const ORGANIZATION_TIMEOUT: Duration = Duration::from_secs(130);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static AUTO_SESSIONS: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
@@ -214,6 +215,10 @@ fn complete_tool_request(
         .and_then(|value| value.get("name"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    let role_apply_policy = payload
+        .and_then(|value| value.get("apply_policy"))
+        .and_then(Value::as_str)
+        .unwrap_or("manual");
     let args = payload
         .and_then(|value| value.get("args"))
         .and_then(Value::as_object)
@@ -225,7 +230,7 @@ fn complete_tool_request(
     let mut outcome = route_tool(resource_dir, name, args, run_id);
     if mutation {
         if let Ok(operation) = outcome.clone() {
-            let auto = auto_policy(session_id);
+            let auto = allows_auto_apply(auto_policy(session_id), role_apply_policy);
             if auto {
                 let operation_id = operation
                     .get("operation_id")
@@ -393,6 +398,10 @@ fn is_mutating_tool(name: &str, args: &Map<String, Value>) -> bool {
         .unwrap_or(false)
 }
 
+fn allows_auto_apply(prompt_auto: bool, role_policy: &str) -> bool {
+    prompt_auto && role_policy == "auto"
+}
+
 fn request_agent(
     app: &tauri::AppHandle,
     resource_dir: &Path,
@@ -424,10 +433,16 @@ fn request_agent(
         }
         *guard = Some(candidate);
     }
+    let timeout = serde_json::from_str::<Value>(request)
+        .ok()
+        .and_then(|value| value.get("method").and_then(Value::as_str).map(str::to_owned))
+        .filter(|method| method == "organization.generate")
+        .map(|_| ORGANIZATION_TIMEOUT)
+        .unwrap_or(COMMAND_TIMEOUT);
     let result = guard
         .as_mut()
         .expect("agent ensured")
-        .request(request, COMMAND_TIMEOUT);
+        .request(request, timeout);
     if result.is_err() {
         *guard = None;
     }
@@ -450,6 +465,12 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "session.rename"
             | "session.pin"
             | "session.delete"
+            | "roles.list"
+            | "role.create"
+            | "role.update"
+            | "role.copy"
+            | "role.delete"
+            | "organization.generate"
             | "prompt"
             | "abort"
             | "steer"
@@ -791,5 +812,12 @@ mod tests {
         assert!(auto_policy(session_id));
         forget_auto_policy(session_id);
         assert!(!auto_policy(session_id));
+    }
+
+    #[test]
+    fn role_manual_policy_cannot_be_overridden_by_prompt_auto_mode() {
+        assert!(!allows_auto_apply(true, "manual"));
+        assert!(allows_auto_apply(true, "auto"));
+        assert!(!allows_auto_apply(false, "auto"));
     }
 }
