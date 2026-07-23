@@ -40,7 +40,7 @@ def _snapshots():
 def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
     """原地编辑前必须留底，否则写坏了没有退路。"""
     before = session.read_bytes()
-    editor = current().adapter("claude").require("editor")
+    editor = current().adapter("claude").editor
     editing.apply(
         editor, str(session), [{"op": "delete-turn", "turn": 2}],
     )
@@ -96,9 +96,7 @@ def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
             return {"ok": True, "target": meta["source"]}
 
     class Plugin:
-        def require(self, capability):
-            assert capability == "lifecycle"
-            return Lifecycle()
+        lifecycle = Lifecycle()
 
     monkeypatch.setattr(services, "adapter", lambda tool: Plugin() if tool == "fake" else None)
 

@@ -26,17 +26,6 @@ class ConcurrentModificationError(DomainError, RuntimeError):
     retryable = True
 
 
-class CapabilityUnsupportedError(DomainError, ValueError):
-    """插件未提供请求的能力。"""
-
-    code = "edit.operation_unsupported"
-    category = "unsupported"
-
-    def __init__(self, tool: str, capability: str):
-        super().__init__(f"{tool} 不支持能力 {capability}",
-                         {"tool": tool, "capability": capability})
-
-
 class InvalidJsonError(DomainError, ValueError):
     code = "rpc.invalid_json"
     category = "validation"

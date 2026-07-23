@@ -888,7 +888,7 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
         max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
         from .services import _truncate_rounds
         _truncate_rounds(session, max_turn)
-    target = current().adapter(target_tool).require("migration_target")
+    target = current().adapter(target_tool).migration_target
     loss = target.plan(session)
     from .services import _migration_counts
     tree_count, message_count = _migration_counts(session)
@@ -911,7 +911,7 @@ def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
     from .editing import preview
-    editor = plugin.require("editor")
+    editor = plugin.editor
     native_ops = resolve_edit_ops(record, ops)
     try:
         result = preview(editor, record.canonical_ref, native_ops,

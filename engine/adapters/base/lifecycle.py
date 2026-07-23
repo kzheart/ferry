@@ -49,7 +49,7 @@ class FileSessionLifecycle(BaseLifecycle):
     delete_undoable = True
 
     def delete(self, plugin, ref: str) -> dict:
-        doc = plugin.require("editor").load(ref)
+        doc = plugin.editor.load(ref)
         path = doc.handle if isinstance(doc.handle, Path) else \
             Path(plugin.browser.resolve_ref(ref))
         children = self._delete_children(doc, path)

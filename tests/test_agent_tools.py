@@ -45,13 +45,30 @@ class Browser:
     def read(self, _ref):
         return copy.deepcopy(self.session)
 
+    def read_agent(self, ref):
+        return self.read(ref)
+
     def fingerprint(self, _ref):
         return self.fingerprint_value
+
+    def agent_fingerprint(self, ref):
+        return self.fingerprint(ref)
+
+
+class MigrationSource:
+    def __init__(self, browser):
+        self.browser = browser
+
+    def export_tree(self, ref):
+        return self.browser.read(ref)
 
 
 class MigrationTarget:
     def plan(self, session):
         return {"lossless": not session.loss, "events": list(session.loss)}
+
+    def preview(self, session, _cwd=None):
+        return self.plan(session)
 
     def write(self, _session, _cwd):
         raise AssertionError("preview must not write")
@@ -117,6 +134,47 @@ class Editor:
         return "revision-2"
 
 
+class Verifier:
+    def probe(self, _session_id, _cwd, _model=None):
+        return {"status": "skipped"}
+
+    def probe_edited(self, _editor, _doc, _result, _model=None):
+        return {"status": "skipped"}
+
+
+class Lifecycle:
+    executable = "fake"
+    delete_undoable = False
+
+    def resume_descriptor(self, session_id, cwd):
+        return {"session_id": session_id, "cwd": cwd,
+                "executable": self.executable, "args": [session_id],
+                "display_command": f"fake {session_id}"}
+
+    def cleanup(self, _session_id, _dest):
+        pass
+
+    def validation_ref(self, session_id, _dest):
+        return session_id
+
+    def probe_cwd(self, cwd):
+        return cwd
+
+    def delete(self, _plugin, _ref):
+        return {"ok": True, "undoable": False}
+
+    def restore_delete(self, _snapshot, _meta):
+        return {"ok": True}
+
+
+class Models:
+    def discover(self):
+        return [], "fake", None
+
+    def fallback(self):
+        return []
+
+
 def _session():
     return Session(
         source_tool="claude",
@@ -156,9 +214,13 @@ def agent_environment(tmp_path):
         "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
         "model": "claude-safe",
     }]
+    claude_browser = Browser(rows, _session())
     claude = ToolPlugin(
         ToolManifest("claude", "Claude Code", "claude", str(root), "path"),
-        Browser(rows, _session()), migration_target=MigrationTarget(), editor=editor,
+        claude_browser,
+        migration_source=MigrationSource(claude_browser),
+        migration_target=MigrationTarget(), editor=editor,
+        verifier=Verifier(), lifecycle=Lifecycle(), models=Models(),
     )
     opencode_rows = [{
         "tool": "opencode", "id": "oc-1", "path": "", "dir": "/tmp/project-b",
@@ -171,7 +233,9 @@ def agent_environment(tmp_path):
     opencode = ToolPlugin(
         ToolManifest("opencode", "OpenCode", "opencode", "/unused", "id"),
         opencode_browser,
-        migration_target=MigrationTarget(),
+        migration_source=MigrationSource(opencode_browser),
+        migration_target=MigrationTarget(), editor=Editor(),
+        verifier=Verifier(), lifecycle=Lifecycle(), models=Models(),
     )
     plugins = {"claude": claude, "opencode": opencode}
     configure(ApplicationPorts(

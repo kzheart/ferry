@@ -1,8 +1,8 @@
-"""OpenCode 插件装配：manifest + 各能力实现。"""
+"""OpenCode 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
+from ..base.migration import TreeMigrationSource
 from .editor import OpenCodeBackend
 from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
@@ -22,14 +22,47 @@ MANIFEST = ToolManifest(
 )
 
 
+class OpenCodeBrowser:
+    """OpenCode 的当前 SQLite 读取路径。"""
+
+    def scan(self, cache):
+        return scan(cache)
+
+    def read(self, ref):
+        return read(ref)
+
+    def read_agent(self, ref):
+        return read_preview(ref)
+
+    def resolve_ref(self, ref):
+        return ref
+
+    def fingerprint(self, ref):
+        return fingerprint(ref)
+
+    def agent_fingerprint(self, ref):
+        return fingerprint(ref)
+
+
+class OpenCodeModels:
+    def discover(self):
+        return discover()
+
+    def fallback(self):
+        return fallback()
+
+
 def build() -> ToolPlugin:
-    return build_plugin(
-        MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: ref, fingerprint=fingerprint,
-                       agent_read=read_preview),
+    browser = OpenCodeBrowser()
+    lifecycle = OpenCodeLifecycle()
+    lifecycle.executable = MANIFEST.executables[0]
+    return ToolPlugin(
+        manifest=MANIFEST,
+        browser=browser,
+        migration_source=TreeMigrationSource(browser),
         migration_target=OpenCodeMigrationTarget(),
         editor=OpenCodeBackend(),
         verifier=OpenCodeVerifier(),
-        lifecycle=OpenCodeLifecycle(),
-        models=ModelCatalogAdapter(discover, fallback),
+        lifecycle=lifecycle,
+        models=OpenCodeModels(),
     )

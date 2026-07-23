@@ -1,6 +1,5 @@
-"""Reusable adapter assembly and JSONL scanner tests."""
-from engine.adapters.base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
-from engine.adapters.base.plugin import ToolManifest
+"""静态内置 Adapter 与 JSONL scanner 测试。"""
+from engine.adapters.registry import create_registry
 from engine.adapters.base.scanner import scan_jsonl
 
 
@@ -13,10 +12,6 @@ class _Cache:
 
     def put(self, path, _stat, value):
         self.values[path] = value
-
-
-class _Lifecycle:
-    executable = ""
 
 
 def test_scan_jsonl_reuses_cached_adapter_metadata(tmp_path):
@@ -37,18 +32,15 @@ def test_scan_jsonl_reuses_cached_adapter_metadata(tmp_path):
     assert calls == [source]
 
 
-def test_build_plugin_wires_shared_browser_models_and_lifecycle():
-    manifest = ToolManifest(
-        id="test-agent", display_name="Test Agent", icon="test",
-        source_path="~/.test-agent", reference_kind="id", executables=("test-agent",))
-    browser = BrowserAdapter(lambda _cache: [], lambda ref: {"ref": ref}, lambda ref: ref)
-    lifecycle = _Lifecycle()
+def test_bundled_plugins_explicitly_wire_complete_static_contract():
+    registry = create_registry()
 
-    plugin = build_plugin(
-        manifest, browser, lifecycle=lifecycle,
-        models=ModelCatalogAdapter(lambda: [{"id": "model"}], lambda: []))
-
-    assert plugin.browser.read("session") == {"ref": "session"}
-    assert plugin.models.discover() == [{"id": "model"}]
-    assert lifecycle.executable == "test-agent"
-    assert plugin.capabilities() == ["browse", "migrate-source"]
+    for tool in registry.ids():
+        plugin = registry.get(tool)
+        assert plugin.migration_source is not None
+        assert plugin.migration_target is not None
+        assert plugin.editor is not None
+        assert plugin.verifier is not None
+        assert plugin.lifecycle is not None
+        assert plugin.models is not None
+        assert plugin.lifecycle.executable == plugin.manifest.executables[0]

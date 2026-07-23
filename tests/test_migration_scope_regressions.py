@@ -65,7 +65,7 @@ def test_migration_counts_include_the_retained_subtree(monkeypatch, tmp_path):
 
     target = Target()
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
-        require=lambda capability: target if capability == "migration_target" else None))
+        migration_target=target))
     monkeypatch.setattr(services, "resume_command", lambda *_: {"kind": "test"})
     monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
     monkeypatch.setattr(services, "_append_history", lambda _entry: None)
@@ -90,8 +90,7 @@ def test_preview_migration_counts_the_actual_tree_after_scope_pruning(monkeypatc
     target = Target()
     ports = SimpleNamespace(
         adapters=lambda: ["opencode"],
-        adapter=lambda _name: SimpleNamespace(
-            require=lambda capability: target if capability == "migration_target" else None),
+        adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
     monkeypatch.setattr(agent_tools, "current", lambda: ports)
     monkeypatch.setattr(agent_tools._INDEX, "resolve", lambda *_: record)

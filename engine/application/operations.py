@@ -112,7 +112,7 @@ class OperationService:
                 "会话在生成操作计划时已变化，请重新计划"
             )
         plugin = current().adapter(tool)
-        editor = plugin.require("editor")
+        editor = plugin.editor
         try:
             native_ops = self._resolve_ops(after, operation_input["ops"])
         except LocatorStaleError as error:
@@ -192,7 +192,7 @@ class OperationService:
             operation_input["tool"], operation_input["ref"],
         )
         plugin = current().adapter(operation_input["tool"])
-        lifecycle = plugin.require("lifecycle")
+        lifecycle = plugin.lifecycle
         preview = {
             "tool": record.tool,
             "ref": record.opaque_ref,
@@ -519,7 +519,7 @@ class OperationService:
                 "会话在操作计划生成后已变化，请重新计划"
             )
         plugin = current().adapter(params["tool"])
-        editor = plugin.require("editor")
+        editor = plugin.editor
         native_ops = self._resolve_ops(record, params["ops"])
         self._require_inplace_support(plugin, editor, native_ops)
         try:
@@ -746,7 +746,7 @@ class OperationService:
                 record.tool, record.opaque_ref, ops=ops,
             )
         plugin = current().adapter(record.tool)
-        editor = plugin.require("editor")
+        editor = plugin.editor
         native_ops = self._resolve_ops(record, ops)
         self._require_inplace_support(
             plugin, editor, native_ops,

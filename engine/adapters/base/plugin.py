@@ -1,16 +1,16 @@
-"""ToolPlugin 插件契约：manifest + 可选能力。
+"""内置 Adapter 的静态契约。
 
-application 层只依赖本模块声明的 Protocol；缺少某能力时对应字段为
-None，capabilities 查询返回 unsupported，而不是伪造实现。
+Ferry 只装配 Claude、Codex 与 OpenCode 三个完整 Adapter。所有已注册
+Adapter 都必须具备相同的查询、迁移、编辑、校验、生命周期和模型能力；
+不能在运行时根据 capability 走另一条业务路径。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from ...domain.errors import CapabilityUnsupportedError
-
-# 能力等级标识（manifest.capabilities 使用）
+# 静态能力标识（manifest.capabilities 使用）。它们是内置产品定义，不是
+# 可选插件协商协议。
 CAP_BROWSE = "browse"
 CAP_MIGRATE_SOURCE = "migrate-source"
 CAP_MIGRATE_TARGET = "migrate-target"
@@ -52,6 +52,8 @@ class SessionBrowser(Protocol):
     def resolve_ref(self, ref: str) -> str: ...
 
     def fingerprint(self, ref: str): ...
+
+    def agent_fingerprint(self, ref: str): ...
 
 
 @runtime_checkable
@@ -130,37 +132,34 @@ class SessionLifecycle(Protocol):
 class ToolPlugin:
     manifest: ToolManifest
     browser: SessionBrowser
-    migration_source: MigrationSource | None = None
-    migration_target: MigrationTarget | None = None
-    editor: SessionEditor | None = None
-    verifier: SessionVerifier | None = None
-    lifecycle: SessionLifecycle | None = None
-    models: ModelCatalog | None = None
+    migration_source: MigrationSource
+    migration_target: MigrationTarget
+    editor: SessionEditor
+    verifier: SessionVerifier
+    lifecycle: SessionLifecycle
+    models: ModelCatalog
+
+    def __post_init__(self):
+        for name in (
+            "browser", "migration_source", "migration_target", "editor",
+            "verifier", "lifecycle", "models",
+        ):
+            if getattr(self, name) is None:
+                raise ValueError(f"内置 Adapter 缺少必填能力: {self.manifest.id}.{name}")
 
     @property
     def id(self) -> str:
         return self.manifest.id
 
     def capabilities(self) -> list[str]:
-        caps = [CAP_BROWSE]
-        if self.migration_source is not None:
-            caps.append(CAP_MIGRATE_SOURCE)
-        if self.migration_target is not None:
-            caps.append(CAP_MIGRATE_TARGET)
-        if self.editor is not None:
-            caps.append(CAP_EDIT)
-        if self.editor is not None and self.editor.capabilities().get("inplace"):
-            caps.append(CAP_INPLACE)
-        if self.verifier is not None:
-            caps.append(CAP_VERIFIED)
-        return caps
+        return [
+            CAP_BROWSE,
+            CAP_MIGRATE_SOURCE,
+            CAP_MIGRATE_TARGET,
+            CAP_EDIT,
+            CAP_INPLACE,
+            CAP_VERIFIED,
+        ]
 
     def describe(self) -> dict:
         return self.manifest.to_dict(self.capabilities())
-
-    def require(self, capability: str):
-        """取用可选能力；缺失时抛出 unsupported 领域异常。"""
-        value = getattr(self, capability.replace("-", "_"), None)
-        if value is None:
-            raise CapabilityUnsupportedError(self.id, capability)
-        return value
