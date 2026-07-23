@@ -9,7 +9,6 @@
     "success": "Success",
     "failed": "Failed",
     "rolled_back": "Rolled back",
-    "dry_run": "Dry run",
     "all": "All statuses"
   },
   "empty": {

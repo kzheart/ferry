@@ -72,20 +72,26 @@ def test_truncate_requires_a_nonempty_message_source_id_for_spawn_link():
     assert root.message_count() == 1
 
 
-def test_dry_run_and_actual_migration_report_identical_scope_counts(monkeypatch, tmp_path):
+def test_preview_and_apply_report_identical_scope_counts(monkeypatch, tmp_path):
     writes = []
     target = _migrate_target(lambda session, _cwd: (
         writes.append(session) or ("written", tmp_path / "written")))
     _install_target(monkeypatch, target)
     monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
 
-    dry = services.migrate("claude", "opencode", "ignored", cwd=str(tmp_path),
-                           dry_run=True, max_turn=1, _session=_scoped_tree())
-    actual = services.migrate("claude", "opencode", "ignored", cwd=str(tmp_path),
+    preview = services.preview_migration(
+        "claude", "opencode", "ignored", cwd=str(tmp_path),
+        max_turn=1, _session=_scoped_tree(),
+    )
+    actual = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
                               max_turn=1, _session=_scoped_tree())
 
     assert writes
-    assert (dry["msg_count"], dry["root_msg_count"], dry["tree_count"]) == (
+    assert (
+        preview["msg_count"],
+        preview["root_msg_count"],
+        preview["tree_count"],
+    ) == (
         actual["msg_count"], actual["root_msg_count"], actual["tree_count"])
 
 
@@ -97,7 +103,7 @@ def test_validation_failure_rolls_back_the_written_artifact(monkeypatch, tmp_pat
     monkeypatch.setattr(services, "_cleanup_artifact", lambda _dst, sid, _dest:
                         removed.append(sid))
 
-    result = services.migrate("claude", "opencode", "ignored", cwd=str(tmp_path),
+    result = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
                               _session=_scoped_tree())
 
     assert result["rolled_back"] is True
@@ -134,7 +140,7 @@ def test_probe_exception_cleans_both_shadow_and_actual_artifacts(monkeypatch, tm
                         removed.append(sid))
 
     with pytest.raises(RuntimeError, match="probe failed"):
-        services.migrate("claude", "opencode", "ignored", cwd=str(tmp_path),
+        services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
                          probe=True, _session=session)
 
     assert removed == ["shadow", "actual"]

@@ -67,14 +67,6 @@ describe("Ferry mutation tool schemas", () => {
       Check(sessionEditSchema, {
         tool: "codex",
         ref: "fsr_session",
-        ops: [{ op: "delete-turn", turn: 1 }],
-        dry_run: true,
-      }),
-    ).toBe(false);
-    expect(
-      Check(sessionEditSchema, {
-        tool: "codex",
-        ref: "fsr_session",
         patch: { pinned: true },
         intent: "preview",
       }),
@@ -97,7 +89,6 @@ describe("Ferry mutation tool schemas", () => {
     expect(Check(migrateSchema, { ...migration, intent: "invalid" })).toBe(
       false,
     );
-    expect(Check(migrateSchema, { ...migration, dry_run: true })).toBe(false);
   });
 
   it("enforces content intent and metadata boundaries during execution", async () => {
@@ -141,14 +132,6 @@ describe("Ferry mutation tool schemas", () => {
         intent: "invalid",
       }),
     ).rejects.toThrow("ops require intent");
-    await expect(
-      execute({
-        tool: "codex",
-        ref: "fsr_session",
-        ops: [{ op: "delete-turn", turn: 1 }],
-        dry_run: true,
-      }),
-    ).rejects.toThrow("no longer accepts dry_run");
   });
 
   it("enforces migration intent during execution", async () => {
@@ -166,17 +149,12 @@ describe("Ferry mutation tool schemas", () => {
     await expect(execute({ ...migration, intent: "invalid" })).rejects.toThrow(
       "requires intent preview or execute",
     );
-    await expect(execute({ ...migration, dry_run: false })).rejects.toThrow(
-      "no longer accepts dry_run",
-    );
   });
 
-  it("describes intent without advertising dry_run", () => {
+  it("describes the explicit operation intent", () => {
     expect(migrateTool.description).toContain("intent is required");
     expect(sessionEditTool.description).toContain(
       "Metadata patch does not accept intent",
     );
-    expect(migrateTool.description).not.toContain("dry_run");
-    expect(sessionEditTool.description).not.toContain("dry_run");
   });
 });

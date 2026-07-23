@@ -207,11 +207,6 @@ export function createFerryTools(
     executionMode: "sequential",
     async execute(toolCallId, params, signal, onUpdate) {
       const input = params as Record<string, unknown>;
-      if ("dry_run" in input) {
-        throw new Error(
-          `${name} no longer accepts dry_run; use intent for migration or content edits`,
-        );
-      }
       if (
         name === "migrate" &&
         input.intent !== "preview" &&

@@ -12,7 +12,6 @@ const ST_STYLE = {
   [STATUS_CODE.success]: ["var(--ok-bg)", "var(--ok)"],
   [STATUS_CODE.failed]: ["var(--err-bg2)", "var(--err)"],
   [STATUS_CODE.rolledBack]: ["var(--chip)", "var(--tx3b)"],
-  [STATUS_CODE.dryRun]: ["var(--warn-bg)", "var(--warn)"],
 };
 
 // 卡片外的小标题(右侧可挂一段次要信息)
