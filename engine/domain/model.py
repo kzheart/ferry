@@ -162,7 +162,6 @@ class AgentEdge:
     agent_type: str | None = None
     prompt: str = ""
     status: str | None = None
-    meta: dict = field(default_factory=dict)
     association: str = "explicit"
     confidence: float = 1.0
 
@@ -185,10 +184,15 @@ class Session:
     agent_id: str | None = None
     agent_path: str | None = None
     agent_type: str | None = None
+    agent_nickname: str | None = None
+    agent_role: str | None = None
+    model_provider: str | None = None
+    model: str | None = None
+    depth: int | None = None
+    parent_association: str | None = None
     children: list["Session"] = field(default_factory=list)
     agent_edges: list[AgentEdge] = field(default_factory=list)
     context_compactions: list[ContextCompaction] = field(default_factory=list)
-    meta: dict = field(default_factory=dict)
 
     def lose(self, code: str, **params):
         self.loss.append(event(code, **params))

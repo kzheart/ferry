@@ -497,6 +497,12 @@ def _identity(meta: dict, fallback: str) -> dict:
                        meta.get("agent_path")),
         "agent_type": (subagent.get("agent_type") or spawn.get("agent_type") or
                        meta.get("agent_type")),
+        "agent_nickname": (
+            spawn.get("agent_nickname") or meta.get("agent_nickname")
+        ),
+        "agent_role": spawn.get("agent_role") or meta.get("agent_role"),
+        "model_provider": meta.get("model_provider"),
+        "model": meta.get("model"),
         "depth": subagent.get("depth", spawn.get("depth")),
     }
 
@@ -629,7 +635,14 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     sess.agent_id = ident["agent_id"]
     sess.agent_path = ident["agent_path"]
     sess.agent_type = ident["agent_type"]
-    sess.meta = dict(meta)
+    sess.agent_nickname = ident["agent_nickname"]
+    sess.agent_role = ident["agent_role"]
+    sess.model_provider = ident["model_provider"]
+    sess.model = ident["model"]
+    sess.depth = ident["depth"]
+    sess.parent_association = (
+        "parent-metadata" if ident["parent_id"] else None
+    )
     for record in lines:
         if record.get("type") in {
                 "__resume_harness_malformed_jsonl__",
@@ -639,8 +652,6 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 line_number=record["line_number"],
                 error=record["error"],
             )
-    if ident["depth"] is not None:
-        sess.meta["depth"] = ident["depth"]
     pending: dict[str, ToolCall] = {}
     cur_tools: list[Block] = []          # 未落消息的工具块,附到下一条 assistant
     cur_reasoning: list[Block] = []      # 可见 reasoning 降级为 text,附到下一条 assistant
@@ -822,19 +833,11 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
             ) or edge_statuses.get(child.source_id),
             association=(
                 "spawn-call" if matched else
-                child.meta.get("parent_association", "parent-metadata")),
+                child.parent_association or "parent-metadata"),
             confidence=(
                 1.0 if matched else 0.95
-                if child.meta.get("parent_association") == "sqlite-parent"
+                if child.parent_association == "sqlite-parent"
                 else 0.75),
-            meta={
-                "parent_thread_id": child.parent_id,
-                "forked_from_id": child.forked_from_id,
-                "depth": child.meta.get("depth"),
-                "association": (
-                    "spawn-call" if matched else
-                    child.meta.get("parent_association", "parent-metadata")),
-            },
         )
         sess.children.append(child)
         sess.agent_edges.append(edge)
@@ -886,7 +889,7 @@ def read(path: str, sessions_dir: str | Path | None = None) -> Session:
             child = _read_one(candidate)
             if child.parent_id is None and registry_parent:
                 child.parent_id = registry_parent
-                child.meta["parent_association"] = "sqlite-parent"
+                child.parent_association = "sqlite-parent"
             sessions[current_id] = child
             added = True
         if not added:

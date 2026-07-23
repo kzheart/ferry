@@ -63,8 +63,8 @@ def register_tree(
                 "subagent": {"thread_spawn": {
                     "parent_thread_id": parent_id,
                     "agent_path": agent_path,
-                    "agent_nickname": session.meta.get("agent_nickname"),
-                    "agent_role": session.meta.get("agent_role"),
+                    "agent_nickname": session.agent_nickname,
+                    "agent_role": session.agent_role,
                 }}
             }, ensure_ascii=False, separators=(",", ":"))
             _insert(db, "threads", {
@@ -77,7 +77,7 @@ def register_tree(
                 "recency_at": now,
                 "recency_at_ms": now_ms,
                 "source": source,
-                "model_provider": "openai",
+                "model_provider": session.model_provider or "openai",
                 "cwd": cwd,
                 "title": title,
                 "sandbox_policy": json.dumps({"type": "read-only"}),
@@ -87,8 +87,8 @@ def register_tree(
                 "archived": 0,
                 "cli_version": cli_version,
                 "first_user_message": first_user,
-                "agent_nickname": session.meta.get("agent_nickname"),
-                "agent_role": session.meta.get("agent_role"),
+                "agent_nickname": session.agent_nickname,
+                "agent_role": session.agent_role,
                 "agent_path": agent_path,
                 "thread_source": "user" if parent_id is None else "subagent",
                 "preview": first_user,

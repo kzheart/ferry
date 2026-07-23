@@ -178,6 +178,38 @@ def test_child_without_edge_and_empty_parent_gets_a_synthetic_user(
     assert messages[1]["parts"][0]["tool"] == "task"
 
 
+def test_writer_uses_explicit_session_model_fields(tmp_path, monkeypatch):
+    imported = []
+    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(
+        opencode_session,
+        "_import_payload",
+        lambda payload, sid, cwd: imported.append(payload),
+    )
+    session = Session(
+        "claude",
+        "root",
+        str(tmp_path),
+        model_provider="fixture-provider",
+        model="fixture-model",
+    )
+    session.messages = [
+        Message("user", [Block("text", "question")]),
+        Message("assistant", [Block("text", "answer")]),
+    ]
+
+    opencode_session.write(session, cwd=str(tmp_path))
+
+    user_info = imported[0]["messages"][0]["info"]
+    assistant_info = imported[0]["messages"][1]["info"]
+    assert user_info["model"] == {
+        "providerID": "fixture-provider",
+        "modelID": "fixture-model",
+    }
+    assert assistant_info["providerID"] == "fixture-provider"
+    assert assistant_info["modelID"] == "fixture-model"
+
+
 def test_empty_native_parent_with_missing_time_can_link_a_child(
         tmp_path, monkeypatch):
     imported = []

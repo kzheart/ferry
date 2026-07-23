@@ -293,7 +293,11 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
     mp["originator"] = "codex-tui"
     mp["source"] = "cli"
     mp["thread_source"] = "user"
-    mp["model_provider"] = "openai"
+    mp["model_provider"] = sess.model_provider or "openai"
+    if sess.model:
+        mp["model"] = sess.model
+    else:
+        mp.pop("model", None)
     mp["memory_mode"] = "enabled"
     mp["history_mode"] = "legacy"
     mp["agent_path"] = agent_path
@@ -306,8 +310,8 @@ def _session_records(tpl, sess: Session, cwd: str, sid: str, root_id: str,
                     "parent_thread_id": parent_id,
                     "agent_path": agent_path,
                     "depth": depth,
-                    "agent_nickname": sess.meta.get("agent_nickname"),
-                    "agent_role": sess.meta.get("agent_role"),
+                    "agent_nickname": sess.agent_nickname,
+                    "agent_role": sess.agent_role,
                 },
             }
         }

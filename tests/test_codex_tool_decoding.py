@@ -97,6 +97,41 @@ def test_reader_keeps_native_records_out_of_the_canonical_session(tmp_path):
     assert all(not hasattr(message, "raw") for message in session.messages)
 
 
+def test_reader_promotes_current_session_semantics_to_explicit_fields(tmp_path):
+    path = tmp_path / "rollout.jsonl"
+    path.write_text(json.dumps({
+        "type": "session_meta",
+        "payload": {
+            "id": "child",
+            "session_id": "root",
+            "cwd": "/workspace",
+            "model_provider": "fixture-provider",
+            "model": "fixture-model",
+            "source": {
+                "subagent": {
+                    "thread_spawn": {
+                        "parent_thread_id": "root",
+                        "agent_path": "/root/1",
+                        "agent_nickname": "reviewer",
+                        "agent_role": "review",
+                        "depth": 2,
+                    },
+                },
+            },
+        },
+    }))
+
+    session = codex_reader._read_one(path)
+
+    assert session.agent_nickname == "reviewer"
+    assert session.agent_role == "review"
+    assert session.model_provider == "fixture-provider"
+    assert session.model == "fixture-model"
+    assert session.depth == 2
+    assert session.parent_association == "parent-metadata"
+    assert not hasattr(session, "meta")
+
+
 def test_private_result_extensions_are_not_rehydrated(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {
@@ -379,6 +414,8 @@ def test_sqlite_parent_edge_attaches_child_when_rollout_metadata_lacks_parent(
 
     assert [value.source_id for value in restored.children] == ["child"]
     edge, = restored.agent_edges
+    assert restored.children[0].parent_association == "sqlite-parent"
     assert edge.association == "sqlite-parent"
     assert edge.confidence == 0.95
     assert edge.status == "open"
+    assert not hasattr(edge, "meta")
