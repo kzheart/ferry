@@ -12,6 +12,7 @@ import { addSessionAttachment, serializeSessionAttachment }
   from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
+import { Sheet } from "../components/ui/primitives.jsx";
 import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
 import Overview from "../features/overview/Overview.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
@@ -29,6 +30,8 @@ import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
+import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
+import { generateOrganizationProposal } from "../features/organizing/organizationService.js";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -46,7 +49,7 @@ function loadRailOrder() {
 }
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // ----- 数据 -----
   const { env, scan, scanning, lastScan, historyRows, pricing,
     doScan, loadHistory, deleteHistory } = useBrowserData();
@@ -58,6 +61,9 @@ export default function App() {
   const [selHist, setSelHist] = useState(null);
   const [detail, setDetail] = useState(null);   // {id, data, error}
   const [refreshing, setRefreshing] = useState(false);
+  const [navigationTarget, setNavigationTarget] = useState(null);
+  const [organizerOpen, setOrganizerOpen] = useState(false);
+  const [peekId, setPeekId] = useState(null);  // Ask Ferry 卡片就地预览的会话 id
 
   // ----- 编辑 -----
   // ----- 迁移 -----
@@ -106,6 +112,9 @@ export default function App() {
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
   const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
   const visibleIds = useRef({});
+  const knownSessions = useRef(null);
+  const organizedSessions = useRef(new Set());
+  const pendingOrganizationSessions = useRef(new Map());
 
   const sessions = scan?.sessions || [];
   const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
@@ -116,6 +125,45 @@ export default function App() {
     runtimeProbe: !!settings.runtimeProbe, doScan,
     onInplaceApplied: () => select(selId),
     onSavedAs: result => savedAsRef.current?.(result) });
+
+  useEffect(() => {
+    const ids = new Set(sessions.map(session => `${session.tool}\0${session.id}`));
+    if (knownSessions.current === null) {
+      knownSessions.current = ids;
+    }
+    const additions = sessions.filter(session =>
+      !knownSessions.current.has(`${session.tool}\0${session.id}`));
+    knownSessions.current = ids;
+    const opened = cur && !organizedSessions.current.has(`${cur.tool}\0${cur.id}`)
+      ? [cur] : [];
+    for (const session of [...additions, ...opened]) {
+      const key = `${session.tool}\0${session.id}`;
+      if (!organizedSessions.current.has(key)) {
+        pendingOrganizationSessions.current.set(key, session);
+      }
+    }
+    const pending = [...pendingOrganizationSessions.current.values()]
+      .filter(session => !organizedSessions.current.has(`${session.tool}\0${session.id}`));
+    if (!pending.length || ferry.health?.credential !== "available") return;
+    pending.forEach(session => {
+      const key = `${session.tool}\0${session.id}`;
+      organizedSessions.current.add(key);
+      pendingOrganizationSessions.current.delete(key);
+    });
+    void (async () => {
+      for (const session of pending) {
+        try {
+          await generateOrganizationProposal([{
+            ...session, project: repoOf(session.dir),
+          }], i18n.language);
+        } catch {
+          const key = `${session.tool}\0${session.id}`;
+          organizedSessions.current.delete(key);
+          pendingOrganizationSessions.current.set(key, session);
+        }
+      }
+    })();
+  }, [sessions, cur, ferry.health?.credential, i18n.language]);
   const { ops, dirtyOps, setOps, saveMode, setSaveMode, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
@@ -209,6 +257,65 @@ export default function App() {
     loadCapabilities(s.tool);
   };
 
+  // 把实体对应的会话装入选中态与详情缓存,不切换主视图。返回装入的会话 id。
+  const loadEntitySession = (action, entity) => {
+    const candidate = sessions.find(session =>
+      (action.sessionId && session.id === action.sessionId) ||
+      (action.ref && sessionRef(session) === action.ref) ||
+      (entity?.title && session.tool === action.tool &&
+        session.title === entity.title &&
+        (!entity.project || repoOf(session.dir) === entity.project)));
+    if (candidate) { select(candidate.id); return candidate.id; }
+    if (action.tool && (action.ref || action.sessionId)) {
+      const id = action.sessionId || action.ref;
+      setSelId(id); resetSelection();
+      setDetail({ id, data: null });
+      rpc("show", { tool: action.tool, ref: action.ref || action.sessionId })
+        .then(data => setDetail(current =>
+          current?.id === id ? { ...current, data } : current))
+        .catch(error => setDetail(current =>
+          current?.id === id ? { ...current, error: error.message } : current));
+      loadCapabilities(action.tool);
+      doScan();
+      return id;
+    }
+    return null;
+  };
+
+  // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
+  // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
+  const peekEntity = (action, entity) => {
+    if (action?.view !== "library") return;
+    setSettingsOpen(false);
+    setPopover(null);
+    setNavigationTarget({ ...action, nonce: Date.now() });
+    const id = loadEntitySession(action, entity);
+    if (id) setPeekId(id);
+  };
+
+  // 显式动作(预览浮层里的「在会话库中打开」)才切换主视图。
+  const navigateEntity = (action, entity) => {
+    if (!action?.view) return;
+    setSettingsOpen(false);
+    setPopover(null);
+    setNavigationTarget({ ...action, nonce: Date.now() });
+    if (action.view === "library") {
+      setView("library");
+      loadEntitySession(action, entity);
+      return;
+    }
+    if (action.view === "history") {
+      setView("history");
+      const candidate = histItems.find(item =>
+        (action.migrationId && (item.id === action.migrationId ||
+          item._id === action.migrationId)) ||
+        (action.ref && (item.source_ref === action.ref || item.ref === action.ref)));
+      if (candidate) setSelHist(candidate._id);
+      return;
+    }
+    setView(action.view);
+  };
+
   // 刷新当前会话:只重读这一个会话的正文,不触发全量扫描
   const refreshDetail = async () => {
     const s = selId && (byId[selId] || sessions.find(x => x.id === selId));
@@ -223,6 +330,13 @@ export default function App() {
     }
     setRefreshing(false);
   };
+
+  useEffect(() => {
+    if (!ferry.mutationVersion) return;
+    doScan();
+    loadHistory();
+    if (view === "library" && selId) refreshDetail();
+  }, [ferry.mutationVersion]);
 
   // 另存为新会话后从 toast 打开:扫描结果已含新会话则正常选中,否则按返回的路径直接读
   savedAsRef.current = result => {
@@ -363,6 +477,7 @@ export default function App() {
         else if (confirmApply) setConfirmApply(false);
         else if (diff) setDiff(null);
         else if (mig) setMig(null);
+        else if (peekId) setPeekId(null);
         else if (multiSel.length) setMultiSel([]);
         else if (guideStep) finishGuide();
         return;
@@ -888,12 +1003,20 @@ export default function App() {
               cursor: "default", color: "var(--tx3b)", opacity: paneCfg ? 1 : .35 }}>
             <SidebarIcon />
           </button>
+          {view === "library" && (
+            <button className="fbtn" onClick={() => setOrganizerOpen(true)}
+              disabled={!sessions.length}
+              style={{ height: 27, fontSize: 11 }}>
+              {t("organizing:open")}
+            </button>
+          )}
           <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
         </div>
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         {view === "overview" && (
           <Overview sessions={sessions} historyRows={historyRows}
-            prices={pricing?.prices || {}} scanning={scanning} />)}
+            prices={pricing?.prices || {}} scanning={scanning}
+            navigationTarget={navigationTarget} />)}
         {view === "library" && (cur ? (
           <SessionDetail key={selId}
             meta={detailMeta}
@@ -906,6 +1029,7 @@ export default function App() {
             startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
             onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
             onOpenMigrate={detailActs.onOpenMigrate}
+            navigationTarget={navigationTarget}
             onRefresh={detailActs.onRefresh} refreshing={refreshing}
             onResume={detailActs.onResume} />
         ) : (
@@ -918,6 +1042,7 @@ export default function App() {
         {view === "askferry" && (
           <AskFerry ferry={ferry} scanSessions={sessions}
             attachments={agentAttachments} onAttachmentsChange={setAgentAttachments}
+            onNavigate={peekEntity}
             onOpenConfig={(section = "providers") => {
               setSettingsSection(section); setSettingsOpen(true); }} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
@@ -925,6 +1050,59 @@ export default function App() {
       </div>
 
       {/* 弹层 */}
+      {organizerOpen && (
+        <OrganizationPanel
+          sessions={sessions.map(session => ({
+            ...session, project: repoOf(session.dir),
+          }))}
+          onClose={() => setOrganizerOpen(false)}
+          onApplied={() => {
+            rpc("session_meta_list").then(value => setMetaMap(value || {}));
+            doScan();
+          }} />
+      )}
+      {peekId && cur && (
+        <Sheet width="min(940px, 94vw)" maxHeight="90vh"
+          onClose={() => setPeekId(null)}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8,
+            padding: "9px 12px 9px 16px", borderBottom: "1px solid var(--line5)" }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {detailMeta?.title || detailMeta?.id}
+            </span>
+            <button type="button"
+              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 7,
+                border: "1px solid var(--line3)", background: "var(--surface)",
+                color: "var(--acc)", cursor: "pointer" }}
+              onClick={() => { setPeekId(null); setView("library"); }}>
+              {t("askferry:peek.openInLibrary")} ↗
+            </button>
+            <button type="button"
+              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 7,
+                border: "1px solid var(--line3)", background: "var(--surface)",
+                color: "var(--tx3)", cursor: "pointer" }}
+              onClick={() => setPeekId(null)}>
+              {t("askferry:peek.close")}
+            </button>
+          </div>
+          <div style={{ height: "min(720px, 78vh)", display: "flex", minHeight: 0 }}>
+            <SessionDetail key={selId}
+              meta={detailMeta}
+              data={detail?.data} error={detail?.error}
+              onDiscardAll={detailActs.onDiscardAll}
+              scope={scope} setScope={detailActs.setScope}
+              ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
+              updateOp={detailActs.updateOp}
+              editCaps={editCaps} authoringCaps={authoringCaps}
+              startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
+              onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
+              onOpenMigrate={detailActs.onOpenMigrate}
+              navigationTarget={navigationTarget}
+              onRefresh={detailActs.onRefresh} refreshing={refreshing}
+              onResume={detailActs.onResume} />
+          </div>
+        </Sheet>
+      )}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
           defaultProbe={!!settings.runtimeProbe} terminalApp={settings.terminalApp}

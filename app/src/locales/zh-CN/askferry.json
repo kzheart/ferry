@@ -85,6 +85,21 @@
     "cancel": "取消",
     "submit": "提交"
   },
+  "entity": {
+    "session": "会话",
+    "migration": "迁移",
+    "messages": "{{n}} 条消息",
+    "turn": "第 {{n}} 轮",
+    "migrationResult": "迁移结果",
+    "edits": "{{n}} 项编辑",
+    "openDiff": "打开会话差异",
+    "tokens": "{{n}} tokens",
+    "sessions": "{{n}} 个会话"
+  },
+  "peek": {
+    "openInLibrary": "在会话库中打开",
+    "close": "关闭"
+  },
   "model": {
     "pick": "选择模型",
     "setup": "配置模型",
@@ -96,5 +111,10 @@
     "effort_medium": "中",
     "effort_high": "高",
     "manage": "管理模型"
+  },
+  "role": {
+    "default": "默认角色",
+    "manage": "管理角色…",
+    "snapshotLocked": "角色已快照到当前会话；新会话才可切换"
   }
 }

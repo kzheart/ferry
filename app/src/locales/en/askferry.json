@@ -85,6 +85,23 @@
     "cancel": "Cancel",
     "submit": "Submit"
   },
+  "entity": {
+    "session": "Session",
+    "migration": "Migration",
+    "messages": "{{n}} messages",
+    "turn": "turn {{n}}",
+    "migrationResult": "Migration result",
+    "edits_one": "{{n}} edit",
+    "edits_other": "{{n}} edits",
+    "openDiff": "Open session diff",
+    "tokens": "{{n}} tokens",
+    "sessions_one": "{{n}} session",
+    "sessions_other": "{{n}} sessions"
+  },
+  "peek": {
+    "openInLibrary": "Open in library",
+    "close": "Close"
+  },
   "model": {
     "pick": "Pick a model",
     "setup": "Set up a model",
@@ -96,5 +113,10 @@
     "effort_medium": "Medium",
     "effort_high": "High",
     "manage": "Manage models"
+  },
+  "role": {
+    "default": "Default role",
+    "manage": "Manage roles…",
+    "snapshotLocked": "The role is snapshotted for this session; switch in a new chat"
   }
 }
