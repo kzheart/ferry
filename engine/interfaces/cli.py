@@ -38,3 +38,7 @@ def main(argv=None):
     else:
         sys.exit(f"未知命令: {cmd}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
