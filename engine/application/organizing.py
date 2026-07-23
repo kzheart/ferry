@@ -48,7 +48,7 @@ def _digest(value) -> str:
 
 
 def _backbone(tool: str, session_id: str) -> dict:
-    record = summaries.get_backbone(tool, session_id)
+    record = summaries.get_backbone(tool, session_id, current())
     if not record:
         raise OrganizationProposalError(
             "会话尚无摘要底座", {"tool": tool, "id": session_id})

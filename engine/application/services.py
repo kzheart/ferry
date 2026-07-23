@@ -374,6 +374,7 @@ from . import environment as _environment  # noqa: E402
 from . import models as _models  # noqa: E402
 from . import scanning as _scanning  # noqa: E402
 from . import sessions as _sessions  # noqa: E402
+from . import summaries as _summaries  # noqa: E402
 
 
 def env() -> dict:
@@ -398,3 +399,11 @@ def show(tool_name: str, ref: str) -> dict:
 
 def session_asset(tool_name: str, ref: str, asset_id: str) -> dict:
     return _sessions.session_asset(tool_name, ref, asset_id, current())
+
+
+def session_backbone(tool_name: str, ref: str) -> dict:
+    return _summaries.build_backbone(tool_name, ref, current())
+
+
+def set_session_summaries(tool_name: str, session_id: str, digests: dict) -> dict:
+    return _summaries.set_summaries(tool_name, session_id, digests, current())

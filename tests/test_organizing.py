@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from engine.application import organizing, services, session_meta, summaries
+from engine.application.ports import current
 from engine.domain.errors import (
     OrganizationProposalError,
     OrganizationProposalStaleError,
@@ -20,7 +21,7 @@ def organization_environment(tmp_path, monkeypatch):
     database = StateDatabase(
         tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
     )
-    monkeypatch.setattr(summaries, "_database", lambda: database)
+    monkeypatch.setattr(summaries, "_database", lambda _ports: database)
     monkeypatch.setattr(organizing, "_database", lambda: database)
     monkeypatch.setattr(session_meta, "_database", lambda: database)
     return tmp_path
@@ -44,7 +45,7 @@ def _seed(tool: str, session_id: str, digest: str,
             "digest": digest,
         }],
     }
-    database = summaries._database()
+    database = summaries._database(current())
     database.store_session_summary(record, 0)
     database.invalidate_organization_proposals(
         tool, session_id, record["fingerprint"], 0,
@@ -290,7 +291,7 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
         organization_environment):
     record = _seed("claude", "session-a", "摘要")
     record["segments"][0]["digest"] = None
-    summaries._database().store_session_summary(record, 0)
+    summaries._database(current()).store_session_summary(record, 0)
     context = organizing.digest_context([
         {"tool": "claude", "id": "session-a"},
     ])
