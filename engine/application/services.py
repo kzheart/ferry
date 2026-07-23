@@ -321,31 +321,6 @@ def _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as):
     return result
 
 
-def authoring_capabilities(tool: str) -> dict:
-    from .authoring import capabilities
-    return capabilities(adapter(tool).require("authoring"))
-
-
-def authoring_preview(ref: str, turn: int | str, reply: dict,
-                      tool: str = "claude") -> dict:
-    from .authoring import preview
-    impl = adapter(tool)
-    editor = impl.require("editor")
-    return preview(editor, impl.require("authoring"), ref, turn, reply,
-                   loader=getattr(editor, "load_preview", None))
-
-
-def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
-                    save_as: bool = False, tool: str = "claude",
-                    revision: str | None = None) -> dict:
-    from .authoring import apply
-    impl = adapter(tool)
-    editor = impl.require("editor")
-    result, doc, snapshot = apply(
-        editor, impl.require("authoring"), ref, turn, reply, save_as, revision)
-    return _finish_mutation(
-        tool, editor, result, doc, snapshot, probe, save_as)
-
 def edit_capabilities(tool: str) -> dict:
     plugin = adapter(tool)
     editor = plugin.require("editor")
