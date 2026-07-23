@@ -1,4 +1,6 @@
 import copy
+import json
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from threading import Barrier
@@ -15,6 +17,7 @@ from engine.domain.errors import (
     InvalidReplyError,
     OperationUnsupportedError,
 )
+from engine.infrastructure.state_db import StateDatabase
 from test_agent_tools import _claude_ref, agent_environment
 
 
@@ -108,6 +111,61 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     ]
     assert applied["result"]["snapshot"] == "snapshot-before-agent-edit"
     assert operations.status(plan["plan_id"])["status"] == "applied"
+
+
+def test_plan_survives_operation_service_restart(agent_environment):
+    plan = _plan()
+
+    operations.reset_service()
+
+    assert operations.status(plan["plan_id"])["status"] == "planned"
+    result = operations.apply(plan["plan_id"])
+    assert result["status"] == "applied"
+    assert agent_environment["editor"].commits == 1
+
+
+def test_restart_marks_interrupted_apply_failed(agent_environment):
+    plan = _plan()
+    database = StateDatabase(
+        agent_environment["root"].parent / "ferry-state.sqlite3",
+    )
+    assert database.claim(plan["plan_id"], 2_000)
+
+    operations.reset_service()
+
+    status = operations.status(plan["plan_id"])
+    assert status["status"] == "failed"
+    assert status["error_type"] == "EngineRestarted"
+
+
+def test_operation_audit_contains_digests_not_raw_content(
+        agent_environment, monkeypatch):
+    _attach_authoring(monkeypatch)
+    secret = "Bearer operation-audit-secret"
+    plan = _plan([{
+        "op": "replace-assistant-reply",
+        "turn": 1,
+        "reply": {"items": [{"kind": "text", "text": secret}]},
+    }])
+
+    operations.apply(plan["plan_id"])
+    encoded = json.dumps(
+        operations.audit(plan["plan_id"]), ensure_ascii=False,
+    )
+
+    assert secret not in encoded
+    assert [item["event"] for item in operations.audit(plan["plan_id"])] == [
+        "planned", "applying", "applied",
+    ]
+
+
+def test_state_database_rejects_unknown_exact_schema(tmp_path):
+    path = tmp_path / "ferry-state.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA user_version = 99")
+
+    with pytest.raises(RuntimeError, match="schema 不受支持"):
+        StateDatabase(path)
 
 
 def test_metadata_plan_applies_with_independent_cas(
