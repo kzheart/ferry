@@ -9,15 +9,15 @@ export type WorkflowTaskStatus =
   | "cancelled"
   | "skipped";
 
-export interface WorkflowTask {
+export interface TaskNode {
   id: string;
   role_id: string;
   instruction: string;
   depends_on?: string[];
 }
 
-export interface WorkflowSpec {
-  tasks: WorkflowTask[];
+export interface TaskGraph {
+  tasks: TaskNode[];
   max_concurrency?: number;
   max_depth?: number;
   task_timeout_ms?: number;
@@ -54,9 +54,13 @@ export interface WorkflowTaskContext {
 }
 
 export type WorkflowTaskExecutor = (
-  task: WorkflowTask,
+  task: TaskNode,
   context: WorkflowTaskContext,
 ) => Promise<string>;
+
+/** 旧的工作流输入名称保留为当前调度图的领域别名。 */
+export type WorkflowTask = TaskNode;
+export type WorkflowSpec = TaskGraph;
 
 const MAX_TASKS = 32;
 const MAX_CONCURRENCY = 8;
@@ -202,7 +206,7 @@ function errorText(error: unknown) {
   return value.slice(0, 1_000);
 }
 
-export class WorkflowRun {
+export class Scheduler {
   private readonly controller = new AbortController();
   private readonly taskControllers = new Map<string, AbortController>();
   private started = false;
@@ -411,3 +415,6 @@ export class WorkflowRun {
     return final;
   }
 }
+
+/** 一个工作流运行持有图、取消树和结果汇聚；调度由 Scheduler 实现。 */
+export class WorkflowRun extends Scheduler {}
