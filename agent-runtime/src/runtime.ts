@@ -146,6 +146,7 @@ function summarizeToolResult(result: unknown) {
 
 export interface RuntimeOptions {
   store?: SessionStore;
+  deferRestore?: boolean;
   backendFactory?: BackendFactory;
   providerHost?: ProviderHost;
   roleStore?: RoleStore;
@@ -778,7 +779,18 @@ export class AgentRuntime {
         return options.providerHost.backend(selection);
       });
     const runtime = new AgentRuntime(options, backendFactory, defaultSelection);
-    for (const record of await runtime.store.loadAll()) {
+    if (!options.deferRestore) await runtime.restore();
+    return runtime;
+  }
+
+  async restore() {
+    if (this.sessions.size > 0) {
+      throw new ProtocolError(
+        "already_restored",
+        "runtime sessions already restored",
+      );
+    }
+    for (const record of await this.store.loadAll()) {
       const selection: ModelSelection = {
         provider: record.state.provider_id,
         model: record.state.model_id,
@@ -790,8 +802,8 @@ export class AgentRuntime {
         record.state.session_id,
         record.state,
         record.events,
-        runtime,
-        runtime.backendFactory(selection),
+        this,
+        this.backendFactory(selection),
         selection,
         record.state.role_id ?? DEFAULT_ROLE_ID,
         record.state.resolved_persona ?? "",
@@ -802,7 +814,7 @@ export class AgentRuntime {
         record.state.resolved_apply_policy ?? "auto",
         true,
       );
-      runtime.sessions.set(session.id, session);
+      this.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
         await session.emit(
           "run.interrupted",
@@ -811,7 +823,6 @@ export class AgentRuntime {
         );
       }
     }
-    return runtime;
   }
 
   newId() {
