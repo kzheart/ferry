@@ -14,16 +14,12 @@ import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js
 import { SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { Sheet } from "../components/ui/primitives.jsx";
 import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
-import Overview from "../features/overview/Overview.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
-import HistoryDetail from "../features/migration/HistoryDetail.jsx";
-import FirstRun from "../features/onboarding/FirstRun.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
   HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
   SessionDeleteConfirm, Toast } from "../components/ui/Overlays.jsx";
-import AskFerry from "../features/askferry/AskFerry.jsx";
 import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
 import { useAskFerry } from "../features/askferry/useAskFerry.js";
 import { useSettings } from "../features/settings/useSettings.js";
@@ -34,6 +30,7 @@ import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
 import { AppShell } from "../features/shell/AppShell.jsx";
+import { WorkspaceRouter } from "../features/shell/WorkspaceRouter.jsx";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -914,39 +911,36 @@ export default function App() {
           <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
         </>}
       >
-        {view === "overview" && (
-          <Overview sessions={sessions} historyRows={historyRows}
-            prices={pricing?.prices || {}} scanning={scanning}
-            navigationTarget={navigationTarget} />)}
-        {view === "library" && (cur ? (
-          <SessionDetail key={selId}
-            meta={detailMeta}
-            data={detail?.data} error={detail?.error}
-            onDiscardAll={detailActs.onDiscardAll}
-            scope={scope} setScope={detailActs.setScope}
-            ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
-            updateOp={detailActs.updateOp}
-            editCaps={editCaps}
-            startReplyEdit={detailActs.startReplyEdit} replyEditError={detailActs.replyEditError}
-            onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
-            onOpenMigrate={detailActs.onOpenMigrate}
-            navigationTarget={navigationTarget}
-            onRefresh={detailActs.onRefresh} refreshing={refreshing}
-            onResume={detailActs.onResume} />
-        ) : (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-            color: "var(--tx5)", fontSize: 13 }}>
-            {scanning ? t("app:detail.scanningSessions") : t("app:detail.noSessionToDisplay")}</div>
-        ))}
-        {view === "history" && (
-          <HistoryDetail h={histSel} onDelete={() => setHistDel(histSel)} />)}
-        {view === "askferry" && (
-          <AskFerry ferry={ferry} scanSessions={sessions}
-            attachments={agentAttachments} onAttachmentsChange={setAgentAttachments}
-            onNavigate={peekEntity}
-            onOpenConfig={(section = "providers") => {
-              setSettingsSection(section); setSettingsOpen(true); }} />)}
-        {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
+        <WorkspaceRouter
+          view={view}
+          sessions={sessions}
+          historyRows={historyRows}
+          pricing={pricing}
+          scanning={scanning}
+          navigationTarget={navigationTarget}
+          currentSession={cur}
+          selectedSessionId={selId}
+          detailMeta={detailMeta}
+          detail={detail}
+          detailActions={{ ...detailActs, refreshing, onDeleteHistory: () => setHistDel(histSel) }}
+          scope={scope}
+          ops={ops}
+          dirtyOps={dirtyOps}
+          editCaps={editCaps}
+          applying={applying}
+          historySelection={histSel}
+          ferry={ferry}
+          agentAttachments={agentAttachments}
+          onAgentAttachmentsChange={setAgentAttachments}
+          onNavigate={peekEntity}
+          onOpenConfig={(section = "providers") => {
+            setSettingsSection(section); setSettingsOpen(true); }}
+          environment={env}
+          scan={scan}
+          onFirstDone={firstDone}
+          scanningLabel={t("app:detail.scanningSessions")}
+          emptyLibraryLabel={t("app:detail.noSessionToDisplay")}
+        />
       </AppShell>
 
       {/* 弹层 */}
