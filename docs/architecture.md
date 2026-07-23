@@ -83,7 +83,8 @@ The first multi-agent execution model is deliberately bounded fan-out/fan-in:
 planner -> parallel task nodes -> synthesizer
 ```
 
-Every workflow has concurrency, task-count, depth, time, and cost/token limits.
+Every workflow has concurrency, task-count, depth, time, and total persisted
+output limits. Provider cost and token accounting are not yet a scheduler input.
 Cancellation propagates to running descendants. Cycles and unbounded recursive
 delegation are rejected.
 
@@ -96,7 +97,7 @@ External Claude, Codex, and OpenCode stores remain external sources of truth.
 Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
 
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
-currently version 7 and owns immutable operation plans, operation audit,
+currently version 8 and owns immutable operation plans, operation audit,
 delete-recovery handles, session metadata, migration history, session summary
 backbones, organization proposals, organization signals, and Ferry Runtime
 session/event records. Session metadata

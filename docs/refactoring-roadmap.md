@@ -45,7 +45,7 @@ Chinese description.
 
 - Split the current runtime by session, provider, tool, event, and persistence
   responsibilities; rename the package and binary if the new boundary is clear.
-- Add `WorkflowRun`, `TaskGraph`, `TaskNode`, scheduler limits, cancellation,
+- Add `Scheduler`, `TaskGraph`, `TaskNode`, scheduler limits, cancellation,
   failure aggregation, and fan-out/fan-in synthesis.
 - Do not introduce long-term memory.
 
