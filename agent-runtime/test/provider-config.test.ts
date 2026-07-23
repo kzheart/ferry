@@ -7,7 +7,6 @@ import {
   DEFAULT_ENABLED_PROVIDERS,
   FileProviderConfigStore,
   parseProviderConfig,
-  PROVIDER_CONFIG_VERSION,
 } from "../src/provider-config.js";
 
 async function store() {
@@ -192,18 +191,14 @@ describe("FileProviderConfigStore", () => {
     ).rejects.toThrow("thinking level");
   });
 
-  it("migrates a v1 document by keeping providers that already have credentials", () => {
-    const migrated = parseProviderConfig({
-      schema_version: 1,
-      default_model: { provider: "groq", model: "llama" },
-      credentials: { groq: { type: "api_key", key: "k" } },
-      custom_providers: [],
-    });
-    expect(migrated.schema_version).toBe(PROVIDER_CONFIG_VERSION);
-    expect(migrated.enabled_providers).toEqual([
-      ...DEFAULT_ENABLED_PROVIDERS,
-      "groq",
-    ]);
-    expect(migrated.visible_models).toEqual({});
+  it("rejects a v1 document instead of migrating it", () => {
+    expect(() =>
+      parseProviderConfig({
+        schema_version: 1,
+        default_model: { provider: "groq", model: "llama" },
+        credentials: { groq: { type: "api_key", key: "k" } },
+        custom_providers: [],
+      }),
+    ).toThrow("schema is unsupported");
   });
 });
