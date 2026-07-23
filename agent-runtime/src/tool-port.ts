@@ -46,7 +46,6 @@ const editOps = Type.Array(
 );
 
 export const FERRY_TOOL_NAMES = [
-  "ferry_list_capabilities",
   "ferry_search_sessions",
   "ferry_resolve_session",
   "ferry_get_session_context",
@@ -78,7 +77,6 @@ export interface FerryToolPort {
 }
 
 const schemas = {
-  ferry_list_capabilities: Type.Object({}, { additionalProperties: false }),
   ferry_search_sessions: Type.Object(
     {
       query: Type.String({ minLength: 1, maxLength: 500 }),
@@ -198,8 +196,6 @@ const schemas = {
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
-  ferry_list_capabilities:
-    "List Ferry capabilities using a privacy-filtered response.",
   ferry_search_sessions:
     "Search session metadata (title, project, source tool, and model). Returns fsr_ refs; it does not search message bodies or native session IDs.",
   ferry_resolve_session:

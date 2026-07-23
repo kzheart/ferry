@@ -147,8 +147,7 @@ fn request_timeout(request: &str) -> Duration {
     } else if matches!(
         method.as_deref(),
         Some(
-            "agent_list_capabilities"
-                | "agent_search_sessions"
+            "agent_search_sessions"
                 | "agent_resolve_session"
                 | "agent_get_session_context"
                 | "agent_search_session_content"
@@ -402,7 +401,6 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "edit_capabilities"
             | "edit_preview"
             | "session_meta_list"
-            | "agent_list_capabilities"
             | "agent_search_sessions"
             | "agent_resolve_session"
             | "agent_get_session_context"

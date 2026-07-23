@@ -314,31 +314,6 @@ def reset_index() -> None:
     _INDEX = AgentSessionIndex()
 
 
-def list_capabilities() -> dict:
-    tools = []
-    ports = current()
-    for name in ports.adapters():
-        plugin = ports.adapter(name)
-        editing = plugin.editor.capabilities() if plugin.editor is not None else None
-        tools.append({
-            "id": plugin.id,
-            "display_name": _redact(plugin.manifest.display_name, 80),
-            "capabilities": [cap for cap in plugin.capabilities() if cap != "author"],
-            "editing": _bounded_json(editing, 12 * 1024) if editing else None,
-            "reference_kind": "opaque",
-        })
-    return _finalize_dto({
-        "tools": tools,
-        "limits": {
-            "search_results": MAX_SEARCH_RESULTS,
-            "context_messages": MAX_CONTEXT_MESSAGES,
-            "context_bytes": MAX_CONTEXT_BYTES,
-        },
-        "mutations_require_approval": True,
-        "destructive_tools": False,
-    })
-
-
 def _string_set(value, name: str, maximum: int, item_size: int) -> set[str]:
     if value is None:
         return set()

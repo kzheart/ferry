@@ -63,16 +63,16 @@ describe("AgentRuntime", () => {
       toolHandler: async (name, args, context) => {
         calls.push(name);
         context.onUpdate({ phase: "gateway" });
-        expect(args).toEqual({});
-        return { agents: ["codex"] };
+        expect(args).toEqual({ query: "x" });
+        return { sessions: [] };
       },
     });
     await runtime.createSession("s1");
-    await runtime.prompt("s1", "tool:list_capabilities");
+    await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
     const types = runtime.replay("s1", 0).map((event) => event.type);
-    expect(calls).toEqual(["ferry_list_capabilities"]);
+    expect(calls).toEqual(["ferry_search_sessions"]);
     expect(types).toContain("tool.started");
     expect(types).toContain("tool.progress");
     expect(types).toContain("tool.completed");
@@ -92,7 +92,7 @@ describe("AgentRuntime", () => {
       }
     });
     await runtime.createSession("s1");
-    await runtime.prompt("s1", "tool:list_capabilities");
+    await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
     expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
@@ -128,10 +128,10 @@ describe("AgentRuntime", () => {
 
   it("ends a tool wait at the configured gateway deadline", async () => {
     const runtime = await createRuntime({
-      toolDeadlinesMs: { ferry_list_capabilities: 5 },
+      toolDeadlinesMs: { ferry_search_sessions: 5 },
     });
     await runtime.createSession("s1");
-    await runtime.prompt("s1", "tool:list_capabilities");
+    await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
     const events = runtime.replay("s1", 0);
@@ -170,7 +170,7 @@ describe("AgentRuntime", () => {
       }
     });
     await runtime.createSession("s1");
-    await runtime.prompt("s1", "tool:list_capabilities");
+    await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
     expect(requestId).not.toBe("");

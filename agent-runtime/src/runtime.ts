@@ -44,7 +44,6 @@ export type ToolHandler = (
 
 // 新增工具时 TypeScript 会强制补齐策略；长任务不能被短读取工具的截止时间误伤。
 const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
-  ferry_list_capabilities: 10_000,
   ferry_search_sessions: 25_000,
   ferry_resolve_session: 25_000,
   ferry_get_session_context: 25_000,
