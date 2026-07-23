@@ -359,15 +359,38 @@ pub(crate) async fn migration_commit(
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(tag = "kind")]
+pub(crate) enum OperationPlanInput {
+    #[serde(rename = "edit")]
+    Edit(EditOperationPlanInput),
+    #[serde(rename = "migration")]
+    Migration(MigrationOperationPlanInput),
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct OperationPlanInput {
-    kind: String,
+pub(crate) struct EditOperationPlanInput {
     tool: String,
     #[serde(rename = "ref")]
     reference: String,
     ops: Vec<Value>,
     #[serde(default)]
     probe: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MigrationOperationPlanInput {
+    source_tool: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    target_tool: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_turn: Option<u32>,
+    #[serde(default)]
+    probe: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    probe_model: Option<String>,
 }
 
 fn validate_bounded_json(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
@@ -456,10 +479,7 @@ fn validate_reply(reply: &Value) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
-    if input.kind != "edit" {
-        return Err("当前 Operation 仅允许 edit".to_owned());
-    }
+fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), String> {
     if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
         return Err("Operation 工具标识无效".to_owned());
     }
@@ -558,6 +578,45 @@ fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), Strin
         return Err("Operation ops 超过 64 KiB".to_owned());
     }
     Ok(())
+}
+
+fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Result<(), String> {
+    if !matches!(input.source_tool.as_str(), "claude" | "codex" | "opencode")
+        || !matches!(input.target_tool.as_str(), "claude" | "codex" | "opencode")
+    {
+        return Err("Migration Operation Agent 标识无效".to_owned());
+    }
+    if input.source_tool == input.target_tool {
+        return Err("Migration Operation 源和目标 Agent 不能相同".to_owned());
+    }
+    if !(8..=128).contains(&input.reference.len())
+        || !input.reference.starts_with("fsr_")
+        || !input
+            .reference
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("Migration Operation ref 不是有效 opaque ref".to_owned());
+    }
+    if input.max_turn == Some(0) || input.max_turn.is_some_and(|turn| turn > 100_000) {
+        return Err("Migration Operation max_turn 无效".to_owned());
+    }
+    if input.probe_model.as_ref().is_some_and(|model| {
+        model.is_empty() || model.chars().count() > 512 || model.chars().any(char::is_control)
+    }) {
+        return Err("Migration Operation probe_model 无效".to_owned());
+    }
+    if !input.probe && input.probe_model.is_some() {
+        return Err("Migration Operation 未启用 probe 时不能指定模型".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
+    match input {
+        OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
+        OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
+    }
 }
 
 fn validate_plan_id(plan_id: &str) -> Result<(), String> {
@@ -681,7 +740,8 @@ mod tests {
     use super::{
         migration_request, operation_id_request, operation_plan_request, request_attempts,
         request_timeout, validate_migration_input, validate_operation_plan_input, validate_plan_id,
-        validate_public_engine_request, MigrationInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
+        validate_public_engine_request, EditOperationPlanInput, MigrationInput,
+        MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
         ENGINE_COMMIT_TIMEOUT, ENGINE_TIMEOUT,
     };
 
@@ -766,9 +826,8 @@ mod tests {
         assert!(validate_migration_input(&input).is_err());
     }
 
-    fn edit_operation_input() -> OperationPlanInput {
-        OperationPlanInput {
-            kind: "edit".to_owned(),
+    fn edit_operation_input() -> EditOperationPlanInput {
+        EditOperationPlanInput {
             tool: "claude".to_owned(),
             reference: "fsr_fixture".to_owned(),
             ops: vec![
@@ -785,7 +844,8 @@ mod tests {
 
     #[test]
     fn operation_plan_request_has_a_fixed_method_and_tagged_input() {
-        let request = operation_plan_request(&edit_operation_input()).unwrap();
+        let request =
+            operation_plan_request(&OperationPlanInput::Edit(edit_operation_input())).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value.get("method").and_then(serde_json::Value::as_str),
@@ -843,24 +903,128 @@ mod tests {
 
     #[test]
     fn operation_inputs_are_strictly_validated() {
-        assert!(validate_operation_plan_input(&edit_operation_input()).is_ok());
-        let mut wrong_kind = edit_operation_input();
-        wrong_kind.kind = "migration".to_owned();
-        assert!(validate_operation_plan_input(&wrong_kind).is_err());
+        assert!(
+            validate_operation_plan_input(&OperationPlanInput::Edit(edit_operation_input()))
+                .is_ok()
+        );
         let mut unknown_tool = edit_operation_input();
         unknown_tool.tool = "unknown".to_owned();
-        assert!(validate_operation_plan_input(&unknown_tool).is_err());
+        assert!(validate_operation_plan_input(&OperationPlanInput::Edit(unknown_tool)).is_err());
         let mut extra_field = edit_operation_input();
         extra_field.ops = vec![serde_json::json!({
             "op": "delete-turn", "turn": 1, "method": "operation.apply",
         })];
-        assert!(validate_operation_plan_input(&extra_field).is_err());
+        assert!(validate_operation_plan_input(&OperationPlanInput::Edit(extra_field)).is_err());
         let mut duplicate = edit_operation_input();
         duplicate.ops = vec![
             serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "a"}),
             serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "b"}),
         ];
-        assert!(validate_operation_plan_input(&duplicate).is_err());
+        assert!(validate_operation_plan_input(&OperationPlanInput::Edit(duplicate)).is_err());
+    }
+
+    fn migration_operation_input() -> MigrationOperationPlanInput {
+        MigrationOperationPlanInput {
+            source_tool: "claude".to_owned(),
+            reference: "fsr_fixture".to_owned(),
+            target_tool: "codex".to_owned(),
+            max_turn: Some(3),
+            probe: true,
+            probe_model: Some("gpt-5".to_owned()),
+        }
+    }
+
+    #[test]
+    fn operation_accepts_strict_tagged_migration_input() {
+        let input = OperationPlanInput::Migration(migration_operation_input());
+        assert!(validate_operation_plan_input(&input).is_ok());
+
+        let request = operation_plan_request(&input).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value
+                .pointer("/params/input/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("migration")
+        );
+        assert_eq!(
+            value
+                .pointer("/params/input/source_tool")
+                .and_then(serde_json::Value::as_str),
+            Some("claude")
+        );
+        assert_eq!(
+            value
+                .pointer("/params/input/target_tool")
+                .and_then(serde_json::Value::as_str),
+            Some("codex")
+        );
+        assert_eq!(
+            value
+                .pointer("/params/input/ref")
+                .and_then(serde_json::Value::as_str),
+            Some("fsr_fixture")
+        );
+        assert!(value.pointer("/params/input/tool").is_none());
+        assert!(value.pointer("/params/input/ops").is_none());
+    }
+
+    #[test]
+    fn operation_migration_input_rejects_invalid_agents_and_options() {
+        let mut same_agent = migration_operation_input();
+        same_agent.target_tool = "claude".to_owned();
+        assert!(validate_operation_plan_input(&OperationPlanInput::Migration(same_agent)).is_err());
+
+        let mut unknown_agent = migration_operation_input();
+        unknown_agent.source_tool = "unknown".to_owned();
+        assert!(
+            validate_operation_plan_input(&OperationPlanInput::Migration(unknown_agent)).is_err()
+        );
+
+        let mut native_ref = migration_operation_input();
+        native_ref.reference = "/tmp/session.jsonl".to_owned();
+        assert!(validate_operation_plan_input(&OperationPlanInput::Migration(native_ref)).is_err());
+
+        let mut invalid_turn = migration_operation_input();
+        invalid_turn.max_turn = Some(0);
+        assert!(
+            validate_operation_plan_input(&OperationPlanInput::Migration(invalid_turn)).is_err()
+        );
+
+        let mut unused_model = migration_operation_input();
+        unused_model.probe = false;
+        assert!(
+            validate_operation_plan_input(&OperationPlanInput::Migration(unused_model)).is_err()
+        );
+
+        let mut invalid_model = migration_operation_input();
+        invalid_model.probe_model = Some("bad\nmodel".to_owned());
+        assert!(
+            validate_operation_plan_input(&OperationPlanInput::Migration(invalid_model)).is_err()
+        );
+    }
+
+    #[test]
+    fn operation_tagged_inputs_deny_unknown_or_cross_variant_fields() {
+        let unknown = serde_json::json!({
+            "kind": "migration",
+            "source_tool": "claude",
+            "ref": "fsr_fixture",
+            "target_tool": "codex",
+            "probe": false,
+            "method": "operation.apply",
+        });
+        assert!(serde_json::from_value::<OperationPlanInput>(unknown).is_err());
+
+        let mixed = serde_json::json!({
+            "kind": "edit",
+            "tool": "claude",
+            "ref": "fsr_fixture",
+            "ops": [{"op": "delete-turn", "turn": 1}],
+            "probe": false,
+            "target_tool": "codex",
+        });
+        assert!(serde_json::from_value::<OperationPlanInput>(mixed).is_err());
     }
 
     #[test]
@@ -882,6 +1046,7 @@ mod tests {
             },
         })];
 
+        let input = OperationPlanInput::Edit(input);
         assert!(validate_operation_plan_input(&input).is_ok());
         let request = operation_plan_request(&input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
@@ -932,7 +1097,7 @@ mod tests {
         ] {
             let mut input = edit_operation_input();
             input.ops = vec![operation];
-            assert!(validate_operation_plan_input(&input).is_err());
+            assert!(validate_operation_plan_input(&OperationPlanInput::Edit(input)).is_err());
         }
     }
 
@@ -944,7 +1109,7 @@ mod tests {
             "turn": 1,
             "reply": {"items": [{"kind": "text", "text": "x".repeat(20_001)}]},
         })];
-        assert!(validate_operation_plan_input(&oversized).is_err());
+        assert!(validate_operation_plan_input(&OperationPlanInput::Edit(oversized)).is_err());
 
         let authored = serde_json::json!({
             "op": "replace-assistant-reply",
@@ -953,7 +1118,7 @@ mod tests {
         });
         let mut duplicate = edit_operation_input();
         duplicate.ops = vec![authored.clone(), authored];
-        assert!(validate_operation_plan_input(&duplicate).is_err());
+        assert!(validate_operation_plan_input(&OperationPlanInput::Edit(duplicate)).is_err());
     }
 
     #[test]
