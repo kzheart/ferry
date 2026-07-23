@@ -366,6 +366,8 @@ pub(crate) struct OperationPlanInput {
     #[serde(rename = "ref")]
     reference: String,
     ops: Vec<Value>,
+    #[serde(default)]
+    probe: bool,
 }
 
 fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
@@ -659,6 +661,7 @@ mod tests {
                     "text": "updated",
                 }),
             ],
+            probe: true,
         }
     }
 
@@ -679,6 +682,12 @@ mod tests {
         assert!(value.pointer("/params/input/tool").is_some());
         assert!(value.pointer("/params/input/ref").is_some());
         assert!(value.pointer("/params/input/ops").is_some());
+        assert_eq!(
+            value
+                .pointer("/params/input/probe")
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
         assert_eq!(
             value
                 .get("params")

@@ -20,12 +20,13 @@ def operation_service():
     operations.reset_service()
 
 
-def _plan(ops=None):
+def _plan(ops=None, probe=False):
     return operations.plan({
         "kind": "edit",
         "tool": "claude",
         "ref": _claude_ref(),
         "ops": ops or [{"op": "delete-turn", "turn": 1}],
+        "probe": probe,
     })
 
 
@@ -48,6 +49,21 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     ]
     assert applied["result"]["snapshot"] == "snapshot-before-agent-edit"
     assert operations.status(plan["plan_id"])["status"] == "applied"
+
+
+def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        operations.services,
+        "_finish_mutation",
+        lambda tool, editor, result, doc, snapshot, probe, save_as:
+            calls.append((probe, save_as)) or result,
+    )
+
+    plan = _plan(probe=True)
+    operations.apply(plan["plan_id"])
+
+    assert calls == [(True, False)]
 
 
 def test_cancelled_plan_never_writes(agent_environment):
