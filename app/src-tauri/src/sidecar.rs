@@ -370,6 +370,92 @@ pub(crate) struct OperationPlanInput {
     probe: bool,
 }
 
+fn validate_bounded_json(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
+    *nodes += 1;
+    if depth > 8 || *nodes > 2_000 {
+        return Err("Operation JSON 结构过深或项目过多".to_owned());
+    }
+    match value {
+        Value::Object(fields) => {
+            if fields.keys().any(|key| key.len() > 128) {
+                return Err("Operation JSON key 过长".to_owned());
+            }
+            for child in fields.values() {
+                validate_bounded_json(child, depth + 1, nodes)?;
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                validate_bounded_json(child, depth + 1, nodes)?;
+            }
+        }
+        Value::String(value) if value.chars().count() > 20_000 => {
+            return Err("Operation JSON 字符串过长".to_owned());
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+    Ok(())
+}
+
+fn validate_reply(reply: &Value) -> Result<(), String> {
+    let fields = reply
+        .as_object()
+        .filter(|fields| fields.len() == 1 && fields.contains_key("items"))
+        .ok_or_else(|| "Operation reply 必须且只能包含 items".to_owned())?;
+    let items = fields["items"]
+        .as_array()
+        .filter(|items| !items.is_empty() && items.len() <= 100)
+        .ok_or_else(|| "Operation reply.items 必须包含 1 到 100 项".to_owned())?;
+    for item in items {
+        let item_fields = item
+            .as_object()
+            .ok_or_else(|| "Operation reply item 必须是 object".to_owned())?;
+        match item_fields.get("kind").and_then(Value::as_str) {
+            Some("text") => {
+                if item_fields.len() != 2 || !item_fields.contains_key("text") {
+                    return Err("Operation reply text item 参数无效".to_owned());
+                }
+                let text = item_fields["text"]
+                    .as_str()
+                    .ok_or_else(|| "Operation reply text 必须是字符串".to_owned())?;
+                if text.is_empty() || text.chars().count() > 20_000 {
+                    return Err("Operation reply text 长度无效".to_owned());
+                }
+            }
+            Some("tool") => {
+                if item_fields.len() != 4
+                    || !item_fields.contains_key("name")
+                    || !item_fields.contains_key("input")
+                    || !item_fields.contains_key("output")
+                {
+                    return Err("Operation reply tool item 参数无效".to_owned());
+                }
+                let name = item_fields["name"]
+                    .as_str()
+                    .ok_or_else(|| "Operation reply tool name 必须是字符串".to_owned())?;
+                let output = item_fields["output"]
+                    .as_str()
+                    .ok_or_else(|| "Operation reply tool output 必须是字符串".to_owned())?;
+                if name.is_empty()
+                    || name.chars().count() > 256
+                    || name.chars().any(char::is_control)
+                    || output.chars().count() > 20_000
+                {
+                    return Err("Operation reply tool name/output 长度无效".to_owned());
+                }
+                let tool_input = &item_fields["input"];
+                if !tool_input.is_object() && !tool_input.is_string() {
+                    return Err("Operation reply tool input 必须是 object 或字符串".to_owned());
+                }
+                let mut nodes = 0;
+                validate_bounded_json(tool_input, 0, &mut nodes)?;
+            }
+            _ => return Err("Operation reply item kind 不受支持".to_owned()),
+        }
+    }
+    Ok(())
+}
+
 fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     if input.kind != "edit" {
         return Err("当前 Operation 仅允许 edit".to_owned());
@@ -387,6 +473,8 @@ fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), Strin
         return Err("Operation ops 必须包含 1 到 50 项".to_owned());
     }
     let mut rewrite_locators = HashSet::new();
+    let mut delete_turns = HashSet::new();
+    let mut authored_turns = HashSet::new();
     for operation in &input.ops {
         let fields = operation
             .as_object()
@@ -401,6 +489,10 @@ fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), Strin
                         .is_none_or(|turn| turn == 0)
                 {
                     return Err("Operation delete-turn 参数无效".to_owned());
+                }
+                let turn = fields["turn"].as_u64().expect("turn validated");
+                if !delete_turns.insert(turn) {
+                    return Err("Operation 不允许重复 delete-turn 目标".to_owned());
                 }
             }
             Some("rewrite") => {
@@ -429,6 +521,34 @@ fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), Strin
                 if !rewrite_locators.insert(locator) {
                     return Err("Operation 不允许重复 rewrite locator".to_owned());
                 }
+            }
+            Some("replace-assistant-reply") => {
+                if fields.len() != 3
+                    || !fields.contains_key("turn")
+                    || !fields.contains_key("reply")
+                {
+                    return Err("Operation replace-assistant-reply 参数无效".to_owned());
+                }
+                let turn = match &fields["turn"] {
+                    Value::Number(value) => {
+                        let turn = value.as_u64().filter(|turn| *turn > 0).ok_or_else(|| {
+                            "Operation replace-assistant-reply turn 无效".to_owned()
+                        })?;
+                        format!("number:{turn}")
+                    }
+                    Value::String(value)
+                        if !value.is_empty()
+                            && value.len() <= 512
+                            && !value.chars().any(char::is_control) =>
+                    {
+                        format!("string:{value}")
+                    }
+                    _ => return Err("Operation replace-assistant-reply turn 无效".to_owned()),
+                };
+                if !authored_turns.insert(turn) {
+                    return Err("Operation 不允许重复 replace-assistant-reply 目标".to_owned());
+                }
+                validate_reply(&fields["reply"])?;
             }
             _ => return Err("Operation edit op 不受支持".to_owned()),
         }
@@ -742,6 +862,99 @@ mod tests {
             serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "a"}),
             serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "b"}),
         ];
+        assert!(validate_operation_plan_input(&duplicate).is_err());
+    }
+
+    #[test]
+    fn operation_accepts_current_replace_assistant_reply_shape() {
+        let mut input = edit_operation_input();
+        input.ops = vec![serde_json::json!({
+            "op": "replace-assistant-reply",
+            "turn": "turn:fixture",
+            "reply": {
+                "items": [
+                    {"kind": "text", "text": "updated answer"},
+                    {
+                        "kind": "tool",
+                        "name": "read",
+                        "input": {"path": "/tmp/file"},
+                        "output": "contents",
+                    },
+                ],
+            },
+        })];
+
+        assert!(validate_operation_plan_input(&input).is_ok());
+        let request = operation_plan_request(&input).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value
+                .pointer("/params/input/ops/0/op")
+                .and_then(serde_json::Value::as_str),
+            Some("replace-assistant-reply")
+        );
+    }
+
+    #[test]
+    fn operation_rejects_invalid_replace_assistant_reply_shapes() {
+        for operation in [
+            serde_json::json!({
+                "op": "replace-assistant-reply",
+                "turn": 0,
+                "reply": {"items": [{"kind": "text", "text": "x"}]},
+            }),
+            serde_json::json!({
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": []},
+            }),
+            serde_json::json!({
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": [{"kind": "text", "text": "x", "extra": true}]},
+            }),
+            serde_json::json!({
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {
+                    "items": [{
+                        "kind": "tool",
+                        "name": "read",
+                        "input": [],
+                        "output": "x",
+                    }],
+                },
+            }),
+            serde_json::json!({
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": [{"kind": "text", "text": "x"}]},
+                "method": "operation.apply",
+            }),
+        ] {
+            let mut input = edit_operation_input();
+            input.ops = vec![operation];
+            assert!(validate_operation_plan_input(&input).is_err());
+        }
+    }
+
+    #[test]
+    fn operation_rejects_oversized_or_duplicate_reply_targets() {
+        let mut oversized = edit_operation_input();
+        oversized.ops = vec![serde_json::json!({
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x".repeat(20_001)}]},
+        })];
+        assert!(validate_operation_plan_input(&oversized).is_err());
+
+        let authored = serde_json::json!({
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+        });
+        let mut duplicate = edit_operation_input();
+        duplicate.ops = vec![authored.clone(), authored];
         assert!(validate_operation_plan_input(&duplicate).is_err());
     }
 

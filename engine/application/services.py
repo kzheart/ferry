@@ -347,7 +347,23 @@ def authoring_apply(ref: str, turn: int | str, reply: dict, probe: bool = False,
         tool, editor, result, doc, snapshot, probe, save_as)
 
 def edit_capabilities(tool: str) -> dict:
-    return adapter(tool).require("editor").capabilities()
+    plugin = adapter(tool)
+    editor = plugin.require("editor")
+    capabilities = editor.capabilities()
+    operation_modes = {
+        operation: ["inplace"]
+        for operation, modes in capabilities.get("operation_modes", {}).items()
+        if "inplace" in modes
+    }
+    authoring = plugin.require("authoring")
+    if authoring.supports_mode(False):
+        operation_modes["replace-assistant-reply"] = ["inplace"]
+    return {
+        "tool": tool,
+        "operations": sorted(operation_modes),
+        "inplace": bool(operation_modes),
+        "operation_modes": operation_modes,
+    }
 
 
 def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
