@@ -45,12 +45,8 @@ export function repoOf(dir) {
   return parts[parts.length - 1] || dir;
 }
 
-import { toolReferenceKind } from "../../api/contract/tools.js";
-
-export const sessionRef = session =>
-  toolReferenceKind(session.tool) === "id"
-    ? session.id
-    : (session.path || session.id);
+// 会话引用只能由 Engine 签发；路径和各 Agent 原生 ID 不得进入 UI 调用链。
+export const sessionRef = session => session.ref;
 
 export const operationRef = session => session.ref;
 

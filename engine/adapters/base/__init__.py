@@ -8,7 +8,7 @@ from .editing import EditBackend, EditDocument
 from .plugin import (
     ModelCatalog, MigrationSource, MigrationTarget,
     SessionBrowser, SessionEditor, SessionLifecycle, SessionVerifier,
-    ToolManifest, ToolPlugin,
+    NativeSessionReference, ToolManifest, ToolPlugin,
 )
 
 __all__ = [
@@ -16,5 +16,5 @@ __all__ = [
     "NativeEditCodec", "TurnIndex", "TurnSpan",
     "ModelCatalog", "MigrationSource", "MigrationTarget",
     "SessionBrowser", "SessionEditor", "SessionLifecycle", "SessionVerifier",
-    "ToolManifest", "ToolPlugin",
+    "NativeSessionReference", "ToolManifest", "ToolPlugin",
 ]

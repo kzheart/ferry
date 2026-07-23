@@ -1,7 +1,7 @@
 """OpenCode 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.plugin import ToolManifest, ToolPlugin
+from ..base.plugin import ToolManifest, ToolPlugin, id_reference
 from ..base.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from .editor import OpenCodeBackend
@@ -35,6 +35,9 @@ class OpenCodeBrowser:
 
     def agent_fingerprint(self, ref):
         return fingerprint(ref)
+
+    def canonicalize(self, row):
+        return id_reference(row)
 
 
 class OpenCodeModels:

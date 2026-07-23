@@ -1,7 +1,7 @@
 """Claude 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.plugin import ToolManifest, ToolPlugin
+from ..base.plugin import ToolManifest, ToolPlugin, jsonl_reference
 from ..base.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from . import editing as claude_edit
@@ -36,6 +36,9 @@ class ClaudeBrowser:
 
     def agent_fingerprint(self, ref):
         return agent_fingerprint(ref)
+
+    def canonicalize(self, row):
+        return jsonl_reference(row, MANIFEST.source_path, self.resolve_ref)
 
 
 class ClaudeModels:

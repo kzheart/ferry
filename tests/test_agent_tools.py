@@ -8,7 +8,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from engine.adapters.base.plugin import ToolManifest, ToolPlugin
+from engine.adapters.base.plugin import (
+    ToolManifest, ToolPlugin, id_reference, jsonl_reference,
+)
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
 from engine.application import scanning
@@ -30,10 +32,11 @@ class Cache:
 
 
 class Browser:
-    def __init__(self, rows, session, *, identity=False):
+    def __init__(self, rows, session, *, identity=False, source_path=None):
         self.rows = rows
         self.session = session
         self.identity = identity
+        self.source_path = source_path
         self.fingerprint_value = "fingerprint-1"
 
     def scan(self, _cache):
@@ -53,6 +56,11 @@ class Browser:
 
     def agent_fingerprint(self, ref):
         return self.fingerprint(ref)
+
+    def canonicalize(self, row):
+        if self.identity:
+            return id_reference(row)
+        return jsonl_reference(row, self.source_path, self.resolve_ref)
 
 
 class MigrationSource:
@@ -214,9 +222,9 @@ def agent_environment(tmp_path):
         "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
         "model": "claude-safe",
     }]
-    claude_browser = Browser(rows, _session())
+    claude_browser = Browser(rows, _session(), source_path=str(root))
     claude = ToolPlugin(
-        ToolManifest("claude", "Claude Code", "claude", str(root), "path"),
+        ToolManifest("claude", "Claude Code", "claude", str(root)),
         claude_browser,
         migration_source=MigrationSource(claude_browser),
         migration_target=MigrationTarget(), editor=editor,
@@ -229,9 +237,9 @@ def agent_environment(tmp_path):
         "model": "model-b",
     }]
     opencode_browser = Browser(
-        opencode_rows, Session("opencode", "oc-1", "/tmp/project-b"))
+        opencode_rows, Session("opencode", "oc-1", "/tmp/project-b"), identity=True)
     opencode = ToolPlugin(
-        ToolManifest("opencode", "OpenCode", "opencode", "/unused", "id"),
+        ToolManifest("opencode", "OpenCode", "opencode", "/unused"),
         opencode_browser,
         migration_source=MigrationSource(opencode_browser),
         migration_target=MigrationTarget(), editor=Editor(),
