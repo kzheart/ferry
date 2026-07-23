@@ -336,15 +336,9 @@ function customModelMap(value: unknown): Record<string, CustomModelConfig[]> {
 }
 
 export function parseProviderConfig(value: unknown): ProviderConfigDocument {
-  if (
-    !record(value) ||
-    (value.schema_version !== PROVIDER_CONFIG_VERSION &&
-      value.schema_version !== 1)
-  ) {
+  if (!record(value) || value.schema_version !== PROVIDER_CONFIG_VERSION) {
     throw new Error("provider config schema is unsupported");
   }
-  // v1 没有可见性字段:迁移时点亮默认 Provider,并把已有凭据的 Provider 一并保留
-  const legacy = value.schema_version === 1;
   if (!record(value.default_model) || !record(value.credentials)) {
     throw new Error("provider config is invalid");
   }
@@ -365,15 +359,6 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
     throw new Error("custom provider ids must be unique");
   }
   const thinking = thinkingLevel(value.default_model.thinking);
-  const enabled = legacy
-    ? [
-        ...new Set([
-          ...DEFAULT_ENABLED_PROVIDERS,
-          ...Object.keys(credentials),
-          ...customProviders.map((provider) => provider.id),
-        ]),
-      ]
-    : providerIdList(value.enabled_providers, "enabled provider id");
   return {
     schema_version: PROVIDER_CONFIG_VERSION,
     default_model: {
@@ -383,9 +368,12 @@ export function parseProviderConfig(value: unknown): ProviderConfigDocument {
     },
     credentials,
     custom_providers: customProviders,
-    enabled_providers: enabled,
-    visible_models: legacy ? {} : visibleModels(value.visible_models ?? {}),
-    custom_models: legacy ? {} : customModelMap(value.custom_models ?? {}),
+    enabled_providers: providerIdList(
+      value.enabled_providers,
+      "enabled provider id",
+    ),
+    visible_models: visibleModels(value.visible_models),
+    custom_models: customModelMap(value.custom_models),
   };
 }
 
