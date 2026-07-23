@@ -93,14 +93,25 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
       turn: turn.turn_locator || turn.turn,
       labelKey: "browser:pendingBar.labelAuthor", labelParams: { n: turn.turn },
       label: `编排 第 ${turn.turn} 轮 AI 回复`, dot: ACCENT,
-      origItems: source, items }]);
+      origItems: source, items, baseKey: replyKey(items) }]);
   };
+  // op 只是「进入编辑」的载体,只有内容真正偏离原始才算待应用(否则底部保存条不该出现)
+  const replyKey = items => JSON.stringify((items || []).map(item => item.kind === "tool"
+    ? { k: "tool", name: item.name, inputText: item.inputText, inputFormat: item.inputFormat, output: item.output }
+    : { k: "text", text: item.text }));
+  const isDirty = op => {
+    if (op.type === "rewrite") return op.text !== op.orig;
+    if (op.type === "assistant-reply") return replyKey(op.items) !== op.baseKey;
+    return true;   // delete 本身即改动
+  };
+  const dirtyOps = ops.filter(isDirty);
+
   const removeOp = id => setOps(currentOps => currentOps.filter(op => op.id !== id));
   const updateOp = (id, patch) => {
     setDiff(null);
     setOps(currentOps => currentOps.map(op => op.id === id ? { ...op, ...patch } : op));
   };
-  const rpcOps = () => ops.map(op => op.type === "rewrite"
+  const rpcOps = () => dirtyOps.map(op => op.type === "rewrite"
     ? { op: "rewrite", locator: op.locator, text: op.text } : op.rpc);
   const authoredReply = op => ({ items: op.items.map(item => item.kind === "text"
     ? { kind: "text", text: item.text }
@@ -125,9 +136,9 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   };
   const openDiff = async () => {
     setDiff({ loading: true, preview: null });
-    if (!current || !ops.length) { setDiff({ loading: false, preview: null }); return; }
+    if (!current || !dirtyOps.length) { setDiff({ loading: false, preview: null }); return; }
     try {
-      const authored = ops.find(op => op.type === "assistant-reply");
+      const authored = dirtyOps.find(op => op.type === "assistant-reply");
       if (authored) {
         const invalid = authoringError(authored);
         if (invalid) throw new Error(invalid);
@@ -143,12 +154,12 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     }
   };
   const applyEdit = async () => {
-    if (!ops.length) return;
+    if (!dirtyOps.length) return;
     setConfirmApply(false); setApplying(true);
     setToast({ kind: "run", title: t("browser:edit.toastApplying"),
       desc: runtimeProbe ? t("browser:edit.toastApplyingDescProbe") : t("browser:edit.toastApplyingDescStructure") });
     try {
-      const authored = ops.find(op => op.type === "assistant-reply");
+      const authored = dirtyOps.find(op => op.type === "assistant-reply");
       const invalid = authored ? authoringError(authored) : null;
       if (invalid) throw new Error(invalid);
       const reply = authored ? authoredReply(authored) : null;
@@ -176,7 +187,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     setApplying(false);
   };
 
-  return { ops, setOps, saveMode, setSaveMode, diff, setDiff,
+  return { ops, dirtyOps, setOps, saveMode, setSaveMode, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, applyEdit };
