@@ -155,16 +155,6 @@ def _agent_ids(session: Session) -> dict[str, str]:
     return result
 
 
-def _uuid_map(session: Session) -> dict[str, str]:
-    values = []
-    for node in session.walk():
-        for raw in node.raw_records:
-            payload = raw.payload if isinstance(raw.payload, dict) else {}
-            if payload.get("uuid"):
-                values.append(payload["uuid"])
-    return {old: str(uuid.uuid4()) for old in dict.fromkeys(values)}
-
-
 def _iso_now(offset: float = 0) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S",
                          time.gmtime(time.time() + offset)) + ".000Z"
@@ -186,43 +176,6 @@ def _ensure_resume_fields(record: dict, *, cwd: str | None = None,
     if cwd and "cwd" in record:
         record["cwd"] = cwd
     return record
-
-
-def _rewrite_record(value: dict, sid: str, agent_map: dict[str, str],
-                    uuid_map: dict[str, str], cwd: str | None = None,
-                    stamp: str | None = None) -> dict:
-    record = _clone(value)
-    for key in ("sessionId", "parentSessionId"):
-        if key in record:
-            record[key] = sid
-    if isinstance(record.get("agentId"), str):
-        record["agentId"] = agent_map.get(record["agentId"], record["agentId"])
-    for key in ("uuid", "parentUuid", "sourceToolAssistantUUID",
-                "parentLastUuid", "leafUuid"):
-        if isinstance(record.get(key), str):
-            record[key] = uuid_map.get(record[key], record[key])
-    result = record.get("toolUseResult")
-    if isinstance(result, dict):
-        if isinstance(result.get("agentId"), str):
-            result["agentId"] = agent_map.get(
-                result["agentId"], result["agentId"]
-            )
-    return _ensure_resume_fields(record, cwd=cwd, stamp=stamp)
-
-
-def _raw_lines(session: Session, sid: str, agent_map: dict[str, str],
-                uuid_map: dict[str, str], cwd: str | None = None) -> list[dict]:
-    lines = []
-    start = time.time() - 2
-    for index, raw in enumerate(
-            sorted(session.raw_records, key=lambda item: item.ordinal)):
-        if not isinstance(raw.payload, dict) or raw.record_type.startswith("workflow."):
-            continue
-        stamp = time.strftime("%Y-%m-%dT%H:%M:%S",
-                              time.gmtime(start + index * 2)) + ".000Z"
-        lines.append(_rewrite_record(
-            raw.payload, sid, agent_map, uuid_map, cwd=cwd, stamp=stamp))
-    return lines
 
 
 def _child_path(destination: Path, sid: str, child: Session,
@@ -257,8 +210,7 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
         records.append({"type": "fork-context-ref", "agentId": agent_id,
                         "parentSessionId": sid,
                         "parentLastUuid": fork_parent,
-                        "contextLength": session.meta.get(
-                            "fork_context_ref", {}).get("contextLength", 0)})
+                        "contextLength": 0})
 
     def base(kind: str) -> dict:
         nonlocal parent, timestamp
@@ -428,33 +380,9 @@ def write(sess: Session, cwd: str | None = None,
                    Path.home() / ".claude" / "projects" / _slug(cwd))
     main_path = destination / f"{sid}.jsonl"
     agent_map = _agent_ids(sess)
-    use_raw = sess.source_tool == "claude" and all(
-        node.raw_records for node in sess.walk())
 
     created = []
     try:
-        if use_raw:
-            uuid_map = _uuid_map(sess)
-            _write_jsonl(main_path, _raw_lines(sess, sid, agent_map, uuid_map, cwd))
-            created.append(main_path)
-            for child in list(sess.walk())[1:]:
-                new_agent = agent_map.get(child.source_id)
-                child_path = _child_path(destination, sid, child, new_agent)
-                _write_jsonl(child_path, _raw_lines(
-                    child, sid, agent_map, uuid_map, child.cwd or cwd))
-                created.append(child_path)
-            for relative, records in sess.meta.get("workflow_journals", {}).items():
-                source = Path(relative)
-                parts = source.parts
-                index = parts.index("workflows") if "workflows" in parts else 0
-                target = destination / sid / "subagents" / Path(*parts[index:])
-                rewritten = [
-                    _rewrite_record(record, sid, agent_map, uuid_map, cwd=cwd)
-                    for record in records]
-                _write_jsonl(target, rewritten)
-                created.append(target)
-            return sid, main_path
-
         source_uuids = {}
         root_records = _generated_lines(
             sess, sid, cwd, templates, agent_map, source_uuids,

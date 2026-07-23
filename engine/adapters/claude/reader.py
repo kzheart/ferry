@@ -8,7 +8,6 @@ from ...domain.model import (
     Block,
     ContextCompaction,
     Message,
-    RawRecord,
     Session,
     ToolCall,
     ToolResult,
@@ -323,12 +322,6 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
     session = Session(source_tool="claude", source_id=source_id,
                       cwd=first.get("cwd", ""), agent_id=agent_id)
     session.context_compactions = _context_compactions(lines)
-    session.raw_records = [
-        RawRecord(source="claude", record_type=record.get("type", ""),
-                  payload=record, ordinal=index,
-                  timestamp=record.get("timestamp"), location=str(path))
-        for index, record in enumerate(lines)
-    ]
     for record in lines:
         if record.get("type") == "__resume_harness_malformed_jsonl__":
             session.lose(
@@ -344,7 +337,6 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
         if record.get("type") == "fork-context-ref":
             session.forked_from_id = record.get("parentLastUuid")
             session.parent_id = record.get("parentSessionId")
-            session.meta["fork_context_ref"] = record
 
     pending: dict[str, ToolCall] = {}
     spawn_messages: dict[str, str | None] = {}
@@ -360,7 +352,7 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
                       if record.get("parentUuid") else [],
                       turn_id=record.get("promptId"),
                       agent_id=_native_agent_id(record) or agent_id,
-                      created_at=record.get("timestamp"), raw=[record])
+                      created_at=record.get("timestamp"))
         if isinstance(content, str):
             session.messages.append(Message(
                 role=role, blocks=[Block("text", content)], **common))
@@ -465,20 +457,6 @@ def read(path: str) -> Session:
     child_dir = main_path.with_suffix("") / "subagents"
     child_paths = sorted(child_dir.rglob("agent-*.jsonl")) \
         if child_dir.exists() else []
-    journals = {}
-    if child_dir.exists():
-        for journal in child_dir.rglob("journal.jsonl"):
-            records = _load(journal)
-            relative = str(journal.relative_to(main_path.with_suffix("")))
-            journals[relative] = records
-            root.raw_records.extend(
-                RawRecord(source="claude",
-                          record_type=f"workflow.{record.get('type', 'unknown')}",
-                          payload=record, ordinal=index,
-                          timestamp=record.get("timestamp"), location=str(journal))
-                for index, record in enumerate(records))
-    if journals:
-        root.meta["workflow_journals"] = journals
     decoded_sessions = [
         _decode_transcript(child_path, is_child=True)
         for child_path in child_paths

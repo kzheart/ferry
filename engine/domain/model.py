@@ -86,16 +86,6 @@ def text_tool_result(text: str, *, status: str = "success", **fields) -> ToolRes
 
 
 @dataclass
-class RawRecord:
-    source: str
-    record_type: str
-    payload: Any
-    ordinal: int = 0
-    timestamp: str | int | None = None
-    location: str = ""
-
-
-@dataclass
 class ToolCall:
     name: str                    # 源工具名(Bash / exec / bash ...)
     op: str | None               # 规范操作(shell.exec 等);None = 无映射,降级
@@ -134,7 +124,6 @@ class Block:
 class Message:
     role: str                    # user | assistant
     blocks: list[Block] = field(default_factory=list)
-    raw: list = field(default_factory=list)   # 来源记录原文(可多条)
     source_id: str | None = None
     parent_ids: list[str] = field(default_factory=list)
     turn_id: str | None = None
@@ -199,7 +188,6 @@ class Session:
     children: list["Session"] = field(default_factory=list)
     agent_edges: list[AgentEdge] = field(default_factory=list)
     context_compactions: list[ContextCompaction] = field(default_factory=list)
-    raw_records: list[RawRecord] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
 
     def lose(self, code: str, **params):
