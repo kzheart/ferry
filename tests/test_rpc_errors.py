@@ -28,6 +28,14 @@ def test_unknown_method_is_structured():
     assert response["error"]["params"] == {"method": "nope"}
 
 
+def test_metadata_write_is_not_a_generic_rpc_method():
+    response = rpc(json.dumps({"method": "session_meta_set", "params": {
+        "id": "session", "patch": {"name": "direct write"},
+    }}))
+    assert response["ok"] is False
+    assert response["error"]["code"] == "rpc.unknown_method"
+
+
 def test_missing_param_is_structured():
     response = rpc(json.dumps({"method": "models", "params": {}}))
     assert response["ok"] is False

@@ -34,7 +34,6 @@ RPC_METHODS = {
     "session_asset": lambda p: services.session_asset(p["tool"], p["ref"], p["asset_id"]),
     "edit_capabilities": lambda p: services.edit_capabilities(p["tool"]),
     "session_meta_list": lambda p: services.session_meta_list(),
-    "session_meta_set": lambda p: services.session_meta_set(p["id"], p.get("patch") or {}),
     "session_backbone": lambda p: summaries.build_backbone(p["tool"], p["ref"]),
     "session_summaries_set": lambda p: summaries.set_summaries(
         p["tool"], p["id"], p.get("digests") or {}),

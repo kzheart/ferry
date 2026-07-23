@@ -142,13 +142,20 @@ export default function App() {
   useEffect(() => {
     rpc("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
   }, []);
-  const setMetaFor = async (id, patch) => {
+  const setMetaFor = async (session, patch) => {
     try {
-      const entry = await rpc("session_meta_set", { id, patch });
+      const plan = await operationPlan({
+        kind: "metadata",
+        tool: session.tool,
+        ref: operationRef(session),
+        patch,
+      });
+      const applied = await operationApply(plan.plan_id);
+      const entry = applied.result.metadata;
       setMetaMap(m => {
         const next = { ...m };
-        if (entry && Object.keys(entry).length) next[id] = entry;
-        else delete next[id];
+        if (entry && Object.keys(entry).length) next[session.id] = entry;
+        else delete next[session.id];
         return next;
       });
     } catch (e) {
@@ -357,7 +364,7 @@ export default function App() {
     { sep: true },
     { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
     { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
-      onClick: () => setMetaFor(ctxSess.id, { pinned: !ctxMeta.pinned }) },
+      onClick: () => setMetaFor(ctxSess, { pinned: !ctxMeta.pinned }) },
     { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
     { sep: true },
     { label: t("app:ctx.copySessionReference"),
@@ -574,8 +581,10 @@ export default function App() {
     if (id !== selId) select(id);
     setCtxMenu({ ...pos, id });
   };
-  rowHandlers.current.pin = id =>
-    setMetaFor(id, { pinned: !(metaMap[id] || {}).pinned });
+  rowHandlers.current.pin = id => {
+    const session = byId[id];
+    if (session) setMetaFor(session, { pinned: !(metaMap[id] || {}).pinned });
+  };
   rowHandlers.current.delete = id => { const s = byId[id]; if (s) askDelete(s); };
   const onRowClick = useCallback((id, e) => rowHandlers.current.click(id, e), []);
   const onRowMore = useCallback((id, e) => rowHandlers.current.more(id, e), []);
@@ -1072,7 +1081,7 @@ export default function App() {
           placeholder={t("app:prompt.renamePlaceholder")} confirmLabel={t("app:prompt.save")}
           initial={metaMap[renameFor.id]?.name || renameFor.title || ""}
           onCancel={() => setRenameFor(null)}
-          onConfirm={v => { setRenameFor(null); setMetaFor(renameFor.id, { name: v }); }} />)}
+          onConfirm={v => { setRenameFor(null); setMetaFor(renameFor, { name: v }); }} />)}
       {agentRenameFor && (
         <PromptBox title={t("askferry:pane.renameTitle")}
           desc={t("askferry:pane.renameDesc", { title: agentRenameFor.title || t("askferry:chat.untitled") })}
@@ -1096,7 +1105,8 @@ export default function App() {
             for (const id of tagFor.ids) {
               const merged = tagFor.batch
                 ? [...new Set([...(metaMap[id]?.tags || []), ...tags])] : tags;
-              await setMetaFor(id, { tags: merged });
+              const session = byId[id];
+              if (session) await setMetaFor(session, { tags: merged });
             }
           }} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
