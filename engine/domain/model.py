@@ -20,24 +20,6 @@ TOOL_RESULT_BLOCK_KINDS = frozenset({
     "text", "json", "image", "file", "tool_reference",
 })
 
-_TOOL_RESULT_STATUS_ALIASES = {
-    "complete": "success",
-    "completed": "success",
-    "failed": "error",
-    "failure": "error",
-    "cancelled": "interrupted",
-    "canceled": "interrupted",
-}
-
-
-def normalize_tool_result_status(value: str | None) -> str:
-    """Map native/legacy result states into the canonical status vocabulary."""
-    if not isinstance(value, str):
-        return "unknown"
-    normalized = value.strip().lower()
-    normalized = _TOOL_RESULT_STATUS_ALIASES.get(normalized, normalized)
-    return normalized if normalized in TOOL_RESULT_STATUSES else "unknown"
-
 
 @dataclass
 class ToolResultBlock:
@@ -76,15 +58,10 @@ class ToolResult:
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        original_status = self.status
-        self.status = normalize_tool_result_status(self.status)
-        if (
-            isinstance(original_status, str)
-            and original_status.strip()
-            and self.status == "unknown"
-            and original_status.strip().lower() != "unknown"
-        ):
-            self.metadata.setdefault("source_status", original_status)
+        if self.status not in TOOL_RESULT_STATUSES:
+            raise ValueError(
+                f"unsupported canonical tool result status: {self.status}"
+            )
         if isinstance(self.exit_code, bool):
             raise TypeError("exit_code must be an integer, not bool")
         if self.exit_code is not None and not isinstance(self.exit_code, int):

@@ -8,7 +8,6 @@ from engine.domain.model import (
     ToolCall,
     ToolResult,
     ToolResultBlock,
-    normalize_tool_result_status,
     tool_result_text,
 )
 from engine.domain.tool_ops import (
@@ -21,7 +20,7 @@ from engine.domain.tool_ops import (
 
 def test_tool_call_uses_one_structured_result_source():
     result = ToolResult(
-        status="completed",
+        status="success",
         blocks=[
             ToolResultBlock("text", text="done"),
             ToolResultBlock("json", data={"count": 2}),
@@ -71,14 +70,12 @@ def test_tool_call_rejects_a_text_result_shortcut():
 
 @pytest.mark.parametrize("status", sorted(TOOL_RESULT_STATUSES))
 def test_canonical_result_statuses_are_stable(status):
-    assert normalize_tool_result_status(status) == status
+    assert ToolResult(status=status).status == status
 
 
-def test_unknown_native_status_is_preserved_as_metadata():
-    result = ToolResult(status="native-future-state")
-
-    assert result.status == "unknown"
-    assert result.metadata["source_status"] == "native-future-state"
+def test_domain_rejects_native_statuses():
+    with pytest.raises(ValueError, match="unsupported canonical"):
+        ToolResult(status="completed")
 
 
 def test_result_contract_rejects_ambiguous_bool_integer():
