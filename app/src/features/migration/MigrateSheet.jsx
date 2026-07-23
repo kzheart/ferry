@@ -1,4 +1,4 @@
-// 迁移向导:目标 → 预演(dry_run) → 确认 → 写入 → 结果(成功/失败+摘要兜底)
+// 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果(成功/失败+摘要兜底)
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { migrationCommit, migrationHandoff, migrationPreview, openTerminal, rpc } from "../../api/transport/rpc.js";
@@ -8,12 +8,14 @@ import { sessionRef } from "../../domain/sessions/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../api/contract/events.js";
+import MigrationSessionPreview from "./MigrationSessionPreview.jsx";
 
-const ORDER = ["target", "preview", "confirm", "result"];
+const ORDER = ["target", "impact", "preview", "confirm", "result"];
 
 function StepsHeader({ step, t }) {
   const labels = {
     target: t("migration:steps.target"),
+    impact: t("migration:steps.impact"),
     preview: t("migration:steps.preview"),
     confirm: t("migration:steps.confirm"),
     result: step === "writing" ? t("migration:steps.writing") : t("migration:steps.result"),
@@ -148,12 +150,14 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   }, [step, target]);
 
   const next = () => {
-    if (step === "target") { if (!dry?.[target]) loadDry(target); setStep("preview"); }
+    if (step === "target") { if (!dry?.[target]) loadDry(target); setStep("impact"); }
+    else if (step === "impact") setStep("preview");
     else if (step === "preview") { loadModels(target); setStep("confirm"); }
     else if (step === "confirm") execute();
   };
   const back = () => {
-    if (step === "preview") setStep("target");
+    if (step === "impact") setStep("target");
+    else if (step === "preview") setStep("impact");
     else if (step === "confirm") setStep("preview");
   };
 
@@ -226,7 +230,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
         })}
       </>
     );
-  } else if (step === "preview") {
+  } else if (step === "impact") {
     body = !d ? (
       <div style={{ padding: "60px 0", display: "flex", alignItems: "center", justifyContent: "center",
         gap: 10, color: "var(--tx4)", fontSize: 13 }}>
@@ -254,6 +258,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
         </div>
       </>
     );
+  } else if (step === "preview") {
+    body = <MigrationSessionPreview preview={d?.preview} />;
   } else if (step === "confirm") {
     body = (
       <>
@@ -395,9 +401,9 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     );
   }
 
-  const canBack = step === "preview" || step === "confirm";
+  const canBack = step === "impact" || step === "preview" || step === "confirm";
   const canNext = step === "target" ? !!target && installed(target)
-    : step === "preview" ? !!d
+    : step === "impact" || step === "preview" ? !!d
     : step === "confirm";
 
   return (

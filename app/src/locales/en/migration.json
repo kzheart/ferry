@@ -1,6 +1,7 @@
 {
   "steps": {
     "target": "Target",
+    "impact": "Impact",
     "preview": "Preview",
     "confirm": "Confirm",
     "writing": "Writing",
@@ -36,7 +37,54 @@
     "loading": "Previewing conversion and assessing impact…",
     "impactTitle": "Impact preview · {{scope}}",
     "scaleLabel": "Migration scale",
-    "scaleMeta": "{{msg}} messages · {{tree}} tree nodes"
+    "scaleMeta": "{{msg}} messages · {{tree}} tree nodes",
+    "targetSession": {
+      "empty": "There is no session content to preview.",
+      "root": "Main session",
+      "childPath": "Sub-session {{path}}",
+      "stepCount": "{{n}} steps",
+      "expandMessage": "Show full message",
+      "collapseMessage": "Collapse"
+    },
+    "differences": {
+      "open": "Review migration differences",
+      "none": "No migration differences",
+      "title": "Migration differences",
+      "summary": "{{exact}} exact · {{transformed}} transformed · {{lossy}} lossy · {{narrated}} narrated · {{dropped}} dropped",
+      "back": "Back to message preview",
+      "all": "All",
+      "degraded": "Degraded",
+      "exact": "Exact",
+      "transformed": "Transformed",
+      "lossy": "Lossy",
+      "narrated": "Narrated",
+      "dropped": "Dropped",
+      "search": "Search differences…",
+      "groupTitle": "{{session}} · Turn {{n}}",
+      "sessionGroupTitle": "{{session}} · Session-level loss",
+      "sessionLoss": "Session-level loss",
+      "thinking": "Thinking",
+      "original": "Original content",
+      "migrated": "Migrated content",
+      "truncated": "Long content truncated ({{n}} characters originally)",
+      "viewTurn": "View containing turn",
+      "noLocation": "No corresponding location after migration",
+      "empty": "No migration differences match this filter",
+      "loadMore": "Show {{n}} more",
+      "reasons": {
+        "tool_transformed": "{{tool}} must be converted to a form supported by the target",
+        "tool_to_history": "{{tool}} cannot be restored natively and was converted to history text",
+        "unknown_result_status": "{{tool}} has an unknown result status and was converted to history text instead of being presented as a success",
+        "unsupported_result_status": "The target cannot reliably represent the result status of {{tool}}, so it was converted to history text",
+        "tool_result_truncated": "The source result of {{tool}} was truncated",
+        "unsupported_tool_fields": "Some {{tool}} parameters cannot be represented by the target",
+        "default_fetch_prompt": "{{tool}} was missing a prompt required by the target, so a default prompt was added",
+        "invalid_tool_input": "{{tool}} has parameters that cannot be converted and was converted to history text",
+        "tool_unsupported": "The target does not support {{tool}} and this content will be dropped",
+        "unsupported_image": "The target session format does not support this image",
+        "unsupported_thinking": "The target session format does not retain thinking content"
+      }
+    }
   },
   "confirm": {
     "title": "Confirm migration",

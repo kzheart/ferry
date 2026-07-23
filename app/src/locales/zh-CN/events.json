@@ -6,6 +6,7 @@
     "apply_patch_unparsed": "apply_patch 无法解析出文件变更，已降级",
     "tool_degraded": "工具 {{tool_name}} 降级为叙述文本",
     "tool_dropped": "工具 {{tool_name}} 将被丢弃",
+    "content_dropped": "{{kind}} 内容无法迁移，已丢弃",
     "fork_parent_fallback": "分支父节点无法精确映射，回退到主对话末尾",
     "truncated": "按迁移范围截断: 丢弃第 {{max_turn}} 轮之后的 {{dropped}} 条消息",
     "children_not_migrated": "截断范围外的 {{count}} 个子会话未迁移",

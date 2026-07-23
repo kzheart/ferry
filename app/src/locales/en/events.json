@@ -6,6 +6,7 @@
     "apply_patch_unparsed": "apply_patch could not be parsed into file changes, degraded",
     "tool_degraded": "Tool {{tool_name}} degraded to narration text",
     "tool_dropped": "Tool {{tool_name}} will be dropped",
+    "content_dropped": "{{kind}} content cannot be migrated and will be dropped",
     "fork_parent_fallback": "Fork parent node could not be mapped precisely, fell back to end of main conversation",
     "truncated": "Truncated by migration range: dropped {{dropped}} messages after turn {{max_turn}}",
     "children_not_migrated": "{{count}} sub-sessions outside the truncation range were not migrated",
