@@ -11,6 +11,7 @@ import pytest
 from engine.adapters.base.plugin import ToolManifest, ToolPlugin
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
+from engine.application import scanning
 from engine.application.ports import ApplicationPorts, configure, current
 from engine.domain.errors import (
     AgentReferenceError,
@@ -199,6 +200,19 @@ def test_search_never_exposes_storage_locations(agent_environment):
     assert "/Users/" not in json.dumps(result, ensure_ascii=False)
     with pytest.raises(AgentRequestError):
         agent_tools.search_sessions(limit=51)
+
+
+def test_library_scan_issues_operation_refs(agent_environment):
+    session = next(
+        item for item in scanning.scan()["sessions"]
+        if item["tool"] == "claude"
+    )
+
+    assert session["ref"].startswith("fsr_")
+    assert session["revision"]
+    assert agent_tools._INDEX.resolve(
+        session["tool"], session["ref"],
+    ).canonical_ref == str(agent_environment["transcript"])
 
 
 def test_native_session_id_resolves_to_scoped_reference(agent_environment):
