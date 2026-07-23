@@ -323,8 +323,7 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
 
     for record in lines:
         if record.get("type") == "ai-title":
-            session.title = record.get("title") or record.get("aiTitle", "") \
-                or session.title
+            session.title = record.get("title") or session.title
         if record.get("type") == "fork-context-ref":
             session.forked_from_id = record.get("parentLastUuid")
             session.parent_id = record.get("parentSessionId")

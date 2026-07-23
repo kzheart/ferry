@@ -107,6 +107,10 @@ def test_claude_ignores_removed_native_field_aliases(tmp_path):
     )
     assert result.exit_code is None
 
+    path = tmp_path / "legacy-title.jsonl"
+    _write_jsonl(path, [{"type": "ai-title", "aiTitle": "legacy title"}])
+    assert _read_transcript(path).title == ""
+
 
 def test_claude_writer_uses_current_agent_input_fields():
     native = write_claude_agent_input({
