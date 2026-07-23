@@ -21,7 +21,7 @@ def _text_part(mid, text):
             "sessionID": "old-root", "type": "text", "text": text}
 
 
-def _raw_message(mid, role, created, parts=None, completed=None):
+def _native_message(mid, role, created, parts=None, completed=None):
     time = created if isinstance(created, dict) else {"created": created}
     if completed is not None and isinstance(time, dict):
         time["completed"] = completed
@@ -61,9 +61,9 @@ def test_remap_normalizes_missing_and_non_dict_time_fields():
     payload = {
         "info": {"id": "old-root", "directory": "/old", "time": None},
         "messages": [
-            _raw_message("m1", "user", None),
-            _raw_message("m2", "assistant", None, completed=10),
-            _raw_message("m3", "user", "invalid-time"),
+            _native_message("m1", "user", None),
+            _native_message("m2", "assistant", None, completed=10),
+            _native_message("m3", "user", "invalid-time"),
         ],
     }
 
@@ -76,7 +76,7 @@ def test_remap_normalizes_missing_and_non_dict_time_fields():
     assert remapped["info"]["time"]["updated"] == created[-1]
 
 
-def test_empty_raw_payload_gets_a_valid_session_time():
+def test_empty_native_payload_gets_a_valid_session_time():
     payload = {"info": {"id": "old-root", "directory": "/old", "time": None},
                "messages": []}
 
@@ -90,7 +90,7 @@ def test_empty_raw_payload_gets_a_valid_session_time():
 
 def test_replace_reply_without_old_assistant_creates_a_complete_time_record():
     payload = {"info": {"id": "session"}, "messages": [
-        _raw_message("u1", "user", 100),
+        _native_message("u1", "user", 100),
     ]}
     payload["messages"][0]["info"]["sessionID"] = "session"
     doc = SimpleNamespace(data=payload)
@@ -178,27 +178,31 @@ def test_child_without_edge_and_empty_parent_gets_a_synthetic_user(
     assert messages[1]["parts"][0]["tool"] == "task"
 
 
-def test_empty_raw_parent_with_missing_time_can_link_a_child(
+def test_empty_native_parent_with_missing_time_can_link_a_child(
         tmp_path, monkeypatch):
     imported = []
     monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
     monkeypatch.setattr(opencode_session, "_import_payload",
                         lambda payload, sid, cwd: imported.append(payload))
     root = Session("opencode", "root", str(tmp_path), title="root")
-    root.meta["opencode_export"] = {
+    root_payload = {
         "info": {"id": "root", "directory": str(tmp_path), "time": None},
         "messages": [],
     }
     child = Session("opencode", "child", str(tmp_path), title="child",
                     parent_id="root")
-    child.meta["opencode_export"] = {
+    child_payload = {
         "info": {"id": "child", "directory": str(tmp_path),
                  "time": {"created": 100, "updated": 100}},
         "messages": [],
     }
     root.children = [child]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_session.write(
+        root,
+        cwd=str(tmp_path),
+        native_payloads={"root": root_payload, "child": child_payload},
+    )
 
     assert [message["info"]["role"] for message in imported[0]["messages"]] == [
         "user", "assistant"]
@@ -206,7 +210,7 @@ def test_empty_raw_parent_with_missing_time_can_link_a_child(
         imported[0]["info"]["time"]["created"]
 
 
-def test_raw_roundtrip_keeps_multiple_tasks_without_adding_duplicates(
+def test_native_payload_keeps_multiple_tasks_without_adding_duplicates(
         tmp_path, monkeypatch):
     imported = []
     monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
@@ -225,17 +229,21 @@ def test_raw_roundtrip_keeps_multiple_tasks_without_adding_duplicates(
                       "time": {"start": 200, "end": 200}},
         })
     root.source_tool = "opencode"
-    root.meta["opencode_export"] = {
+    root_payload = {
         "info": {"id": "root", "directory": str(tmp_path),
                  "time": {"created": 100, "updated": 300}},
         "messages": [
-            _raw_message("u1", "user", 100),
-            _raw_message("spawn", "assistant", 200, task_parts, completed=200),
-            _raw_message("u2", "user", 300),
+            _native_message("u1", "user", 100),
+            _native_message("spawn", "assistant", 200, task_parts, completed=200),
+            _native_message("u2", "user", 300),
         ],
     }
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_session.write(
+        root,
+        cwd=str(tmp_path),
+        native_payloads={"root": root_payload},
+    )
 
     payload, root_sid = imported[0]
     tasks = [part for part in payload["messages"][1]["parts"]

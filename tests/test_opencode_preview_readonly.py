@@ -34,10 +34,13 @@ def _payload():
     }
 
 
-def test_canonical_reader_does_not_retain_native_export():
+def test_canonical_reader_does_not_retain_native_document():
     session, _edges = opencode_session._parse_session(_payload())
 
     assert "opencode_export" not in session.meta
+    assert session.raw_records == []
+    assert all(message.raw == [] for message in session.messages)
+    assert [message.source_id for message in session.messages] == ["message-1"]
 
 
 @pytest.mark.parametrize(

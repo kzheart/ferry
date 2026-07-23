@@ -142,7 +142,7 @@ def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(
     assert task["state"]["metadata"]["sessionId"] == imported[1][1]
 
 
-def test_missing_raw_task_link_is_inserted_at_spawn_message_before_remap(
+def test_missing_native_task_link_is_inserted_at_spawn_message_before_remap(
         tmp_path, monkeypatch):
     imported = []
     monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
@@ -151,7 +151,7 @@ def test_missing_raw_task_link_is_inserted_at_spawn_message_before_remap(
         lambda payload, sid, cwd: imported.append((payload, sid)),
     )
     root = Session("opencode", "old-root", str(tmp_path), title="root")
-    root.meta["opencode_export"] = {
+    root_payload = {
         "info": {"id": "old-root", "directory": str(tmp_path),
                  "time": {"created": 100, "updated": 300}},
         "messages": [
@@ -162,7 +162,7 @@ def test_missing_raw_task_link_is_inserted_at_spawn_message_before_remap(
     }
     child = Session("opencode", "old-child", str(tmp_path), title="child",
                     parent_id="old-root")
-    child.meta["opencode_export"] = {
+    child_payload = {
         "info": {"id": "old-child", "directory": str(tmp_path),
                  "time": {"created": 200, "updated": 200}},
         "messages": [_message("ca", "assistant", 200, completed=200)],
@@ -171,7 +171,14 @@ def test_missing_raw_task_link_is_inserted_at_spawn_message_before_remap(
     root.agent_edges = [AgentEdge(
         "old-root", "old-child", spawn_message_id="spawn", prompt="review")]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_session.write(
+        root,
+        cwd=str(tmp_path),
+        native_payloads={
+            "old-root": root_payload,
+            "old-child": child_payload,
+        },
+    )
 
     payload, root_sid = imported[0]
     assert len(payload["messages"]) == 3
