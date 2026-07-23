@@ -78,9 +78,9 @@ class CodexBackend(EditBackend):
             payload = record.get("payload") or {}
             subtype = payload.get("type")
             call_id = payload.get("call_id")
-            if subtype in ("custom_tool_call", "function_call") and call_id:
+            if subtype == "custom_tool_call" and call_id:
                 calls.add(call_id)
-            elif subtype in ("custom_tool_call_output", "function_call_output") and call_id:
+            elif subtype == "custom_tool_call_output" and call_id:
                 outputs.add(call_id)
             if subtype == "message":
                 role = payload.get("role")

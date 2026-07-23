@@ -42,22 +42,22 @@ def _tools(session):
     ]
 
 
-def test_current_function_and_custom_calls_coexist(tmp_path):
+def test_function_call_shape_fails_explicitly(tmp_path):
+    with pytest.raises(AgentFormatChangedError, match="codex 当前结构不匹配"):
+        _read(tmp_path, [
+            {"type": "response_item", "payload": {
+                "type": "function_call", "name": "exec_command",
+                "arguments": '{"cmd":"pwd","workdir":"/workspace"}',
+                "call_id": "function-call",
+            }},
+        ])
+
+
+def test_current_custom_call_is_decoded(tmp_path):
     session = _read(tmp_path, [
-        {"type": "response_item", "payload": {
-            "type": "function_call", "name": "exec_command",
-            "arguments": '{"cmd":"pwd","workdir":"/workspace"}',
-            "input": 'tools.exec_command({"cmd":"wrong-function-field"})',
-            "call_id": "function-call",
-        }},
-        {"type": "response_item", "payload": {
-            "type": "function_call_output", "call_id": "function-call",
-            "output": "function output",
-        }},
         {"type": "response_item", "payload": {
             "type": "custom_tool_call", "name": "exec",
             "input": 'tools.exec_command({"cmd":"printf custom"})',
-            "arguments": '{"cmd":"wrong-custom-field"}',
             "call_id": "custom-call",
         }},
         {"type": "response_item", "payload": {
@@ -66,10 +66,7 @@ def test_current_function_and_custom_calls_coexist(tmp_path):
         }},
     ])
 
-    function, custom = _tools(session)
-    assert function.op == CanonicalOp.SHELL_EXEC
-    assert function.input == {"command": "pwd", "workdir": "/workspace"}
-    assert tool_result_text(function.result) == "function output"
+    custom, = _tools(session)
     assert custom.op == CanonicalOp.SHELL_EXEC
     assert custom.input == {"command": "printf custom"}
     assert tool_result_text(custom.result) == "custom output"
@@ -222,29 +219,6 @@ def test_result_statuses_are_mapped_at_the_codex_boundary():
             }),
         }])
         assert result.status == canonical_status
-
-
-def test_current_remote_function_call_stays_an_opaque_tool(tmp_path):
-    session = _read(tmp_path, [
-        {"type": "response_item", "payload": {
-            "type": "function_call",
-            "name": "mcp__ssh__exec",
-            "arguments": json.dumps({
-                "host": "example.invalid",
-                "command": "uptime",
-            }),
-            "call_id": "remote-call",
-        }},
-    ])
-
-    tool, = _tools(session)
-    assert tool.op == getattr(CanonicalOp, "TOOL_INVOKE", "tool.invoke")
-    assert tool.input["namespace"] == "codex"
-    assert tool.input["name"] == "mcp__ssh__exec"
-    assert tool.input["input"] == {
-        "host": "example.invalid",
-        "command": "uptime",
-    }
 
 
 def test_current_custom_apply_patch_preserves_patch_and_change_summary(tmp_path):
