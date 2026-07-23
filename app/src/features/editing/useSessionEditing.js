@@ -5,7 +5,7 @@ import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
 export function useSessionEditing({ current, runtimeProbe, doScan,
-  onInplaceApplied, onSavedAs }) {
+  onInplaceApplied }) {
   const { t } = useTranslation();
   const [ops, setOps] = useState([]);
   const [diff, setDiff] = useState(null);
@@ -14,10 +14,9 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const [applying, setApplying] = useState(false);
   const [scope, setScope] = useState(null);
   const [editCaps, setEditCaps] = useState(null);
-  const [authoringCaps, setAuthoringCaps] = useState(null);
   const [plannedEdit, setPlannedEdit] = useState(null);
   const capabilityRequest = useRef(0);
-  const capsCache = useRef({});   // tool -> {edit, authoring},能力按工具固定,切会话不重复请求
+  const capsCache = useRef({});   // tool -> edit capabilities
 
   const invalidateEditPlan = () => {
     setPlannedEdit(null);
@@ -34,27 +33,18 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const loadCapabilities = tool => {
     const request = ++capabilityRequest.current;
     const cached = capsCache.current[tool];
-    if (cached?.edit && cached?.authoring) {
-      setEditCaps(cached.edit);
-      setAuthoringCaps(cached.authoring);
+    if (cached) {
+      setEditCaps(cached);
       return;
     }
     setEditCaps(null);
-    setAuthoringCaps(null);
     rpc("edit_capabilities", { tool }).then(caps => {
-      (capsCache.current[tool] ||= {}).edit = caps;
+      capsCache.current[tool] = caps;
       if (request !== capabilityRequest.current) return;
       setEditCaps(caps);
     }).catch(() => {
       if (request === capabilityRequest.current)
-        setEditCaps({ operations: [], inplace: false, save_as: false });
-    });
-    rpc("authoring_capabilities", { tool }).then(caps => {
-      (capsCache.current[tool] ||= {}).authoring = caps;
-      if (request === capabilityRequest.current) setAuthoringCaps(caps);
-    }).catch(() => {
-      if (request === capabilityRequest.current)
-        setAuthoringCaps({ inplace: false, save_as: false, operation_modes: {} });
+        setEditCaps({ operations: [], inplace: false, operation_modes: {} });
     });
   };
   const addOp = (type, round) => {
@@ -92,12 +82,13 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     } : {}) });
   const startReplyEdit = turn => {
     if (!turn || ops.length) return;
-    const allowed = authoringCaps?.operation_modes?.["replace-assistant-reply"] || [];
+    const allowed = editCaps?.operation_modes?.["replace-assistant-reply"] || [];
+    if (!allowed.includes("inplace")) return;
     invalidateEditPlan();
     const source = turn.assistant_reply?.items || [];
     const items = source.length ? source.map(draftItem) : [draftItem({ kind: "text", text: "" })];
     setOps([{ id: `assistant-reply-${turn.turn}-${Date.now()}`, type: "assistant-reply",
-      backendOp: "replace-assistant-reply", modes: allowed, n: turn.turn,
+      backendOp: "replace-assistant-reply", n: turn.turn,
       turn: turn.turn_locator || turn.turn,
       labelKey: "browser:pendingBar.labelAuthor", labelParams: { n: turn.turn },
       label: `编排 第 ${turn.turn} 轮 AI 回复`, dot: ACCENT,
@@ -122,13 +113,18 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     invalidateEditPlan();
     setOps(currentOps => currentOps.map(op => op.id === id ? { ...op, ...patch } : op));
   };
-  const rpcOps = () => dirtyOps.map(op => op.type === "rewrite"
-    ? { op: "rewrite", locator: op.locator, text: op.text } : op.rpc);
   const authoredReply = op => ({ items: op.items.map(item => item.kind === "text"
     ? { kind: "text", text: item.text }
     : { kind: "tool", name: item.name,
         input: item.inputFormat === "json" ? JSON.parse(item.inputText) : item.inputText,
         output: item.output }) });
+  const rpcOps = () => dirtyOps.map(op => {
+    if (op.type === "rewrite")
+      return { op: "rewrite", locator: op.locator, text: op.text };
+    if (op.type === "assistant-reply")
+      return { op: "replace-assistant-reply", turn: op.turn, reply: authoredReply(op) };
+    return op.rpc;
+  });
   const authoringError = op => {
     if (!op) return null;
     if (!op.items?.length) return t("browser:edit.errNoItems");
@@ -166,16 +162,10 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     if (!current || !dirtyOps.length) { setDiff({ loading: false, preview: null }); return; }
     try {
       const authored = dirtyOps.find(op => op.type === "assistant-reply");
-      if (authored) {
-        const invalid = authoringError(authored);
-        if (invalid) throw new Error(invalid);
-        const preview = await rpc("authoring_preview", { tool: current.tool,
-          ref: sessionRef(current), turn: authored.turn, reply: authoredReply(authored) });
-        setDiff(value => value && { ...value, loading: false, preview });
-      } else {
-        const plan = await ensureEditPlan();
-        setDiff(value => value && { ...value, loading: false, preview: plan.preview });
-      }
+      const invalid = authored ? authoringError(authored) : null;
+      if (invalid) throw new Error(invalid);
+      const plan = await ensureEditPlan();
+      setDiff(value => value && { ...value, loading: false, preview: plan.preview });
     } catch (error) {
       setDiff(value => value && { ...value, loading: false, preview: null, error: error.message });
     }
@@ -183,12 +173,10 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const prepareApply = async () => {
     if (!dirtyOps.length) return;
     const authored = dirtyOps.find(op => op.type === "assistant-reply");
-    if (authored) {
-      setConfirmApply(true);
-      return;
-    }
     setApplying(true);
     try {
+      const invalid = authored ? authoringError(authored) : null;
+      if (invalid) throw new Error(invalid);
       await ensureEditPlan();
       setConfirmApply(true);
     } catch (error) {
@@ -209,27 +197,16 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
       const authored = dirtyOps.find(op => op.type === "assistant-reply");
       const invalid = authored ? authoringError(authored) : null;
       if (invalid) throw new Error(invalid);
-      const reply = authored ? authoredReply(authored) : null;
-      const authoringSaveAs = !!authored && !authoringCaps?.inplace && !!authoringCaps?.save_as;
-      const latest = authored ? await rpc("authoring_preview", { tool: current.tool,
-        ref: sessionRef(current), turn: authored.turn, reply }) : null;
-      const result = authored
-        ? await rpc("authoring_apply", { tool: current.tool, ref: sessionRef(current),
-            turn: authored.turn, reply, revision: latest.revision,
-            probe: runtimeProbe, save_as: authoringSaveAs })
-        : (await operationApply((await ensureEditPlan()).plan_id)).result;
+      const result = (await operationApply((await ensureEditPlan()).plan_id)).result;
       if (result.ok) {
         const verdict = runtimeProbe ? t("browser:edit.verdictProbe") : t("browser:edit.verdictStructure");
-        const savedAs = authoringSaveAs && result.session_id
-          ? { ...result, tool: current.tool } : null;
         setToast({ kind: "ok",
-          title: (authoringSaveAs ? t("browser:edit.toastSavedAs", { verdict }) : t("browser:edit.toastInplace", { verdict })),
-          desc: authoringSaveAs ? t("browser:edit.toastSavedAsDesc") : t("browser:edit.toastInplaceDesc"),
-          action: savedAs ? { label: t("browser:edit.toastOpenNew"), onClick: () => onSavedAs(savedAs) } : undefined });
+          title: t("browser:edit.toastInplace", { verdict }),
+          desc: t("browser:edit.toastInplaceDesc") });
         setOps([]);
         setPlannedEdit(null);
         doScan();
-        if (!authoringSaveAs) onInplaceApplied();
+        onInplaceApplied();
       } else setToast({ kind: "fail", title: t("browser:edit.toastVerifyFail"),
         desc: result.error || t("browser:edit.toastVerifyFailDesc") });
     } catch (error) { setToast({ kind: "fail", title: t("browser:edit.toastApplyFail"), desc: error.message }); }
@@ -238,6 +215,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
 
   return { ops, dirtyOps, setOps: replaceOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
+    editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit };
 }
