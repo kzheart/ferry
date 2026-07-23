@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.application import organizing, services, summaries
+from engine.application import organizing, services, session_meta, summaries
 from engine.domain.errors import (
     OrganizationProposalError,
     OrganizationProposalStaleError,
@@ -113,7 +113,7 @@ def test_proposal_caches_by_content_fingerprint_and_has_sources(
 def test_reject_records_signal_without_changing_metadata(
         organization_environment):
     record = _seed("claude", "session-a", "一次性探索")
-    services.session_meta_set("session-a", {"name": "原名"})
+    session_meta.set_entry("session-a", {"name": "原名"})
     proposal = organizing.propose([
         _target(record, {"name": "建议名", "dead_candidate": True}),
     ])
@@ -231,12 +231,12 @@ def test_metadata_cas_failure_does_not_partially_apply_cluster(
         organization_environment):
     first = _seed("claude", "session-a", "A")
     second = _seed("codex", "session-b", "B")
-    services.session_meta_set("session-b", {"name": "before"})
+    session_meta.set_entry("session-b", {"name": "before"})
     proposal = organizing.propose([
         _target(first, {"cluster_id": "cluster:x"}),
         _target(second, {"cluster_id": "cluster:x"}),
     ])
-    services.session_meta_set("session-b", {"name": "concurrent"})
+    session_meta.set_entry("session-b", {"name": "concurrent"})
 
     with pytest.raises(Exception):
         organizing.decide(proposal["proposal_id"], "approve")
