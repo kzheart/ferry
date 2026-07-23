@@ -146,6 +146,9 @@ function summarizeToolResult(result: unknown) {
 
 export interface RuntimeOptions {
   store?: SessionStore;
+  storeFactory?: (
+    invoke: import("./engine-session-store.js").RuntimeEngineInvoke,
+  ) => SessionStore;
   deferRestore?: boolean;
   backendFactory?: BackendFactory;
   providerHost?: ProviderHost;
@@ -714,7 +717,7 @@ class RuntimeSession {
 }
 
 export class AgentRuntime {
-  readonly store: SessionStore;
+  store: SessionStore;
   readonly roleStore: RoleStore;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
@@ -779,6 +782,11 @@ export class AgentRuntime {
         return options.providerHost.backend(selection);
       });
     const runtime = new AgentRuntime(options, backendFactory, defaultSelection);
+    if (options.storeFactory) {
+      runtime.store = options.storeFactory((method, params, sessionId) =>
+        runtime.invokeInternalEngine(method, params, sessionId),
+      );
+    }
     if (!options.deferRestore) await runtime.restore();
     return runtime;
   }
@@ -1520,8 +1528,22 @@ export class AgentRuntime {
     params: Record<string, unknown>,
     workflowId: string,
   ) {
-    if (this.engineHandler) {
-      return this.engineHandler(method, params, workflowId);
+    return this.invokeInternalEngine(method, params, workflowId);
+  }
+
+  private async invokeInternalEngine(
+    method:
+      | OrganizationEngineMethod
+      | import("./engine-session-store.js").RuntimeEngineMethod,
+    params: Record<string, unknown>,
+    sessionId: string,
+  ) {
+    if (this.engineHandler && !method.startsWith("runtime_sessions.")) {
+      return this.engineHandler(
+        method as OrganizationEngineMethod,
+        params,
+        sessionId,
+      );
     }
     const requestId = this.newId();
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -1530,7 +1552,7 @@ export class AgentRuntime {
         if (timeout) clearTimeout(timeout);
       };
       this.pendingTools.set(requestId, {
-        sessionId: workflowId,
+        sessionId,
         resolve,
         reject,
         cleanup,
@@ -1543,8 +1565,8 @@ export class AgentRuntime {
     });
     this.publish({
       protocol: PROTOCOL_VERSION,
-      session_id: workflowId,
-      run_id: workflowId,
+      session_id: sessionId,
+      run_id: sessionId,
       seq: this.runtimeSequence++,
       timestamp: this.now().toISOString(),
       type: "engine.request",
