@@ -199,10 +199,6 @@ class MigrationTargetBase:
             reasons.append("tool_result_block_dropped")
             if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
                 fidelity = Fidelity.LOSSY
-        if any(block.metadata for block in result.blocks):
-            reasons.append("tool_result_block_metadata_dropped")
-            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
-                fidelity = Fidelity.LOSSY
         if result.attachments and not self.preserves_tool_result_attachments:
             reasons.append("tool_result_attachments_dropped")
             if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:

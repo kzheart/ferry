@@ -232,9 +232,7 @@ def _opencode_result(state: dict) -> ToolResult:
         if not any(
             block.kind == "text" and block.text == error for block in blocks
         ):
-            blocks.append(ToolResultBlock(
-                "text", text=error, metadata={"stream": "error"},
-            ))
+            blocks.append(ToolResultBlock("text", text=error))
         if status == "unknown":
             status = "error"
 
@@ -243,8 +241,7 @@ def _opencode_result(state: dict) -> ToolResult:
         attachments = [attachments]
     for attachment in attachments:
         if not isinstance(attachment, dict):
-            blocks.append(ToolResultBlock("json", data=attachment,
-                                          metadata={"attachment": True}))
+            blocks.append(ToolResultBlock("json", data=attachment))
             continue
         if attachment.get("type") == "file":
             blocks.append(ToolResultBlock(
@@ -252,17 +249,9 @@ def _opencode_result(state: dict) -> ToolResult:
                 mime_type=attachment.get("mime"),
                 filename=attachment.get("filename"),
                 uri=attachment.get("url"),
-                metadata={
-                    key: value for key, value in attachment.items()
-                    if key not in {"type", "mime", "filename", "url"}
-                },
             ))
         else:
-            blocks.append(ToolResultBlock(
-                "json", data=attachment,
-                metadata={"attachment": True,
-                          "native_type": attachment.get("type")},
-            ))
+            blocks.append(ToolResultBlock("json", data=attachment))
 
     exit_code = metadata.get("exit")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):

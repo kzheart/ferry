@@ -143,10 +143,7 @@ def _result_blocks(content) -> list[ToolResultBlock]:
     if isinstance(content, str):
         return [ToolResultBlock("text", text=content)] if content else []
     if isinstance(content, dict):
-        return [ToolResultBlock(
-            "json", data=content,
-            metadata={"native_type": content.get("type")},
-        )]
+        return [ToolResultBlock("json", data=content)]
     if not isinstance(content, list):
         return [] if content is None else [ToolResultBlock("json", data=content)]
 
@@ -164,23 +161,17 @@ def _result_blocks(content) -> list[ToolResultBlock]:
                 "image",
                 data=source.get("data"),
                 mime_type=source.get("media_type"),
-                metadata={
-                    key: value for key, value in source.items()
-                    if key not in {"data", "media_type"}
-                },
             ))
         elif kind == "tool_reference":
             blocks.append(ToolResultBlock(
                 "tool_reference",
-                metadata={
+                data={
                     key: value for key, value in item.items()
                     if key != "type"
                 },
             ))
         else:
-            blocks.append(ToolResultBlock(
-                "json", data=item, metadata={"native_type": kind},
-            ))
+            blocks.append(ToolResultBlock("json", data=item))
     return blocks
 
 
