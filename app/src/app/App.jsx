@@ -2,12 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { canReveal, onMenu, openTerminal, revealPath, rpc,
+  operationApply, operationPlan,
   preloadWindow, startWindowDrag, toggleWindowMaximize,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, onToolsHydrated, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
-import { BUCKETS, bucketOf, fmtTime, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
+import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
+  sessionRef } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment }
   from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
@@ -295,10 +297,14 @@ export default function App() {
   }, [ferry.mutationVersion]);
 
   // ----- 会话删除(先落一份备份,可撤销) -----
-  const undoDelete = async snapshot => {
+  const undoDelete = async recoveryId => {
     setToast({ kind: "run", title: t("app:toast.restoring"), desc: t("app:toast.restoringDesc") });
     try {
-      await rpc("session_undelete", { snapshot });
+      const plan = await operationPlan({
+        kind: "restore-delete",
+        recovery_id: recoveryId,
+      });
+      await operationApply(plan.plan_id);
       doScan();
       setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
     } catch (e) {
@@ -309,14 +315,19 @@ export default function App() {
     setDelConfirm(null);
     setToast({ kind: "run", title: t("app:toast.deleting"), desc: t("app:toast.deletingDesc") });
     try {
-      const r = await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+      const plan = await operationPlan({
+        kind: "delete",
+        tool: s.tool,
+        ref: operationRef(s),
+      });
+      const r = (await operationApply(plan.plan_id)).result;
       detailCache.current.delete(s.id);
       if (selId === s.id) { setSelId(null); setDetail(null); }
       doScan();
       setToast({ kind: "ok", title: t("app:toast.deleteDone"),
         desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
         action: r.undoable
-          ? { label: t("app:toast.undo"), onClick: () => undoDelete(r.snapshot) } : undefined });
+          ? { label: t("app:toast.undo"), onClick: () => undoDelete(r.recovery_id) } : undefined });
     } catch (e) {
       setToast({ kind: "fail", title: t("app:toast.deleteFail"), desc: e.message });
     }
@@ -333,7 +344,12 @@ export default function App() {
       setToast({ kind: "run", title: t("app:toast.batchDeleting"),
         desc: t("app:toast.batchProgress", { done: done + fail, total: targets.length }) });
       try {
-        await rpc("session_delete", { tool: s.tool, ref: sessionRef(s) });
+        const plan = await operationPlan({
+          kind: "delete",
+          tool: s.tool,
+          ref: operationRef(s),
+        });
+        await operationApply(plan.plan_id);
         detailCache.current.delete(s.id);
         done++;
       } catch { fail++; }
