@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://github.com/kzheart/ferry/releases"><img src="https://img.shields.io/github/v/release/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&logo=github&label=Release" alt="Release" /></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri-8b5cf6?style=flat-square&labelColor=black&logo=tauri" alt="Tauri" />
-  <a href="#download"><img src="https://img.shields.io/badge/macOS%20%7C%20Windows-supported-8b5cf6?style=flat-square&labelColor=black" alt="Platforms" /></a>
+  <a href="#download"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="Platform" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=License" alt="License" /></a>
   <img src="https://img.shields.io/github/last-commit/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=Last%20commit" alt="Last commit" />
 </p>
@@ -140,7 +140,6 @@ Modify conversations before you resume them:
 | Platform | File |
 | --- | --- |
 | macOS (Apple Silicon) | `Ferry_<version>_aarch64.dmg` |
-| Windows (x64) | `Ferry_<version>_x64-setup.exe` |
 
 > **macOS**: If the app is blocked on first launch, allow it under **System Settings → Privacy & Security**.
 
