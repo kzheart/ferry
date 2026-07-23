@@ -267,6 +267,8 @@ pub(crate) enum OperationPlanInput {
     Migration(MigrationOperationPlanInput),
     #[serde(rename = "metadata")]
     Metadata(MetadataOperationPlanInput),
+    #[serde(rename = "delete")]
+    Delete(DeleteOperationPlanInput),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -302,6 +304,14 @@ pub(crate) struct MetadataOperationPlanInput {
     #[serde(rename = "ref")]
     reference: String,
     patch: MetadataPatch,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeleteOperationPlanInput {
+    tool: String,
+    #[serde(rename = "ref")]
+    reference: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -575,11 +585,28 @@ fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Resu
     Ok(())
 }
 
+fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(), String> {
+    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+        return Err("Delete Operation Agent 标识无效".to_owned());
+    }
+    if !(8..=128).contains(&input.reference.len())
+        || !input.reference.starts_with("fsr_")
+        || !input
+            .reference
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("Delete Operation ref 不是有效 opaque ref".to_owned());
+    }
+    Ok(())
+}
+
 fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     match input {
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
         OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
+        OperationPlanInput::Delete(delete) => validate_delete_operation_input(delete),
     }
 }
 
@@ -710,8 +737,8 @@ mod tests {
     use super::{
         operation_plan_id_request, operation_plan_request, request_attempts, request_timeout,
         validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
-        EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
-        MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
+        DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
+        MetadataPatch, MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
         ENGINE_COMMIT_TIMEOUT,
     };
 
@@ -883,6 +910,32 @@ mod tests {
                 .and_then(serde_json::Value::as_bool),
             Some(true)
         );
+    }
+
+    #[test]
+    fn operation_accepts_strict_tagged_delete_input() {
+        let input = OperationPlanInput::Delete(DeleteOperationPlanInput {
+            tool: "claude".to_owned(),
+            reference: "fsr_fixture".to_owned(),
+        });
+        assert!(validate_operation_plan_input(&input).is_ok());
+
+        let request = operation_plan_request(&input).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value
+                .pointer("/params/input/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("delete")
+        );
+        assert!(value.pointer("/params/input/ref").is_some());
+        assert!(value.pointer("/params/input/ops").is_none());
+
+        let unknown = OperationPlanInput::Delete(DeleteOperationPlanInput {
+            tool: "unknown".to_owned(),
+            reference: "fsr_fixture".to_owned(),
+        });
+        assert!(validate_operation_plan_input(&unknown).is_err());
     }
 
     #[test]
