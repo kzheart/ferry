@@ -91,6 +91,8 @@ class OperationService:
             return self._plan_migration(value)
         if value.get("kind") == "metadata":
             return self._plan_metadata(value)
+        if value.get("kind") == "delete":
+            return self._plan_delete(value)
         raise AgentRequestError(
             "operation kind 非法", {"kind": value.get("kind")},
         )
@@ -182,6 +184,34 @@ class OperationService:
             document_revision=None,
         )
 
+    def _plan_delete(self, value: dict) -> dict:
+        operation_input = self._validate_delete_input(value)
+        record = agent_tools._INDEX.resolve(
+            operation_input["tool"], operation_input["ref"],
+        )
+        plugin = current().adapter(operation_input["tool"])
+        lifecycle = plugin.require("lifecycle")
+        preview = {
+            "tool": record.tool,
+            "ref": record.opaque_ref,
+            "session_id": agent_tools._record_session_id(record),
+            "title": agent_tools._redact(str(record.row.get("title") or ""), 512),
+            "undoable": bool(getattr(lifecycle, "delete_undoable", False)),
+        }
+        after = agent_tools._INDEX.resolve(
+            operation_input["tool"], operation_input["ref"],
+        )
+        if record.revision != after.revision:
+            raise ConcurrentModificationError(
+                "会话在生成删除计划时已变化，请重新计划"
+            )
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision=after.revision,
+            document_revision=None,
+        )
+
     def _store_plan(self, operation_input: dict, preview: dict, *,
                     base_revision: str,
                     document_revision: str | None) -> dict:
@@ -227,6 +257,8 @@ class OperationService:
                 result = self._apply_migration(operation)
             elif operation.kind == "metadata":
                 result = self._apply_metadata(operation)
+            elif operation.kind == "delete":
+                result = self._apply_delete(operation)
             else:
                 raise AgentRequestError(
                     "operation kind 非法", {"kind": operation.kind},
@@ -411,6 +443,24 @@ class OperationService:
             "patch": patch,
         }))
 
+    @staticmethod
+    def _validate_delete_input(value: dict) -> dict:
+        allowed = {"kind", "tool", "ref"}
+        unknown = set(value) - allowed
+        if unknown:
+            raise AgentRequestError(
+                "delete operation 包含未知字段",
+                {"fields": sorted(unknown)},
+            )
+        tool = value.get("tool")
+        ref = value.get("ref")
+        if tool not in current().adapters():
+            raise AgentRequestError("delete tool 非法")
+        if (not isinstance(ref, str) or not 1 <= len(ref) <= 512
+                or any(ord(character) < 33 for character in ref)):
+            raise AgentRequestError("delete ref 非法")
+        return {"kind": "delete", "tool": tool, "ref": ref}
+
     def _apply_edit(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
@@ -506,6 +556,24 @@ class OperationService:
             params["patch"],
         )
         return {"metadata": result}
+
+    def _apply_delete(self, operation: OperationPlan) -> dict:
+        params = operation.input()
+        try:
+            record = agent_tools._INDEX.resolve(
+                params["tool"], params["ref"],
+            )
+        except AgentReferenceError as error:
+            raise ConcurrentModificationError(
+                "会话在删除计划生成后已变化，请重新计划"
+            ) from error
+        if record.revision != operation.base_revision:
+            raise ConcurrentModificationError(
+                "会话在删除计划生成后已变化，请重新计划"
+            )
+        return services.session_delete(
+            params["tool"], record.canonical_ref,
+        )
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
@@ -696,6 +764,8 @@ class OperationService:
             )
         elif operation.kind == "metadata":
             summary = "修改会话元数据"
+        elif operation.kind == "delete":
+            summary = "删除原始会话（执行前创建恢复快照）"
         else:
             summary = "修改原始会话（执行前自动创建可恢复快照）"
         return {

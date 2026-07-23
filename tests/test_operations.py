@@ -61,6 +61,16 @@ def _metadata_plan(**overrides):
     return operations.plan(value)
 
 
+def _delete_plan(**overrides):
+    value = {
+        "kind": "delete",
+        "tool": "claude",
+        "ref": _claude_ref(),
+    }
+    value.update(overrides)
+    return operations.plan(value)
+
+
 class ReplyCompiler:
     name = "claude"
 
@@ -90,6 +100,34 @@ def _attach_authoring(monkeypatch, *, inplace=True):
         lambda tool: plugin if tool == "claude" else original_adapter(tool),
     )
     return compiler
+
+
+def _attach_lifecycle(monkeypatch, transcript):
+    class Lifecycle:
+        delete_undoable = True
+
+        def __init__(self):
+            self.calls = []
+
+        def delete(self, _plugin, ref):
+            self.calls.append(ref)
+            transcript.unlink()
+            return {
+                "ok": True,
+                "snapshot": "snapshot-before-delete",
+                "undoable": True,
+            }
+
+    ports = current()
+    original_adapter = ports.adapter
+    lifecycle = Lifecycle()
+    plugin = replace(original_adapter("claude"), lifecycle=lifecycle)
+    monkeypatch.setattr(
+        ports,
+        "adapter",
+        lambda tool: plugin if tool == "claude" else original_adapter(tool),
+    )
+    return lifecycle
 
 
 def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
@@ -209,6 +247,43 @@ def test_metadata_plan_rejects_concurrent_metadata_change(
 def test_metadata_plan_rejects_invalid_patch(agent_environment, patch):
     with pytest.raises(AgentRequestError):
         _metadata_plan(patch=patch)
+
+
+def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
+        agent_environment, monkeypatch):
+    lifecycle = _attach_lifecycle(
+        monkeypatch, agent_environment["transcript"],
+    )
+
+    plan = _delete_plan()
+
+    assert plan["kind"] == "delete"
+    assert plan["risk"] == "high"
+    assert plan["preview"]["undoable"] is True
+    assert plan["preview"]["session_id"] == "private-id"
+    assert agent_environment["transcript"].exists()
+    assert lifecycle.calls == []
+
+    applied = operations.apply(plan["plan_id"])
+
+    assert applied["result"]["snapshot"] == "snapshot-before-delete"
+    assert lifecycle.calls == [str(agent_environment["transcript"])]
+    assert not agent_environment["transcript"].exists()
+
+
+def test_delete_plan_rejects_revision_change(
+        agent_environment, monkeypatch):
+    lifecycle = _attach_lifecycle(
+        monkeypatch, agent_environment["transcript"],
+    )
+    plan = _delete_plan()
+    agent_environment["claude_browser"].fingerprint_value = "changed"
+
+    with pytest.raises(ConcurrentModificationError):
+        operations.apply(plan["plan_id"])
+
+    assert lifecycle.calls == []
+    assert agent_environment["transcript"].exists()
 
 
 def test_replace_assistant_reply_plans_and_applies_as_edit(

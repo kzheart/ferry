@@ -13,6 +13,7 @@ class BaseLifecycle:
 
     tool: str
     executable: str = ""        # 装配时由 plugin 从 manifest executables 注入
+    delete_undoable = False
 
     def resume_args(self, session_id: str) -> list[str]:
         raise NotImplementedError
@@ -44,6 +45,8 @@ class BaseLifecycle:
 
 class FileSessionLifecycle(BaseLifecycle):
     """文件型会话：删除前落快照（回收站语义），可通过 undelete 撤销。"""
+
+    delete_undoable = True
 
     def delete(self, plugin, ref: str) -> dict:
         doc = plugin.require("editor").load(ref)
