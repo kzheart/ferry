@@ -661,8 +661,6 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "pricing"
             | "show"
             | "session_asset"
-            | "authoring_capabilities"
-            | "authoring_preview"
             | "edit_capabilities"
             | "session_meta_list"
             | "session_backbone"

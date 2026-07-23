@@ -43,22 +43,17 @@ def test_unknown_tool_is_structured():
     assert response["error"]["category"] == "not-found"
 
 
-def test_error_params_are_semantic_fields_not_sentences():
-    response = rpc(json.dumps({
-        "method": "authoring_preview",
-        "params": {"tool": "claude", "ref": "no-such-session", "turn": 1,
-                   "reply": {"items": [{"kind": "text", "text": "x"}]}}}))
-    assert response["ok"] is False
-    assert response["error"]["code"] == "session.not_found"
-    assert response["error"]["params"] == {"tool": "claude",
-                                           "ref": "no-such-session"}
-
-
 def test_invalid_reply_maps_to_authoring_code():
     response = rpc(json.dumps({
-        "method": "authoring_preview",
-        "params": {"tool": "claude", "ref": "x", "turn": 1,
-                   "reply": {"items": []}}}))
+        "method": "operation.plan",
+        "params": {"input": {
+            "kind": "edit", "tool": "claude", "ref": "fsr_missing",
+            "ops": [{
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": []},
+            }],
+        }}}))
     assert response["ok"] is False
     assert response["error"]["code"] == "authoring.invalid_reply"
 
