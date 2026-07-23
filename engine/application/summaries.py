@@ -113,6 +113,7 @@ def segment_session(session) -> list[dict]:
         segment["hash"] = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
         segment["char_count"] = len(text)
         segment["digest"] = None
+        segment["_source_text"] = text
         result.append(segment)
     return result
 
@@ -144,6 +145,10 @@ def build_backbone(tool: str, ref: str) -> dict:
     session = read_tree(tool, ref)
     segments = segment_session(session)
     fingerprint = session_fingerprint(segments)
+    source_by_hash = {
+        segment["hash"]: segment.pop("_source_text", "")
+        for segment in segments
+    }
     key = f"{tool}:{session.source_id}"
     with _LOCK:
         data = _load()
@@ -159,7 +164,13 @@ def build_backbone(tool: str, ref: str) -> dict:
         if data.get(key) != record:
             data[key] = record
             _write(data)
-        return _view(record)
+        view = _view(record)
+        view["pending_sources"] = [
+            {"hash": segment["hash"], "text": source_by_hash[segment["hash"]]}
+            for segment in record["segments"]
+            if not segment.get("digest") and source_by_hash.get(segment["hash"])
+        ]
+        return view
 
 
 def set_summaries(tool: str, session_id: str, digests: dict) -> dict:

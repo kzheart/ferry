@@ -67,6 +67,13 @@ def _safe_project(value: object) -> str:
     return _redact(Path(value).name, 120)
 
 
+def _record_session_id(record, session=None) -> str:
+    row = getattr(record, "row", None)
+    value = row.get("id") if isinstance(row, dict) else None
+    value = value or getattr(session, "source_id", None)
+    return _redact(str(value or ""), 512)
+
+
 def _timestamp(value) -> int | None:
     if value is None:
         return None
@@ -480,6 +487,7 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
         matches.append({
             "tool": record.tool,
             "ref": record.opaque_ref,
+            "session_id": _record_session_id(record),
             "title": _redact(str(row.get("title") or ""), 200),
             "project": project,
             "updated": updated,
@@ -715,6 +723,7 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
     result = {
         "tool": tool,
         "ref": opaque_ref,
+        "session_id": _record_session_id(record, session),
         "title": _redact(session.title, 200),
         "project": _safe_project(session.cwd),
         "revision": record.revision,
@@ -796,6 +805,7 @@ def search_session_content(tool: str, opaque_ref: str, terms,
     return _finalize_dto({
         "tool": tool,
         "ref": opaque_ref,
+        "session_id": _record_session_id(record, session),
         "revision": record.revision,
         "message_count": len(session.messages),
         "turn_count": total_turns,
@@ -871,6 +881,11 @@ def get_usage(agents=None, projects=None, time_range=None) -> dict:
         "by_agent": by_agent,
         "cost": None,
         "currency": "USD",
+        "filters": {
+            "agents": sorted(allowed_agents) if allowed_agents else None,
+            "projects": sorted(allowed_projects) if allowed_projects else None,
+            "time_range": {"from": start, "to": end},
+        },
     })
 
 
@@ -893,6 +908,7 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
                 "agent_edges": edge_count, "preserved": True}
     return _finalize_dto({"source_tool": source_tool, "target_tool": target_tool,
             "ref": opaque_ref, "revision": record.revision,
+            "source_session_id": _record_session_id(record, session),
             "message_count": message_count,
             "root_message_count": len(session.messages), "tree_count": tree_count,
             "child_count": tree_count - 1, "loss": _bounded_json(loss),
@@ -915,6 +931,7 @@ def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
         raise _public_locator_error(ops) from error
     _INDEX.resolve(tool, opaque_ref)
     return _finalize_dto({"tool": tool, "ref": opaque_ref, "mode": "edit",
+            "session_id": _record_session_id(record),
             "revision": _redact(str(result["revision"]), 256),
             "before": _bounded_json(result["before"], 12 * 1024),
             "after": _bounded_json(result["after"], 12 * 1024),

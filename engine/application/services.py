@@ -287,8 +287,12 @@ def handoff(src: str, ref: str, dst: str, cwd: str | None = None) -> dict:
 from .session_meta import list_all as session_meta_list  # noqa: E402
 from .session_meta import set_entry as _meta_set
 from .session_meta import compare_and_set_entry as _meta_compare_and_set
+from .session_meta import compare_and_set_entries as _meta_compare_and_set_entries
 
-META_FIELDS = {"name", "pinned", "archived", "tags"}
+META_FIELDS = {
+    "name", "pinned", "archived", "tags",
+    "summary", "cluster_id", "cluster_name", "dead_candidate", "dead_reason",
+}
 
 
 def session_meta_set(sid: str, patch: dict) -> dict:
@@ -298,6 +302,18 @@ def session_meta_set(sid: str, patch: dict) -> dict:
 def session_meta_compare_and_set(sid: str, expected: dict, patch: dict) -> dict:
     return _meta_compare_and_set(
         sid, expected, {k: v for k, v in patch.items() if k in META_FIELDS})
+
+
+def session_meta_compare_and_set_many(changes: list[dict]) -> dict:
+    return _meta_compare_and_set_entries([
+        {
+            "id": change["id"],
+            "expected": change.get("expected", {}),
+            "patch": {k: v for k, v in change.get("patch", {}).items()
+                      if k in META_FIELDS},
+        }
+        for change in changes
+    ])
 
 
 # ---------- 会话生命周期 ----------
