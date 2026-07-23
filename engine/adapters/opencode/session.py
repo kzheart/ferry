@@ -1,4 +1,4 @@
-"""OpenCode reader/writer:走官方 `opencode export` / `opencode import`,不直接碰 SQLite。
+"""OpenCode reader/writer：读取当前 SQLite 结构，写入走官方 OpenCode 接口。
 
 处理 OpenCode 会话存储。export 形状:
     {"info": <session 行>, "messages": [{"info": <message.data>, "parts": [<part.data>...]}]}
@@ -13,6 +13,11 @@ import tempfile
 import time
 from pathlib import Path
 
+from ...domain.errors import (
+    AgentFormatChangedError,
+    SessionNotFoundError,
+    SessionStoreUnavailableError,
+)
 from ...domain.model import (
     AgentEdge,
     Block,
@@ -29,6 +34,7 @@ from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...domain.usage import iso_ms
 from ...infrastructure import executables
+from ...infrastructure.platform_paths import opencode_database_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
 from .native_schema import templates
@@ -44,7 +50,21 @@ TOOL_OPS = {
     "webfetch": CanonicalOp.WEB_FETCH,
     "websearch": CanonicalOp.WEB_SEARCH,
 }
-OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+OPENCODE_DB = opencode_database_path()
+
+
+_CURRENT_DB_COLUMNS = {
+    "session": {
+        "id", "slug", "project_id", "directory", "path", "title", "version",
+        "summary_additions", "summary_deletions", "summary_files", "cost",
+        "tokens_input", "tokens_output", "tokens_reasoning",
+        "tokens_cache_read", "tokens_cache_write", "time_created",
+        "time_updated", "parent_id", "agent", "model", "permission",
+        "share_url", "revert", "time_archived", "time_compacting",
+    },
+    "message": {"id", "session_id", "data", "time_created"},
+    "part": {"id", "message_id", "session_id", "data", "time_created"},
+}
 
 
 def _patch_operations(patch: str) -> list[dict]:
@@ -281,18 +301,46 @@ def _opencode_result(state: dict) -> ToolResult:
     )
 
 def _db_conn():
-    """只读打开当前库;库缺失或 schema 不兼容时返回 None,由 CLI export 兜底。"""
+    """只读打开并严格校验 Ferry 当前支持的 OpenCode SQLite 结构。"""
     if not OPENCODE_DB.exists():
-        return None
+        raise SessionStoreUnavailableError(
+            "opencode", f"数据库不存在: {OPENCODE_DB}"
+        )
     try:
         conn = sqlite3.connect(f"file:{OPENCODE_DB.resolve()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
-        conn.execute("SELECT id FROM session LIMIT 1")
-        conn.execute("SELECT id, session_id, data FROM message LIMIT 1")
-        conn.execute("SELECT id, message_id, session_id, data FROM part LIMIT 1")
+        conn.execute("BEGIN")
+    except (OSError, sqlite3.Error) as error:
+        raise SessionStoreUnavailableError(
+            "opencode", f"数据库不可只读访问: {error}"
+        ) from error
+
+    try:
+        for table, required in _CURRENT_DB_COLUMNS.items():
+            columns = {
+                str(row["name"])
+                for row in conn.execute(f'PRAGMA table_info("{table}")')
+            }
+            missing = sorted(required - columns)
+            if missing:
+                raise AgentFormatChangedError(
+                    "opencode",
+                    f"sqlite.{table}",
+                    sorted(required),
+                    sorted(columns),
+                )
         return conn
-    except (OSError, sqlite3.Error):
-        return None
+    except AgentFormatChangedError:
+        conn.close()
+        raise
+    except sqlite3.Error as error:
+        conn.close()
+        raise AgentFormatChangedError(
+            "opencode",
+            "sqlite.schema",
+            "readable current schema",
+            str(error),
+        ) from error
 
 
 def _db_info(row) -> dict:
@@ -353,21 +401,13 @@ def _db_export(conn, session_id: str) -> dict | None:
             data.update(id=message["id"], sessionID=message["session_id"])
             messages.append({"info": data, "parts": parts_by_mid.get(message["id"], [])})
         return {"info": _db_info(row), "messages": messages}
-    except (sqlite3.Error, json.JSONDecodeError, KeyError, IndexError):
-        return None
-
-
-def _db_child_ids(session_id: str) -> list[str]:
-    """只读查询当前库；库不存在/版本不兼容时由 export 中的 task 关系兜底。"""
-    try:
-        uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
-        with sqlite3.connect(uri, uri=True) as db:
-            rows = db.execute(
-                "SELECT id FROM session WHERE parent_id = ? "
-                "ORDER BY time_created, id", (session_id,)).fetchall()
-        return [row[0] for row in rows]
-    except (OSError, sqlite3.Error):
-        return []
+    except (sqlite3.Error, json.JSONDecodeError, KeyError, IndexError) as error:
+        raise AgentFormatChangedError(
+            "opencode",
+            f"session.{session_id}",
+            "current session/message/part JSON",
+            type(error).__name__,
+        ) from error
 
 
 def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
@@ -516,30 +556,28 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     return sess, edges
 
 
-def _read(session_id: str, *, allow_cli: bool) -> Session:
+def _read(session_id: str) -> Session:
     seen: dict[str, Session] = {}
     conn = _db_conn()
-    if conn is None and not allow_cli:
-        raise RuntimeError("OpenCode 数据库不可只读访问，拒绝执行 Agent 预览")
 
     def export(sid: str) -> dict:
-        if conn is not None:
-            data = _db_export(conn, sid)
-            if data is not None:
-                return data
-        if not allow_cli:
-            raise RuntimeError("OpenCode 会话无法从数据库只读加载，拒绝执行 Agent 预览")
-        return _oc_export(sid)
+        data = _db_export(conn, sid)
+        if data is None:
+            raise SessionNotFoundError("opencode", sid)
+        return data
 
     def child_ids_of(sid: str) -> list[str]:
-        if conn is not None:
-            try:
-                return [row[0] for row in conn.execute(
-                    "SELECT id FROM session WHERE parent_id = ? "
-                    "ORDER BY time_created, id", (sid,))]
-            except sqlite3.Error:
-                pass
-        return _db_child_ids(sid) if allow_cli else []
+        try:
+            return [row[0] for row in conn.execute(
+                "SELECT id FROM session WHERE parent_id = ? "
+                "ORDER BY time_created, id", (sid,))]
+        except sqlite3.Error as error:
+            raise AgentFormatChangedError(
+                "opencode",
+                "sqlite.session.parent_id",
+                "queryable parent-child relation",
+                str(error),
+            ) from error
 
     def visit(sid: str, root_id: str) -> Session:
         if sid in seen:
@@ -589,12 +627,12 @@ def _read(session_id: str, *, allow_cli: bool) -> Session:
 
 
 def read(session_id: str) -> Session:
-    return _read(session_id, allow_cli=True)
+    return _read(session_id)
 
 
 def read_preview(session_id: str) -> Session:
-    """Agent 预览专用：只读 SQLite，不启动 CLI、不创建临时文件。"""
-    return _read(session_id, allow_cli=False)
+    """Agent 预览使用与普通读取相同的严格 SQLite 路径。"""
+    return _read(session_id)
 
 
 # ---------- writer ----------

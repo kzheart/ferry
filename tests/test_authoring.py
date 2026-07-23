@@ -386,8 +386,8 @@ def test_codex_preserves_reasoning_unknown_items_and_event_positions():
 def test_codex_reader_flushes_incomplete_tool_before_next_user(tmp_path):
     records = _native("codex")[:-1]
     records.extend([
-        {"type": "response_item", "payload": {"type": "function_call",
-                                                "name": "lookup", "arguments": "{}",
+        {"type": "response_item", "payload": {"type": "custom_tool_call",
+                                                "name": "lookup", "input": "{}",
                                                 "call_id": "pending"}},
         {"type": "response_item", "payload": {"type": "message", "role": "user",
                                                 "content": [{"type": "input_text", "text": "second"}]}},

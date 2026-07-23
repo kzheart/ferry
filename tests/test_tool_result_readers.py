@@ -5,7 +5,9 @@ from engine.adapters.claude.reader import (
     _norm_input as norm_claude_input,
     _read_transcript,
     _spawns,
+    _tool_result as claude_tool_result,
 )
+from engine.adapters.claude.writer import _agent_input as write_claude_agent_input
 from engine.adapters.opencode.session import _parse_session
 
 
@@ -52,7 +54,7 @@ def test_claude_preserves_observed_semantic_input_fields():
     }
 
 
-def test_claude_normalizes_agent_options_and_aliases(tmp_path):
+def test_claude_normalizes_current_agent_options(tmp_path):
     assert norm_claude_input("Agent", {
         "description": "fixture",
         "prompt": "fixture prompt",
@@ -71,53 +73,119 @@ def test_claude_normalizes_agent_options_and_aliases(tmp_path):
         "reasoning_effort": "high",
     }
 
-    for key in ("agentId", "agent_id", "teammate_id"):
-        path = tmp_path / f"{key}.jsonl"
-        _write_jsonl(path, [{key: "fixture-agent"}])
-        assert _agent_id([{key: "fixture-agent"}], path) == "fixture-agent"
+    path = tmp_path / "agent-current.jsonl"
+    _write_jsonl(path, [{"agentId": "fixture-agent"}])
+    assert _agent_id([{"agentId": "fixture-agent"}], path) == "fixture-agent"
 
 
-def test_claude_spawn_accepts_result_agent_aliases(tmp_path):
-    for key in ("agentId", "agent_id", "teammate_id"):
-        path = tmp_path / f"{key}.jsonl"
-        _write_jsonl(path, [
-            {
-                "type": "assistant",
-                "uuid": "message-use",
-                "sessionId": "fixture-session",
-                "cwd": "/fixture",
-                "message": {
-                    "role": "assistant",
-                    "content": [{
-                        "type": "tool_use",
-                        "id": "call-fixture",
-                        "name": "Agent",
-                        "input": {
-                            "description": "fixture",
-                            "prompt": "fixture",
-                            "subagent_type": "general-purpose",
-                        },
-                    }],
-                },
+def test_claude_ignores_removed_native_field_aliases(tmp_path):
+    assert norm_claude_input("Bash", {
+        "command": "fixture-command",
+        "timeout_ms": 3000,
+    }) == {"command": "fixture-command"}
+    assert norm_claude_input("Agent", {
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "subagent_type": "general-purpose",
+        "task_name": "legacy-task",
+        "fork_mode": "legacy-mode",
+    }) == {
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "subagent_type": "general-purpose",
+    }
+
+    path = tmp_path / "session.jsonl"
+    assert _agent_id([{"agent_id": "legacy-agent"}], path) is None
+    assert _agent_id([{"teammate_id": "legacy-agent"}], path) is None
+
+    result = claude_tool_result(
+        {"content": "done"},
+        {"exitCode": 17},
+    )
+    assert result.exit_code is None
+
+
+def test_claude_writer_uses_current_agent_input_fields():
+    native = write_claude_agent_input({
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "subagent_type": "general-purpose",
+        "task_name": "fixture-task",
+        "model": "fixture-model",
+        "fork_mode": "fork",
+        "reasoning_effort": "high",
+    })
+
+    assert native == {
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "subagent_type": "general-purpose",
+        "name": "fixture-task",
+        "model": "fixture-model",
+        "mode": "fork",
+        "reasoning_effort": "high",
+    }
+    assert "task_name" not in native
+    assert "fork_mode" not in native
+
+
+def test_claude_writer_keeps_named_agent_shape_without_empty_subagent_type():
+    native = write_claude_agent_input({
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "task_name": "reviewer",
+    })
+    assert native == {
+        "description": "fixture",
+        "prompt": "fixture prompt",
+        "name": "reviewer",
+    }
+
+
+def test_claude_spawn_reads_current_agent_id(tmp_path):
+    path = tmp_path / "agent-current.jsonl"
+    _write_jsonl(path, [
+        {
+            "type": "assistant",
+            "uuid": "message-use",
+            "sessionId": "fixture-session",
+            "cwd": "/fixture",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "call-fixture",
+                    "name": "Agent",
+                    "input": {
+                        "description": "fixture",
+                        "prompt": "fixture",
+                        "subagent_type": "general-purpose",
+                    },
+                }],
             },
-            {
-                "type": "user",
-                "uuid": "message-result",
-                "sessionId": "fixture-session",
-                "cwd": "/fixture",
-                "toolUseResult": {key: "fixture-agent", "status": "completed"},
-                "message": {
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": "call-fixture",
-                        "content": "done",
-                    }],
-                },
+        },
+        {
+            "type": "user",
+            "uuid": "message-result",
+            "sessionId": "fixture-session",
+            "cwd": "/fixture",
+            "toolUseResult": {
+                "agentId": "fixture-agent",
+                "status": "completed",
             },
-        ])
-        session = _read_transcript(path)
-        assert "fixture-agent" in _spawns(session)
+            "message": {
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "call-fixture",
+                    "content": "done",
+                }],
+            },
+        },
+    ])
+    session = _read_transcript(path)
+    assert "fixture-agent" in _spawns(session)
 
 
 def test_claude_preserves_error_and_multimodal_result(tmp_path):

@@ -1,22 +1,57 @@
 import json
+import sqlite3
 
 import pytest
 
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.base.editing import EditDocument
 from engine.adapters.opencode.editor import OpenCodeBackend
+from engine.domain.errors import (
+    AgentFormatChangedError,
+    SessionStoreUnavailableError,
+)
 
 
-def test_preview_refuses_cli_and_tempfile_fallback(monkeypatch):
-    monkeypatch.setattr(opencode_session, "_db_conn", lambda: None)
+def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):
+    def unavailable():
+        raise SessionStoreUnavailableError("opencode", "fixture")
+
+    monkeypatch.setattr(opencode_session, "_db_conn", unavailable)
     monkeypatch.setattr(
         opencode_session,
         "_oc_export",
         lambda _ref: pytest.fail("preview must not invoke opencode export"),
     )
 
-    with pytest.raises(RuntimeError, match="拒绝执行 Agent 预览"):
+    with pytest.raises(SessionStoreUnavailableError):
         OpenCodeBackend().load_preview("session-1")
+    with pytest.raises(SessionStoreUnavailableError):
+        opencode_session.read("session-1")
+
+
+def test_current_sqlite_schema_mismatch_fails_explicitly(tmp_path, monkeypatch):
+    database = tmp_path / "opencode.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE session (id TEXT PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE message (id TEXT, session_id TEXT, data TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, data TEXT)"
+        )
+    monkeypatch.setattr(opencode_session, "OPENCODE_DB", database)
+    monkeypatch.setattr(
+        opencode_session,
+        "_oc_export",
+        lambda _ref: pytest.fail("schema mismatch must not invoke opencode export"),
+    )
+
+    with pytest.raises(
+        AgentFormatChangedError,
+    ) as excinfo:
+        opencode_session.read("session-1")
+    assert excinfo.value.code == "agent.format_changed"
+    assert excinfo.value.params["location"] == "sqlite.session"
 
 
 def test_snapshot_restore_reads_unicode_line_separators_as_json(tmp_path, monkeypatch):

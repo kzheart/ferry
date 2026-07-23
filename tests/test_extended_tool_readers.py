@@ -134,14 +134,23 @@ def test_opencode_repeated_task_calls_remain_distinct_from_one_tree_child(
         "messages": [],
     }
     exports = {"root": root, "child": child}
-    monkeypatch.setattr(opencode_session, "_db_conn", lambda: None)
-    monkeypatch.setattr(
-        opencode_session, "_oc_export", lambda session_id: exports[session_id])
-    monkeypatch.setattr(
-        opencode_session, "_db_child_ids",
-        lambda session_id: ["child"] if session_id == "root" else [])
 
-    session = opencode_session._read("root", allow_cli=True)
+    class Connection:
+        def execute(self, _query, params):
+            sid = params[0]
+            return [("child",)] if sid == "root" else []
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(opencode_session, "_db_conn", Connection)
+    monkeypatch.setattr(
+        opencode_session,
+        "_db_export",
+        lambda _connection, session_id: exports.get(session_id),
+    )
+
+    session = opencode_session._read("root")
 
     assert [child.source_id for child in session.children] == ["child"]
     assert [edge.source_call_id for edge in session.agent_edges] == [

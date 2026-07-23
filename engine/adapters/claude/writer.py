@@ -53,6 +53,26 @@ OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
 }
 
 
+def _agent_input(value: dict) -> dict:
+    return {
+        "description": value.get("description", ""),
+        "prompt": value.get("prompt", ""),
+        **(
+            {"subagent_type": value["subagent_type"]}
+            if value.get("subagent_type")
+            else {}
+        ),
+        **({"name": value["task_name"]} if "task_name" in value else {}),
+        **({"model": value["model"]} if "model" in value else {}),
+        **({"mode": value["fork_mode"]} if "fork_mode" in value else {}),
+        **(
+            {"reasoning_effort": value["reasoning_effort"]}
+            if "reasoning_effort" in value
+            else {}
+        ),
+    }
+
+
 def _slug(path: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(Path(path).resolve()))
 
@@ -191,9 +211,10 @@ def _rewrite_record(value: dict, sid: str, agent_map: dict[str, str],
             record[key] = uuid_map.get(record[key], record[key])
     result = record.get("toolUseResult")
     if isinstance(result, dict):
-        for key in ("agentId", "agent_id", "teammate_id"):
-            if isinstance(result.get(key), str):
-                result[key] = agent_map.get(result[key], result[key])
+        if isinstance(result.get("agentId"), str):
+            result["agentId"] = agent_map.get(
+                result["agentId"], result["agentId"]
+            )
     return _ensure_resume_fields(record, cwd=cwd, stamp=stamp)
 
 
@@ -294,7 +315,9 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                                   tool.name == "Agent" else None)
         if edge:
             native_name = "Agent"
-            native_input = _clone(tool.input) if isinstance(tool.input, dict) else {}
+            native_input = (
+                _agent_input(tool.input) if isinstance(tool.input, dict) else {}
+            )
             emitted_children.add(edge.child_session_id)
         elif tool.op == CanonicalOp.TOOL_INVOKE:
             native_name = str(tool.input["name"])

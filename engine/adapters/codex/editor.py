@@ -106,7 +106,7 @@ class CodexBackend(EditBackend):
         write_jsonl(doc.handle, doc.data)
         meta = next(record.get("payload", {}) for record in doc.data
                     if record.get("type") == "session_meta")
-        sid = meta.get("id") or meta.get("session_id") or doc.handle.stem
+        sid = meta["id"]
         return {"session_id": sid, "saved_as": str(doc.handle),
                 "resume": f"codex resume {sid}"}
 

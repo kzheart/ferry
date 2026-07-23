@@ -75,6 +75,34 @@ class SessionNotFoundError(DomainError, ValueError):
                          {"tool": tool, "ref": ref})
 
 
+class SessionStoreUnavailableError(DomainError, RuntimeError):
+    code = "session.store_unavailable"
+    category = "unavailable"
+    retryable = True
+
+    def __init__(self, tool: str, reason: str):
+        super().__init__(
+            f"{tool} 会话存储不可用: {reason}",
+            {"tool": tool, "reason": reason},
+        )
+
+
+class AgentFormatChangedError(DomainError, RuntimeError):
+    code = "agent.format_changed"
+    category = "unsupported"
+
+    def __init__(self, agent: str, location: str, expected, actual):
+        super().__init__(
+            f"{agent} 当前结构不匹配: {location}",
+            {
+                "agent": agent,
+                "location": location,
+                "expected": expected,
+                "actual": actual,
+            },
+        )
+
+
 class SessionAssetNotFoundError(DomainError, ValueError):
     code = "session.asset_not_found"
     category = "not-found"

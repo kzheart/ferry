@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ...infrastructure.snapshots import snapshot_file
 from ..base.lifecycle import FileSessionLifecycle
-from .native import CodexStore
+from .native import CodexCloneError, CodexStore, discover_closure
 from .registry import unregister_tree
 
 
@@ -20,13 +20,22 @@ class CodexLifecycle(FileSessionLifecycle):
         store = CodexStore.for_rollout(Path(dest))
         owned_ids = set()
         owned_paths = []
+        try:
+            closure = discover_closure(Path(dest), store)
+        except CodexCloneError:
+            closure = None
+        if closure is not None:
+            owned_ids.update(closure.nodes)
+            owned_paths.extend(node.path for node in closure.nodes.values())
         for hit in store.sessions_dir.glob("*/*/*/rollout-*.jsonl"):
+            if hit in owned_paths:
+                continue
             try:
                 records = (json.loads(line) for line in
                            hit.read_text().splitlines() if line.strip())
                 meta = next((row.get("payload", {}) for row in records
                              if row.get("type") == "session_meta"), {})
-                if meta.get("id") == session_id or meta.get("session_id") == session_id:
+                if meta.get("id") == session_id:
                     if meta.get("id"):
                         owned_ids.add(str(meta["id"]))
                     owned_paths.append(hit)

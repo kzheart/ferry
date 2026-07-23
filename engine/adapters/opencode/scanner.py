@@ -3,12 +3,12 @@
 import hashlib
 import json
 import sqlite3
-from pathlib import Path
 
 from ...domain.topology import session_roots
 from ...domain.usage import add_tokens, dominant_model, empty_tokens, has_tokens
+from ...infrastructure.platform_paths import opencode_database_path
 
-OPENCODE_DB = Path.home() / ".local/share/opencode/opencode.db"
+OPENCODE_DB = opencode_database_path()
 _FINGERPRINT_INDEX: tuple[tuple, set[str]] | None = None
 
 
