@@ -21,8 +21,8 @@ def organization_environment(tmp_path, monkeypatch):
         tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
     )
     monkeypatch.setattr(summaries, "_database", lambda: database)
-    monkeypatch.setattr(organizing, "PROPOSALS", tmp_path / "proposals.json")
-    monkeypatch.setattr(organizing, "SIGNALS", tmp_path / "signals.jsonl")
+    monkeypatch.setattr(organizing, "_database", lambda: database)
+    monkeypatch.setattr(session_meta, "_database", lambda: database)
     return tmp_path
 
 
@@ -44,7 +44,11 @@ def _seed(tool: str, session_id: str, digest: str,
             "digest": digest,
         }],
     }
-    summaries._database().store_session_summary(record, 0)
+    database = summaries._database()
+    database.store_session_summary(record, 0)
+    database.invalidate_organization_proposals(
+        tool, session_id, record["fingerprint"], 0,
+    )
     return record
 
 
@@ -59,10 +63,7 @@ def _target(record: dict, suggested: dict) -> dict:
 
 
 def _signals() -> list[dict]:
-    return [
-        json.loads(line)
-        for line in organizing.SIGNALS.read_text().splitlines()
-    ]
+    return organizing._database().list_organization_signals()
 
 
 def test_digest_context_only_exposes_cached_digest(organization_environment):
@@ -109,7 +110,6 @@ def test_proposal_caches_by_content_fingerprint_and_has_sources(
         "anchor_locator": "message-session-a",
         "digest": "实现支付重试",
     }
-    assert organizing.PROPOSALS.stat().st_mode & 0o777 == 0o600
 
 
 def test_reject_records_signal_without_changing_metadata(
@@ -125,7 +125,6 @@ def test_reject_records_signal_without_changing_metadata(
     assert result["status"] == "rejected"
     assert services.session_meta_list()["claude\0session-a"] == {"name": "原名"}
     assert _signals()[-1]["event"] == "rejected"
-    assert organizing.SIGNALS.stat().st_mode & 0o777 == 0o600
 
 
 def test_modify_then_approve_writes_only_local_metadata(
@@ -227,7 +226,6 @@ def test_changed_fingerprint_invalidates_and_can_regenerate(
     new_record = _seed(
         "opencode", "session-a", "续写后的工作", fingerprint="sha256:new")
 
-    organizing.digest_context([{"tool": "opencode", "id": "session-a"}])
     assert organizing.list_proposals()[0]["status"] == "stale"
     fresh = organizing.propose([
         _target(new_record, {"name": "续写后的工作"}),
@@ -235,7 +233,7 @@ def test_changed_fingerprint_invalidates_and_can_regenerate(
 
     assert fresh["proposal_id"] != old["proposal_id"]
     assert fresh["cache_hit"] is False
-    with pytest.raises(OrganizationProposalError):
+    with pytest.raises(OrganizationProposalStaleError):
         organizing.decide(old["proposal_id"], "approve")
 
 
@@ -270,6 +268,8 @@ def test_metadata_cas_failure_does_not_partially_apply_cluster(
 
     assert "claude\0session-a" not in services.session_meta_list()
     assert services.session_meta_list()["codex\0session-b"] == {"name": "concurrent"}
+    assert organizing.list_proposals()[0]["status"] == "stale"
+    assert _signals()[-1]["reason"] == "metadata_changed"
 
 
 def test_invalid_source_is_retryable_without_persisting_failure(
@@ -280,7 +280,7 @@ def test_invalid_source_is_retryable_without_persisting_failure(
 
     with pytest.raises(OrganizationProposalError):
         organizing.propose([target])
-    assert not organizing.PROPOSALS.exists()
+    assert organizing.list_proposals() == []
 
     target["sources"] = [record["segments"][0]["hash"]]
     assert organizing.propose([target])["status"] == "pending"
@@ -302,7 +302,7 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
         organizing.propose([
             _target(record, {"name": "不完整建议"}),
         ])
-    assert not organizing.PROPOSALS.exists()
+    assert organizing.list_proposals() == []
 
 
 def test_rpc_exposes_context_proposal_list_and_decision(

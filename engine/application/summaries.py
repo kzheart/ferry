@@ -149,7 +149,11 @@ def build_backbone(tool: str, ref: str) -> dict:
         "segments": segments,
     }
     if previous != record:
-        database.store_session_summary(record, _now_ms())
+        now = _now_ms()
+        database.store_session_summary(record, now)
+        database.invalidate_organization_proposals(
+            tool, session.source_id, fingerprint, now,
+        )
     view = _view(record)
     view["pending_sources"] = [
         {"hash": segment["hash"], "text": source_by_hash[segment["hash"]]}
