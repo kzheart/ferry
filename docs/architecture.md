@@ -20,6 +20,14 @@ supports exactly the current structure implemented in the repository. Readers
 ignore unrelated additional fields, reject changes to required structure, and
 never select parsers by CLI version.
 
+Current structure may legitimately contain more than one record subtype when
+the upstream runtime itself emits them. Codex is the important example:
+`response_item.function_call` / `function_call_output` and
+`response_item.custom_tool_call` / `custom_tool_call_output` coexist in
+current rollouts, with the former also representing `spawn_agent`. This is one
+current native union, not a version fallback; the reader must reject unknown
+subtypes instead of selecting a parser by CLI version.
+
 Ferry's own IPC protocol and durable-store schema remain exact, independently
 versioned contracts. They protect against mixed binaries and corrupt data; they
 do not provide backward compatibility.
