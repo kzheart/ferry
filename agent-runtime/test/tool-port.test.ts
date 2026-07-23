@@ -22,8 +22,10 @@ const sessionEditSchema = tools.find(
   (tool) => tool.name === "session_edit",
 )!.parameters;
 const sessionEditTool = tools.find((tool) => tool.name === "session_edit")!;
+const migrateTool = tools.find((tool) => tool.name === "migrate")!;
+const migrateSchema = migrateTool.parameters;
 
-describe("session_edit schema", () => {
+describe("Ferry mutation tool schemas", () => {
   it("uses an object root accepted by function-tool providers", () => {
     for (const tool of tools) {
       expect(tool.parameters).toMatchObject({ type: "object" });
@@ -36,6 +38,7 @@ describe("session_edit schema", () => {
         tool: "codex",
         ref: "fsr_session",
         ops: [{ op: "delete-turn", turn: 1 }],
+        intent: "preview",
       }),
     ).toBe(true);
     expect(
@@ -43,7 +46,7 @@ describe("session_edit schema", () => {
         tool: "codex",
         ref: "fsr_session",
         ops: [{ op: "delete-turn", turn: 1 }],
-        dry_run: true,
+        intent: "execute",
       }),
     ).toBe(true);
     expect(
@@ -53,9 +56,51 @@ describe("session_edit schema", () => {
         patch: { pinned: true },
       }),
     ).toBe(true);
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        ops: [{ op: "delete-turn", turn: 1 }],
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        ops: [{ op: "delete-turn", turn: 1 }],
+        dry_run: true,
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        patch: { pinned: true },
+        intent: "preview",
+      }),
+    ).toBe(false);
   });
 
-  it("rejects ambiguous edit modes at the execution boundary", async () => {
+  it("requires migration intent in the schema", () => {
+    const migration = {
+      source_tool: "claude",
+      ref: "fsr_session",
+      target_tool: "codex",
+    };
+    expect(Check(migrateSchema, migration)).toBe(false);
+    expect(Check(migrateSchema, { ...migration, intent: "preview" })).toBe(
+      true,
+    );
+    expect(Check(migrateSchema, { ...migration, intent: "execute" })).toBe(
+      true,
+    );
+    expect(Check(migrateSchema, { ...migration, intent: "invalid" })).toBe(
+      false,
+    );
+    expect(Check(migrateSchema, { ...migration, dry_run: true })).toBe(false);
+  });
+
+  it("enforces content intent and metadata boundaries during execution", async () => {
     const execute = (params: Record<string, unknown>) =>
       sessionEditTool.execute("call", params, undefined, undefined);
     await expect(
@@ -70,6 +115,7 @@ describe("session_edit schema", () => {
         ref: "fsr_session",
         ops: [{ op: "delete-turn", turn: 1 }],
         patch: { pinned: true },
+        intent: "execute",
       }),
     ).rejects.toThrow("requires exactly one");
     await expect(
@@ -77,16 +123,60 @@ describe("session_edit schema", () => {
         tool: "codex",
         ref: "fsr_session",
         patch: { pinned: true },
-        dry_run: true,
+        intent: "preview",
       }),
-    ).rejects.toThrow("dry_run is only valid");
+    ).rejects.toThrow("metadata patch does not accept intent");
     await expect(
       execute({
         tool: "codex",
         ref: "fsr_session",
-        patch: { pinned: true },
-        dry_run: false,
+        ops: [{ op: "delete-turn", turn: 1 }],
       }),
-    ).rejects.toThrow("dry_run is only valid");
+    ).rejects.toThrow("ops require intent");
+    await expect(
+      execute({
+        tool: "codex",
+        ref: "fsr_session",
+        ops: [{ op: "delete-turn", turn: 1 }],
+        intent: "invalid",
+      }),
+    ).rejects.toThrow("ops require intent");
+    await expect(
+      execute({
+        tool: "codex",
+        ref: "fsr_session",
+        ops: [{ op: "delete-turn", turn: 1 }],
+        dry_run: true,
+      }),
+    ).rejects.toThrow("no longer accepts dry_run");
+  });
+
+  it("enforces migration intent during execution", async () => {
+    const execute = (params: Record<string, unknown>) =>
+      migrateTool.execute("call", params, undefined, undefined);
+    const migration = {
+      source_tool: "claude",
+      ref: "fsr_session",
+      target_tool: "codex",
+    };
+
+    await expect(execute(migration)).rejects.toThrow(
+      "requires intent preview or execute",
+    );
+    await expect(execute({ ...migration, intent: "invalid" })).rejects.toThrow(
+      "requires intent preview or execute",
+    );
+    await expect(execute({ ...migration, dry_run: false })).rejects.toThrow(
+      "no longer accepts dry_run",
+    );
+  });
+
+  it("describes intent without advertising dry_run", () => {
+    expect(migrateTool.description).toContain("intent is required");
+    expect(sessionEditTool.description).toContain(
+      "Metadata patch does not accept intent",
+    );
+    expect(migrateTool.description).not.toContain("dry_run");
+    expect(sessionEditTool.description).not.toContain("dry_run");
   });
 });

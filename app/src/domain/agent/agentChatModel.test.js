@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyEvent, emptyLog } from "./agentChatModel.js";
+import { applyEvent, emptyLog, patchApproval } from "./agentChatModel.js";
 
 test("structured tool details survive event reduction and become entities", () => {
   let log = applyEvent(emptyLog(), {
@@ -33,4 +33,17 @@ test("replay reconstructs an approval card from persisted tool details", () => {
   assert.equal(log.items[1].kind, "approval");
   assert.equal(log.items[1].operation.operation_id, "op_1");
   assert.equal(log.items[1].status, "pending");
+});
+
+test("operation plans use plan_id as the approval identity", () => {
+  const log = applyEvent(emptyLog(), {
+    type: "operation.proposed",
+    run_id: "run-1",
+    payload: {
+      tool: "migrate",
+      operation: { plan_id: "op_plan", kind: "migration", preview: {} },
+    },
+  });
+  const updated = patchApproval(log, "op_plan", { status: "applied" });
+  assert.equal(updated.items[0].status, "applied");
 });

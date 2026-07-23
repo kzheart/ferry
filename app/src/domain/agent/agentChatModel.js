@@ -27,6 +27,9 @@ const sealAssistant = items => {
   }
 };
 
+export const operationKey = operation =>
+  operation?.plan_id || operation?.operation_id || null;
+
 const endRun = (log, items) => {
   sealAssistant(items);
   log.status = "idle";
@@ -79,9 +82,10 @@ export function applyEvent(log, ev) {
           entities: p.is_error ? [] : entitiesFromToolResult(current.name, p.result, current.args) };
         const envelope = p.result?.details;
         const operation = envelope?.operation;
-        if (!p.is_error && operation?.operation_id &&
+        const key = operationKey(operation);
+        if (!p.is_error && key &&
             !items.some(item => item.kind === "approval" &&
-              item.operation?.operation_id === operation.operation_id)) {
+              operationKey(item.operation) === key)) {
           items.push({
             kind: "approval", tool: current.name, operation,
             runId: ev.run_id, status: envelope.status === "applied" ? "applied" : "pending",
@@ -123,7 +127,7 @@ export function applyEvent(log, ev) {
 // 本地推进审批卡状态(applying/applied/failed/dismissed)
 export function patchApproval(log, operationId, patch) {
   const i = log.items.findLastIndex(
-    it => it.kind === "approval" && it.operation?.operation_id === operationId);
+    it => it.kind === "approval" && operationKey(it.operation) === operationId);
   if (i < 0) return log;
   const items = [...log.items];
   items[i] = { ...items[i], ...patch };
