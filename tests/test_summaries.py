@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from engine.application import summaries
+from engine.application.ports import current
 from engine.domain.errors import SummaryBackboneMissingError
 from engine.infrastructure.state_db import StateDatabase
 
@@ -13,7 +14,7 @@ def _use_database(tmp_path, monkeypatch) -> StateDatabase:
     database = StateDatabase(
         tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
     )
-    monkeypatch.setattr(summaries, "_database", lambda: database)
+    monkeypatch.setattr(summaries, "_database", lambda _ports: database)
     return database
 
 
@@ -90,7 +91,8 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    first = summaries.build_backbone("claude", "fsr_x")
+    ports = current()
+    first = summaries.build_backbone("claude", "fsr_x", ports)
     assert first["segment_count"] == 2
     assert len(first["pending"]) == 2
     assert first["pending_sources"] == [
@@ -102,12 +104,12 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
     )["segments"][0]
 
     head = first["segments"][0]["hash"]
-    written = summaries.set_summaries("claude", "sess-1", {head: "改了支付逻辑"})
+    written = summaries.set_summaries("claude", "sess-1", {head: "改了支付逻辑"}, ports)
     assert written["applied"] == 1
 
     # 续写一轮 → 指纹变;未变段的摘要按内容 hash 迁移保留
     session.messages.append(_msg("user", "第三轮", "u3"))
-    rebuilt = summaries.build_backbone("claude", "fsr_x")
+    rebuilt = summaries.build_backbone("claude", "fsr_x", ports)
     assert rebuilt["segment_count"] == 3
     kept = next(s for s in rebuilt["segments"] if s["hash"] == head)
     assert kept["digest"] == "改了支付逻辑"
@@ -118,8 +120,9 @@ def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
     _use_database(tmp_path, monkeypatch)
     session = _session([_msg("user", "只此一轮", "u1")])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
-    first = summaries.build_backbone("claude", "fsr_x")
-    again = summaries.build_backbone("claude", "fsr_x")
+    ports = current()
+    first = summaries.build_backbone("claude", "fsr_x", ports)
+    again = summaries.build_backbone("claude", "fsr_x", ports)
     assert first["fingerprint"] == again["fingerprint"]
 
 
@@ -133,13 +136,14 @@ def test_build_backbone_refreshes_structure_for_textless_message(
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    first = summaries.build_backbone("claude", "fsr_x")
+    ports = current()
+    first = summaries.build_backbone("claude", "fsr_x", ports)
     first_hash = first["segments"][0]["hash"]
     summaries.set_summaries(
-        "claude", "sess-1", {first_hash: "已修改支付逻辑"})
+        "claude", "sess-1", {first_hash: "已修改支付逻辑"}, ports)
 
     session.messages.insert(2, _msg("assistant", "", "tool-1", with_tool=True))
-    rebuilt = summaries.build_backbone("claude", "fsr_x")
+    rebuilt = summaries.build_backbone("claude", "fsr_x", ports)
 
     assert rebuilt["fingerprint"] == first["fingerprint"]
     assert rebuilt["segments"][0]["message_end"] == 2
@@ -155,14 +159,15 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    first = summaries.build_backbone("claude", "fsr_x")
+    ports = current()
+    first = summaries.build_backbone("claude", "fsr_x", ports)
     second_hash = first["segments"][1]["hash"]
     summaries.set_summaries(
-        "claude", "sess-1", {second_hash: "第二轮摘要"})
+        "claude", "sess-1", {second_hash: "第二轮摘要"}, ports)
 
     session.context_compactions.append(SimpleNamespace(
         summary_message_id=None, after_message_id="u1"))
-    rebuilt = summaries.build_backbone("claude", "fsr_x")
+    rebuilt = summaries.build_backbone("claude", "fsr_x", ports)
 
     assert rebuilt["fingerprint"] == first["fingerprint"]
     assert rebuilt["segments"][1]["after_compaction"] is True
@@ -172,7 +177,7 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
 def test_set_summaries_requires_backbone(tmp_path, monkeypatch):
     _use_database(tmp_path, monkeypatch)
     with pytest.raises(SummaryBackboneMissingError):
-        summaries.set_summaries("claude", "missing", {"sha256:x": "y"})
+        summaries.set_summaries("claude", "missing", {"sha256:x": "y"}, current())
 
 
 def test_summary_cache_is_scoped_by_tool_and_native_session_id(
@@ -187,8 +192,9 @@ def test_summary_cache_is_scoped_by_tool_and_native_session_id(
         "segments": [],
     }, 2)
 
-    assert summaries.get_backbone("claude", "shared")["fingerprint"] == "claude-fp"
-    assert summaries.get_backbone("codex", "shared")["fingerprint"] == "codex-fp"
+    ports = current()
+    assert summaries.get_backbone("claude", "shared", ports)["fingerprint"] == "claude-fp"
+    assert summaries.get_backbone("codex", "shared", ports)["fingerprint"] == "codex-fp"
 
 
 def test_rpc_wiring_returns_structured_error(tmp_path, monkeypatch):

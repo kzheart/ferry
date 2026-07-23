@@ -6,7 +6,6 @@ import os
 
 from ..application import services
 from ..application import agent_tools
-from ..application import summaries
 from ..application import organizing
 from ..application import operations
 from ..application import runtime_sessions
@@ -34,8 +33,8 @@ RPC_METHODS = {
     "session_asset": lambda p: services.session_asset(p["tool"], p["ref"], p["asset_id"]),
     "edit_capabilities": lambda p: services.edit_capabilities(p["tool"]),
     "session_meta_list": lambda p: services.session_meta_list(),
-    "session_backbone": lambda p: summaries.build_backbone(p["tool"], p["ref"]),
-    "session_summaries_set": lambda p: summaries.set_summaries(
+    "session_backbone": lambda p: services.session_backbone(p["tool"], p["ref"]),
+    "session_summaries_set": lambda p: services.set_session_summaries(
         p["tool"], p["id"], p.get("digests") or {}),
     "organization_digest_context": lambda p: organizing.digest_context(
         p["targets"]),

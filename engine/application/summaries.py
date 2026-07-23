@@ -12,15 +12,15 @@ from pathlib import Path
 
 from ..domain.errors import SummaryBackboneMissingError
 from ..infrastructure.state_db import StateDatabase
-from .ports import current
+from .ports import ApplicationPorts
 from .sessions import read_tree
 
 MAX_DIGEST_CHARS = 4000
 
 
-def _database() -> StateDatabase:
+def _database(ports: ApplicationPorts) -> StateDatabase:
     return StateDatabase(
-        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
     )
 
@@ -29,8 +29,8 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def get_backbone(tool: str, session_id: str) -> dict | None:
-    return _database().get_session_summary(tool, session_id)
+def get_backbone(tool: str, session_id: str, ports: ApplicationPorts) -> dict | None:
+    return _database(ports).get_session_summary(tool, session_id)
 
 
 def _locator(message, index: int) -> str:
@@ -122,17 +122,17 @@ def _view(record: dict) -> dict:
     }
 
 
-def build_backbone(tool: str, ref: str) -> dict:
+def build_backbone(tool: str, ref: str, ports: ApplicationPorts) -> dict:
     """读取会话 → 分段 → 算指纹。每次都以当前会话重建段结构,并按内容
     hash 复用既有摘要(编辑结构或某段时不牵连未变内容的摘要)。"""
-    session = read_tree(tool, ref, current())
+    session = read_tree(tool, ref, ports)
     segments = segment_session(session)
     fingerprint = session_fingerprint(segments)
     source_by_hash = {
         segment["hash"]: segment.pop("_source_text", "")
         for segment in segments
     }
-    database = _database()
+    database = _database(ports)
     previous = database.get_session_summary(tool, session.source_id)
     prior = {
         segment["hash"]: segment["digest"]
@@ -163,11 +163,12 @@ def build_backbone(tool: str, ref: str) -> dict:
     return view
 
 
-def set_summaries(tool: str, session_id: str, digests: dict) -> dict:
+def set_summaries(tool: str, session_id: str, digests: dict,
+                  ports: ApplicationPorts) -> dict:
     """agent-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
     编辑后仍存在的段稳健。"""
     updates = digests if isinstance(digests, dict) else {}
-    database = _database()
+    database = _database(ports)
     record = database.get_session_summary(tool, session_id)
     if not record:
         raise SummaryBackboneMissingError(
