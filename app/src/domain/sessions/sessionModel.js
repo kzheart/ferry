@@ -54,9 +54,9 @@ export const sessionRef = session =>
 
 export const operationRef = session => session.ref;
 
-export function toRounds(messages, authoredTurns) {
-  if (authoredTurns?.length) {
-    return authoredTurns.map(turn => {
+export function toRounds(messages, replyTurns) {
+  if (replyTurns?.length) {
+    return replyTurns.map(turn => {
       const userBlocks = turn.user?.blocks || [];
       const user = userBlocks.filter(block => block.kind === "text")
         .map(block => block.text).join("\n");
@@ -71,7 +71,7 @@ export function toRounds(messages, authoredTurns) {
       seq.forEach((item, index) => { if (item.kind === "text") last = index; });
       return { n: turn.turn, user, images, locator: turn.turn_locator, index: turn.user?.index,
         ai, tools, seq, final: last >= 0 ? seq[last].text : "",
-        steps: seq.filter((_, index) => index !== last), authoring: turn };
+        steps: seq.filter((_, index) => index !== last), assistantReply: turn };
     });
   }
   const rounds = [];

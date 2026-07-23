@@ -113,7 +113,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     invalidateEditPlan();
     setOps(currentOps => currentOps.map(op => op.id === id ? { ...op, ...patch } : op));
   };
-  const authoredReply = op => ({ items: op.items.map(item => item.kind === "text"
+  const replacementReply = op => ({ items: op.items.map(item => item.kind === "text"
     ? { kind: "text", text: item.text }
     : { kind: "tool", name: item.name,
         input: item.inputFormat === "json" ? JSON.parse(item.inputText) : item.inputText,
@@ -122,10 +122,10 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     if (op.type === "rewrite")
       return { op: "rewrite", locator: op.locator, text: op.text };
     if (op.type === "assistant-reply")
-      return { op: "replace-assistant-reply", turn: op.turn, reply: authoredReply(op) };
+      return { op: "replace-assistant-reply", turn: op.turn, reply: replacementReply(op) };
     return op.rpc;
   });
-  const authoringError = op => {
+  const replyEditError = op => {
     if (!op) return null;
     if (!op.items?.length) return t("browser:edit.errNoItems");
     for (const item of op.items) {
@@ -161,8 +161,8 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     setDiff({ loading: true, preview: null });
     if (!current || !dirtyOps.length) { setDiff({ loading: false, preview: null }); return; }
     try {
-      const authored = dirtyOps.find(op => op.type === "assistant-reply");
-      const invalid = authored ? authoringError(authored) : null;
+      const replyEdit = dirtyOps.find(op => op.type === "assistant-reply");
+      const invalid = replyEdit ? replyEditError(replyEdit) : null;
       if (invalid) throw new Error(invalid);
       const plan = await ensureEditPlan();
       setDiff(value => value && { ...value, loading: false, preview: plan.preview });
@@ -172,10 +172,10 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   };
   const prepareApply = async () => {
     if (!dirtyOps.length) return;
-    const authored = dirtyOps.find(op => op.type === "assistant-reply");
+    const replyEdit = dirtyOps.find(op => op.type === "assistant-reply");
     setApplying(true);
     try {
-      const invalid = authored ? authoringError(authored) : null;
+      const invalid = replyEdit ? replyEditError(replyEdit) : null;
       if (invalid) throw new Error(invalid);
       await ensureEditPlan();
       setConfirmApply(true);
@@ -194,8 +194,8 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     setToast({ kind: "run", title: t("browser:edit.toastApplying"),
       desc: runtimeProbe ? t("browser:edit.toastApplyingDescProbe") : t("browser:edit.toastApplyingDescStructure") });
     try {
-      const authored = dirtyOps.find(op => op.type === "assistant-reply");
-      const invalid = authored ? authoringError(authored) : null;
+      const replyEdit = dirtyOps.find(op => op.type === "assistant-reply");
+      const invalid = replyEdit ? replyEditError(replyEdit) : null;
       if (invalid) throw new Error(invalid);
       const result = (await operationApply((await ensureEditPlan()).plan_id)).result;
       if (result.ok) {
@@ -216,5 +216,5 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   return { ops, dirtyOps, setOps: replaceOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
-    removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit };
+    removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit };
 }

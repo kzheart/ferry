@@ -122,7 +122,7 @@
     "fakeOutput": "Faked tool output",
     "blockedHint": "Apply or discard other pending operations first",
     "startHint": "Edit or forge assistant reply and tool calls",
-    "panelTitle": "Assistant reply authoring",
+    "panelTitle": "Assistant reply editing",
     "panelHint": "Only edits history, does not execute tools",
     "cancel": "Cancel assistant reply edit",
     "addText": "+ Text",
