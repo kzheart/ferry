@@ -192,48 +192,22 @@ export function HistoryDeleteConfirm({ h, onCancel, onConfirm }) {
   );
 }
 
-export function ApplyConfirm({ ops, saveMode, setSaveMode, editCaps, onCancel, onConfirm }) {
+export function ApplyConfirm({ ops, saveAs = false, onCancel, onConfirm }) {
   const { t } = useTranslation();
-  const modes = [
-    ["saveas", t("overlays:apply.saveas"), t("overlays:apply.saveasDesc")],
-    ["inplace", t("overlays:apply.inplace"), t("overlays:apply.inplaceDesc")],
-  ].filter(([mode]) => {
-    return ops.every(op => op.modes?.includes(mode) ||
-      editCaps?.operation_modes?.[op.backendOp || (op.type === "delete" ? "delete-turn" : "rewrite")]?.includes(mode));
-  });
-  const inplace = saveMode === "inplace";
   return (
     <ConfirmBox width={440} title={t("overlays:apply.title", { n: ops.length })} actions={<>
       <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:apply.cancel")}</button>
-      {inplace ? (
+      {saveAs ? (
+        <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
+          onClick={onConfirm}>{t("overlays:apply.confirmSaveas")}</button>
+      ) : (
         <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
           borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
           onClick={onConfirm}>{t("overlays:apply.confirmInplace")}</button>
-      ) : (
-        <button className="fbtn-primary" style={{ height: 34, padding: "0 16px", fontSize: 13 }}
-          onClick={onConfirm}>{t("overlays:apply.confirmSaveas")}</button>
       )}
     </>}>
-      <div style={{ marginTop: 12 }}>
-        {modes.map(([k, l, d]) => {
-          const on = saveMode === k;
-          return (
-            <label key={k} onClick={() => setSaveMode(k)}
-              style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 11px",
-                border: `1px solid ${on ? ACCENT : "var(--line3)"}`,
-                background: on ? "var(--acc-soft4)" : "var(--surface)",
-                borderRadius: 8, marginTop: 7, cursor: "default" }}>
-              <span style={{ marginTop: 1, display: "inline-flex" }}><RadioDot on={on} /></span>
-              <span>
-                <span style={{ fontSize: 12, color: "var(--tx2)", fontWeight: 500 }}>{l}</span><br />
-                <span style={{ fontSize: 11, color: "var(--tx5)" }}>{d}</span>
-              </span>
-            </label>
-          );
-        })}
-      </div>
       <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 12, lineHeight: 1.55 }}>
-        {inplace ? t("overlays:apply.inplaceFootnote") : t("overlays:apply.saveasFootnote")}</div>
+        {t(saveAs ? "overlays:apply.saveasFootnote" : "overlays:apply.inplaceFootnote")}</div>
     </ConfirmBox>
   );
 }

@@ -164,10 +164,10 @@ export default function App() {
       }
     })();
   }, [sessions, cur, ferry.health?.credential, i18n.language]);
-  const { ops, dirtyOps, setOps, saveMode, setSaveMode, diff, setDiff,
+  const { ops, dirtyOps, setOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
-    removeOp, updateOp, authoringError, openDiff, applyEdit } = editing;
+    removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit } = editing;
 
   // 清单水合(首启无缓存 / 引擎清单与缓存不一致)后,把"全选"态筛选器扩展到新全集
   useEffect(() => onToolsHydrated(() => {
@@ -673,7 +673,7 @@ export default function App() {
   detailFns.current = {
     discardAll: () => setOps([]),
     setScope, addOp, removeOp, updateOp, startReplyEdit, authoringError,
-    openDiff, apply: () => setConfirmApply(true),
+    openDiff, apply: prepareApply,
     openMigrate: sc => setMig({ scope: sc ?? scope }),
     refresh: refreshDetail,
     resume: async meta => {
@@ -1110,8 +1110,10 @@ export default function App() {
           onDone={() => loadHistory()} />)}
       {diff && <DiffSheet ops={dirtyOps} preview={diff.preview} loading={diff.loading} error={diff.error}
         onClose={() => setDiff(null)} />}
-      {confirmApply && <ApplyConfirm ops={dirtyOps} saveMode={saveMode} setSaveMode={setSaveMode}
-        editCaps={editCaps} onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
+      {confirmApply && <ApplyConfirm ops={dirtyOps}
+        saveAs={dirtyOps.some(op => op.type === "assistant-reply") &&
+          !authoringCaps?.inplace && !!authoringCaps?.save_as}
+        onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
       {searchOpen && paneCfg && (
         <SearchPalette
           placeholder={paneCfg.placeholder}

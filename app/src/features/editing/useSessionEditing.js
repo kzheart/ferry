@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { rpc } from "../../api/transport/rpc.js";
+import { operationApply, operationPlan, rpc } from "../../api/transport/rpc.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
@@ -8,7 +8,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   onInplaceApplied, onSavedAs }) {
   const { t } = useTranslation();
   const [ops, setOps] = useState([]);
-  const [saveMode, setSaveMode] = useState("saveas");
   const [diff, setDiff] = useState(null);
   const [confirmApply, setConfirmApply] = useState(false);
   const [toast, setToast] = useState(null);
@@ -16,16 +15,27 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const [scope, setScope] = useState(null);
   const [editCaps, setEditCaps] = useState(null);
   const [authoringCaps, setAuthoringCaps] = useState(null);
+  const [plannedEdit, setPlannedEdit] = useState(null);
   const capabilityRequest = useRef(0);
   const capsCache = useRef({});   // tool -> {edit, authoring},能力按工具固定,切会话不重复请求
 
-  const resetSelection = () => { setScope(null); setOps([]); };
+  const invalidateEditPlan = () => {
+    setPlannedEdit(null);
+    setDiff(null);
+  };
+  const replaceOps = value => {
+    invalidateEditPlan();
+    setOps(value);
+  };
+  const resetSelection = () => {
+    setScope(null);
+    replaceOps([]);
+  };
   const loadCapabilities = tool => {
     const request = ++capabilityRequest.current;
     const cached = capsCache.current[tool];
     if (cached?.edit && cached?.authoring) {
       setEditCaps(cached.edit);
-      setSaveMode(cached.edit.save_as ? "saveas" : "inplace");
       setAuthoringCaps(cached.authoring);
       return;
     }
@@ -35,7 +45,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
       (capsCache.current[tool] ||= {}).edit = caps;
       if (request !== capabilityRequest.current) return;
       setEditCaps(caps);
-      setSaveMode(caps.save_as ? "saveas" : "inplace");
     }).catch(() => {
       if (request === capabilityRequest.current)
         setEditCaps({ operations: [], inplace: false, save_as: false });
@@ -66,13 +75,12 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
         orig: round.user, text: round.user, locator: round.locator };
     }
     const backendOp = type === "delete" ? "delete-turn" : "rewrite";
-    const allowed = editCaps?.operation_modes?.[backendOp] || [];
-    if (allowed.length && !allowed.includes(saveMode)) setSaveMode(allowed[0]);
+    invalidateEditPlan();
     setOps(currentOps => {
       if (currentOps.some(item => item.type === type && item.n === round.n) ||
           currentOps.some(item => item.type === "assistant-reply")) return currentOps;
       return [...currentOps, { id: `${type}-${round.n}-${Date.now()}`,
-        backendOp, modes: allowed, ...op }];
+        backendOp, ...op }];
     });
   };
   const draftItem = item => ({ ...item,
@@ -85,7 +93,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const startReplyEdit = turn => {
     if (!turn || ops.length) return;
     const allowed = authoringCaps?.operation_modes?.["replace-assistant-reply"] || [];
-    if (allowed.length && !allowed.includes(saveMode)) setSaveMode(allowed[0]);
+    invalidateEditPlan();
     const source = turn.assistant_reply?.items || [];
     const items = source.length ? source.map(draftItem) : [draftItem({ kind: "text", text: "" })];
     setOps([{ id: `assistant-reply-${turn.turn}-${Date.now()}`, type: "assistant-reply",
@@ -106,9 +114,12 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   };
   const dirtyOps = ops.filter(isDirty);
 
-  const removeOp = id => setOps(currentOps => currentOps.filter(op => op.id !== id));
+  const removeOp = id => {
+    invalidateEditPlan();
+    setOps(currentOps => currentOps.filter(op => op.id !== id));
+  };
   const updateOp = (id, patch) => {
-    setDiff(null);
+    invalidateEditPlan();
     setOps(currentOps => currentOps.map(op => op.id === id ? { ...op, ...patch } : op));
   };
   const rpcOps = () => dirtyOps.map(op => op.type === "rewrite"
@@ -134,6 +145,22 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     }
     return null;
   };
+  const editPlanInput = () => ({
+    kind: "edit",
+    tool: current.tool,
+    ref: sessionRef(current),
+    ops: rpcOps(),
+    probe: !!runtimeProbe,
+  });
+  const editPlanKey = input => JSON.stringify(input);
+  const ensureEditPlan = async () => {
+    const input = editPlanInput();
+    const key = editPlanKey(input);
+    if (plannedEdit?.key === key) return plannedEdit.plan;
+    const plan = await operationPlan(input);
+    setPlannedEdit({ key, plan });
+    return plan;
+  };
   const openDiff = async () => {
     setDiff({ loading: true, preview: null });
     if (!current || !dirtyOps.length) { setDiff({ loading: false, preview: null }); return; }
@@ -146,12 +173,32 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
           ref: sessionRef(current), turn: authored.turn, reply: authoredReply(authored) });
         setDiff(value => value && { ...value, loading: false, preview });
       } else {
-        const preview = await rpc("edit_preview", { tool: current.tool, ref: sessionRef(current), ops: rpcOps() });
-        setDiff(value => value && { ...value, loading: false, preview });
+        const plan = await ensureEditPlan();
+        setDiff(value => value && { ...value, loading: false, preview: plan.preview });
       }
     } catch (error) {
       setDiff(value => value && { ...value, loading: false, preview: null, error: error.message });
     }
+  };
+  const prepareApply = async () => {
+    if (!dirtyOps.length) return;
+    const authored = dirtyOps.find(op => op.type === "assistant-reply");
+    if (authored) {
+      setConfirmApply(true);
+      return;
+    }
+    setApplying(true);
+    try {
+      await ensureEditPlan();
+      setConfirmApply(true);
+    } catch (error) {
+      setToast({
+        kind: "fail",
+        title: t("browser:edit.toastApplyFail"),
+        desc: error.message,
+      });
+    }
+    setApplying(false);
   };
   const applyEdit = async () => {
     if (!dirtyOps.length) return;
@@ -163,32 +210,34 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
       const invalid = authored ? authoringError(authored) : null;
       if (invalid) throw new Error(invalid);
       const reply = authored ? authoredReply(authored) : null;
+      const authoringSaveAs = !!authored && !authoringCaps?.inplace && !!authoringCaps?.save_as;
       const latest = authored ? await rpc("authoring_preview", { tool: current.tool,
         ref: sessionRef(current), turn: authored.turn, reply }) : null;
       const result = authored
         ? await rpc("authoring_apply", { tool: current.tool, ref: sessionRef(current),
             turn: authored.turn, reply, revision: latest.revision,
-            probe: runtimeProbe, save_as: saveMode === "saveas" })
-        : await rpc("edit_apply", { tool: current.tool, ref: sessionRef(current), ops: rpcOps(),
-            probe: runtimeProbe, save_as: saveMode === "saveas" });
+            probe: runtimeProbe, save_as: authoringSaveAs })
+        : (await operationApply((await ensureEditPlan()).plan_id)).result;
       if (result.ok) {
         const verdict = runtimeProbe ? t("browser:edit.verdictProbe") : t("browser:edit.verdictStructure");
-        const savedAs = saveMode === "saveas" && result.session_id
+        const savedAs = authoringSaveAs && result.session_id
           ? { ...result, tool: current.tool } : null;
         setToast({ kind: "ok",
-          title: (saveMode === "saveas" ? t("browser:edit.toastSavedAs", { verdict }) : t("browser:edit.toastInplace", { verdict })),
-          desc: saveMode === "saveas" ? t("browser:edit.toastSavedAsDesc") : t("browser:edit.toastInplaceDesc"),
+          title: (authoringSaveAs ? t("browser:edit.toastSavedAs", { verdict }) : t("browser:edit.toastInplace", { verdict })),
+          desc: authoringSaveAs ? t("browser:edit.toastSavedAsDesc") : t("browser:edit.toastInplaceDesc"),
           action: savedAs ? { label: t("browser:edit.toastOpenNew"), onClick: () => onSavedAs(savedAs) } : undefined });
-        setOps([]); doScan();
-        if (saveMode === "inplace") onInplaceApplied();
+        setOps([]);
+        setPlannedEdit(null);
+        doScan();
+        if (!authoringSaveAs) onInplaceApplied();
       } else setToast({ kind: "fail", title: t("browser:edit.toastVerifyFail"),
         desc: result.error || t("browser:edit.toastVerifyFailDesc") });
     } catch (error) { setToast({ kind: "fail", title: t("browser:edit.toastApplyFail"), desc: error.message }); }
     setApplying(false);
   };
 
-  return { ops, dirtyOps, setOps, saveMode, setSaveMode, diff, setDiff,
+  return { ops, dirtyOps, setOps: replaceOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
-    removeOp, updateOp, authoringError, openDiff, applyEdit };
+    removeOp, updateOp, authoringError, openDiff, prepareApply, applyEdit };
 }

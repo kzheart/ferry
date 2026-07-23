@@ -528,7 +528,7 @@ export default memo(function SessionDetail({ meta, data, error,
     () => toTimeline(rounds, data?.context_compactions),
     [rounds, data?.context_compactions],
   );
-  const canEdit = !!editCaps && (editCaps.inplace || editCaps.save_as);
+  const canEdit = !!editCaps?.inplace;
   const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
   const canMigrate = toolHasCapability(meta.tool, "migrate-source");
   const [copied, setCopied] = useState(false);
