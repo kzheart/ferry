@@ -7,10 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import secrets
-import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -21,15 +18,20 @@ from ..domain.errors import (
     OrganizationProposalStaleError,
 )
 from . import services, session_meta, summaries
+from ..infrastructure.state_db import StateDatabase
+from .ports import current
 
-PROPOSALS = Path.home() / ".resume-harness" / "organization-proposals.json"
-SIGNALS = Path.home() / ".resume-harness" / "organization-signals.jsonl"
-_LOCK = threading.RLock()
 _PATCH_FIELDS = {
     "name", "summary", "tags", "cluster_id", "cluster_name",
     "dead_candidate", "dead_reason", "archived",
 }
-_FINAL_STATES = {"approved", "rejected", "stale"}
+
+
+def _database() -> StateDatabase:
+    return StateDatabase(
+        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        recover_interrupted=False,
+    )
 
 
 def _now_ms() -> int:
@@ -43,51 +45,6 @@ def _canonical(value) -> str:
 
 def _digest(value) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
-
-
-def _load(path: Path | None = None) -> dict:
-    path = path or PROPOSALS
-    try:
-        data = json.loads(path.read_text())
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _write(data: dict) -> None:
-    PROPOSALS.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(
-        prefix="organization-proposals-", suffix=".tmp",
-        dir=PROPOSALS.parent)
-    try:
-        with os.fdopen(fd, "w") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=1)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, PROPOSALS)
-        os.chmod(PROPOSALS, 0o600)
-    finally:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-
-
-def _signal(event: str, proposal: dict, **extra) -> None:
-    SIGNALS.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "event": event,
-        "proposal_id": proposal["proposal_id"],
-        "generation_key": proposal["generation_key"],
-        "target_count": len(proposal["targets"]),
-        "at": _now_ms(),
-        **extra,
-    }
-    fd = os.open(SIGNALS, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "ab") as stream:
-        stream.write((_canonical(payload) + "\n").encode())
-        stream.flush()
-        os.fsync(stream.fileno())
 
 
 def _backbone(tool: str, session_id: str) -> dict:
@@ -108,7 +65,6 @@ def digest_context(targets: list[dict]) -> dict:
         if not isinstance(tool, str) or not isinstance(session_id, str):
             raise OrganizationProposalError("target 缺少 tool/id")
         record = _backbone(tool, session_id)
-        invalidate_session(tool, session_id, record["fingerprint"])
         segments = [{
             "hash": item["hash"],
             "digest": item["digest"],
@@ -213,40 +169,23 @@ def propose(targets: list[dict]) -> dict:
         [target["tool"], target["id"], target["fingerprint"]]
         for target in normalized
     ])
-    with _LOCK:
-        data = _load()
-        existing = next((
-            item for item in data.values()
-            if item.get("generation_key") == generation_key
-            and item.get("status") != "stale"
-        ), None)
-        if existing:
-            return {**existing, "cache_hit": True}
-        now = _now_ms()
-        proposal = {
-            "proposal_id": "org_" + secrets.token_urlsafe(18),
-            "generation_key": generation_key,
-            "status": "pending",
-            "targets": normalized,
-            "created_at": now,
-            "updated_at": now,
-        }
-        data[proposal["proposal_id"]] = proposal
-        _write(data)
-        return {**proposal, "cache_hit": False}
+    now = _now_ms()
+    result = _database().create_or_get_organization_proposal({
+        "proposal_id": "org_" + secrets.token_urlsafe(18),
+        "generation_key": generation_key,
+        "status": "pending",
+        "targets": normalized,
+        "created_at": now,
+        "updated_at": now,
+    })
+    return {**result["proposal"], "cache_hit": result["cache_hit"]}
 
 
 def list_proposals(status: str | None = None) -> list[dict]:
-    with _LOCK:
-        values = list(_load().values())
-    if status is not None:
-        values = [item for item in values if item.get("status") == status]
-    return sorted(values, key=lambda item: item.get("created_at", 0),
-                  reverse=True)
+    return _database().list_organization_proposals(status)
 
 
-def _get_pending(data: dict, proposal_id: str) -> dict:
-    proposal = data.get(proposal_id)
+def _get_pending(proposal: dict | None, proposal_id: str) -> dict:
     if proposal is None:
         raise OrganizationProposalNotFoundError(
             "整理提案不存在", {"proposal_id": proposal_id})
@@ -265,83 +204,56 @@ def modify(proposal_id: str, changes: list[dict]) -> dict:
     for change in changes:
         identity = (change.get("tool"), change.get("id"))
         by_identity[identity] = _validated_patch(change.get("suggested"))
-    with _LOCK:
-        data = _load()
-        proposal = _get_pending(data, proposal_id)
-        known = {(target["tool"], target["id"]) for target in proposal["targets"]}
-        if not set(by_identity) <= known:
-            raise OrganizationProposalError("changes 包含未知 target")
-        for target in proposal["targets"]:
-            patch = by_identity.get((target["tool"], target["id"]))
-            if patch is not None:
-                target["suggested"] = patch
-        proposal["updated_at"] = _now_ms()
-        proposal["modified"] = True
-        _write(data)
-        _signal("modified", proposal)
-        return proposal
+    database = _database()
+    proposal = _get_pending(
+        database.get_organization_proposal(proposal_id), proposal_id,
+    )
+    known = {(target["tool"], target["id"]) for target in proposal["targets"]}
+    if not set(by_identity) <= known:
+        raise OrganizationProposalError("changes 包含未知 target")
+    for target in proposal["targets"]:
+        patch = by_identity.get((target["tool"], target["id"]))
+        if patch is not None:
+            target["suggested"] = patch
+    result = database.modify_organization_proposal(proposal, _now_ms())
+    if result["outcome"] == "missing":
+        raise OrganizationProposalNotFoundError(
+            "整理提案不存在", {"proposal_id": proposal_id})
+    if result["outcome"] == "not-pending":
+        raise OrganizationProposalError(
+            "整理提案已处理", {
+                "proposal_id": proposal_id,
+                "status": result["proposal"]["status"],
+            },
+        )
+    return result["proposal"]
 
 
 def decide(proposal_id: str, decision: str) -> dict:
     """批准才批量写 sidecar；拒绝仅改变提案状态并记录信号。"""
     if decision not in {"approve", "reject"}:
         raise OrganizationProposalError("decision 必须是 approve/reject")
-    with _LOCK:
-        data = _load()
-        proposal = _get_pending(data, proposal_id)
-        if decision == "reject":
-            proposal["status"] = "rejected"
-            proposal["updated_at"] = _now_ms()
-            _write(data)
-            _signal("rejected", proposal)
-            return proposal
-        for target in proposal["targets"]:
-            record = _backbone(target["tool"], target["id"])
-            if record["fingerprint"] != target["fingerprint"]:
-                proposal["status"] = "stale"
-                proposal["updated_at"] = _now_ms()
-                _write(data)
-                _signal("stale", proposal)
-                raise OrganizationProposalStaleError(
-                    "摘要内容已变化，请重新生成整理建议",
-                    {"tool": target["tool"], "id": target["id"]})
-        try:
-            applied = services.session_meta_compare_and_set_many([{
-                "tool": target["tool"],
-                "id": target["id"],
-                "expected": target["current"],
-                "patch": target["suggested"],
-            } for target in proposal["targets"]])
-        except ConcurrentModificationError:
-            proposal["status"] = "stale"
-            proposal["updated_at"] = _now_ms()
-            _write(data)
-            _signal("stale", proposal, reason="metadata_changed")
-            raise
-        proposal["status"] = "approved"
-        proposal["updated_at"] = _now_ms()
-        proposal["applied"] = applied
-        _write(data)
-        _signal("accepted", proposal,
-                modified=bool(proposal.get("modified")))
-        return proposal
-
-
-def invalidate_session(tool: str, session_id: str, fingerprint: str) -> int:
-    """摘要重建时把旧内容的待处理提案标 stale，允许新指纹重新生成。"""
-    changed = 0
-    with _LOCK:
-        data = _load()
-        for proposal in data.values():
-            if proposal.get("status") in _FINAL_STATES:
-                continue
-            if any(target["tool"] == tool and target["id"] == session_id
-                   and target["fingerprint"] != fingerprint
-                   for target in proposal.get("targets", [])):
-                proposal["status"] = "stale"
-                proposal["updated_at"] = _now_ms()
-                _signal("stale", proposal)
-                changed += 1
-        if changed:
-            _write(data)
-    return changed
+    result = _database().decide_organization_proposal(
+        proposal_id, decision, _now_ms(),
+    )
+    if result["outcome"] == "missing":
+        raise OrganizationProposalNotFoundError(
+            "整理提案不存在", {"proposal_id": proposal_id})
+    if result["outcome"] == "not-pending":
+        if result["proposal"]["status"] == "stale":
+            raise OrganizationProposalStaleError(
+                "摘要内容已变化，请重新生成整理建议",
+            )
+        raise OrganizationProposalError(
+            "整理提案已处理", {
+                "proposal_id": proposal_id,
+                "status": result["proposal"]["status"],
+            },
+        )
+    if result["outcome"] == "stale-summary":
+        raise OrganizationProposalStaleError(
+            "摘要内容已变化，请重新生成整理建议", result["target"],
+        )
+    if result["outcome"] == "stale-metadata":
+        raise ConcurrentModificationError("会话元数据在审批后已变化")
+    return result["proposal"]
