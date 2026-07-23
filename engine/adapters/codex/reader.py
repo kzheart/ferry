@@ -4,6 +4,7 @@ import re
 import sqlite3
 from pathlib import Path
 
+from ...domain.errors import AgentFormatChangedError
 from ...domain.model import (
     AgentEdge,
     Block,
@@ -610,6 +611,20 @@ def _codex_compaction(record: dict, ordinal: int,
 
 def _read_one(path: Path, meta: dict | None = None) -> Session:
     lines = _load_records(Path(path))
+    response_payload_types = {
+        "message", "reasoning",
+        "function_call", "function_call_output",
+        "custom_tool_call", "custom_tool_call_output",
+    }
+    for line_number, record in enumerate(lines, start=1):
+        record_type = record.get("type")
+        if record_type in response_payload_types:
+            raise AgentFormatChangedError(
+                "codex",
+                f"jsonl[{line_number}].type",
+                "response_item with payload.type",
+                record_type,
+            )
     meta = meta or next((l.get("payload") or {} for l in lines
                          if l.get("type") == "session_meta"), {})
     ident = _identity(meta, path.stem)
