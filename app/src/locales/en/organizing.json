@@ -1,0 +1,31 @@
+{
+  "open": "AI Organize",
+  "title": "AI-native session organization",
+  "scope": "{{n}} sessions in scope",
+  "close": "Close",
+  "description": "Ferry incrementally creates source-grounded digests and proposes titles, summaries, tags, cross-agent clusters, and dead-session candidates. Nothing changes before approval, and source sessions remain read-only.",
+  "generate": "Generate proposal",
+  "generating": "Generating…",
+  "cacheHit": "Content unchanged; reused the existing proposal",
+  "current": "Current metadata",
+  "suggested": "Suggested changes",
+  "empty": "Untitled session",
+  "noSummary": "No summary yet",
+  "noTags": "No tags yet",
+  "name": "Proposed title",
+  "summary": "Proposed summary",
+  "tags": "Proposed tags (comma-separated)",
+  "cluster": "Cluster",
+  "dead": "Dead-session candidate",
+  "active": "Active / has an outcome",
+  "sources": "Digest sources",
+  "saveChanges": "Save edits",
+  "reject": "Reject proposal",
+  "approve": "Approve and write local metadata",
+  "status": {
+    "pending": "Awaiting review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "stale": "Content changed; regenerate"
+  }
+}
