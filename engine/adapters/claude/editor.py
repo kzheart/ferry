@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import shutil
-import uuid
-from pathlib import Path
 
 from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
 from ..base.codec import positive_turn, select_span
@@ -56,17 +54,3 @@ class ClaudeBackend(EditBackend):
         cwd = next((r.get("cwd") for r in doc.data if r.get("cwd")), ".")
         return {"session_id": doc.handle.stem, "saved_as": str(doc.handle),
                 "resume": f"cd {cwd} && claude --resume {doc.handle.stem}"}
-
-    def save_copy(self, doc):
-        new_id = str(uuid.uuid4())
-        for record in doc.data:
-            if "sessionId" in record:
-                record["sessionId"] = new_id
-        path = doc.handle.with_name(f"{new_id}.jsonl")
-        claude_edit.save(path, doc.data)
-        cwd = next((r.get("cwd") for r in doc.data if r.get("cwd")), ".")
-        return {"session_id": new_id, "saved_as": str(path),
-                "resume": f"cd {cwd} && claude --resume {new_id}"}
-
-    def discard(self, result):
-        Path(result["saved_as"]).unlink(missing_ok=True)

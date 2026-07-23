@@ -11,7 +11,6 @@ from engine.domain.errors import (
     AgentFormatChangedError,
     SessionStoreUnavailableError,
 )
-from engine.domain.model import Session
 
 
 def _payload():
@@ -80,33 +79,6 @@ def test_editor_loads_private_native_document_without_canonical_meta(
     document.data["messages"][0]["parts"][0]["text"] = "edited"
     assert document.original["messages"][0]["parts"][0]["text"] == "original"
     assert payload["messages"][0]["parts"][0]["text"] == "original"
-
-
-def test_save_copy_passes_native_payload_without_mutating_canonical_meta(
-        monkeypatch, tmp_path):
-    payload = _payload()
-    tree = Session("opencode", "session-1", "/tmp")
-    document = OpenCodeDocument(
-        tool="opencode",
-        ref="session-1",
-        handle="session-1",
-        data=payload,
-        revision="sha256:fixture",
-        original=opencode_session._clone(payload),
-        tree=tree,
-    )
-    captured = {}
-
-    def write(session, **kwargs):
-        captured.update(session=session, **kwargs)
-        return "copy-1", tmp_path / "opencode.db"
-
-    monkeypatch.setattr(opencode_session, "write", write)
-
-    result = OpenCodeBackend().save_copy(document)
-
-    assert result["session_id"] == "copy-1"
-    assert captured["native_payloads"] == {"session-1": payload}
 
 
 def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):

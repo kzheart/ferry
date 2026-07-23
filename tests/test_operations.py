@@ -42,9 +42,6 @@ class ReplyCompiler:
         self.inplace = inplace
         self.calls = []
 
-    def supports_mode(self, save_as):
-        return not save_as and self.inplace
-
     def capabilities(self):
         return {
             "operation": "replace-assistant-reply",
@@ -229,8 +226,8 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
     monkeypatch.setattr(
         operations.services,
         "_finish_mutation",
-        lambda tool, editor, result, doc, snapshot, probe, save_as:
-            calls.append((probe, save_as, snapshot)) or result,
+        lambda tool, editor, result, doc, snapshot, probe:
+            calls.append((probe, snapshot)) or result,
     )
 
     plan = _plan([{
@@ -240,7 +237,7 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
     }], probe=True)
     operations.apply(plan["plan_id"])
 
-    assert calls == [(True, False, "snapshot-before-agent-edit")]
+    assert calls == [(True, "snapshot-before-agent-edit")]
 
 
 def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
@@ -248,14 +245,14 @@ def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
     monkeypatch.setattr(
         operations.services,
         "_finish_mutation",
-        lambda tool, editor, result, doc, snapshot, probe, save_as:
-            calls.append((probe, save_as)) or result,
+        lambda tool, editor, result, doc, snapshot, probe:
+            calls.append(probe) or result,
     )
 
     plan = _plan(probe=True)
     operations.apply(plan["plan_id"])
 
-    assert calls == [(True, False)]
+    assert calls == [True]
 
 
 def test_cancelled_plan_never_writes(agent_environment):
@@ -386,8 +383,9 @@ def test_only_inplace_edit_is_supported(agent_environment):
 def test_plan_rejects_edit_without_inplace_support(
         agent_environment, monkeypatch):
     monkeypatch.setattr(
-        agent_environment["editor"], "supports_mode",
-        lambda _ops, _save_as: False,
+        agent_environment["editor"], "capabilities",
+        lambda: {"inplace": False, "operations": [],
+                 "operation_modes": {}},
     )
 
     with pytest.raises(OperationUnsupportedError):

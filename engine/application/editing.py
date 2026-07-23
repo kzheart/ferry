@@ -12,7 +12,7 @@ def preview_mutation(editor, ref: str, mutate, loader=None) -> dict:
             "revision": doc.revision}
 
 
-def apply_mutation(editor, ref: str, mutate, save_as: bool,
+def apply_mutation(editor, ref: str, mutate,
                    expected_revision: str | None = None):
     doc = editor.load(ref)
     if expected_revision is not None and doc.revision != expected_revision:
@@ -21,27 +21,21 @@ def apply_mutation(editor, ref: str, mutate, save_as: bool,
     changes = mutate(doc)
     editor.validate(doc)
     # 快照记下它救的是哪次编辑，还原界面才能说清「会失去什么」
-    snapshot = None if save_as else editor.snapshot(
+    snapshot = editor.snapshot(
         doc, extra={"changes": changes, "before": before, "after": editor.stats(doc)})
-    if not save_as and not snapshot:
+    if not snapshot:
         raise RuntimeError("原地编辑无法创建恢复快照，已取消写入")
-    result = None
     try:
-        result = editor.save_copy(doc) if save_as else editor.commit(doc)
+        result = editor.commit(doc)
         result.update(ok=True, changes=changes,
                       revision=editor.saved_revision(result, doc))
         if snapshot:
             result["snapshot"] = str(snapshot)
         return result, doc, snapshot
     except ConcurrentModificationError:
-        if save_as and result:
-            editor.discard(result)
         raise
     except Exception:
-        if save_as and result:
-            editor.discard(result)
-        elif snapshot:
-            editor.restore_snapshot(snapshot, doc)
+        editor.restore_snapshot(snapshot, doc)
         raise
 
 
@@ -52,12 +46,13 @@ def preview(editor, ref: str, ops: list[dict], loader=None) -> dict:
     return result
 
 
-def apply(editor, ref: str, ops: list[dict], save_as: bool,
+def apply(editor, ref: str, ops: list[dict],
           expected_revision: str | None = None):
-    if not editor.supports_mode(ops, save_as):
+    modes = editor.capabilities().get("operation_modes", {})
+    if not all("inplace" in modes.get(op.get("op"), []) for op in ops):
         raise OperationUnsupportedError(
             editor.name, ",".join(op.get("op", "?") for op in ops),
-            "saveas" if save_as else "inplace")
+            "inplace")
     return apply_mutation(
-        editor, ref, lambda doc: editor.apply_ops(doc, ops), save_as,
+        editor, ref, lambda doc: editor.apply_ops(doc, ops),
         expected_revision=expected_revision)
