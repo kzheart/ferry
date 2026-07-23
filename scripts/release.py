@@ -87,7 +87,7 @@ def bump(version: str) -> None:
     check()
 
 
-def release_config(output: Path, repository: str, pubkey: str, targets: list[str], thumbprint: str | None) -> None:
+def release_config(output: Path, repository: str, pubkey: str, targets: list[str]) -> None:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("repository must be owner/name")
     if not pubkey.strip():
@@ -99,11 +99,6 @@ def release_config(output: Path, repository: str, pubkey: str, targets: list[str
         }},
         "bundle": {"createUpdaterArtifacts": True, "targets": targets},
     }
-    if thumbprint:
-        config["bundle"]["windows"] = {
-            "certificateThumbprint": thumbprint,
-            "digestAlgorithm": "sha256",
-        }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -112,7 +107,6 @@ def latest(assets: Path, output: Path, repository: str, version: str, notes: str
     base = f"https://github.com/{repository}/releases/download/v{version}"
     specs = {
         "darwin-aarch64": ("*.app.tar.gz", "*.app.tar.gz.sig"),
-        "windows-x86_64": ("*.exe", "*.exe.sig"),
     }
     platforms = {}
     for platform, (artifact_glob, sig_glob) in specs.items():
@@ -169,8 +163,7 @@ def main() -> None:
     config_parser.add_argument("--output", type=Path, required=True)
     config_parser.add_argument("--repository", required=True)
     config_parser.add_argument("--pubkey", required=True)
-    config_parser.add_argument("--targets", nargs="+", required=True, choices=("app", "dmg", "nsis"))
-    config_parser.add_argument("--windows-thumbprint")
+    config_parser.add_argument("--targets", nargs="+", required=True, choices=("app", "dmg"))
     latest_parser = commands.add_parser("latest")
     latest_parser.add_argument("--assets", type=Path, required=True)
     latest_parser.add_argument("--output", type=Path, required=True)
@@ -183,7 +176,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "check": check(args.tag)
     elif args.command == "bump": bump(args.version)
-    elif args.command == "config": release_config(args.output, args.repository, args.pubkey, args.targets, args.windows_thumbprint)
+    elif args.command == "config": release_config(args.output, args.repository, args.pubkey, args.targets)
     elif args.command == "latest": latest(args.assets, args.output, args.repository, args.version, args.notes)
     elif args.command == "notes": notes(args.version, args.output)
 

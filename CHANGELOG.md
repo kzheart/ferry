@@ -29,6 +29,7 @@ fails validation if its version has no section.
 
 ### Changed
 
+- **macOS-only distribution** — this release ships for Apple Silicon macOS; Windows installers and updater packages are temporarily unavailable.
 - **Cross-agent session model** — unified tool-operation mapping and adapter contracts make session browsing, editing, and migration more consistent across supported agents.
 - **Migration interface** — impact information is grouped into clearer cards and proportional indicators, with a more focused detail layout.
 - **Settings experience** — theme and language controls now use compact native-style selectors; provider configuration is organized around each provider.

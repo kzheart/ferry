@@ -19,7 +19,7 @@
 <p align="center">
   <a href="https://github.com/kzheart/ferry/releases"><img src="https://img.shields.io/github/v/release/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&logo=github&label=Release" alt="Release" /></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri-8b5cf6?style=flat-square&labelColor=black&logo=tauri" alt="Tauri" />
-  <a href="#下载"><img src="https://img.shields.io/badge/macOS%20%7C%20Windows-supported-8b5cf6?style=flat-square&labelColor=black" alt="Platforms" /></a>
+  <a href="#下载"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="平台" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=License" alt="License" /></a>
   <img src="https://img.shields.io/github/last-commit/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=Last%20commit" alt="Last commit" />
 </p>
@@ -137,7 +137,6 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 | 平台 | 文件 |
 | --- | --- |
 | macOS（Apple Silicon） | `Ferry_<version>_aarch64.dmg` |
-| Windows（64 位） | `Ferry_<version>_x64-setup.exe` |
 
 > **macOS**：首次打开若被系统拦截，在 **系统设置 → 隐私与安全性** 中允许运行即可。
 
