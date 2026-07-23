@@ -121,7 +121,7 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 
 - **删除轮次** —— 移除单个对话轮次。
 - **改写消息** —— 原地编辑用户提示词和 AI 回复。
-- **补写回复** —— 撰写新的 AI 回复和工具调用。
+- **替换助手回复** —— 通过同一条编辑操作链路替换 AI 回复及其有序工具调用。
 - **安全设计** —— 每次修改以 diff 预览，应用前自动备份，会话随时可回滚。
 
 ### 更多
@@ -179,6 +179,11 @@ cd app && npm run tauri build
 Rust 宿主分别监督 Python Session Engine 和 Node.js Ferry Runtime 两个
 sidecar。外部 Coding Agent 是会话来源，Ferry Agent 是 LLM Worker，两者使用
 不同的领域模型。
+
+Ferry Runtime 可以在一次 Ferry 对话内执行有界的 fan-out/fan-in 协作：独立
+角色 Worker 并行执行，有依赖的任务等待前置结果，最后由父 Agent 汇总工作流
+范围内的产物。Worker 不共享长期记忆，且只能经由 Rust 审批边界请求 Session
+Engine 操作。
 
 完整约束见[架构事实源](./docs/architecture.md)和
 [重构路线图](./docs/refactoring-roadmap.md)。

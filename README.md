@@ -124,7 +124,8 @@ Modify conversations before you resume them:
 
 - **Delete turns** — Remove individual conversation rounds.
 - **Rewrite messages** — Edit user prompts and AI responses in place.
-- **Author replies** — Compose new AI responses and tool calls.
+- **Replace assistant replies** — Replace an assistant reply, including its
+  ordered tool calls, through the same edit operation lifecycle.
 - **Safe by design** — Every change is previewed as a diff and backed up before application. Sessions can always be rolled back.
 
 ### More
@@ -182,6 +183,12 @@ cd app && npm run tauri build
 The Rust host supervises the Python Session Engine and Node.js Ferry Runtime as
 separate sidecars. External coding tools are session sources; Ferry agents are
 LLM workers and are modeled separately.
+
+Ferry Runtime can schedule bounded fan-out/fan-in work inside one Ferry
+conversation: independent role workers run in parallel, dependent tasks wait
+for their predecessors, and the parent agent synthesizes their scoped results.
+Worker tasks share no long-term memory and may only request Session Engine
+operations through the Rust approval boundary.
 
 See [the architecture source of truth](./docs/architecture.md) and the
 [refactoring roadmap](./docs/refactoring-roadmap.md).
