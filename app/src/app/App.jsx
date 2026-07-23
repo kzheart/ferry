@@ -1,7 +1,7 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { canReveal, onMenu, openTerminal, revealPath, rpc,
+import { onMenu, openTerminal, revealPath, rpc,
   operationApply, operationPlan,
   preloadWindow, startWindowDrag, toggleWindowMaximize,
   writeClipboardText } from "../api/transport/rpc.js";
@@ -137,18 +137,6 @@ export default function App() {
   useEffect(() => {
     if (!selId && sessions.length) select(sessions[0].id);
   }, [sessions]);
-
-  // macOS 惯例快捷键:⌘, 打开设置(桌面端由原生菜单接管,避免与菜单加速键重复触发)
-  useEffect(() => {
-    if (canReveal()) return;
-    const onKey = e => {
-      if (e.metaKey && !e.shiftKey && !e.altKey && e.key === ",") {
-        e.preventDefault(); setSettingsSection("prefs"); setSettingsOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   // 原生菜单栏事件:经 ref 转发,回调始终拿到最新闭包
   const menuActs = useRef({});
@@ -407,8 +395,8 @@ export default function App() {
         ctxSess.tool, ctxSess.id, ctxSess.dir)
         .then(d => writeClipboardText(d.display_command))
         .catch(() => {}) },
-    { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path || !canReveal(),
-      disabledHint: ctxSess.path ? t("app:ctx.onlyDesktop") : t("app:ctx.noSessionFile"),
+    { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path,
+      disabledHint: t("app:ctx.noSessionFile"),
       onClick: () => revealPath(ctxSess.path).catch(() => {}) },
     { sep: true },
     { label: t("app:ctx.deleteSession"), hint: "⌫", danger: true, onClick: () => askDelete(ctxSess) },
@@ -417,11 +405,6 @@ export default function App() {
   // ----- 键盘 -----
   useEffect(() => {
     const onKey = e => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
-        // 桌面端 ⌘B 由原生菜单加速键接管,这里只兜底浏览器环境
-        if (canReveal()) return;
-        e.preventDefault(); setCollapsed(v => !v); return;
-      }
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && paneCfg) {
         e.preventDefault(); setSearchOpen(true); return;
       }

@@ -2,13 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { throwEngineError } from "./errors.js";
 
-const inTauri = () => !!window.__TAURI_INTERNALS__;
-
 async function transport(command, request) {
   try {
-    return inTauri()
-      ? await invoke(command, { request })
-      : await (await fetch("/api/rpc", { method: "POST", body: request })).text();
+    return await invoke(command, { request });
   } catch (error) {
     throwEngineError(typeof error === "string" ? error : (error?.message || String(error)));
   }
@@ -50,34 +46,23 @@ export const operationCancel = planId =>
 
 // 启动描述符仍由引擎生成；终端偏好只决定原生层用哪个应用承载它。
 export const openTerminal = (launch, terminalApp = "auto") =>
-  inTauri() ? invoke("open_terminal", { launch, terminalApp }) : Promise.resolve();
+  invoke("open_terminal", { launch, terminalApp });
 
 export const revealPath = path =>
-  inTauri() ? invoke("reveal_path", { path }) : Promise.resolve();
-
-export const canReveal = () => inTauri();
+  invoke("reveal_path", { path });
 
 export const writeClipboardText = async text => {
-  if (inTauri()) {
-    const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
-    return writeText(String(text));
-  }
-  if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-  return navigator.clipboard.writeText(String(text));
+  const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+  return writeText(String(text));
 };
 
 export const readClipboardText = async () => {
-  if (inTauri()) {
-    const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
-    return readText();
-  }
-  if (!navigator.clipboard?.readText) throw new Error("clipboard unavailable");
-  return navigator.clipboard.readText();
+  const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
+  return readText();
 };
 
 // 原生菜单栏事件:handler 收到菜单项 id("settings"/"toggle-sidebar"/"rescan"),返回取消订阅函数
 export const onMenu = async handler => {
-  if (!inTauri()) return () => {};
   const { listen } = await import("@tauri-apps/api/event");
   return listen("menu", e => handler(e.payload));
 };
@@ -86,7 +71,7 @@ export const onMenu = async handler => {
 // 动态 import 的异步延迟会让手势过期,所以启动时先缓存句柄。
 let _win = null;
 export const preloadWindow = async () => {
-  if (!inTauri() || _win) return;
+  if (_win) return;
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   _win = getCurrentWindow();
 };
@@ -99,7 +84,6 @@ export const toggleWindowMaximize = () => { _win?.toggleMaximize?.(); };
 
 // 窗口外观与应用主题同步(毛玻璃材质/红绿灯):theme 为 "light"|"dark",null 表示跟随系统
 export const setWindowTheme = async theme => {
-  if (!inTauri()) return;
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   await getCurrentWindow().setTheme(theme);
 };

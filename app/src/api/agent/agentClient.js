@@ -3,7 +3,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
 const PROTOCOL = "ferry-agent/v1";
-const inTauri = () => !!window.__TAURI_INTERNALS__;
 let requestSeq = 1;
 
 export class AgentError extends Error {
@@ -13,10 +12,7 @@ export class AgentError extends Error {
   }
 }
 
-export const agentAvailable = () => inTauri();
-
 export async function agentCommand(method, params) {
-  if (!inTauri()) throw new AgentError("desktop_only");
   const request = JSON.stringify({
     protocol: PROTOCOL,
     id: `ui_${Date.now().toString(36)}_${requestSeq++}`,
@@ -38,7 +34,6 @@ export async function agentCommand(method, params) {
 
 // 事件流:runtime 事件与 Rust 补发的 operation.proposed / runtime.disconnected 共用同一通道
 export async function onAgentEvent(handler) {
-  if (!inTauri()) return () => {};
   const { listen } = await import("@tauri-apps/api/event");
   return listen("ferry-agent-event", e => handler(e.payload));
 }

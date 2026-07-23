@@ -1,7 +1,7 @@
 // Ask Ferry 状态中枢:订阅 ferry-agent-event,维护会话列表与每会话时间线,
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useRef, useState } from "react";
-import { agentAvailable, agentCommand, onAgentEvent,
+import { agentCommand, onAgentEvent,
   operationPlanApply } from "../../api/agent/agentClient.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "../../domain/agent/agentChatModel.js";
@@ -11,7 +11,7 @@ const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
   "run.cancelled", "run.interrupted"]);
 
 export function useAskFerry() {
-  const available = agentAvailable();
+  const available = true;
   const [sessions, setSessions] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [logs, setLogs] = useState({});
