@@ -405,11 +405,34 @@ def load_native_payload(session_id: str) -> dict:
         conn.close()
 
 
+def _message_model(data: dict) -> tuple[str | None, str | None]:
+    for message in data.get("messages", []):
+        info = message.get("info") or {}
+        model = info.get("model")
+        if isinstance(model, dict):
+            provider_id = model.get("providerID")
+            model_id = model.get("modelID")
+        else:
+            provider_id = info.get("providerID")
+            model_id = info.get("modelID")
+        provider_id = (
+            provider_id
+            if isinstance(provider_id, str) and provider_id
+            else None
+        )
+        model_id = model_id if isinstance(model_id, str) and model_id else None
+        if provider_id is not None or model_id is not None:
+            return provider_id, model_id
+    return None, None
+
+
 def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     info = data["info"]
+    model_provider, model = _message_model(data)
     sess = Session(source_tool="opencode", source_id=info["id"],
                    cwd=info.get("directory", ""), title=info.get("title", ""),
-                   parent_id=info.get("parentID"), agent_id=info.get("agent"))
+                   parent_id=info.get("parentID"), agent_id=info.get("agent"),
+                   model_provider=model_provider, model=model)
     edges = []
     pending_compactions = []
     last_visible_message_id = None
@@ -504,8 +527,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                         agent_id=inp.get("subagent_type") or inp.get("agent"),
                         agent_type=inp.get("subagent_type"),
                         prompt=inp.get("prompt", ""), status=st.get("status"),
-                        association="task-metadata", confidence=1.0,
-                        meta=_clone(metadata)))
+                        association="task-metadata", confidence=1.0))
             elif pt in ("step-start", "step-finish"):
                 continue
             else:
@@ -588,7 +610,6 @@ def _read(session_id: str) -> Session:
             edges = task_by_child.get(child_id) or [AgentEdge(
                 parent_session_id=sid, child_session_id=child_id,
                 association="sqlite-parent", confidence=0.9,
-                meta={"association": "sqlite-parent"},
             )]
             for edge in edges:
                 edge.agent_id = edge.agent_id or child.agent_id
@@ -940,8 +961,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
     edges = {edge.child_session_id: edge for edge in sess.agent_edges}
     linked_children = set()
     emitted_edges = set()
-    provider_id = str(sess.meta.get("model_provider") or "openai")
-    model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
+    provider_id = str(sess.model_provider or "openai")
+    model_id = str(sess.model or "gpt-5.6-sol")
     for m, message_time in zip(sess.messages, message_times):
         mid = _new_id("msg")
         minfo = _clone(tpl.get(f"msg.{m.role}", tpl["msg.user"]))
@@ -1208,8 +1229,8 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
         mid = _new_id("msg")
         minfo = _clone(tpl["msg.assistant"])
         cwd = payload["info"]["directory"]
-        provider_id = str(sess.meta.get("model_provider") or "openai")
-        model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
+        provider_id = str(sess.model_provider or "openai")
+        model_id = str(sess.model or "gpt-5.6-sol")
         if last_user is None:
             last_user = _new_id("msg")
             user_info = _clone(tpl["msg.user"])

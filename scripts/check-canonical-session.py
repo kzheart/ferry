@@ -16,7 +16,10 @@ def violations() -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == "RawRecord":
             found.append("RawRecord")
-        if isinstance(node, ast.ClassDef) and node.name in {"Message", "Session"}:
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name in {"AgentEdge", "Message", "Session"}
+        ):
             for statement in node.body:
                 if not isinstance(statement, ast.AnnAssign):
                     continue
@@ -25,8 +28,10 @@ def violations() -> list[str]:
                     continue
                 if node.name == "Message" and target.id == "raw":
                     found.append("Message.raw")
-                if node.name == "Session" and target.id == "raw_records":
-                    found.append("Session.raw_records")
+                if node.name == "Session" and target.id in {"meta", "raw_records"}:
+                    found.append(f"Session.{target.id}")
+                if node.name == "AgentEdge" and target.id == "meta":
+                    found.append("AgentEdge.meta")
     for path in (ROOT / "engine").rglob("*.py"):
         text = path.read_text(errors="replace")
         for line_number, line in enumerate(text.splitlines(), 1):

@@ -22,6 +22,10 @@ def _payload():
                 "id": "message-1",
                 "sessionID": "session-1",
                 "role": "user",
+                "model": {
+                    "providerID": "fixture-provider",
+                    "modelID": "fixture-model",
+                },
             },
             "parts": [{
                 "id": "part-1",
@@ -37,10 +41,21 @@ def _payload():
 def test_canonical_reader_does_not_retain_native_document():
     session, _edges = opencode_session._parse_session(_payload())
 
-    assert "opencode_export" not in session.meta
+    assert session.model_provider == "fixture-provider"
+    assert session.model == "fixture-model"
     assert not hasattr(session, "raw_records")
     assert all(not hasattr(message, "raw") for message in session.messages)
     assert [message.source_id for message in session.messages] == ["message-1"]
+
+
+def test_canonical_reader_keeps_missing_model_explicitly_empty():
+    session, _edges = opencode_session._parse_session({
+        "info": {"id": "session-1", "directory": "/tmp"},
+        "messages": [],
+    })
+
+    assert session.model_provider is None
+    assert session.model is None
 
 
 @pytest.mark.parametrize(
@@ -50,7 +65,7 @@ def test_canonical_reader_does_not_retain_native_document():
 def test_editor_loads_private_native_document_without_canonical_meta(
         monkeypatch, method, tree_loader):
     payload = _payload()
-    tree = SimpleNamespace(meta={})
+    tree = SimpleNamespace()
     monkeypatch.setattr(
         opencode_session, "load_native_payload", lambda _ref: payload,
     )
@@ -65,7 +80,6 @@ def test_editor_loads_private_native_document_without_canonical_meta(
     document.data["messages"][0]["parts"][0]["text"] = "edited"
     assert document.original["messages"][0]["parts"][0]["text"] == "original"
     assert payload["messages"][0]["parts"][0]["text"] == "original"
-    assert tree.meta == {}
 
 
 def test_save_copy_passes_native_payload_without_mutating_canonical_meta(
@@ -93,7 +107,6 @@ def test_save_copy_passes_native_payload_without_mutating_canonical_meta(
 
     assert result["session_id"] == "copy-1"
     assert captured["native_payloads"] == {"session-1": payload}
-    assert tree.meta == {}
 
 
 def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):

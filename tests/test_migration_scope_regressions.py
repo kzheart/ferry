@@ -30,7 +30,7 @@ def _tree():
     root.agent_edges = [
         AgentEdge("root", "linked", spawn_message_id="root-assistant-1"),
         AgentEdge("root", "unlinked", spawn_message_id=None,
-                  meta={"association": "directory-fallback"}),
+                  association="directory-fallback"),
     ]
     return root
 
