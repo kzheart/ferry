@@ -145,23 +145,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-build.txt
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: agent-runtime/package-lock.json
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
-        with:
-          target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          workspaces: app/src-tauri -> target
-          key: ${{ matrix.target }}
+      # 自托管 runner 直接用本机预装的 Python 3.12 / Node / Rust(见 ~/actions-runner/.path)。
+      # 不用 setup-python/setup-node:那些 action 下载的是托管机(/Users/runner)专用包,在本机会失败。
+      - name: Verify local toolchain
+        run: |
+          python --version && node --version && cargo --version
+          rustup target list --installed | grep -q "$BUILD_TARGET" || rustup target add "$BUILD_TARGET"
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
       - run: python -m pip install -r requirements-build.txt
       - run: npm ci
         working-directory: agent-runtime
