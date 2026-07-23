@@ -97,6 +97,27 @@ def test_opencode_reader_normalizes_patch_search_web_and_opaque_tools():
     assert opaque.input["input"] == {"secret": "kept-in-opaque-input"}
 
 
+def test_opencode_reader_does_not_restore_removed_native_field_aliases():
+    canonical = opencode_session._canonical_tool_input
+
+    assert canonical("bash", {"command": "pwd", "timeout_ms": 10,
+                               "background": True})[1] == {"command": "pwd"}
+    assert canonical("read", {"file_path": "old.py"})[1] == {"file_path": ""}
+    assert canonical("edit", {
+        "file_path": "old.py", "old": "before", "new": "after",
+        "replace_all": True,
+    })[1] == {"file_path": "", "old": "", "new": ""}
+    assert canonical("apply_patch", {"raw_patch": "*** Add File: old.py"})[1] == {
+        "operations": [], "raw_patch": "",
+    }
+    assert canonical("grep", {"query": "old", "glob": "*.py"})[1] == {
+        "query": "",
+    }
+    assert canonical("task", {"agent": "old-agent", "task_name": "old"})[1] == {
+        "description": "migrated subagent", "prompt": "", "subagent_type": "general",
+    }
+
+
 def test_opencode_repeated_task_calls_remain_distinct_from_one_tree_child(
         monkeypatch):
     def task_part(call_id, ordinal):

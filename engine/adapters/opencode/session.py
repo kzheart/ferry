@@ -82,12 +82,8 @@ def _canonical_tool_input(name: str, source_input):
         value = {
             "description": str(inp.get("description") or "migrated subagent"),
             "prompt": str(inp.get("prompt") or ""),
-            "subagent_type": str(inp.get("subagent_type") or
-                                 inp.get("agent") or "general"),
+            "subagent_type": str(inp.get("subagent_type") or "general"),
         }
-        for field in ("task_name", "model", "fork_mode", "reasoning_effort"):
-            if inp.get(field) is not None:
-                value[field] = str(inp[field])
         return CanonicalOp.AGENT_SPAWN, value
     op = TOOL_OPS.get(name)
     if op is None:
@@ -98,43 +94,41 @@ def _canonical_tool_input(name: str, source_input):
         return op, inp
     if name == "bash":
         value = {"command": inp.get("command", "")}
-        aliases = {
-            "workdir": "workdir", "timeout": "timeout_ms",
-            "timeout_ms": "timeout_ms",
-            "run_in_background": "background", "background": "background",
-        }
-        for source, target in aliases.items():
-            if source in inp:
-                value[target] = inp[source]
+        if "workdir" in inp:
+            value["workdir"] = inp["workdir"]
+        if "timeout" in inp:
+            value["timeout_ms"] = inp["timeout"]
+        if "run_in_background" in inp:
+            value["background"] = inp["run_in_background"]
         return op, value
     if name == "read":
-        value = {"file_path": inp.get("filePath", inp.get("file_path", ""))}
+        value = {"file_path": inp.get("filePath", "")}
         value.update({key: inp[key] for key in ("offset", "limit") if key in inp})
         return op, value
     if name == "write":
         return op, {
-            "file_path": inp.get("filePath", inp.get("file_path", "")),
+            "file_path": inp.get("filePath", ""),
             "content": inp.get("content", ""),
         }
     if name == "edit":
         value = {
-            "file_path": inp.get("filePath", inp.get("file_path", "")),
-            "old": inp.get("oldString", inp.get("old", "")),
-            "new": inp.get("newString", inp.get("new", "")),
+            "file_path": inp.get("filePath", ""),
+            "old": inp.get("oldString", ""),
+            "new": inp.get("newString", ""),
         }
-        if "replaceAll" in inp or "replace_all" in inp:
-            value["replace_all"] = inp.get("replaceAll", inp.get("replace_all"))
+        if "replaceAll" in inp:
+            value["replace_all"] = inp["replaceAll"]
         return op, value
     if name == "apply_patch":
-        patch = inp.get("patchText", inp.get("raw_patch", ""))
+        patch = inp.get("patchText", "")
         return op, {"operations": _patch_operations(str(patch)),
                     "raw_patch": str(patch)}
     if name == "grep":
-        value = {"query": inp.get("pattern", inp.get("query", ""))}
+        value = {"query": inp.get("pattern", "")}
         if "path" in inp:
             value["path"] = inp["path"]
-        if "include" in inp or "glob" in inp:
-            value["glob"] = inp.get("include", inp.get("glob"))
+        if "include" in inp:
+            value["glob"] = inp["include"]
         if "limit" in inp:
             value["max_results"] = inp["limit"]
         return op, value
@@ -512,7 +506,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                         parent_session_id=info["id"],
                         child_session_id=child_id,
                         source_call_id=p.get("callID"), spawn_message_id=mid,
-                        agent_id=inp.get("subagent_type") or inp.get("agent"),
+                        agent_id=inp.get("subagent_type"),
                         agent_type=inp.get("subagent_type"),
                         prompt=inp.get("prompt", ""), status=st.get("status"),
                         association="task-metadata", confidence=1.0))
