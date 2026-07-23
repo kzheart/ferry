@@ -1,6 +1,6 @@
 // 总览页:KPI + 使用习惯 + Token/成本 + 项目/迁移 + 洞察。
 // 数据全部由 computeOverview 从真实扫描结果聚合;图表手写内联 SVG,随主题变量着色。
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../../api/contract/tools.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../components/ui/icons.jsx";
@@ -286,11 +286,28 @@ function insightCopy(ins, t) {
 
 // ---------- 主组件 ----------
 export default function Overview({ sessions = [], historyRows = [],
-  prices = {}, scanning = false }) {
+  prices = {}, scanning = false, navigationTarget }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const [scope, setScope] = useState("30");
   const [tool, setTool] = useState("all");
+  useEffect(() => {
+    if (navigationTarget?.view !== "overview") return;
+    if (navigationTarget.agents?.length === 1 &&
+        TOOLS.includes(navigationTarget.agents[0])) {
+      setTool(navigationTarget.agents[0]);
+    }
+    const range = navigationTarget.timeRange;
+    if (range === "7" || range === "30" || range === "all") setScope(range);
+    else if (range && typeof range === "object") {
+      const from = Number(range.from);
+      const to = Number(range.to || Date.now());
+      if (Number.isFinite(from) && Number.isFinite(to) && to >= from) {
+        const days = (to - from) / 86_400_000;
+        setScope(days <= 7 ? "7" : days <= 30 ? "30" : "all");
+      }
+    }
+  }, [navigationTarget]);
   const data = useMemo(() => computeOverview({
     sessions, history: historyRows, prices, scope, tool,
   }), [sessions, historyRows, prices, scope, tool]);

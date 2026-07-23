@@ -1,5 +1,7 @@
 // Agent 事件 → 聊天时间线的纯归约:实时事件与 events.replay 共用同一入口,
 // 带 seq 的事件按序去重,重载后回放能得到一致的消息与工具状态
+import { entitiesFromToolResult } from "../entities/ferryEntities.js";
+
 export const emptyLog = () => ({
   items: [],
   latestSeq: 0,
@@ -70,8 +72,23 @@ export function applyEvent(log, ev) {
       break;
     case "tool.completed": {
       const i = items.findLastIndex(it => it.kind === "tool" && it.callId === p.tool_call_id);
-      if (i >= 0) items[i] = { ...items[i], status: p.is_error ? "error" : "ok",
-        endedAt: ev.timestamp, result: p.result };
+      if (i >= 0) {
+        const current = items[i];
+        items[i] = { ...current, status: p.is_error ? "error" : "ok",
+          endedAt: ev.timestamp, result: p.result,
+          entities: p.is_error ? [] : entitiesFromToolResult(current.name, p.result, current.args) };
+        const envelope = p.result?.details;
+        const operation = envelope?.operation;
+        if (!p.is_error && operation?.operation_id &&
+            !items.some(item => item.kind === "approval" &&
+              item.operation?.operation_id === operation.operation_id)) {
+          items.push({
+            kind: "approval", tool: current.name, operation,
+            runId: ev.run_id, status: envelope.status === "applied" ? "applied" : "pending",
+            result: envelope.result, auto: envelope.status === "applied",
+          });
+        }
+      }
       break;
     }
     // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进
