@@ -2,15 +2,27 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
 from ...infrastructure.snapshots import snapshot_payload
 from ..base.codec import positive_turn, select_span
-from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size
+from ..base.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import session as rw_opencode
 from .codec import CODEC, TURN_INDEX
+
+
+@dataclass(slots=True)
+class OpenCodeDocument:
+    tool: str
+    ref: str
+    handle: str
+    data: dict
+    revision: str
+    original: dict
+    tree: object
 
 
 class OpenCodeBackend(EditBackend):
@@ -29,20 +41,26 @@ class OpenCodeBackend(EditBackend):
         return result
 
     def load(self, ref):
+        payload = rw_opencode.load_native_payload(ref)
         tree = rw_opencode.read(ref)
-        return self._document(ref, tree)
+        return self._document(ref, payload, tree)
 
     def load_preview(self, ref):
+        payload = rw_opencode.load_native_payload(ref)
         tree = rw_opencode.read_preview(ref)
-        return self._document(ref, tree)
+        return self._document(ref, payload, tree)
 
-    def _document(self, ref, tree):
-        payload = tree.meta.get("opencode_export")
-        if not isinstance(payload, dict):
-            raise RuntimeError("OpenCode 会话缺少只读 export 数据")
+    def _document(self, ref, payload, tree):
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
-        return EditDocument(self.name, ref, ref, rw_opencode._clone(payload), hash_bytes(raw),
-                            {"original": rw_opencode._clone(payload), "tree": tree})
+        return OpenCodeDocument(
+            tool=self.name,
+            ref=ref,
+            handle=ref,
+            data=rw_opencode._clone(payload),
+            revision=hash_bytes(raw),
+            original=rw_opencode._clone(payload),
+            tree=tree,
+        )
 
     def apply_ops(self, doc, ops):
         notes = []
@@ -88,9 +106,10 @@ class OpenCodeBackend(EditBackend):
                 for part in message.get("parts", []) if part.get("id")}
 
     def snapshot(self, doc, reason_code="snapshot.before_edit", extra=None):
-        original = (doc.context or {}).get("original", doc.data)
-        return snapshot_payload(doc.ref, json.dumps(original, ensure_ascii=False) + "\n",
-                                reason_code, self.name, doc.ref, extra)
+        return snapshot_payload(
+            doc.ref, json.dumps(doc.original, ensure_ascii=False) + "\n",
+            reason_code, self.name, doc.ref, extra,
+        )
 
     def restore_snapshot(self, snapshot, doc):
         original = json.loads(Path(snapshot).read_text())
@@ -129,7 +148,7 @@ class OpenCodeBackend(EditBackend):
         fresh_raw = json.dumps(fresh, ensure_ascii=False, sort_keys=True).encode()
         if hash_bytes(fresh_raw) != doc.revision:
             raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
-        original = (doc.context or {}).get("original") or fresh
+        original = doc.original
         before = self._part_map(original)
         after = self._part_map(doc.data)
         before_messages = {m["info"].get("id") for m in original.get("messages", [])}
@@ -167,11 +186,12 @@ class OpenCodeBackend(EditBackend):
 
     def save_copy(self, doc):
         cwd = doc.data["info"].get("directory") or "."
-        tree = (doc.context or {}).get("tree")
-        if tree is None:
-            raise RuntimeError("OpenCode 原生会话树未加载")
-        tree.meta["opencode_export"] = rw_opencode._clone(doc.data)
-        new_sid, dest = rw_opencode.write(tree, cwd=cwd)
+        tree = doc.tree
+        new_sid, dest = rw_opencode.write(
+            tree,
+            cwd=cwd,
+            native_payloads={tree.source_id: rw_opencode._clone(doc.data)},
+        )
         return {"session_id": new_sid, "saved_as": str(dest),
                 "tree_count": sum(1 for _ in tree.walk()),
                 "resume": f"cd {cwd} && opencode -s {new_sid}"}
