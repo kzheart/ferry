@@ -30,6 +30,8 @@
     "confirmRewrite": "确认改写 ⌘↵",
     "rewritten": "已改写",
     "clickToEdit": "点击继续编辑",
+    "expand": "展开全文（{{n}} 字）",
+    "collapse": "收起",
     "imagesCount": "{{n}} 张图片",
     "viewImages": "查看 {{n}} 张图片",
     "openImages": "查看 {{n}} 张图片",
