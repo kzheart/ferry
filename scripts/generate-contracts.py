@@ -40,14 +40,15 @@ def load_engine_methods() -> list[dict[str, object]]:
     methods = document.get("methods")
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
-    required = {"name", "kind", "public", "timeout", "retry"}
+    required = {"name", "kind", "public", "timeout", "retry", "dispatch"}
     allowed_kinds = {"read", "index-refresh", "mutation", "long"}
     allowed_timeouts = {"normal", "lookup", "commit"}
     allowed_retries = {"safe-read", "never"}
+    allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
         if not isinstance(method, dict) or set(method) != required:
-            raise ValueError("Engine 方法契约字段必须精确为 name/kind/public/timeout/retry")
+            raise ValueError("Engine 方法契约字段必须精确为 name/kind/public/timeout/retry/dispatch")
         name = method["name"]
         if not isinstance(name, str) or not name:
             raise ValueError("Engine method name 必须非空")
@@ -59,6 +60,10 @@ def load_engine_methods() -> list[dict[str, object]]:
             raise ValueError(f"Engine method {name} 的 timeout 无效")
         if method["retry"] not in allowed_retries:
             raise ValueError(f"Engine method {name} 的 retry 无效")
+        if method["dispatch"] not in allowed_dispatches:
+            raise ValueError(f"Engine method {name} 的 dispatch 无效")
+        if method["dispatch"] == "parallel-read" and method["kind"] != "read":
+            raise ValueError(f"Engine method {name} 的 parallel-read 只能用于 read")
         names.append(name)
     if len(names) != len(set(names)):
         raise ValueError("Engine method name 必须唯一")
@@ -171,13 +176,23 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
 
 
 def engine_methods_python(methods: list[dict[str, object]]) -> str:
-    policies = {method["name"]: {key: method[key] for key in ("kind", "public", "timeout", "retry")} for method in methods}
+    policies = {
+        method["name"]: {
+            key: method[key]
+            for key in ("kind", "public", "timeout", "retry", "dispatch")
+        }
+        for method in methods
+    }
+    parallel = tuple(
+        method["name"] for method in methods if method["dispatch"] == "parallel-read"
+    )
     return "\n".join((
         '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
         "from __future__ import annotations",
         "",
         f"ENGINE_METHOD_POLICIES = {policies!r}",
         "ENGINE_METHOD_NAMES = frozenset(ENGINE_METHOD_POLICIES)",
+        f"PARALLEL_READ_METHOD_NAMES = frozenset({parallel!r})",
         "",
     ))
 
