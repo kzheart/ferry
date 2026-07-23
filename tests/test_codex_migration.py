@@ -56,8 +56,9 @@ MIGRATION_TARGET_TESTS = {"claude", "codex", "opencode"}
 
 
 def test_every_migration_target_has_a_discovery_test():
-    targets = {tool for tool in registry.adapters()
-               if registry.adapter(tool).migration_target is not None}
+    adapters = registry.create_registry()
+    targets = {tool for tool in adapters.ids()
+               if adapters.get(tool).migration_target is not None}
     assert targets == MIGRATION_TARGET_TESTS
 
 

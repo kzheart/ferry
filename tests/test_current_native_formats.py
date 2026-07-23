@@ -15,7 +15,7 @@ from engine.adapters.opencode.native_schema import (
     extract_templates as extract_opencode,
     templates as opencode_templates,
 )
-from engine.adapters.registry import adapter
+from engine.adapters.registry import create_registry
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "agent_formats"
@@ -61,7 +61,7 @@ def test_template_results_are_independent_copies(template_factory):
 
 @pytest.mark.parametrize("agent_id", ["claude", "codex", "opencode"])
 def test_adapter_does_not_expose_a_format_version_registry(agent_id):
-    plugin = adapter(agent_id)
+    plugin = create_registry().get(agent_id)
     assert not hasattr(plugin, "formats")
 
 
