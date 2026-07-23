@@ -394,12 +394,23 @@ def _db_export(conn, session_id: str) -> dict | None:
         ) from error
 
 
+def load_native_payload(session_id: str) -> dict:
+    """Load the current OpenCode payload without constructing a Canonical Session."""
+    conn = _db_conn()
+    try:
+        payload = _db_export(conn, session_id)
+        if payload is None:
+            raise SessionNotFoundError("opencode", session_id)
+        return payload
+    finally:
+        conn.close()
+
+
 def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     info = data["info"]
     sess = Session(source_tool="opencode", source_id=info["id"],
                    cwd=info.get("directory", ""), title=info.get("title", ""),
-                   parent_id=info.get("parentID"), agent_id=info.get("agent"),
-                   meta={"opencode_export": _clone(data)})
+                   parent_id=info.get("parentID"), agent_id=info.get("agent"))
     session_raw = RawRecord("opencode", "session", _clone(info))
     sess.raw_records.append(session_raw)
     edges = []
@@ -1302,7 +1313,8 @@ def _import_payload(payload: dict, sid: str, cwd: str) -> None:
 
 
 def write(sess: Session, cwd: str | None = None,
-          tool_decider=None) -> tuple[str, Path]:
+          tool_decider=None,
+          native_payloads: dict[str, dict] | None = None) -> tuple[str, Path]:
     sessions = list(sess.walk())
     sid_map = {node.source_id: _new_id("ses") for node in sessions}
     parent_map = {}
@@ -1318,7 +1330,10 @@ def write(sess: Session, cwd: str | None = None,
         node_cwd = target_cwd if cwd is not None else str(
             Path(node.cwd or target_cwd).resolve())
         parent_sid = parent_map.get(id(node))
-        payload = _raw_payload(node)
+        explicit_payload = (native_payloads or {}).get(node.source_id)
+        payload = (_clone(explicit_payload)
+                   if isinstance(explicit_payload, dict)
+                   else _raw_payload(node))
         is_raw = payload is not None
         if payload is not None:
             if node.children:

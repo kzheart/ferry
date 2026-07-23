@@ -1,15 +1,96 @@
 import json
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.base.editing import EditDocument
-from engine.adapters.opencode.editor import OpenCodeBackend
+from engine.adapters.opencode.editor import OpenCodeBackend, OpenCodeDocument
 from engine.domain.errors import (
     AgentFormatChangedError,
     SessionStoreUnavailableError,
 )
+from engine.domain.model import Session
+
+
+def _payload():
+    return {
+        "info": {"id": "session-1", "directory": "/tmp"},
+        "messages": [{
+            "info": {
+                "id": "message-1",
+                "sessionID": "session-1",
+                "role": "user",
+            },
+            "parts": [{
+                "id": "part-1",
+                "messageID": "message-1",
+                "sessionID": "session-1",
+                "type": "text",
+                "text": "original",
+            }],
+        }],
+    }
+
+
+def test_canonical_reader_does_not_retain_native_export():
+    session, _edges = opencode_session._parse_session(_payload())
+
+    assert "opencode_export" not in session.meta
+
+
+@pytest.mark.parametrize(
+    ("method", "tree_loader"),
+    [("load", "read"), ("load_preview", "read_preview")],
+)
+def test_editor_loads_private_native_document_without_canonical_meta(
+        monkeypatch, method, tree_loader):
+    payload = _payload()
+    tree = SimpleNamespace(meta={})
+    monkeypatch.setattr(
+        opencode_session, "load_native_payload", lambda _ref: payload,
+    )
+    monkeypatch.setattr(opencode_session, tree_loader, lambda _ref: tree)
+
+    document = getattr(OpenCodeBackend(), method)("session-1")
+
+    assert isinstance(document, OpenCodeDocument)
+    assert document.tree is tree
+    assert document.data == payload
+    assert document.original == payload
+    document.data["messages"][0]["parts"][0]["text"] = "edited"
+    assert document.original["messages"][0]["parts"][0]["text"] == "original"
+    assert payload["messages"][0]["parts"][0]["text"] == "original"
+    assert tree.meta == {}
+
+
+def test_save_copy_passes_native_payload_without_mutating_canonical_meta(
+        monkeypatch, tmp_path):
+    payload = _payload()
+    tree = Session("opencode", "session-1", "/tmp")
+    document = OpenCodeDocument(
+        tool="opencode",
+        ref="session-1",
+        handle="session-1",
+        data=payload,
+        revision="sha256:fixture",
+        original=opencode_session._clone(payload),
+        tree=tree,
+    )
+    captured = {}
+
+    def write(session, **kwargs):
+        captured.update(session=session, **kwargs)
+        return "copy-1", tmp_path / "opencode.db"
+
+    monkeypatch.setattr(opencode_session, "write", write)
+
+    result = OpenCodeBackend().save_copy(document)
+
+    assert result["session_id"] == "copy-1"
+    assert captured["native_payloads"] == {"session-1": payload}
+    assert tree.meta == {}
 
 
 def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):

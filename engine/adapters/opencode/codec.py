@@ -116,7 +116,7 @@ class OpenCodeEditCodec:
         } - {None}
         doc.data["messages"] = [m for m in messages
                                 if m["info"].get("id") not in remove_ids]
-        tree = (doc.context or {}).get("tree") if isinstance(doc.context, dict) else None
+        tree = getattr(doc, "tree", None)
         if tree is not None and removed_children:
             tree.children = [child for child in tree.children
                              if child.source_id not in removed_children]
