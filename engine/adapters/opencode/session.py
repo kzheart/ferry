@@ -31,7 +31,7 @@ from ...domain.usage import iso_ms
 from ...infrastructure import executables
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
-from .formats import FORMATS
+from .native_schema import templates
 
 TOOL_OPS = {
     "bash": CanonicalOp.SHELL_EXEC,
@@ -600,8 +600,7 @@ def read_preview(session_id: str) -> Session:
 # ---------- writer ----------
 
 def _template():
-    """Load the latest declarative OpenCode format profile."""
-    return FORMATS.templates()
+    return templates()
 
 
 def _clone(o):

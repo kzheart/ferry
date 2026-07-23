@@ -212,8 +212,6 @@ function Sources({ scan, env, scanning, onRescan }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>
                   {TOOL_NAME[t2]}
-                  {env?.[t2]?.version && <span style={{ fontWeight: 400, color: "var(--tx5)",
-                    fontSize: 11 }}> · v{env[t2].version}</span>}
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 2,
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

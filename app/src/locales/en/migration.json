@@ -29,7 +29,7 @@
     "chooseHint": "Choose the migration target tool (source session stays read-only and is not modified)",
     "noTargets": "No installed agents currently advertise migration write support.",
     "notInstalled": "Not detected, cannot be used as a target",
-    "installedMeta": "v{{version}} · writes to {{tool}} local session store"
+    "installedMeta": "Writes to the local {{tool}} session store"
   },
   "preview": {
     "failed": "Preview failed: {{error}}",

@@ -22,8 +22,6 @@ class OpenCodeApiError(RuntimeError):
 
 
 class OpenCodeApi:
-    SUPPORTED_VERSION = "1.18.4"
-
     def __init__(self, cwd: str, timeout: float = 20):
         self.cwd = cwd
         self.timeout = timeout
@@ -31,7 +29,6 @@ class OpenCodeApi:
         self.base_url = None
         self.username = "ferry"
         self.password = secrets.token_hex(32)
-        self.version = None
 
     def __enter__(self):
         env = dict(os.environ)
@@ -72,12 +69,6 @@ class OpenCodeApi:
         if not health.get("healthy"):
             self.close()
             raise OpenCodeApiError("OpenCode server 健康检查失败")
-        self.version = str(health.get("version") or "")
-        if self.version != self.SUPPORTED_VERSION:
-            self.close()
-            raise OpenCodeApiError(
-                f"OpenCode {self.version or '未知版本'} 尚未通过原地编辑验证，"
-                f"当前仅支持 {self.SUPPORTED_VERSION}")
         return self
 
     def close(self):

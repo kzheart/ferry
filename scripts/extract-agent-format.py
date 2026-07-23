@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from engine.adapters.claude.formats import extract_templates as extract_claude
-from engine.adapters.codex.formats import extract_templates as extract_codex
-from engine.adapters.opencode.formats import extract_templates as extract_opencode
+from engine.adapters.claude.native_schema import extract_templates as extract_claude
+from engine.adapters.codex.native_schema import extract_templates as extract_codex
+from engine.adapters.opencode.native_schema import extract_templates as extract_opencode
 
 
 def _jsonl(path: Path) -> list[dict]:

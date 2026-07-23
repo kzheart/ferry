@@ -1,6 +1,5 @@
 {
   "tool": "opencode",
-  "cli_version": "1.18.3",
   "case": "01-plain",
   "prompt": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
   "session_id": "fixture-opencode-plain",

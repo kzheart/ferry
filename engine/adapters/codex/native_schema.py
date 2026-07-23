@@ -1,7 +1,7 @@
-"""Codex rollout JSONL format profiles."""
+"""The single Codex rollout structure supported by Ferry."""
 from __future__ import annotations
 
-from ..base.formats import FormatProfile, FormatRegistry, VersionRange
+import copy
 
 
 def extract_templates(records: list[dict]) -> dict:
@@ -26,7 +26,7 @@ def extract_templates(records: list[dict]) -> dict:
     return templates
 
 
-def _v1_templates() -> dict:
+def _current_templates() -> dict:
     return {
         "session_meta": {
             "type": "session_meta",
@@ -115,16 +115,9 @@ def _v1_templates() -> dict:
         },
     }
 
+_TEMPLATES = _current_templates()
 
-FORMATS = FormatRegistry(
-    agent="codex",
-    profiles=(
-        FormatProfile(
-            id="codex-rollout-v1",
-            output_version="0.144.0",
-            compatible=VersionRange("0.144.0", "0.146.0"),
-            tested_versions=("0.144.0",),
-            template_factory=_v1_templates,
-        ),
-    ),
-)
+
+def templates() -> dict:
+    """Return an independent copy of the current native record templates."""
+    return copy.deepcopy(_TEMPLATES)

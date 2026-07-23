@@ -17,7 +17,7 @@ from pathlib import Path
 from ...domain.model import Session
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ..base.narration import narrate
-from .formats import FORMATS
+from .native_schema import templates
 from .registry import register_tree
 
 
@@ -48,8 +48,7 @@ def _timestamp(value: str | int | None = None) -> str:
 
 
 def _load_templates():
-    """Load the latest declarative Codex format profile."""
-    return FORMATS.templates()
+    return templates()
 
 
 def _clone(tpl: dict) -> dict:

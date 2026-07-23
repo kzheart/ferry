@@ -6,12 +6,9 @@ None，capabilities 查询返回 unsupported，而不是伪造实现。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ...domain.errors import CapabilityUnsupportedError
-
-if TYPE_CHECKING:
-    from .formats import FormatRegistry
 
 # 能力等级标识（manifest.capabilities 使用）
 CAP_BROWSE = "browse"
@@ -156,7 +153,6 @@ class ToolPlugin:
     verifier: SessionVerifier | None = None
     lifecycle: SessionLifecycle | None = None
     models: ModelCatalog | None = None
-    formats: FormatRegistry | None = None
 
     @property
     def id(self) -> str:

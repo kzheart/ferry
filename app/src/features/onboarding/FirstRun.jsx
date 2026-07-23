@@ -25,7 +25,7 @@ export default function FirstRun({ env, scan, onStart }) {
           const installed = info.installed;
           const detect = tool?.ok
             ? t("onboarding:welcome.detectWithSessions", { path: tool.path, count: tool.count })
-            : installed ? t("onboarding:welcome.detectInstalled", { version: info.version || "?" })
+            : installed ? t("onboarding:welcome.detectInstalled")
               : t("onboarding:welcome.detectNotFound");
           return (
             <div key={t2} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px",

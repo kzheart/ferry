@@ -1,7 +1,7 @@
-"""Claude Code native JSONL format profiles."""
+"""The single Claude Code native structure supported by Ferry."""
 from __future__ import annotations
 
-from ..base.formats import FormatProfile, FormatRegistry, VersionRange
+import copy
 
 
 def extract_templates(records: list[dict]) -> dict:
@@ -20,7 +20,7 @@ def extract_templates(records: list[dict]) -> dict:
     return templates
 
 
-def _v1_templates() -> dict:
+def _current_templates() -> dict:
     return {
         "user": {
             "parentUuid": None,
@@ -60,16 +60,9 @@ def _v1_templates() -> dict:
         },
     }
 
+_TEMPLATES = _current_templates()
 
-FORMATS = FormatRegistry(
-    agent="claude",
-    profiles=(
-        FormatProfile(
-            id="claude-jsonl-v1",
-            output_version="2.1.204",
-            compatible=VersionRange("2.1.204", "2.2.0"),
-            tested_versions=("2.1.204",),
-            template_factory=_v1_templates,
-        ),
-    ),
-)
+
+def templates() -> dict:
+    """Return an independent copy of the current native record templates."""
+    return copy.deepcopy(_TEMPLATES)

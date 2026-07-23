@@ -4,7 +4,7 @@
     "desc": "Ferry runs locally, scanning your AI coding tool sessions and unifying them in one view. No login required, no data uploaded.",
     "detectedTools": "Detected tools",
     "detectWithSessions": "{{path}} · {{count}} sessions",
-    "detectInstalled": "v{{version}}",
+    "detectInstalled": "Executable detected",
     "detectNotFound": "Not detected",
     "badgeInstalled": "Detected",
     "badgeNotInstalled": "Not installed",

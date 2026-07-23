@@ -5,7 +5,6 @@ from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
 from .authoring import OpenCodeAuthoringCompiler
 from .editor import OpenCodeBackend
-from .formats import FORMATS
 from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
 from .models import discover, fallback
@@ -35,5 +34,4 @@ def build() -> ToolPlugin:
         verifier=OpenCodeVerifier(),
         lifecycle=OpenCodeLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),
-        formats=FORMATS,
     )

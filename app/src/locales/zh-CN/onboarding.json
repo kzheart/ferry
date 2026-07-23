@@ -4,7 +4,7 @@
     "desc": "Ferry 在本机运行,扫描你的 AI 编码工具会话并统一浏览。无需登录,不上传任何数据。",
     "detectedTools": "检测到的工具",
     "detectWithSessions": "{{path}} · {{count}} 会话",
-    "detectInstalled": "v{{version}}",
+    "detectInstalled": "已检测到可执行文件",
     "detectNotFound": "未检测到安装",
     "badgeInstalled": "已检测",
     "badgeNotInstalled": "未安装",

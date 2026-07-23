@@ -1,10 +1,9 @@
 {
-  "tool": "claude",
-  "cli_version": "2.1.204",
+  "tool": "codex",
   "case": "02-tools",
   "prompt": "Run the shell command `echo format-fixture-shell-test`, create format-fixture.txt containing 'hello fixture', then read it back.",
-  "session_id": "fixture-claude-tools",
+  "session_id": "fixture-codex-tools",
   "source_paths": [
-    "/fixture/claude/fixture-claude-tools.jsonl"
+    "/fixture/codex/rollout-fixture-codex-tools.jsonl"
   ]
 }

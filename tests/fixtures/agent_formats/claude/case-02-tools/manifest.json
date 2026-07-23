@@ -1,10 +1,9 @@
 {
-  "tool": "opencode",
-  "cli_version": "1.18.3",
+  "tool": "claude",
   "case": "02-tools",
   "prompt": "Run the shell command `echo format-fixture-shell-test`, create format-fixture.txt containing 'hello fixture', then read it back.",
-  "session_id": "fixture-opencode-tools",
+  "session_id": "fixture-claude-tools",
   "source_paths": [
-    "/fixture/opencode/tools.db"
+    "/fixture/claude/fixture-claude-tools.jsonl"
   ]
 }

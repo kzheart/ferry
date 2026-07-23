@@ -6,8 +6,7 @@
       "cwd": "/fixture/codex/tools",
       "title": "Tools fixture",
       "first_user_message": "Run the fixture shell, write, and read operations.",
-      "cli_version": "0.144.0",
-      "format_profile": "codex-rollout-v1"
+      "cli_version": "0.144.0"
     }
   ]
 }
