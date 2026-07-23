@@ -10,7 +10,7 @@ from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import session as opencode_session
 from engine.domain.model import (
-    Block, Message, RawRecord, Session, ToolCall, text_tool_result,
+    Block, Message, Session, ToolCall, text_tool_result,
 )
 from engine.domain.tool_ops import CanonicalOp
 
@@ -81,18 +81,21 @@ def test_claude_writer_publishes_discoverable_session(tmp_path, monkeypatch):
                if record.get("type") in {"user", "assistant"})
 
 
-def test_claude_raw_rewrite_fills_resume_required_fields(tmp_path, monkeypatch):
+def test_claude_semantic_rewrite_uses_current_shape_without_unknown_fields(
+        tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    source = Session("claude", "raw-root", str(tmp_path), title="raw")
-    source.messages = [Message("user", [Block("text", "hello from raw")])]
-    source.raw_records = [RawRecord(
-        source="claude", record_type="user", ordinal=0,
-        payload={
-            "type": "user", "uuid": "u1", "parentUuid": None,
-            "sessionId": "old", "cwd": "/fixture/path",
-            "message": {"role": "user", "content": "hello from raw"},
-            "version": "2.1.204",
-        })]
+    native = tmp_path / "source.jsonl"
+    native.write_text(json.dumps({
+        "type": "user",
+        "uuid": "u1",
+        "parentUuid": None,
+        "sessionId": "old",
+        "cwd": "/fixture/path",
+        "message": {"role": "user", "content": "hello from native"},
+        "version": "2.1.204",
+        "unknownNativeField": "must-not-copy",
+    }) + "\n")
+    source = read_claude(str(native))
 
     session_id, path = write_claude(source, cwd=str(tmp_path / "proj"))
     record = json.loads(path.read_text().splitlines()[0])
@@ -100,6 +103,10 @@ def test_claude_raw_rewrite_fills_resume_required_fields(tmp_path, monkeypatch):
     assert record["cwd"] == str(tmp_path / "proj")
     assert record["timestamp"]
     assert record["userType"] == "external"
+    assert record["message"]["content"] == "hello from native"
+    assert "unknownNativeField" not in record
+    assert not hasattr(source, "raw_records")
+    assert all(not hasattr(message, "raw") for message in source.messages)
 
 
 def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypatch):

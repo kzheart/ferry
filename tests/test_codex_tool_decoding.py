@@ -89,12 +89,12 @@ def test_reader_keeps_native_records_out_of_the_canonical_session(tmp_path):
         }},
     ])
 
-    assert session.raw_records == []
+    assert not hasattr(session, "raw_records")
     assert [message.source_id for message in session.messages] == [
         "record:1",
         "record:2",
     ]
-    assert all(message.raw == [] for message in session.messages)
+    assert all(not hasattr(message, "raw") for message in session.messages)
 
 
 def test_private_result_extensions_are_not_rehydrated(tmp_path):
