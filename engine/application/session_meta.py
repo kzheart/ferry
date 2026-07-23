@@ -72,3 +72,25 @@ def compare_and_set_entry(sid: str, expected: dict, patch: dict) -> dict:
         if _load().get(sid, {}) != entry:
             raise RuntimeError("元数据写入后校验失败")
         return entry
+
+
+def compare_and_set_entries(changes: list[dict]) -> dict:
+    """在一次原子替换中应用多会话元数据，供跨 Agent 整理提案使用。"""
+    from ..domain.errors import ConcurrentModificationError
+
+    with _LOCK:
+        data = _load()
+        for change in changes:
+            sid = change["id"]
+            if data.get(sid, {}) != change.get("expected", {}):
+                raise ConcurrentModificationError(
+                    "会话元数据在整理提案审批后已变化", {"id": sid})
+        result = {}
+        for change in changes:
+            sid = change["id"]
+            result[sid] = _merged(data, sid, change.get("patch", {}))
+        _write(data)
+        if any(_load().get(sid, {}) != entry
+               for sid, entry in result.items()):
+            raise RuntimeError("批量元数据写入后校验失败")
+        return result

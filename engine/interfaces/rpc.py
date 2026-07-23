@@ -10,6 +10,7 @@ from ..application import services
 from ..application import agent_tools
 from ..application import agent_mutations
 from ..application import summaries
+from ..application import organizing
 from ..application.verification import ProbeTimeout
 from ..domain.errors import (
     DomainError, InvalidJsonError, MissingParamError, UnknownMethodError,
@@ -56,6 +57,15 @@ RPC_METHODS = {
     "session_backbone": lambda p: summaries.build_backbone(p["tool"], p["ref"]),
     "session_summaries_set": lambda p: summaries.set_summaries(
         p["tool"], p["id"], p.get("digests") or {}),
+    "organization_digest_context": lambda p: organizing.digest_context(
+        p["targets"]),
+    "organization_propose": lambda p: organizing.propose(p["targets"]),
+    "organization_proposals_list": lambda p: organizing.list_proposals(
+        p.get("status")),
+    "organization_proposal_modify": lambda p: organizing.modify(
+        p["proposal_id"], p["changes"]),
+    "organization_proposal_decide": lambda p: organizing.decide(
+        p["proposal_id"], p["decision"]),
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),

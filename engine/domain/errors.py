@@ -156,3 +156,21 @@ class SummaryBackboneMissingError(DomainError, ValueError):
 
     code = "summary.backbone_missing"
     category = "not-found"
+
+
+class OrganizationProposalError(DomainError, ValueError):
+    """整理建议不完整、引用了过期摘要或提案状态不允许当前操作。"""
+
+    code = "organization.proposal_invalid"
+    category = "validation"
+
+
+class OrganizationProposalNotFoundError(DomainError, ValueError):
+    code = "organization.proposal_not_found"
+    category = "not-found"
+
+
+class OrganizationProposalStaleError(DomainError, RuntimeError):
+    code = "organization.proposal_stale"
+    category = "conflict"
+    retryable = True

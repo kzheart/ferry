@@ -319,7 +319,8 @@ def propose_edit(tool: str, ref: str, *, ops, run_id: str) -> dict:
 
 def propose_metadata_change(tool: str, ref: str, patch: dict,
                             run_id: str) -> dict:
-    if not isinstance(patch, dict) or not patch or not set(patch) <= services.META_FIELDS:
+    agent_fields = {"name", "pinned", "archived", "tags"}
+    if not isinstance(patch, dict) or not patch or not set(patch) <= agent_fields:
         raise AgentRequestError("metadata patch 字段非法")
     agent_tools._validate_json_shape(patch, max_depth=3, max_nodes=50)
     if "name" in patch and (not isinstance(patch["name"], str)

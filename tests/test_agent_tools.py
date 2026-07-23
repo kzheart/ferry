@@ -421,6 +421,11 @@ def test_usage_is_aggregated_without_raw_session_data(agent_environment):
         },
         "cost": None,
         "currency": "USD",
+        "filters": {
+            "agents": ["claude"],
+            "projects": None,
+            "time_range": {"from": None, "to": None},
+        },
     }
     assert "private-id" not in json.dumps(result)
 

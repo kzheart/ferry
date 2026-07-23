@@ -84,6 +84,11 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
     first = summaries.build_backbone("claude", "fsr_x")
     assert first["segment_count"] == 2
     assert len(first["pending"]) == 2
+    assert first["pending_sources"] == [
+        {"hash": first["segments"][0]["hash"], "text": "改支付"},
+        {"hash": first["segments"][1]["hash"], "text": "改标题"},
+    ]
+    assert "_source_text" not in summaries._load()["claude:sess-1"]["segments"][0]
 
     head = first["segments"][0]["hash"]
     written = summaries.set_summaries("claude", "sess-1", {head: "改了支付逻辑"})
