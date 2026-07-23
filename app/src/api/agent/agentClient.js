@@ -49,5 +49,15 @@ export const operationDetail = operationId =>
 export const operationApproveAndApply = (operationId, runId) =>
   invoke("agent_operation_approve_and_apply", { operationId, runId });
 
+export const operationPlanApply = planId =>
+  invoke("operation_apply", { planId }).then(raw => {
+    const response = JSON.parse(raw);
+    if (!response.ok) throw new AgentError(
+      response.error?.code || "operation_apply_failed",
+      response.error?.message,
+    );
+    return response.result;
+  });
+
 export const operationStatus = operationId =>
   invoke("agent_operation_status", { operationId });

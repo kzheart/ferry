@@ -45,6 +45,48 @@ const editOps = Type.Array(
   { minItems: 1, maxItems: 50 },
 );
 
+const operationIntent = Type.Union([
+  Type.Literal("preview"),
+  Type.Literal("execute"),
+]);
+
+const metadataPatch = Type.Object(
+  {
+    name: Type.Optional(Type.String({ maxLength: 200 })),
+    pinned: Type.Optional(Type.Boolean()),
+    archived: Type.Optional(Type.Boolean()),
+    tags: Type.Optional(
+      Type.Array(Type.String({ maxLength: 64 }), { maxItems: 20 }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+const sessionEditSchema = Type.Unsafe({
+  type: "object",
+  properties: {
+    tool: Type.String({ minLength: 1, maxLength: 32 }),
+    ref: Type.String({ minLength: 1, maxLength: 512 }),
+    ops: editOps,
+    patch: metadataPatch,
+    intent: operationIntent,
+  },
+  required: ["tool", "ref"],
+  additionalProperties: false,
+  oneOf: [
+    {
+      required: ["ops", "intent"],
+      not: { required: ["patch"] },
+    },
+    {
+      required: ["patch"],
+      not: {
+        anyOf: [{ required: ["ops"] }, { required: ["intent"] }],
+      },
+    },
+  ],
+});
+
 export const FERRY_TOOL_NAMES = [
   "session_search",
   "session_read",
@@ -131,34 +173,13 @@ const schemas = {
       ref: Type.String({ minLength: 1, maxLength: 512 }),
       target_tool: Type.String({ minLength: 1, maxLength: 32 }),
       max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
-      dry_run: Type.Optional(Type.Boolean()),
+      intent: operationIntent,
     },
     { additionalProperties: false },
   ),
-  // Function-tool providers require the root schema to be an object. Keep the
-  // ops/patch exclusivity at the execution boundary instead of a root anyOf.
-  session_edit: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      ops: Type.Optional(editOps),
-      patch: Type.Optional(
-        Type.Object(
-          {
-            name: Type.Optional(Type.String({ maxLength: 200 })),
-            pinned: Type.Optional(Type.Boolean()),
-            archived: Type.Optional(Type.Boolean()),
-            tags: Type.Optional(
-              Type.Array(Type.String({ maxLength: 64 }), { maxItems: 20 }),
-            ),
-          },
-          { additionalProperties: false },
-        ),
-      ),
-      dry_run: Type.Optional(Type.Boolean()),
-    },
-    { additionalProperties: false },
-  ),
+  // Function-tool providers require an object root. Conditional constraints
+  // live inside oneOf while the execution boundary validates them again.
+  session_edit: sessionEditSchema,
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
@@ -168,9 +189,9 @@ const descriptions: Record<FerryToolName, string> = {
     "Read one indexed session. Provide either ref (an fsr_ value from session_search) or session_id (a native ID from a session attachment, resolved internally) — exactly one. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage: "Get privacy-filtered aggregate usage.",
   migrate:
-    "Migrate a session into another agent's format (targets: claude, codex, opencode). Set dry_run true to preview the impact without changing anything; otherwise this creates an approval-gated migration that, once applied, writes an immutable copy in the target format. source_tool and target_tool are agent names; ref is an fsr_ value.",
+    "Migrate a session into another agent's format (targets: claude, codex, opencode). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.",
   session_edit:
-    "Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. For content ops, set dry_run true to preview the diff without changing anything; otherwise this creates an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.",
+    "Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.",
 };
 
 export function createFerryTools(
@@ -185,15 +206,29 @@ export function createFerryTools(
     parameters: schemas[name],
     executionMode: "sequential",
     async execute(toolCallId, params, signal, onUpdate) {
+      const input = params as Record<string, unknown>;
+      if ("dry_run" in input) {
+        throw new Error(
+          `${name} no longer accepts dry_run; use intent for migration or content edits`,
+        );
+      }
+      if (
+        name === "migrate" &&
+        input.intent !== "preview" &&
+        input.intent !== "execute"
+      ) {
+        throw new Error("migrate requires intent preview or execute");
+      }
       if (name === "session_edit") {
-        const input = params as Record<string, unknown>;
         const hasOps = input.ops !== undefined;
         const hasPatch = input.patch !== undefined;
-        if (hasOps === hasPatch || (hasPatch && input.dry_run !== undefined)) {
-          throw new Error(
-            "session_edit requires exactly one of ops or patch; dry_run is only valid with ops",
-          );
+        if (hasOps === hasPatch) {
+          throw new Error("session_edit requires exactly one of ops or patch");
         }
+        if (hasOps && input.intent !== "preview" && input.intent !== "execute")
+          throw new Error("session_edit ops require intent preview or execute");
+        if (hasPatch && input.intent !== undefined)
+          throw new Error("session_edit metadata patch does not accept intent");
       }
       const active = getContext();
       const details = await port.invoke(

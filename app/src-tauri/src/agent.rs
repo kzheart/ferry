@@ -224,19 +224,14 @@ fn complete_tool_request(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    // 写操作(dry_run=false 的 migrate/session_edit 或 metadata 变更)由可信边界决定：
-    // 手动模式发审批卡，自动模式同步授权并应用;dry_run 预览不落此路。
+    // execute intent 与 metadata 变更由 Rust 审批边界决定；preview 只生成 plan。
     let mutation = is_mutating_tool(name, &args);
     let mut outcome = route_tool(resource_dir, name, args, run_id);
     if mutation {
         if let Ok(operation) = outcome.clone() {
             let auto = allows_auto_apply(auto_policy(session_id), role_apply_policy);
             if auto {
-                let operation_id = operation
-                    .get("operation_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                match approve_and_apply(resource_dir, operation_id, run_id) {
+                match apply_routed_operation(resource_dir, &operation, run_id) {
                     Ok(result) => {
                         let _ = app.emit(
                             "ferry-agent-event",
@@ -307,21 +302,18 @@ fn complete_tool_request(
 fn route_tool(
     resource_dir: &Path,
     name: &str,
-    mut args: Map<String, Value>,
+    args: Map<String, Value>,
     run_id: &str,
 ) -> Result<Value, String> {
-    let (method, mutation) =
-        resolve_tool_method(name, &args).ok_or_else(|| "tool.not_allowed".to_owned())?;
-    if mutation {
-        if run_id.is_empty() {
-            return Err("agent.run_missing".to_owned());
-        }
-        args.insert("run_id".to_owned(), Value::String(run_id.to_owned()));
+    let route =
+        resolve_tool_request(name, &args, run_id).ok_or_else(|| "tool.not_allowed".to_owned())?;
+    if route.requires_approval && run_id.is_empty() {
+        return Err("agent.run_missing".to_owned());
     }
     let request = json!({
-        "method": method,
+        "method": route.method,
         "request_id": next_id("engine_tool"),
-        "params": args,
+        "params": route.params,
     });
     let response =
         engine_request_blocking(resource_dir, &request.to_string()).map_err(|error| {
@@ -359,32 +351,99 @@ fn structured_engine_error(envelope: &Value) -> String {
     .to_string()
 }
 
-// 工具名 + 参数 → (引擎方法, 是否写操作)。合并后 migrate/session_edit 靠 dry_run
-// 与 patch 在 preview/propose 之间分流;写操作(propose 类)才需注入 run_id 并走审批闸。
-fn resolve_tool_method(name: &str, args: &Map<String, Value>) -> Option<(&'static str, bool)> {
-    let dry_run = args
-        .get("dry_run")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+#[derive(Debug, PartialEq)]
+struct ToolRequestRoute {
+    method: &'static str,
+    params: Value,
+    requires_approval: bool,
+}
+
+fn has_exact_keys(args: &Map<String, Value>, required: &[&str], optional: &[&str]) -> bool {
+    required.iter().all(|key| args.contains_key(*key))
+        && args
+            .keys()
+            .all(|key| required.contains(&key.as_str()) || optional.contains(&key.as_str()))
+}
+
+fn execution_intent(args: &Map<String, Value>) -> Option<bool> {
+    match args.get("intent").and_then(Value::as_str) {
+        Some("preview") => Some(false),
+        Some("execute") => Some(true),
+        _ => None,
+    }
+}
+
+// Model 参数只在这里转换成固定 Engine 请求；intent 永远不会进入 Operation input。
+fn resolve_tool_request(
+    name: &str,
+    args: &Map<String, Value>,
+    run_id: &str,
+) -> Option<ToolRequestRoute> {
+    let read = |method| ToolRequestRoute {
+        method,
+        params: Value::Object(args.clone()),
+        requires_approval: false,
+    };
     Some(match name {
-        "session_search" => ("agent_search_sessions", false),
-        "session_read" => ("agent_session_read", false),
-        "usage" => ("agent_get_usage", false),
+        "session_search" => read("agent_search_sessions"),
+        "session_read" => read("agent_session_read"),
+        "usage" => read("agent_get_usage"),
         "migrate" => {
-            if dry_run {
-                ("agent_preview_migration", false)
-            } else {
-                ("agent_propose_migration", true)
+            if !has_exact_keys(
+                args,
+                &["source_tool", "ref", "target_tool", "intent"],
+                &["max_turn"],
+            ) {
+                return None;
+            }
+            let execute = execution_intent(args)?;
+            let mut input = Map::new();
+            input.insert("kind".to_owned(), Value::String("migration".to_owned()));
+            for key in ["source_tool", "ref", "target_tool"] {
+                input.insert(key.to_owned(), args.get(key)?.clone());
+            }
+            if let Some(max_turn) = args.get("max_turn") {
+                input.insert("max_turn".to_owned(), max_turn.clone());
+            }
+            input.insert("probe".to_owned(), Value::Bool(false));
+            ToolRequestRoute {
+                method: "operation.plan",
+                params: json!({"input": Value::Object(input)}),
+                requires_approval: execute,
             }
         }
         "session_edit" => match (args.contains_key("ops"), args.contains_key("patch")) {
-            (true, false) => match args.get("dry_run") {
-                Some(Value::Bool(true)) => ("agent_preview_edit", false),
-                Some(Value::Bool(false)) | None => ("agent_propose_edit", true),
-                Some(_) => return None,
-            },
-            (false, true) if !args.contains_key("dry_run") => {
-                ("agent_propose_metadata_change", true)
+            (true, false) => {
+                if !has_exact_keys(args, &["tool", "ref", "ops", "intent"], &[]) {
+                    return None;
+                }
+                let execute = execution_intent(args)?;
+                ToolRequestRoute {
+                    method: "operation.plan",
+                    params: json!({"input": {
+                        "kind": "edit",
+                        "tool": args.get("tool")?,
+                        "ref": args.get("ref")?,
+                        "ops": args.get("ops")?,
+                        "probe": false,
+                    }}),
+                    requires_approval: execute,
+                }
+            }
+            (false, true) => {
+                if !has_exact_keys(args, &["tool", "ref", "patch"], &[]) {
+                    return None;
+                }
+                ToolRequestRoute {
+                    method: "agent_propose_metadata_change",
+                    params: json!({
+                        "tool": args.get("tool")?,
+                        "ref": args.get("ref")?,
+                        "patch": args.get("patch")?,
+                        "run_id": run_id,
+                    }),
+                    requires_approval: true,
+                }
             }
             _ => return None,
         },
@@ -393,8 +452,8 @@ fn resolve_tool_method(name: &str, args: &Map<String, Value>) -> Option<(&'stati
 }
 
 fn is_mutating_tool(name: &str, args: &Map<String, Value>) -> bool {
-    resolve_tool_method(name, args)
-        .map(|(_, mutation)| mutation)
+    resolve_tool_request(name, args, "mutation-check")
+        .map(|route| route.requires_approval)
         .unwrap_or(false)
 }
 
@@ -540,6 +599,40 @@ fn approve_and_apply(
         json!({"operation_id": operation_id, "run_id": run_id,
                "approval_token": token}),
     )
+}
+
+fn apply_operation_plan(resource_dir: &Path, plan_id: &str) -> Result<Value, String> {
+    engine_value(resource_dir, "operation.apply", json!({"plan_id": plan_id}))
+}
+
+#[derive(Debug, PartialEq)]
+enum OperationApplyRoute<'a> {
+    Plan(&'a str),
+    Legacy(&'a str),
+}
+
+fn resolve_operation_apply_route(operation: &Value) -> Result<OperationApplyRoute<'_>, String> {
+    if let Some(plan_id) = operation.get("plan_id").and_then(Value::as_str) {
+        return Ok(OperationApplyRoute::Plan(plan_id));
+    }
+    operation
+        .get("operation_id")
+        .and_then(Value::as_str)
+        .map(OperationApplyRoute::Legacy)
+        .ok_or_else(|| "Engine 未返回可审批的 operation 标识".to_owned())
+}
+
+fn apply_routed_operation(
+    resource_dir: &Path,
+    operation: &Value,
+    run_id: &str,
+) -> Result<Value, String> {
+    match resolve_operation_apply_route(operation)? {
+        OperationApplyRoute::Plan(plan_id) => apply_operation_plan(resource_dir, plan_id),
+        OperationApplyRoute::Legacy(operation_id) => {
+            approve_and_apply(resource_dir, operation_id, run_id)
+        }
+    }
 }
 
 fn remember_auto_policy(request: &str) {
@@ -713,69 +806,168 @@ mod tests {
     #[test]
     fn tool_gateway_is_an_exact_allowlist() {
         let map = |value: Value| value.as_object().cloned().unwrap_or_default();
-        // 只读工具:非写操作,不注入 run_id、不走审批。
+        let read = resolve_tool_request("session_read", &map(json!({"ref": "fsr_a"})), "").unwrap();
+        assert_eq!(read.method, "agent_session_read");
+        assert!(!read.requires_approval);
+
+        let migrate_preview = resolve_tool_request(
+            "migrate",
+            &map(json!({
+                "source_tool": "claude",
+                "ref": "fsr_a",
+                "target_tool": "codex",
+                "max_turn": 3,
+                "intent": "preview",
+            })),
+            "",
+        )
+        .unwrap();
+        assert_eq!(migrate_preview.method, "operation.plan");
+        assert!(!migrate_preview.requires_approval);
         assert_eq!(
-            resolve_tool_method("session_read", &map(json!({}))),
-            Some(("agent_session_read", false))
+            migrate_preview.params,
+            json!({"input": {
+                "kind": "migration",
+                "source_tool": "claude",
+                "ref": "fsr_a",
+                "target_tool": "codex",
+                "max_turn": 3,
+                "probe": false,
+            }})
         );
+
+        let migrate_execute = resolve_tool_request(
+            "migrate",
+            &map(json!({
+                "source_tool": "claude",
+                "ref": "fsr_a",
+                "target_tool": "codex",
+                "intent": "execute",
+            })),
+            "run-1",
+        )
+        .unwrap();
+        assert_eq!(migrate_execute.method, "operation.plan");
+        assert!(migrate_execute.requires_approval);
+        assert!(migrate_execute.params.pointer("/input/intent").is_none());
+
+        let edit_preview = resolve_tool_request(
+            "session_edit",
+            &map(json!({
+                "tool": "claude",
+                "ref": "fsr_a",
+                "ops": [{"op": "delete-turn", "turn": 1}],
+                "intent": "preview",
+            })),
+            "",
+        )
+        .unwrap();
+        assert_eq!(edit_preview.method, "operation.plan");
+        assert!(!edit_preview.requires_approval);
         assert_eq!(
-            resolve_tool_method("session_search", &map(json!({}))),
-            Some(("agent_search_sessions", false))
+            edit_preview.params,
+            json!({"input": {
+                "kind": "edit",
+                "tool": "claude",
+                "ref": "fsr_a",
+                "ops": [{"op": "delete-turn", "turn": 1}],
+                "probe": false,
+            }})
         );
-        // migrate:dry_run 在 preview(非写)与 propose(写)之间分流。
+
+        let edit_execute = resolve_tool_request(
+            "session_edit",
+            &map(json!({
+                "tool": "claude",
+                "ref": "fsr_a",
+                "ops": [{"op": "delete-turn", "turn": 1}],
+                "intent": "execute",
+            })),
+            "run-1",
+        )
+        .unwrap();
+        assert!(edit_execute.requires_approval);
+        assert!(edit_execute.params.pointer("/input/intent").is_none());
+
+        let metadata = resolve_tool_request(
+            "session_edit",
+            &map(json!({
+                "tool": "claude",
+                "ref": "fsr_a",
+                "patch": {"pinned": true},
+            })),
+            "run-1",
+        )
+        .unwrap();
+        assert_eq!(metadata.method, "agent_propose_metadata_change");
+        assert!(metadata.requires_approval);
+        assert_eq!(metadata.params["run_id"], "run-1");
+
         assert_eq!(
-            resolve_tool_method("migrate", &map(json!({"dry_run": true}))),
-            Some(("agent_preview_migration", false))
-        );
-        assert_eq!(
-            resolve_tool_method("migrate", &map(json!({}))),
-            Some(("agent_propose_migration", true))
-        );
-        // session_edit:ops 与 patch 必须恰好提供一个;patch 不接受 dry_run。
-        assert_eq!(
-            resolve_tool_method("session_edit", &map(json!({"patch": {"pinned": true}}))),
-            Some(("agent_propose_metadata_change", true))
-        );
-        assert_eq!(
-            resolve_tool_method("session_edit", &map(json!({"ops": [], "dry_run": true}))),
-            Some(("agent_preview_edit", false))
-        );
-        assert_eq!(
-            resolve_tool_method("session_edit", &map(json!({"ops": []}))),
-            Some(("agent_propose_edit", true))
-        );
-        assert_eq!(
-            resolve_tool_method(
+            resolve_tool_request(
                 "session_edit",
-                &map(json!({"patch": {"pinned": true}, "dry_run": true}))
+                &map(json!({
+                    "tool": "claude",
+                    "ref": "fsr_a",
+                    "ops": [],
+                    "patch": {"pinned": true},
+                    "intent": "execute",
+                })),
+                "run-1",
             ),
             None
         );
         assert_eq!(
-            resolve_tool_method(
-                "session_edit",
-                &map(json!({"patch": {"pinned": true}, "dry_run": false}))
+            resolve_tool_request(
+                "migrate",
+                &map(json!({
+                    "source_tool": "claude",
+                    "ref": "fsr_a",
+                    "target_tool": "codex",
+                    "intent": "execute",
+                    "method": "operation.apply",
+                })),
+                "run-1",
             ),
             None
         );
         assert_eq!(
-            resolve_tool_method(
-                "session_edit",
-                &map(json!({"ops": [], "patch": {"pinned": true}}))
-            ),
+            resolve_tool_request("agent_operation_apply", &map(json!({})), ""),
             None
         );
-        assert_eq!(resolve_tool_method("session_edit", &map(json!({}))), None);
+        assert_eq!(resolve_tool_request("shell", &map(json!({})), ""), None);
+    }
+
+    #[test]
+    fn preview_never_requires_approval_and_execute_always_does() {
+        for name in ["migrate", "session_edit"] {
+            let base = if name == "migrate" {
+                json!({"source_tool": "claude", "ref": "fsr_a",
+                       "target_tool": "codex"})
+            } else {
+                json!({"tool": "claude", "ref": "fsr_a",
+                       "ops": [{"op": "delete-turn", "turn": 1}]})
+            };
+            let mut preview = base.as_object().unwrap().clone();
+            preview.insert("intent".to_owned(), Value::String("preview".to_owned()));
+            assert!(!is_mutating_tool(name, &preview));
+            let mut execute = base.as_object().unwrap().clone();
+            execute.insert("intent".to_owned(), Value::String("execute".to_owned()));
+            assert!(is_mutating_tool(name, &execute));
+        }
+    }
+
+    #[test]
+    fn operation_plans_apply_without_the_legacy_approval_token_route() {
         assert_eq!(
-            resolve_tool_method("session_edit", &map(json!({"ops": [], "dry_run": "true"}))),
-            None
+            resolve_operation_apply_route(&json!({"plan_id": "op_fixture"})).unwrap(),
+            OperationApplyRoute::Plan("op_fixture")
         );
-        // 引擎方法名与未知名都不是可调用工具。
         assert_eq!(
-            resolve_tool_method("agent_operation_apply", &map(json!({}))),
-            None
+            resolve_operation_apply_route(&json!({"operation_id": "legacy_fixture"})).unwrap(),
+            OperationApplyRoute::Legacy("legacy_fixture")
         );
-        assert_eq!(resolve_tool_method("shell", &map(json!({}))), None);
+        assert!(resolve_operation_apply_route(&json!({})).is_err());
     }
 
     #[test]
