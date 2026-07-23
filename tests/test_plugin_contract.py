@@ -288,9 +288,10 @@ def test_codex_rewrite_preserves_user_image_content():
 
 def test_resume_descriptor_executable_matches_manifest_whitelist():
     from engine.application import services
-    for manifest in services.tool_manifests():
-        descriptor = services.resume_command(manifest["id"], "sid-1", "/work")
-        assert descriptor["executable"] in manifest["executables"]
+    for agent_id in services.adapters():
+        adapter = services.adapter(agent_id)
+        descriptor = services.resume_command(agent_id, "sid-1", "/work")
+        assert descriptor["executable"] in adapter.manifest.executables
         assert descriptor["args"]
         assert descriptor["executable"] in descriptor["display_command"]
         assert "sid-1" in descriptor["display_command"]

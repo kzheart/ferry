@@ -1,72 +1,64 @@
-// Agent 清单单一事实源:引擎 tools RPC 下发,应用启动时水合(见 main.jsx)。
-// TOOLS/TOOL_NAME 原地更新,保证既有引用在水合后拿到最新清单。
+// 内置会话源是编译期契约，不通过 Engine manifest 动态水合。
+// 安装状态与扫描结果由 env/scan 查询提供，格式细节不泄漏给前端。
 import { rpc } from "../transport/rpc.js";
 
-const CACHE_KEY = "ferry-tools-manifests";
-let manifests = [];
-export const TOOLS = [];
-export const TOOL_NAME = {};
-const listeners = new Set();
+export const AGENTS = Object.freeze({
+  claude: Object.freeze({
+    displayName: "Claude Code",
+    icon: "claude",
+    referenceKind: "path",
+  }),
+  codex: Object.freeze({
+    displayName: "Codex CLI",
+    icon: "codex",
+    referenceKind: "path",
+  }),
+  opencode: Object.freeze({
+    displayName: "OpenCode",
+    icon: "opencode",
+    referenceKind: "id",
+  }),
+});
 
-// 清单实际变化时通知订阅方(App 用它把"全选"态筛选器扩展到新全集)
-export function onToolsHydrated(cb) {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
-}
+export const TOOLS = Object.freeze(Object.keys(AGENTS));
+export const TOOL_NAME = Object.freeze(Object.fromEntries(
+  TOOLS.map(tool => [tool, AGENTS[tool].displayName]),
+));
 
-export function hydrateTools(list) {
-  const next = Array.isArray(list) ? list : [];
-  const changed = JSON.stringify(next) !== JSON.stringify(manifests);
-  manifests = next;
-  TOOLS.length = 0;
-  for (const key of Object.keys(TOOL_NAME)) delete TOOL_NAME[key];
-  for (const m of manifests) {
-    TOOLS.push(m.id);
-    TOOL_NAME[m.id] = m.display_name || m.id;
-  }
-  if (changed) listeners.forEach(cb => cb([...TOOLS]));
-}
-
-// 秒开:启动先用上次缓存的清单同步水合,引擎就绪后 loadTools 再校准
-export function hydrateToolsFromCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-    if (Array.isArray(cached) && cached.length) hydrateTools(cached);
-  } catch { /* 缓存损坏则忽略,等引擎清单 */ }
-}
-
-export const toolManifests = () => manifests;
+const CAPABILITIES = Object.freeze([
+  "browse",
+  "migrate-source",
+  "migrate-target",
+  "edit",
+  "inplace",
+  "verified",
+]);
 
 export function toolManifest(tool) {
-  return manifests.find(item => item.id === tool) || null;
-}
-
-export function toolCapabilities(tool) {
-  return toolManifest(tool)?.capabilities || [];
+  const agent = AGENTS[tool];
+  return agent ? {
+    id: tool,
+    display_name: agent.displayName,
+    icon: agent.icon,
+    reference_kind: agent.referenceKind,
+    capabilities: CAPABILITIES,
+  } : null;
 }
 
 export function toolHasCapability(tool, capability) {
-  return toolCapabilities(tool).includes(capability);
+  return Boolean(AGENTS[tool]) && CAPABILITIES.includes(capability);
 }
 
 export function toolsWithCapability(capability) {
-  return TOOLS.filter(tool => toolHasCapability(tool, capability));
+  return CAPABILITIES.includes(capability) ? TOOLS : [];
 }
 
-// path: prefer local file path; id: prefer stable session id (e.g. database agents).
+// Native reference handling remains an adapter-internal transition detail.
+// Mutating operations use Engine-issued fsr_ references exclusively.
 export function toolReferenceKind(tool) {
-  return toolManifest(tool)?.reference_kind === "id" ? "id" : "path";
+  return AGENTS[tool]?.referenceKind || "path";
 }
 
-export async function loadTools() {
-  try {
-    const list = await rpc("tools");
-    hydrateTools(list);
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(list)); }
-    catch { /* 配额不足则放弃缓存 */ }
-  } catch { /* 引擎不可用时保持现有清单 */ }
-}
-
-// 接续命令由引擎 lifecycle 生成(launch descriptor),前端不再拼装
+// 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, sessionId, cwd) =>
   rpc("resume", { tool, session_id: sessionId, cwd: cwd || "." });

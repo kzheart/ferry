@@ -5,7 +5,7 @@ import { onMenu, openTerminal, revealPath, rpc,
   operationApply, operationPlan,
   preloadWindow, startWindowDrag, toggleWindowMaximize,
   writeClipboardText } from "../api/transport/rpc.js";
-import { TOOLS, TOOL_NAME, onToolsHydrated, resumeDescriptor,
+import { TOOLS, TOOL_NAME, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
@@ -126,12 +126,6 @@ export default function App() {
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
-
-  // 清单水合(首启无缓存 / 引擎清单与缓存不一致)后,把"全选"态筛选器扩展到新全集
-  useEffect(() => onToolsHydrated(() => {
-    setLibF(v => ({ ...v, src: [...TOOLS] }));
-    setHistF(v => ({ ...v, src: [...TOOLS] }));
-  }), []);
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {

@@ -24,7 +24,6 @@ RPC_METHODS = {
     "version": lambda p: services.version(),
     "scan": lambda p: services.scan(),
     "env": lambda p: services.env(),
-    "tools": lambda p: services.tool_manifests(),
     "resume": lambda p: services.resume_command(
         p["tool"], p["session_id"], p.get("cwd") or "."),
     "models": lambda p: services.list_models(p["tool"]),

@@ -45,11 +45,6 @@ def resume_command(tool: str, sid: str, cwd: str) -> dict:
     return adapter(tool).lifecycle.resume_descriptor(sid, cwd)
 
 
-def tool_manifests() -> list[dict]:
-    """插件 manifest 列表：前端与 Rust 的 Agent 定义单一事实源。"""
-    return [adapter(name).describe() for name in adapters()]
-
-
 # ---------- 范围截断 ----------
 
 def _truncate_rounds(sess, max_turn: int):
