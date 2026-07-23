@@ -23,7 +23,6 @@ from ...domain.model import (
     Block,
     ContextCompaction,
     Message,
-    RawRecord,
     Session,
     ToolCall,
     ToolResult,
@@ -411,8 +410,6 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     sess = Session(source_tool="opencode", source_id=info["id"],
                    cwd=info.get("directory", ""), title=info.get("title", ""),
                    parent_id=info.get("parentID"), agent_id=info.get("agent"))
-    session_raw = RawRecord("opencode", "session", _clone(info))
-    sess.raw_records.append(session_raw)
     edges = []
     pending_compactions = []
     last_visible_message_id = None
@@ -466,19 +463,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                 compaction.summary_text = summary
                 compaction.summary_status = "available" if summary else "missing"
                 compaction.state = "completed" if summary else "incomplete"
-        message_raw = RawRecord(
-            "opencode", "message", _clone(m["info"]), ordinal=ordinal,
-            timestamp=(m["info"].get("time") or {}).get("created"))
-        sess.raw_records.append(message_raw)
-        message_records = [message_raw]
         for part_ordinal, p in enumerate(m.get("parts", [])):
-            part_raw = RawRecord(
-                "opencode", "part", _clone(p), ordinal=part_ordinal,
-                timestamp=(p.get("time") or
-                           (p.get("state") or {}).get("time") or {}).get("start"),
-                location=mid or "")
-            sess.raw_records.append(part_raw)
-            message_records.append(part_raw)
             pt = p.get("type")
             if pt == "text":
                 blocks.append(Block("text", p.get("text", "")))
@@ -529,7 +514,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
             minfo = m["info"]
             parent_id = minfo.get("parentID")
             sess.messages.append(Message(
-                role=role, blocks=blocks, raw=message_records, source_id=mid,
+                role=role, blocks=blocks, source_id=mid,
                 parent_ids=[parent_id] if parent_id else [],
                 agent_id=minfo.get("agent"),
                 created_at=(minfo.get("time") or {}).get("created")))
@@ -1124,35 +1109,6 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
     return {"info": info, "messages": messages}
 
 
-def _payload_from_records(sess: Session) -> dict | None:
-    session_record = next((r for r in sess.raw_records
-                           if r.source == "opencode" and
-                           r.record_type == "session"), None)
-    message_records = sorted(
-        (r for r in sess.raw_records if r.source == "opencode" and
-         r.record_type == "message"), key=lambda r: r.ordinal)
-    if not session_record or not message_records:
-        return None
-    parts_by_message = {}
-    for record in sess.raw_records:
-        if record.source == "opencode" and record.record_type == "part":
-            parts_by_message.setdefault(record.location, []).append(record)
-    messages = []
-    for record in message_records:
-        mid = record.payload.get("id", "")
-        parts = sorted(parts_by_message.get(mid, []), key=lambda r: r.ordinal)
-        messages.append({"info": _clone(record.payload),
-                         "parts": [_clone(part.payload) for part in parts]})
-    return {"info": _clone(session_record.payload), "messages": messages}
-
-
-def _raw_payload(sess: Session) -> dict | None:
-    payload = sess.meta.get("opencode_export")
-    if isinstance(payload, dict) and "info" in payload:
-        return _clone(payload)
-    return _payload_from_records(sess)
-
-
 def _remap_payload(payload: dict, sid: str, cwd: str,
                    parent_sid: str | None, sid_map: dict[str, str]) -> dict:
     payload = _clone(payload)
@@ -1332,9 +1288,8 @@ def write(sess: Session, cwd: str | None = None,
         parent_sid = parent_map.get(id(node))
         explicit_payload = (native_payloads or {}).get(node.source_id)
         payload = (_clone(explicit_payload)
-                   if isinstance(explicit_payload, dict)
-                   else _raw_payload(node))
-        is_raw = payload is not None
+                   if isinstance(explicit_payload, dict) else None)
+        has_native_payload = payload is not None
         if payload is not None:
             if node.children:
                 if tpl is None:
@@ -1348,7 +1303,7 @@ def write(sess: Session, cwd: str | None = None,
             payload = _canonical_payload(
                 node, sid, node_cwd, parent_sid, tpl, sid_map=sid_map,
                 tool_decider=tool_decider)
-        if node.children and not is_raw:
+        if node.children and not has_native_payload:
             if tpl is None:
                 tpl = _template()
             _ensure_task_links(payload, node, sid, sid_map, tpl)
