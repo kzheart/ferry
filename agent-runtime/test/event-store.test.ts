@@ -2,7 +2,11 @@ import { appendFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FileSessionStore, type PersistedSession } from "../src/event-store.js";
+import {
+  FileSessionStore,
+  type PersistedSession,
+  type SessionStore,
+} from "../src/event-store.js";
 import type { EventEnvelope } from "../src/protocol.js";
 import { safeEvents, safeMessages } from "../src/runtime.js";
 
@@ -16,8 +20,40 @@ afterEach(async () => {
   );
 });
 
+async function commitSnapshot(
+  store: SessionStore,
+  state: PersistedSession,
+  events: EventEnvelope[],
+) {
+  const { messages, ...metadata } = state;
+  const lastMessage = messages.at(-1);
+  const committableMessageCount =
+    state.status === "running" &&
+    events.at(-1)?.type === "content.delta" &&
+    lastMessage?.role === "assistant"
+      ? messages.length - 1
+      : messages.length;
+  let boundary = events.length - 1;
+  if (state.status === "running") {
+    while (boundary >= 0 && events[boundary]!.type === "content.delta") {
+      boundary -= 1;
+    }
+  }
+  await store.commit({
+    metadata,
+    messages: messages
+      .slice(0, committableMessageCount)
+      .map((message, ordinal) => ({
+        ordinal,
+        message,
+      })),
+    events: events.slice(0, boundary + 1),
+    timestamp: events.at(-1)?.timestamp ?? "2026-01-01T00:00:00.000Z",
+  });
+}
+
 describe("FileSessionStore", () => {
-  it("serializes concurrent saves for the same session", async () => {
+  it("serializes concurrent commits for the same session", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ferry-agent-store-"));
     directories.push(directory);
     const store = new FileSessionStore(directory);
@@ -34,7 +70,7 @@ describe("FileSessionStore", () => {
 
     await Promise.all(
       Array.from({ length: 20 }, (_, index) =>
-        store.save({ ...base, title: `title-${index + 1}` }, []),
+        commitSnapshot(store, { ...base, title: `title-${index + 1}` }, []),
       ),
     );
 
@@ -162,7 +198,7 @@ describe("FileSessionStore", () => {
       title: "测试",
       pinned: false,
     };
-    await Promise.all([store.save(state, []), store.delete("s1")]);
+    await Promise.all([commitSnapshot(store, state, []), store.delete("s1")]);
     expect(await readdir(directory)).not.toContain("s1.jsonl");
   });
 
@@ -223,7 +259,7 @@ describe("FileSessionStore", () => {
       type: "content.delta",
       payload: { delta: "正在搜索" },
     };
-    await store.save(state, [started, delta]);
+    await commitSnapshot(store, state, [started, delta]);
     const beforeBoundary = await readFile(join(directory, "s1.jsonl"), "utf8");
     expect(beforeBoundary).toContain('"type":"run.started"');
     expect(beforeBoundary).not.toContain('"type":"content.delta"');
@@ -237,7 +273,11 @@ describe("FileSessionStore", () => {
       type: "tool.started",
       payload: { tool_call_id: "tool-1", name: "ferry_search_sessions" },
     };
-    await store.save({ ...state, next_seq: 4 }, [started, delta, tool]);
+    await commitSnapshot(store, { ...state, next_seq: 4 }, [
+      started,
+      delta,
+      tool,
+    ]);
     const [restored] = await store.loadAll();
     expect(restored?.events.map((event) => event.type)).toEqual([
       "run.started",
@@ -271,7 +311,7 @@ describe("FileSessionStore", () => {
     };
     const first = new FileSessionStore(directory);
     await first.loadAll();
-    await first.save(state, []);
+    await commitSnapshot(first, state, []);
     await appendFile(
       join(directory, "s1.jsonl"),
       '{"version":1,"type":"event"',
@@ -279,7 +319,7 @@ describe("FileSessionStore", () => {
 
     const restored = new FileSessionStore(directory);
     expect((await restored.loadAll())[0]?.state.title).toBe("before");
-    await restored.save({ ...state, title: "after" }, []);
+    await commitSnapshot(restored, { ...state, title: "after" }, []);
     expect(
       (await new FileSessionStore(directory).loadAll())[0]?.state.title,
     ).toBe("after");

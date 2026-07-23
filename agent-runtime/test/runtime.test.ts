@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MemorySessionStore,
   type PersistedSession,
+  type SessionCommit,
 } from "../src/event-store.js";
 import { AgentRuntime } from "../src/runtime.js";
 import { FERRY_SAFETY_PROMPT } from "../src/runtime.js";
@@ -20,7 +21,50 @@ async function createRuntime(
   });
 }
 
+async function commitSnapshot(
+  store: MemorySessionStore,
+  state: PersistedSession,
+  events: EventEnvelope[],
+) {
+  const { messages, ...metadata } = state;
+  await store.commit({
+    metadata,
+    messages: messages.map((message, ordinal) => ({ ordinal, message })),
+    events,
+    timestamp: events.at(-1)?.timestamp ?? "2026-01-01T00:00:00.000Z",
+  });
+}
+
+class RecordingSessionStore extends MemorySessionStore {
+  readonly commits: SessionCommit[] = [];
+
+  override async commit(update: SessionCommit) {
+    this.commits.push(structuredClone(update));
+    await super.commit(update);
+  }
+}
+
 describe("AgentRuntime", () => {
+  it("commits each persisted message and event only once", async () => {
+    const store = new RecordingSessionStore();
+    const runtime = await createRuntime({ store });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "hello");
+    await runtime.waitForIdle("s1");
+
+    const eventSeqs = store.commits.flatMap((commit) =>
+      commit.events.map((event) => event.seq),
+    );
+    const messageOrdinals = store.commits.flatMap((commit) =>
+      commit.messages.map((message) => message.ordinal),
+    );
+    expect(new Set(eventSeqs).size).toBe(eventSeqs.length);
+    expect(new Set(messageOrdinals).size).toBe(messageOrdinals.length);
+    expect(eventSeqs).toEqual(
+      runtime.replay("s1", 0).map((event) => event.seq),
+    );
+  });
+
   it("snapshots role persona, tools, policy and defaults without drifting", async () => {
     const store = new MemorySessionStore();
     const roleStore = new MemoryRoleStore();
@@ -447,7 +491,7 @@ describe("AgentRuntime", () => {
         payload: {},
       },
     ];
-    await store.save(state, events);
+    await commitSnapshot(store, state, events);
 
     const runtime = await createRuntime({ store });
     expect(runtime.replay("s1", 0).map((event) => event.type)).toEqual([

@@ -345,6 +345,8 @@ class RuntimeSession {
   readonly agent: Agent;
   nextSeq: number;
   activeRunId: string | null;
+  private persistedEventSeq: number;
+  private persistedMessageCount: number;
   private terminalResult: TerminalResult | null = null;
   private runPromise: Promise<void> | null = null;
   private containsImages: boolean;
@@ -366,6 +368,8 @@ class RuntimeSession {
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
+    this.persistedEventSeq = events.at(-1)?.seq ?? 0;
+    this.persistedMessageCount = state?.messages.length ?? 0;
     this.containsImages = state?.contains_images ?? false;
     this.title = state?.title ?? null;
     this.pinned = state?.pinned ?? false;
@@ -647,9 +651,35 @@ class RuntimeSession {
     }
   }
 
-  private persist() {
-    return this.runtime.store.save(
-      {
+  private async persist() {
+    const lastMessage = this.agent.state.messages.at(-1);
+    const committableMessageCount =
+      this.activeRunId &&
+      this.events.at(-1)?.type === "content.delta" &&
+      lastMessage?.role === "assistant"
+        ? this.agent.state.messages.length - 1
+        : this.agent.state.messages.length;
+    const committableEventSeq = this.activeRunId
+      ? this.lastCommittableEventSeq()
+      : (this.events.at(-1)?.seq ?? 0);
+    const messages = safeMessages(
+      this.agent.state.messages.slice(
+        this.persistedMessageCount,
+        committableMessageCount,
+      ),
+    ).map((message, offset) => ({
+      ordinal: this.persistedMessageCount + offset,
+      message,
+    }));
+    const events = safeEvents(
+      this.events.filter(
+        (event) =>
+          event.seq > this.persistedEventSeq &&
+          event.seq <= committableEventSeq,
+      ),
+    );
+    await this.runtime.store.commit({
+      metadata: {
         session_id: this.id,
         provider_id: this.selection.provider,
         model_id: this.selection.model,
@@ -657,7 +687,6 @@ class RuntimeSession {
         next_seq: this.nextSeq,
         status: this.activeRunId ? "running" : "idle",
         active_run_id: this.activeRunId,
-        messages: safeMessages(this.agent.state.messages),
         title: this.title,
         pinned: this.pinned,
         thinking_level: this.selection.thinking ?? "off",
@@ -666,8 +695,20 @@ class RuntimeSession {
         resolved_tools: [...this.resolvedTools],
         resolved_apply_policy: this.resolvedApplyPolicy,
       },
-      safeEvents(this.events),
-    );
+      messages,
+      events,
+      timestamp: this.runtime.now().toISOString(),
+    });
+    this.persistedMessageCount = committableMessageCount;
+    this.persistedEventSeq = committableEventSeq;
+  }
+
+  private lastCommittableEventSeq() {
+    let index = this.events.length - 1;
+    while (index >= 0 && this.events[index]!.type === "content.delta") {
+      index -= 1;
+    }
+    return this.events[index]?.seq ?? 0;
   }
 }
 
