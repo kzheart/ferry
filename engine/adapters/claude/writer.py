@@ -104,11 +104,11 @@ def _result_block_payload(block) -> dict:
             },
         }
     if block.kind == "tool_reference":
-        return {"type": "tool_reference", **block.metadata}
+        reference = block.data if isinstance(block.data, dict) else {}
+        return {"type": "tool_reference", **reference}
     value = {
         "kind": block.kind, "data": block.data, "mime_type": block.mime_type,
         "filename": block.filename, "uri": block.uri,
-        "metadata": block.metadata,
     }
     return {"type": "text", "text": json.dumps(value, ensure_ascii=False)}
 

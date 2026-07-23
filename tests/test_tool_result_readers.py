@@ -261,7 +261,7 @@ def test_claude_preserves_error_and_multimodal_result(tmp_path):
     ]
     assert tool.result.blocks[1].mime_type == "image/png"
     assert tool.result.blocks[1].data == "Zml4dHVyZQ=="
-    assert tool.result.blocks[2].metadata["tool_name"] == "fixture-tool"
+    assert tool.result.blocks[2].data == {"tool_name": "fixture-tool"}
 
 
 def test_claude_ignores_removed_ferry_tool_result_extension():

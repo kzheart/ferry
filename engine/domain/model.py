@@ -27,7 +27,6 @@ class ToolResultBlock:
     mime_type: str | None = None
     filename: str | None = None
     uri: str | None = None
-    metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.kind not in TOOL_RESULT_BLOCK_KINDS:

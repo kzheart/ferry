@@ -309,6 +309,7 @@ def _parse_result(raw) -> ToolResult:
     attachments = []
     explicit_status = None
     structured_envelope = False
+    wrapper_blocks = []
     try:
         native_blocks = raw if isinstance(raw, list) else json.loads(raw)
     except (json.JSONDecodeError, TypeError):
@@ -355,42 +356,30 @@ def _parse_result(raw) -> ToolResult:
                     attachments = inner["attachments"]
                 explicit_status = inner.get("status")
             elif text:
-                blocks.append(ToolResultBlock(
-                    "text", text=text,
-                    metadata={"codex_wrapper": True}
-                    if text.startswith("Script completed\nWall time ") else {},
-                ))
+                block = ToolResultBlock("text", text=text)
+                blocks.append(block)
+                if text.startswith("Script completed\nWall time "):
+                    wrapper_blocks.append(block)
         elif kind in {"input_image", "output_image", "image"}:
             blocks.append(ToolResultBlock(
                 "image",
                 uri=native_block.get("image_url") or native_block.get("url"),
                 data=native_block.get("data"),
                 mime_type=native_block.get("mime_type"),
-                metadata={
-                    key: value for key, value in native_block.items()
-                    if key not in {"type", "image_url", "url", "data", "mime_type"}
-                },
             ))
         elif kind == "file":
             blocks.append(ToolResultBlock(
                 "file", uri=native_block.get("url"),
                 filename=native_block.get("filename"),
                 mime_type=native_block.get("mime_type"),
-                metadata={
-                    key: value for key, value in native_block.items()
-                    if key not in {"type", "url", "filename", "mime_type"}
-                },
             ))
         else:
-            blocks.append(ToolResultBlock(
-                "json", data=native_block, metadata={"native_type": kind}))
+            blocks.append(ToolResultBlock("json", data=native_block))
 
     status = _result_status(explicit_status)
     if structured_envelope:
-        blocks = [
-            block for block in blocks
-            if block.metadata.get("codex_wrapper") is not True
-        ]
+        wrapper_ids = {id(block) for block in wrapper_blocks}
+        blocks = [block for block in blocks if id(block) not in wrapper_ids]
     if status == "unknown" and exit_code is not None:
         status = "success" if exit_code == 0 else "error"
     if stderr and status == "unknown":
