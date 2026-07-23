@@ -334,7 +334,7 @@ fn complete_engine_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, 
         .and_then(|value| value.get("params"))
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let outcome = if is_organization_engine_method(method) {
+    let outcome = if is_runtime_engine_method(method) {
         engine_value(resource_dir, method, params)
     } else {
         Err("engine.method_not_allowed".to_owned())
@@ -342,7 +342,7 @@ fn complete_engine_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, 
     send_gateway_result(stdin, session_id, request_id, outcome);
 }
 
-fn is_organization_engine_method(method: &str) -> bool {
+fn is_runtime_engine_method(method: &str) -> bool {
     matches!(
         method,
         "session_backbone"
@@ -350,6 +350,9 @@ fn is_organization_engine_method(method: &str) -> bool {
             | "organization_digest_context"
             | "organization_proposals_list"
             | "organization_propose"
+            | "runtime_sessions.load_all"
+            | "runtime_sessions.commit"
+            | "runtime_sessions.delete"
     )
 }
 
@@ -950,7 +953,7 @@ mod tests {
     }
 
     #[test]
-    fn organization_engine_gateway_is_an_exact_allowlist() {
+    fn runtime_engine_gateway_is_an_exact_allowlist() {
         for method in [
             "session_backbone",
             "session_summaries_set",
@@ -958,10 +961,17 @@ mod tests {
             "organization_proposals_list",
             "organization_propose",
         ] {
-            assert!(is_organization_engine_method(method));
+            assert!(is_runtime_engine_method(method));
         }
-        assert!(!is_organization_engine_method("operation.apply"));
-        assert!(!is_organization_engine_method("session_delete"));
+        for method in [
+            "runtime_sessions.load_all",
+            "runtime_sessions.commit",
+            "runtime_sessions.delete",
+        ] {
+            assert!(is_runtime_engine_method(method));
+        }
+        assert!(!is_runtime_engine_method("operation.apply"));
+        assert!(!is_runtime_engine_method("session_delete"));
     }
 
     #[test]
