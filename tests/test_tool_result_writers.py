@@ -1,0 +1,139 @@
+import json
+
+import pytest
+
+from engine.adapters.claude import reader as claude_reader
+from engine.adapters.claude import writer as claude_writer
+from engine.adapters.claude.migration import ClaudeMigrationTarget
+from engine.adapters.codex import reader as codex_reader
+from engine.adapters.codex import writer as codex_writer
+from engine.adapters.codex.migration import CodexMigrationTarget
+from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode.migration import OpenCodeMigrationTarget
+from engine.domain.model import (
+    Block,
+    Message,
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+)
+from engine.domain.tool_ops import CanonicalOp
+
+
+def _source_session(status="error"):
+    result = ToolResult(
+        status=status,
+        blocks=[
+            ToolResultBlock("text", text="visible output"),
+            ToolResultBlock("json", data={"count": 2}),
+            ToolResultBlock(
+                "file", filename="report.txt", uri="file:///tmp/report.txt",
+                mime_type="text/plain",
+            ),
+        ],
+        stdout="visible output",
+        stderr="failure detail" if status == "error" else None,
+        exit_code=7 if status == "error" else 0,
+        truncated=False,
+        attachments=[{"type": "file", "filename": "report.txt",
+                      "url": "file:///tmp/report.txt"}],
+        metadata={"trace": "fixture"},
+    )
+    tool = ToolCall(
+        "shell", CanonicalOp.SHELL_EXEC, {"command": "printf test"}, "",
+        result=result,
+    )
+    session = Session("fixture", "source", "/tmp")
+    session.messages = [
+        Message("user", [Block("text", "run")]),
+        Message("assistant", [Block("tool", tool=tool)]),
+    ]
+    return session
+
+
+def _only_result(session):
+    results = [
+        block.tool.result
+        for message in session.messages
+        for block in message.blocks
+        if block.kind == "tool" and block.tool
+    ]
+    assert len(results) == 1
+    assert results[0] is not None
+    return results[0]
+
+
+def _roundtrip_claude(session, tmp_path):
+    target = ClaudeMigrationTarget()
+    records = claude_writer._generated_lines(
+        session, "fixture-session", "/tmp", claude_writer._load_templates(),
+        {}, {}, tool_decider=target.evaluate_tool,
+    )
+    path = tmp_path / "claude.jsonl"
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return claude_reader._read_transcript(path)
+
+
+def _roundtrip_codex(session, tmp_path):
+    target = CodexMigrationTarget()
+    records = codex_writer._session_records(
+        codex_writer._load_templates(), session, "/tmp", "fixture-session",
+        "fixture-session", None, 0, "/root", {},
+        tool_decider=target.evaluate_tool,
+    )
+    path = tmp_path / "codex.jsonl"
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return codex_reader._read_one(path)
+
+
+def _roundtrip_opencode(session, _tmp_path):
+    target = OpenCodeMigrationTarget()
+    payload = opencode_session._canonical_payload(
+        session, "fixture-session", "/tmp", None,
+        opencode_session._template(), tool_decider=target.evaluate_tool,
+    )
+    return opencode_session._parse_session(payload)[0]
+
+
+@pytest.mark.parametrize("roundtrip", [
+    _roundtrip_claude,
+    _roundtrip_codex,
+    _roundtrip_opencode,
+])
+def test_structured_error_result_survives_target_writer_roundtrip(
+        roundtrip, tmp_path):
+    result = _only_result(roundtrip(_source_session(), tmp_path))
+
+    assert result.status == "error"
+    assert [block.kind for block in result.blocks] == ["text", "json", "file"]
+    assert result.blocks[1].data == {"count": 2}
+    assert result.stdout == "visible output"
+    assert result.stderr == "failure detail"
+    assert result.exit_code == 7
+    assert result.truncated is False
+    assert result.attachments[0]["filename"] == "report.txt"
+    assert result.metadata["trace"] == "fixture"
+
+
+@pytest.mark.parametrize(("target", "status", "fidelity"), [
+    (ClaudeMigrationTarget(), "running", "narrated"),
+    (CodexMigrationTarget(), "pending", "narrated"),
+    (OpenCodeMigrationTarget(), "running", "exact"),
+])
+def test_result_status_support_is_part_of_shared_render_decision(
+        target, status, fidelity):
+    session = _source_session(status)
+    tool = session.messages[1].blocks[0].tool
+
+    decision = target.evaluate_tool(tool, session, session.messages[1])
+
+    assert decision.fidelity == fidelity
+    assert (decision.rendered is None) == (fidelity == "narrated")
+
+
+def test_claude_writer_roundtrip_does_not_turn_interruption_into_error(tmp_path):
+    result = _only_result(_roundtrip_claude(
+        _source_session("interrupted"), tmp_path))
+
+    assert result.status == "interrupted"

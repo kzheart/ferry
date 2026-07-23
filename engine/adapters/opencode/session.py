@@ -5,6 +5,7 @@
 """
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -12,7 +13,17 @@ import tempfile
 import time
 from pathlib import Path
 
-from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from ...domain.model import (
+    AgentEdge,
+    Block,
+    Message,
+    RawRecord,
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+    normalize_tool_result_status,
+)
 from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...domain.usage import iso_ms
@@ -21,10 +32,111 @@ from ...infrastructure.resources import resource_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
 
-TOOL_OPS = {"bash": CanonicalOp.SHELL_EXEC, "read": CanonicalOp.FS_READ,
-            "write": CanonicalOp.FS_WRITE, "edit": CanonicalOp.FS_EDIT}
+TOOL_OPS = {
+    "bash": CanonicalOp.SHELL_EXEC,
+    "read": CanonicalOp.FS_READ,
+    "write": CanonicalOp.FS_WRITE,
+    "edit": CanonicalOp.FS_EDIT,
+    "apply_patch": CanonicalOp.FS_PATCH,
+    "grep": CanonicalOp.FS_SEARCH,
+    "glob": CanonicalOp.FS_GLOB,
+    "webfetch": CanonicalOp.WEB_FETCH,
+    "websearch": CanonicalOp.WEB_SEARCH,
+}
 GOLDEN = resource_path("golden", "opencode")
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+
+
+def _patch_operations(patch: str) -> list[dict]:
+    return [
+        {"operation": operation.lower(), "path": path.strip()}
+        for operation, path in re.findall(
+            r"^\*\*\* (Add|Update|Delete) File: ([^\r\n]+)$",
+            patch, re.MULTILINE,
+        )
+    ]
+
+
+def _canonical_tool_input(name: str, source_input):
+    inp = dict(source_input) if isinstance(source_input, dict) else source_input
+    if name == "task":
+        value = {
+            "description": str(inp.get("description") or "migrated subagent"),
+            "prompt": str(inp.get("prompt") or ""),
+            "subagent_type": str(inp.get("subagent_type") or
+                                 inp.get("agent") or "general"),
+        }
+        for field in ("task_name", "model", "fork_mode", "reasoning_effort"):
+            if inp.get(field) is not None:
+                value[field] = str(inp[field])
+        return CanonicalOp.AGENT_SPAWN, value
+    op = TOOL_OPS.get(name)
+    if op is None:
+        return CanonicalOp.TOOL_INVOKE, {
+            "namespace": "opencode", "name": name, "input": inp,
+        }
+    if not isinstance(inp, dict):
+        return op, inp
+    if name == "bash":
+        value = {"command": inp.get("command", "")}
+        aliases = {
+            "workdir": "workdir", "timeout": "timeout_ms",
+            "timeout_ms": "timeout_ms",
+            "run_in_background": "background", "background": "background",
+        }
+        for source, target in aliases.items():
+            if source in inp:
+                value[target] = inp[source]
+        return op, value
+    if name == "read":
+        value = {"file_path": inp.get("filePath", inp.get("file_path", ""))}
+        value.update({key: inp[key] for key in ("offset", "limit") if key in inp})
+        return op, value
+    if name == "write":
+        return op, {
+            "file_path": inp.get("filePath", inp.get("file_path", "")),
+            "content": inp.get("content", ""),
+        }
+    if name == "edit":
+        value = {
+            "file_path": inp.get("filePath", inp.get("file_path", "")),
+            "old": inp.get("oldString", inp.get("old", "")),
+            "new": inp.get("newString", inp.get("new", "")),
+        }
+        if "replaceAll" in inp or "replace_all" in inp:
+            value["replace_all"] = inp.get("replaceAll", inp.get("replace_all"))
+        return op, value
+    if name == "apply_patch":
+        patch = inp.get("patchText", inp.get("raw_patch", ""))
+        return op, {"operations": _patch_operations(str(patch)),
+                    "raw_patch": str(patch)}
+    if name == "grep":
+        value = {"query": inp.get("pattern", inp.get("query", ""))}
+        if "path" in inp:
+            value["path"] = inp["path"]
+        if "include" in inp or "glob" in inp:
+            value["glob"] = inp.get("include", inp.get("glob"))
+        if "limit" in inp:
+            value["max_results"] = inp["limit"]
+        return op, value
+    if name == "glob":
+        value = {"pattern": inp.get("pattern", "")}
+        if "path" in inp:
+            value["path"] = inp["path"]
+        return op, value
+    if name == "webfetch":
+        value = {"url": inp.get("url", "")}
+        aliases = {"format": "format", "timeout": "timeout_ms"}
+        for source, target in aliases.items():
+            if source in inp:
+                value[target] = inp[source]
+        return op, value
+    if name == "websearch":
+        value = {"query": inp.get("query", "")}
+        if "numResults" in inp:
+            value["num_results"] = inp["numResults"]
+        return op, value
+    return op, inp
 
 
 def _oc(args, **kw):
@@ -82,6 +194,106 @@ def _export_from_capture(capture: dict) -> dict:
 
 
 # ---------- reader ----------
+
+def _opencode_result(state: dict) -> ToolResult:
+    metadata = _clone(state.get("metadata") or {})
+    canonical = metadata.pop("canonicalToolResult", None)
+    canonical = canonical if isinstance(canonical, dict) else {}
+    if isinstance(state.get("status"), str):
+        metadata["source_status"] = state["status"]
+    native_state = {
+        key: _clone(value) for key, value in state.items()
+        if key not in {
+            "input", "output", "error", "metadata", "attachments", "status",
+            "time",
+        }
+    }
+    if native_state:
+        metadata["opencode_state"] = native_state
+    status = normalize_tool_result_status(
+        canonical.get("status") or state.get("status"))
+    if metadata.get("interrupted") is True:
+        status = "interrupted"
+
+    output = state.get("output")
+    blocks = []
+    canonical_blocks = canonical.get("blocks")
+    if isinstance(canonical_blocks, list):
+        for item in canonical_blocks:
+            if not isinstance(item, dict):
+                blocks.append(ToolResultBlock("json", data=item))
+                continue
+            kind = item.get("kind")
+            if kind not in {"text", "json", "image", "file", "tool_reference"}:
+                kind = "json"
+                item = {"data": item}
+            blocks.append(ToolResultBlock(
+                kind, text=item.get("text", ""), data=item.get("data"),
+                mime_type=item.get("mime_type"),
+                filename=item.get("filename"), uri=item.get("uri"),
+                metadata=item.get("metadata") or {},
+            ))
+    elif isinstance(output, str):
+        if output:
+            blocks.append(ToolResultBlock("text", text=output))
+    elif output is not None:
+        blocks.append(ToolResultBlock("json", data=_clone(output)))
+
+    error = state.get("error")
+    if isinstance(error, str) and error:
+        if (not isinstance(canonical_blocks, list) and
+                not any(block.kind == "text" and block.text == error
+                        for block in blocks)):
+            blocks.append(ToolResultBlock(
+                "text", text=error, metadata={"stream": "error"},
+            ))
+        if status == "unknown":
+            status = "error"
+
+    attachments = _clone(state.get("attachments") or [])
+    if not isinstance(attachments, list):
+        attachments = [attachments]
+    for attachment in attachments if not isinstance(canonical_blocks, list) else []:
+        if not isinstance(attachment, dict):
+            blocks.append(ToolResultBlock("json", data=attachment,
+                                          metadata={"attachment": True}))
+            continue
+        if attachment.get("type") == "file":
+            blocks.append(ToolResultBlock(
+                "file",
+                mime_type=attachment.get("mime"),
+                filename=attachment.get("filename"),
+                uri=attachment.get("url"),
+                metadata={
+                    key: value for key, value in attachment.items()
+                    if key not in {"type", "mime", "filename", "url"}
+                },
+            ))
+        else:
+            blocks.append(ToolResultBlock(
+                "json", data=attachment,
+                metadata={"attachment": True,
+                          "native_type": attachment.get("type")},
+            ))
+
+    exit_code = metadata.get("exit")
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        exit_code = None
+    truncated = metadata.get("truncated")
+    if not isinstance(truncated, bool):
+        truncated = None
+    stdout = metadata.get("stdout")
+    stderr_value = error if isinstance(error, str) else metadata.get("stderr")
+    return ToolResult(
+        status=status,
+        blocks=blocks,
+        stdout=stdout if isinstance(stdout, str) else None,
+        stderr=stderr_value if isinstance(stderr_value, str) else None,
+        exit_code=exit_code,
+        truncated=truncated,
+        attachments=attachments,
+        metadata=metadata,
+    )
 
 def _db_conn():
     """只读打开当前库;库缺失或 schema 不兼容时返回 None,由 CLI export 兜底。"""
@@ -219,25 +431,18 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
             elif pt == "tool":
                 st = p.get("state", {})
                 source_input = st.get("input")
-                inp = dict(source_input or {}) if isinstance(source_input, dict) \
-                    else (source_input or "")
-                if isinstance(inp, dict):
-                    if "filePath" in inp:      # 归一化为规范参数名
-                        inp["file_path"] = inp.pop("filePath")
-                    if "oldString" in inp:
-                        inp["old"] = inp.pop("oldString")
-                    if "newString" in inp:
-                        inp["new"] = inp.pop("newString")
+                op, inp = _canonical_tool_input(
+                    p.get("tool", "?"), source_input or {})
                 blocks.append(Block("tool", tool=ToolCall(
                     name=p.get("tool", "?"),
-                    op=(CanonicalOp.AGENT_SPAWN if p.get("tool") == "task" else
-                        TOOL_OPS.get(p.get("tool"))),
+                    op=op,
                     input=inp,
-                    output=st.get("output", ""),
+                    output="",
                     meta=_clone(st.get("metadata") or {}),
-                    source_call_id=p.get("callID"), status=st.get("status"),
+                    source_call_id=p.get("callID"),
                     started_at=(st.get("time") or {}).get("start"),
-                    ended_at=(st.get("time") or {}).get("end"))))
+                    ended_at=(st.get("time") or {}).get("end"),
+                    result=_opencode_result(st))))
                 metadata = st.get("metadata") or {}
                 child_id = metadata.get("sessionId")
                 if p.get("tool") == "task" and child_id:
@@ -248,6 +453,7 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                         agent_id=inp.get("subagent_type") or inp.get("agent"),
                         agent_type=inp.get("subagent_type"),
                         prompt=inp.get("prompt", ""), status=st.get("status"),
+                        association="task-metadata", confidence=1.0,
                         meta=_clone(metadata)))
             elif pt in ("step-start", "step-finish"):
                 continue
@@ -296,7 +502,9 @@ def _read(session_id: str, *, allow_cli: bool) -> Session:
         seen[sid] = sess
         sess.root_id = root_id
 
-        task_by_child = {edge.child_session_id: edge for edge in task_edges}
+        task_by_child = {}
+        for edge in task_edges:
+            task_by_child.setdefault(edge.child_session_id, []).append(edge)
         child_ids = child_ids_of(sid)
         db_child_ids = set(child_ids)
         for child_id in task_by_child:
@@ -315,12 +523,16 @@ def _read(session_id: str, *, allow_cli: bool) -> Session:
                 continue
             child.parent_id = sid
             sess.children.append(child)
-            edge = task_by_child.get(child_id) or AgentEdge(
-                parent_session_id=sid, child_session_id=child_id)
-            edge.agent_id = edge.agent_id or child.agent_id
-            edge.agent_path = edge.agent_path or child.agent_path
-            edge.agent_type = edge.agent_type or child.agent_type
-            sess.agent_edges.append(edge)
+            edges = task_by_child.get(child_id) or [AgentEdge(
+                parent_session_id=sid, child_session_id=child_id,
+                association="sqlite-parent", confidence=0.9,
+                meta={"association": "sqlite-parent"},
+            )]
+            for edge in edges:
+                edge.agent_id = edge.agent_id or child.agent_id
+                edge.agent_path = edge.agent_path or child.agent_path
+                edge.agent_type = edge.agent_type or child.agent_type
+                sess.agent_edges.append(edge)
         return sess
 
     try:
@@ -371,10 +583,17 @@ def _write_shell_exec(add_tool_part, tool) -> bool:
     command = inputs.get("command")
     if not command:
         return False
+    native_input = {"command": command}
+    if "workdir" in inputs:
+        native_input["workdir"] = inputs["workdir"]
+    if "timeout_ms" in inputs:
+        native_input["timeout"] = inputs["timeout_ms"]
+    if "background" in inputs:
+        native_input["run_in_background"] = inputs["background"]
     return add_tool_part(
-        "bash", {"command": command}, tool.output, command,
+        "bash", native_input, tool.output, command,
         {"output": tool.output, "exit": tool.meta.get("exit", 0) or 0,
-         "truncated": False})
+         "truncated": False}, tool)
 
 
 def _write_fs_read(add_tool_part, tool) -> bool:
@@ -382,8 +601,11 @@ def _write_fs_read(add_tool_part, tool) -> bool:
     path = inputs.get("file_path")
     if not path:
         return False
-    return add_tool_part("read", {"filePath": path}, tool.output, path,
-                         {"truncated": False})
+    native_input = {"filePath": path}
+    native_input.update({key: inputs[key] for key in ("offset", "limit")
+                         if key in inputs})
+    return add_tool_part("read", native_input, tool.output, path,
+                         {"truncated": False}, tool)
 
 
 def _write_fs_write(add_tool_part, tool) -> bool:
@@ -395,7 +617,7 @@ def _write_fs_write(add_tool_part, tool) -> bool:
         "write", {"filePath": path, "content": inputs.get("content", "")},
         tool.output or "Wrote file successfully.", path,
         {"filepath": path, "exists": False, "truncated": False,
-         "diagnostics": {}})
+         "diagnostics": {}}, tool)
 
 
 def _write_fs_edit(add_tool_part, tool) -> bool:
@@ -406,7 +628,79 @@ def _write_fs_edit(add_tool_part, tool) -> bool:
     return add_tool_part(
         "edit", {"filePath": path, "oldString": inputs.get("old", ""),
                  "newString": inputs.get("new", "")},
-        tool.output or "Edited file.", path, {"truncated": False})
+        tool.output or "Edited file.", path, {"truncated": False}, tool)
+
+
+def _write_fs_patch(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    patch = inputs.get("raw_patch")
+    if not patch:
+        return False
+    return add_tool_part(
+        "apply_patch", {"patchText": patch}, tool.output or "Applied patch.",
+        "apply patch", {"truncated": False}, tool)
+
+
+def _write_fs_search(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    query = inputs.get("query")
+    if not query:
+        return False
+    native_input = {"pattern": query}
+    if "path" in inputs:
+        native_input["path"] = inputs["path"]
+    if "glob" in inputs:
+        native_input["include"] = inputs["glob"]
+    return add_tool_part("grep", native_input, tool.output, str(query),
+                         {"truncated": False}, tool)
+
+
+def _write_fs_glob(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    pattern = inputs.get("pattern")
+    if not pattern:
+        return False
+    native_input = {"pattern": pattern}
+    if "path" in inputs:
+        native_input["path"] = inputs["path"]
+    return add_tool_part("glob", native_input, tool.output, str(pattern),
+                         {"truncated": False}, tool)
+
+
+def _write_web_fetch(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    url = inputs.get("url")
+    if not url:
+        return False
+    native_input = {"url": url}
+    if "format" in inputs:
+        native_input["format"] = inputs["format"]
+    if "timeout_ms" in inputs:
+        native_input["timeout"] = inputs["timeout_ms"]
+    return add_tool_part("webfetch", native_input, tool.output, str(url),
+                         {"truncated": False}, tool)
+
+
+def _write_web_search(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    query = inputs.get("query")
+    if not query:
+        return False
+    native_input = {"query": query}
+    if "num_results" in inputs:
+        native_input["numResults"] = inputs["num_results"]
+    return add_tool_part("websearch", native_input, tool.output, str(query),
+                         {"truncated": False}, tool)
+
+
+def _write_tool_invoke(add_tool_part, tool) -> bool:
+    inputs = tool.input if isinstance(tool.input, dict) else {}
+    name = inputs.get("name")
+    native_input = inputs.get("input")
+    if not name or not isinstance(native_input, (dict, str)):
+        return False
+    return add_tool_part(str(name), native_input, tool.output, str(name),
+                         {"historical": True, "truncated": False}, tool)
 
 
 OP_WRITERS = {
@@ -414,6 +708,12 @@ OP_WRITERS = {
     CanonicalOp.FS_READ: _write_fs_read,
     CanonicalOp.FS_WRITE: _write_fs_write,
     CanonicalOp.FS_EDIT: _write_fs_edit,
+    CanonicalOp.FS_PATCH: _write_fs_patch,
+    CanonicalOp.FS_SEARCH: _write_fs_search,
+    CanonicalOp.FS_GLOB: _write_fs_glob,
+    CanonicalOp.WEB_FETCH: _write_web_fetch,
+    CanonicalOp.WEB_SEARCH: _write_web_search,
+    CanonicalOp.TOOL_INVOKE: _write_tool_invoke,
 }
 
 OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
@@ -545,7 +845,8 @@ def _task_part(tpl: dict, sid: str, mid: str, ordinal: int, child: Session,
 
 
 def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None,
-                       tpl: dict, sid_map: dict[str, str] | None = None) -> dict:
+                       tpl: dict, sid_map: dict[str, str] | None = None,
+                       tool_decider=None) -> dict:
     now = int(time.time() * 1000)
     message_times = _message_times(sess.messages, now)
     session_created = message_times[0] if message_times else now
@@ -582,6 +883,7 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
     children = {child.source_id: child for child in sess.children}
     edges = {edge.child_session_id: edge for edge in sess.agent_edges}
     linked_children = set()
+    emitted_edges = set()
     provider_id = str(sess.meta.get("model_provider") or "openai")
     model_id = str(sess.meta.get("model") or "gpt-5.6-sol")
     for m, message_time in zip(sess.messages, message_times):
@@ -643,14 +945,57 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
             parts.append(p)
             return True
 
-        def add_tool_part(tool, native_input, output, title, metadata):
+        def add_tool_part(tool, native_input, output, title, metadata,
+                          canonical_tool):
             st = _clone(tpl["part.tool"]["state"])
-            # OpenCode 1.18+ validates tool state.time as required.
-            st.update({"status": "completed", "input": native_input,
-                       "output": output, "title": title[:80],
-                       "metadata": metadata,
-                       "time": {"start": message_time,
-                                "end": message_time}})
+            result = canonical_tool.result
+            state_status = {
+                "success": "completed",
+                "error": "error",
+                "running": "running",
+                "pending": "pending",
+            }.get(result.status if result else "", "completed")
+            native_metadata = dict(metadata)
+            if result is not None:
+                native_metadata.update(result.metadata)
+                native_metadata["canonicalToolResult"] = {
+                    "status": result.status,
+                    "blocks": [{
+                        "kind": block.kind,
+                        "text": block.text,
+                        "data": block.data,
+                        "mime_type": block.mime_type,
+                        "filename": block.filename,
+                        "uri": block.uri,
+                        "metadata": block.metadata,
+                    } for block in result.blocks],
+                }
+                if result.exit_code is not None:
+                    native_metadata["exit"] = result.exit_code
+                if result.truncated is not None:
+                    native_metadata["truncated"] = result.truncated
+                if result.stdout is not None:
+                    native_metadata["stdout"] = result.stdout
+                if result.stderr is not None:
+                    native_metadata["stderr"] = result.stderr
+            st.clear()
+            st.update({"status": state_status, "input": native_input})
+            if state_status == "pending":
+                st["raw"] = ""
+            else:
+                st.update({"title": title[:80], "metadata": native_metadata,
+                           "time": {"start": message_time}})
+                if state_status in {"completed", "error"}:
+                    st["time"]["end"] = message_time
+                if state_status == "error":
+                    st["error"] = (result.stderr if result and result.stderr
+                                   else output or "Tool failed")
+                elif state_status == "completed":
+                    st["output"] = output
+                else:
+                    st["output"] = output
+            if result is not None and result.attachments:
+                st["attachments"] = result.attachments
             return add_part("tool", {"tool": tool,
                                      "callID": "call-" + secrets.token_hex(8),
                                      "state": st})
@@ -660,10 +1005,11 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                 add_part("text", {"text": b.text})
             elif b.kind == "tool":
                 t = b.tool
+                decision = tool_decider(t, sess, m) if tool_decider else None
                 if t.op == CanonicalOp.AGENT_SPAWN:
                     candidates = [
                         candidate for candidate in sess.agent_edges
-                        if candidate.child_session_id not in linked_children]
+                        if id(candidate) not in emitted_edges]
                     edge = next((candidate for candidate in candidates
                                  if t.source_call_id and candidate.source_call_id ==
                                  t.source_call_id), None)
@@ -673,19 +1019,36 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                         edge = at_message[0] if len(at_message) == 1 else None
                     child = children.get(edge.child_session_id) if edge else None
                     child_sid = sid_map.get(edge.child_session_id) if edge else None
-                    if child is not None and child_sid is not None:
+                    if (child is not None and child_sid is not None and
+                            (decision is None or decision.rendered is not None)):
                         parts.append(_task_part(
                             tpl, sid, mid, len(parts), child, child_sid, edge,
                             message_time, t.source_call_id))
+                        emitted_edges.add(id(edge))
                         linked_children.add(child.source_id)
                     else:
-                        sess.lose("migration.tool_degraded", tool_name=t.name)
+                        params = {"tool_name": t.name}
+                        if decision is not None:
+                            params.update({
+                                "fidelity": decision.fidelity,
+                                "reason_codes": list(decision.reason_codes),
+                                "ignored_fields": sorted(decision.ignored_fields),
+                            })
+                        sess.lose("migration.tool_degraded", **params)
                         add_part("text", {"text": narrate(t)})
                     continue
                 writer = OP_WRITERS.get(t.op)
-                if (writer is None or not has_valid_tool_input(t.op, t.input) or
+                if ((decision is not None and decision.rendered is None) or
+                        writer is None or not has_valid_tool_input(t.op, t.input) or
                         not writer(add_tool_part, t)):
-                    sess.lose("migration.tool_degraded", tool_name=t.name)
+                    params = {"tool_name": t.name}
+                    if decision is not None:
+                        params.update({
+                            "fidelity": decision.fidelity,
+                            "reason_codes": list(decision.reason_codes),
+                            "ignored_fields": sorted(decision.ignored_fields),
+                        })
+                    sess.lose("migration.tool_degraded", **params)
                     add_part("text", {"text": narrate(t)})
         for child_id, edge in edges.items():
             if (child_id in linked_children or edge.spawn_message_id != m.source_id or
@@ -891,7 +1254,8 @@ def _import_payload(payload: dict, sid: str, cwd: str) -> None:
             pass
 
 
-def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
+def write(sess: Session, cwd: str | None = None,
+          tool_decider=None) -> tuple[str, Path]:
     sessions = list(sess.walk())
     sid_map = {node.source_id: _new_id("ses") for node in sessions}
     parent_map = {}
@@ -920,7 +1284,8 @@ def write(sess: Session, cwd: str | None = None) -> tuple[str, Path]:
             if tpl is None:
                 tpl = _template()
             payload = _canonical_payload(
-                node, sid, node_cwd, parent_sid, tpl, sid_map=sid_map)
+                node, sid, node_cwd, parent_sid, tpl, sid_map=sid_map,
+                tool_decider=tool_decider)
         if node.children and not is_raw:
             if tpl is None:
                 tpl = _template()

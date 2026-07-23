@@ -2,52 +2,246 @@
 import json
 from pathlib import Path
 
-from ...domain.model import AgentEdge, Block, Message, RawRecord, Session, ToolCall
+from ...domain.model import (
+    AgentEdge,
+    Block,
+    Message,
+    RawRecord,
+    Session,
+    ToolCall,
+    ToolResult,
+    ToolResultBlock,
+    normalize_tool_result_status,
+)
 from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp
 from ..base.media import image_from_base64
 
-TOOL_OPS = {"Bash": CanonicalOp.SHELL_EXEC, "Read": CanonicalOp.FS_READ,
-            "Write": CanonicalOp.FS_WRITE, "Edit": CanonicalOp.FS_EDIT}
+TOOL_OPS = {
+    "Bash": CanonicalOp.SHELL_EXEC,
+    "Read": CanonicalOp.FS_READ,
+    "Write": CanonicalOp.FS_WRITE,
+    "Edit": CanonicalOp.FS_EDIT,
+    "Grep": CanonicalOp.FS_SEARCH,
+    "Glob": CanonicalOp.FS_GLOB,
+    "WebFetch": CanonicalOp.WEB_FETCH,
+    "WebSearch": CanonicalOp.WEB_SEARCH,
+}
 
 
 def _norm_input(name: str, inp: dict | str) -> dict | str:
     if not isinstance(inp, dict):
         return inp
     if name == "Edit":
-        return {"file_path": inp.get("file_path", ""),
-                "old": inp.get("old_string", ""),
-                "new": inp.get("new_string", "")}
+        value = {"file_path": inp.get("file_path", ""),
+                 "old": inp.get("old_string", ""),
+                 "new": inp.get("new_string", "")}
+        if "replace_all" in inp:
+            value["replace_all"] = inp["replace_all"]
+        return value
     if name == "Read":
-        return {"file_path": inp.get("file_path", "")}
+        value = {"file_path": inp.get("file_path", "")}
+        for field in ("offset", "limit"):
+            if field in inp:
+                value[field] = inp[field]
+        return value
     if name == "Write":
         return {"file_path": inp.get("file_path", ""),
                 "content": inp.get("content", "")}
     if name == "Bash":
-        return {"command": inp.get("command", "")}
+        value = {"command": inp.get("command", "")}
+        if "timeout" in inp or "timeout_ms" in inp:
+            value["timeout_ms"] = inp.get("timeout_ms", inp.get("timeout"))
+        if "run_in_background" in inp:
+            value["background"] = inp["run_in_background"]
+        if "dangerouslyDisableSandbox" in inp:
+            value["sandbox_policy"] = (
+                "dangerously-disable" if inp["dangerouslyDisableSandbox"]
+                else "default")
+        return value
+    if name == "Agent":
+        value = {
+            "description": inp.get("description", ""),
+            "prompt": inp.get("prompt", ""),
+            "subagent_type": inp.get("subagent_type", ""),
+        }
+        aliases = {
+            "name": "task_name",
+            "model": "model",
+            "mode": "fork_mode",
+            "reasoning_effort": "reasoning_effort",
+        }
+        for source, target in aliases.items():
+            if source in inp:
+                value[target] = inp[source]
+        return value
+    if name == "Grep":
+        value = {"query": inp.get("pattern", "")}
+        aliases = {"path": "path", "glob": "glob", "head_limit": "max_results"}
+        for source, target in aliases.items():
+            if source in inp:
+                value[target] = inp[source]
+        return value
+    if name == "Glob":
+        value = {"pattern": inp.get("pattern", "")}
+        if "path" in inp:
+            value["path"] = inp["path"]
+        return value
+    if name == "WebFetch":
+        value = {"url": inp.get("url", "")}
+        if "prompt" in inp:
+            value["prompt"] = inp["prompt"]
+        return value
+    if name == "WebSearch":
+        value = {"query": inp.get("query", "")}
+        if "allowed_domains" in inp:
+            value["domains"] = inp["allowed_domains"]
+        return value
     return inp
 
 
 def _result_text(block) -> str:
-    content = block.get("content")
+    return _tool_result(block).legacy_output()
+
+
+def _result_status(block: dict, native: dict) -> str:
+    if block.get("is_error") is True or native.get("success") is False:
+        return "error"
+    if native.get("interrupted") is True:
+        return "interrupted"
+    if native.get("status") == "async_launched":
+        return "running"
+    if native.get("status") == "teammate_spawned":
+        return "success"
+    status = normalize_tool_result_status(native.get("status"))
+    if "status" in native:
+        return status
+    return "success"
+
+
+def _result_blocks(content) -> list[ToolResultBlock]:
     if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "\n".join(item.get("text", "") for item in content
-                         if isinstance(item, dict) and
-                         item.get("type") == "text")
-    return ""
+        return [ToolResultBlock("text", text=content)] if content else []
+    if isinstance(content, dict):
+        return [ToolResultBlock(
+            "json", data=content,
+            metadata={"native_type": content.get("type")},
+        )]
+    if not isinstance(content, list):
+        return [] if content is None else [ToolResultBlock("json", data=content)]
+
+    blocks = []
+    for item in content:
+        if not isinstance(item, dict):
+            blocks.append(ToolResultBlock("json", data=item))
+            continue
+        kind = item.get("type")
+        if kind == "text":
+            blocks.append(ToolResultBlock("text", text=item.get("text", "")))
+        elif kind == "image":
+            source = item.get("source") or {}
+            blocks.append(ToolResultBlock(
+                "image",
+                data=source.get("data"),
+                mime_type=source.get("media_type"),
+                metadata={
+                    key: value for key, value in source.items()
+                    if key not in {"data", "media_type"}
+                },
+            ))
+        elif kind == "tool_reference":
+            blocks.append(ToolResultBlock(
+                "tool_reference",
+                metadata={
+                    key: value for key, value in item.items()
+                    if key != "type"
+                },
+            ))
+        else:
+            blocks.append(ToolResultBlock(
+                "json", data=item, metadata={"native_type": kind},
+            ))
+    return blocks
+
+
+def _tool_result(block: dict, native=None) -> ToolResult:
+    native = native if isinstance(native, dict) else {}
+    canonical = native.get("canonicalToolResult")
+    canonical = canonical if isinstance(canonical, dict) else {}
+    exit_code = native.get("exit_code", native.get("exitCode"))
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        exit_code = None
+    truncated = native.get("truncated")
+    if not isinstance(truncated, bool):
+        truncated = None
+    stdout = native.get("stdout")
+    stderr = native.get("stderr")
+    metadata = dict(canonical.get("metadata") or {})
+    metadata["claude_native_result"] = {
+        key: value for key, value in native.items()
+        if key != "canonicalToolResult"
+    }
+    metadata["claude_tool_result"] = {
+        key: value for key, value in block.items() if key != "content"
+    }
+    attachments = canonical.get("attachments")
+    if not isinstance(attachments, list):
+        attachments = []
+    blocks = _result_blocks(block.get("content"))
+    canonical_blocks = canonical.get("blocks")
+    if isinstance(canonical_blocks, list):
+        blocks = []
+        for item in canonical_blocks:
+            if not isinstance(item, dict):
+                blocks.append(ToolResultBlock("json", data=item))
+                continue
+            kind = item.get("kind")
+            if kind not in {"text", "json", "image", "file", "tool_reference"}:
+                kind = "json"
+                item = {"data": item}
+            blocks.append(ToolResultBlock(
+                kind, text=item.get("text", ""), data=item.get("data"),
+                mime_type=item.get("mime_type"),
+                filename=item.get("filename"), uri=item.get("uri"),
+                metadata=item.get("metadata") or {},
+            ))
+    return ToolResult(
+        status=canonical.get("status") or _result_status(block, native),
+        blocks=blocks,
+        stdout=stdout if isinstance(stdout, str) else None,
+        stderr=stderr if isinstance(stderr, str) else None,
+        exit_code=exit_code,
+        truncated=truncated,
+        attachments=attachments,
+        metadata=metadata,
+    )
 
 
 def _load(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines()
-            if line.strip()]
+    records = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError as error:
+            records.append({
+                "type": "__resume_harness_malformed_jsonl__",
+                "line_number": line_number,
+                "error": error.msg,
+            })
+    return records
+
+
+def _agent_alias(value: dict) -> str | None:
+    return (value.get("agentId") or value.get("agent_id") or
+            value.get("teammate_id"))
 
 
 def _agent_id(lines: list[dict], path: Path) -> str | None:
     for record in lines:
-        if record.get("agentId"):
-            return record["agentId"]
+        if _agent_alias(record):
+            return _agent_alias(record)
     name = path.stem
     return name[6:] if name.startswith("agent-") else None
 
@@ -68,6 +262,13 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                   timestamp=record.get("timestamp"), location=str(path))
         for index, record in enumerate(lines)
     ]
+    for record in lines:
+        if record.get("type") == "__resume_harness_malformed_jsonl__":
+            session.lose(
+                "session.malformed_record",
+                line_number=record["line_number"],
+                error=record["error"],
+            )
 
     for record in lines:
         if record.get("type") == "ai-title":
@@ -89,7 +290,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                       parent_ids=[record["parentUuid"]]
                       if record.get("parentUuid") else [],
                       turn_id=record.get("promptId"),
-                      agent_id=record.get("agentId") or agent_id,
+                      agent_id=_agent_alias(record) or agent_id,
                       created_at=record.get("timestamp"), raw=[record])
         if isinstance(content, str):
             session.messages.append(Message(
@@ -121,9 +322,18 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 name = item.get("name", "")
                 op = CanonicalOp.AGENT_SPAWN if name == "Agent" else TOOL_OPS.get(name)
                 source_input = item.get("input") or {}
+                if op is None:
+                    op = CanonicalOp.TOOL_INVOKE
+                    canonical_input = {
+                        "namespace": "claude",
+                        "name": name,
+                        "input": source_input,
+                    }
+                else:
+                    canonical_input = _norm_input(name, source_input)
                 tool = ToolCall(
                     name=name, op=op,
-                    input=_norm_input(name, source_input) if op else source_input,
+                    input=canonical_input,
                     output="", source_call_id=item.get("id"),
                     meta={"claude_input": source_input})
                 pending[item.get("id")] = tool
@@ -134,12 +344,11 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 if tool is None:
                     session.lose("session.orphan_tool_result", call_id=item.get("tool_use_id"))
                     continue
-                tool.output = _result_text(item)
                 tool.source_result_id = record.get("uuid")
                 result = record.get("toolUseResult")
                 if isinstance(result, dict):
                     tool.meta.update(result)
-                    tool.status = result.get("status")
+                tool.set_result(_tool_result(item, result))
             else:
                 session.lose("migration.unknown_block_dropped", kind=kind)
         if result_carrier and not any(
@@ -167,7 +376,8 @@ def _spawns(session: Session) -> dict[str, dict]:
     for raw in session.raw_records:
         record = raw.payload
         result = record.get("toolUseResult")
-        if not isinstance(result, dict) or not result.get("agentId"):
+        result_agent_id = _agent_alias(result) if isinstance(result, dict) else None
+        if not isinstance(result, dict) or not result_agent_id:
             continue
         content = (record.get("message") or {}).get("content") or []
         result_block = next((item for item in content
@@ -175,7 +385,7 @@ def _spawns(session: Session) -> dict[str, dict]:
                              item.get("type") == "tool_result"), {})
         call_id = result_block.get("tool_use_id")
         info = calls.get(call_id, {})
-        spawns[result["agentId"]] = {
+        spawns[result_agent_id] = {
             **info, "call_id": call_id, "result_id": record.get("uuid"),
             "result": result,
         }
@@ -234,6 +444,7 @@ def read(path: str) -> Session:
                 agent_path=child.agent_path,
                 agent_type=tool_input.get("subagent_type"),
                 prompt=tool_input.get("prompt", ""), status=result.get("status"),
+                association="agent-id", confidence=1.0,
                 meta={"toolUseResult": result})
             parent.children.append(child)
             parent.agent_edges.append(edge)
@@ -251,6 +462,7 @@ def read(path: str) -> Session:
             parent_session_id=root.source_id,
             child_session_id=child.source_id, agent_id=child.agent_id,
             agent_path=child.agent_path,
+            association="directory-fallback", confidence=0.25,
             meta={"association": "directory-fallback"}))
         root.lose("session.subagent_unlinked", child_id=child.agent_id)
     return root

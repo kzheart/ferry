@@ -19,6 +19,7 @@ from engine.application.editing import apply_mutation
 from engine.application.sessions import session_json
 from engine.domain.authoring import AssistantReply
 from engine.domain.errors import ConcurrentModificationError
+from engine.domain.tool_ops import CanonicalOp
 
 
 ROOT = Path(__file__).parents[1]
@@ -91,8 +92,14 @@ def _items(session):
             if block.kind == "text":
                 result.append({"kind": "text", "text": block.text})
             elif block.kind == "tool":
-                result.append({"kind": "tool", "name": block.tool.name,
-                               "input": block.tool.input,
+                name = block.tool.name
+                tool_input = block.tool.input
+                if (block.tool.op == CanonicalOp.TOOL_INVOKE and
+                        isinstance(tool_input, dict)):
+                    name = tool_input.get("name") or name
+                    tool_input = tool_input.get("input", tool_input)
+                result.append({"kind": "tool", "name": name,
+                               "input": tool_input,
                                "output": block.tool.output})
     return result
 
