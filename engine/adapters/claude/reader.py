@@ -382,8 +382,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 tool = ToolCall(
                     name=name, op=op,
                     input=canonical_input,
-                    source_call_id=item.get("id"),
-                    meta={"claude_input": source_input})
+                    source_call_id=item.get("id"))
                 pending[item.get("id")] = tool
                 blocks.append(Block("tool", tool=tool))
             elif kind == "tool_result":
@@ -395,6 +394,10 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                 tool.source_result_id = record.get("uuid")
                 result = record.get("toolUseResult")
                 tool.result = _tool_result(item, result)
+                tool.agent_id = (
+                    _native_agent_id(result)
+                    if isinstance(result, dict) else None
+                )
             else:
                 session.lose("migration.unknown_block_dropped", kind=kind)
         if result_carrier and not any(
@@ -438,7 +441,7 @@ def _spawns(session: Session) -> dict[str, dict]:
             "result": result,
         }
         if info.get("tool"):
-            info["tool"].meta.update(result)
+            info["tool"].agent_id = result_agent_id
     return spawns
 
 

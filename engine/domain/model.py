@@ -101,9 +101,10 @@ class ToolCall:
     op: str | None               # 规范操作(shell.exec 等);None = 无映射,降级
     input: dict | str            # 源参数(已解析)
     result: ToolResult | None = None
-    meta: dict = field(default_factory=dict)
     source_call_id: str | None = None
     source_result_id: str | None = None
+    source_message_id: str | None = None
+    agent_id: str | None = None
     started_at: str | int | None = None
     ended_at: str | int | None = None
 
