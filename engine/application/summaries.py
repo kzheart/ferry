@@ -139,8 +139,8 @@ def _view(record: dict) -> dict:
 
 
 def build_backbone(tool: str, ref: str) -> dict:
-    """读取会话 → 分段 → 算指纹。指纹未变则直接返回缓存;变了则重算,并按
-    内容 hash 把未变段的既有摘要迁移过来(编辑某段不牵连其他段的摘要)。"""
+    """读取会话 → 分段 → 算指纹。每次都以当前会话重建段结构,并按内容
+    hash 复用既有摘要(编辑结构或某段时不牵连未变内容的摘要)。"""
     session = read_tree(tool, ref)
     segments = segment_session(session)
     fingerprint = session_fingerprint(segments)
@@ -148,8 +148,6 @@ def build_backbone(tool: str, ref: str) -> dict:
     with _LOCK:
         data = _load()
         record = data.get(key)
-        if record and record.get("fingerprint") == fingerprint:
-            return _view(record)
         prior = {segment["hash"]: segment["digest"]
                  for segment in (record or {}).get("segments", [])
                  if segment.get("digest")}
@@ -158,8 +156,9 @@ def build_backbone(tool: str, ref: str) -> dict:
                 segment["digest"] = prior[segment["hash"]]
         record = {"tool": tool, "id": session.source_id,
                   "fingerprint": fingerprint, "segments": segments}
-        data[key] = record
-        _write(data)
+        if data.get(key) != record:
+            data[key] = record
+            _write(data)
         return _view(record)
 
 
