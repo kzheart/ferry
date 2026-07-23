@@ -2,7 +2,7 @@
   "tool": "claude",
   "cli_version": "2.1.204",
   "case": "01-plain",
-  "prompt": "Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools.",
+  "prompt": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
   "session_id": "fixture-claude-plain",
   "source_paths": [
     "/fixture/claude/fixture-claude-plain.jsonl"

@@ -22,13 +22,13 @@
       "id": "fixture-part-user-plain",
       "message_id": "fixture-message-user-plain",
       "session_id": "fixture-opencode-plain",
-      "data": "{\"id\":\"fixture-part-user-plain\",\"messageID\":\"fixture-message-user-plain\",\"sessionID\":\"fixture-opencode-plain\",\"type\":\"text\",\"text\":\"Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools.\"}"
+      "data": "{\"id\":\"fixture-part-user-plain\",\"messageID\":\"fixture-message-user-plain\",\"sessionID\":\"fixture-opencode-plain\",\"type\":\"text\",\"text\":\"Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.\"}"
     },
     {
       "id": "fixture-part-assistant-plain",
       "message_id": "fixture-message-assistant-plain",
       "session_id": "fixture-opencode-plain",
-      "data": "{\"id\":\"fixture-part-assistant-plain\",\"messageID\":\"fixture-message-assistant-plain\",\"sessionID\":\"fixture-opencode-plain\",\"type\":\"text\",\"text\":\"GOLDEN_PLAIN_OK\"}"
+      "data": "{\"id\":\"fixture-part-assistant-plain\",\"messageID\":\"fixture-message-assistant-plain\",\"sessionID\":\"fixture-opencode-plain\",\"type\":\"text\",\"text\":\"FORMAT_FIXTURE_PLAIN_OK\"}"
     }
   ]
 }

@@ -7,10 +7,9 @@ from pathlib import Path
 
 from ...domain.model import AgentEdge, Session, ToolCall
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
-from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
+from .formats import FORMATS
 
-GOLDEN = resource_path("golden", "claude")
 
 OP_WRITERS = {
     CanonicalOp.SHELL_EXEC: ("Bash", lambda i: {
@@ -59,21 +58,7 @@ def _slug(path: str) -> str:
 
 
 def _load_templates():
-    versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
-    if not versions:
-        raise RuntimeError("缺少生产依赖 golden/claude 样本")
-    sample = versions[-1] / "case-02-tools" / "session.jsonl"
-    templates = {}
-    for line in sample.read_text().splitlines():
-        record = json.loads(line)
-        if record.get("type") == "user" and "user" not in templates and \
-                isinstance(record.get("message", {}).get("content"), str):
-            templates["user"] = record
-        if record.get("type") == "assistant" and "assistant" not in templates:
-            templates["assistant"] = record
-    if "user" not in templates or "assistant" not in templates:
-        raise RuntimeError("黄金样本中未找到 user/assistant 模板记录")
-    return templates
+    return FORMATS.templates()
 
 
 def _clone(value):

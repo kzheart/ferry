@@ -5,7 +5,7 @@
       "rollout_path": "/fixture/codex/rollout-fixture-codex-plain.jsonl",
       "cwd": "/fixture/codex/plain",
       "title": "Plain fixture",
-      "first_user_message": "Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools.",
+      "first_user_message": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
       "cli_version": "0.144.0"
     }
   ]

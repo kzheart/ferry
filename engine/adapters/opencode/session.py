@@ -29,9 +29,9 @@ from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ...domain.usage import iso_ms
 from ...infrastructure import executables
-from ...infrastructure.resources import resource_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
+from .formats import FORMATS
 
 TOOL_OPS = {
     "bash": CanonicalOp.SHELL_EXEC,
@@ -44,7 +44,6 @@ TOOL_OPS = {
     "webfetch": CanonicalOp.WEB_FETCH,
     "websearch": CanonicalOp.WEB_SEARCH,
 }
-GOLDEN = resource_path("golden", "opencode")
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
 
@@ -177,21 +176,6 @@ def _new_id(prefix: str) -> str:
 def _new_ordered_id(prefix: str, ordinal: int) -> str:
     """生成同一父记录内可按字典序恢复原顺序的 ID。"""
     return f"{prefix}_{ordinal:08x}{secrets.token_hex(10)}"
-
-
-def _export_from_capture(capture: dict) -> dict:
-    """把 golden 中的数据库行快照还原为官方 export 形状。"""
-    info = json.loads(capture["session"]["data"]) \
-        if "data" in capture["session"] else dict(capture["session"])
-    parts = {}
-    for row in capture.get("parts", []):
-        part = json.loads(row["data"])
-        parts.setdefault(row["message_id"], []).append(part)
-    messages = []
-    for row in capture.get("messages", []):
-        messages.append({"info": json.loads(row["data"]),
-                         "parts": parts.get(row["id"], [])})
-    return {"info": info, "messages": messages}
 
 
 # ---------- reader ----------
@@ -616,24 +600,8 @@ def read_preview(session_id: str) -> Session:
 # ---------- writer ----------
 
 def _template():
-    """用黄金样本会话的官方 export 作为结构模板。"""
-    versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
-    if not versions:
-        raise RuntimeError("缺少 golden/opencode 样本")
-    sample = versions[-1] / "case-02-tools"
-    captured = sample / "session.json"
-    if captured.exists():
-        data = _export_from_capture(json.loads(captured.read_text()))
-    else:
-        manifest = json.loads((sample / "manifest.json").read_text())
-        data = _oc_export(manifest["session_id"])
-    tpl = {"info": data["info"]}
-    for m in data["messages"]:
-        role = m["info"].get("role")
-        tpl.setdefault(f"msg.{role}", m["info"])
-        for p in m["parts"]:
-            tpl.setdefault(f"part.{p.get('type')}", p)
-    return tpl
+    """Load the latest declarative OpenCode format profile."""
+    return FORMATS.templates()
 
 
 def _clone(o):
@@ -920,8 +888,8 @@ def _canonical_payload(sess: Session, sid: str, cwd: str, parent_sid: str | None
                   "title": sess.title or f"migrated from {sess.source_tool}",
                   "time": {"created": session_created,
                            "updated": session_updated}})
-    # `opencode import` 严格校验完整 Session.Info；黄金 fixture 的最小
-    # 快照可供内部 reader 使用，但不足以通过官方导入器。
+    # `opencode import` strictly validates complete Session.Info. The profile
+    # keeps only structural fields, so required defaults are completed here.
     info.setdefault("slug", f"ferry-{sid[-8:].lower()}")
     info.setdefault("projectID", "global")
     info.setdefault("path", "")

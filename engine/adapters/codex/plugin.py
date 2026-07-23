@@ -5,6 +5,7 @@ from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
 from .authoring import CodexAuthoringCompiler
 from .editor import CodexBackend, resolve
+from .formats import FORMATS
 from .lifecycle import CodexLifecycle
 from .migration import CodexMigrationTarget
 from .models import discover, fallback
@@ -33,4 +34,5 @@ def build() -> ToolPlugin:
         verifier=CodexVerifier(),
         lifecycle=CodexLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),
+        formats=FORMATS,
     )
