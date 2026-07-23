@@ -1,5 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -130,7 +131,7 @@ fn request_timeout(request: &str) -> Duration {
     let method = value
         .as_ref()
         .and_then(|value| value.get("method").and_then(Value::as_str));
-    if method == Some("agent_operation_apply") {
+    if matches!(method, Some("agent_operation_apply" | "operation.apply")) {
         ENGINE_COMMIT_TIMEOUT
     } else if method == Some("migrate") {
         let dry_run = value
@@ -166,7 +167,10 @@ fn request_attempts(request: &str) -> u8 {
     if method
         .as_deref()
         .is_some_and(|name| name.starts_with("agent_"))
-        || method.as_deref() == Some("migrate")
+        || matches!(
+            method.as_deref(),
+            Some("migrate" | "operation.plan" | "operation.apply" | "operation.cancel")
+        )
     {
         1
     } else {
@@ -354,6 +358,169 @@ pub(crate) async fn migration_commit(
     migration_engine_request(app, input, false).await
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OperationPlanInput {
+    kind: String,
+    tool: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    ops: Vec<Value>,
+}
+
+fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
+    if input.kind != "edit" {
+        return Err("当前 Operation 仅允许 edit".to_owned());
+    }
+    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+        return Err("Operation 工具标识无效".to_owned());
+    }
+    if input.reference.is_empty()
+        || input.reference.len() > 512
+        || input.reference.chars().any(char::is_control)
+    {
+        return Err("Operation 会话引用无效".to_owned());
+    }
+    if input.ops.is_empty() || input.ops.len() > 50 {
+        return Err("Operation ops 必须包含 1 到 50 项".to_owned());
+    }
+    let mut rewrite_locators = HashSet::new();
+    for operation in &input.ops {
+        let fields = operation
+            .as_object()
+            .ok_or_else(|| "Operation edit op 必须是 object".to_owned())?;
+        match fields.get("op").and_then(Value::as_str) {
+            Some("delete-turn") => {
+                if fields.len() != 2
+                    || !fields.contains_key("turn")
+                    || fields
+                        .get("turn")
+                        .and_then(Value::as_u64)
+                        .is_none_or(|turn| turn == 0)
+                {
+                    return Err("Operation delete-turn 参数无效".to_owned());
+                }
+            }
+            Some("rewrite") => {
+                if fields.len() != 3
+                    || !fields.contains_key("locator")
+                    || !fields.contains_key("text")
+                {
+                    return Err("Operation rewrite 参数无效".to_owned());
+                }
+                let locator = fields
+                    .get("locator")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "Operation rewrite locator 无效".to_owned())?;
+                let text = fields
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "Operation rewrite text 无效".to_owned())?;
+                if !locator.starts_with("fml_")
+                    || locator.len() > 512
+                    || locator.chars().any(char::is_control)
+                    || text.is_empty()
+                    || text.chars().count() > 20_000
+                {
+                    return Err("Operation rewrite locator/text 无效".to_owned());
+                }
+                if !rewrite_locators.insert(locator) {
+                    return Err("Operation 不允许重复 rewrite locator".to_owned());
+                }
+            }
+            _ => return Err("Operation edit op 不受支持".to_owned()),
+        }
+    }
+    let encoded = serde_json::to_vec(&input.ops).map_err(|error| error.to_string())?;
+    if encoded.len() > 64 * 1024 {
+        return Err("Operation ops 超过 64 KiB".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_plan_id(plan_id: &str) -> Result<(), String> {
+    if !(8..=128).contains(&plan_id.len())
+        || !plan_id.starts_with("op_")
+        || !plan_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("Operation plan_id 无效".to_owned());
+    }
+    Ok(())
+}
+
+fn operation_plan_request(input: &OperationPlanInput) -> Result<String, String> {
+    validate_operation_plan_input(input)?;
+    serde_json::to_string(&json!({
+        "method": "operation.plan",
+        "params": {"input": input},
+    }))
+    .map_err(|error| error.to_string())
+}
+
+fn operation_id_request(method: &'static str, plan_id: &str) -> Result<String, String> {
+    validate_plan_id(plan_id)?;
+    if !matches!(
+        method,
+        "operation.apply" | "operation.status" | "operation.cancel"
+    ) {
+        return Err("Operation Engine 方法无效".to_owned());
+    }
+    serde_json::to_string(&json!({
+        "method": method,
+        "params": {"plan_id": plan_id},
+    }))
+    .map_err(|error| error.to_string())
+}
+
+async fn operation_engine_request(
+    app: tauri::AppHandle,
+    request: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|error| error.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn operation_plan(
+    app: tauri::AppHandle,
+    input: OperationPlanInput,
+) -> Result<String, String> {
+    operation_engine_request(app, operation_plan_request(&input)?).await
+}
+
+/// 此命令只接受已经生成的 plan_id；业务参数不会在应用阶段再次进入 Engine。
+#[tauri::command]
+pub(crate) async fn operation_apply(
+    app: tauri::AppHandle,
+    plan_id: String,
+) -> Result<String, String> {
+    operation_engine_request(app, operation_id_request("operation.apply", &plan_id)?).await
+}
+
+#[tauri::command]
+pub(crate) async fn operation_status(
+    app: tauri::AppHandle,
+    plan_id: String,
+) -> Result<String, String> {
+    operation_engine_request(app, operation_id_request("operation.status", &plan_id)?).await
+}
+
+#[tauri::command]
+pub(crate) async fn operation_cancel(
+    app: tauri::AppHandle,
+    plan_id: String,
+) -> Result<String, String> {
+    operation_engine_request(app, operation_id_request("operation.cancel", &plan_id)?).await
+}
+
 fn validate_public_engine_request(request: &str) -> Result<(), String> {
     let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
@@ -393,14 +560,19 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        migration_request, request_attempts, request_timeout, validate_migration_input,
-        validate_public_engine_request, MigrationInput, AGENT_LOOKUP_TIMEOUT,
+        migration_request, operation_id_request, operation_plan_request, request_attempts,
+        request_timeout, validate_migration_input, validate_operation_plan_input, validate_plan_id,
+        validate_public_engine_request, MigrationInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
         ENGINE_COMMIT_TIMEOUT, ENGINE_TIMEOUT,
     };
 
     #[test]
     fn sensitive_agent_methods_are_not_generic_rpc_methods() {
         assert!(validate_public_engine_request(r#"{"method":"agent_operation_apply"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"operation.apply"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"operation.plan"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"operation.status"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"operation.cancel"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"edit_apply"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"migrate"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"scan"}"#).is_ok());
@@ -423,6 +595,13 @@ mod tests {
             ENGINE_COMMIT_TIMEOUT
         );
         assert_eq!(request_attempts(r#"{"method":"migrate"}"#), 1);
+        assert_eq!(
+            request_timeout(r#"{"method":"operation.apply"}"#),
+            ENGINE_COMMIT_TIMEOUT
+        );
+        assert_eq!(request_attempts(r#"{"method":"operation.apply"}"#), 1);
+        assert_eq!(request_attempts(r#"{"method":"operation.plan"}"#), 1);
+        assert_eq!(request_attempts(r#"{"method":"operation.cancel"}"#), 1);
     }
 
     #[test]
@@ -465,5 +644,103 @@ mod tests {
         let mut input = migration_input();
         input.reference = "bad\0reference".to_owned();
         assert!(validate_migration_input(&input).is_err());
+    }
+
+    fn edit_operation_input() -> OperationPlanInput {
+        OperationPlanInput {
+            kind: "edit".to_owned(),
+            tool: "claude".to_owned(),
+            reference: "fsr_fixture".to_owned(),
+            ops: vec![
+                serde_json::json!({"op": "delete-turn", "turn": 1}),
+                serde_json::json!({
+                    "op": "rewrite",
+                    "locator": "fml_fixture",
+                    "text": "updated",
+                }),
+            ],
+        }
+    }
+
+    #[test]
+    fn operation_plan_request_has_a_fixed_method_and_tagged_input() {
+        let request = operation_plan_request(&edit_operation_input()).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value.get("method").and_then(serde_json::Value::as_str),
+            Some("operation.plan")
+        );
+        assert_eq!(
+            value
+                .pointer("/params/input/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("edit")
+        );
+        assert!(value.pointer("/params/input/tool").is_some());
+        assert!(value.pointer("/params/input/ref").is_some());
+        assert!(value.pointer("/params/input/ops").is_some());
+        assert_eq!(
+            value
+                .get("params")
+                .and_then(serde_json::Value::as_object)
+                .map(serde_json::Map::len),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn operation_id_requests_cannot_override_the_engine_method() {
+        for method in ["operation.apply", "operation.status", "operation.cancel"] {
+            let request = operation_id_request(method, "op_fixture-123").unwrap();
+            let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+            assert_eq!(
+                value.get("method").and_then(serde_json::Value::as_str),
+                Some(method)
+            );
+            assert_eq!(
+                value
+                    .pointer("/params/plan_id")
+                    .and_then(serde_json::Value::as_str),
+                Some("op_fixture-123")
+            );
+            assert_eq!(
+                value
+                    .get("params")
+                    .and_then(serde_json::Value::as_object)
+                    .map(serde_json::Map::len),
+                Some(1)
+            );
+        }
+        assert!(operation_id_request("show", "op_fixture-123").is_err());
+    }
+
+    #[test]
+    fn operation_inputs_are_strictly_validated() {
+        assert!(validate_operation_plan_input(&edit_operation_input()).is_ok());
+        let mut wrong_kind = edit_operation_input();
+        wrong_kind.kind = "migration".to_owned();
+        assert!(validate_operation_plan_input(&wrong_kind).is_err());
+        let mut unknown_tool = edit_operation_input();
+        unknown_tool.tool = "unknown".to_owned();
+        assert!(validate_operation_plan_input(&unknown_tool).is_err());
+        let mut extra_field = edit_operation_input();
+        extra_field.ops = vec![serde_json::json!({
+            "op": "delete-turn", "turn": 1, "method": "operation.apply",
+        })];
+        assert!(validate_operation_plan_input(&extra_field).is_err());
+        let mut duplicate = edit_operation_input();
+        duplicate.ops = vec![
+            serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "a"}),
+            serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "b"}),
+        ];
+        assert!(validate_operation_plan_input(&duplicate).is_err());
+    }
+
+    #[test]
+    fn operation_plan_id_validation_rejects_injection_and_bad_shapes() {
+        assert!(validate_plan_id("op_fixture-123").is_ok());
+        assert!(validate_plan_id("operation_fixture").is_err());
+        assert!(validate_plan_id("op_bad\nmethod").is_err());
+        assert!(validate_plan_id(&format!("op_{}", "a".repeat(126))).is_err());
     }
 }
