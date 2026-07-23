@@ -3,6 +3,7 @@ import json
 from engine.domain.model import tool_result_text
 from engine.adapters.claude.reader import (
     _agent_id,
+    _decode_transcript,
     _norm_input as norm_claude_input,
     _read_transcript,
     _spawns,
@@ -185,8 +186,13 @@ def test_claude_spawn_reads_current_agent_id(tmp_path):
             },
         },
     ])
-    session = _read_transcript(path)
-    assert "fixture-agent" in _spawns(session)
+    decoded = _decode_transcript(path)
+    spawn = _spawns(decoded)["fixture-agent"]
+    assert spawn.call_id == "call-fixture"
+    assert spawn.result_id == "message-result"
+    assert spawn.message_id == "message-use"
+    assert spawn.status == "completed"
+    assert spawn.tool.agent_id == "fixture-agent"
 
 
 def test_claude_preserves_error_and_multimodal_result(tmp_path):
