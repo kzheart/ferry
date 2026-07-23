@@ -133,18 +133,6 @@ fn request_timeout(request: &str) -> Duration {
         .and_then(|value| value.get("method").and_then(Value::as_str));
     if matches!(method, Some("agent_operation_apply" | "operation.apply")) {
         ENGINE_COMMIT_TIMEOUT
-    } else if method == Some("migrate") {
-        let dry_run = value
-            .as_ref()
-            .and_then(|value| value.get("params"))
-            .and_then(|params| params.get("dry_run"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if dry_run {
-            ENGINE_TIMEOUT
-        } else {
-            ENGINE_COMMIT_TIMEOUT
-        }
     } else if matches!(
         method,
         Some("agent_search_sessions" | "agent_session_read" | "agent_get_usage")
@@ -169,7 +157,7 @@ fn request_attempts(request: &str) -> u8 {
         .is_some_and(|name| name.starts_with("agent_"))
         || matches!(
             method.as_deref(),
-            Some("migrate" | "operation.plan" | "operation.apply" | "operation.cancel")
+            Some("operation.plan" | "operation.apply" | "operation.cancel")
         )
     {
         1
@@ -268,94 +256,6 @@ pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result
     tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct MigrationInput {
-    src: String,
-    dst: String,
-    reference: String,
-    max_turn: Option<u32>,
-    #[serde(default)]
-    probe: bool,
-    probe_model: Option<String>,
-}
-
-fn validate_migration_input(input: &MigrationInput) -> Result<(), String> {
-    for (label, value) in [("源工具", &input.src), ("目标工具", &input.dst)] {
-        if value.is_empty()
-            || value.len() > 64
-            || !value.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
-        {
-            return Err(format!("{label} 标识无效"));
-        }
-    }
-    if input.reference.is_empty()
-        || input.reference.len() > 16 * 1024
-        || input.reference.contains('\0')
-    {
-        return Err("会话引用无效".to_owned());
-    }
-    if input.max_turn == Some(0) || input.max_turn.is_some_and(|turn| turn > 100_000) {
-        return Err("迁移轮数无效".to_owned());
-    }
-    if input
-        .probe_model
-        .as_ref()
-        .is_some_and(|model| model.len() > 512 || model.chars().any(char::is_control))
-    {
-        return Err("探针模型标识无效".to_owned());
-    }
-    Ok(())
-}
-
-fn migration_request(input: &MigrationInput, dry_run: bool) -> Result<String, String> {
-    validate_migration_input(input)?;
-    serde_json::to_string(&json!({
-        "method": "migrate",
-        "params": {
-            "src": input.src,
-            "dst": input.dst,
-            "ref": input.reference,
-            "max_turn": input.max_turn,
-            "dry_run": dry_run,
-            "probe": !dry_run && input.probe,
-            "probe_model": if dry_run { None } else { input.probe_model.as_deref() },
-        }
-    }))
-    .map_err(|error| error.to_string())
-}
-
-async fn migration_engine_request(
-    app: tauri::AppHandle,
-    input: MigrationInput,
-    dry_run: bool,
-) -> Result<String, String> {
-    let request = migration_request(&input, dry_run)?;
-    use tauri::Manager;
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-/// 只读预演：强制 dry_run，不接受 cwd 或其它引擎参数。
-#[tauri::command]
-pub(crate) async fn migration_preview(
-    app: tauri::AppHandle,
-    input: MigrationInput,
-) -> Result<String, String> {
-    migration_engine_request(app, input, true).await
-}
-
-/// 用户在确认页明确提交后才会调用，且只接受白名单字段。
-#[tauri::command]
-pub(crate) async fn migration_commit(
-    app: tauri::AppHandle,
-    input: MigrationInput,
-) -> Result<String, String> {
-    migration_engine_request(app, input, false).await
 }
 
 #[derive(Deserialize, Serialize)]
@@ -738,11 +638,10 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        migration_request, operation_id_request, operation_plan_request, request_attempts,
-        request_timeout, validate_migration_input, validate_operation_plan_input, validate_plan_id,
-        validate_public_engine_request, EditOperationPlanInput, MigrationInput,
-        MigrationOperationPlanInput, OperationPlanInput, AGENT_LOOKUP_TIMEOUT,
-        ENGINE_COMMIT_TIMEOUT, ENGINE_TIMEOUT,
+        operation_id_request, operation_plan_request, request_attempts, request_timeout,
+        validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
+        EditOperationPlanInput, MigrationOperationPlanInput, OperationPlanInput,
+        AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
     };
 
     #[test]
@@ -767,15 +666,6 @@ mod tests {
             ENGINE_COMMIT_TIMEOUT
         );
         assert_eq!(
-            request_timeout(r#"{"method":"migrate","params":{"dry_run":true}}"#),
-            ENGINE_TIMEOUT
-        );
-        assert_eq!(
-            request_timeout(r#"{"method":"migrate"}"#),
-            ENGINE_COMMIT_TIMEOUT
-        );
-        assert_eq!(request_attempts(r#"{"method":"migrate"}"#), 1);
-        assert_eq!(
             request_timeout(r#"{"method":"operation.apply"}"#),
             ENGINE_COMMIT_TIMEOUT
         );
@@ -789,41 +679,6 @@ mod tests {
         let request = r#"{"method":"agent_search_sessions"}"#;
         assert_eq!(request_timeout(request), AGENT_LOOKUP_TIMEOUT);
         assert_eq!(request_attempts(request), 1);
-    }
-
-    fn migration_input() -> MigrationInput {
-        MigrationInput {
-            src: "claude".to_owned(),
-            dst: "codex".to_owned(),
-            reference: "/tmp/session.jsonl".to_owned(),
-            max_turn: Some(3),
-            probe: true,
-            probe_model: Some("gpt-5".to_owned()),
-        }
-    }
-
-    #[test]
-    fn migration_preview_forces_read_only_request_shape() {
-        let request = migration_request(&migration_input(), true).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
-        let params = value.get("params").unwrap();
-        assert_eq!(
-            params.get("dry_run").and_then(serde_json::Value::as_bool),
-            Some(true)
-        );
-        assert_eq!(
-            params.get("probe").and_then(serde_json::Value::as_bool),
-            Some(false)
-        );
-        assert!(params.get("cwd").is_none());
-        assert!(params.get("content_locale").is_none());
-    }
-
-    #[test]
-    fn migration_input_rejects_invalid_reference() {
-        let mut input = migration_input();
-        input.reference = "bad\0reference".to_owned();
-        assert!(validate_migration_input(&input).is_err());
     }
 
     fn edit_operation_input() -> EditOperationPlanInput {
