@@ -49,11 +49,8 @@ export const FERRY_TOOL_NAMES = [
   "session_search",
   "session_read",
   "usage",
-  "ferry_preview_migration",
-  "ferry_preview_edit",
-  "ferry_propose_migration",
-  "ferry_propose_edit",
-  "ferry_propose_metadata_change",
+  "migrate",
+  "session_edit",
 ] as const;
 
 export type FerryToolName = (typeof FERRY_TOOL_NAMES)[number];
@@ -127,55 +124,35 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
-  ferry_preview_migration: Type.Object(
+  migrate: Type.Object(
     {
       source_tool: Type.String({ minLength: 1, maxLength: 32 }),
       ref: Type.String({ minLength: 1, maxLength: 512 }),
       target_tool: Type.String({ minLength: 1, maxLength: 32 }),
       max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
+      dry_run: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
   ),
-  ferry_preview_edit: Type.Object(
+  session_edit: Type.Object(
     {
       tool: Type.String({ minLength: 1, maxLength: 32 }),
       ref: Type.String({ minLength: 1, maxLength: 512 }),
-      ops: editOps,
-    },
-    { additionalProperties: false },
-  ),
-  ferry_propose_migration: Type.Object(
-    {
-      source_tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      target_tool: Type.String({ minLength: 1, maxLength: 32 }),
-      max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
-    },
-    { additionalProperties: false },
-  ),
-  ferry_propose_edit: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      ops: editOps,
-    },
-    { additionalProperties: false },
-  ),
-  ferry_propose_metadata_change: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      patch: Type.Object(
-        {
-          name: Type.Optional(Type.String({ maxLength: 200 })),
-          pinned: Type.Optional(Type.Boolean()),
-          archived: Type.Optional(Type.Boolean()),
-          tags: Type.Optional(
-            Type.Array(Type.String({ maxLength: 64 }), { maxItems: 20 }),
-          ),
-        },
-        { additionalProperties: false },
+      ops: Type.Optional(editOps),
+      patch: Type.Optional(
+        Type.Object(
+          {
+            name: Type.Optional(Type.String({ maxLength: 200 })),
+            pinned: Type.Optional(Type.Boolean()),
+            archived: Type.Optional(Type.Boolean()),
+            tags: Type.Optional(
+              Type.Array(Type.String({ maxLength: 64 }), { maxItems: 20 }),
+            ),
+          },
+          { additionalProperties: false },
+        ),
       ),
+      dry_run: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
   ),
@@ -187,15 +164,10 @@ const descriptions: Record<FerryToolName, string> = {
   session_read:
     "Read one indexed session. Provide either ref (an fsr_ value from session_search) or session_id (a native ID from a session attachment, resolved internally) — exactly one. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage: "Get privacy-filtered aggregate usage.",
-  ferry_preview_migration: "Preview a session migration without writing data.",
-  ferry_preview_edit:
-    "Preview a session edit without writing data. For rewrite operations, use only fml_ locators returned by the latest context or content-search response. Batch all intended rewrites into one call.",
-  ferry_propose_migration:
-    "Create an approval-required immutable migration proposal.",
-  ferry_propose_edit:
-    "Create one in-place edit proposal for the original session after a successful preview. For rewrite operations, copy current fml_ locators exactly and batch all intended rewrites. Applying modifies the original after revision checks and a recovery snapshot; Auto mode applies it synchronously.",
-  ferry_propose_metadata_change:
-    "Create an approval-required immutable metadata proposal only when the user explicitly asks to rename, pin, archive, or tag a session. Never use metadata mutation to test editing or as a fallback for content-edit failures.",
+  migrate:
+    "Migrate a session into another agent's format (targets: claude, codex, opencode). Set dry_run true to preview the impact without changing anything; otherwise this creates an approval-gated migration that, once applied, writes an immutable copy in the target format. source_tool and target_tool are agent names; ref is an fsr_ value.",
+  session_edit:
+    "Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. For content ops, set dry_run true to preview the diff without changing anything; otherwise this creates an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.",
 };
 
 export function createFerryTools(

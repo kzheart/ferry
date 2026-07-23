@@ -47,11 +47,8 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   session_search: 25_000,
   session_read: 25_000,
   usage: 25_000,
-  ferry_preview_migration: 125_000,
-  ferry_preview_edit: 125_000,
-  ferry_propose_migration: 125_000,
-  ferry_propose_edit: 125_000,
-  ferry_propose_metadata_change: 125_000,
+  migrate: 125_000,
+  session_edit: 125_000,
 };
 
 // 工具结果要进事件日志并回放，超长内容截断后再落盘

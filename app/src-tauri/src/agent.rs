@@ -219,9 +219,11 @@ fn complete_tool_request(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // 写操作(dry_run=false 的 migrate/session_edit 或 metadata 变更)由可信边界决定：
+    // 手动模式发审批卡，自动模式同步授权并应用;dry_run 预览不落此路。
+    let mutation = is_mutating_tool(name, &args);
     let mut outcome = route_tool(resource_dir, name, args, run_id);
-    // 提议类工具由可信边界决定：手动模式发审批卡，自动模式同步授权并应用。
-    if name.starts_with("ferry_propose_") {
+    if mutation {
         if let Ok(operation) = outcome.clone() {
             let auto = auto_policy(session_id);
             if auto {
@@ -303,8 +305,9 @@ fn route_tool(
     mut args: Map<String, Value>,
     run_id: &str,
 ) -> Result<Value, String> {
-    let method = tool_method(name).ok_or_else(|| "tool.not_allowed".to_owned())?;
-    if name.starts_with("ferry_propose_") {
+    let (method, mutation) =
+        resolve_tool_method(name, &args).ok_or_else(|| "tool.not_allowed".to_owned())?;
+    if mutation {
         if run_id.is_empty() {
             return Err("agent.run_missing".to_owned());
         }
@@ -351,18 +354,41 @@ fn structured_engine_error(envelope: &Value) -> String {
     .to_string()
 }
 
-fn tool_method(name: &str) -> Option<&'static str> {
+// 工具名 + 参数 → (引擎方法, 是否写操作)。合并后 migrate/session_edit 靠 dry_run
+// 与 patch 在 preview/propose 之间分流;写操作(propose 类)才需注入 run_id 并走审批闸。
+fn resolve_tool_method(name: &str, args: &Map<String, Value>) -> Option<(&'static str, bool)> {
+    let dry_run = args
+        .get("dry_run")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     Some(match name {
-        "session_search" => "agent_search_sessions",
-        "session_read" => "agent_session_read",
-        "usage" => "agent_get_usage",
-        "ferry_preview_migration" => "agent_preview_migration",
-        "ferry_preview_edit" => "agent_preview_edit",
-        "ferry_propose_migration" => "agent_propose_migration",
-        "ferry_propose_edit" => "agent_propose_edit",
-        "ferry_propose_metadata_change" => "agent_propose_metadata_change",
+        "session_search" => ("agent_search_sessions", false),
+        "session_read" => ("agent_session_read", false),
+        "usage" => ("agent_get_usage", false),
+        "migrate" => {
+            if dry_run {
+                ("agent_preview_migration", false)
+            } else {
+                ("agent_propose_migration", true)
+            }
+        }
+        "session_edit" => {
+            if args.contains_key("patch") {
+                ("agent_propose_metadata_change", true)
+            } else if dry_run {
+                ("agent_preview_edit", false)
+            } else {
+                ("agent_propose_edit", true)
+            }
+        }
         _ => return None,
     })
+}
+
+fn is_mutating_tool(name: &str, args: &Map<String, Value>) -> bool {
+    resolve_tool_method(name, args)
+        .map(|(_, mutation)| mutation)
+        .unwrap_or(false)
 }
 
 fn request_agent(
@@ -658,20 +684,41 @@ mod tests {
 
     #[test]
     fn tool_gateway_is_an_exact_allowlist() {
+        let map = |value: Value| value.as_object().cloned().unwrap_or_default();
+        // 只读工具:非写操作,不注入 run_id、不走审批。
         assert_eq!(
-            tool_method("session_read"),
-            Some("agent_session_read")
+            resolve_tool_method("session_read", &map(json!({}))),
+            Some(("agent_session_read", false))
         );
         assert_eq!(
-            tool_method("session_search"),
-            Some("agent_search_sessions")
+            resolve_tool_method("session_search", &map(json!({}))),
+            Some(("agent_search_sessions", false))
+        );
+        // migrate:dry_run 在 preview(非写)与 propose(写)之间分流。
+        assert_eq!(
+            resolve_tool_method("migrate", &map(json!({"dry_run": true}))),
+            Some(("agent_preview_migration", false))
         );
         assert_eq!(
-            tool_method("ferry_propose_edit"),
-            Some("agent_propose_edit")
+            resolve_tool_method("migrate", &map(json!({}))),
+            Some(("agent_propose_migration", true))
         );
-        assert_eq!(tool_method("agent_operation_apply"), None);
-        assert_eq!(tool_method("shell"), None);
+        // session_edit:patch 恒为写(元数据),ops 按 dry_run 分流。
+        assert_eq!(
+            resolve_tool_method("session_edit", &map(json!({"patch": {"pinned": true}}))),
+            Some(("agent_propose_metadata_change", true))
+        );
+        assert_eq!(
+            resolve_tool_method("session_edit", &map(json!({"ops": [], "dry_run": true}))),
+            Some(("agent_preview_edit", false))
+        );
+        assert_eq!(
+            resolve_tool_method("session_edit", &map(json!({"ops": []}))),
+            Some(("agent_propose_edit", true))
+        );
+        // 引擎方法名与未知名都不是可调用工具。
+        assert_eq!(resolve_tool_method("agent_operation_apply", &map(json!({}))), None);
+        assert_eq!(resolve_tool_method("shell", &map(json!({}))), None);
     }
 
     #[test]
