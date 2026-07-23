@@ -372,15 +372,17 @@ fn resolve_tool_method(name: &str, args: &Map<String, Value>) -> Option<(&'stati
                 ("agent_propose_migration", true)
             }
         }
-        "session_edit" => {
-            if args.contains_key("patch") {
+        "session_edit" => match (args.contains_key("ops"), args.contains_key("patch")) {
+            (true, false) => match args.get("dry_run") {
+                Some(Value::Bool(true)) => ("agent_preview_edit", false),
+                Some(Value::Bool(false)) | None => ("agent_propose_edit", true),
+                Some(_) => return None,
+            },
+            (false, true) if !args.contains_key("dry_run") => {
                 ("agent_propose_metadata_change", true)
-            } else if dry_run {
-                ("agent_preview_edit", false)
-            } else {
-                ("agent_propose_edit", true)
             }
-        }
+            _ => return None,
+        },
         _ => return None,
     })
 }
@@ -703,7 +705,7 @@ mod tests {
             resolve_tool_method("migrate", &map(json!({}))),
             Some(("agent_propose_migration", true))
         );
-        // session_edit:patch 恒为写(元数据),ops 按 dry_run 分流。
+        // session_edit:ops 与 patch 必须恰好提供一个;patch 不接受 dry_run。
         assert_eq!(
             resolve_tool_method("session_edit", &map(json!({"patch": {"pinned": true}}))),
             Some(("agent_propose_metadata_change", true))
@@ -716,8 +718,37 @@ mod tests {
             resolve_tool_method("session_edit", &map(json!({"ops": []}))),
             Some(("agent_propose_edit", true))
         );
+        assert_eq!(
+            resolve_tool_method(
+                "session_edit",
+                &map(json!({"patch": {"pinned": true}, "dry_run": true}))
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_method(
+                "session_edit",
+                &map(json!({"patch": {"pinned": true}, "dry_run": false}))
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_method(
+                "session_edit",
+                &map(json!({"ops": [], "patch": {"pinned": true}}))
+            ),
+            None
+        );
+        assert_eq!(resolve_tool_method("session_edit", &map(json!({}))), None);
+        assert_eq!(
+            resolve_tool_method("session_edit", &map(json!({"ops": [], "dry_run": "true"}))),
+            None
+        );
         // 引擎方法名与未知名都不是可调用工具。
-        assert_eq!(resolve_tool_method("agent_operation_apply", &map(json!({}))), None);
+        assert_eq!(
+            resolve_tool_method("agent_operation_apply", &map(json!({}))),
+            None
+        );
         assert_eq!(resolve_tool_method("shell", &map(json!({}))), None);
     }
 

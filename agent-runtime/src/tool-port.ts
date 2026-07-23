@@ -134,13 +134,21 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
-  session_edit: Type.Object(
-    {
-      tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
-      ops: Type.Optional(editOps),
-      patch: Type.Optional(
-        Type.Object(
+  session_edit: Type.Union([
+    Type.Object(
+      {
+        tool: Type.String({ minLength: 1, maxLength: 32 }),
+        ref: Type.String({ minLength: 1, maxLength: 512 }),
+        ops: editOps,
+        dry_run: Type.Optional(Type.Boolean()),
+      },
+      { additionalProperties: false },
+    ),
+    Type.Object(
+      {
+        tool: Type.String({ minLength: 1, maxLength: 32 }),
+        ref: Type.String({ minLength: 1, maxLength: 512 }),
+        patch: Type.Object(
           {
             name: Type.Optional(Type.String({ maxLength: 200 })),
             pinned: Type.Optional(Type.Boolean()),
@@ -151,11 +159,10 @@ const schemas = {
           },
           { additionalProperties: false },
         ),
-      ),
-      dry_run: Type.Optional(Type.Boolean()),
-    },
-    { additionalProperties: false },
-  ),
+      },
+      { additionalProperties: false },
+    ),
+  ]),
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {

@@ -107,6 +107,52 @@ def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
     assert first["fingerprint"] == again["fingerprint"]
 
 
+def test_build_backbone_refreshes_structure_for_textless_message(
+        tmp_path, monkeypatch):
+    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    session = _session([
+        _msg("user", "改支付", "u1"),
+        _msg("assistant", "完成", "a1"),
+        _msg("user", "改标题", "u2"),
+    ])
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+
+    first = summaries.build_backbone("claude", "fsr_x")
+    first_hash = first["segments"][0]["hash"]
+    summaries.set_summaries(
+        "claude", "sess-1", {first_hash: "已修改支付逻辑"})
+
+    session.messages.insert(2, _msg("assistant", "", "tool-1", with_tool=True))
+    rebuilt = summaries.build_backbone("claude", "fsr_x")
+
+    assert rebuilt["fingerprint"] == first["fingerprint"]
+    assert rebuilt["segments"][0]["message_end"] == 2
+    assert rebuilt["segments"][1]["message_start"] == 3
+    assert rebuilt["segments"][0]["digest"] == "已修改支付逻辑"
+
+
+def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
+    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    session = _session([
+        _msg("user", "第一轮", "u1"),
+        _msg("user", "第二轮", "u2"),
+    ])
+    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
+
+    first = summaries.build_backbone("claude", "fsr_x")
+    second_hash = first["segments"][1]["hash"]
+    summaries.set_summaries(
+        "claude", "sess-1", {second_hash: "第二轮摘要"})
+
+    session.context_compactions.append(SimpleNamespace(
+        summary_message_id=None, after_message_id="u1"))
+    rebuilt = summaries.build_backbone("claude", "fsr_x")
+
+    assert rebuilt["fingerprint"] == first["fingerprint"]
+    assert rebuilt["segments"][1]["after_compaction"] is True
+    assert rebuilt["segments"][1]["digest"] == "第二轮摘要"
+
+
 def test_set_summaries_requires_backbone(tmp_path, monkeypatch):
     monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
     with pytest.raises(SummaryBackboneMissingError):
