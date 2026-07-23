@@ -8,7 +8,7 @@ from pathlib import Path
 from ...domain.model import AgentEdge, Session, ToolCall
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
 from ..base.narration import narrate
-from .formats import FORMATS
+from .native_schema import templates
 
 
 OP_WRITERS = {
@@ -58,7 +58,7 @@ def _slug(path: str) -> str:
 
 
 def _load_templates():
-    return FORMATS.templates()
+    return templates()
 
 
 def _clone(value):

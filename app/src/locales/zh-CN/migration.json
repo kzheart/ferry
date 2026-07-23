@@ -29,7 +29,7 @@
     "chooseHint": "选择迁移目标工具(源会话保持只读,不会被修改)",
     "noTargets": "当前没有已声明支持迁移写入的 Agent。",
     "notInstalled": "未检测到安装,无法作为目标",
-    "installedMeta": "v{{version}} · 写入 {{tool}} 的本地会话存储"
+    "installedMeta": "写入 {{tool}} 的本地会话存储"
   },
   "preview": {
     "failed": "预演失败:{{error}}",

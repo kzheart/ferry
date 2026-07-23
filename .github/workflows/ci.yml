@@ -49,6 +49,7 @@ jobs:
       - run: npm test && npm run build
         working-directory: app
       - run: python -m pip install -r requirements-test.txt
+      - run: python scripts/check-no-agent-versioning.py
       - run: python -m pytest
 
   rust-quality:

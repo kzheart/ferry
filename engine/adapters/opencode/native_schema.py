@@ -1,9 +1,8 @@
-"""OpenCode export/import format profiles."""
+"""The single OpenCode export/import structure supported by Ferry."""
 from __future__ import annotations
 
+import copy
 import json
-
-from ..base.formats import FormatProfile, FormatRegistry, VersionRange
 
 
 def export_from_capture(capture: dict) -> dict:
@@ -41,7 +40,7 @@ def extract_templates(capture: dict) -> dict:
     return templates
 
 
-def _v1_templates() -> dict:
+def _current_templates() -> dict:
     return {
         "info": {
             "id": "fixture-opencode-tools",
@@ -84,16 +83,9 @@ def _v1_templates() -> dict:
         },
     }
 
+_TEMPLATES = _current_templates()
 
-FORMATS = FormatRegistry(
-    agent="opencode",
-    profiles=(
-        FormatProfile(
-            id="opencode-export-v1",
-            output_version="1.18.3",
-            compatible=VersionRange("1.18.3", "1.19.0"),
-            tested_versions=("1.18.3",),
-            template_factory=_v1_templates,
-        ),
-    ),
-)
+
+def templates() -> dict:
+    """Return an independent copy of the current native record templates."""
+    return copy.deepcopy(_TEMPLATES)

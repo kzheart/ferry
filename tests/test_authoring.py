@@ -31,7 +31,7 @@ def _jsonl(path):
 
 
 def _opencode_payload(case):
-    fixture = json.loads((FORMAT_FIXTURES / "opencode" / "1.18.3" /
+    fixture = json.loads((FORMAT_FIXTURES / "opencode" /
                           case / "session.json").read_text())
     messages = []
     parts = {}
@@ -45,10 +45,10 @@ def _opencode_payload(case):
 
 def _native(tool, case="case-01-plain"):
     if tool == "claude":
-        path = FORMAT_FIXTURES / "claude" / "2.1.204" / case / "session.jsonl"
+        path = FORMAT_FIXTURES / "claude" / case / "session.jsonl"
         return _jsonl(path)
     if tool == "codex":
-        path = FORMAT_FIXTURES / "codex" / "0.144.0" / case / "session.jsonl"
+        path = FORMAT_FIXTURES / "codex" / case / "session.jsonl"
         return _jsonl(path)
     return _opencode_payload(case)
 

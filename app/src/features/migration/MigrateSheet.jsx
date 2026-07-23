@@ -215,7 +215,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t2]}</div>
                 <div style={{ fontSize: 11, color: "var(--tx4)" }}>
-                  {inst ? t("migration:target.installedMeta", { version: env[t2].version || "?", tool: t2 })
+                  {inst ? t("migration:target.installedMeta", { tool: t2 })
                     : t("migration:target.notInstalled")}
                 </div>
               </div>
