@@ -9,6 +9,7 @@ from ..application import agent_tools
 from ..application import summaries
 from ..application import organizing
 from ..application import operations
+from ..application import runtime_sessions
 from ..application.verification import ProbeTimeout
 from ..contracts.engine_methods import ENGINE_METHOD_NAMES
 from ..domain.errors import (
@@ -45,6 +46,9 @@ RPC_METHODS = {
         p["proposal_id"], p["changes"]),
     "organization_proposal_decide": lambda p: organizing.decide(
         p["proposal_id"], p["decision"]),
+    "runtime_sessions.load_all": lambda p: runtime_sessions.load_all(),
+    "runtime_sessions.commit": lambda p: runtime_sessions.commit(p["update"]),
+    "runtime_sessions.delete": lambda p: runtime_sessions.delete(p["session_id"]),
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),

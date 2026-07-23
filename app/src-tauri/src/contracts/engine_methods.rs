@@ -121,6 +121,21 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
         }),
+        "runtime_sessions.load_all" => Some(EngineMethodPolicy {
+            is_public: false,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+        }),
+        "runtime_sessions.commit" => Some(EngineMethodPolicy {
+            is_public: false,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+        }),
+        "runtime_sessions.delete" => Some(EngineMethodPolicy {
+            is_public: false,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+        }),
         "agent_search_sessions" => Some(EngineMethodPolicy {
             is_public: true,
             timeout: TimeoutClass::Lookup,
