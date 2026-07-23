@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from ..contracts.agents import AGENT_IDS
 from ..domain.errors import ToolUnknownError
 from .base.plugin import ToolPlugin
 from .claude.plugin import build as build_claude
@@ -32,8 +33,9 @@ class AdapterRegistry:
 
 
 def create_registry() -> AdapterRegistry:
-    return AdapterRegistry((
-        build_claude(),
-        build_codex(),
-        build_opencode(),
-    ))
+    builders = {
+        "claude": build_claude,
+        "codex": build_codex,
+        "opencode": build_opencode,
+    }
+    return AdapterRegistry(builders[agent_id]() for agent_id in AGENT_IDS)

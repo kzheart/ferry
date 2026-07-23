@@ -1,3 +1,4 @@
+use crate::contracts::agents::ALLOWED_EXECUTABLES;
 use serde::Deserialize;
 #[cfg(target_os = "macos")]
 use std::{
@@ -41,8 +42,6 @@ impl TerminalApp {
         }
     }
 }
-
-const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode"];
 
 #[cfg(target_os = "macos")]
 fn shell_quote(value: &str) -> String {

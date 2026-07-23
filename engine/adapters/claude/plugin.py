@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..base.plugin import ToolManifest, ToolPlugin
 from ..base.migration import TreeMigrationSource
+from ...contracts.agents import AGENTS
 from . import editing as claude_edit
 from .editor import ClaudeBackend
 from .lifecycle import ClaudeLifecycle
@@ -12,14 +13,7 @@ from .probe import ClaudeVerifier
 from .reader import read
 from .scanner import agent_fingerprint, fingerprint, scan
 
-MANIFEST = ToolManifest(
-    id="claude",
-    display_name="Claude Code",
-    icon="claude",
-    source_path="~/.claude/projects",
-    reference_kind="path",
-    executables=("claude",),
-)
+MANIFEST = ToolManifest(id="claude", **AGENTS["claude"])
 
 
 class ClaudeBrowser:

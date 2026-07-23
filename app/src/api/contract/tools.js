@@ -1,26 +1,10 @@
 // 内置会话源是编译期契约，不通过 Engine manifest 动态水合。
 // 安装状态与扫描结果由 env/scan 查询提供，格式细节不泄漏给前端。
 import { rpc } from "../transport/rpc.js";
+export { AGENTS } from "./generated/agents.js";
+import { AGENTS, AGENT_IDS } from "./generated/agents.js";
 
-export const AGENTS = Object.freeze({
-  claude: Object.freeze({
-    displayName: "Claude Code",
-    icon: "claude",
-    referenceKind: "path",
-  }),
-  codex: Object.freeze({
-    displayName: "Codex CLI",
-    icon: "codex",
-    referenceKind: "path",
-  }),
-  opencode: Object.freeze({
-    displayName: "OpenCode",
-    icon: "opencode",
-    referenceKind: "id",
-  }),
-});
-
-export const TOOLS = Object.freeze(Object.keys(AGENTS));
+export const TOOLS = AGENT_IDS;
 export const TOOL_NAME = Object.freeze(Object.fromEntries(
   TOOLS.map(tool => [tool, AGENTS[tool].displayName]),
 ));

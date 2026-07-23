@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..base.plugin import ToolManifest, ToolPlugin
 from ..base.migration import TreeMigrationSource
+from ...contracts.agents import AGENTS
 from .editor import OpenCodeBackend
 from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
@@ -11,15 +12,7 @@ from .probe import OpenCodeVerifier
 from .scanner import fingerprint, scan
 from .session import read, read_preview
 
-MANIFEST = ToolManifest(
-    id="opencode",
-    display_name="OpenCode",
-    icon="opencode",
-    source_path="~/.local/share/opencode",
-    reference_kind="id",
-    executables=("opencode",),
-    fallback_bin_dirs=("~/.opencode/bin",),
-)
+MANIFEST = ToolManifest(id="opencode", **AGENTS["opencode"])
 
 
 class OpenCodeBrowser:
