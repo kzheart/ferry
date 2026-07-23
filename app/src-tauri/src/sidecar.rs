@@ -397,6 +397,8 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "edit_capabilities"
             | "edit_preview"
             | "session_meta_list"
+            | "session_backbone"
+            | "session_summaries_set"
             | "agent_search_sessions"
             | "agent_session_read"
             | "agent_get_usage"

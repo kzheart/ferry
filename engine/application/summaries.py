@@ -1,0 +1,186 @@
+"""摘要底座:把规范会话切成'段'(一个用户诉求 + 回应它的那段工作),
+按内容 hash 缓存,存进本地元数据层(不碰原始会话文件)。
+
+分工:engine 负责分段 / 内容指纹 / 缓存失效 / 存储 / RPC;真正的一句蒸馏摘要
+(digest)由常驻、持有 LLM 栈的 agent-runtime 生成后经 set_summaries 写回。
+召回 / 整理 / 记忆文件三个上层功能共用这一份底座。
+"""
+
+import hashlib
+import json
+import os
+import tempfile
+import threading
+from pathlib import Path
+
+from ..domain.errors import SummaryBackboneMissingError
+from .sessions import read_tree
+
+SUMMARIES = Path.home() / ".resume-harness" / "session-summaries.json"
+_LOCK = threading.RLock()
+MAX_DIGEST_CHARS = 4000
+
+
+def _load() -> dict:
+    try:
+        return json.loads(SUMMARIES.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write(data: dict) -> None:
+    SUMMARIES.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix="session-summaries-", suffix=".tmp",
+                                     dir=SUMMARIES.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=1)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, SUMMARIES)
+        os.chmod(SUMMARIES, 0o600)
+    finally:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+
+
+def _locator(message, index: int) -> str:
+    if isinstance(message.source_id, str) and message.source_id:
+        return message.source_id
+    if message.raw and isinstance(message.raw[0], dict):
+        value = message.raw[0].get("uuid")
+        if isinstance(value, str) and value:
+            return value
+    return f"index:{index}"
+
+
+def _message_text(message) -> str:
+    return "\n".join(block.text for block in message.blocks
+                     if block.kind == "text" and getattr(block, "text", ""))
+
+
+def segment_session(session) -> list[dict]:
+    """按轮次切段:每条 user 消息开一个新段,并入其后到下一条 user 之间的
+    assistant 文本。只取可见文本(跳过工具输出等噪声)。上下文压缩边界作为
+    段的附加标记(after_compaction)。"""
+    internal = {compaction.summary_message_id
+                for compaction in session.context_compactions
+                if compaction.summary_message_id}
+    messages = [message for message in session.messages
+                if message.source_id not in internal]
+
+    turn = 0
+    turn_by_locator: dict[str, int] = {}
+    for message in messages:
+        if message.role == "user":
+            turn += 1
+        if message.source_id:
+            turn_by_locator[message.source_id] = turn
+    compacted_after_turns = {
+        turn_by_locator.get(compaction.after_message_id, 0)
+        for compaction in session.context_compactions
+    }
+
+    segments: list[dict] = []
+    turn = 0
+    current: dict | None = None
+    for index, message in enumerate(messages):
+        if message.role == "user":
+            turn += 1
+            if current is not None:
+                segments.append(current)
+            current = {
+                "turn": turn,
+                "anchor_locator": _locator(message, index),
+                "message_start": index,
+                "message_end": index,
+                "after_compaction": turn > 1 and (turn - 1) in compacted_after_turns,
+                "_texts": [_message_text(message)],
+            }
+        elif current is not None:
+            text = _message_text(message)
+            if text:
+                current["_texts"].append(text)
+            current["message_end"] = index
+    if current is not None:
+        segments.append(current)
+
+    result = []
+    for segment in segments:
+        text = "\n".join(part for part in segment.pop("_texts") if part).strip()
+        segment["hash"] = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+        segment["char_count"] = len(text)
+        segment["digest"] = None
+        result.append(segment)
+    return result
+
+
+def session_fingerprint(segments: list[dict]) -> str:
+    """会话级内容指纹:段数 + 各段内容 hash 的有序拼接。会话被改 / 续写时
+    指纹变化,借此决定是否重算摘要底座。"""
+    joined = "\n".join(segment["hash"] for segment in segments)
+    payload = f"{len(segments)}:{joined}".encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _view(record: dict) -> dict:
+    pending = [segment["hash"] for segment in record["segments"]
+               if not segment.get("digest")]
+    return {
+        "tool": record["tool"],
+        "id": record["id"],
+        "fingerprint": record["fingerprint"],
+        "segment_count": len(record["segments"]),
+        "pending": pending,
+        "segments": record["segments"],
+    }
+
+
+def build_backbone(tool: str, ref: str) -> dict:
+    """读取会话 → 分段 → 算指纹。指纹未变则直接返回缓存;变了则重算,并按
+    内容 hash 把未变段的既有摘要迁移过来(编辑某段不牵连其他段的摘要)。"""
+    session = read_tree(tool, ref)
+    segments = segment_session(session)
+    fingerprint = session_fingerprint(segments)
+    key = f"{tool}:{session.source_id}"
+    with _LOCK:
+        data = _load()
+        record = data.get(key)
+        if record and record.get("fingerprint") == fingerprint:
+            return _view(record)
+        prior = {segment["hash"]: segment["digest"]
+                 for segment in (record or {}).get("segments", [])
+                 if segment.get("digest")}
+        for segment in segments:
+            if segment["hash"] in prior:
+                segment["digest"] = prior[segment["hash"]]
+        record = {"tool": tool, "id": session.source_id,
+                  "fingerprint": fingerprint, "segments": segments}
+        data[key] = record
+        _write(data)
+        return _view(record)
+
+
+def set_summaries(tool: str, session_id: str, digests: dict) -> dict:
+    """agent-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
+    编辑后仍存在的段稳健。"""
+    updates = digests if isinstance(digests, dict) else {}
+    key = f"{tool}:{session_id}"
+    with _LOCK:
+        data = _load()
+        record = data.get(key)
+        if not record:
+            raise SummaryBackboneMissingError(
+                "请先调用 session_backbone 建立底座",
+                {"tool": tool, "id": session_id})
+        applied = 0
+        for segment in record["segments"]:
+            digest = updates.get(segment["hash"])
+            if isinstance(digest, str) and digest.strip():
+                segment["digest"] = digest.strip()[:MAX_DIGEST_CHARS]
+                applied += 1
+        data[key] = record
+        _write(data)
+        return {**_view(record), "applied": applied}
