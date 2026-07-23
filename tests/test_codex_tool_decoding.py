@@ -130,6 +130,32 @@ def test_writer_emits_only_current_native_result_fields():
     }
 
 
+def test_result_statuses_are_mapped_at_the_codex_boundary():
+    expected = {
+        "success": "success",
+        "completed": "success",
+        "error": "error",
+        "interrupted": "interrupted",
+        "running": "running",
+        "pending": "pending",
+        "unknown": "unknown",
+        "complete": "unknown",
+        "failed": "unknown",
+        "cancelled": "unknown",
+        None: "unknown",
+    }
+
+    for native_status, canonical_status in expected.items():
+        result = codex_reader._parse_result([{
+            "type": "input_text",
+            "text": json.dumps({
+                "status": native_status,
+                "output": "fixture",
+            }),
+        }])
+        assert result.status == canonical_status
+
+
 def test_current_remote_function_call_stays_an_opaque_tool(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {

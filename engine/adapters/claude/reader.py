@@ -12,7 +12,6 @@ from ...domain.model import (
     ToolCall,
     ToolResult,
     ToolResultBlock,
-    normalize_tool_result_status,
 )
 from ...domain.reasoning import visible_text
 from ...domain.tool_ops import CanonicalOp
@@ -27,6 +26,17 @@ TOOL_OPS = {
     "Glob": CanonicalOp.FS_GLOB,
     "WebFetch": CanonicalOp.WEB_FETCH,
     "WebSearch": CanonicalOp.WEB_SEARCH,
+}
+
+_RESULT_STATUS = {
+    "success": "success",
+    "completed": "success",
+    "teammate_spawned": "success",
+    "error": "error",
+    "interrupted": "interrupted",
+    "running": "running",
+    "async_launched": "running",
+    "pending": "pending",
 }
 
 
@@ -106,13 +116,8 @@ def _result_status(block: dict, native: dict) -> str:
         return "error"
     if native.get("interrupted") is True:
         return "interrupted"
-    if native.get("status") == "async_launched":
-        return "running"
-    if native.get("status") == "teammate_spawned":
-        return "success"
-    status = normalize_tool_result_status(native.get("status"))
     if "status" in native:
-        return status
+        return _RESULT_STATUS.get(native["status"], "unknown")
     return "success"
 
 

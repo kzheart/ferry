@@ -28,7 +28,6 @@ from ...domain.model import (
     ToolCall,
     ToolResult,
     ToolResultBlock,
-    normalize_tool_result_status,
     tool_result_text,
 )
 from ...domain.reasoning import visible_text
@@ -203,8 +202,6 @@ def _new_ordered_id(prefix: str, ordinal: int) -> str:
 
 def _opencode_result(state: dict) -> ToolResult:
     metadata = _clone(state.get("metadata") or {})
-    if isinstance(state.get("status"), str):
-        metadata["source_status"] = state["status"]
     native_state = {
         key: _clone(value) for key, value in state.items()
         if key not in {
@@ -214,7 +211,12 @@ def _opencode_result(state: dict) -> ToolResult:
     }
     if native_state:
         metadata["opencode_state"] = native_state
-    status = normalize_tool_result_status(state.get("status"))
+    status = {
+        "completed": "success",
+        "error": "error",
+        "running": "running",
+        "pending": "pending",
+    }.get(state.get("status"), "unknown")
     if metadata.get("interrupted") is True:
         status = "interrupted"
 

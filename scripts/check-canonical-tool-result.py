@@ -9,7 +9,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT / "engine" / "domain" / "model.py"
 FORBIDDEN_TOOL_CALL_FIELDS = {"output", "status", "tool_result"}
-FORBIDDEN_METHODS = {"from_legacy", "legacy_output", "set_result"}
+FORBIDDEN_METHODS = {
+    "from_legacy",
+    "legacy_output",
+    "normalize_tool_result_status",
+    "set_result",
+}
 FORBIDDEN_PRIVATE_FIELDS = (
     "canonical" + "ToolResult",
     "canonical_" + "blocks",
@@ -21,6 +26,11 @@ def violations() -> list[str]:
     tree = ast.parse(MODEL.read_text(), filename=str(MODEL))
     found = []
     for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "normalize_tool_result_status"
+        ):
+            found.append(f"{node.name}()")
         if isinstance(node, ast.ClassDef) and node.name == "ToolCall":
             for statement in node.body:
                 if isinstance(statement, ast.AnnAssign):

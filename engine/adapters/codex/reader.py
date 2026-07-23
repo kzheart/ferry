@@ -14,7 +14,6 @@ from ...domain.model import (
     ToolCall,
     ToolResult,
     ToolResultBlock,
-    normalize_tool_result_status,
     tool_result_text,
 )
 from ...domain.reasoning import codex_summary_text
@@ -32,11 +31,26 @@ _PATCH_HEADER_RE = re.compile(
 _PATCH_MOVE_RE = re.compile(r"^\*\*\* Move to: ([^\r\n]+)$", re.M)
 _SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",
                       "<ENVIRONMENT_CONTEXT>", "<turn_aborted>")
+_RESULT_STATUS = {
+    "success": "success",
+    "completed": "success",
+    "error": "error",
+    "interrupted": "interrupted",
+    "running": "running",
+    "pending": "pending",
+    "unknown": "unknown",
+}
 
 
 def session_id(meta: dict, fallback: str) -> str:
     del fallback
     return str(meta["id"])
+
+
+def _result_status(value) -> str:
+    if not isinstance(value, str):
+        return "unknown"
+    return _RESULT_STATUS.get(value, "unknown")
 
 
 def _skip_js_string(source: str, start: int) -> int:
@@ -373,7 +387,7 @@ def _parse_result(raw) -> ToolResult:
             blocks.append(ToolResultBlock(
                 "json", data=native_block, metadata={"native_type": kind}))
 
-    status = normalize_tool_result_status(explicit_status)
+    status = _result_status(explicit_status)
     if structured_envelope:
         blocks = [
             block for block in blocks

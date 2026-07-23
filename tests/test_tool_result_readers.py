@@ -503,3 +503,12 @@ def test_opencode_running_and_interrupted_status_are_not_faked():
     base["messages"][0]["parts"][0]["state"]["metadata"]["interrupted"] = True
     interrupted, _ = _parse_session(base)
     assert _tool(interrupted).result.status == "interrupted"
+
+    base["messages"][0]["parts"][0]["state"]["metadata"] = {}
+    base["messages"][0]["parts"][0]["state"]["status"] = "completed"
+    completed, _ = _parse_session(base)
+    assert _tool(completed).result.status == "success"
+
+    base["messages"][0]["parts"][0]["state"]["status"] = "future_status"
+    unknown, _ = _parse_session(base)
+    assert _tool(unknown).result.status == "unknown"
