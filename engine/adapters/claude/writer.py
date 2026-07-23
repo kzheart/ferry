@@ -342,10 +342,10 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
             user["toolUseResult"] = native_result
         elif edge:
             old_agent = edge.child_session_id
-            result = _clone(edge.meta.get("toolUseResult", {}))
-            result.update({"agentId": agent_map.get(old_agent, old_agent),
-                           "status": edge.status or result.get("status", "completed")})
-            user["toolUseResult"] = result
+            user["toolUseResult"] = {
+                "agentId": agent_map.get(old_agent, old_agent),
+                "status": edge.status or "completed",
+            }
         elif tool.result is not None:
             user["toolUseResult"] = native_result
         records.append(user)

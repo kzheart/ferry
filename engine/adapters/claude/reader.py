@@ -1,5 +1,6 @@
 """Claude Code reader: JSONL 会话文件 -> 规范化会话树。"""
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from ...domain.model import (
@@ -27,6 +28,24 @@ TOOL_OPS = {
     "WebFetch": CanonicalOp.WEB_FETCH,
     "WebSearch": CanonicalOp.WEB_SEARCH,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class ClaudeSpawnDescriptor:
+    agent_id: str
+    call_id: str | None
+    result_id: str | None
+    message_id: str | None
+    status: str | None
+    tool: ToolCall | None
+
+
+@dataclass(slots=True)
+class ClaudeDecodeResult:
+    session: Session
+    path: Path
+    spawns: dict[str, ClaudeSpawnDescriptor]
+
 
 _RESULT_STATUS = {
     "success": "success",
@@ -293,7 +312,7 @@ def _context_compactions(lines: list[dict]) -> list[ContextCompaction]:
     return compactions
 
 
-def _read_transcript(path: Path, is_child: bool = False) -> Session:
+def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult:
     lines = _load(path)
     messages = [record for record in lines
                 if record.get("type") in ("user", "assistant") and
@@ -328,6 +347,8 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
             session.meta["fork_context_ref"] = record
 
     pending: dict[str, ToolCall] = {}
+    spawn_messages: dict[str, str | None] = {}
+    spawns: dict[str, ClaudeSpawnDescriptor] = {}
     for record in messages:
         if record.get("isMeta"):
             continue
@@ -384,6 +405,8 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                     input=canonical_input,
                     source_call_id=item.get("id"))
                 pending[item.get("id")] = tool
+                if op == CanonicalOp.AGENT_SPAWN:
+                    spawn_messages[item.get("id")] = record.get("uuid")
                 blocks.append(Block("tool", tool=tool))
             elif kind == "tool_result":
                 result_carrier = True
@@ -398,6 +421,16 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                     _native_agent_id(result)
                     if isinstance(result, dict) else None
                 )
+                if tool.agent_id:
+                    spawns[tool.agent_id] = ClaudeSpawnDescriptor(
+                        agent_id=tool.agent_id,
+                        call_id=tool.source_call_id,
+                        result_id=tool.source_result_id,
+                        message_id=spawn_messages.get(tool.source_call_id),
+                        status=result.get("status")
+                        if isinstance(result, dict) else None,
+                        tool=tool,
+                    )
             else:
                 session.lose("migration.unknown_block_dropped", kind=kind)
         if result_carrier and not any(
@@ -409,45 +442,25 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                                             **common))
     for tool in pending.values():
         session.lose("session.unpaired_tool_use", tool_name=tool.name)
-    return session
+    return ClaudeDecodeResult(
+        session=session,
+        path=path,
+        spawns=spawns,
+    )
 
 
-def _spawns(session: Session) -> dict[str, dict]:
-    calls = {}
-    for message in session.messages:
-        for block in message.blocks:
-            tool = block.tool if block.kind == "tool" else None
-            if tool and tool.name == "Agent":
-                calls[tool.source_call_id] = {
-                    "tool": tool, "message_id": message.source_id}
+def _read_transcript(path: Path, is_child: bool = False) -> Session:
+    return _decode_transcript(path, is_child=is_child).session
 
-    spawns = {}
-    for raw in session.raw_records:
-        record = raw.payload
-        result = record.get("toolUseResult")
-        result_agent_id = (
-            _native_agent_id(result) if isinstance(result, dict) else None
-        )
-        if not isinstance(result, dict) or not result_agent_id:
-            continue
-        content = (record.get("message") or {}).get("content") or []
-        result_block = next((item for item in content
-                             if isinstance(item, dict) and
-                             item.get("type") == "tool_result"), {})
-        call_id = result_block.get("tool_use_id")
-        info = calls.get(call_id, {})
-        spawns[result_agent_id] = {
-            **info, "call_id": call_id, "result_id": record.get("uuid"),
-            "result": result,
-        }
-        if info.get("tool"):
-            info["tool"].agent_id = result_agent_id
-    return spawns
+
+def _spawns(decoded: ClaudeDecodeResult) -> dict[str, ClaudeSpawnDescriptor]:
+    return decoded.spawns
 
 
 def read(path: str) -> Session:
     main_path = Path(path)
-    root = _read_transcript(main_path)
+    root_decoded = _decode_transcript(main_path)
+    root = root_decoded.session
     root.root_id = root.source_id
     child_dir = main_path.with_suffix("") / "subagents"
     child_paths = sorted(child_dir.rglob("agent-*.jsonl")) \
@@ -466,12 +479,22 @@ def read(path: str) -> Session:
                 for index, record in enumerate(records))
     if journals:
         root.meta["workflow_journals"] = journals
-    sessions = [_read_transcript(child_path, is_child=True)
-                for child_path in child_paths]
+    decoded_sessions = [
+        _decode_transcript(child_path, is_child=True)
+        for child_path in child_paths
+    ]
+    sessions = [decoded.session for decoded in decoded_sessions]
     by_agent = {session.agent_id: session for session in sessions
                 if session.agent_id}
+    decoded_by_session = {
+        id(decoded.session): decoded
+        for decoded in [root_decoded, *decoded_sessions]
+    }
     containers = [root, *sessions]
-    spawn_by_parent = {id(session): _spawns(session) for session in containers}
+    spawn_by_parent = {
+        id(session): _spawns(decoded_by_session[id(session)])
+        for session in containers
+    }
 
     assigned = set()
     for parent in containers:
@@ -481,22 +504,20 @@ def read(path: str) -> Session:
                 continue
             child.parent_id = parent.source_id
             child.root_id = root.source_id
-            child.agent_path = str(Path(child.raw_records[0].location)
-                                   .relative_to(main_path.parent))
-            tool = spawn.get("tool")
+            child_path = decoded_by_session[id(child)].path
+            child.agent_path = str(child_path.relative_to(main_path.parent))
+            tool = spawn.tool
             tool_input = tool.input if tool and isinstance(tool.input, dict) else {}
-            result = spawn["result"]
             edge = AgentEdge(
                 parent_session_id=parent.source_id,
                 child_session_id=child.source_id,
-                source_call_id=spawn.get("call_id"),
-                spawn_message_id=spawn.get("message_id"),
-                result_message_id=spawn.get("result_id"), agent_id=agent_id,
+                source_call_id=spawn.call_id,
+                spawn_message_id=spawn.message_id,
+                result_message_id=spawn.result_id, agent_id=agent_id,
                 agent_path=child.agent_path,
                 agent_type=tool_input.get("subagent_type"),
-                prompt=tool_input.get("prompt", ""), status=result.get("status"),
-                association="agent-id", confidence=1.0,
-                meta={"toolUseResult": result})
+                prompt=tool_input.get("prompt", ""), status=spawn.status,
+                association="agent-id", confidence=1.0)
             parent.children.append(child)
             parent.agent_edges.append(edge)
             assigned.add(id(child))
@@ -506,14 +527,13 @@ def read(path: str) -> Session:
             continue
         child.parent_id = root.source_id
         child.root_id = root.source_id
-        child.agent_path = str(Path(child.raw_records[0].location)
-                               .relative_to(main_path.parent))
+        child_path = decoded_by_session[id(child)].path
+        child.agent_path = str(child_path.relative_to(main_path.parent))
         root.children.append(child)
         root.agent_edges.append(AgentEdge(
             parent_session_id=root.source_id,
             child_session_id=child.source_id, agent_id=child.agent_id,
             agent_path=child.agent_path,
-            association="directory-fallback", confidence=0.25,
-            meta={"association": "directory-fallback"}))
+            association="directory-fallback", confidence=0.25))
         root.lose("session.subagent_unlinked", child_id=child.agent_id)
     return root
