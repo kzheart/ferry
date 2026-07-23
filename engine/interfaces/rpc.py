@@ -12,6 +12,7 @@ from ..application import summaries
 from ..application import organizing
 from ..application import operations
 from ..application.verification import ProbeTimeout
+from ..contracts.engine_methods import ENGINE_METHOD_NAMES
 from ..domain.errors import (
     DomainError, InvalidJsonError, MissingParamError, UnknownMethodError,
 )
@@ -63,6 +64,11 @@ RPC_METHODS = {
     "operation.status": lambda p: operations.status(p["plan_id"]),
     "operation.cancel": lambda p: operations.cancel(p["plan_id"]),
 }
+
+if set(RPC_METHODS) != ENGINE_METHOD_NAMES:
+    missing = ENGINE_METHOD_NAMES - set(RPC_METHODS)
+    extra = set(RPC_METHODS) - ENGINE_METHOD_NAMES
+    raise RuntimeError(f"Engine RPC 与生成方法契约不一致: missing={missing}, extra={extra}")
 
 
 def _error_envelope(error: DomainError, request_id) -> dict:

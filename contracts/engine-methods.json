@@ -1,0 +1,31 @@
+{
+  "methods": [
+    {"name": "health", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "version", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "scan", "kind": "index-refresh", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "env", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "resume", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "models", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "history", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "history_delete", "kind": "mutation", "public": true, "timeout": "normal", "retry": "never"},
+    {"name": "pricing", "kind": "index-refresh", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "show", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "session_asset", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "edit_capabilities", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "session_meta_list", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "session_backbone", "kind": "read", "public": true, "timeout": "normal", "retry": "safe-read"},
+    {"name": "session_summaries_set", "kind": "mutation", "public": true, "timeout": "normal", "retry": "never"},
+    {"name": "organization_digest_context", "kind": "read", "public": false, "timeout": "normal", "retry": "safe-read"},
+    {"name": "organization_propose", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never"},
+    {"name": "organization_proposals_list", "kind": "read", "public": false, "timeout": "normal", "retry": "safe-read"},
+    {"name": "organization_proposal_modify", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never"},
+    {"name": "organization_proposal_decide", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never"},
+    {"name": "agent_search_sessions", "kind": "read", "public": true, "timeout": "lookup", "retry": "never"},
+    {"name": "agent_session_read", "kind": "read", "public": true, "timeout": "lookup", "retry": "never"},
+    {"name": "agent_get_usage", "kind": "read", "public": true, "timeout": "lookup", "retry": "never"},
+    {"name": "operation.plan", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never"},
+    {"name": "operation.apply", "kind": "long", "public": false, "timeout": "commit", "retry": "never"},
+    {"name": "operation.status", "kind": "read", "public": false, "timeout": "normal", "retry": "safe-read"},
+    {"name": "operation.cancel", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never"}
+  ]
+}
