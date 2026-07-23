@@ -520,7 +520,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
-  onOpenMigrate, onRefresh, refreshing, onResume, editCaps, authoringCaps,
+  onOpenMigrate, onRefresh, refreshing, onResume, editCaps,
   navigationTarget }) {
   const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
@@ -529,7 +529,8 @@ export default memo(function SessionDetail({ meta, data, error,
     [rounds, data?.context_compactions],
   );
   const canEdit = !!editCaps?.inplace;
-  const canAuthor = !!authoringCaps && (authoringCaps.inplace || authoringCaps.save_as);
+  const canAuthor = editCaps?.operation_modes
+    ?.["replace-assistant-reply"]?.includes("inplace") === true;
   const canMigrate = toolHasCapability(meta.tool, "migrate-source");
   const [copied, setCopied] = useState(false);
   const [resuming, setResuming] = useState(false);
