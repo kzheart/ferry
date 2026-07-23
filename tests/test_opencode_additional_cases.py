@@ -1,10 +1,6 @@
-from types import SimpleNamespace
-
 import pytest
 
 from engine.adapters.opencode import session as opencode_session
-from engine.adapters.opencode.codec import CODEC, TURN_INDEX
-from engine.domain.authoring import AssistantReply, TextItem
 from engine.domain.model import (
     AgentEdge,
     Block,
@@ -86,20 +82,6 @@ def test_empty_native_payload_gets_a_valid_session_time():
     assert isinstance(remapped["info"]["time"]["created"], int)
     assert remapped["info"]["time"]["updated"] >= \
         remapped["info"]["time"]["created"]
-
-
-def test_replace_reply_without_old_assistant_creates_a_complete_time_record():
-    payload = {"info": {"id": "session"}, "messages": [
-        _native_message("u1", "user", 100),
-    ]}
-    payload["messages"][0]["info"]["sessionID"] = "session"
-    doc = SimpleNamespace(data=payload)
-
-    CODEC.replace_reply(
-        doc, TURN_INDEX.turns(payload)[0], AssistantReply((TextItem("answer"),)))
-
-    reply = doc.data["messages"][1]
-    assert reply["info"]["time"] == {"created": 101, "completed": 101}
 
 
 def test_multiple_tasks_in_one_message_link_distinct_children(

@@ -1,4 +1,4 @@
-"""声明式 AI 回复模型；不承载任何原生存储标识。"""
+"""会话编辑领域模型；不承载任何原生存储标识。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,8 +24,12 @@ class ToolItem:
     kind: str = "tool"
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "name": self.name,
-                "input": self.input, "output": self.output}
+        return {
+            "kind": self.kind,
+            "name": self.name,
+            "input": self.input,
+            "output": self.output,
+        }
 
 
 ReplyItem = TextItem | ToolItem
@@ -48,23 +52,41 @@ class AssistantReply:
                 raise InvalidReplyError(f"reply.items[{index}] 必须是对象")
             kind = raw.get("kind")
             if kind == "text":
-                if set(raw) != {"kind", "text"} or not isinstance(raw.get("text"), str):
-                    raise InvalidReplyError(f"reply.items[{index}] text 结构非法")
+                if set(raw) != {"kind", "text"} or not isinstance(
+                    raw.get("text"), str
+                ):
+                    raise InvalidReplyError(
+                        f"reply.items[{index}] text 结构非法"
+                    )
                 if not raw["text"]:
-                    raise InvalidReplyError(f"reply.items[{index}].text 不可为空")
+                    raise InvalidReplyError(
+                        f"reply.items[{index}].text 不可为空"
+                    )
                 items.append(TextItem(raw["text"]))
             elif kind == "tool":
                 if set(raw) != {"kind", "name", "input", "output"}:
-                    raise InvalidReplyError(f"reply.items[{index}] tool 结构非法")
+                    raise InvalidReplyError(
+                        f"reply.items[{index}] tool 结构非法"
+                    )
                 if not isinstance(raw.get("name"), str) or not raw["name"]:
-                    raise InvalidReplyError(f"reply.items[{index}].name 必须是非空字符串")
+                    raise InvalidReplyError(
+                        f"reply.items[{index}].name 必须是非空字符串"
+                    )
                 if not isinstance(raw.get("input"), (dict, str)):
-                    raise InvalidReplyError(f"reply.items[{index}].input 必须是对象或字符串")
+                    raise InvalidReplyError(
+                        f"reply.items[{index}].input 必须是对象或字符串"
+                    )
                 if not isinstance(raw.get("output"), str):
-                    raise InvalidReplyError(f"reply.items[{index}].output 必须是字符串")
-                items.append(ToolItem(raw["name"], raw["input"], raw["output"]))
+                    raise InvalidReplyError(
+                        f"reply.items[{index}].output 必须是字符串"
+                    )
+                items.append(
+                    ToolItem(raw["name"], raw["input"], raw["output"])
+                )
             else:
-                raise InvalidReplyError(f"reply.items[{index}].kind 仅支持 text/tool")
+                raise InvalidReplyError(
+                    f"reply.items[{index}].kind 仅支持 text/tool"
+                )
         return cls(tuple(items))
 
     def to_dict(self) -> dict:

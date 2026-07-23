@@ -26,15 +26,14 @@ class OpenCodeDocument:
 
 class OpenCodeBackend(EditBackend):
     name = "opencode"
+    operations = ("rewrite",)
 
     def __init__(self, api_factory=None):
         self._api_factory = api_factory or (lambda cwd: opencode_api.OpenCodeApi(cwd))
 
     def capabilities(self):
         result = super().capabilities()
-        result["operations"] = ["rewrite"]
         result["operation_roles"] = {"rewrite": ["user", "assistant"]}
-        result["operation_modes"] = {"rewrite": ["inplace"]}
         return result
 
     def load(self, ref):

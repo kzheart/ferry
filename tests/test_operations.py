@@ -9,10 +9,9 @@ import pytest
 
 from engine.application import operations, services, session_meta
 from engine.application.ports import current
-from engine.domain.authoring import AssistantReply
+from engine.domain.edit import AssistantReply
 from engine.domain.errors import (
     AgentRequestError,
-    CapabilityUnsupportedError,
     ConcurrentModificationError,
     InvalidReplyError,
     OperationUnsupportedError,
@@ -71,35 +70,30 @@ def _delete_plan(**overrides):
     return operations.plan(value)
 
 
-class ReplyCompiler:
-    name = "claude"
+def _attach_reply_editing(monkeypatch, *, inplace=True):
+    editor = current().adapter("claude").editor
+    calls = []
+    original_capabilities = editor.capabilities
 
-    def __init__(self, *, inplace=True):
-        self.inplace = inplace
-        self.calls = []
+    def capabilities():
+        result = original_capabilities()
+        result["operation_modes"] = dict(result["operation_modes"])
+        result["operation_modes"]["replace-assistant-reply"] = (
+            ["inplace"] if inplace else []
+        )
+        result["operations"] = [
+            *result["operations"],
+            "replace-assistant-reply",
+        ]
+        return result
 
-    def capabilities(self):
-        return {
-            "operation": "replace-assistant-reply",
-            "inplace": self.inplace,
-        }
-
-    def replace(self, _doc, turn, reply: AssistantReply):
-        self.calls.append((turn, reply.to_dict()))
+    def replace_reply(_doc, turn, reply: AssistantReply):
+        calls.append((turn, reply.to_dict()))
         return [{"code": "reply.replaced", "turn": turn}]
 
-
-def _attach_authoring(monkeypatch, *, inplace=True):
-    ports = current()
-    original_adapter = ports.adapter
-    compiler = ReplyCompiler(inplace=inplace)
-    plugin = replace(original_adapter("claude"), authoring=compiler)
-    monkeypatch.setattr(
-        ports,
-        "adapter",
-        lambda tool: plugin if tool == "claude" else original_adapter(tool),
-    )
-    return compiler
+    monkeypatch.setattr(editor, "capabilities", capabilities)
+    monkeypatch.setattr(editor, "replace_reply", replace_reply, raising=False)
+    return calls
 
 
 def _attach_lifecycle(monkeypatch, transcript):
@@ -178,7 +172,7 @@ def test_restart_marks_interrupted_apply_failed(agent_environment):
 
 def test_operation_audit_contains_digests_not_raw_content(
         agent_environment, monkeypatch):
-    _attach_authoring(monkeypatch)
+    _attach_reply_editing(monkeypatch)
     secret = "Bearer operation-audit-secret"
     plan = _plan([{
         "op": "replace-assistant-reply",
@@ -323,7 +317,7 @@ def test_delete_plan_rejects_revision_change(
 
 def test_replace_assistant_reply_plans_and_applies_as_edit(
         agent_environment, monkeypatch):
-    compiler = _attach_authoring(monkeypatch)
+    calls = _attach_reply_editing(monkeypatch)
     requested = {
         "items": [{"kind": "text", "text": "新的回答"}],
     }
@@ -341,7 +335,7 @@ def test_replace_assistant_reply_plans_and_applies_as_edit(
     result = operations.apply(plan["plan_id"])["result"]
 
     assert result["snapshot"] == "snapshot-before-agent-edit"
-    assert compiler.calls == [
+    assert calls == [
         (1, {"items": [{"kind": "text", "text": "新的回答"}]}),
         (1, {"items": [{"kind": "text", "text": "新的回答"}]}),
     ]
@@ -350,7 +344,7 @@ def test_replace_assistant_reply_plans_and_applies_as_edit(
 
 def test_replace_reply_can_be_combined_with_native_edit_ops(
         agent_environment, monkeypatch):
-    _attach_authoring(monkeypatch)
+    _attach_reply_editing(monkeypatch)
 
     plan = _plan([
         {"op": "delete-turn", "turn": 1},
@@ -405,8 +399,8 @@ def test_replace_reply_rejects_invalid_current_shape(
         _plan([op])
 
 
-def test_replace_reply_requires_authoring_capability(agent_environment):
-    with pytest.raises(CapabilityUnsupportedError):
+def test_replace_reply_requires_editor_operation(agent_environment):
+    with pytest.raises(OperationUnsupportedError):
         _plan([{
             "op": "replace-assistant-reply",
             "turn": 1,
@@ -414,9 +408,9 @@ def test_replace_reply_requires_authoring_capability(agent_environment):
         }])
 
 
-def test_replace_reply_requires_inplace_authoring(
+def test_replace_reply_requires_inplace_editor_operation(
         agent_environment, monkeypatch):
-    _attach_authoring(monkeypatch, inplace=False)
+    _attach_reply_editing(monkeypatch, inplace=False)
 
     with pytest.raises(OperationUnsupportedError):
         _plan([{
@@ -429,7 +423,7 @@ def test_replace_reply_requires_inplace_authoring(
 
 def test_replace_reply_keeps_document_revision_cas(
         agent_environment, monkeypatch):
-    compiler = _attach_authoring(monkeypatch)
+    calls = _attach_reply_editing(monkeypatch)
     plan = _plan([{
         "op": "replace-assistant-reply",
         "turn": 1,
@@ -447,7 +441,7 @@ def test_replace_reply_keeps_document_revision_cas(
 
     with pytest.raises(ConcurrentModificationError):
         operations.apply(plan["plan_id"])
-    assert compiler.calls == [
+    assert calls == [
         (1, {"items": [{"kind": "text", "text": "x"}]}),
     ]
     assert editor.commits == 0
@@ -455,7 +449,7 @@ def test_replace_reply_keeps_document_revision_cas(
 
 def test_replace_reply_keeps_probe_in_mutation_finish(
         agent_environment, monkeypatch):
-    _attach_authoring(monkeypatch)
+    _attach_reply_editing(monkeypatch)
     calls = []
     monkeypatch.setattr(
         operations.services,

@@ -43,7 +43,7 @@ def test_unknown_tool_is_structured():
     assert response["error"]["category"] == "not-found"
 
 
-def test_invalid_reply_maps_to_authoring_code():
+def test_invalid_reply_maps_to_edit_code():
     response = rpc(json.dumps({
         "method": "operation.plan",
         "params": {"input": {
@@ -55,7 +55,7 @@ def test_invalid_reply_maps_to_authoring_code():
             }],
         }}}))
     assert response["ok"] is False
-    assert response["error"]["code"] == "authoring.invalid_reply"
+    assert response["error"]["code"] == "edit.invalid_reply"
 
 
 def test_tools_rpc_returns_manifests():

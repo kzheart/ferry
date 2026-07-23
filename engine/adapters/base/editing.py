@@ -12,6 +12,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...domain.edit import AssistantReply, ToolItem
+from ...domain.errors import (
+    OperationUnsupportedError,
+    SubagentNotSupportedError,
+)
+from .codec import TurnSpan, positive_turn, select_span  # noqa: F401
+
+SPAWN_TOOL_NAMES = {"agent", "spawn_agent", "task"}
+
 
 @dataclass
 class EditDocument:
@@ -29,9 +38,10 @@ class EditBackend(ABC):
     name: str
     inplace = True
     probe = True
+    operations = ("delete-turn", "rewrite")
 
     def capabilities(self) -> dict:
-        operations = ["delete-turn", "rewrite"]
+        operations = list(self.operations)
         return {"tool": self.name, "operations": operations,
             "inplace": self.inplace,
             "probe": self.probe,
@@ -45,6 +55,13 @@ class EditBackend(ABC):
 
     @abstractmethod
     def apply_ops(self, doc: EditDocument, ops: list[dict]) -> list[str]: ...
+
+    def replace_reply(
+        self, doc: EditDocument, turn: int | str, reply: AssistantReply
+    ) -> list[str]:
+        raise OperationUnsupportedError(
+            self.name, "replace-assistant-reply", "inplace"
+        )
 
     @abstractmethod
     def validate(self, doc: EditDocument) -> None: ...
@@ -81,3 +98,39 @@ def write_jsonl(path: Path, records: list[dict]) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n")
     os.replace(tmp, path)
+
+
+def reject_replacement_spawn(reply: AssistantReply) -> None:
+    if any(
+        isinstance(item, ToolItem) and is_spawn_name(item.name)
+        for item in reply.items
+    ):
+        raise SubagentNotSupportedError(
+            "子 Agent spawn/task 会改变会话树，编辑操作已拒绝"
+        )
+
+
+def reject_target_spawn(tool: str) -> None:
+    raise SubagentNotSupportedError(
+        "目标回复包含子 Agent spawn/task，编辑操作已拒绝",
+        {"tool": tool},
+    )
+
+
+def is_spawn_name(name) -> bool:
+    return isinstance(name, str) and name.lower() in SPAWN_TOOL_NAMES
+
+
+def replace_at_first(records, is_reply, compiled):
+    result = []
+    inserted = False
+    for record in records:
+        if is_reply(record):
+            if not inserted:
+                result.extend(compiled)
+                inserted = True
+        else:
+            result.append(record)
+    if not inserted:
+        result.extend(compiled)
+    return result

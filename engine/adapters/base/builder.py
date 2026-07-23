@@ -59,7 +59,7 @@ class ModelCatalogAdapter:
 
 
 def build_plugin(manifest: ToolManifest, browser: BrowserAdapter, *,
-                 migration_target=None, editor=None, authoring=None,
+                 migration_target=None, editor=None,
                  verifier=None, lifecycle=None, models=None) -> ToolPlugin:
     """Assemble a plugin without duplicating lifecycle and binary wiring."""
     executables.register_fallback_dirs(
@@ -72,7 +72,6 @@ def build_plugin(manifest: ToolManifest, browser: BrowserAdapter, *,
         migration_source=TreeMigrationSource(browser),
         migration_target=migration_target,
         editor=editor,
-        authoring=authoring,
         verifier=verifier,
         lifecycle=lifecycle,
         models=models,
