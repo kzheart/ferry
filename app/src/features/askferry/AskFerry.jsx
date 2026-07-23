@@ -12,8 +12,6 @@ import { TOOL_NAME } from "../../api/contract/tools.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../../domain/sessions/sessionAttachment.js";
-import { entitiesFromToolResult } from "../../domain/entities/ferryEntities.js";
-import EntityCards from "./EntityCards.jsx";
 
 const fmtDur = (a, b) => {
   if (!a || !b) return "";
@@ -86,9 +84,6 @@ const ToolRow = memo(function ToolRow({ item, onNavigate }) {
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
   const summary = toolSummary(item, t);
-  // mutate 且成功 → 结果卡常驻(产出);只读类仅展开时出卡;失败/合并不出卡
-  const showCards = !error && !merged && (item.entities?.length > 0) &&
-    (level === "mutate" || open);
   const dotColor = error ? "var(--err)" : level === "mutate" ? "var(--warn)" : "var(--ok)";
 
   return (
@@ -154,12 +149,6 @@ const ToolRow = memo(function ToolRow({ item, onNavigate }) {
               </pre>
             </div>
           )}
-        </div>
-      )}
-
-      {showCards && (
-        <div style={{ marginTop: 6 }}>
-          <EntityCards entities={item.entities} onNavigate={onNavigate} />
         </div>
       )}
     </div>
@@ -236,12 +225,6 @@ function ApprovalCard({ item, onApprove, onDismiss, onNavigate }) {
     : item.status === "applying" ? t("askferry:approval.applying")
     : item.status === "dismissed" ? t("askferry:approval.dismissed")
     : t(`askferry:approval.${KIND_KEYS[op.kind] || "kindGeneric"}`);
-  const entities = op.kind === "migration" || op.kind === "edit"
-    ? entitiesFromToolResult(
-        op.kind === "migration" ? "migrate" : "session_edit",
-        { details: { ...op, result: item.result } },
-      )
-    : [];
   return (
     <div className="fcard" style={{ padding: "12px 14px", display: "flex",
       flexDirection: "column", gap: 8, maxWidth: 560 }}>
@@ -256,7 +239,6 @@ function ApprovalCard({ item, onApprove, onDismiss, onNavigate }) {
       {op.summary && (
         <div className="selectable" style={{ fontSize: 12.5, color: "var(--tx2)", lineHeight: 1.55 }}>
           {op.summary}</div>)}
-      <EntityCards entities={entities} onNavigate={onNavigate} />
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--tx4)" }}>
         {Array.isArray(op.affected_refs) && (
           <span>{t("askferry:approval.affected", { n: op.affected_refs.length })}</span>)}
