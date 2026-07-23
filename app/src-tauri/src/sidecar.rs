@@ -4,7 +4,10 @@ use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    mpsc, Mutex, OnceLock,
+};
 use std::time::Duration;
 
 const ENGINE_PROTOCOL: u64 = 2;
@@ -31,6 +34,30 @@ impl Drop for EngineProcess {
 }
 
 static ENGINE: OnceLock<Mutex<Option<EngineProcess>>> = OnceLock::new();
+static ENGINE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+fn stamp_engine_request(request: &str) -> Result<(String, String), String> {
+    let mut value: Value = serde_json::from_str(request)
+        .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "Engine 请求必须是 JSON object".to_owned())?;
+    let request_id = format!(
+        "engine_{:x}",
+        ENGINE_REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+    );
+    object.insert("request_id".to_owned(), Value::String(request_id.clone()));
+    Ok((value.to_string(), request_id))
+}
+
+fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), String> {
+    let value: Value = serde_json::from_str(response)
+        .map_err(|error| format!("Engine 响应不是有效 JSON: {error}"))?;
+    if value.get("request_id").and_then(Value::as_str) != Some(request_id) {
+        return Err("Engine 响应 request_id 不匹配".to_owned());
+    }
+    Ok(())
+}
 
 fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut command = engine_command(resource_dir)?;
@@ -77,8 +104,11 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
 /// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
 /// 在 release 下会让 PyInstaller onefile 多解压一整次,冷启动时间翻倍。
 fn handshake(engine: &mut EngineProcess) -> Result<(), String> {
+    let (request, request_id) = stamp_engine_request(r#"{"method":"health"}"#)?;
     let line = engine
-        .exchange(r#"{"method":"health"}"#, Duration::from_secs(15))
+        .exchange(&request, Duration::from_secs(15))
+        .map_err(|error| format!("引擎健康检查失败: {error}"))?;
+    validate_engine_response_id(&line, &request_id)
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     let health: Value = serde_json::from_str(&line)
         .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
@@ -109,16 +139,20 @@ pub(crate) fn engine_request_blocking(
     resource_dir: &Path,
     request: &str,
 ) -> Result<String, String> {
-    let timeout = request_timeout(request);
+    let (request, request_id) = stamp_engine_request(request)?;
+    let timeout = request_timeout(&request);
     let slot = ENGINE.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
     let mut last_error = String::new();
-    for _attempt in 0..request_attempts(request) {
+    for _attempt in 0..request_attempts(&request) {
         if guard.is_none() {
             *guard = Some(spawn_engine(resource_dir)?);
         }
         let engine = guard.as_mut().expect("engine just ensured");
-        let exchange = engine.exchange(request, timeout);
+        let exchange = engine.exchange(&request, timeout).and_then(|line| {
+            validate_engine_response_id(&line, &request_id)?;
+            Ok(line)
+        });
         match exchange {
             Ok(line) => return Ok(line),
             Err(error) => {
@@ -763,10 +797,11 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 mod tests {
     use super::{
         operation_plan_id_request, operation_plan_request, request_attempts, request_timeout,
-        validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
-        DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
-        MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
-        RestoreDeleteOperationPlanInput, AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
+        stamp_engine_request, validate_engine_response_id, validate_operation_plan_input,
+        validate_plan_id, validate_public_engine_request, DeleteOperationPlanInput,
+        EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
+        MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
+        AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
     };
 
     #[test]
@@ -1177,5 +1212,23 @@ mod tests {
         assert!(validate_plan_id("operation_fixture").is_err());
         assert!(validate_plan_id("op_bad\nmethod").is_err());
         assert!(validate_plan_id(&format!("op_{}", "a".repeat(126))).is_err());
+    }
+
+    #[test]
+    fn engine_requests_receive_host_owned_correlation_ids() {
+        let (request, request_id) =
+            stamp_engine_request(r#"{"method":"health","request_id":"untrusted"}"#).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert_eq!(
+            value.get("request_id").and_then(serde_json::Value::as_str),
+            Some(request_id.as_str()),
+        );
+        assert_ne!(request_id, "untrusted");
+        assert!(validate_engine_response_id(
+            &serde_json::json!({"request_id": request_id}).to_string(),
+            &request_id,
+        )
+        .is_ok());
+        assert!(validate_engine_response_id(r#"{"request_id":"other"}"#, &request_id).is_err());
     }
 }
