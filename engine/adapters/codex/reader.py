@@ -9,7 +9,6 @@ from ...domain.model import (
     Block,
     ContextCompaction,
     Message,
-    RawRecord,
     Session,
     ToolCall,
     ToolResult,
@@ -554,17 +553,6 @@ def _rollout_index(path: Path, sessions_dir: str | Path | None) -> dict[str, tup
     return index
 
 
-def _raw_record(record: dict, ordinal: int, path: Path) -> RawRecord:
-    payload = record.get("payload") or {}
-    subtype = payload.get("type") if isinstance(payload, dict) else None
-    record_type = record.get("type", "unknown")
-    if subtype:
-        record_type += "." + str(subtype)
-    return RawRecord(source="codex", record_type=record_type,
-                     payload=record, ordinal=ordinal,
-                     timestamp=record.get("timestamp"), location=str(path))
-
-
 def _load_records(path: Path) -> list[dict]:
     records = []
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
@@ -671,7 +659,6 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         cur_reasoning = []
 
     for ordinal, l in enumerate(lines):
-        sess.raw_records.append(_raw_record(l, ordinal, path))
         record_type = l.get("type")
         if record_type == "compacted":
             after_message_id = next((
@@ -714,14 +701,14 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 source_id = f"record:{ordinal}"
                 flush_pending_into(pending_blocks, source_id)
                 sess.messages.append(Message(role="assistant", blocks=pending_blocks,
-                                             raw=[], source_id=source_id,
+                                             source_id=source_id,
                                              created_at=l.get("timestamp")))
             if not text.strip() and not image_blocks and not cur_tools and not cur_reasoning:
                 continue
             blocks = ([Block("text", text)] if text.strip() else []) + image_blocks
             if role == "assistant":
                 flush_pending_into(blocks, f"record:{ordinal}")
-            sess.messages.append(Message(role=role, blocks=blocks, raw=[l],
+            sess.messages.append(Message(role=role, blocks=blocks,
                                          source_id=f"record:{ordinal}",
                                          created_at=l.get("timestamp")))
         elif pt in ("custom_tool_call", "function_call"):
@@ -758,7 +745,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     if cur_tools or cur_reasoning:
         blocks = []
         flush_pending_into(blocks)
-        sess.messages.append(Message(role="assistant", blocks=blocks, raw=[]))
+        sess.messages.append(Message(role="assistant", blocks=blocks))
     candidates = [
         compaction for compaction in sess.context_compactions
         if compaction.source_meta.get("replacement_history_present")
