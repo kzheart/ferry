@@ -29,7 +29,7 @@ do not provide backward compatibility.
 ```text
 React UI
   |
-  | typed desktop commands and events
+  | desktop commands and events
   v
 Tauri / Rust Host
   |-- Python Session Engine
@@ -95,7 +95,20 @@ result artifacts live only within the workflow/conversation persistence model.
 External Claude, Codex, and OpenCode stores remain external sources of truth.
 Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
 
-Ferry-owned durable state may use SQLite under these rules:
+Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
+currently version 3 and owns immutable operation plans, operation audit,
+delete-recovery handles, and session metadata. The database uses WAL plus
+`BEGIN IMMEDIATE` for every state transition and metadata CAS. A schema other
+than the exact current version fails at startup; old JSON metadata and older
+SQLite schemas are not read or migrated.
+
+Other Ferry-owned stores (migration history, summaries, organization proposals,
+and Runtime conversation event logs) have not yet been consolidated. They must
+continue to be accessed only by their designated process until they move into
+the Python-owned SQLite boundary; Rust and Ferry Runtime never open
+`ferry-state.sqlite3` directly.
+
+The SQLite boundary follows these rules:
 
 - one process is the database writer and schema owner;
 - other runtimes use an IPC port instead of opening the database for writes;
@@ -103,13 +116,18 @@ Ferry-owned durable state may use SQLite under these rules:
 - UI caches are disposable and rebuildable;
 - schema mismatch fails explicitly instead of running compatibility migrations.
 
-The storage owner will be selected before the SQLite migration begins and
-recorded as an ADR. Until then, existing stores keep their current owners.
+The static external-session contract starts at `contracts/agents.json` and is
+generated into the UI, Rust Host, Python Engine, and Ferry Runtime by
+`scripts/generate-contracts.py`. CI rejects generated-file drift. It contains
+only current built-in Agent identities and launch policy, never external Agent
+version ranges or compatibility status.
 
 ## Cross-platform boundary
 
-Windows support is retained. Platform behavior is isolated behind explicit
-Rust interfaces:
+Windows support is retained. `app/src-tauri/src/platform/` is the initial Rust
+platform boundary. It already owns reveal-in-file-manager behavior: macOS has
+the native implementation and Windows has an explicit, compilable unsupported
+stub. The following capabilities still need to move behind the same boundary:
 
 - process spawning and hidden-console policy;
 - executable and bundled-sidecar naming;
@@ -139,8 +157,8 @@ Windows sidecar builds and Rust compilation remain CI gates.
 ## Dependency direction
 
 ```text
-UI -> generated desktop contract
-Rust host -> generated protocol and policy
+UI -> generated Agent contract and desktop command layer
+Rust host -> generated Agent policy and IPC boundary
 Ferry Runtime -> tool port -> Rust gateway
 Rust gateway -> Session Engine application API
 Session Engine application -> adapter contracts
