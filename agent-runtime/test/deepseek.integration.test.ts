@@ -28,7 +28,7 @@ describe("DeepSeek provider integration", () => {
         providerHost,
         toolHandler: async (name) => {
           calls.push(name);
-          return { capabilities: ["session_search"] };
+          return { sessions: [] };
         },
       });
       await expect(runtime.providerStatus()).resolves.toMatchObject({
@@ -41,7 +41,7 @@ describe("DeepSeek provider integration", () => {
       await runtime.createSession("deepseek-smoke");
       const { run_id } = await runtime.prompt(
         "deepseek-smoke",
-        "必须先调用 ferry_list_capabilities 获取能力，然后仅回复 FERRY_DEEPSEEK_OK。",
+        '必须先调用 ferry_search_sessions（query 传 "test"）搜索会话，然后仅回复 FERRY_DEEPSEEK_OK。',
       );
       await runtime.waitForIdle("deepseek-smoke");
 
@@ -55,7 +55,7 @@ describe("DeepSeek provider integration", () => {
       expect(
         events.filter((event) => event.type === "content.delta").length,
       ).toBeGreaterThan(0);
-      expect(calls).toEqual(["ferry_list_capabilities"]);
+      expect(calls).toEqual(["ferry_search_sessions"]);
       expect(events.some((event) => event.type === "tool.completed")).toBe(
         true,
       );

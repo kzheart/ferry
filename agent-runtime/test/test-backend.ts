@@ -89,12 +89,12 @@ const streamFn: StreamFunction = (
       return;
     }
     const prompt = lastUserText(context);
-    if (prompt.startsWith("tool:list_capabilities")) {
+    if (prompt.startsWith("tool:search")) {
       const call: ToolCall = {
         type: "toolCall",
         id: "tool-call-1",
-        name: "ferry_list_capabilities",
-        arguments: {},
+        name: "ferry_search_sessions",
+        arguments: { query: "x" },
       };
       const partial = message([], "toolUse");
       stream.push({ type: "start", partial });

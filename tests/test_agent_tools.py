@@ -197,12 +197,7 @@ def _claude_ref():
     return result["sessions"][0]["ref"]
 
 
-def test_capabilities_and_search_never_expose_storage_locations(agent_environment):
-    capabilities = agent_tools.list_capabilities()
-    encoded = json.dumps(capabilities, ensure_ascii=False)
-    assert "source_path" not in encoded
-    assert "executables" not in encoded
-
+def test_search_never_exposes_storage_locations(agent_environment):
     result = agent_tools.search_sessions("支付", agents=["claude"], limit=1)
     assert result["returned"] == 1
     item = result["sessions"][0]

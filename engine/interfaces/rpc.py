@@ -52,7 +52,6 @@ RPC_METHODS = {
     "session_undelete": lambda p: services.session_undelete(p["snapshot"]),
     "session_meta_list": lambda p: services.session_meta_list(),
     "session_meta_set": lambda p: services.session_meta_set(p["id"], p.get("patch") or {}),
-    "agent_list_capabilities": lambda p: agent_tools.list_capabilities(),
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),

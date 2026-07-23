@@ -353,7 +353,6 @@ fn structured_engine_error(envelope: &Value) -> String {
 
 fn tool_method(name: &str) -> Option<&'static str> {
     Some(match name {
-        "ferry_list_capabilities" => "agent_list_capabilities",
         "ferry_search_sessions" => "agent_search_sessions",
         "ferry_resolve_session" => "agent_resolve_session",
         "ferry_get_session_context" => "agent_get_session_context",
