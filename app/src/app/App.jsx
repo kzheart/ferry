@@ -6,7 +6,6 @@ import { openTerminal, revealPath, rpc,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
-import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
   sessionRef } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
@@ -34,6 +33,7 @@ import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
+import { AppShell } from "../features/shell/AppShell.jsx";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -818,7 +818,8 @@ export default function App() {
   return (
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex",
       background: "var(--win-bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
-        <AppRail
+      <AppShell
+        rail={<AppRail
           railOnly={railOnly}
           resizing={dragging}
           items={railItems}
@@ -846,10 +847,8 @@ export default function App() {
             up: endRailDrag,
             cancel: cancelRailDrag,
           }}
-        />
-
-        {/* 资源栏 */}
-        {paneCfg && (
+        />}
+        resourcePane={paneCfg && (
           <Pane collapsed={collapsed} width={paneW} dragging={dragging}
             title={paneCfg.title} count={paneCfg.count} placeholder={paneCfg.placeholder}
             query={paneCfg.query}
@@ -890,22 +889,12 @@ export default function App() {
                 onRename={setAgentRenameFor} />)}
           </Pane>
         )}
-
-        {/* 拖拽分隔条 */}
-        {paneCfg && !collapsed && (
-          <div onMouseDown={startDrag} onDoubleClick={() => setPaneW(232)}
-            title={t("app:drag.hint")}
-            style={{ width: 9, flex: "none", cursor: "col-resize", position: "relative",
-              background: dragging ? "var(--acc-soft2)" : "var(--bg)", zIndex: 6 }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 1,
-              background: dragging ? ACCENT : "var(--line)" }} />
-          </div>
-        )}
-
-        {/* 内容列:自带 44px 工具栏,白底从窗口顶通到底(窗口透明走 vibrancy 时必须自带不透明底) */}
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
-        <div data-tauri-drag-region style={{ height: 44, flex: "none", display: "flex", alignItems: "center",
-          gap: 12, padding: "0 12px" }}>
+        showDivider={Boolean(paneCfg && !collapsed)}
+        resizing={dragging}
+        onResizeStart={startDrag}
+        onResizeReset={() => setPaneW(232)}
+        dividerTitle={t("app:drag.hint")}
+        toolbar={<>
           {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
           <button className={paneCfg ? "hov" : undefined} disabled={!paneCfg}
             onClick={() => setCollapsed(v => !v)}
@@ -923,8 +912,8 @@ export default function App() {
             </button>
           )}
           <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
-        </div>
-        <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        </>}
+      >
         {view === "overview" && (
           <Overview sessions={sessions} historyRows={historyRows}
             prices={pricing?.prices || {}} scanning={scanning}
@@ -958,8 +947,7 @@ export default function App() {
             onOpenConfig={(section = "providers") => {
               setSettingsSection(section); setSettingsOpen(true); }} />)}
         {view === "firstrun" && <FirstRun env={env} scan={scan} onStart={firstDone} />}
-        </div>
-      </div>
+      </AppShell>
 
       {/* 弹层 */}
       {organizerOpen && (
