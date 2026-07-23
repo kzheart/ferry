@@ -1,13 +1,18 @@
 import copy
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from threading import Barrier
 
 import pytest
 
 from engine.application import operations
+from engine.application.ports import current
+from engine.domain.authoring import AssistantReply
 from engine.domain.errors import (
     AgentRequestError,
+    CapabilityUnsupportedError,
     ConcurrentModificationError,
+    InvalidReplyError,
     OperationUnsupportedError,
 )
 from test_agent_tools import _claude_ref, agent_environment
@@ -30,6 +35,40 @@ def _plan(ops=None, probe=False):
     })
 
 
+class ReplyCompiler:
+    name = "claude"
+
+    def __init__(self, *, inplace=True):
+        self.inplace = inplace
+        self.calls = []
+
+    def supports_mode(self, save_as):
+        return not save_as and self.inplace
+
+    def capabilities(self):
+        return {
+            "operation": "replace-assistant-reply",
+            "inplace": self.inplace,
+        }
+
+    def replace(self, _doc, turn, reply: AssistantReply):
+        self.calls.append((turn, reply.to_dict()))
+        return [{"code": "reply.replaced", "turn": turn}]
+
+
+def _attach_authoring(monkeypatch, *, inplace=True):
+    ports = current()
+    original_adapter = ports.adapter
+    compiler = ReplyCompiler(inplace=inplace)
+    plugin = replace(original_adapter("claude"), authoring=compiler)
+    monkeypatch.setattr(
+        ports,
+        "adapter",
+        lambda tool: plugin if tool == "claude" else original_adapter(tool),
+    )
+    return compiler
+
+
 def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     requested_ops = [{"op": "delete-turn", "turn": 1}]
     plan = _plan(requested_ops)
@@ -49,6 +88,159 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     ]
     assert applied["result"]["snapshot"] == "snapshot-before-agent-edit"
     assert operations.status(plan["plan_id"])["status"] == "applied"
+
+
+def test_replace_assistant_reply_plans_and_applies_as_edit(
+        agent_environment, monkeypatch):
+    compiler = _attach_authoring(monkeypatch)
+    requested = {
+        "items": [{"kind": "text", "text": "新的回答"}],
+    }
+    plan = _plan([{
+        "op": "replace-assistant-reply",
+        "turn": 1,
+        "reply": requested,
+    }])
+    requested["items"][0]["text"] = "计划后篡改"
+
+    assert plan["preview"]["changes"] == [{
+        "code": "reply.replaced",
+        "turn": 1,
+    }]
+    result = operations.apply(plan["plan_id"])["result"]
+
+    assert result["snapshot"] == "snapshot-before-agent-edit"
+    assert compiler.calls == [
+        (1, {"items": [{"kind": "text", "text": "新的回答"}]}),
+        (1, {"items": [{"kind": "text", "text": "新的回答"}]}),
+    ]
+    assert agent_environment["editor"].commits == 1
+
+
+def test_replace_reply_can_be_combined_with_native_edit_ops(
+        agent_environment, monkeypatch):
+    _attach_authoring(monkeypatch)
+
+    plan = _plan([
+        {"op": "delete-turn", "turn": 1},
+        {
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "保留轮次的新回答"}]},
+        },
+    ])
+
+    assert plan["preview"]["changes"] == [
+        {"code": "turn.deleted"},
+        {"code": "reply.replaced", "turn": 1},
+    ]
+    operations.apply(plan["plan_id"])
+    assert agent_environment["editor"].last_ops == [{
+        "op": "delete-turn",
+        "turn": 1,
+    }]
+
+
+@pytest.mark.parametrize("op,error", [
+    (
+        {
+            "op": "replace-assistant-reply",
+            "turn": 0,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+        },
+        AgentRequestError,
+    ),
+    (
+        {
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": []},
+        },
+        InvalidReplyError,
+    ),
+    (
+        {
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+            "unexpected": True,
+        },
+        AgentRequestError,
+    ),
+])
+def test_replace_reply_rejects_invalid_current_shape(
+        agent_environment, op, error):
+    with pytest.raises(error):
+        _plan([op])
+
+
+def test_replace_reply_requires_authoring_capability(agent_environment):
+    with pytest.raises(CapabilityUnsupportedError):
+        _plan([{
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+        }])
+
+
+def test_replace_reply_requires_inplace_authoring(
+        agent_environment, monkeypatch):
+    _attach_authoring(monkeypatch, inplace=False)
+
+    with pytest.raises(OperationUnsupportedError):
+        _plan([{
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+        }])
+    assert agent_environment["editor"].commits == 0
+
+
+def test_replace_reply_keeps_document_revision_cas(
+        agent_environment, monkeypatch):
+    compiler = _attach_authoring(monkeypatch)
+    plan = _plan([{
+        "op": "replace-assistant-reply",
+        "turn": 1,
+        "reply": {"items": [{"kind": "text", "text": "x"}]},
+    }])
+    editor = agent_environment["editor"]
+    original_load = editor.load
+
+    def stale_load(ref):
+        document = original_load(ref)
+        document.revision = "revision-2"
+        return document
+
+    monkeypatch.setattr(editor, "load", stale_load)
+
+    with pytest.raises(ConcurrentModificationError):
+        operations.apply(plan["plan_id"])
+    assert compiler.calls == [
+        (1, {"items": [{"kind": "text", "text": "x"}]}),
+    ]
+    assert editor.commits == 0
+
+
+def test_replace_reply_keeps_probe_in_mutation_finish(
+        agent_environment, monkeypatch):
+    _attach_authoring(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        operations.services,
+        "_finish_mutation",
+        lambda tool, editor, result, doc, snapshot, probe, save_as:
+            calls.append((probe, save_as, snapshot)) or result,
+    )
+
+    plan = _plan([{
+        "op": "replace-assistant-reply",
+        "turn": "turn-locator-1",
+        "reply": {"items": [{"kind": "text", "text": "x"}]},
+    }], probe=True)
+    operations.apply(plan["plan_id"])
+
+    assert calls == [(True, False, "snapshot-before-agent-edit")]
 
 
 def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):

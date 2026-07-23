@@ -8,6 +8,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+from ..domain.authoring import AssistantReply
 from ..domain.errors import (
     AgentReferenceError,
     AgentRequestError,
@@ -16,6 +17,7 @@ from ..domain.errors import (
     OperationUnsupportedError,
 )
 from . import agent_tools, services
+from .editing import apply_mutation, preview_mutation
 from .ports import current
 
 
@@ -77,30 +79,19 @@ class OperationService:
         ref = operation_input["ref"]
 
         before = agent_tools._INDEX.resolve(tool, ref)
-        preview = agent_tools.preview_edit(
-            tool, ref, ops=operation_input["ops"],
-        )
+        preview = self._preview_edit(before, operation_input["ops"])
         after = agent_tools._INDEX.resolve(tool, ref)
         if before.revision != after.revision:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
             )
-        editor = current().adapter(tool).require("editor")
+        plugin = current().adapter(tool)
+        editor = plugin.require("editor")
         try:
-            native_ops = agent_tools.resolve_edit_ops(
-                after, operation_input["ops"],
-            )
+            native_ops = self._resolve_ops(after, operation_input["ops"])
         except LocatorStaleError as error:
-            raise agent_tools._public_locator_error(
-                operation_input["ops"],
-            ) from error
-        if not editor.supports_mode(native_ops, False):
-            operation_names = ",".join(
-                sorted({item.get("op", "?") for item in native_ops})
-            )
-            raise OperationUnsupportedError(
-                tool, operation_names, "inplace",
-            )
+            raise self._public_locator_error(operation_input["ops"]) from error
+        self._require_inplace_support(plugin, editor, native_ops)
 
         input_json = _canonical(operation_input)
         preview_json = _canonical(preview)
@@ -200,7 +191,7 @@ class OperationService:
             raise AgentRequestError("operation ref 非法")
         if not isinstance(probe, bool):
             raise AgentRequestError("operation probe 必须是布尔值")
-        agent_tools._validate_ops(ops)
+        ops = OperationService._validate_ops(ops)
         if len(_canonical(ops).encode()) > 64 * 1024:
             raise AgentRequestError("ops 超过 64 KiB")
         return json.loads(_canonical({
@@ -224,27 +215,177 @@ class OperationService:
             )
         plugin = current().adapter(params["tool"])
         editor = plugin.require("editor")
-        native_ops = agent_tools.resolve_edit_ops(record, params["ops"])
-        if not editor.supports_mode(native_ops, False):
-            operations = ",".join(
-                sorted({item.get("op", "?") for item in native_ops})
-            )
-            raise OperationUnsupportedError(
-                params["tool"], operations, "inplace",
-            )
-        from .editing import apply
+        native_ops = self._resolve_ops(record, params["ops"])
+        compiler = self._require_inplace_support(
+            plugin, editor, native_ops,
+        )
         try:
-            result, doc, snapshot = apply(
-                editor,
-                record.canonical_ref,
-                native_ops,
-                False,
-                expected_revision=operation.document_revision,
-            )
+            if compiler is None:
+                from .editing import apply
+                result, doc, snapshot = apply(
+                    editor,
+                    record.canonical_ref,
+                    native_ops,
+                    False,
+                    expected_revision=operation.document_revision,
+                )
+            else:
+                result, doc, snapshot = apply_mutation(
+                    editor,
+                    record.canonical_ref,
+                    self._mutate(editor, compiler, native_ops),
+                    False,
+                    expected_revision=operation.document_revision,
+                )
         except LocatorStaleError as error:
-            raise agent_tools._public_locator_error(params["ops"]) from error
+            raise self._public_locator_error(params["ops"]) from error
         return services._finish_mutation(
             params["tool"], editor, result, doc, snapshot, params["probe"], False,
+        )
+
+    @staticmethod
+    def _validate_ops(ops) -> list[dict]:
+        if not isinstance(ops, list) or not ops or len(ops) > 50:
+            raise AgentRequestError("ops 必须是 1 到 50 项的数组")
+        agent_tools._validate_json_shape(ops)
+        ordinary = []
+        normalized = []
+        authored_turns = []
+        for op in ops:
+            if not isinstance(op, dict):
+                raise AgentRequestError("每个 edit op 必须是 object")
+            if op.get("op") != "replace-assistant-reply":
+                ordinary.append(op)
+                normalized.append(op)
+                continue
+            if set(op) != {"op", "turn", "reply"}:
+                raise AgentRequestError(
+                    "replace-assistant-reply 参数非法"
+                )
+            turn = op["turn"]
+            if (isinstance(turn, bool) or
+                    not isinstance(turn, (int, str)) or
+                    (isinstance(turn, int) and turn < 1) or
+                    (isinstance(turn, str) and not 1 <= len(turn) <= 512)):
+                raise AgentRequestError(
+                    "replace-assistant-reply turn 参数非法"
+                )
+            reply = AssistantReply.from_dict(op["reply"])
+            turn_key = (type(turn).__name__, turn)
+            if turn_key in authored_turns:
+                raise AgentRequestError(
+                    "同一轮次不能在一次编辑中重复替换",
+                    {"field": "ops.turn"},
+                )
+            authored_turns.append(turn_key)
+            normalized.append({
+                "op": "replace-assistant-reply",
+                "turn": turn,
+                "reply": reply.to_dict(),
+            })
+        if ordinary:
+            agent_tools._validate_ops(ordinary)
+        return normalized
+
+    @staticmethod
+    def _resolve_ops(record, ops: list[dict]) -> list[dict]:
+        resolved = []
+        for op in ops:
+            if op["op"] == "replace-assistant-reply":
+                resolved.append(dict(op))
+            else:
+                resolved.extend(agent_tools.resolve_edit_ops(record, [op]))
+        return resolved
+
+    @staticmethod
+    def _require_inplace_support(plugin, editor, ops: list[dict]):
+        ordinary = [
+            op for op in ops if op["op"] != "replace-assistant-reply"
+        ]
+        authored = [
+            op for op in ops if op["op"] == "replace-assistant-reply"
+        ]
+        if ordinary and not editor.supports_mode(ordinary, False):
+            operation_names = ",".join(
+                sorted({item["op"] for item in ordinary})
+            )
+            raise OperationUnsupportedError(
+                plugin.id, operation_names, "inplace",
+            )
+        if not authored:
+            return None
+        compiler = plugin.require("authoring")
+        if not compiler.supports_mode(False):
+            raise OperationUnsupportedError(
+                compiler.name, "replace-assistant-reply", "inplace",
+            )
+        return compiler
+
+    @staticmethod
+    def _mutate(editor, compiler, ops: list[dict]):
+        def mutate(doc):
+            changes = []
+            for op in ops:
+                if op["op"] == "replace-assistant-reply":
+                    changes.extend(compiler.replace(
+                        doc,
+                        op["turn"],
+                        AssistantReply.from_dict(op["reply"]),
+                    ))
+                else:
+                    changes.extend(editor.apply_ops(doc, [op]))
+            return changes
+        return mutate
+
+    def _preview_edit(self, record, ops: list[dict]) -> dict:
+        if not any(
+                op["op"] == "replace-assistant-reply" for op in ops):
+            return agent_tools.preview_edit(
+                record.tool, record.opaque_ref, ops=ops,
+            )
+        plugin = current().adapter(record.tool)
+        editor = plugin.require("editor")
+        native_ops = self._resolve_ops(record, ops)
+        compiler = self._require_inplace_support(
+            plugin, editor, native_ops,
+        )
+        try:
+            result = preview_mutation(
+                editor,
+                record.canonical_ref,
+                self._mutate(editor, compiler, native_ops),
+                loader=getattr(editor, "load_preview", None),
+            )
+        except LocatorStaleError as error:
+            raise self._public_locator_error(ops) from error
+        return agent_tools._finalize_dto({
+            "tool": record.tool,
+            "ref": record.opaque_ref,
+            "mode": "edit",
+            "session_id": agent_tools._record_session_id(record),
+            "revision": agent_tools._redact(str(result["revision"]), 256),
+            "before": agent_tools._bounded_json(result["before"], 12 * 1024),
+            "after": agent_tools._bounded_json(result["after"], 12 * 1024),
+            "changes": agent_tools._bounded_json(result["changes"], 12 * 1024),
+            "capabilities": agent_tools._bounded_json({
+                "editing": editor.capabilities(),
+                "authoring": compiler.capabilities(),
+            }, 12 * 1024),
+        })
+
+    @staticmethod
+    def _public_locator_error(ops: list[dict]) -> LocatorStaleError:
+        authored = next((
+            op for op in ops
+            if op.get("op") == "replace-assistant-reply"
+            and isinstance(op.get("turn"), str)
+        ), None)
+        if authored is None:
+            return agent_tools._public_locator_error(ops)
+        return LocatorStaleError(
+            "轮次定位信息与当前会话不匹配",
+            {"field": "turn", "locator": authored["turn"],
+             "hint": "重新读取会话，并原样使用 turns[].turn_locator"},
         )
 
     def _get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
