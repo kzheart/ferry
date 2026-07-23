@@ -27,6 +27,8 @@ export function renderEvent(e) {
       return t("events:migration.tool_degraded", { tool_name: p.tool_name ?? "" });
     case "migration.tool_dropped":
       return t("events:migration.tool_dropped", { tool_name: p.tool_name ?? "" });
+    case "migration.content_dropped":
+      return t("events:migration.content_dropped", { kind: p.kind ?? "" });
     case "migration.fork_parent_fallback":
       return t("events:migration.fork_parent_fallback");
     case "migration.truncated":

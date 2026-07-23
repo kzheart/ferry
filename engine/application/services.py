@@ -129,7 +129,9 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "root_msg_count": len(sess.messages),
             "probe_model": probe_model or None}
     if dry_run:
-        return {**base, "dry_run": True}
+        with narration.content_locale(content_locale):
+            preview = target.preview(sess, target_cwd) if hasattr(target, "preview") else None
+        return {**base, "dry_run": True, "preview": preview}
 
     with narration.content_locale(content_locale):
         sid, dest = target.write(sess, target_cwd)

@@ -1,7 +1,8 @@
 {
   "steps": {
     "target": "目标",
-    "preview": "预演",
+    "impact": "影响",
+    "preview": "预览",
     "confirm": "确认",
     "writing": "写入",
     "result": "结果"
@@ -36,7 +37,54 @@
     "loading": "正在预演转换、评估影响…",
     "impactTitle": "影响预览 · {{scope}}",
     "scaleLabel": "迁移规模",
-    "scaleMeta": "{{msg}} 条消息 · {{tree}} 个树节点"
+    "scaleMeta": "{{msg}} 条消息 · {{tree}} 个树节点",
+    "targetSession": {
+      "empty": "当前没有可预览的会话内容",
+      "root": "主会话",
+      "childPath": "子会话 {{path}}",
+      "stepCount": "{{n}} 步",
+      "expandMessage": "展开全文",
+      "collapseMessage": "收起"
+    },
+    "differences": {
+      "open": "查看迁移差异",
+      "none": "无迁移差异",
+      "title": "迁移差异",
+      "summary": "精确保留 {{exact}} · 转换 {{transformed}} · 有损 {{lossy}} · 叙述 {{narrated}} · 丢弃 {{dropped}}",
+      "back": "返回消息预览",
+      "all": "全部",
+      "degraded": "降级",
+      "exact": "精确保留",
+      "transformed": "转换",
+      "lossy": "有损",
+      "narrated": "叙述",
+      "dropped": "丢弃",
+      "search": "搜索差异…",
+      "groupTitle": "{{session}} · 第 {{n}} 轮",
+      "sessionGroupTitle": "{{session}} · 会话级损失",
+      "sessionLoss": "会话级损失",
+      "thinking": "思考内容",
+      "original": "原始内容",
+      "migrated": "迁移后内容",
+      "truncated": "内容过长，已截取（原始 {{n}} 字符）",
+      "viewTurn": "查看所在轮次",
+      "noLocation": "迁移后无对应位置",
+      "empty": "没有符合当前筛选的迁移差异",
+      "loadMore": "继续显示 {{n}} 条",
+      "reasons": {
+        "tool_transformed": "{{tool}} 需要转换为目标工具支持的形式",
+        "tool_to_history": "{{tool}} 无法原生恢复，已转为历史文本",
+        "unknown_result_status": "{{tool}} 的结果状态未知，为避免伪造成成功，已转为历史文本",
+        "unsupported_result_status": "目标工具无法可靠表达 {{tool}} 的结果状态，已转为历史文本",
+        "tool_result_truncated": "{{tool}} 的源结果已被截断",
+        "unsupported_tool_fields": "{{tool}} 的部分参数无法在目标端表达",
+        "default_fetch_prompt": "{{tool}} 缺少目标端必需提示词，已补入默认提示词",
+        "invalid_tool_input": "{{tool}} 的参数无法转换，已转为历史文本",
+        "tool_unsupported": "目标工具不支持 {{tool}}，该内容将被丢弃",
+        "unsupported_image": "目标会话格式不支持该图片",
+        "unsupported_thinking": "目标会话格式不保留思考内容"
+      }
+    }
   },
   "confirm": {
     "title": "确认迁移",
