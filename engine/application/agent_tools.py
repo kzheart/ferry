@@ -174,29 +174,37 @@ class AgentSessionIndex:
     def refresh(self) -> list[IndexedSession]:
         ports = current()
         cache = ports.cache_factory()
+        scanned = []
+        for tool_name in ports.adapters():
+            plugin = ports.adapter(tool_name)
+            scanned.extend(
+                (tool_name, plugin, row)
+                for row in plugin.browser.scan(cache)
+            )
+        cache.flush()
+        return self.index_rows(scanned)
+
+    def index_rows(self, scanned) -> list[IndexedSession]:
         records: list[IndexedSession] = []
         active: set[str] = set()
         with self._lock:
-            for tool_name in ports.adapters():
-                plugin = ports.adapter(tool_name)
-                for row in plugin.browser.scan(cache):
-                    canonical, root, path_backed, identity = self._canonicalize(plugin, row)
-                    if canonical is None:
-                        continue
-                    revision = _revision(tool_name, canonical, row, identity)
-                    key = (tool_name, canonical, revision)
-                    opaque = self._opaque_by_key.get(key)
-                    if opaque is None:
-                        opaque = "fsr_" + secrets.token_urlsafe(18)
-                        self._opaque_by_key[key] = opaque
-                    record = IndexedSession(
-                        opaque, tool_name, canonical, root, path_backed,
-                        dict(row), revision, identity,
-                    )
-                    self._by_opaque[opaque] = record
-                    active.add(opaque)
-                    records.append(record)
-            cache.flush()
+            for tool_name, plugin, row in scanned:
+                canonical, root, path_backed, identity = self._canonicalize(plugin, row)
+                if canonical is None:
+                    continue
+                revision = _revision(tool_name, canonical, row, identity)
+                key = (tool_name, canonical, revision)
+                opaque = self._opaque_by_key.get(key)
+                if opaque is None:
+                    opaque = "fsr_" + secrets.token_urlsafe(18)
+                    self._opaque_by_key[key] = opaque
+                record = IndexedSession(
+                    opaque, tool_name, canonical, root, path_backed,
+                    dict(row), revision, identity,
+                )
+                self._by_opaque[opaque] = record
+                active.add(opaque)
+                records.append(record)
             for opaque in set(self._by_opaque) - active:
                 stale = self._by_opaque.pop(opaque)
                 self._opaque_by_key.pop(

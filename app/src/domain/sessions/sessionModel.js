@@ -52,6 +52,8 @@ export const sessionRef = session =>
     ? session.id
     : (session.path || session.id);
 
+export const operationRef = session => session.ref;
+
 export function toRounds(messages, authoredTurns) {
   if (authoredTurns?.length) {
     return authoredTurns.map(turn => {
