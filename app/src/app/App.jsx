@@ -31,7 +31,6 @@ import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
-import { generateOrganizationProposal } from "../features/organizing/organizationService.js";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -112,9 +111,6 @@ export default function App() {
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
   const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
   const visibleIds = useRef({});
-  const knownSessions = useRef(null);
-  const organizedSessions = useRef(new Set());
-  const pendingOrganizationSessions = useRef(new Map());
 
   const sessions = scan?.sessions || [];
   const byId = useMemo(() => Object.fromEntries(sessions.map(s => [s.id, s])), [sessions]);
@@ -124,44 +120,6 @@ export default function App() {
     runtimeProbe: !!settings.runtimeProbe, doScan,
     onInplaceApplied: () => select(selId) });
 
-  useEffect(() => {
-    const ids = new Set(sessions.map(session => `${session.tool}\0${session.id}`));
-    if (knownSessions.current === null) {
-      knownSessions.current = ids;
-    }
-    const additions = sessions.filter(session =>
-      !knownSessions.current.has(`${session.tool}\0${session.id}`));
-    knownSessions.current = ids;
-    const opened = cur && !organizedSessions.current.has(`${cur.tool}\0${cur.id}`)
-      ? [cur] : [];
-    for (const session of [...additions, ...opened]) {
-      const key = `${session.tool}\0${session.id}`;
-      if (!organizedSessions.current.has(key)) {
-        pendingOrganizationSessions.current.set(key, session);
-      }
-    }
-    const pending = [...pendingOrganizationSessions.current.values()]
-      .filter(session => !organizedSessions.current.has(`${session.tool}\0${session.id}`));
-    if (!pending.length || ferry.health?.credential !== "available") return;
-    pending.forEach(session => {
-      const key = `${session.tool}\0${session.id}`;
-      organizedSessions.current.add(key);
-      pendingOrganizationSessions.current.delete(key);
-    });
-    void (async () => {
-      for (const session of pending) {
-        try {
-          await generateOrganizationProposal([{
-            ...session, project: repoOf(session.dir),
-          }], i18n.language);
-        } catch {
-          const key = `${session.tool}\0${session.id}`;
-          organizedSessions.current.delete(key);
-          pendingOrganizationSessions.current.set(key, session);
-        }
-      }
-    })();
-  }, [sessions, cur, ferry.health?.credential, i18n.language]);
   const { ops, dirtyOps, setOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
