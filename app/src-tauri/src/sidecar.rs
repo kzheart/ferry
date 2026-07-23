@@ -1,3 +1,4 @@
+use crate::contracts::engine_methods::{self, RetryPolicy, TimeoutClass};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -165,43 +166,30 @@ pub(crate) fn engine_request_blocking(
 }
 
 fn request_timeout(request: &str) -> Duration {
-    let value = serde_json::from_str::<Value>(request).ok();
-    let method = value
-        .as_ref()
-        .and_then(|value| value.get("method").and_then(Value::as_str));
-    if matches!(method, Some("operation.apply")) {
-        ENGINE_COMMIT_TIMEOUT
-    } else if matches!(
-        method,
-        Some("agent_search_sessions" | "agent_session_read" | "agent_get_usage")
-    ) {
-        AGENT_LOOKUP_TIMEOUT
-    } else {
-        ENGINE_TIMEOUT
+    match request_policy(request).map(|policy| policy.timeout) {
+        Some(TimeoutClass::Lookup) => AGENT_LOOKUP_TIMEOUT,
+        Some(TimeoutClass::Commit) => ENGINE_COMMIT_TIMEOUT,
+        Some(TimeoutClass::Normal) | None => ENGINE_TIMEOUT,
     }
 }
 
 fn request_attempts(request: &str) -> u8 {
-    let method = serde_json::from_str::<Value>(request)
+    match request_policy(request).map(|policy| policy.retry) {
+        Some(RetryPolicy::SafeRead) => 2,
+        Some(RetryPolicy::Never) | None => 1,
+    }
+}
+
+fn request_policy(request: &str) -> Option<engine_methods::EngineMethodPolicy> {
+    serde_json::from_str::<Value>(request)
         .ok()
         .and_then(|value| {
             value
                 .get("method")
                 .and_then(Value::as_str)
-                .map(str::to_owned)
-        });
-    if method
-        .as_deref()
-        .is_some_and(|name| name.starts_with("agent_"))
-        || matches!(
-            method.as_deref(),
-            Some("operation.plan" | "operation.apply" | "operation.cancel")
-        )
-    {
-        1
-    } else {
-        2
-    }
+                .map(engine_methods::policy)
+        })
+        .flatten()
 }
 
 /// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
@@ -767,27 +755,7 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
     let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
     let method = value.get("method").and_then(Value::as_str).unwrap_or("");
-    if !matches!(
-        method,
-        "health"
-            | "version"
-            | "scan"
-            | "env"
-            | "resume"
-            | "models"
-            | "history"
-            | "history_delete"
-            | "pricing"
-            | "show"
-            | "session_asset"
-            | "edit_capabilities"
-            | "session_meta_list"
-            | "session_backbone"
-            | "session_summaries_set"
-            | "agent_search_sessions"
-            | "agent_session_read"
-            | "agent_get_usage"
-    ) {
+    if !engine_methods::policy(method).is_some_and(|policy| policy.is_public) {
         return Err("该 Engine 方法不允许从通用前端 RPC 调用".to_owned());
     }
     Ok(())
