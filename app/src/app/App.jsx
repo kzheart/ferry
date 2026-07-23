@@ -786,7 +786,7 @@ export default function App() {
           from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
           statusLabel: t(`common:${h.status}`),
           stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
-            [STATUS_CODE.rolledBack]: "var(--tx3b)", [STATUS_CODE.dryRun]: "var(--warn)" }[h.status],
+            [STATUS_CODE.rolledBack]: "var(--tx3b)" }[h.status],
           tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
           // 旧缓存里的记录没有引擎 id,删不了,索性不给删除按钮
           deletable: !!h.id,

@@ -37,7 +37,7 @@ def test_migration_cleans_artifact_when_post_write_audit_fails(monkeypatch):
 
     session = Session("claude", "source", "/tmp/project")
     with pytest.raises(RuntimeError, match="audit failed"):
-        services.migrate(
+        services.apply_migration(
             "claude", "codex", "unused", _session=session)
     assert cleaned == [("codex", "new-session", "/tmp/new-session")]
 

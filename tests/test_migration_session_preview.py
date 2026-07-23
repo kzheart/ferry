@@ -10,7 +10,7 @@ from engine.domain.model import (
 from engine.domain.tool_ops import CanonicalOp
 
 
-def test_dry_run_returns_target_session_preview_without_mutating_source(monkeypatch, tmp_path):
+def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp_path):
     session = Session("claude", "source", str(tmp_path), title="Preview me")
     session.messages = [Message("assistant", [
         Block("text", "I inspected the file."),
@@ -22,8 +22,9 @@ def test_dry_run_returns_target_session_preview_without_mutating_source(monkeypa
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
         require=lambda capability: target if capability == "migration_target" else None))
 
-    result = services.migrate("claude", "codex", "ignored", cwd=str(tmp_path),
-                              dry_run=True, _session=session)
+    result = services.preview_migration(
+        "claude", "codex", "ignored", cwd=str(tmp_path), _session=session,
+    )
 
     blocks = result["preview"]["root"]["messages"][0]["blocks"]
     assert result["preview"]["target_tool"] == "codex"

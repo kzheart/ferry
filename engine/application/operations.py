@@ -119,12 +119,10 @@ class OperationService:
         ref = operation_input["ref"]
         before = agent_tools._INDEX.resolve(source_tool, ref)
         session = agent_tools._read_record(before)
-        preview = services.migrate(
+        preview = services.preview_migration(
             source_tool,
             operation_input["target_tool"],
             before.canonical_ref,
-            dry_run=True,
-            probe=operation_input["probe"],
             max_turn=operation_input.get("max_turn"),
             probe_model=operation_input.get("probe_model"),
             _session=session,
@@ -450,7 +448,7 @@ class OperationService:
                 "会话在迁移计划生成后已变化，请重新计划"
             )
         session = agent_tools._read_record(record)
-        result = services.migrate(
+        result = services.apply_migration(
             params["source_tool"],
             params["target_tool"],
             record.canonical_ref,

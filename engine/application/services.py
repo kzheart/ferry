@@ -4,7 +4,6 @@
 既可 import(gui/server.py 直接调用),也可命令行调试:
     python3 -m engine.api scan
     python3 -m engine.api show claude <sid>
-    python3 -m engine.api migrate claude codex <ref> [--dry-run] [--probe] [--cwd DIR]
     python3 -m engine.api history / env
 """
 import json
@@ -102,11 +101,10 @@ def _migration_counts(sess) -> tuple[int, int]:
     return nodes, sess.message_count()
 
 
-def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
-            dry_run: bool = False, probe: bool = False,
-            max_turn: int | None = None,
-            probe_model: str | None = None,
-            content_locale: str | None = None, *, _session=None) -> dict:
+def _prepare_migration(src: str, dst: str, ref: str,
+                       cwd: str | None = None,
+                       max_turn: int | None = None,
+                       probe_model: str | None = None, *, _session=None):
     sess = _session if _session is not None else _read_tree(src, ref)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
@@ -128,10 +126,32 @@ def migrate(src: str, dst: str, ref: str, cwd: str | None = None,
             "max_turn": max_turn, "msg_count": message_count,
             "root_msg_count": len(sess.messages),
             "probe_model": probe_model or None}
-    if dry_run:
-        with narration.content_locale(content_locale):
-            preview = target.preview(sess, target_cwd) if hasattr(target, "preview") else None
-        return {**base, "dry_run": True, "preview": preview}
+    return sess, target, target_cwd, base
+
+
+def preview_migration(src: str, dst: str, ref: str,
+                      cwd: str | None = None,
+                      max_turn: int | None = None,
+                      probe_model: str | None = None,
+                      content_locale: str | None = None, *, _session=None) -> dict:
+    sess, target, target_cwd, base = _prepare_migration(
+        src, dst, ref, cwd, max_turn, probe_model, _session=_session,
+    )
+    with narration.content_locale(content_locale):
+        preview = target.preview(
+            sess, target_cwd,
+        ) if hasattr(target, "preview") else None
+    return {**base, "preview": preview}
+
+
+def apply_migration(src: str, dst: str, ref: str,
+                    cwd: str | None = None, probe: bool = False,
+                    max_turn: int | None = None,
+                    probe_model: str | None = None,
+                    content_locale: str | None = None, *, _session=None) -> dict:
+    sess, target, target_cwd, base = _prepare_migration(
+        src, dst, ref, cwd, max_turn, probe_model, _session=_session,
+    )
 
     with narration.content_locale(content_locale):
         sid, dest = target.write(sess, target_cwd)

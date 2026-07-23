@@ -9,7 +9,6 @@
     "success": "成功",
     "failed": "失败",
     "rolled_back": "已回滚",
-    "dry_run": "预演",
     "all": "全部状态"
   },
   "empty": {

@@ -31,10 +31,6 @@ def main(argv=None):
         result = services.scan()
     elif cmd == "show":
         result = services.show(rest[0], rest[1])
-    elif cmd == "migrate":
-        result = services.migrate(rest[0], rest[1], rest[2],
-            cwd=rest[rest.index("--cwd") + 1] if "--cwd" in rest else None,
-            dry_run="--dry-run" in rest, probe="--probe" in rest)
     elif cmd == "history":
         result = services.history()
     elif cmd == "env":

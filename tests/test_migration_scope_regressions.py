@@ -70,7 +70,7 @@ def test_migration_counts_include_the_retained_subtree(monkeypatch, tmp_path):
     monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
     monkeypatch.setattr(services, "_append_history", lambda _entry: None)
 
-    result = services.migrate("claude", "opencode", "ignored", cwd=str(tmp_path),
+    result = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
                               max_turn=1, _session=session)
 
     assert written == [session]
