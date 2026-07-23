@@ -6,6 +6,15 @@ import pytest
 
 from engine.application import summaries
 from engine.domain.errors import SummaryBackboneMissingError
+from engine.infrastructure.state_db import StateDatabase
+
+
+def _use_database(tmp_path, monkeypatch) -> StateDatabase:
+    database = StateDatabase(
+        tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
+    )
+    monkeypatch.setattr(summaries, "_database", lambda: database)
+    return database
 
 
 def _text_block(text):
@@ -74,7 +83,7 @@ def test_fingerprint_tracks_content():
 
 
 def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    database = _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "改支付", "u1"),
         _msg("user", "改标题", "u2"),
@@ -88,7 +97,9 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
         {"hash": first["segments"][0]["hash"], "text": "改支付"},
         {"hash": first["segments"][1]["hash"], "text": "改标题"},
     ]
-    assert "_source_text" not in summaries._load()["claude:sess-1"]["segments"][0]
+    assert "_source_text" not in database.get_session_summary(
+        "claude", "sess-1",
+    )["segments"][0]
 
     head = first["segments"][0]["hash"]
     written = summaries.set_summaries("claude", "sess-1", {head: "改了支付逻辑"})
@@ -104,7 +115,7 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
 
 
 def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    _use_database(tmp_path, monkeypatch)
     session = _session([_msg("user", "只此一轮", "u1")])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref: session)
     first = summaries.build_backbone("claude", "fsr_x")
@@ -114,7 +125,7 @@ def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
 
 def test_build_backbone_refreshes_structure_for_textless_message(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "改支付", "u1"),
         _msg("assistant", "完成", "a1"),
@@ -137,7 +148,7 @@ def test_build_backbone_refreshes_structure_for_textless_message(
 
 
 def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "第一轮", "u1"),
         _msg("user", "第二轮", "u2"),
@@ -159,9 +170,25 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
 
 
 def test_set_summaries_requires_backbone(tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    _use_database(tmp_path, monkeypatch)
     with pytest.raises(SummaryBackboneMissingError):
         summaries.set_summaries("claude", "missing", {"sha256:x": "y"})
+
+
+def test_summary_cache_is_scoped_by_tool_and_native_session_id(
+        tmp_path, monkeypatch):
+    database = _use_database(tmp_path, monkeypatch)
+    database.store_session_summary({
+        "tool": "claude", "id": "shared", "fingerprint": "claude-fp",
+        "segments": [],
+    }, 1)
+    database.store_session_summary({
+        "tool": "codex", "id": "shared", "fingerprint": "codex-fp",
+        "segments": [],
+    }, 2)
+
+    assert summaries.get_backbone("claude", "shared")["fingerprint"] == "claude-fp"
+    assert summaries.get_backbone("codex", "shared")["fingerprint"] == "codex-fp"
 
 
 def test_rpc_wiring_returns_structured_error(tmp_path, monkeypatch):
@@ -169,7 +196,7 @@ def test_rpc_wiring_returns_structured_error(tmp_path, monkeypatch):
 
     from engine.interfaces.rpc import rpc
 
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    _use_database(tmp_path, monkeypatch)
     response = rpc(json.dumps({
         "method": "session_summaries_set", "request_id": "s-1",
         "params": {"tool": "claude", "id": "missing", "digests": {"sha256:x": "y"}},

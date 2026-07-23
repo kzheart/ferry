@@ -12,11 +12,15 @@ from engine.domain.errors import (
     OrganizationProposalStaleError,
 )
 from engine.interfaces.rpc import rpc
+from engine.infrastructure.state_db import StateDatabase
 
 
 @pytest.fixture
 def organization_environment(tmp_path, monkeypatch):
-    monkeypatch.setattr(summaries, "SUMMARIES", tmp_path / "summaries.json")
+    database = StateDatabase(
+        tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
+    )
+    monkeypatch.setattr(summaries, "_database", lambda: database)
     monkeypatch.setattr(organizing, "PROPOSALS", tmp_path / "proposals.json")
     monkeypatch.setattr(organizing, "SIGNALS", tmp_path / "signals.jsonl")
     return tmp_path
@@ -40,9 +44,7 @@ def _seed(tool: str, session_id: str, digest: str,
             "digest": digest,
         }],
     }
-    data = summaries._load()
-    data[f"{tool}:{session_id}"] = record
-    summaries._write(data)
+    summaries._database().store_session_summary(record, 0)
     return record
 
 
@@ -288,7 +290,7 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
         organization_environment):
     record = _seed("claude", "session-a", "摘要")
     record["segments"][0]["digest"] = None
-    summaries._write({"claude:session-a": record})
+    summaries._database().store_session_summary(record, 0)
     context = organizing.digest_context([
         {"tool": "claude", "id": "session-a"},
     ])

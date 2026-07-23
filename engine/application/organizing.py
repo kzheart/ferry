@@ -91,7 +91,7 @@ def _signal(event: str, proposal: dict, **extra) -> None:
 
 
 def _backbone(tool: str, session_id: str) -> dict:
-    record = summaries._load().get(f"{tool}:{session_id}")
+    record = summaries.get_backbone(tool, session_id)
     if not record:
         raise OrganizationProposalError(
             "会话尚无摘要底座", {"tool": tool, "id": session_id})
