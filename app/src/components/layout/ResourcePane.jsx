@@ -145,10 +145,10 @@ const PinGlyph = () => (
 const LibraryRow = memo(function LibraryRow({ r, selected, multi,
   onRowClick, onRowPin, onRowDelete, onRowMore }) {
   const { t } = useTranslation();
-  const act = (fn, id) => e => { e.stopPropagation(); fn(id, e); };
+  const act = (fn, key) => e => { e.stopPropagation(); fn(key, e); };
   return (
-    <div onClick={e => onRowClick(r.id, e)}
-      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.id, e); }}
+    <div onClick={e => onRowClick(r.key, e)}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.key, e); }}
       title={r.dir}
       className={selected || multi ? "lib-row" : "lib-row hov-item"}
       style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,
@@ -164,14 +164,14 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi,
       <span className="row-meta" style={{ fontSize: 10, color: "var(--tx5)",
         flex: "none" }}>{r.active}</span>
       <span className="row-act" style={{ gap: 1, flex: "none" }}>
-        <button className="row-act-btn" onClick={act(onRowPin, r.id)}
+        <button className="row-act-btn" onClick={act(onRowPin, r.key)}
           title={r.pinned ? t("app:ctx.unpin") : t("app:ctx.pin")}
           style={r.pinned ? { color: ACCENT } : undefined}>
           <PinIcon filled={r.pinned} /></button>
-        <button className="row-act-btn row-act-danger" onClick={act(onRowDelete, r.id)}
+        <button className="row-act-btn row-act-danger" onClick={act(onRowDelete, r.key)}
           title={t("app:ctx.deleteSession")}>
           <TrashIcon size={13} /></button>
-        <button className="row-act-btn" onClick={act(onRowMore, r.id)}
+        <button className="row-act-btn" onClick={act(onRowMore, r.key)}
           title={t("app:ctx.more")}><MoreDots /></button>
       </span>
     </div>
@@ -199,8 +199,8 @@ export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selec
     ) });
     y += HEADER_H;
     if (expanded) g.rows.forEach(r => {
-      items.push({ key: r.id, y, h: ROW_H, node: (
-        <LibraryRow r={r} selected={r.id === selectedId} multi={multiSet.has(r.id)}
+      items.push({ key: r.key, y, h: ROW_H, node: (
+        <LibraryRow r={r} selected={r.key === selectedId} multi={multiSet.has(r.key)}
           onRowClick={onRowClick} onRowPin={onRowPin}
           onRowDelete={onRowDelete} onRowMore={onRowMore} />
       ) });

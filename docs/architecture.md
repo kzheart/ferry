@@ -103,6 +103,10 @@ database uses WAL plus `BEGIN IMMEDIATE` for every state transition and
 metadata CAS. A schema other than the exact current version fails at startup;
 old JSON metadata and older SQLite schemas are not read or migrated.
 
+The UI uses the same pair as its local session identity for list keys,
+selection, multi-selection, context menus, and detail caching. Native session
+IDs remain adapter data and must never become cross-tool UI identifiers.
+
 Other Ferry-owned stores (migration history, summaries, organization proposals,
 and Runtime conversation event logs) have not yet been consolidated. They must
 continue to be accessed only by their designated process until they move into
