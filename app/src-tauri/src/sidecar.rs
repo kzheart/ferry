@@ -737,7 +737,6 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "version"
             | "scan"
             | "env"
-            | "tools"
             | "resume"
             | "models"
             | "history"

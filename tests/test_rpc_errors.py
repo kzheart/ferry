@@ -56,16 +56,3 @@ def test_invalid_reply_maps_to_edit_code():
         }}}))
     assert response["ok"] is False
     assert response["error"]["code"] == "edit.invalid_reply"
-
-
-def test_tools_rpc_returns_manifests():
-    response = rpc(json.dumps({"method": "tools"}))
-    assert response["ok"] is True
-    manifests = response["result"]
-    ids = [m["id"] for m in manifests]
-    assert ids == ["claude", "codex", "opencode"]
-    for manifest in manifests:
-        assert manifest["display_name"]
-        assert manifest["icon"]
-        assert manifest["executables"]
-        assert "browse" in manifest["capabilities"]
