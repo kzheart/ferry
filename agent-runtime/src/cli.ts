@@ -29,8 +29,10 @@ async function main() {
     store: new FileSessionStore(join(dataDirectory, "sessions")),
     roleStore: new FileRoleStore(join(dataDirectory, "roles.json")),
     providerHost,
+    deferRestore: true,
   });
   runtime.subscribe(write);
+  await runtime.restore();
 
   try {
     for await (const line of readJsonLines(process.stdin)) {
