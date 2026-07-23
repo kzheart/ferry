@@ -21,7 +21,10 @@ describe("AuthCoordinator", () => {
       async (_provider, _type, interaction) => {
         expect(startReturned).toBe(true);
         loginStarted = true;
-        await interaction.prompt({ type: "manual_code", message: "Paste code" });
+        await interaction.prompt({
+          type: "manual_code",
+          message: "Paste code",
+        });
         return { type: "oauth", access: "a", refresh: "r", expires: 1 };
       },
       () => {},
