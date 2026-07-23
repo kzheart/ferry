@@ -75,6 +75,28 @@ def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tm
     assert tool_result_text(custom.result) == "custom output"
 
 
+def test_reader_keeps_native_records_out_of_the_canonical_session(tmp_path):
+    session = _read(tmp_path, [
+        {"type": "response_item", "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "current input"}],
+        }},
+        {"type": "response_item", "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "current output"}],
+        }},
+    ])
+
+    assert session.raw_records == []
+    assert [message.source_id for message in session.messages] == [
+        "record:1",
+        "record:2",
+    ]
+    assert all(message.raw == [] for message in session.messages)
+
+
 def test_private_result_extensions_are_not_rehydrated(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {
