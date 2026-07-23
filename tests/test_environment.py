@@ -14,7 +14,6 @@ class FakePorts:
 
 
 def test_environment_reports_executable_state_without_agent_version(monkeypatch):
-    monkeypatch.setattr(environment, "current", FakePorts)
     monkeypatch.setattr(
         environment.executables,
         "resolve",
@@ -30,7 +29,7 @@ def test_environment_reports_executable_state_without_agent_version(monkeypatch)
         ),
     )
 
-    result = environment.inspect()
+    result = environment.inspect(FakePorts())
 
     assert result == {
         "claude": {

@@ -125,7 +125,7 @@ def _view(record: dict) -> dict:
 def build_backbone(tool: str, ref: str) -> dict:
     """读取会话 → 分段 → 算指纹。每次都以当前会话重建段结构,并按内容
     hash 复用既有摘要(编辑结构或某段时不牵连未变内容的摘要)。"""
-    session = read_tree(tool, ref)
+    session = read_tree(tool, ref, current())
     segments = segment_session(session)
     fingerprint = session_fingerprint(segments)
     source_by_hash = {

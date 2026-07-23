@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from .ports import current
+from .ports import ApplicationPorts
 
 MODELS_CONFIG = Path.home() / ".resume-harness/models.json"
 
@@ -21,8 +21,8 @@ def _user_model_ids(tool):
             or (isinstance(item, dict) and item.get("id"))]
 
 
-def list_models(tool_name):
-    catalog = current().adapter(tool_name).models
+def list_models(tool_name: str, ports: ApplicationPorts):
+    catalog = ports.adapter(tool_name).models
     error = default = None
     try:
         rows, source, default = catalog.discover()

@@ -4,7 +4,7 @@ from ..adapters.base.migration import assemble_tree
 from ..domain.errors import SessionAssetNotFoundError
 from ..domain.model import tool_result_text
 from ..domain.tool_ops import CanonicalOp
-from .ports import current
+from .ports import ApplicationPorts
 
 
 def _tool_view(call):
@@ -16,8 +16,7 @@ def _tool_view(call):
     return name, value
 
 
-def read_tree(tool_name: str, ref: str):
-    ports = current()
+def read_tree(tool_name: str, ref: str, ports: ApplicationPorts):
     tool = ports.adapter(tool_name)
     return assemble_tree(tool.browser, ref, ports.cache_factory())
 
@@ -148,12 +147,12 @@ def session_json(session):
         "agent_edges": edges}
 
 
-def show(tool: str, ref: str) -> dict:
-    return session_json(read_tree(tool, ref))
+def show(tool: str, ref: str, ports: ApplicationPorts) -> dict:
+    return session_json(read_tree(tool, ref, ports))
 
 
-def session_asset(tool: str, ref: str, asset_id: str) -> dict:
-    for session in read_tree(tool, ref).walk():
+def session_asset(tool: str, ref: str, asset_id: str, ports: ApplicationPorts) -> dict:
+    for session in read_tree(tool, ref, ports).walk():
         for message in session.messages:
             for block in message.blocks:
                 if block.kind == "image" and block.image and block.image.id == asset_id:

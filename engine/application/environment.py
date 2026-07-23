@@ -2,12 +2,11 @@
 
 import subprocess
 
-from .ports import current
+from .ports import ApplicationPorts
 from ..infrastructure import executables
 
 
-def inspect() -> dict:
-    ports = current()
+def inspect(ports: ApplicationPorts) -> dict:
     out = {}
     for tool in ports.adapters():
         info = {"installed": False, "path": None, "broken": False}

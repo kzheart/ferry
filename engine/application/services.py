@@ -357,8 +357,6 @@ def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
 
 # ---------- 环境 / 模型列表 ----------
 
-from .environment import inspect as env
-
 
 # ---------- CLI ----------
 
@@ -371,7 +369,32 @@ def health() -> dict:
     return {"status": "ok", **version()}
 
 
-# 稳定门面仍从本模块导出，具体用例由职责更小的应用模块持有。
-from .models import list_models  # noqa: E402,F811
-from .scanning import scan  # noqa: E402,F811
-from .sessions import read_tree as _read_tree, session_asset, show  # noqa: E402,F811
+# 进程边界在这里取得一次依赖；查询用例本身不再触碰全局 composition。
+from . import environment as _environment  # noqa: E402
+from . import models as _models  # noqa: E402
+from . import scanning as _scanning  # noqa: E402
+from . import sessions as _sessions  # noqa: E402
+
+
+def env() -> dict:
+    return _environment.inspect(current())
+
+
+def list_models(tool_name: str) -> dict:
+    return _models.list_models(tool_name, current())
+
+
+def scan() -> dict:
+    return _scanning.scan(current())
+
+
+def _read_tree(tool_name: str, ref: str):
+    return _sessions.read_tree(tool_name, ref, current())
+
+
+def show(tool_name: str, ref: str) -> dict:
+    return _sessions.show(tool_name, ref, current())
+
+
+def session_asset(tool_name: str, ref: str, asset_id: str) -> dict:
+    return _sessions.session_asset(tool_name, ref, asset_id, current())

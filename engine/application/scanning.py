@@ -1,12 +1,11 @@
 """跨工具会话扫描用例。"""
 
-from .ports import current
+from .ports import ApplicationPorts
 from . import agent_tools
 
 
-def scan() -> dict:
+def scan(ports: ApplicationPorts) -> dict:
     tools, scanned = {}, []
-    ports = current()
     cache = ports.cache_factory()
     for name in ports.adapters():
         tool = ports.adapter(name)
