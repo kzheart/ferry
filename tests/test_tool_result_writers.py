@@ -100,27 +100,47 @@ def _roundtrip_opencode(session, _tmp_path):
     _roundtrip_codex,
     _roundtrip_opencode,
 ])
-def test_structured_error_result_survives_target_writer_roundtrip(
+def test_structured_error_result_projects_to_each_native_shape(
         roundtrip, tmp_path):
     result = _only_result(roundtrip(_source_session(), tmp_path))
 
     assert result.status == "error"
-    expected_kinds = (
-        ["text"] if roundtrip is _roundtrip_codex else ["text", "json", "file"]
-    )
+    expected_kinds = {
+        _roundtrip_claude: ["text", "text", "text"],
+        _roundtrip_codex: ["text"],
+        _roundtrip_opencode: ["text", "file"],
+    }[roundtrip]
     assert [block.kind for block in result.blocks] == expected_kinds
-    if roundtrip is not _roundtrip_codex:
-        assert result.blocks[1].data == {"count": 2}
     assert result.stdout == "visible output"
     assert result.stderr == "failure detail"
     assert result.exit_code == 7
     assert result.truncated is False
-    if roundtrip is not _roundtrip_codex:
+    if roundtrip is _roundtrip_opencode:
         assert result.attachments[0]["filename"] == "report.txt"
-        assert result.metadata["trace"] == "fixture"
+        assert result.metadata.get("trace") is None
     else:
         assert result.attachments == []
         assert result.metadata.get("trace") is None
+
+
+def test_claude_writer_does_not_emit_ferry_tool_result_extension():
+    records = claude_writer._generated_lines(
+        _source_session(), "fixture-session", "/tmp",
+        claude_writer._load_templates(), {}, {},
+        tool_decider=ClaudeMigrationTarget().evaluate_tool,
+    )
+
+    assert "canonicalToolResult" not in json.dumps(records)
+
+
+def test_opencode_writer_does_not_emit_ferry_tool_result_extension():
+    payload = opencode_session._canonical_payload(
+        _source_session(), "fixture-session", "/tmp", None,
+        opencode_session._template(),
+        tool_decider=OpenCodeMigrationTarget().evaluate_tool,
+    )
+
+    assert "canonicalToolResult" not in json.dumps(payload)
 
 
 @pytest.mark.parametrize(("target", "status", "fidelity"), [
@@ -132,11 +152,32 @@ def test_result_status_support_is_part_of_shared_render_decision(
         target, status, fidelity):
     session = _source_session(status)
     tool = session.messages[1].blocks[0].tool
+    tool.result = ToolResult(
+        status=status,
+        blocks=[ToolResultBlock("text", text="visible output")],
+    )
 
     decision = target.evaluate_tool(tool, session, session.messages[1])
 
     assert decision.fidelity == fidelity
     assert (decision.rendered is None) == (fidelity == "narrated")
+
+
+@pytest.mark.parametrize(("target", "block_reason"), [
+    (ClaudeMigrationTarget(), "tool_result_block_degraded"),
+    (CodexMigrationTarget(), "tool_result_block_dropped"),
+    (OpenCodeMigrationTarget(), "tool_result_block_dropped"),
+])
+def test_unrepresentable_result_data_is_reported_as_migration_loss(
+        target, block_reason):
+    session = _source_session()
+    tool = session.messages[1].blocks[0].tool
+
+    decision = target.evaluate_tool(tool, session, session.messages[1])
+
+    assert decision.fidelity == "lossy"
+    assert block_reason in decision.reason_codes
+    assert "tool_result_metadata_dropped" in decision.reason_codes
 
 
 def test_claude_writer_roundtrip_does_not_turn_interruption_into_error(tmp_path):

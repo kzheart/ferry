@@ -11,6 +11,7 @@ class OpenCodeMigrationTarget(MigrationTargetBase):
     tool = "opencode"
     tool_fidelity = OP_FIDELITY
     tool_result_statuses = frozenset({"success", "error", "running", "pending"})
+    preserves_tool_result_attachments = True
 
     def preview_tool(self, tool, session, message=None):
         if not has_valid_tool_input(tool.op, tool.input):

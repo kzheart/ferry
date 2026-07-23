@@ -256,7 +256,30 @@ def test_claude_preserves_error_and_multimodal_result(tmp_path):
     assert tool.result.blocks[1].mime_type == "image/png"
     assert tool.result.blocks[1].data == "Zml4dHVyZQ=="
     assert tool.result.blocks[2].metadata["tool_name"] == "fixture-tool"
-    assert tool.result.metadata["claude_tool_result"]["is_error"] is True
+    assert tool.result.metadata == {}
+
+
+def test_claude_ignores_removed_ferry_tool_result_extension():
+    result = claude_tool_result(
+        {
+            "content": "native result",
+            "is_error": False,
+        },
+        {
+            "status": "completed",
+            "canonicalToolResult": {
+                "status": "error",
+                "attachments": [{"type": "file", "filename": "private.txt"}],
+                "metadata": {"private": True},
+                "blocks": [{"kind": "text", "text": "private result"}],
+            },
+        },
+    )
+
+    assert result.status == "success"
+    assert tool_result_text(result) == "native result"
+    assert result.attachments == []
+    assert result.metadata == {}
 
 
 def test_claude_preserves_interrupted_result_without_error_flag(tmp_path):

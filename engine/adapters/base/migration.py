@@ -162,6 +162,10 @@ class MigrationTargetBase:
     tool: str
     tool_fidelity: Mapping[str, str] = {}
     tool_result_statuses = frozenset({"success", "error"})
+    tool_result_native_blocks = frozenset({"text"})
+    tool_result_projected_blocks = frozenset({"json"})
+    preserves_tool_result_attachments = False
+    preserves_tool_result_metadata = False
 
     def _with_result_fidelity(self, tool, decision: RenderDecision) -> RenderDecision:
         result = tool.result
@@ -181,20 +185,47 @@ class MigrationTargetBase:
                 ignored_fields=frozenset(tool.input)
                 if isinstance(tool.input, dict) else frozenset(),
             )
+        reasons = list(decision.reason_codes)
+        fidelity = decision.fidelity
+        block_kinds = {block.kind for block in result.blocks}
+        projected = block_kinds & self.tool_result_projected_blocks
+        dropped = block_kinds - (
+            self.tool_result_native_blocks | self.tool_result_projected_blocks
+        )
+        if projected:
+            reasons.append("tool_result_block_degraded")
+            if fidelity == Fidelity.EXACT:
+                fidelity = Fidelity.TRANSFORMED
+        if dropped:
+            reasons.append("tool_result_block_dropped")
+            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
+                fidelity = Fidelity.LOSSY
+        if any(block.metadata for block in result.blocks):
+            reasons.append("tool_result_block_metadata_dropped")
+            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
+                fidelity = Fidelity.LOSSY
+        if result.attachments and not self.preserves_tool_result_attachments:
+            reasons.append("tool_result_attachments_dropped")
+            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
+                fidelity = Fidelity.LOSSY
+        if result.metadata and not self.preserves_tool_result_metadata:
+            reasons.append("tool_result_metadata_dropped")
+            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
+                fidelity = Fidelity.LOSSY
         if result.truncated is True:
-            reasons = tuple(dict.fromkeys(
-                (*decision.reason_codes, "tool_result_truncated")))
-            fidelity = (Fidelity.LOSSY if decision.fidelity in {
-                Fidelity.EXACT, Fidelity.TRANSFORMED
-            } else decision.fidelity)
-            return RenderDecision(
-                fidelity=fidelity, rendered=decision.rendered,
-                reason_codes=reasons,
-                consumed_fields=decision.consumed_fields,
-                ignored_fields=decision.ignored_fields,
-                target_records=decision.target_records,
-            )
-        return decision
+            reasons.append("tool_result_truncated")
+            if fidelity in {Fidelity.EXACT, Fidelity.TRANSFORMED}:
+                fidelity = Fidelity.LOSSY
+        if fidelity == decision.fidelity and not reasons:
+            return decision
+        return RenderDecision(
+            fidelity=fidelity,
+            rendered=decision.rendered,
+            reason_codes=tuple(dict.fromkeys(reasons)),
+            consumed_fields=decision.consumed_fields,
+            ignored_fields=decision.ignored_fields,
+            target_records=decision.target_records,
+        )
 
     def classify_tool_call(self, tool_call) -> str:
         if not has_valid_tool_input(tool_call.op, tool_call.input):
