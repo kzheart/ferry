@@ -3,17 +3,12 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
 repo = Path(SPECPATH)
-golden_files = [
-    (str(path), str(path.parent.relative_to(repo)))
-    for path in sorted((repo / "golden").rglob("*"))
-    if path.is_file()
-]
 
 a = Analysis(
     [str(repo / "sidecar.py")],
     pathex=[str(repo)],
     binaries=[],
-    datas=golden_files,
+    datas=[],
     # Adapter packages are discovered with pkgutil at runtime. PyInstaller
     # cannot infer those imports from the source graph, so include them
     # explicitly in the sidecar bundle.

@@ -33,19 +33,19 @@
       "id": "fixture-part-shell",
       "message_id": "fixture-message-assistant-tools",
       "session_id": "fixture-opencode-tools",
-      "data": "{\"id\":\"fixture-part-shell\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"fixture-call-shell\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"echo golden-shell-test\"},\"output\":\"golden-shell-test\\n\",\"metadata\":{\"exit\":0}}}"
+      "data": "{\"id\":\"fixture-part-shell\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"fixture-call-shell\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"echo format-fixture-shell-test\"},\"output\":\"format-fixture-shell-test\\n\",\"metadata\":{\"exit\":0}}}"
     },
     {
       "id": "fixture-part-write",
       "message_id": "fixture-message-assistant-tools",
       "session_id": "fixture-opencode-tools",
-      "data": "{\"id\":\"fixture-part-write\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"write\",\"callID\":\"fixture-call-write\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/golden.txt\",\"content\":\"hello golden\"},\"output\":\"File created.\",\"metadata\":{}}}"
+      "data": "{\"id\":\"fixture-part-write\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"write\",\"callID\":\"fixture-call-write\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/format-fixture.txt\",\"content\":\"hello fixture\"},\"output\":\"File created.\",\"metadata\":{}}}"
     },
     {
       "id": "fixture-part-read",
       "message_id": "fixture-message-assistant-tools",
       "session_id": "fixture-opencode-tools",
-      "data": "{\"id\":\"fixture-part-read\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"read\",\"callID\":\"fixture-call-read\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/golden.txt\"},\"output\":\"hello golden\",\"metadata\":{}}}"
+      "data": "{\"id\":\"fixture-part-read\",\"messageID\":\"fixture-message-assistant-tools\",\"sessionID\":\"fixture-opencode-tools\",\"type\":\"tool\",\"tool\":\"read\",\"callID\":\"fixture-call-read\",\"state\":{\"status\":\"completed\",\"input\":{\"filePath\":\"/fixture/opencode/tools/format-fixture.txt\"},\"output\":\"hello fixture\",\"metadata\":{}}}"
     },
     {
       "id": "fixture-part-assistant-final",

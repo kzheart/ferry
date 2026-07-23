@@ -1,8 +1,8 @@
 """Codex writer:规范化中间格式 → rollout JSONL(可被 codex exec resume 加载)。
 
 写入 Codex 原生 JSONL 会话记录。核心策略:
-- 结构模板取自黄金样本原文(session_meta / 各类 response_item),
-  只替换内容字段,不手写结构 —— 版本漂移时重新生成黄金样本即可跟上。
+- 结构模板来自声明式格式配置档(session_meta / 各类 response_item),
+  真实 CLI 样本仅用于测试配置档与原生格式保持一致。
 - shell.exec 原生映射为 exec_command;fs.write 映射为 apply_patch(Add File);
   其余工具降级为叙述文本(narration)。
 """
@@ -16,11 +16,10 @@ from pathlib import Path
 
 from ...domain.model import Session
 from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
-from ...infrastructure.resources import resource_path
 from ..base.narration import narrate
+from .formats import FORMATS
 from .registry import register_tree
 
-GOLDEN = resource_path("golden", "codex")
 
 
 def _uuid7() -> str:
@@ -49,22 +48,8 @@ def _timestamp(value: str | int | None = None) -> str:
 
 
 def _load_templates():
-    """从最新版本的黄金样本中取各类记录的原文模板。"""
-    versions = sorted(GOLDEN.iterdir()) if GOLDEN.exists() else []
-    if not versions:
-        raise RuntimeError("缺少生产依赖 golden/codex 样本")
-    sample = versions[-1] / "case-02-tools" / "session.jsonl"
-    tpl = {}
-    for line in sample.read_text().splitlines():
-        rec = json.loads(line)
-        t = rec["type"]
-        pt = (rec.get("payload") or {}).get("type")
-        key = f"{t}.{pt}" if pt else t
-        if key not in tpl:
-            tpl[key] = rec
-        if key == "response_item.message":
-            tpl.setdefault(f"message.{rec['payload']['role']}", rec)
-    return tpl
+    """Load the latest declarative Codex format profile."""
+    return FORMATS.templates()
 
 
 def _clone(tpl: dict) -> dict:

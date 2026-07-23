@@ -6,6 +6,7 @@ from ..base.plugin import ToolManifest, ToolPlugin
 from . import editing as claude_edit
 from .authoring import ClaudeAuthoringCompiler
 from .editor import ClaudeBackend
+from .formats import FORMATS
 from .lifecycle import ClaudeLifecycle
 from .migration import ClaudeMigrationTarget
 from .models import discover, fallback
@@ -34,4 +35,5 @@ def build() -> ToolPlugin:
         verifier=ClaudeVerifier(),
         lifecycle=ClaudeLifecycle(),
         models=ModelCatalogAdapter(discover, fallback),
+        formats=FORMATS,
     )

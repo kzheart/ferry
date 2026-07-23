@@ -2,7 +2,7 @@
   "tool": "opencode",
   "cli_version": "1.18.3",
   "case": "01-plain",
-  "prompt": "Reply with exactly the text: GOLDEN_PLAIN_OK. Do not use any tools.",
+  "prompt": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
   "session_id": "fixture-opencode-plain",
   "source_paths": [
     "/fixture/opencode/plain.db"

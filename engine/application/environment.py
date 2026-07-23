@@ -1,4 +1,4 @@
-"""Installed tool and golden fixture inspection."""
+"""Installed tool and native-format profile inspection."""
 
 import re
 import subprocess
@@ -12,8 +12,9 @@ def inspect() -> dict:
     out = {}
     for tool in ports.adapters():
         info = {"installed": False, "version": None, "path": None,
-                "broken": False, "golden": None, "verified": False}
-        executable = ports.adapter(tool).manifest.executables[0]
+                "broken": False, "format": None, "verified": False}
+        plugin = ports.adapter(tool)
+        executable = plugin.manifest.executables[0]
         resolved = executables.resolve(executable)
         if resolved:
             info["path"] = resolved
@@ -29,11 +30,8 @@ def inspect() -> dict:
                 info["version"] = match.group(0) if match else None
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-        golden = ports.resource_path("golden", tool)
-        if golden.exists():
-            versions = sorted(path.name for path in golden.iterdir() if path.is_dir())
-            info["golden"] = versions[-1] if versions else None
-        info["verified"] = bool(info["installed"] and info["golden"]
-                                and info["version"] == info["golden"])
+        if plugin.formats is not None:
+            info["format"] = plugin.formats.inspect(info["version"])
+            info["verified"] = info["format"]["status"] == "verified"
         out[tool] = info
     return out
