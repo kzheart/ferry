@@ -40,9 +40,7 @@ def _messages(messages):
                     "id": block.image.id, "mime_type": block.image.mime_type,
                     "filename": block.image.filename}})
         entry = {"index": index, "role": message.role, "blocks": blocks}
-        if message.raw and isinstance(message.raw[0], dict) and message.raw[0].get("uuid"):
-            entry.update(uuid=message.raw[0]["uuid"], locator=message.raw[0]["uuid"])
-        elif message.source_id:
+        if message.source_id:
             entry["locator"] = message.source_id
         else:
             entry["locator"] = f"index:{index}"

@@ -621,31 +621,11 @@ def _fit_context_result(result: dict, budget: int) -> dict:
 def _message_native_locator(message, index: int) -> str:
     if isinstance(message.source_id, str) and message.source_id:
         return message.source_id
-    if message.raw and isinstance(message.raw[0], dict):
-        value = message.raw[0].get("uuid")
-        if isinstance(value, str) and value:
-            return value
     return f"index:{index}"
 
 
-def _message_is_rewritable(tool: str, message) -> bool:
-    if not any(block.kind == "text" for block in message.blocks):
-        return False
-    payloads = [getattr(item, "payload", item) for item in message.raw]
-    payloads = [item for item in payloads if isinstance(item, dict)]
-    if not payloads:
-        return True
-    if tool == "opencode":
-        return any(item.get("type") == "text" for item in payloads)
-    if tool == "codex":
-        payload = payloads[0].get("payload") or {}
-        return any(item.get("type") in {"input_text", "output_text"}
-                   for item in payload.get("content") or [])
-    if tool == "claude":
-        content = (payloads[0].get("message") or {}).get("content")
-        return isinstance(content, str) or isinstance(content, list) and any(
-            item.get("type") == "text" for item in content if isinstance(item, dict))
-    return True
+def _message_is_rewritable(_tool: str, message) -> bool:
+    return any(block.kind == "text" for block in message.blocks)
 
 
 def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
