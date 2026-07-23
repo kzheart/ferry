@@ -244,7 +244,8 @@ export class ProviderHost {
       reasoning: input.reasoning ?? template.reasoning,
       context_window: contextWindow,
       // 沿用模板的输出上限,但不能超过用户填的上下文窗口
-      max_tokens: input.max_tokens ?? Math.min(template.maxTokens, contextWindow),
+      max_tokens:
+        input.max_tokens ?? Math.min(template.maxTokens, contextWindow),
     });
     await this.applyCustomModels();
     return { provider_id: providerId, model: saved };
