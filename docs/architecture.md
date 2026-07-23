@@ -140,15 +140,13 @@ out-of-order but are always correlated by `request_id`.
 
 ## Cross-platform boundary
 
-Windows support is retained. `app/src-tauri/src/platform/` is the initial Rust
-platform boundary. It already owns reveal-in-file-manager behavior: macOS has
-the native implementation and Windows has an explicit, compilable unsupported
-stub. The following capabilities still need to move behind the same boundary:
+Windows support is retained. `app/src-tauri/src/platform/` is the Rust platform
+boundary. It owns reveal-in-file-manager and terminal launch behavior: macOS
+has the native implementation and Windows has explicit, compilable unsupported
+stubs. The following capabilities still need to move behind the same boundary:
 
 - process spawning and hidden-console policy;
 - executable and bundled-sidecar naming;
-- terminal or shell launch;
-- reveal-in-file-manager;
 - window decoration and visual effects.
 
 macOS implementations may use private or native APIs. Windows implementations
