@@ -24,6 +24,7 @@ pub(crate) struct TerminalLaunch {
     handoff_doc: Option<String>,
 }
 
+#[cfg(any(target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TerminalApp {
     Auto,
@@ -32,6 +33,7 @@ enum TerminalApp {
     Warp,
 }
 
+#[cfg(any(target_os = "macos", test))]
 impl TerminalApp {
     fn from_preference(value: Option<&str>) -> Self {
         match value {
