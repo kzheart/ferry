@@ -284,17 +284,6 @@ def _parse_call(payload, sess) -> ToolCall:
 
     calls = _scan_tool_invocations(src) if isinstance(src, str) else []
     if len(calls) != 1:
-        direct_input = _decode_current_input(src)
-        if direct_input is not None:
-            return ToolCall(
-                name=native_name,
-                op=_TOOL_INVOKE,
-                input={
-                    "namespace": "codex",
-                    "name": native_name,
-                    "input": direct_input,
-                },
-            )
         return _opaque_call(native_name, src, calls=calls)
 
     call_name, argument = calls[0]
@@ -402,14 +391,14 @@ def _parse_result(raw) -> ToolResult:
     )
 
 
-def _decode_current_input(raw) -> dict | str | None:
+def _json_args(raw) -> dict | str:
     if isinstance(raw, dict):
         return raw
     try:
-        value = json.loads(raw)
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else raw
     except (json.JSONDecodeError, TypeError):
-        return None
-    return value if isinstance(value, (dict, str)) else None
+        return raw or ""
 
 
 def _spawn_input(raw) -> dict:
@@ -433,6 +422,37 @@ def _spawn_input(raw) -> dict:
         if value is not None:
             result[field] = str(value)
     return result
+
+
+def _function_call(payload: dict) -> ToolCall:
+    name = payload.get("name", "?")
+    args = _json_args(payload.get("arguments", "{}"))
+    if name == "spawn_agent":
+        return ToolCall(
+            name="spawn_agent",
+            op=CanonicalOp.AGENT_SPAWN,
+            input=_spawn_input(args),
+            source_call_id=payload.get("call_id"),
+        )
+    if name in _LOCAL_SHELL_NAMES and isinstance(args, dict):
+        shell_input = _shell_input(args)
+        if shell_input is not None:
+            return ToolCall(
+                name=name,
+                op=CanonicalOp.SHELL_EXEC,
+                input=shell_input,
+                source_call_id=payload.get("call_id"),
+            )
+    return ToolCall(
+        name=name,
+        op=_TOOL_INVOKE,
+        input={
+            "namespace": "codex",
+            "name": name,
+            "input": args,
+        },
+        source_call_id=payload.get("call_id"),
+    )
 
 
 def _subagent_meta(meta: dict) -> dict:
@@ -593,6 +613,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     lines = _load_records(Path(path))
     response_payload_types = {
         "message", "reasoning",
+        "function_call", "function_call_output",
         "custom_tool_call", "custom_tool_call_output",
     }
     for line_number, record in enumerate(lines, start=1):
@@ -664,13 +685,6 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         else:
             continue
         pt = p.get("type")
-        if pt in {"function_call", "function_call_output"}:
-            raise AgentFormatChangedError(
-                "codex",
-                f"jsonl[{ordinal + 1}].payload.type",
-                "custom_tool_call or custom_tool_call_output",
-                str(pt),
-            )
         if pt == "message":
             content = p.get("content", [])
             if isinstance(content, str):
@@ -710,11 +724,12 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             sess.messages.append(Message(role=role, blocks=blocks,
                                          source_id=f"record:{ordinal}",
                                          created_at=l.get("timestamp")))
-        elif pt == "custom_tool_call":
-            if p.get("name") == "spawn_agent":
-                input_value = _decode_current_input(p.get("input", ""))
+        elif pt in ("custom_tool_call", "function_call"):
+            if pt == "function_call":
+                tc = _function_call(p)
+            elif p.get("name") == "spawn_agent":
                 tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                              input=_spawn_input(input_value))
+                              input=_spawn_input(_json_args(p.get("input", ""))))
             else:
                 tc = _parse_call(p, sess)
             tc.source_call_id = p.get("call_id")
@@ -724,7 +739,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                     if message.role in {"user", "assistant"}), None)
             pending[p.get("call_id")] = tc
             cur_tools.append(Block("tool", tool=tc))
-        elif pt == "custom_tool_call_output":
+        elif pt in ("custom_tool_call_output", "function_call_output"):
             tc = pending.pop(p.get("call_id"), None)
             if tc is not None:
                 tc.result = _parse_result(p.get("output", ""))
