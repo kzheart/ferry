@@ -39,8 +39,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
-            sidecar::migration_preview,
-            sidecar::migration_commit,
             sidecar::operation_plan,
             sidecar::operation_apply,
             sidecar::operation_status,
