@@ -445,7 +445,6 @@ def _function_call(payload: dict) -> ToolCall:
             name="spawn_agent",
             op=CanonicalOp.AGENT_SPAWN,
             input=_spawn_input(args),
-            meta={"source_id": payload.get("id")},
             source_call_id=payload.get("call_id"),
         )
     if name in _LOCAL_SHELL_NAMES and isinstance(args, dict):
@@ -661,8 +660,12 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     def flush_pending_into(blocks, message_source_id: str | None = None):
         nonlocal cur_tools, cur_reasoning
         for block in cur_tools:
-            if block.tool and message_source_id:
-                block.tool.meta.setdefault("message_source_id", message_source_id)
+            if (
+                block.tool
+                and message_source_id
+                and block.tool.source_message_id is None
+            ):
+                block.tool.source_message_id = message_source_id
         blocks[:0] = cur_reasoning + cur_tools
         cur_tools = []
         cur_reasoning = []
@@ -726,17 +729,14 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 tc = _function_call(p)
             elif p.get("name") == "spawn_agent":
                 tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                              input=_spawn_input(_json_args(p.get("input", ""))),
-                              meta={"source_id": p.get("id")})
+                              input=_spawn_input(_json_args(p.get("input", ""))))
             else:
                 tc = _parse_call(p, sess)
             tc.source_call_id = p.get("call_id")
-            if p.get("id"):
-                tc.meta.setdefault("source_id", p.get("id"))
             if tc.op == CanonicalOp.AGENT_SPAWN:
-                tc.meta.setdefault("message_source_id", next((
+                tc.source_message_id = next((
                     message.source_id for message in reversed(sess.messages)
-                    if message.role in {"user", "assistant"}), None))
+                    if message.role in {"user", "assistant"}), None)
             pending[p.get("call_id")] = tc
             cur_tools.append(Block("tool", tool=tc))
         elif pt in ("custom_tool_call_output", "function_call_output"):
@@ -823,7 +823,7 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
             parent_session_id=sess.source_id,
             child_session_id=child.source_id,
             source_call_id=matched.source_call_id if matched else None,
-            spawn_message_id=(matched.meta.get("message_source_id") if matched else None),
+            spawn_message_id=matched.source_message_id if matched else None,
             result_message_id=matched.source_result_id if matched else None,
             agent_id=child.agent_id,
             agent_path=child.agent_path,

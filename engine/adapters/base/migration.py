@@ -132,10 +132,10 @@ def linked_agent_edge(session, tool, message=None, *, allow_message=False):
                      if edge.source_call_id == tool.source_call_id), None)
         if edge:
             return edge
-    agent_id = tool.meta.get("agentId") or tool.meta.get("agent_id")
-    if agent_id:
+    if tool.agent_id:
         edge = next((edge for edge in session.agent_edges
-                     if edge.agent_id == agent_id or edge.child_session_id == agent_id), None)
+                     if edge.agent_id == tool.agent_id or
+                     edge.child_session_id == tool.agent_id), None)
         if edge:
             return edge
     if allow_message and message and message.source_id:

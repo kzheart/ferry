@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL = ROOT / "engine" / "domain" / "model.py"
-FORBIDDEN_TOOL_CALL_FIELDS = {"output", "status", "tool_result"}
+FORBIDDEN_TOOL_CALL_FIELDS = {"meta", "output", "status", "tool_result"}
 FORBIDDEN_METHODS = {
     "from_legacy",
     "legacy_output",

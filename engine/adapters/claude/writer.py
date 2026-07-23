@@ -240,7 +240,7 @@ def _edge_for_tool(session: Session, tool) -> AgentEdge | None:
     for edge in session.agent_edges:
         if tool.source_call_id and edge.source_call_id == tool.source_call_id:
             return edge
-        if tool.meta.get("agentId") and edge.agent_id == tool.meta["agentId"]:
+        if tool.agent_id and edge.agent_id == tool.agent_id:
             return edge
     return None
 
