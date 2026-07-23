@@ -23,6 +23,8 @@ import zhCNOverview from "../locales/zh-CN/overview.json";
 import enOverview from "../locales/en/overview.json";
 import zhCNAskFerry from "../locales/zh-CN/askferry.json";
 import enAskFerry from "../locales/en/askferry.json";
+import zhCNOrganizing from "../locales/zh-CN/organizing.json";
+import enOrganizing from "../locales/en/organizing.json";
 
 // 新增语言只需在这里加一行(外加 RESOURCES 注册),设置页下拉框自动出现该选项。
 // nativeName 用目标语言自称,不做翻译——找母语的人认自己的语言名最快。
@@ -36,8 +38,8 @@ export const FALLBACK_LOCALE = "zh-CN";
 export const DEFAULT_LOCALE = null;
 
 const RESOURCES = {
-  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays, app: zhCNApp, overview: zhCNOverview, askferry: zhCNAskFerry },
-  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, onboarding: enOnboarding, settings: enSettings, overlays: enOverlays, app: enApp, overview: enOverview, askferry: enAskFerry },
+  "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays, app: zhCNApp, overview: zhCNOverview, askferry: zhCNAskFerry, organizing: zhCNOrganizing },
+  "en": { common: enCommon, errors: enErrors, events: enEvents, browser: enBrowser, migration: enMigration, onboarding: enOnboarding, settings: enSettings, overlays: enOverlays, app: enApp, overview: enOverview, askferry: enAskFerry, organizing: enOrganizing },
 };
 
 const SETTINGS_KEY = "ferry-settings";
@@ -86,7 +88,7 @@ export function initI18n() {
       lng,
       fallbackLng: FALLBACK_LOCALE,
       defaultNS: "common",
-      ns: ["common", "errors", "events", "browser", "migration", "onboarding", "settings", "overlays", "app", "overview", "askferry"],
+      ns: ["common", "errors", "events", "browser", "migration", "onboarding", "settings", "overlays", "app", "overview", "askferry", "organizing"],
       interpolation: { escapeValue: false },
       returnEmptyString: false,
       returnNull: false,

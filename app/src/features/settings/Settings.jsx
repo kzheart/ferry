@@ -9,9 +9,10 @@ import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
 import Providers from "./Providers.jsx";
 import Models from "./Models.jsx";
+import Roles from "./Roles.jsx";
 
 const SECTIONS = [["prefs", "settings:sections.prefs"], ["providers", "settings:sections.providers"],
-  ["models", "settings:sections.models"],
+  ["models", "settings:sections.models"], ["roles", "settings:sections.roles"],
   ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
 
 function TerminalAppIcon({ app, size = 16 }) {
@@ -382,6 +383,8 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             <Providers ferry={ferry} />
           ) : section === "models" ? (
             <Models ferry={ferry} onOpenProviders={() => setSection("providers")} />
+          ) : section === "roles" ? (
+            <Roles ferry={ferry} />
           ) : (
             <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
               <div style={{ maxWidth: 620 }}>

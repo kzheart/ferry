@@ -1,0 +1,31 @@
+{
+  "open": "AI 整理",
+  "title": "AI-native 会话整理",
+  "scope": "当前范围 {{n}} 个会话",
+  "close": "关闭",
+  "description": "Ferry 会按内容指纹增量生成忠实摘要，并提出标题、摘要、标签、跨 Agent 聚类与死会话候选。批准前不会修改任何元数据，原始会话始终只读。",
+  "generate": "生成整理提案",
+  "generating": "生成中…",
+  "cacheHit": "内容未变，复用已有提案",
+  "current": "当前元数据",
+  "suggested": "建议修改",
+  "empty": "未命名会话",
+  "noSummary": "尚无摘要",
+  "noTags": "尚无标签",
+  "name": "建议标题",
+  "summary": "建议摘要",
+  "tags": "建议标签（逗号分隔）",
+  "cluster": "聚类",
+  "dead": "死会话候选",
+  "active": "活跃/有产出",
+  "sources": "摘要来源",
+  "saveChanges": "保存修改",
+  "reject": "拒绝提案",
+  "approve": "批准并写入本地元数据",
+  "status": {
+    "pending": "等待审阅",
+    "approved": "已批准",
+    "rejected": "已拒绝",
+    "stale": "内容已变化，需要重新生成"
+  }
+}
