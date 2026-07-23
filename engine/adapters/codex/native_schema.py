@@ -17,8 +17,6 @@ def extract_templates(records: list[dict]) -> dict:
         "session_meta",
         "response_item.custom_tool_call",
         "response_item.custom_tool_call_output",
-        "response_item.function_call",
-        "response_item.function_call_output",
         "message.user",
         "message.assistant",
     }
@@ -85,27 +83,6 @@ def _current_templates() -> dict:
                         "text": '{"exit_code":0,"output":"format-fixture-shell-test\\n"}',
                     }
                 ],
-            },
-        },
-        "response_item.function_call": {
-            "type": "response_item",
-            "payload": {
-                "type": "function_call",
-                "id": "fixture-function-call-shell",
-                "status": "completed",
-                "call_id": "fixture-function-shell",
-                "name": "exec_command",
-                "arguments": (
-                    '{"cmd":"pwd","workdir":"/fixture/codex/tools"}'
-                ),
-            },
-        },
-        "response_item.function_call_output": {
-            "type": "response_item",
-            "payload": {
-                "type": "function_call_output",
-                "call_id": "fixture-function-shell",
-                "output": "/fixture/codex/tools",
             },
         },
         "message.user": {

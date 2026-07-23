@@ -35,13 +35,12 @@ def _is_reply_record(record) -> bool:
     payload = record.get("payload") or {}
     subtype = payload.get("type")
     return ((subtype == "message" and payload.get("role") == "assistant") or
-            subtype in {"custom_tool_call", "function_call",
-                        "custom_tool_call_output", "function_call_output"})
+            subtype in {"custom_tool_call", "custom_tool_call_output"})
 
 
 def _is_spawn(record) -> bool:
     payload = record.get("payload") or {}
-    return payload.get("type") in {"custom_tool_call", "function_call"} and \
+    return payload.get("type") == "custom_tool_call" and \
         is_spawn_name(payload.get("name"))
 
 
@@ -86,16 +85,16 @@ class CodexEditCodec:
                     "phase": "final_answer"}})
             else:
                 call_id = "call_" + secrets.token_urlsafe(18)[:24]
-                arguments = (json.dumps(item.input, ensure_ascii=False)
-                             if isinstance(item.input, dict) else item.input)
+                source = json.dumps(item.input, ensure_ascii=False)
                 compiled.extend((
                     {"timestamp": now, "type": "response_item", "payload": {
-                        "type": "function_call", "id": "fc_" + secrets.token_hex(12),
-                        "name": item.name, "arguments": arguments, "call_id": call_id,
+                        "type": "custom_tool_call", "id": "ctc_" + secrets.token_hex(12),
+                        "name": item.name, "input": source, "call_id": call_id,
                         "status": "completed"}},
                     {"timestamp": now, "type": "response_item", "payload": {
-                        "type": "function_call_output", "id": "fco_" + secrets.token_hex(12),
-                        "call_id": call_id, "output": item.output}},
+                        "type": "custom_tool_call_output", "id": "ctco_" + secrets.token_hex(12),
+                        "call_id": call_id,
+                        "output": json.dumps([{"type": "input_text", "text": item.output}])}},
                 ))
         records[span.start + 1:span.end] = replace_at_first(
             old, _is_reply_record, compiled)

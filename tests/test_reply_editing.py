@@ -133,9 +133,9 @@ def test_tool_insertion_generates_native_pairs_and_foreign_keys(tool, tmp_path):
         assert uses == results and uses[0].startswith("toolu_")
     elif tool == "codex":
         calls = [row["payload"]["call_id"] for row in doc.data
-                 if (row.get("payload") or {}).get("type") == "function_call"]
+                 if (row.get("payload") or {}).get("type") == "custom_tool_call"]
         outputs = [row["payload"]["call_id"] for row in doc.data
-                   if (row.get("payload") or {}).get("type") == "function_call_output"]
+                   if (row.get("payload") or {}).get("type") == "custom_tool_call_output"]
         assert calls == outputs and calls[0].startswith("call_")
     assert _items(_roundtrip(tool, doc.data, tmp_path)) == reply.to_dict()["items"]
 
