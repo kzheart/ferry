@@ -23,7 +23,7 @@ directory.
    required structure changed, replace the current templates, reader, writer,
    and fixtures together. Do not add a version branch.
 5. Run
-   `python -m pytest tests/test_current_native_formats.py tests/test_authoring.py`.
+   `python -m pytest tests/test_current_native_formats.py tests/test_reply_editing.py`.
 
 The extractor intentionally only prints a candidate. Updating a production
 structure remains an explicit, reviewable code change. The previous structure
