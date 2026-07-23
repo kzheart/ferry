@@ -206,6 +206,15 @@ def test_state_database_rejects_unknown_exact_schema(tmp_path):
         StateDatabase(path)
 
 
+def test_state_database_rejects_previous_schema_without_migration(tmp_path):
+    path = tmp_path / "ferry-state.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA user_version = 1")
+
+    with pytest.raises(RuntimeError, match="schema 不受支持"):
+        StateDatabase(path)
+
+
 def test_metadata_plan_applies_with_independent_cas(
         agent_environment, monkeypatch):
     metadata_path = agent_environment["root"].parent / "session-meta.json"
@@ -266,9 +275,35 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
 
     applied = operations.apply(plan["plan_id"])
 
-    assert applied["result"]["snapshot"] == "snapshot-before-delete"
+    assert applied["result"]["recovery_id"].startswith("recovery_")
+    assert "snapshot" not in applied["result"]
     assert lifecycle.calls == [str(agent_environment["transcript"])]
     assert not agent_environment["transcript"].exists()
+
+    restored = []
+    monkeypatch.setattr(
+        operations.services,
+        "session_undelete",
+        lambda snapshot: restored.append(snapshot) or {
+            "ok": True,
+            "target": str(agent_environment["transcript"]),
+        },
+    )
+    restore_plan = operations.plan({
+        "kind": "restore-delete",
+        "recovery_id": applied["result"]["recovery_id"],
+    })
+    restore_result = operations.apply(restore_plan["plan_id"])
+
+    assert restore_plan["preview"]["tool"] == "claude"
+    assert restore_result["result"]["recovery_id"] == \
+        applied["result"]["recovery_id"]
+    assert restored == ["snapshot-before-delete"]
+    with pytest.raises(AgentRequestError):
+        operations.plan({
+            "kind": "restore-delete",
+            "recovery_id": applied["result"]["recovery_id"],
+        })
 
 
 def test_delete_plan_rejects_revision_change(
