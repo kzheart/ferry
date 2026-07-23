@@ -193,15 +193,19 @@ class OperationService:
                 if isinstance(value, dict) else None},
             )
         tool, ref, ops = value.get("tool"), value.get("ref"), value.get("ops")
+        probe = value.get("probe", False)
         if not isinstance(tool, str) or not tool:
             raise AgentRequestError("operation tool 非法")
         if not isinstance(ref, str) or not ref:
             raise AgentRequestError("operation ref 非法")
+        if not isinstance(probe, bool):
+            raise AgentRequestError("operation probe 必须是布尔值")
         agent_tools._validate_ops(ops)
         if len(_canonical(ops).encode()) > 64 * 1024:
             raise AgentRequestError("ops 超过 64 KiB")
         return json.loads(_canonical({
             "kind": "edit", "tool": tool, "ref": ref, "ops": ops,
+            "probe": probe,
         }))
 
     def _apply_edit(self, operation: OperationPlan) -> dict:
@@ -240,7 +244,7 @@ class OperationService:
         except LocatorStaleError as error:
             raise agent_tools._public_locator_error(params["ops"]) from error
         return services._finish_mutation(
-            params["tool"], editor, result, doc, snapshot, False, False,
+            params["tool"], editor, result, doc, snapshot, params["probe"], False,
         )
 
     def _get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
