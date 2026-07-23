@@ -9,3 +9,4 @@ export * from "./jsonl.js";
 export * from "./protocol.js";
 export * from "./runtime.js";
 export * from "./tool-port.js";
+export * from "./workflow.js";
