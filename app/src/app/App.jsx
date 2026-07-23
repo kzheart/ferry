@@ -116,7 +116,7 @@ export default function App() {
     runtimeProbe: !!settings.runtimeProbe, doScan,
     onInplaceApplied: () => select(selId),
     onSavedAs: result => savedAsRef.current?.(result) });
-  const { ops, setOps, saveMode, setSaveMode, diff, setDiff,
+  const { ops, dirtyOps, setOps, saveMode, setSaveMode, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     editCaps, authoringCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
     removeOp, updateOp, authoringError, openDiff, applyEdit } = editing;
@@ -900,7 +900,7 @@ export default function App() {
             data={detail?.data} error={detail?.error}
             onDiscardAll={detailActs.onDiscardAll}
             scope={scope} setScope={detailActs.setScope}
-            ops={ops} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
+            ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
             updateOp={detailActs.updateOp}
             editCaps={editCaps} authoringCaps={authoringCaps}
             startReplyEdit={detailActs.startReplyEdit} authoringError={detailActs.authoringError}
@@ -930,9 +930,9 @@ export default function App() {
           defaultProbe={!!settings.runtimeProbe} terminalApp={settings.terminalApp}
           onClose={() => setMig(null)}
           onDone={() => loadHistory()} />)}
-      {diff && <DiffSheet ops={ops} preview={diff.preview} loading={diff.loading} error={diff.error}
+      {diff && <DiffSheet ops={dirtyOps} preview={diff.preview} loading={diff.loading} error={diff.error}
         onClose={() => setDiff(null)} />}
-      {confirmApply && <ApplyConfirm ops={ops} saveMode={saveMode} setSaveMode={setSaveMode}
+      {confirmApply && <ApplyConfirm ops={dirtyOps} saveMode={saveMode} setSaveMode={setSaveMode}
         editCaps={editCaps} onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
       {searchOpen && paneCfg && (
         <SearchPalette

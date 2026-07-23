@@ -417,19 +417,25 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
             )}
           </div>
         )}
-        {!replyOp && aiText && (
-          <div style={{ margin: "10px 0 0" }}>
-            <div className="fdel-text"><Markdown text={aiText} /></div>
-            <div className="fhact" style={{ marginTop: 4 }}>
-              <IconBtn title={copied ? tt("browser:round.copiedAi") : tt("browser:round.copyAi")} onClick={copyAi}>
-                {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
+        {!replyOp && (aiText || (canAuthor && !deleted)) && (
+          <div style={{ margin: aiText ? "10px 0 0" : "6px 0 0" }}>
+            {aiText && <div className="fdel-text"><Markdown text={aiText} /></div>}
+            <div className="fhact" style={{ display: "flex", gap: 3, marginTop: 4 }}>
+              {aiText && (
+                <IconBtn title={copied ? tt("browser:round.copiedAi") : tt("browser:round.copyAi")} onClick={copyAi}>
+                  {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
+              )}
+              {canAuthor && !deleted && (
+                <IconBtn onClick={onStartReply} disabled={authoringBlocked}
+                  title={authoringBlocked ? tt("browser:replyEditor.blockedHint") : tt("browser:replyEditor.startHint")}>
+                  <PencilIcon /></IconBtn>
+              )}
             </div>
           </div>
         )}
-        {!deleted && (
+        {!deleted && replyOp && (
           <div style={{ marginTop: 7 }}>
-            <AssistantReplyEditor op={replyOp} canAuthor={canAuthor}
-              blocked={authoringBlocked} onStart={onStartReply}
+            <AssistantReplyEditor op={replyOp}
               onChange={onUpdateReply} onCancel={onCancelReply} />
           </div>
         )}
@@ -512,7 +518,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({ meta, data, error,
-  scope, setScope, ops, addOp, removeOp, updateOp,
+  scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
   startReplyEdit, authoringError, onOpenDiff, onApply, applying, onDiscardAll,
   onOpenMigrate, onRefresh, refreshing, onResume, editCaps, authoringCaps }) {
   const { t: tt } = useTranslation();
@@ -607,7 +613,7 @@ export default memo(function SessionDetail({ meta, data, error,
             </div>
           )}
         </div>
-        <div style={{ padding: `20px 26px ${ops.length ? 110 : 48}px`, maxWidth: 720, margin: "0 auto" }}>
+        <div style={{ padding: `20px 26px ${dirtyOps.length ? 110 : 48}px`, maxWidth: 720, margin: "0 auto" }}>
           {error && <div style={{ padding: 30, color: "var(--err-deep)", fontSize: 13 }}>{tt("browser:session.readFailed", { error })}</div>}
           {!data && !error && (
             <div style={{ padding: 40, display: "flex", alignItems: "center", gap: 10,
@@ -645,10 +651,10 @@ export default memo(function SessionDetail({ meta, data, error,
           )}
         </div>
       </div>
-      {ops.length > 0 && (
-        <PendingBar ops={ops} removeOp={removeOp}
+      {dirtyOps.length > 0 && (
+        <PendingBar ops={dirtyOps} removeOp={removeOp}
           onOpenDiff={onOpenDiff} onApply={onApply} applying={applying}
-          invalid={authoringError(ops.find(op => op.type === "assistant-reply"))}
+          invalid={authoringError(dirtyOps.find(op => op.type === "assistant-reply"))}
           onDiscardAll={onDiscardAll} />
       )}
       {previewImages && <ImagePreview key={previewImages[0]?.id} images={previewImages}

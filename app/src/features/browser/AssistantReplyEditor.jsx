@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
-import { CloseIcon, PencilIcon, TrashIcon } from "../../components/ui/icons.jsx";
+import { CloseIcon, TrashIcon } from "../../components/ui/icons.jsx";
 
 const uid = () => globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random()}`;
 
 function SmallButton({ title, danger, disabled, onClick, children }) {
   return <button className={`ficon-btn${danger ? " danger" : ""}`} title={title}
-    disabled={disabled} onClick={onClick} style={{ width: 25, height: 25 }}>{children}</button>;
+    disabled={disabled} onClick={e => { e.stopPropagation(); onClick(e); }}
+    style={{ width: 25, height: 25 }}>{children}</button>;
 }
 
 const fieldStyle = {
@@ -23,10 +24,10 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
   return (
     <div style={{ border: "1px solid var(--line3)", borderRadius: 8,
       background: "var(--fill)", marginBottom: 8, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px",
+      <div onClick={() => setExpanded(value => !value)}
+        style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px", cursor: "default",
         borderBottom: expanded ? "1px solid var(--line5)" : "none" }}>
-        <button onClick={() => setExpanded(value => !value)} style={{ border: 0, background: "none",
-          color: "var(--tx4)", cursor: "default", fontSize: 11 }}>{expanded ? "▾" : "▸"}</button>
+        <span style={{ color: "var(--tx4)", fontSize: 11 }}>{expanded ? "▾" : "▸"}</span>
         <span className="mono" style={{ flex: 1, fontSize: 11, fontWeight: 600,
           color: item.kind === "tool" ? "var(--acc-text)" : "var(--tx3b)" }}>
           {item.kind === "tool"
@@ -70,17 +71,9 @@ function ItemEditor({ item, index, count, onPatch, onRemove, onMove }) {
   );
 }
 
-export default function AssistantReplyEditor({ op, blocked, canAuthor, onStart, onChange, onCancel }) {
+export default function AssistantReplyEditor({ op, onChange, onCancel }) {
   const { t } = useTranslation();
-  if (!op) {
-    return (
-      <button className="fbtn" disabled={!canAuthor || blocked} onClick={onStart}
-        title={blocked ? t("browser:replyEditor.blockedHint") : t("browser:replyEditor.startHint")}
-        style={{ height: 27, padding: "0 10px", fontSize: 11, color: ACCENT }}>
-        <PencilIcon size={11} /> {t("browser:replyEditor.startButton")}
-      </button>
-    );
-  }
+  if (!op) return null;
 
   const patchItem = (id, patch) => onChange(op.items.map(item => item.id === id ? { ...item, ...patch } : item));
   const removeItem = id => onChange(op.items.filter(item => item.id !== id));

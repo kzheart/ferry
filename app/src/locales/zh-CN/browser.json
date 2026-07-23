@@ -122,7 +122,6 @@
     "fakeOutput": "伪造的工具输出",
     "blockedHint": "请先应用或放弃其他暂存操作",
     "startHint": "修改或伪造 AI 回复与工具调用",
-    "startButton": "编排 AI 回复",
     "panelTitle": "AI 回复编排",
     "panelHint": "仅修改历史，不会执行工具",
     "cancel": "放弃 AI 回复修改",
