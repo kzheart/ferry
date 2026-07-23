@@ -98,7 +98,8 @@ Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
 currently version 7 and owns immutable operation plans, operation audit,
 delete-recovery handles, session metadata, migration history, session summary
-backbones, organization proposals, and organization signals. Session metadata
+backbones, organization proposals, organization signals, and Ferry Runtime
+session/event records. Session metadata
 is identified by the exact `(tool, native_session_id)` pair, never by a bare
 native ID. Migration history has a database-generated immutable ID and is
 listed in append order from newest to oldest. Summary backbones use the same
@@ -114,9 +115,10 @@ The UI uses the same pair as its local session identity for list keys,
 selection, multi-selection, context menus, and detail caching. Native session
 IDs remain adapter data and must never become cross-tool UI identifiers.
 
-Runtime conversation event logs have not yet been consolidated. They must
-continue to be accessed only by their designated process until they move into
-the Python-owned SQLite boundary; Rust and Ferry Runtime never open
+Runtime session/event records enter the database only through internal Engine
+RPC after the Runtime has redacted them; Python stores these records as opaque
+JSON and never interprets Provider or AgentMessage semantics. Rust and Ferry
+Runtime never open
 `ferry-state.sqlite3` directly.
 
 The SQLite boundary follows these rules:

@@ -209,7 +209,7 @@ def test_state_database_rejects_previous_schema_without_migration(tmp_path):
         StateDatabase(path)
 
 
-@pytest.mark.parametrize("version", [2, 3, 4, 5, 6])
+@pytest.mark.parametrize("version", [2, 3, 4, 5, 6, 7])
 def test_state_database_rejects_previous_current_schema_without_migration(tmp_path, version):
     path = tmp_path / "ferry-state.sqlite3"
     with sqlite3.connect(path) as connection:

@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class StateDatabase:
@@ -125,7 +125,31 @@ class StateDatabase:
                         payload_json TEXT NOT NULL,
                         FOREIGN KEY(proposal_id) REFERENCES organization_proposals(proposal_id)
                     );
-                    PRAGMA user_version = 7;
+                    CREATE TABLE runtime_sessions (
+                        session_id TEXT PRIMARY KEY,
+                        metadata_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX runtime_sessions_recent
+                        ON runtime_sessions(updated_at DESC);
+                    CREATE TABLE runtime_messages (
+                        session_id TEXT NOT NULL,
+                        ordinal INTEGER NOT NULL,
+                        message_json TEXT NOT NULL,
+                        PRIMARY KEY(session_id, ordinal),
+                        FOREIGN KEY(session_id) REFERENCES runtime_sessions(session_id)
+                            ON DELETE CASCADE
+                    );
+                    CREATE TABLE runtime_events (
+                        session_id TEXT NOT NULL,
+                        seq INTEGER NOT NULL,
+                        event_json TEXT NOT NULL,
+                        PRIMARY KEY(session_id, seq),
+                        FOREIGN KEY(session_id) REFERENCES runtime_sessions(session_id)
+                            ON DELETE CASCADE
+                    );
+                    PRAGMA user_version = 8;
                     COMMIT;
                 """)
             if recover_interrupted:
@@ -720,6 +744,101 @@ class StateDatabase:
                     (proposal_id,),
                 ).fetchall()
         return [json.loads(row["payload_json"]) for row in rows]
+
+    def load_runtime_sessions(self) -> list[dict]:
+        with self._lock, self._connect() as connection:
+            sessions = connection.execute(
+                "SELECT session_id, metadata_json FROM runtime_sessions"
+            ).fetchall()
+            result = []
+            for row in sessions:
+                session_id = row["session_id"]
+                messages = connection.execute(
+                    """
+                    SELECT ordinal, message_json FROM runtime_messages
+                    WHERE session_id = ? ORDER BY ordinal
+                    """,
+                    (session_id,),
+                ).fetchall()
+                events = connection.execute(
+                    """
+                    SELECT event_json FROM runtime_events
+                    WHERE session_id = ? ORDER BY seq
+                    """,
+                    (session_id,),
+                ).fetchall()
+                result.append({
+                    "state": {
+                        **json.loads(row["metadata_json"]),
+                        "messages": [json.loads(item["message_json"]) for item in messages],
+                    },
+                    "events": [json.loads(item["event_json"]) for item in events],
+                })
+        return result
+
+    def commit_runtime_session(self, update: dict) -> None:
+        metadata = update["metadata"]
+        session_id = metadata["session_id"]
+        timestamp = update["timestamp"]
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT metadata_json, created_at FROM runtime_sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO runtime_sessions(session_id, metadata_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    session_id,
+                    json.dumps(metadata, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":")),
+                    existing["created_at"] if existing is not None else timestamp,
+                    timestamp,
+                ),
+            )
+            self._insert_runtime_records(
+                connection, "runtime_messages", session_id, "ordinal",
+                update.get("messages", []), "message", "message_json",
+            )
+            self._insert_runtime_records(
+                connection, "runtime_events", session_id, "seq",
+                update.get("events", []), "event", "event_json",
+            )
+            connection.commit()
+
+    @staticmethod
+    def _insert_runtime_records(connection: sqlite3.Connection, table: str,
+                                session_id: str, key: str, records: list,
+                                value: str, column: str) -> None:
+        for record in records:
+            identifier = record[key]
+            payload = json.dumps(record[value], ensure_ascii=False, sort_keys=True,
+                                 separators=(",", ":"))
+            row = connection.execute(
+                f"SELECT {column} FROM {table} WHERE session_id = ? AND {key} = ?",
+                (session_id, identifier),
+            ).fetchone()
+            if row is not None:
+                if row[column] != payload:
+                    connection.rollback()
+                    raise RuntimeError("Runtime 持久化记录冲突")
+                continue
+            connection.execute(
+                f"INSERT INTO {table}(session_id, {key}, {column}) VALUES (?, ?, ?)",
+                (session_id, identifier, payload),
+            )
+
+    def delete_runtime_session(self, session_id: str) -> bool:
+        with self._lock, self._connect() as connection:
+            return connection.execute(
+                "DELETE FROM runtime_sessions WHERE session_id = ?", (session_id,)
+            ).rowcount == 1
 
     @staticmethod
     def _metadata_entry(row: sqlite3.Row | None) -> dict:
