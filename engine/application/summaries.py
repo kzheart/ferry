@@ -49,10 +49,6 @@ def _write(data: dict) -> None:
 def _locator(message, index: int) -> str:
     if isinstance(message.source_id, str) and message.source_id:
         return message.source_id
-    if message.raw and isinstance(message.raw[0], dict):
-        value = message.raw[0].get("uuid")
-        if isinstance(value, str) and value:
-            return value
     return f"index:{index}"
 
 
