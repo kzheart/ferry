@@ -11,6 +11,7 @@ from ..application import agent_tools
 from ..application import agent_mutations
 from ..application import summaries
 from ..application import organizing
+from ..application import operations
 from ..application.verification import ProbeTimeout
 from ..domain.errors import (
     DomainError, InvalidJsonError, MissingParamError, UnknownMethodError,
@@ -98,6 +99,10 @@ RPC_METHODS = {
         p["operation_id"], p["run_id"], p["approval_token"]),
     "agent_operation_status": lambda p: agent_mutations.status(
         p["operation_id"]),
+    "operation.plan": lambda p: operations.plan(p["input"]),
+    "operation.apply": lambda p: operations.apply(p["plan_id"]),
+    "operation.status": lambda p: operations.status(p["plan_id"]),
+    "operation.cancel": lambda p: operations.cancel(p["plan_id"]),
 }
 
 
