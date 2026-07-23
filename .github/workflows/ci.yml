@@ -50,6 +50,7 @@ jobs:
         working-directory: app
       - run: python -m pip install -r requirements-test.txt
       - run: python scripts/check-no-agent-versioning.py
+      - run: python scripts/generate-contracts.py --check
       - run: python scripts/check-canonical-tool-result.py
       - run: python scripts/check-canonical-session.py
       - run: python -m pytest

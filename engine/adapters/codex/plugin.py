@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ..base.plugin import ToolManifest, ToolPlugin
 from ..base.migration import TreeMigrationSource
+from ...contracts.agents import AGENTS
 from .editor import CodexBackend, resolve
 from .lifecycle import CodexLifecycle
 from .migration import CodexMigrationTarget
@@ -11,14 +12,7 @@ from .probe import CodexVerifier
 from .reader import read
 from .scanner import agent_fingerprint, fingerprint, scan
 
-MANIFEST = ToolManifest(
-    id="codex",
-    display_name="Codex CLI",
-    icon="codex",
-    source_path="~/.codex/sessions",
-    reference_kind="path",
-    executables=("codex",),
-)
+MANIFEST = ToolManifest(id="codex", **AGENTS["codex"])
 
 
 class CodexBrowser:

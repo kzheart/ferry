@@ -12,6 +12,10 @@ const ENGINE_TIMEOUT: Duration = Duration::from_secs(120);
 const AGENT_LOOKUP_TIMEOUT: Duration = Duration::from_secs(20);
 const ENGINE_COMMIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
+fn is_known_agent(agent: &str) -> bool {
+    crate::contracts::agents::AGENT_IDS.contains(&agent)
+}
+
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
 struct EngineProcess {
     child: Child,
@@ -422,7 +426,7 @@ fn validate_reply(reply: &Value) -> Result<(), String> {
 }
 
 fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), String> {
-    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+    if !is_known_agent(&input.tool) {
         return Err("Operation 工具标识无效".to_owned());
     }
     if input.reference.is_empty()
@@ -523,9 +527,7 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
 }
 
 fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Result<(), String> {
-    if !matches!(input.source_tool.as_str(), "claude" | "codex" | "opencode")
-        || !matches!(input.target_tool.as_str(), "claude" | "codex" | "opencode")
-    {
+    if !is_known_agent(&input.source_tool) || !is_known_agent(&input.target_tool) {
         return Err("Migration Operation Agent 标识无效".to_owned());
     }
     if input.source_tool == input.target_tool {
@@ -555,7 +557,7 @@ fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Re
 }
 
 fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Result<(), String> {
-    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+    if !is_known_agent(&input.tool) {
         return Err("Metadata Operation Agent 标识无效".to_owned());
     }
     if !(8..=128).contains(&input.reference.len())
@@ -594,7 +596,7 @@ fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Resu
 }
 
 fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(), String> {
-    if !matches!(input.tool.as_str(), "claude" | "codex" | "opencode") {
+    if !is_known_agent(&input.tool) {
         return Err("Delete Operation Agent 标识无效".to_owned());
     }
     if !(8..=128).contains(&input.reference.len())

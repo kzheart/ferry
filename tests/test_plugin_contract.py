@@ -15,6 +15,7 @@ from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.application.sessions import session_json
 from engine.domain.edit import AssistantReply
 from engine.domain.errors import ToolUnknownError
+from engine.contracts.agents import AGENT_IDS
 
 from test_reply_editing import (
     _editor,
@@ -194,7 +195,7 @@ def test_registry_reports_unknown_adapter():
 
 
 def test_registry_explicitly_composes_all_bundled_adapters():
-    assert create_registry().ids() == ("claude", "codex", "opencode")
+    assert create_registry().ids() == AGENT_IDS
 
 
 @pytest.mark.parametrize("tool", ["claude", "codex"])

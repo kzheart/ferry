@@ -1,6 +1,7 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
 mod agent;
+mod contracts;
 #[cfg(target_os = "macos")]
 mod menu;
 mod reveal;
