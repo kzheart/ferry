@@ -350,22 +350,6 @@ def edit_capabilities(tool: str) -> dict:
     return adapter(tool).require("editor").capabilities()
 
 
-def edit_preview(ref: str, ops: list[dict], tool: str = "claude") -> dict:
-    """在内存中施加操作,返回前后统计与摘要,不落盘。"""
-    from .editing import preview
-    editor = adapter(tool).require("editor")
-    return preview(editor, ref, ops,
-                   loader=getattr(editor, "load_preview", None))
-
-
-def edit_apply(ref: str, ops: list[dict], probe: bool = False,
-               save_as: bool = False, tool: str = "claude") -> dict:
-    from .editing import apply
-    impl = adapter(tool).require("editor")
-    result, doc, snapshot = apply(impl, ref, ops, save_as=save_as)
-    return _finish_mutation(tool, impl, result, doc, snapshot, probe, save_as)
-
-
 def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
     """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
     try:

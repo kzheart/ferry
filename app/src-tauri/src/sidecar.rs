@@ -544,7 +544,6 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
             | "authoring_capabilities"
             | "authoring_preview"
             | "edit_capabilities"
-            | "edit_preview"
             | "session_meta_list"
             | "session_backbone"
             | "session_summaries_set"
@@ -576,6 +575,7 @@ mod tests {
         assert!(validate_public_engine_request(r#"{"method":"operation.status"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"operation.cancel"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"edit_apply"}"#).is_err());
+        assert!(validate_public_engine_request(r#"{"method":"edit_preview"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"migrate"}"#).is_err());
         assert!(validate_public_engine_request(r#"{"method":"scan"}"#).is_ok());
         // 删除迁移记录只动 Ferry 自己的历史文件,不写目标工具的会话
