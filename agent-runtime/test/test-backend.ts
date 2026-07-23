@@ -109,6 +109,41 @@ const streamFn: StreamFunction = (
       stream.push({ type: "done", reason: "toolUse", message: complete });
       return;
     }
+    if (prompt.startsWith("tool:delegate")) {
+      const call: ToolCall = {
+        type: "toolCall",
+        id: "delegate-call-1",
+        name: "delegate_agents",
+        arguments: {
+          max_concurrency: 2,
+          tasks: [
+            {
+              id: "research",
+              role_id: "default",
+              instruction: "research the issue",
+            },
+            {
+              id: "review",
+              role_id: "default",
+              instruction: "review the research",
+              depends_on: ["research"],
+            },
+          ],
+        },
+      };
+      const partial = message([], "toolUse");
+      stream.push({ type: "start", partial });
+      const complete = message([call], "toolUse");
+      stream.push({ type: "toolcall_start", contentIndex: 0, partial });
+      stream.push({
+        type: "toolcall_end",
+        contentIndex: 0,
+        toolCall: call,
+        partial: complete,
+      });
+      stream.push({ type: "done", reason: "toolUse", message: complete });
+      return;
+    }
     if (prompt.startsWith("error:")) {
       const failed = {
         ...message([], "error"),

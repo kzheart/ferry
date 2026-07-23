@@ -47,3 +47,42 @@ test("operation plans use plan_id as the approval identity", () => {
   const updated = patchApproval(log, "op_plan", { status: "applied" });
   assert.equal(updated.items[0].status, "applied");
 });
+
+test("workflow events expose parallel agent task state in the parent chat", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "workflow.started",
+    run_id: "run-1",
+    payload: { task_count: 2 },
+  });
+  log = applyEvent(log, {
+    type: "task.started",
+    run_id: "run-1",
+    payload: { task_id: "research", role_id: "researcher" },
+  });
+  log = applyEvent(log, {
+    type: "task.started",
+    run_id: "run-1",
+    payload: { task_id: "review", role_id: "reviewer" },
+  });
+  log = applyEvent(log, {
+    type: "task.completed",
+    run_id: "run-1",
+    payload: { task_id: "research" },
+  });
+  log = applyEvent(log, {
+    type: "workflow.completed",
+    run_id: "run-1",
+    payload: { status: "completed" },
+  });
+
+  assert.deepEqual(log.items[0], {
+    kind: "workflow",
+    runId: "run-1",
+    status: "completed",
+    taskCount: 2,
+    tasks: [
+      { id: "research", roleId: "researcher", status: "completed" },
+      { id: "review", roleId: "reviewer", status: "running" },
+    ],
+  });
+});

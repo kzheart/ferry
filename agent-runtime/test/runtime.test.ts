@@ -224,6 +224,39 @@ describe("AgentRuntime", () => {
     expect(types.at(-1)).toBe("run.completed");
   });
 
+  it("delegates a bounded task graph and deletes workflow-scoped sessions", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("parent");
+
+    await runtime.prompt("parent", "tool:delegate");
+    await runtime.waitForIdle("parent");
+
+    const events = runtime.replay("parent", 0);
+    expect(
+      events.filter((event) => event.type === "task.started"),
+    ).toHaveLength(2);
+    expect(
+      events.find((event) => event.type === "workflow.completed")?.payload,
+    ).toEqual({ status: "completed" });
+    expect(runtime.listSessions().map((session) => session.session_id)).toEqual(
+      ["parent"],
+    );
+    const completed = events.find(
+      (event) =>
+        event.type === "tool.completed" &&
+        event.payload.name === "delegate_agents",
+    );
+    expect(completed?.payload.result).toMatchObject({
+      details: {
+        status: "completed",
+        tasks: [
+          { task_id: "research", status: "completed" },
+          { task_id: "review", status: "completed" },
+        ],
+      },
+    });
+  });
+
   it("preserves redacted structured tool details across replay", async () => {
     const runtime = await createRuntime({
       toolHandler: async () => ({
