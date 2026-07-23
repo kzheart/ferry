@@ -35,9 +35,30 @@ const secLabel = { fontSize: 10.5, color: "var(--tx5)", margin: "0 0 3px 2px" };
 // 只读类工具:过程步骤,默认收在时间线里不吐卡
 const READ_TOOLS = new Set(["session_search", "session_read", "usage"]);
 
-const railDot = { position: "absolute", left: 2, top: 8, width: 7, height: 7,
-  borderRadius: "50%", boxShadow: "0 0 0 3px var(--bg)" };
-const railSpin = { position: "absolute", left: 1, top: 6, display: "inline-flex" };
+// 工具语义小图标(单色线性,坐落在时间线上;状态靠 spinner 表达而非颜色)
+const TRACE_ICON = {
+  session_search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+  session_read: (
+    <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" /></>),
+  usage: <path d="M3 12h4l3 8 4-16 3 8h4" />,
+  migrate: (
+    <><path d="M8 3 4 7l4 4M4 7h16" /><path d="M16 21l4-4-4-4M20 17H4" /></>),
+  session_edit: (
+    <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></>),
+};
+
+function TraceIcon({ name, size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {TRACE_ICON[name] || <circle cx="12" cy="12" r="3" />}
+    </svg>
+  );
+}
+
+const traceIconWrap = { position: "absolute", left: 0, top: 3, width: 16, height: 16,
+  display: "grid", placeItems: "center", background: "var(--bg)", color: "var(--tx4)" };
 
 const tokenTotal = tokens => Object.values(tokens || {})
   .filter(v => typeof v === "number").reduce((a, b) => a + b, 0);
@@ -84,13 +105,12 @@ const ToolRow = memo(function ToolRow({ item, onNavigate }) {
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
   const summary = toolSummary(item, t);
-  const dotColor = error ? "var(--err)" : level === "mutate" ? "var(--warn)" : "var(--ok)";
 
   return (
-    <div style={{ position: "relative", paddingLeft: 20 }}>
-      {running
-        ? <span style={railSpin}><Spinner size={9} /></span>
-        : <span style={{ ...railDot, background: dotColor }} />}
+    <div style={{ position: "relative", paddingLeft: 24 }}>
+      <span style={traceIconWrap}>
+        {running ? <Spinner size={12} /> : <TraceIcon name={item.name} />}
+      </span>
       <div onClick={() => setOpen(v => !v)}
         style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22,
           cursor: "default", fontSize: 12 }}>
@@ -159,7 +179,7 @@ const ToolRow = memo(function ToolRow({ item, onNavigate }) {
 function Trace({ rows, onNavigate }) {
   return (
     <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 2 }}>
-      <span style={{ position: "absolute", left: 5, top: 12, bottom: 12, width: 1.5,
+      <span style={{ position: "absolute", left: 7.5, top: 14, bottom: 14, width: 1.5,
         background: "var(--line3)", borderRadius: 1 }} />
       {rows.map((row, i) => (
         <ToolRow key={row.callId || i} item={row} onNavigate={onNavigate} />))}
