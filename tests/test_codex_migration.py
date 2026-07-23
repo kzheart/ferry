@@ -237,6 +237,13 @@ def test_codex_writer_registers_rollout_tree(tmp_path):
     assert meta["payload"]["thread_source"] == "user"
     assert meta["payload"]["model_provider"] == "openai"
     assert not any(record["type"] == "turn_context" for record in records)
+    child_path = next(
+        path for path in sessions.glob("*/*/*/rollout-*.jsonl")
+        if path != root_path
+    )
+    child_meta = json.loads(child_path.read_text().splitlines()[0])["payload"]
+    assert child_meta["thread_source"] == "subagent"
+    assert isinstance(child_meta["source"]["subagent"], dict)
 
 
 def test_codex_cleanup_removes_files_and_registration(tmp_path):

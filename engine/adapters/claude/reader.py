@@ -51,8 +51,8 @@ def _norm_input(name: str, inp: dict | str) -> dict | str:
                 "content": inp.get("content", "")}
     if name == "Bash":
         value = {"command": inp.get("command", "")}
-        if "timeout" in inp or "timeout_ms" in inp:
-            value["timeout_ms"] = inp.get("timeout_ms", inp.get("timeout"))
+        if "timeout" in inp:
+            value["timeout_ms"] = inp["timeout"]
         if "run_in_background" in inp:
             value["background"] = inp["run_in_background"]
         if "dangerouslyDisableSandbox" in inp:
@@ -169,7 +169,7 @@ def _tool_result(block: dict, native=None) -> ToolResult:
     native = native if isinstance(native, dict) else {}
     canonical = native.get("canonicalToolResult")
     canonical = canonical if isinstance(canonical, dict) else {}
-    exit_code = native.get("exit_code", native.get("exitCode"))
+    exit_code = native.get("exit_code")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         exit_code = None
     truncated = native.get("truncated")
@@ -234,15 +234,16 @@ def _load(path: Path) -> list[dict]:
     return records
 
 
-def _agent_alias(value: dict) -> str | None:
-    return (value.get("agentId") or value.get("agent_id") or
-            value.get("teammate_id"))
+def _native_agent_id(value: dict) -> str | None:
+    agent_id = value.get("agentId")
+    return agent_id if isinstance(agent_id, str) and agent_id else None
 
 
 def _agent_id(lines: list[dict], path: Path) -> str | None:
     for record in lines:
-        if _agent_alias(record):
-            return _agent_alias(record)
+        agent_id = _native_agent_id(record)
+        if agent_id:
+            return agent_id
     name = path.stem
     return name[6:] if name.startswith("agent-") else None
 
@@ -369,7 +370,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
                       parent_ids=[record["parentUuid"]]
                       if record.get("parentUuid") else [],
                       turn_id=record.get("promptId"),
-                      agent_id=_agent_alias(record) or agent_id,
+                      agent_id=_native_agent_id(record) or agent_id,
                       created_at=record.get("timestamp"), raw=[record])
         if isinstance(content, str):
             session.messages.append(Message(
@@ -455,7 +456,9 @@ def _spawns(session: Session) -> dict[str, dict]:
     for raw in session.raw_records:
         record = raw.payload
         result = record.get("toolUseResult")
-        result_agent_id = _agent_alias(result) if isinstance(result, dict) else None
+        result_agent_id = (
+            _native_agent_id(result) if isinstance(result, dict) else None
+        )
         if not isinstance(result, dict) or not result_agent_id:
             continue
         content = (record.get("message") or {}).get("content") or []

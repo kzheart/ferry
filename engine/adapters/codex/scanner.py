@@ -42,7 +42,7 @@ def _meta(path: Path, stat) -> dict:
         if rtype == "session_meta" and not has_meta:
             payload = record["payload"]
             sid, cwd = session_id(payload, sid), payload.get("cwd", "")
-            source = payload.get("source") or payload.get("thread_source") or {}
+            source = payload.get("source") or {}
             source = source if isinstance(source, dict) else {}
             subagent = source.get("subagent") or {}
             subagent = subagent if isinstance(subagent, dict) else {}

@@ -1,8 +1,4 @@
-"""Codex reader:rollout JSONL → 规范化中间格式。
-
-读取 Codex 原生 JSONL 会话记录。
-支持 0.144 的 custom_tool_call(exec/apply_patch,JS 源码 input)与旧版 function_call。
-"""
+"""Codex reader: current rollout JSONL → canonical session model."""
 import json
 import re
 import sqlite3
@@ -38,8 +34,8 @@ _SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",
 
 
 def session_id(meta: dict, fallback: str) -> str:
-    # 子代理的 session_id 指向父会话，id 才是当前 rollout 的身份。
-    return meta.get("id") or meta.get("session_id") or fallback
+    del fallback
+    return str(meta["id"])
 
 
 def _skip_js_string(source: str, start: int) -> int:
@@ -504,8 +500,6 @@ def _function_call(payload: dict) -> ToolCall:
 def _subagent_meta(meta: dict) -> dict:
     source = meta.get("source")
     if not isinstance(source, dict):
-        source = meta.get("thread_source")
-    if not isinstance(source, dict):
         return {}
     subagent = source.get("subagent", {})
     return subagent if isinstance(subagent, dict) else {}
@@ -701,10 +695,6 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         cur_tools = []
         cur_reasoning = []
 
-    direct_item_types = {
-        "message", "custom_tool_call", "function_call",
-        "custom_tool_call_output", "function_call_output", "reasoning",
-    }
     for ordinal, l in enumerate(lines):
         sess.raw_records.append(_raw_record(l, ordinal, path))
         record_type = l.get("type")
@@ -717,9 +707,6 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             continue
         if record_type == "response_item":
             p = l.get("payload") or {}
-        elif record_type in direct_item_types:
-            # Older rollouts wrote Responses items directly at the JSONL root.
-            p = l
         else:
             continue
         pt = p.get("type")
@@ -765,15 +752,14 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         elif pt in ("custom_tool_call", "function_call"):
             if pt == "function_call":
                 tc = _function_call(p)
+            elif p.get("name") == "spawn_agent":
+                tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
+                              input=_spawn_input(_json_args(p.get("input", ""))), output="",
+                              meta={"source_id": p.get("id")},
+                              status=p.get("status"))
             else:
-                if p.get("name") == "spawn_agent":
-                    tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                                  input=_spawn_input(_json_args(p.get("input", ""))), output="",
-                                  meta={"source_id": p.get("id")},
-                                  status=p.get("status"))
-                else:
-                    tc = _parse_call(p, sess)
-                tc.source_call_id = p.get("call_id")
+                tc = _parse_call(p, sess)
+            tc.source_call_id = p.get("call_id")
             if p.get("id"):
                 tc.meta.setdefault("source_id", p.get("id"))
             if tc.op == CanonicalOp.AGENT_SPAWN:
@@ -834,7 +820,7 @@ def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[s
     ordered_children = []
     selected_children: set[int] = set()
     # 优先按父 rollout 中 spawn_agent 的物理顺序恢复 siblings。writer 的
-    # function_call_output 包含 agent_path，因此即使目录遍历顺序不同也能
+    # tool output 包含 agent_path，因此即使目录遍历顺序不同也能
     # 找回原顺序；无法关联的旧记录再走稳定排序兜底。
     for tool in spawn_calls:
         child = next((candidate for candidate in candidates

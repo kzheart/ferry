@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from engine.adapters.codex import reader as codex_reader
 from engine.domain.model import Session
 from engine.domain.tool_ops import CanonicalOp
@@ -9,6 +7,18 @@ from engine.domain.tool_ops import CanonicalOp
 
 def _read(tmp_path, records):
     path = tmp_path / "rollout.jsonl"
+    records = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "current-rollout",
+                "session_id": "current-rollout",
+                "cwd": "/workspace",
+                "source": "cli",
+            },
+        },
+        *records,
+    ]
     path.write_text("\n".join(json.dumps(record) for record in records))
     return codex_reader._read_one(path)
 
@@ -22,35 +32,52 @@ def _tools(session):
     ]
 
 
-@pytest.mark.parametrize(
-    ("arguments", "expected"),
-    [
-        ({"cmd": "pwd", "workdir": "/workspace"}, "pwd"),
-        ({"command": ["bash", "-lc", "printf ok"], "workdir": "/workspace"}, "printf ok"),
-    ],
-)
-def test_response_function_call_decodes_local_shell_fields(tmp_path, arguments, expected):
+def test_current_function_and_custom_calls_coexist_but_root_items_are_ignored(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {
-            "type": "function_call",
-            "name": "exec_command",
-            "arguments": json.dumps(arguments),
-            "call_id": "call-local",
+            "type": "function_call", "name": "exec_command",
+            "arguments": '{"cmd":"pwd","workdir":"/workspace"}',
+            "input": 'tools.exec_command({"cmd":"wrong-function-field"})',
+            "call_id": "function-call",
         }},
+        {"type": "response_item", "payload": {
+            "type": "function_call_output", "call_id": "function-call",
+            "output": "function output",
+        }},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec",
+            "input": 'tools.exec_command({"cmd":"printf custom"})',
+            "arguments": '{"cmd":"wrong-custom-field"}',
+            "call_id": "custom-call",
+        }},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call_output", "call_id": "custom-call",
+            "output": "custom output",
+        }},
+        {"type": "custom_tool_call", "name": "exec",
+         "input": 'tools.exec_command({"cmd":"pwd"})',
+         "call_id": "root-call"},
     ])
 
-    tool, = _tools(session)
-    assert tool.op == CanonicalOp.SHELL_EXEC
-    assert tool.input == {"command": expected, "workdir": "/workspace"}
+    function, custom = _tools(session)
+    assert function.op == CanonicalOp.SHELL_EXEC
+    assert function.input == {"command": "pwd", "workdir": "/workspace"}
+    assert function.output == "function output"
+    assert custom.op == CanonicalOp.SHELL_EXEC
+    assert custom.input == {"command": "printf custom"}
+    assert custom.output == "custom output"
 
 
-def test_command_argument_does_not_turn_remote_tool_into_local_shell(tmp_path):
+def test_current_remote_function_call_stays_an_opaque_tool(tmp_path):
     session = _read(tmp_path, [
         {"type": "response_item", "payload": {
             "type": "function_call",
             "name": "mcp__ssh__exec",
-            "arguments": json.dumps({"host": "example.invalid", "command": "uptime"}),
-            "call_id": "call-remote",
+            "arguments": json.dumps({
+                "host": "example.invalid",
+                "command": "uptime",
+            }),
+            "call_id": "remote-call",
         }},
     ])
 
@@ -58,28 +85,13 @@ def test_command_argument_does_not_turn_remote_tool_into_local_shell(tmp_path):
     assert tool.op == getattr(CanonicalOp, "TOOL_INVOKE", "tool.invoke")
     assert tool.input["namespace"] == "codex"
     assert tool.input["name"] == "mcp__ssh__exec"
-    assert tool.input["input"]["host"] == "example.invalid"
+    assert tool.input["input"] == {
+        "host": "example.invalid",
+        "command": "uptime",
+    }
 
 
-def test_legacy_direct_records_pair_function_call_and_output(tmp_path):
-    session = _read(tmp_path, [
-        {"type": "message", "role": "user",
-         "content": [{"type": "input_text", "text": "run"}]},
-        {"type": "function_call", "name": "exec_command",
-         "arguments": {"cmd": "printf legacy", "workdir": "/workspace"},
-         "call_id": "call-legacy"},
-        {"type": "function_call_output", "call_id": "call-legacy",
-         "output": "legacy"},
-        {"type": "message", "role": "assistant",
-         "content": [{"type": "output_text", "text": "done"}]},
-    ])
-
-    tool, = _tools(session)
-    assert tool.input == {"command": "printf legacy", "workdir": "/workspace"}
-    assert tool.output == "legacy"
-
-
-def test_direct_custom_apply_patch_preserves_patch_and_change_summary(tmp_path):
+def test_current_custom_apply_patch_preserves_patch_and_change_summary(tmp_path):
     patch = """*** Begin Patch
 *** Add File: src/new.txt
 +new
@@ -91,8 +103,10 @@ def test_direct_custom_apply_patch_preserves_patch_and_change_summary(tmp_path):
 *** Delete File: src/gone.txt
 *** End Patch"""
     session = _read(tmp_path, [
-        {"type": "custom_tool_call", "name": "apply_patch",
-         "input": patch, "call_id": "call-patch"},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "apply_patch",
+            "input": patch, "call_id": "call-patch",
+        }},
     ])
 
     tool, = _tools(session)
@@ -179,8 +193,10 @@ def test_composite_custom_exec_stays_one_structured_opaque_call(tmp_path):
 def test_nested_custom_tools_are_detected_as_composite(tmp_path):
     source = 'tools.outer(tools.inner({"value":"quoted ) and }"}))'
     session = _read(tmp_path, [
-        {"type": "custom_tool_call", "name": "exec",
-         "input": source, "call_id": "call-nested"},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec",
+            "input": source, "call_id": "call-nested",
+        }},
     ])
 
     tool, = _tools(session)
@@ -195,8 +211,10 @@ def test_composite_summary_does_not_copy_sensitive_argument_values(tmp_path):
         'tools.other({"authorization":"Bearer ' + secret + '"})'
     )
     session = _read(tmp_path, [
-        {"type": "custom_tool_call", "name": "exec",
-         "input": source, "call_id": "call-secret"},
+        {"type": "response_item", "payload": {
+            "type": "custom_tool_call", "name": "exec",
+            "input": source, "call_id": "call-secret",
+        }},
     ])
 
     tool, = _tools(session)
@@ -212,9 +230,10 @@ def test_composite_summary_does_not_copy_sensitive_argument_values(tmp_path):
 def test_malformed_codex_line_is_reported_without_losing_later_records(tmp_path):
     path = tmp_path / "rollout.jsonl"
     path.write_text(
-        '{"type":"message","role":"user","content":"before"}\n'
+        '{"type":"session_meta","payload":{"id":"current-rollout","session_id":"current-rollout","cwd":"/workspace","source":"cli"}}\n'
+        '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"before"}]}}\n'
         '{"type":"broken"\n'
-        '{"type":"message","role":"assistant","content":"after"}\n'
+        '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"after"}]}}\n'
     )
 
     session = codex_reader._read_one(path)

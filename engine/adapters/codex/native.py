@@ -92,13 +92,14 @@ def _canonical_meta(records: list[dict]) -> dict:
 
 
 def _identity(meta: dict, fallback: str) -> tuple[str, str, str | None]:
-    source = meta.get("source") or meta.get("thread_source") or {}
+    del fallback
+    source = meta.get("source") or {}
     source = source if isinstance(source, dict) else {}
     subagent = source.get("subagent") or {}
     subagent = subagent if isinstance(subagent, dict) else {}
     spawn = subagent.get("thread_spawn") or {}
     spawn = spawn if isinstance(spawn, dict) else {}
-    current = meta.get("id") or meta.get("session_id") or fallback
+    current = meta["id"]
     root = meta.get("session_id") or spawn.get("session_id") or current
     parent = (meta.get("parent_thread_id") or spawn.get("parent_thread_id") or
               subagent.get("parent_thread_id"))
