@@ -96,11 +96,12 @@ External Claude, Codex, and OpenCode stores remain external sources of truth.
 Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
 
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
-currently version 3 and owns immutable operation plans, operation audit,
-delete-recovery handles, and session metadata. The database uses WAL plus
-`BEGIN IMMEDIATE` for every state transition and metadata CAS. A schema other
-than the exact current version fails at startup; old JSON metadata and older
-SQLite schemas are not read or migrated.
+currently version 4 and owns immutable operation plans, operation audit,
+delete-recovery handles, and session metadata. Session metadata is identified
+by the exact `(tool, native_session_id)` pair, never by a bare native ID. The
+database uses WAL plus `BEGIN IMMEDIATE` for every state transition and
+metadata CAS. A schema other than the exact current version fails at startup;
+old JSON metadata and older SQLite schemas are not read or migrated.
 
 Other Ferry-owned stores (migration history, summaries, organization proposals,
 and Runtime conversation event logs) have not yet been consolidated. They must

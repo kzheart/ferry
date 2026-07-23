@@ -268,14 +268,18 @@ META_FIELDS = {
 }
 
 
-def session_meta_compare_and_set(sid: str, expected: dict, patch: dict) -> dict:
+def session_meta_compare_and_set(
+        tool: str, session_id: str, expected: dict, patch: dict,
+) -> dict:
     return _meta_compare_and_set(
-        sid, expected, {k: v for k, v in patch.items() if k in META_FIELDS})
+        tool, session_id,
+        expected, {k: v for k, v in patch.items() if k in META_FIELDS})
 
 
 def session_meta_compare_and_set_many(changes: list[dict]) -> dict:
     return _meta_compare_and_set_entries([
         {
+            "tool": change["tool"],
             "id": change["id"],
             "expected": change.get("expected", {}),
             "patch": {k: v for k, v in change.get("patch", {}).items()

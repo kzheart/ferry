@@ -165,7 +165,9 @@ class OperationService:
         session_id = before_record.row.get("id")
         if not isinstance(session_id, str) or not session_id:
             raise AgentRequestError("会话缺少可用的 metadata id")
-        metadata_before = services.session_meta_list().get(session_id, {})
+        metadata_before = services.session_meta_list().get(
+            StateDatabase.metadata_key(tool, session_id), {}
+        )
         operation_input["session_id"] = session_id
         operation_input["metadata_before"] = metadata_before
         preview = {
@@ -594,7 +596,7 @@ class OperationService:
                 "会话标识在元数据计划生成后已变化，请重新计划"
             )
         result = services.session_meta_compare_and_set(
-            params["session_id"],
+            params["tool"], params["session_id"],
             params["metadata_before"],
             params["patch"],
         )

@@ -9,7 +9,7 @@ import { TOOLS, TOOL_NAME, resumeDescriptor,
 import { ACCENT } from "../domain/tools/toolDisplay.js";
 import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
   sessionRef } from "../domain/sessions/sessionModel.js";
-import { addSessionAttachment, serializeSessionAttachment }
+import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
@@ -142,6 +142,7 @@ export default function App() {
   useEffect(() => {
     rpc("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
   }, []);
+  const metaFor = session => metaMap[sessionIdentity(session)] || {};
   const setMetaFor = async (session, patch) => {
     try {
       const plan = await operationPlan({
@@ -154,8 +155,9 @@ export default function App() {
       const entry = applied.result.metadata;
       setMetaMap(m => {
         const next = { ...m };
-        if (entry && Object.keys(entry).length) next[session.id] = entry;
-        else delete next[session.id];
+        const key = sessionIdentity(session);
+        if (entry && Object.keys(entry).length) next[key] = entry;
+        else delete next[key];
         return next;
       });
     } catch (e) {
@@ -330,7 +332,7 @@ export default function App() {
   };
 
   const ctxSess = ctxMenu ? byId[ctxMenu.id] : null;
-  const ctxMeta = ctxSess ? metaMap[ctxSess.id] || {} : {};
+  const ctxMeta = ctxSess ? metaFor(ctxSess) : {};
   const multiSess = multiSel.map(id => byId[id]).filter(Boolean);
   const addToAgent = session => {
     setAgentAttachments(list => addSessionAttachment(list, session));
@@ -345,7 +347,7 @@ export default function App() {
     }).catch(() => {});
   };
   const ctxItems = ctxMenu?.multi ? [
-    { label: t("app:ctx.addTags"), onClick: () => setTagFor({ ids: [...multiSel], batch: true }) },
+    { label: t("app:ctx.addTags"), onClick: () => setTagFor({ sessions: multiSess, batch: true }) },
     { sep: true },
     { label: t("app:ctx.deleteN", { n: multiSess.length }), danger: true,
       onClick: () => setBatchDel(multiSess) },
@@ -365,7 +367,7 @@ export default function App() {
     { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
     { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
       onClick: () => setMetaFor(ctxSess, { pinned: !ctxMeta.pinned }) },
-    { label: t("app:ctx.tags"), onClick: () => setTagFor({ ids: [ctxSess.id] }) },
+    { label: t("app:ctx.tags"), onClick: () => setTagFor({ sessions: [ctxSess] }) },
     { sep: true },
     { label: t("app:ctx.copySessionReference"),
       onClick: () => copySessionReference(ctxSess) },
@@ -583,7 +585,7 @@ export default function App() {
   };
   rowHandlers.current.pin = id => {
     const session = byId[id];
-    if (session) setMetaFor(session, { pinned: !(metaMap[id] || {}).pinned });
+    if (session) setMetaFor(session, { pinned: !metaFor(session).pinned });
   };
   rowHandlers.current.delete = id => { const s = byId[id]; if (s) askDelete(s); };
   const onRowClick = useCallback((id, e) => rowHandlers.current.click(id, e), []);
@@ -627,13 +629,13 @@ export default function App() {
     onRefresh: () => detailFns.current.refresh(),
     onResume: meta => detailFns.current.resume(meta),
   }), []);
-  const detailMeta = useMemo(() => cur && metaMap[cur.id]?.name
-    ? { ...cur, title: metaMap[cur.id].name } : cur, [cur, metaMap]);
+  const detailMeta = useMemo(() => cur && metaFor(cur).name
+    ? { ...cur, title: metaFor(cur).name } : cur, [cur, metaMap]);
 
   // 行展示数据与过滤用字段只依赖会话/元数据,预计算一次;
   // 之后筛选条件怎么变都只做轻量匹配,不再重建 3000+ 行的时间/文案字符串
   const libIndex = useMemo(() => sessions.map(s => {
-    const m = metaMap[s.id] || {};
+    const m = metaFor(s);
     const tags = m.tags || [];
     return {
       tool: s.tool, bucket: bucketOf(s.updated), repo: repoOf(s.dir), tags,
@@ -1079,7 +1081,7 @@ export default function App() {
         <PromptBox title={t("app:prompt.renameTitle")}
           desc={t("app:prompt.renameDesc", { title: renameFor.title || renameFor.id })}
           placeholder={t("app:prompt.renamePlaceholder")} confirmLabel={t("app:prompt.save")}
-          initial={metaMap[renameFor.id]?.name || renameFor.title || ""}
+          initial={metaFor(renameFor).name || renameFor.title || ""}
           onCancel={() => setRenameFor(null)}
           onConfirm={v => { setRenameFor(null); setMetaFor(renameFor, { name: v }); }} />)}
       {agentRenameFor && (
@@ -1093,20 +1095,19 @@ export default function App() {
           }} />)}
       {tagFor && (
         <PromptBox
-          title={tagFor.batch ? t("app:prompt.tagsBatchTitle", { n: tagFor.ids.length }) : t("app:prompt.tagsTitle")}
+          title={tagFor.batch ? t("app:prompt.tagsBatchTitle", { n: tagFor.sessions.length }) : t("app:prompt.tagsTitle")}
           desc={tagFor.batch ? t("app:prompt.tagsBatchDesc")
             : t("app:prompt.tagsDesc")}
           placeholder={t("app:prompt.tagsPlaceholder")} confirmLabel={t("app:prompt.save")}
-          initial={tagFor.batch ? "" : (metaMap[tagFor.ids[0]]?.tags || []).join(", ")}
+          initial={tagFor.batch ? "" : (metaFor(tagFor.sessions[0]).tags || []).join(", ")}
           onCancel={() => setTagFor(null)}
           onConfirm={async v => {
             setTagFor(null);
             const tags = v.split(/[,，]/).map(t => t.trim()).filter(Boolean);
-            for (const id of tagFor.ids) {
+            for (const session of tagFor.sessions) {
               const merged = tagFor.batch
-                ? [...new Set([...(metaMap[id]?.tags || []), ...tags])] : tags;
-              const session = byId[id];
-              if (session) await setMetaFor(session, { tags: merged });
+                ? [...new Set([...(metaFor(session).tags || []), ...tags])] : tags;
+              await setMetaFor(session, { tags: merged });
             }
           }} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

@@ -209,10 +209,11 @@ def test_state_database_rejects_previous_schema_without_migration(tmp_path):
         StateDatabase(path)
 
 
-def test_state_database_rejects_previous_current_schema_without_migration(tmp_path):
+@pytest.mark.parametrize("version", [2, 3])
+def test_state_database_rejects_previous_current_schema_without_migration(tmp_path, version):
     path = tmp_path / "ferry-state.sqlite3"
     with sqlite3.connect(path) as connection:
-        connection.execute("PRAGMA user_version = 2")
+        connection.execute(f"PRAGMA user_version = {version}")
 
     with pytest.raises(RuntimeError, match="schema 不受支持"):
         StateDatabase(path)
@@ -220,18 +221,29 @@ def test_state_database_rejects_previous_current_schema_without_migration(tmp_pa
 
 def test_session_metadata_batch_cas_is_atomic(tmp_path):
     database = StateDatabase(tmp_path / "ferry-state.sqlite3", recover_interrupted=False)
-    database.set_session_metadata("one", {"name": "before"}, 1)
-    database.set_session_metadata("two", {"pinned": True}, 1)
+    database.set_session_metadata("claude", "one", {"name": "before"}, 1)
+    database.set_session_metadata("codex", "two", {"pinned": True}, 1)
 
     changed = database.compare_and_set_session_metadata([
-        ("one", {"name": "before"}, {"name": "after"}),
-        ("two", {}, {"archived": True}),
+        ("claude", "one", {"name": "before"}, {"name": "after"}),
+        ("codex", "two", {}, {"archived": True}),
     ], 2)
 
     assert changed is None
     assert database.list_session_metadata() == {
-        "one": {"name": "before"},
-        "two": {"pinned": True},
+        "claude\0one": {"name": "before"},
+        "codex\0two": {"pinned": True},
+    }
+
+
+def test_session_metadata_isolated_by_tool_and_native_session_id(tmp_path):
+    database = StateDatabase(tmp_path / "ferry-state.sqlite3", recover_interrupted=False)
+    database.set_session_metadata("claude", "shared-id", {"name": "Claude"}, 1)
+    database.set_session_metadata("codex", "shared-id", {"name": "Codex"}, 2)
+
+    assert database.list_session_metadata() == {
+        "claude\0shared-id": {"name": "Claude"},
+        "codex\0shared-id": {"name": "Codex"},
     }
 
 
@@ -255,19 +267,19 @@ def test_metadata_plan_applies_with_independent_cas(agent_environment):
     applied = operations.apply(plan["plan_id"])
 
     assert applied["result"]["metadata"] == {"name": "新名称"}
-    assert services.session_meta_list()["private-id"] == {"name": "新名称"}
+    assert services.session_meta_list()["claude\0private-id"] == {"name": "新名称"}
 
 
 def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
     plan = _metadata_plan()
-    session_meta.set_entry("private-id", {"name": "并发名称"})
+    session_meta.set_entry("claude", "private-id", {"name": "并发名称"})
 
     with pytest.raises(
             ConcurrentModificationError, match="元数据在审批后已变化"):
         operations.apply(plan["plan_id"])
 
     assert operations.status(plan["plan_id"])["status"] == "failed"
-    assert services.session_meta_list()["private-id"] == {"name": "并发名称"}
+    assert services.session_meta_list()["claude\0private-id"] == {"name": "并发名称"}
 
 
 @pytest.mark.parametrize("patch", [
