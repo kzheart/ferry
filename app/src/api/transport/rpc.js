@@ -36,6 +36,30 @@ async function nativeMigration(command, input) {
   return response.result;
 }
 
+async function nativeOperation(command, args) {
+  let raw;
+  try {
+    raw = await invoke(command, args);
+  } catch (error) {
+    throwEngineError(typeof error === "string" ? error : (error?.message || String(error)));
+  }
+  const response = JSON.parse(raw);
+  if (!response.ok) throwEngineError(response.error);
+  return response.result;
+}
+
+export const operationPlan = input =>
+  nativeOperation("operation_plan", { input });
+
+export const operationApply = planId =>
+  nativeOperation("operation_apply", { planId });
+
+export const operationStatus = planId =>
+  nativeOperation("operation_status", { planId });
+
+export const operationCancel = planId =>
+  nativeOperation("operation_cancel", { planId });
+
 const migrationInput = params => ({
   src: params.src,
   dst: params.dst,
