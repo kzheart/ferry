@@ -7,7 +7,7 @@ from threading import Barrier
 
 import pytest
 
-from engine.application import operations, services, session_meta
+from engine.application import operations, services
 from engine.application.ports import current
 from engine.domain.edit import AssistantReply
 from engine.domain.errors import (
@@ -209,10 +209,42 @@ def test_state_database_rejects_previous_schema_without_migration(tmp_path):
         StateDatabase(path)
 
 
-def test_metadata_plan_applies_with_independent_cas(
-        agent_environment, monkeypatch):
-    metadata_path = agent_environment["root"].parent / "session-meta.json"
-    monkeypatch.setattr(session_meta, "META", metadata_path)
+def test_state_database_rejects_previous_current_schema_without_migration(tmp_path):
+    path = tmp_path / "ferry-state.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA user_version = 2")
+
+    with pytest.raises(RuntimeError, match="schema 不受支持"):
+        StateDatabase(path)
+
+
+def test_session_metadata_batch_cas_is_atomic(tmp_path):
+    database = StateDatabase(tmp_path / "ferry-state.sqlite3", recover_interrupted=False)
+    database.set_session_metadata("one", {"name": "before"}, 1)
+    database.set_session_metadata("two", {"pinned": True}, 1)
+
+    changed = database.compare_and_set_session_metadata([
+        ("one", {"name": "before"}, {"name": "after"}),
+        ("two", {}, {"archived": True}),
+    ], 2)
+
+    assert changed is None
+    assert database.list_session_metadata() == {
+        "one": {"name": "before"},
+        "two": {"pinned": True},
+    }
+
+
+def test_metadata_query_does_not_fail_an_applying_operation(agent_environment):
+    plan = _plan()
+    database = StateDatabase(agent_environment["root"].parent / "ferry-state.sqlite3")
+    assert database.claim(plan["plan_id"], 2_000)
+
+    assert services.session_meta_list() == {}
+    assert operations.status(plan["plan_id"])["status"] == "applying"
+
+
+def test_metadata_plan_applies_with_independent_cas(agent_environment):
     plan = _metadata_plan()
 
     assert plan["kind"] == "metadata"
@@ -226,10 +258,7 @@ def test_metadata_plan_applies_with_independent_cas(
     assert services.session_meta_list()["private-id"] == {"name": "新名称"}
 
 
-def test_metadata_plan_rejects_concurrent_metadata_change(
-        agent_environment, monkeypatch):
-    metadata_path = agent_environment["root"].parent / "session-meta.json"
-    monkeypatch.setattr(session_meta, "META", metadata_path)
+def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
     plan = _metadata_plan()
     services.session_meta_set("private-id", {"name": "并发名称"})
 

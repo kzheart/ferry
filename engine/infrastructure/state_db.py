@@ -12,15 +12,15 @@ from dataclasses import asdict
 from pathlib import Path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class StateDatabase:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, recover_interrupted: bool = True):
         self.path = path
         self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._initialize()
+        self._initialize(recover_interrupted=recover_interrupted)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(
@@ -32,7 +32,7 @@ class StateDatabase:
         connection.execute("PRAGMA busy_timeout = 30000")
         return connection
 
-    def _initialize(self) -> None:
+    def _initialize(self, *, recover_interrupted: bool) -> None:
         with self._lock, self._connect() as connection:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, SCHEMA_VERSION):
@@ -76,18 +76,24 @@ class StateDatabase:
                         created_at INTEGER NOT NULL,
                         updated_at INTEGER NOT NULL
                     );
-                    PRAGMA user_version = 2;
+                    CREATE TABLE session_metadata (
+                        session_id TEXT PRIMARY KEY,
+                        value_json TEXT NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    );
+                    PRAGMA user_version = 3;
                     COMMIT;
                 """)
-            connection.execute(
-                """
-                UPDATE operation_plans
-                SET status = 'failed',
-                    error_type = 'EngineRestarted',
-                    updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
-                WHERE status = 'applying'
-                """
-            )
+            if recover_interrupted:
+                connection.execute(
+                    """
+                    UPDATE operation_plans
+                    SET status = 'failed',
+                        error_type = 'EngineRestarted',
+                        updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                    WHERE status = 'applying'
+                    """
+                )
 
     @staticmethod
     def _audit(connection: sqlite3.Connection, plan_id: str,
@@ -286,3 +292,71 @@ class StateDatabase:
                 (status, now, recovery_id, expected),
             ).rowcount
             return changed == 1
+
+    @staticmethod
+    def _metadata_entry(row: sqlite3.Row | None) -> dict:
+        return json.loads(row["value_json"]) if row is not None else {}
+
+    @staticmethod
+    def _merge_metadata(current: dict, patch: dict) -> dict:
+        merged = {**current, **patch}
+        return {
+            key: value for key, value in merged.items()
+            if value not in (None, False, "", [])
+        }
+
+    def list_session_metadata(self) -> dict[str, dict]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT session_id, value_json FROM session_metadata"
+            ).fetchall()
+        return {row["session_id"]: json.loads(row["value_json"]) for row in rows}
+
+    def set_session_metadata(self, session_id: str, patch: dict, now: int) -> dict:
+        return self.compare_and_set_session_metadata(
+            [(session_id, None, patch)], now,
+        )[session_id]
+
+    def compare_and_set_session_metadata(
+            self, changes: list[tuple[str, dict | None, dict]], now: int,
+    ) -> dict[str, dict] | None:
+        """原子更新元数据；expected 为 None 时不进行 CAS。"""
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current: dict[str, dict] = {}
+            for session_id, expected, _patch in changes:
+                row = connection.execute(
+                    "SELECT value_json FROM session_metadata WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                value = self._metadata_entry(row)
+                if expected is not None and value != expected:
+                    connection.rollback()
+                    return None
+                current[session_id] = value
+
+            result: dict[str, dict] = {}
+            for session_id, _expected, patch in changes:
+                entry = self._merge_metadata(current[session_id], patch)
+                if entry:
+                    connection.execute(
+                        """
+                        INSERT INTO session_metadata(session_id, value_json, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(session_id) DO UPDATE SET
+                            value_json = excluded.value_json,
+                            updated_at = excluded.updated_at
+                        """,
+                        (session_id, json.dumps(
+                            entry, ensure_ascii=False, sort_keys=True,
+                            separators=(",", ":"),
+                        ), now),
+                    )
+                else:
+                    connection.execute(
+                        "DELETE FROM session_metadata WHERE session_id = ?",
+                        (session_id,),
+                    )
+                result[session_id] = entry
+            connection.commit()
+            return result
