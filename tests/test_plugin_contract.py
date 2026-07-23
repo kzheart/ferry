@@ -1,17 +1,20 @@
-"""插件契约测试：可选能力、只读 fake 插件与 turn locator 一致性。"""
+"""内置 Adapter 静态契约与 turn locator 一致性测试。"""
 import copy
 
 import pytest
 
 from engine.adapters.base.codec import select_span
-from engine.adapters.base.plugin import ToolManifest, ToolPlugin
+from engine.adapters.base.plugin import (
+    MigrationSource, MigrationTarget, ModelCatalog, SessionBrowser,
+    SessionEditor, SessionLifecycle, SessionVerifier, ToolManifest, ToolPlugin,
+)
 from engine.adapters.registry import AdapterRegistry, create_registry
 from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
 from engine.adapters.codex.codec import TURN_INDEX as CODEX_INDEX
 from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.application.sessions import session_json
 from engine.domain.edit import AssistantReply
-from engine.domain.errors import CapabilityUnsupportedError, ToolUnknownError
+from engine.domain.errors import ToolUnknownError
 
 from test_reply_editing import (
     _editor,
@@ -33,8 +36,109 @@ class _FakeBrowser:
     def read(self, ref):
         raise ValueError(f"找不到 fake 会话: {ref}")
 
+    def read_agent(self, ref):
+        return self.read(ref)
+
     def resolve_ref(self, ref):
         return ref
+
+    def fingerprint(self, _ref):
+        return "fake-revision"
+
+    def agent_fingerprint(self, ref):
+        return self.fingerprint(ref)
+
+
+class _FakeMigrationSource:
+    def export_tree(self, ref):
+        return _FakeBrowser().read(ref)
+
+
+class _FakeMigrationTarget:
+    def plan(self, _session):
+        return {}
+
+    def preview(self, _session, _cwd=None):
+        return {}
+
+    def write(self, _session, _cwd):
+        raise AssertionError("fake target 不应写入")
+
+    def classify_tool_call(self, _tool_call):
+        return "native"
+
+
+class _FakeEditor:
+    name = "fake"
+
+    def capabilities(self):
+        return {"inplace": True, "operation_modes": {}}
+
+    def load(self, _ref):
+        return object()
+
+    def apply_ops(self, _doc, _ops):
+        return []
+
+    def replace_reply(self, _doc, _turn, _reply):
+        return []
+
+    def validate(self, _doc):
+        pass
+
+    def stats(self, _doc):
+        return {}
+
+    def commit(self, _doc):
+        return {}
+
+    def snapshot(self, _doc, reason_code=None, extra=None):
+        return object()
+
+    def restore_snapshot(self, _snapshot, _doc):
+        pass
+
+    def saved_revision(self, _result, _doc):
+        return "fake-revision"
+
+
+class _FakeVerifier:
+    def probe(self, _session_id, _cwd, _model=None):
+        return {"status": "skipped"}
+
+    def probe_edited(self, _editor, _doc, _result, _model=None):
+        return {"status": "skipped"}
+
+
+class _FakeLifecycle:
+    executable = "fake"
+    delete_undoable = False
+
+    def resume_descriptor(self, session_id, cwd):
+        return {"session_id": session_id, "cwd": cwd}
+
+    def cleanup(self, _session_id, _dest):
+        pass
+
+    def validation_ref(self, session_id, _dest):
+        return session_id
+
+    def probe_cwd(self, cwd):
+        return cwd
+
+    def delete(self, _plugin, _ref):
+        raise AssertionError("fake lifecycle 不应删除")
+
+    def restore_delete(self, _snapshot, _meta):
+        raise AssertionError("fake lifecycle 不应恢复")
+
+
+class _FakeModels:
+    def discover(self):
+        return [], "fake", None
+
+    def fallback(self):
+        return []
 
 
 def _fake_plugin() -> ToolPlugin:
@@ -43,29 +147,32 @@ def _fake_plugin() -> ToolPlugin:
                               source_path="~/.fake/sessions", reference_kind="id",
                               executables=("fake",)),
         browser=_FakeBrowser(),
+        migration_source=_FakeMigrationSource(),
+        migration_target=_FakeMigrationTarget(),
+        editor=_FakeEditor(),
+        verifier=_FakeVerifier(),
+        lifecycle=_FakeLifecycle(),
+        models=_FakeModels(),
     )
 
 
-def test_readonly_fake_plugin_satisfies_contract():
+def test_fake_plugin_satisfies_complete_static_contract():
     plugin = _fake_plugin()
-    assert plugin.capabilities() == ["browse"]
+    assert isinstance(plugin.browser, SessionBrowser)
+    assert isinstance(plugin.migration_source, MigrationSource)
+    assert isinstance(plugin.migration_target, MigrationTarget)
+    assert isinstance(plugin.editor, SessionEditor)
+    assert isinstance(plugin.verifier, SessionVerifier)
+    assert isinstance(plugin.lifecycle, SessionLifecycle)
+    assert isinstance(plugin.models, ModelCatalog)
+    assert plugin.capabilities() == [
+        "browse", "migrate-source", "migrate-target", "edit", "inplace", "verified",
+    ]
     described = plugin.describe()
     assert described["id"] == "fake"
-    assert described["capabilities"] == ["browse"]
+    assert described["capabilities"] == plugin.capabilities()
     assert described["executables"] == ["fake"]
     assert plugin.browser.scan(cache=None) == []
-
-
-@pytest.mark.parametrize("capability", [
-    "migration_source", "migration_target", "editor",
-    "verifier", "lifecycle", "models",
-])
-def test_missing_capability_reports_unsupported(capability):
-    plugin = _fake_plugin()
-    with pytest.raises(CapabilityUnsupportedError) as excinfo:
-        plugin.require(capability)
-    assert excinfo.value.code == "edit.operation_unsupported"
-    assert excinfo.value.params == {"tool": "fake", "capability": capability}
 
 
 def test_registry_accepts_injected_fake_plugin():

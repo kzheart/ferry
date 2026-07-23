@@ -20,7 +20,7 @@ def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp
     ])]
     target = CodexMigrationTarget()
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
-        require=lambda capability: target if capability == "migration_target" else None))
+        migration_target=target))
 
     result = services.preview_migration(
         "claude", "codex", "ignored", cwd=str(tmp_path), _session=session,

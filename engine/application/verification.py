@@ -16,7 +16,7 @@ def timeout_report(tool, error) -> dict:
 
 def run_probe(tool, session_id, dirpath=None, model=None):
     try:
-        return current().adapter(tool).require("verifier").probe(
+        return current().adapter(tool).verifier.probe(
             session_id, dirpath, model)
     except Exception as error:
         if error.__class__.__name__ == "ProbeTimeout":

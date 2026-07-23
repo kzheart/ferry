@@ -33,6 +33,9 @@ def _migrate_target(write):
         def plan(self, session):
             return {"messages": session.message_count()}
 
+        def preview(self, session, _cwd=None):
+            return self.plan(session)
+
         def write(self, session, cwd):
             return write(session, cwd)
 
@@ -41,7 +44,7 @@ def _migrate_target(write):
 
 def _install_target(monkeypatch, target):
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
-        require=lambda capability: target if capability == "migration_target" else None))
+        migration_target=target))
     monkeypatch.setattr(services, "resume_command", lambda *_: {"kind": "test"})
     monkeypatch.setattr(services, "_append_history", lambda _entry: None)
 
@@ -117,7 +120,7 @@ def test_probe_shadow_write_failure_restores_the_original_loss_state(monkeypatch
         (_ for _ in ()).throw(RuntimeError("shadow write failed")),
     )[1])
     monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
-        require=lambda capability: target if capability == "migration_target" else None))
+        migration_target=target))
 
     with pytest.raises(RuntimeError, match="shadow write failed"):
         services._isolated_migrate_probe("opencode", session, "/tmp/project")
@@ -151,8 +154,7 @@ def test_preview_reports_same_scope_counts_as_migration(monkeypatch):
     target = _migrate_target(lambda *_: (_ for _ in ()).throw(AssertionError()))
     ports = SimpleNamespace(
         adapters=lambda: ["opencode"],
-        adapter=lambda _name: SimpleNamespace(
-            require=lambda capability: target if capability == "migration_target" else None),
+        adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
     monkeypatch.setattr(agent_tools, "current", lambda: ports)
     monkeypatch.setattr(agent_tools._INDEX, "resolve", lambda *_: SimpleNamespace(

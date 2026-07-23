@@ -13,10 +13,7 @@ class Target:
 
 
 class Adapter:
-    def require(self, capability):
-        if capability == "migration_target":
-            return Target()
-        raise AssertionError(capability)
+    migration_target = Target()
 
 
 def test_migration_cleans_artifact_when_post_write_audit_fails(monkeypatch):

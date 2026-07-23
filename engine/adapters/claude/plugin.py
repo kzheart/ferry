@@ -1,8 +1,8 @@
-"""Claude 插件装配：manifest + 各能力实现。"""
+"""Claude 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
+from ..base.migration import TreeMigrationSource
 from . import editing as claude_edit
 from .editor import ClaudeBackend
 from .lifecycle import ClaudeLifecycle
@@ -22,14 +22,47 @@ MANIFEST = ToolManifest(
 )
 
 
+class ClaudeBrowser:
+    """Claude 扫描与读取实现，不复用跨 Agent 的函数适配器。"""
+
+    def scan(self, cache):
+        return scan(cache)
+
+    def read(self, ref):
+        return read(ref)
+
+    def read_agent(self, ref):
+        return read(ref)
+
+    def resolve_ref(self, ref):
+        return str(claude_edit.resolve(ref))
+
+    def fingerprint(self, ref):
+        return fingerprint(ref)
+
+    def agent_fingerprint(self, ref):
+        return agent_fingerprint(ref)
+
+
+class ClaudeModels:
+    def discover(self):
+        return discover()
+
+    def fallback(self):
+        return fallback()
+
+
 def build() -> ToolPlugin:
-    return build_plugin(
-        MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: str(claude_edit.resolve(ref)),
-                       fingerprint=fingerprint, agent_fingerprint=agent_fingerprint),
+    browser = ClaudeBrowser()
+    lifecycle = ClaudeLifecycle()
+    lifecycle.executable = MANIFEST.executables[0]
+    return ToolPlugin(
+        manifest=MANIFEST,
+        browser=browser,
+        migration_source=TreeMigrationSource(browser),
         migration_target=ClaudeMigrationTarget(),
         editor=ClaudeBackend(),
         verifier=ClaudeVerifier(),
-        lifecycle=ClaudeLifecycle(),
-        models=ModelCatalogAdapter(discover, fallback),
+        lifecycle=lifecycle,
+        models=ClaudeModels(),
     )

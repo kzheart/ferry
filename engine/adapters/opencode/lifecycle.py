@@ -29,7 +29,7 @@ class OpenCodeLifecycle(BaseLifecycle):
         return session_id
 
     def delete(self, plugin, ref: str) -> dict:
-        editor = plugin.require("editor")
+        editor = plugin.editor
         doc = editor.load(ref)
         snap = editor.snapshot(doc, reason_code="snapshot.before_delete")
         self.cleanup(ref, None)

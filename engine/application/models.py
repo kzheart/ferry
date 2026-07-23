@@ -22,7 +22,7 @@ def _user_model_ids(tool):
 
 
 def list_models(tool_name):
-    catalog = current().adapter(tool_name).require("models")
+    catalog = current().adapter(tool_name).models
     error = default = None
     try:
         rows, source, default = catalog.discover()

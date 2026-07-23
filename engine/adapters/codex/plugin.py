@@ -1,8 +1,8 @@
-"""Codex 插件装配：manifest + 各能力实现。"""
+"""Codex 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.builder import BrowserAdapter, ModelCatalogAdapter, build_plugin
 from ..base.plugin import ToolManifest, ToolPlugin
+from ..base.migration import TreeMigrationSource
 from .editor import CodexBackend, resolve
 from .lifecycle import CodexLifecycle
 from .migration import CodexMigrationTarget
@@ -21,14 +21,47 @@ MANIFEST = ToolManifest(
 )
 
 
+class CodexBrowser:
+    """Codex 扫描与读取实现，不复用跨 Agent 的函数适配器。"""
+
+    def scan(self, cache):
+        return scan(cache)
+
+    def read(self, ref):
+        return read(ref)
+
+    def read_agent(self, ref):
+        return read(ref)
+
+    def resolve_ref(self, ref):
+        return str(resolve(ref))
+
+    def fingerprint(self, ref):
+        return fingerprint(ref)
+
+    def agent_fingerprint(self, ref):
+        return agent_fingerprint(ref)
+
+
+class CodexModels:
+    def discover(self):
+        return discover()
+
+    def fallback(self):
+        return fallback()
+
+
 def build() -> ToolPlugin:
-    return build_plugin(
-        MANIFEST,
-        BrowserAdapter(scan, read, lambda ref: str(resolve(ref)),
-                       fingerprint=fingerprint, agent_fingerprint=agent_fingerprint),
+    browser = CodexBrowser()
+    lifecycle = CodexLifecycle()
+    lifecycle.executable = MANIFEST.executables[0]
+    return ToolPlugin(
+        manifest=MANIFEST,
+        browser=browser,
+        migration_source=TreeMigrationSource(browser),
         migration_target=CodexMigrationTarget(),
         editor=CodexBackend(),
         verifier=CodexVerifier(),
-        lifecycle=CodexLifecycle(),
-        models=ModelCatalogAdapter(discover, fallback),
+        lifecycle=lifecycle,
+        models=CodexModels(),
     )

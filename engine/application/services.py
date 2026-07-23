@@ -42,7 +42,7 @@ from .pricing import pricing  # noqa: F401  暴露给 RPC
 # ---------- 迁移 ----------
 
 def resume_command(tool: str, sid: str, cwd: str) -> dict:
-    return adapter(tool).require("lifecycle").resume_descriptor(sid, cwd)
+    return adapter(tool).lifecycle.resume_descriptor(sid, cwd)
 
 
 def tool_manifests() -> list[dict]:
@@ -108,7 +108,7 @@ def _prepare_migration(src: str, dst: str, ref: str,
     sess = _session if _session is not None else _read_tree(src, ref)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
-    target = adapter(dst).require("migration_target")
+    target = adapter(dst).migration_target
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     stats = target.plan(sess)
     tree_count, message_count = _migration_counts(sess)
@@ -138,9 +138,7 @@ def preview_migration(src: str, dst: str, ref: str,
         src, dst, ref, cwd, max_turn, probe_model, _session=_session,
     )
     with narration.content_locale(content_locale):
-        preview = target.preview(
-            sess, target_cwd,
-        ) if hasattr(target, "preview") else None
+        preview = target.preview(sess, target_cwd)
     return {**base, "preview": preview}
 
 
@@ -207,7 +205,7 @@ def _isolated_migrate_probe(dst: str, sess, cwd: str,
     saved_loss = [(node, list(node.loss)) for node in sess.walk()]
     shadow_sid = shadow_dest = None
     try:
-        shadow_sid, shadow_dest = adapter(dst).require("migration_target").write(sess, cwd)
+        shadow_sid, shadow_dest = adapter(dst).migration_target.write(sess, cwd)
         rep = run_probe(dst, shadow_sid, cwd, model=model)
         rep.setdefault("isolation", {"kind": "shadow_copy", "id": shadow_sid,
                                      "cleaned": True})
@@ -223,7 +221,7 @@ def run_probe(tool: str, sid: str, cwd: str,
               model: str | None = None) -> dict:
     try:
         return probe_mod.run_probe(
-            tool, sid, adapter(tool).require("lifecycle").probe_cwd(cwd), model)
+            tool, sid, adapter(tool).lifecycle.probe_cwd(cwd), model)
     except probe_mod.ProbeTimeout as error:
         return probe_mod.timeout_report(tool, error)
 
@@ -236,7 +234,7 @@ def _tree_shape(sess) -> tuple:
 def validate_written_tree(tool: str, sid: str, dest,
                           expected_shape: tuple) -> tuple[bool, str]:
     try:
-        ref = adapter(tool).require("lifecycle").validation_ref(sid, dest)
+        ref = adapter(tool).lifecycle.validation_ref(sid, dest)
         restored = adapter(tool).browser.read(ref)
         nodes = list(restored.walk())
         ids = [node.source_id for node in nodes]
@@ -260,7 +258,7 @@ def _shape_nodes(shape):
 
 
 def _cleanup_artifact(dst: str, sid: str, dest):
-    adapter(dst).require("lifecycle").cleanup(sid, dest)
+    adapter(dst).lifecycle.cleanup(sid, dest)
 
 
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------
@@ -302,7 +300,7 @@ def session_meta_compare_and_set_many(changes: list[dict]) -> dict:
 def session_delete(tool: str, ref: str) -> dict:
     """删除会话前先落快照(回收站语义);具体策略由插件 lifecycle 决定。"""
     impl = adapter(tool)
-    return impl.require("lifecycle").delete(impl, ref)
+    return impl.lifecycle.delete(impl, ref)
 
 
 def session_undelete(snapshot: str) -> dict:
@@ -318,7 +316,7 @@ def session_undelete(snapshot: str) -> dict:
     tool = meta.get("tool")
     if not isinstance(tool, str) or not tool:
         raise SnapshotInvalidSourceError("快照缺少来源 Agent", {"snapshot": snapshot})
-    return adapter(tool).require("lifecycle").restore_delete(snap, meta)
+    return adapter(tool).lifecycle.restore_delete(snap, meta)
 
 
 # ---------- 迁移历史 / 快照 ----------
@@ -340,7 +338,7 @@ def _finish_mutation(tool, impl, result, doc, snapshot, probe):
 
 def edit_capabilities(tool: str) -> dict:
     plugin = adapter(tool)
-    editor = plugin.require("editor")
+    editor = plugin.editor
     capabilities = editor.capabilities()
     operation_modes = {
         operation: ["inplace"]
@@ -358,7 +356,7 @@ def edit_capabilities(tool: str) -> dict:
 def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
     """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
     try:
-        return adapter(tool).require("verifier").probe_edited(impl, doc, result)
+        return adapter(tool).verifier.probe_edited(impl, doc, result)
     except probe_mod.ProbeTimeout as error:
         return probe_mod.timeout_report(tool, error)
 
