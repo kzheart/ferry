@@ -24,7 +24,6 @@ export function toolManifest(tool) {
     id: tool,
     display_name: agent.displayName,
     icon: agent.icon,
-    reference_kind: agent.referenceKind,
     capabilities: CAPABILITIES,
   } : null;
 }
@@ -35,12 +34,6 @@ export function toolHasCapability(tool, capability) {
 
 export function toolsWithCapability(capability) {
   return CAPABILITIES.includes(capability) ? TOOLS : [];
-}
-
-// Native reference handling remains an adapter-internal transition detail.
-// Mutating operations use Engine-issued fsr_ references exclusively.
-export function toolReferenceKind(tool) {
-  return AGENTS[tool]?.referenceKind || "path";
 }
 
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。

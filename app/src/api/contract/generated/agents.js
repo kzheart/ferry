@@ -2,18 +2,15 @@
 export const AGENTS = Object.freeze({
   "claude": {
     "displayName": "Claude Code",
-    "icon": "claude",
-    "referenceKind": "path"
+    "icon": "claude"
   },
   "codex": {
     "displayName": "Codex CLI",
-    "icon": "codex",
-    "referenceKind": "path"
+    "icon": "codex"
   },
   "opencode": {
     "displayName": "OpenCode",
-    "icon": "opencode",
-    "referenceKind": "id"
+    "icon": "opencode"
   }
 });
 export const AGENT_IDS = Object.freeze(Object.keys(AGENTS));

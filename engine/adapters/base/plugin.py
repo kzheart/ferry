@@ -7,6 +7,7 @@ Adapter 都必须具备相同的查询、迁移、编辑、校验、生命周期
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 # 静态能力标识（manifest.capabilities 使用）。它们是内置产品定义，不是
@@ -27,16 +28,52 @@ class ToolManifest:
     display_name: str
     icon: str
     source_path: str
-    reference_kind: str                 # "path" | "id"
     executables: tuple[str, ...] = ()   # launch descriptor 可执行文件白名单
     fallback_bin_dirs: tuple[str, ...] = ()
 
     def to_dict(self, capabilities: list[str] | None = None) -> dict:
         return {"id": self.id, "display_name": self.display_name,
                 "icon": self.icon, "source_path": self.source_path,
-                "reference_kind": self.reference_kind,
                 "executables": list(self.executables),
                 "capabilities": capabilities or []}
+
+
+@dataclass(frozen=True)
+class NativeSessionReference:
+    """Adapter 内部的原生引用；不会离开 Python Engine。"""
+
+    canonical_ref: str
+    root: str | None
+    path_backed: bool
+
+
+def jsonl_reference(row: dict, source_path: str, resolve_ref) -> NativeSessionReference | None:
+    """校验 JSONL 会话路径并收窄为 Adapter 可接受的内部引用。"""
+    raw = row.get("path")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        root = Path(source_path).expanduser().resolve(strict=True)
+        path = Path(raw).expanduser().resolve(strict=True)
+    except OSError:
+        return None
+    if not path.is_file() or path.suffix != ".jsonl" or not path.is_relative_to(root):
+        return None
+    try:
+        resolved = Path(resolve_ref(str(path))).resolve(strict=True)
+    except (OSError, ValueError):
+        return None
+    if resolved != path:
+        return None
+    return NativeSessionReference(str(path), str(root), True)
+
+
+def id_reference(row: dict) -> NativeSessionReference | None:
+    """校验由 Adapter 管理的原生 ID。"""
+    raw = row.get("id")
+    if not isinstance(raw, str) or not raw or len(raw) > 512 or "\x00" in raw:
+        return None
+    return NativeSessionReference(raw, None, False)
 
 
 @runtime_checkable
@@ -54,6 +91,8 @@ class SessionBrowser(Protocol):
     def fingerprint(self, ref: str): ...
 
     def agent_fingerprint(self, ref: str): ...
+
+    def canonicalize(self, row: dict) -> NativeSessionReference | None: ...
 
 
 @runtime_checkable

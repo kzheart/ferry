@@ -32,6 +32,12 @@ def load_agents() -> list[dict[str, object]]:
         isinstance(identifier, str) and identifier for identifier in identifiers
     ):
         raise ValueError("Agent id 必须唯一且非空")
+    required = {
+        "id", "display_name", "icon", "source_path", "executables",
+        "fallback_bin_dirs",
+    }
+    if any(not isinstance(agent, dict) or set(agent) != required for agent in agents):
+        raise ValueError("Agent 契约字段必须精确为当前静态定义")
     return agents
 
 
@@ -75,7 +81,6 @@ def frontend(agents: list[dict[str, object]]) -> str:
         agent["id"]: {
             "displayName": agent["display_name"],
             "icon": agent["icon"],
-            "referenceKind": agent["reference_kind"],
         }
         for agent in agents
     }
@@ -111,7 +116,7 @@ def python(agents: list[dict[str, object]]) -> str:
     ]
     for agent in agents:
         lines.append(f'    {agent["id"]!r}: {{')
-        for key in ("display_name", "icon", "source_path", "reference_kind"):
+        for key in ("display_name", "icon", "source_path"):
             lines.append(f"        {key!r}: {agent[key]!r},")
         lines.append(f"        'executables': {tuple(agent['executables'])!r},")
         lines.append(f"        'fallback_bin_dirs': {tuple(agent['fallback_bin_dirs'])!r},")

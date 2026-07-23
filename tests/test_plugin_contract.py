@@ -7,6 +7,7 @@ from engine.adapters.base.codec import select_span
 from engine.adapters.base.plugin import (
     MigrationSource, MigrationTarget, ModelCatalog, SessionBrowser,
     SessionEditor, SessionLifecycle, SessionVerifier, ToolManifest, ToolPlugin,
+    id_reference,
 )
 from engine.adapters.registry import AdapterRegistry, create_registry
 from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
@@ -48,6 +49,9 @@ class _FakeBrowser:
 
     def agent_fingerprint(self, ref):
         return self.fingerprint(ref)
+
+    def canonicalize(self, row):
+        return id_reference(row)
 
 
 class _FakeMigrationSource:
@@ -145,7 +149,7 @@ class _FakeModels:
 def _fake_plugin() -> ToolPlugin:
     return ToolPlugin(
         manifest=ToolManifest(id="fake", display_name="Fake Agent", icon="fake",
-                              source_path="~/.fake/sessions", reference_kind="id",
+                              source_path="~/.fake/sessions",
                               executables=("fake",)),
         browser=_FakeBrowser(),
         migration_source=_FakeMigrationSource(),

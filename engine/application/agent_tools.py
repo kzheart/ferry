@@ -284,23 +284,16 @@ class AgentSessionIndex:
     def _canonicalize(plugin, row: dict) -> tuple[
         str | None, str | None, bool, tuple | str | None
     ]:
-        if plugin.manifest.reference_kind == "path":
-            raw = row.get("path")
-            if not isinstance(raw, str) or not raw:
-                return None, None, True, None
+        native = plugin.browser.canonicalize(row)
+        if native is None:
+            return None, None, False, None
+        if native.path_backed:
             try:
-                root = Path(plugin.manifest.source_path).expanduser().resolve(strict=True)
-                path = Path(raw).expanduser().resolve(strict=True)
+                root = Path(native.root or "").resolve(strict=True)
+                path = Path(native.canonical_ref).resolve(strict=True)
             except OSError:
                 return None, None, True, None
-            if (not path.is_file() or path.suffix != ".jsonl"
-                    or not path.is_relative_to(root)):
-                return None, None, True, None
-            try:
-                resolved = Path(plugin.browser.resolve_ref(str(path))).resolve(strict=True)
-            except (OSError, ValueError):
-                return None, None, True, None
-            if resolved != path:
+            if not path.is_relative_to(root):
                 return None, None, True, None
             try:
                 fingerprint = _agent_fingerprint(plugin.browser, str(path))
@@ -310,15 +303,12 @@ class AgentSessionIndex:
             except (OSError, ValueError, AgentReferenceError):
                 return None, None, True, None
             return str(path), str(root), True, identity
-        raw = row.get("id")
-        if not isinstance(raw, str) or not raw or len(raw) > 512 or "\x00" in raw:
+        if plugin.browser.resolve_ref(native.canonical_ref) != native.canonical_ref:
             return None, None, False, None
-        if plugin.browser.resolve_ref(raw) != raw:
-            return None, None, False, None
-        fingerprint = _agent_fingerprint(plugin.browser, raw)
+        fingerprint = _agent_fingerprint(plugin.browser, native.canonical_ref)
         if fingerprint is None:
             return None, None, False, None
-        return raw, None, False, fingerprint
+        return native.canonical_ref, None, False, fingerprint
 
 
 _INDEX = AgentSessionIndex()
