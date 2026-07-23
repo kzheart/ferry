@@ -16,6 +16,32 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-23
+
+### Added
+
+- **Ask Ferry assistant** — a built-in, provider-configurable AI workspace for discussing sessions, inspecting tool activity, and preparing safe session changes.
+- **Agent-assisted session editing** — edit supported source sessions in place or as a copy, with explicit preview/confirmation and references that keep follow-up work anchored to the right conversation.
+- **Migration preview and safeguards** — five-level fidelity previews, migration history management, safe preflight checks, and stronger preservation of ordering, tool calls, and subagent relationships across Claude Code, Codex, and OpenCode.
+- **Context-compaction timeline** — session details now show compression boundaries, summary availability, trigger state, token changes, and the point where the live context resumed.
+- **Session productivity controls** — resume commands for the terminal, copyable session commands, long-message folding, refresh-in-place, draggable sidebar navigation, and configurable terminal preferences.
+- **Provider and model management** — dedicated model visibility controls, custom models, connection testing, dynamic model discovery, and Pi OAuth provider support.
+
+### Changed
+
+- **Cross-agent session model** — unified tool-operation mapping and adapter contracts make session browsing, editing, and migration more consistent across supported agents.
+- **Migration interface** — impact information is grouped into clearer cards and proportional indicators, with a more focused detail layout.
+- **Settings experience** — theme and language controls now use compact native-style selectors; provider configuration is organized around each provider.
+
+### Fixed
+
+- **Reliable migration output** — fixed cross-tool message ordering, session-boundary handling, child-session association, and validation of restored sessions.
+- **Safer runtime discovery** — strengthened CLI probing and session-reference handling so available tools and recovery commands match the installed runtime.
+
+### Performance
+
+- **Faster startup and navigation** — warmed engine startup and cached first paint reduce initial wait time, while large session details avoid rendering long message bodies until needed.
+
 ## [0.4.0] - 2026-07-21
 
 ### Added

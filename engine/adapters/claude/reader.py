@@ -5,6 +5,7 @@ from pathlib import Path
 from ...domain.model import (
     AgentEdge,
     Block,
+    ContextCompaction,
     Message,
     RawRecord,
     Session,
@@ -246,6 +247,83 @@ def _agent_id(lines: list[dict], path: Path) -> str | None:
     return name[6:] if name.startswith("agent-") else None
 
 
+def _compact_summary_text(record: dict) -> str:
+    content = (record.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(item.get("text") or "") for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+        and item.get("text")
+    )
+
+
+def _context_compactions(lines: list[dict]) -> list[ContextCompaction]:
+    compactions = []
+    by_boundary = {}
+    for index, record in enumerate(lines):
+        if record.get("type") != "system" or \
+                record.get("subtype") != "compact_boundary":
+            continue
+        metadata = record.get("compactMetadata") or {}
+        boundary_id = record.get("uuid") or f"compact-boundary:{index}"
+        pre_tokens = metadata.get("preTokens")
+        post_tokens = metadata.get("postTokens")
+        metrics = {
+            "pre_tokens": pre_tokens,
+            "post_tokens": post_tokens,
+            "cumulative_dropped_tokens": metadata.get(
+                "cumulativeDroppedTokens"),
+            "duration_ms": metadata.get("durationMs"),
+        }
+        if isinstance(pre_tokens, int) and isinstance(post_tokens, int):
+            metrics["dropped_tokens"] = max(0, pre_tokens - post_tokens)
+        trigger = metadata.get("trigger")
+        compaction = ContextCompaction(
+            id=boundary_id,
+            source="claude",
+            after_message_id=record.get("logicalParentUuid"),
+            event_locator=boundary_id,
+            created_at=record.get("timestamp"),
+            trigger=("automatic" if trigger == "auto"
+                     else "manual" if trigger == "manual"
+                     else "unknown"),
+            state="incomplete",
+            metrics={key: value for key, value in metrics.items()
+                     if value is not None},
+            source_meta={
+                "preserved_segment": metadata.get("preservedSegment"),
+                "preserved_messages": metadata.get("preservedMessages"),
+            },
+        )
+        compactions.append(compaction)
+        by_boundary[boundary_id] = compaction
+
+    for index, record in enumerate(lines):
+        if record.get("isCompactSummary") is not True:
+            continue
+        summary = _compact_summary_text(record)
+        parent_id = record.get("parentUuid")
+        compaction = by_boundary.get(parent_id)
+        if compaction is None:
+            compaction = ContextCompaction(
+                id=parent_id or record.get("uuid") or f"compact-summary:{index}",
+                source="claude",
+                after_message_id=record.get("logicalParentUuid"),
+                event_locator=parent_id,
+                created_at=record.get("timestamp"),
+                state="incomplete",
+            )
+            compactions.append(compaction)
+        compaction.summary_message_id = record.get("uuid")
+        compaction.summary_text = summary
+        compaction.summary_status = "available" if summary else "missing"
+        compaction.state = "completed" if summary else "incomplete"
+    return compactions
+
+
 def _read_transcript(path: Path, is_child: bool = False) -> Session:
     lines = _load(path)
     messages = [record for record in lines
@@ -256,6 +334,7 @@ def _read_transcript(path: Path, is_child: bool = False) -> Session:
     source_id = agent_id or first.get("sessionId", path.stem)
     session = Session(source_tool="claude", source_id=source_id,
                       cwd=first.get("cwd", ""), agent_id=agent_id)
+    session.context_compactions = _context_compactions(lines)
     session.raw_records = [
         RawRecord(source="claude", record_type=record.get("type", ""),
                   payload=record, ordinal=index,

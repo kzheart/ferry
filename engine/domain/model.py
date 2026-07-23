@@ -221,6 +221,25 @@ class Message:
 
 
 @dataclass
+class ContextCompaction:
+    id: str
+    source: str
+    after_message_id: str | None = None
+    event_locator: str | None = None
+    created_at: str | int | None = None
+    trigger: str = "unknown"
+    state: str = "completed"
+    summary_status: str = "missing"
+    summary_text: str = ""
+    summary_message_id: str | None = None
+    tail_status: str = "unknown"
+    tail_start_locator: str | None = None
+    tail_start_message_index: int | None = None
+    metrics: dict = field(default_factory=dict)
+    source_meta: dict = field(default_factory=dict)
+
+
+@dataclass
 class AgentEdge:
     parent_session_id: str
     child_session_id: str
@@ -257,6 +276,7 @@ class Session:
     agent_type: str | None = None
     children: list["Session"] = field(default_factory=list)
     agent_edges: list[AgentEdge] = field(default_factory=list)
+    context_compactions: list[ContextCompaction] = field(default_factory=list)
     raw_records: list[RawRecord] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
 

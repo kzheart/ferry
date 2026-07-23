@@ -11,6 +11,7 @@ from pathlib import Path
 from ...domain.model import (
     AgentEdge,
     Block,
+    ContextCompaction,
     Message,
     RawRecord,
     Session,
@@ -624,6 +625,43 @@ def _load_records(path: Path) -> list[dict]:
     return records
 
 
+def _codex_compaction(record: dict, ordinal: int,
+                      after_message_id: str | None) -> ContextCompaction:
+    payload = record.get("payload") or {}
+    summary = payload.get("message")
+    summary = summary.strip() if isinstance(summary, str) else ""
+    replacement = payload.get("replacement_history")
+    replacement = replacement if isinstance(replacement, list) else []
+    encrypted = any(
+        isinstance(item, dict) and item.get("type") == "compaction"
+        and isinstance(item.get("encrypted_content"), str)
+        and bool(item["encrypted_content"])
+        for item in replacement
+    )
+    summary_status = (
+        "available" if summary else "protected" if encrypted else "missing"
+    )
+    window_id = payload.get("window_id")
+    return ContextCompaction(
+        id=str(window_id or f"record:{ordinal}"),
+        source="codex",
+        after_message_id=after_message_id,
+        event_locator=f"record:{ordinal}",
+        created_at=record.get("timestamp"),
+        state="completed",
+        summary_status=summary_status,
+        summary_text=summary,
+        source_meta={
+            "replacement_history_present": bool(replacement),
+            "replacement_item_count": len(replacement),
+            "window_number": payload.get("window_number"),
+            "first_window_id": payload.get("first_window_id"),
+            "previous_window_id": payload.get("previous_window_id"),
+            "window_id": window_id,
+        },
+    )
+
+
 def _read_one(path: Path, meta: dict | None = None) -> Session:
     lines = _load_records(Path(path))
     meta = meta or next((l.get("payload") or {} for l in lines
@@ -670,6 +708,13 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     for ordinal, l in enumerate(lines):
         sess.raw_records.append(_raw_record(l, ordinal, path))
         record_type = l.get("type")
+        if record_type == "compacted":
+            after_message_id = next((
+                message.source_id for message in reversed(sess.messages)
+                if message.source_id), None)
+            sess.context_compactions.append(
+                _codex_compaction(l, ordinal, after_message_id))
+            continue
         if record_type == "response_item":
             p = l.get("payload") or {}
         elif record_type in direct_item_types:
@@ -757,6 +802,12 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         blocks = []
         flush_pending_into(blocks)
         sess.messages.append(Message(role="assistant", blocks=blocks, raw=[]))
+    candidates = [
+        compaction for compaction in sess.context_compactions
+        if compaction.source_meta.get("replacement_history_present")
+    ]
+    if candidates:
+        candidates[-1].source_meta["active"] = True
     return sess
 
 

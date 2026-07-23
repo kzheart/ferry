@@ -16,6 +16,7 @@ from pathlib import Path
 from ...domain.model import (
     AgentEdge,
     Block,
+    ContextCompaction,
     Message,
     RawRecord,
     Session,
@@ -394,10 +395,58 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
     session_raw = RawRecord("opencode", "session", _clone(info))
     sess.raw_records.append(session_raw)
     edges = []
+    pending_compactions = []
+    last_visible_message_id = None
+    raw_message_indexes = {
+        (message.get("info") or {}).get("id"): index
+        for index, message in enumerate(data.get("messages", []), start=1)
+    }
     for ordinal, m in enumerate(data.get("messages", [])):
         role = m["info"].get("role", "user")
         blocks = []
         mid = m["info"].get("id")
+        compaction_part = next((
+            part for part in m.get("parts", [])
+            if part.get("type") == "compaction"), None)
+        if compaction_part is not None:
+            tail_locator = compaction_part.get("tail_start_id")
+            tail_index = raw_message_indexes.get(tail_locator)
+            compaction = ContextCompaction(
+                id=mid or f"compaction:{ordinal}",
+                source="opencode",
+                after_message_id=last_visible_message_id,
+                event_locator=mid,
+                created_at=(m["info"].get("time") or {}).get("created"),
+                trigger=("automatic" if compaction_part.get("auto") is True
+                         else "manual" if compaction_part.get("auto") is False
+                         else "unknown"),
+                state="incomplete",
+                tail_status="located" if tail_index is not None else "unknown",
+                tail_start_locator=tail_locator,
+                tail_start_message_index=tail_index,
+                source_meta={
+                    key: _clone(value) for key, value in compaction_part.items()
+                    if key not in {"type", "tail_start_id"}
+                },
+            )
+            sess.context_compactions.append(compaction)
+            pending_compactions.append(compaction)
+        is_summary = (
+            m["info"].get("mode") == "compaction"
+            or m["info"].get("summary") is True
+        )
+        if is_summary:
+            summary = "\n".join(
+                str(part.get("text") or "") for part in m.get("parts", [])
+                if part.get("type") == "text" and part.get("text"))
+            compaction = next((
+                item for item in reversed(pending_compactions)
+                if item.summary_message_id is None), None)
+            if compaction is not None:
+                compaction.summary_message_id = mid
+                compaction.summary_text = summary
+                compaction.summary_status = "available" if summary else "missing"
+                compaction.state = "completed" if summary else "incomplete"
         message_raw = RawRecord(
             "opencode", "message", _clone(m["info"]), ordinal=ordinal,
             timestamp=(m["info"].get("time") or {}).get("created"))
@@ -467,6 +516,19 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
                 parent_ids=[parent_id] if parent_id else [],
                 agent_id=minfo.get("agent"),
                 created_at=(minfo.get("time") or {}).get("created")))
+            if not is_summary:
+                last_visible_message_id = mid
+    compacting = (info.get("time") or {}).get("compacting")
+    if compacting and not any(
+            compaction.state == "in_progress"
+            for compaction in sess.context_compactions):
+        sess.context_compactions.append(ContextCompaction(
+            id=f"{info['id']}:compacting",
+            source="opencode",
+            after_message_id=last_visible_message_id,
+            created_at=compacting,
+            state="in_progress",
+        ))
     return sess, edges
 
 
