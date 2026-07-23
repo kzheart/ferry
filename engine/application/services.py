@@ -259,7 +259,6 @@ def _cleanup_artifact(dst: str, sid: str, dest):
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------
 
 from .session_meta import list_all as session_meta_list  # noqa: E402
-from .session_meta import set_entry as _meta_set
 from .session_meta import compare_and_set_entry as _meta_compare_and_set
 from .session_meta import compare_and_set_entries as _meta_compare_and_set_entries
 
@@ -267,10 +266,6 @@ META_FIELDS = {
     "name", "pinned", "archived", "tags",
     "summary", "cluster_id", "cluster_name", "dead_candidate", "dead_reason",
 }
-
-
-def session_meta_set(sid: str, patch: dict) -> dict:
-    return _meta_set(sid, {k: v for k, v in patch.items() if k in META_FIELDS})
 
 
 def session_meta_compare_and_set(sid: str, expected: dict, patch: dict) -> dict:
