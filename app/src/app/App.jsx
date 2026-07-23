@@ -12,7 +12,7 @@ import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
 import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
-import { RailGlyph, RescanIcon, SidebarIcon, Spinner } from "../components/ui/icons.jsx";
+import { SidebarIcon, Spinner } from "../components/ui/icons.jsx";
 import { Sheet } from "../components/ui/primitives.jsx";
 import { HistoryList, LibraryList, Pane } from "../components/layout/ResourcePane.jsx";
 import Overview from "../features/overview/Overview.jsx";
@@ -33,6 +33,7 @@ import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
+import { AppRail } from "../features/shell/AppRail.jsx";
 
 const RAIL_ORDER_KEY = "ferry-rail-order";
 const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
@@ -806,7 +807,7 @@ export default function App() {
     history: t("app:rail.history"),
     askferry: t("askferry:rail"),
   };
-  const railItems = railOrder.map(k => ({ k, label: railLabels[k] })).filter(n => n.label);
+  const railItems = railOrder.map(key => ({ key, label: railLabels[key] })).filter(item => item.label);
 
   const firstDone = () => {
     localStorage.setItem("ferry-first-done", "1");
@@ -817,66 +818,35 @@ export default function App() {
   return (
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex",
       background: "var(--win-bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
-        {/* 导航轨:通高到窗口顶,顶部 44px 留给红绿灯、可拖拽窗口。
-            与资源栏同底色构成一整块侧栏(Finder 式);
-            侧栏只剩导航轨时加宽到 80,让红绿灯完整落在侧栏内,分界线也避开顶部 44px */}
-        <div style={{ width: railOnly ? 80 : 56, flex: "none", background: "var(--pane)",
-          position: "relative", display: "flex", flexDirection: "column", alignItems: "center",
-          padding: "0 0 12px", gap: 4, zIndex: 5,
-          transition: dragging ? "none" : "width .2s ease-out" }}>
-          {railOnly && (
-            <div style={{ position: "absolute", right: 0, top: 44, bottom: 0, width: 1,
-              background: "var(--line)", pointerEvents: "none" }} />
-          )}
-          <div data-tauri-drag-region style={{ height: 44, alignSelf: "stretch", flex: "none" }} />
-          {railItems.map(n => {
-            const on = view === n.k;
-            const dropBefore = railDrop?.key === n.k && railDrop.position === "before" && railDragging !== n.k;
-            const dropAfter = railDrop?.key === n.k && railDrop.position === "after" && railDragging !== n.k;
-            return (
-              <button key={n.k} className="hov-rail"
-                data-rail-key={n.k}
-                data-guide={n.k === "library" ? "rail" : undefined}
-                onMouseEnter={e => railEnter(n.label, e)} onMouseLeave={railLeave}
-                onPointerDown={startRailDrag} onPointerMove={moveRailDrag}
-                onPointerUp={endRailDrag} onPointerCancel={cancelRailDrag}
-                onClick={() => {
-                  if (suppressRailClick.current) return;
-                  setView(n.k); setSettingsOpen(false); setPopover(null); railLeave();
-                }}
-                style={{ width: 40, height: 40, border: "none", borderRadius: 8,
-                  background: on ? "var(--acc-soft2)" : "transparent", display: "flex", alignItems: "center",
-                  justifyContent: "center", cursor: "default",
-                  touchAction: "none", opacity: railDragging === n.k ? .48 : 1,
-                  transform: railDragging === n.k ? "scale(.9)" : "none",
-                  boxShadow: dropBefore ? `0 -2px 0 ${ACCENT}` : dropAfter ? `0 2px 0 ${ACCENT}` : "none",
-                  transition: "background .12s ease, transform .12s ease, opacity .12s ease" }}>
-                <RailGlyph name={n.k} color={on ? ACCENT : "var(--tx4b)"} />
-              </button>
-            );
-          })}
-          <div style={{ flex: 1 }} />
-          <button className="hov-rail"
-            onMouseEnter={e => railEnter(scanning ? t("app:titlebar.scanning") : t("app:titlebar.rescan"), e)}
-            onMouseLeave={railLeave}
-            disabled={scanning}
-            onClick={() => { doScan(); railLeave(); }}
-            style={{ width: 40, height: 40, border: "none", borderRadius: 8,
-              background: "transparent", display: "flex", alignItems: "center",
-              justifyContent: "center", cursor: "default", transition: "background .12s ease",
-              color: "var(--tx4b)" }}>
-            {scanning ? <Spinner size={18} /> : <RescanIcon size={18} color="var(--tx4b)" />}
-          </button>
-          <button className="hov-rail"
-            onMouseEnter={e => railEnter(t("app:rail.settings"), e)} onMouseLeave={railLeave}
-            onClick={() => { setSettingsSection("prefs"); setSettingsOpen(v => !v); railLeave(); }}
-            style={{ width: 40, height: 40, border: "none", borderRadius: 8,
-              background: settingsOpen ? "var(--acc-soft2)" : "transparent", display: "flex",
-              alignItems: "center", justifyContent: "center", cursor: "default",
-              transition: "background .12s ease" }}>
-            <RailGlyph name="settings" color={settingsOpen ? ACCENT : "var(--tx4b)"} />
-          </button>
-        </div>
+        <AppRail
+          railOnly={railOnly}
+          resizing={dragging}
+          items={railItems}
+          activeView={view}
+          draggingKey={railDragging}
+          dropTarget={railDrop}
+          scanning={scanning}
+          settingsOpen={settingsOpen}
+          scanningLabel={t("app:titlebar.scanning")}
+          rescanLabel={t("app:titlebar.rescan")}
+          settingsLabel={t("app:rail.settings")}
+          onSelect={key => {
+            if (suppressRailClick.current) return;
+            setView(key); setSettingsOpen(false); setPopover(null); railLeave();
+          }}
+          onRescan={() => { doScan(); railLeave(); }}
+          onToggleSettings={() => {
+            setSettingsSection("prefs"); setSettingsOpen(value => !value); railLeave();
+          }}
+          onEnter={railEnter}
+          onLeave={railLeave}
+          pointerHandlers={{
+            down: startRailDrag,
+            move: moveRailDrag,
+            up: endRailDrag,
+            cancel: cancelRailDrag,
+          }}
+        />
 
         {/* 资源栏 */}
         {paneCfg && (
