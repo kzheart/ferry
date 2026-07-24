@@ -4,11 +4,8 @@ import {
   Agent,
   type AgentEvent,
   type AgentMessage,
-  type StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { ImageContent, Model } from "@earendil-works/pi-ai";
-import type { AuthType } from "@earendil-works/pi-ai";
-import { AuthCoordinator } from "../providers/auth-coordinator.js";
+import type { AuthType, ImageContent } from "@earendil-works/pi-ai";
 import { createDelegationTool } from "../tools/delegation.js";
 import type {
   PersistedSession,
@@ -21,6 +18,10 @@ import type {
   ThinkingLevel,
 } from "../providers/provider-config.js";
 import type { ProviderHost } from "../providers/provider-host.js";
+import {
+  ProviderService,
+  type AgentBackend,
+} from "../providers/provider-service.js";
 import { parseOrganizerInput } from "../organizing/organizer.js";
 import {
   runOrganizationWorkflow,
@@ -55,14 +56,6 @@ import {
   safeMessages,
   summarizeToolResult,
 } from "../security/redaction.js";
-
-export interface AgentBackend {
-  model: Model<string>;
-  streamFn: StreamFn;
-  provider?: string;
-  modelId?: string;
-  credentialAvailable?: () => boolean | Promise<boolean>;
-}
 
 export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
 export type ToolHandler = (
@@ -511,7 +504,7 @@ export class AgentRuntime {
   private readonly engineHandler: EngineHandler | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
-  private readonly auth: AuthCoordinator | undefined;
+  private readonly providersService: ProviderService;
   private readonly toolDeadlinesMs: Record<FerryToolName, number>;
   private runtimeSequence = 1;
 
@@ -530,23 +523,27 @@ export class AgentRuntime {
     this.providerHost = options.providerHost;
     this.backendFactory = backendFactory;
     this.backendInfo = this.backendFactory(defaultSelection);
-    this.auth = this.providerHost
-      ? new AuthCoordinator(
-          (providerId, type, interaction) =>
-            this.providerHost!.login(providerId, type, interaction),
-          (event) =>
-            this.publish({
-              protocol: PROTOCOL_VERSION,
-              session_id: "runtime",
-              run_id: null,
-              seq: this.runtimeSequence++,
-              timestamp: this.now().toISOString(),
-              type: event.type,
-              payload: event.payload,
-            }),
-          this.idFactory,
-        )
-      : undefined;
+    this.providersService = new ProviderService({
+      ...(this.providerHost ? { host: this.providerHost } : {}),
+      fallbackBackend: this.backendInfo,
+      emitAuth: (event) =>
+        this.publish({
+          protocol: PROTOCOL_VERSION,
+          session_id: "runtime",
+          run_id: null,
+          seq: this.runtimeSequence++,
+          timestamp: this.now().toISOString(),
+          type: event.type,
+          payload: event.payload,
+        }),
+      idFactory: this.idFactory,
+      isProviderInUse: (providerId) =>
+        [...this.sessions.values()].some(
+          (session) => session.state().provider_id === providerId,
+        ),
+      selectSessionModel: (sessionId, selection, backend) =>
+        this.session(sessionId).selectModel(selection, backend),
+    });
   }
 
   static async create(options: RuntimeOptions = {}) {
@@ -619,25 +616,7 @@ export class AgentRuntime {
   }
 
   async providerStatus() {
-    const selection = this.providerHost
-      ? await this.providerHost.defaultModel()
-      : {
-          provider:
-            this.backendInfo.provider ?? this.backendInfo.model.provider,
-          model: this.backendInfo.modelId ?? this.backendInfo.model.id,
-        };
-    const configured = this.providerHost
-      ? await this.providerHost.isConfigured(selection.provider)
-      : await this.backendInfo.credentialAvailable?.();
-    return {
-      provider: selection.provider,
-      model: selection.model,
-      thinking: selection.thinking ?? "off",
-      credential: configured ? "available" : "unavailable",
-      provider_count: this.providerHost
-        ? (await this.providerHost.providers()).length
-        : 1,
-    };
+    return this.providersService.status();
   }
 
   subscribe(listener: (event: EventEnvelope) => void) {
@@ -754,8 +733,7 @@ export class AgentRuntime {
   }
 
   async providers() {
-    if (!this.providerHost) return [];
-    return this.providerHost.providers();
+    return this.providersService.providers();
   }
 
   roles() {
@@ -839,39 +817,19 @@ export class AgentRuntime {
   }
 
   models(providerId: string, query = "", limit = 100) {
-    if (!this.providerHost) return [];
-    try {
-      return this.providerHost.listModels(providerId, query, limit);
-    } catch (error) {
-      throw new ProtocolError(
-        "provider_not_found",
-        error instanceof Error ? error.message : "provider not found",
-      );
-    }
+    return this.providersService.models(providerId, query, limit);
   }
 
   async enabledModels() {
-    if (!this.providerHost) return [];
-    return this.providerHost.enabledModels();
+    return this.providersService.enabledModels();
   }
 
   async catalogModels() {
-    if (!this.providerHost) return [];
-    return this.providerHost.catalogModels();
+    return this.providersService.catalogModels();
   }
 
   async testProvider(providerId: string, modelId?: string) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    }
-    try {
-      return await this.providerHost.testProvider(providerId, modelId);
-    } catch (error) {
-      throw new ProtocolError(
-        "provider_unreachable",
-        error instanceof Error ? error.message : "provider test failed",
-      );
-    }
+    return this.providersService.testProvider(providerId, modelId);
   }
 
   async saveCustomModel(
@@ -885,71 +843,27 @@ export class AgentRuntime {
       max_tokens?: number;
     },
   ) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    }
-    try {
-      return await this.providerHost.saveCustomModel(providerId, input);
-    } catch (error) {
-      throw new ProtocolError(
-        "invalid_params",
-        error instanceof Error ? error.message : "custom model is invalid",
-      );
-    }
+    return this.providersService.saveCustomModel(providerId, input);
   }
 
   async deleteCustomModel(providerId: string, modelId: string) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    }
-    try {
-      return await this.providerHost.deleteCustomModel(providerId, modelId);
-    } catch (error) {
-      throw new ProtocolError(
-        "provider_not_found",
-        error instanceof Error ? error.message : "provider not found",
-      );
-    }
+    return this.providersService.deleteCustomModel(providerId, modelId);
   }
 
   async setProviderEnabled(providerId: string, enabled: boolean) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    }
-    try {
-      return await this.providerHost.setProviderEnabled(providerId, enabled);
-    } catch (error) {
-      throw new ProtocolError(
-        "provider_not_found",
-        error instanceof Error ? error.message : "provider not found",
-      );
-    }
+    return this.providersService.setProviderEnabled(providerId, enabled);
   }
 
   async setVisibleModels(providerId: string, modelIds: string[] | null) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    }
-    try {
-      return await this.providerHost.setVisibleModels(providerId, modelIds);
-    } catch (error) {
-      throw new ProtocolError(
-        "model_not_found",
-        error instanceof Error ? error.message : "model not found",
-      );
-    }
+    return this.providersService.setVisibleModels(providerId, modelIds);
   }
 
   async refreshModels() {
-    if (!this.providerHost)
-      throw new ProtocolError("unsupported", "model refresh unavailable");
-    return this.providerHost.refreshModels();
+    return this.providersService.refreshModels();
   }
 
   async config() {
-    if (!this.providerHost)
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    return this.providerHost.store.publicSnapshot();
+    return this.providersService.config();
   }
 
   async saveApiKey(
@@ -957,177 +871,39 @@ export class AgentRuntime {
     key: string,
     fields?: Record<string, string>,
   ) {
-    if (!this.providerHost)
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    if (this.auth?.isProviderActive(providerId)) {
-      throw new ProtocolError(
-        "auth_in_progress",
-        "provider authentication is in progress",
-      );
-    }
-    try {
-      await this.providerHost.saveApiKey(providerId, key, fields);
-      return {
-        provider_id: providerId,
-        configured: true,
-        credential_type: "api_key",
-      };
-    } catch (error) {
-      throw new ProtocolError(
-        "invalid_provider_config",
-        error instanceof Error ? error.message : "provider config failed",
-      );
-    }
+    return this.providersService.saveApiKey(providerId, key, fields);
   }
 
   async logoutProvider(providerId: string) {
-    if (!this.providerHost)
-      throw new ProtocolError("unsupported", "provider config unavailable");
-    if (this.auth?.isProviderActive(providerId)) {
-      throw new ProtocolError(
-        "auth_in_progress",
-        "provider authentication is in progress",
-      );
-    }
-    try {
-      await this.providerHost.logout(providerId);
-      return { provider_id: providerId, configured: false };
-    } catch (error) {
-      throw new ProtocolError(
-        "provider_not_found",
-        error instanceof Error ? error.message : "provider logout failed",
-      );
-    }
+    return this.providersService.logoutProvider(providerId);
   }
 
   startAuthentication(providerId: string, type: AuthType) {
-    if (!this.providerHost || !this.auth) {
-      throw new ProtocolError(
-        "unsupported",
-        "provider authentication unavailable",
-      );
-    }
-    const provider = this.providerHost.models.getProvider(providerId);
-    const supported =
-      type === "oauth" ? provider?.auth.oauth : provider?.auth.apiKey;
-    if (!supported) {
-      throw new ProtocolError(
-        "auth_type_unsupported",
-        `provider does not support ${type} authentication`,
-      );
-    }
-    try {
-      return this.auth.start(providerId, type);
-    } catch (error) {
-      throw new ProtocolError(
-        "auth_in_progress",
-        error instanceof Error
-          ? error.message
-          : "authentication is in progress",
-      );
-    }
+    return this.providersService.startAuthentication(providerId, type);
   }
 
   respondAuthentication(loginId: string, promptId: string, value: string) {
-    if (!this.auth)
-      throw new ProtocolError("unsupported", "authentication unavailable");
-    try {
-      return this.auth.respond(loginId, promptId, value);
-    } catch (error) {
-      throw new ProtocolError(
-        "auth_prompt_not_found",
-        error instanceof Error
-          ? error.message
-          : "authentication prompt not found",
-      );
-    }
+    return this.providersService.respondAuthentication(
+      loginId,
+      promptId,
+      value,
+    );
   }
 
   cancelAuthentication(loginId: string) {
-    if (!this.auth)
-      throw new ProtocolError("unsupported", "authentication unavailable");
-    try {
-      return this.auth.cancel(loginId);
-    } catch (error) {
-      throw new ProtocolError(
-        "auth_login_not_found",
-        error instanceof Error
-          ? error.message
-          : "authentication login not found",
-      );
-    }
+    return this.providersService.cancelAuthentication(loginId);
   }
 
   async selectModel(sessionId: string | undefined, selection: ModelSelection) {
-    if (!this.providerHost)
-      throw new ProtocolError("unsupported", "model selection unavailable");
-    let backend: AgentBackend;
-    try {
-      backend = this.providerHost.backend(selection);
-    } catch (error) {
-      throw new ProtocolError(
-        "model_not_found",
-        error instanceof Error ? error.message : "model not found",
-      );
-    }
-    if (sessionId) {
-      return this.session(sessionId).selectModel(selection, backend);
-    }
-    await this.providerHost.selectDefault(selection);
-    return { ...selection };
+    return this.providersService.selectModel(sessionId, selection);
   }
 
   async saveCustomProvider(config: CustomProviderConfig, clearApiKey = false) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "custom providers unavailable");
-    }
-    if (
-      this.providerHost.isCustom(config.id) &&
-      [...this.sessions.values()].some(
-        (session) => session.state().provider_id === config.id,
-      )
-    ) {
-      throw new ProtocolError(
-        "provider_in_use",
-        "custom provider is used by a session",
-      );
-    }
-    try {
-      await this.providerHost.saveCustomProvider(config, clearApiKey);
-      return { provider_id: config.id, configured: true };
-    } catch (error) {
-      throw new ProtocolError(
-        "invalid_provider_config",
-        error instanceof Error ? error.message : "custom provider save failed",
-      );
-    }
+    return this.providersService.saveCustomProvider(config, clearApiKey);
   }
 
   async deleteCustomProvider(providerId: string) {
-    if (!this.providerHost) {
-      throw new ProtocolError("unsupported", "custom providers unavailable");
-    }
-    if (
-      [...this.sessions.values()].some(
-        (session) => session.state().provider_id === providerId,
-      )
-    ) {
-      throw new ProtocolError(
-        "provider_in_use",
-        "custom provider is used by a session",
-      );
-    }
-    try {
-      await this.providerHost.deleteCustomProvider(providerId);
-      return { provider_id: providerId, deleted: true };
-    } catch (error) {
-      throw new ProtocolError(
-        "invalid_provider_config",
-        error instanceof Error
-          ? error.message
-          : "custom provider delete failed",
-      );
-    }
+    return this.providersService.deleteCustomProvider(providerId);
   }
 
   abort(sessionId: string) {
