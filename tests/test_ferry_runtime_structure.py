@@ -51,6 +51,10 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert "function customProvider(" not in provider_host
     assert "function withCustomModels(" not in provider_host
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
+    assert (RUNTIME / "src/providers/commands.ts").is_file()
+    assert (RUNTIME / "src/roles/role-service.ts").is_file()
+    assert "runtime.providerService" not in runtime
+    assert "runtime.roleService" not in runtime
     assert "new AuthCoordinator" not in runtime
     assert "this.providerHost.saveApiKey" not in runtime
     assert "new Set<(event: EventEnvelope)" not in runtime

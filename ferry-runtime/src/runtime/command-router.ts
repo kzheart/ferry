@@ -1,5 +1,6 @@
 import type { ThinkingLevel } from "../providers/provider-config.js";
 import { parseThinkingLevel } from "../providers/provider-config-validation.js";
+import { dispatchProviderCommand } from "../providers/commands.js";
 import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { RoleInput } from "../roles/role-repository.js";
@@ -22,298 +23,155 @@ export async function dispatch(
   try {
     const params = command.params;
     let result: unknown;
-    switch (command.method) {
-      case "health":
-        result = {
-          status: "ready",
-          service: "ferry-runtime",
-          contract_hash: FERRY_CONTRACT_HASH,
-          pi_version: "0.81.1",
-          ...(await runtime.providerService.status()),
-        };
-        break;
-      case "session.create":
-        if (
-          (params.provider_id === undefined) !==
-          (params.model_id === undefined)
-        ) {
-          throw new ProtocolError(
-            "invalid_params",
-            "provider_id and model_id must be provided together",
+    const providerCommand = await dispatchProviderCommand(
+      runtime.providerService,
+      command,
+    );
+    if (providerCommand.handled) {
+      result = providerCommand.result;
+    } else
+      switch (command.method) {
+        case "health":
+          result = {
+            status: "ready",
+            service: "ferry-runtime",
+            contract_hash: FERRY_CONTRACT_HASH,
+            pi_version: "0.81.1",
+            ...(await runtime.providerService.status()),
+          };
+          break;
+        case "session.create":
+          if (
+            (params.provider_id === undefined) !==
+            (params.model_id === undefined)
+          ) {
+            throw new ProtocolError(
+              "invalid_params",
+              "provider_id and model_id must be provided together",
+            );
+          }
+          let createThinking: ThinkingLevel | undefined;
+          try {
+            createThinking = parseThinkingLevel(params.thinking);
+          } catch {
+            throw new ProtocolError("invalid_params", "thinking is invalid");
+          }
+          result = await runtime.createSession(
+            params.session_id === undefined
+              ? undefined
+              : requireString(params, "session_id", 128),
+            params.provider_id === undefined
+              ? undefined
+              : {
+                  provider: requireString(params, "provider_id", 128),
+                  model: requireString(params, "model_id", 512),
+                  ...(createThinking ? { thinking: createThinking } : {}),
+                },
+            optionalString(params, "role_id", 128),
           );
-        }
-        let createThinking: ThinkingLevel | undefined;
-        try {
-          createThinking = parseThinkingLevel(params.thinking);
-        } catch {
-          throw new ProtocolError("invalid_params", "thinking is invalid");
-        }
-        result = await runtime.createSession(
-          params.session_id === undefined
-            ? undefined
-            : requireString(params, "session_id", 128),
-          params.provider_id === undefined
-            ? undefined
-            : {
-                provider: requireString(params, "provider_id", 128),
-                model: requireString(params, "model_id", 512),
-                ...(createThinking ? { thinking: createThinking } : {}),
-              },
-          optionalString(params, "role_id", 128),
-        );
-        break;
-      case "session.rename":
-        result = await runtime.renameSession(
-          requireString(params, "session_id", 128),
-          requireString(params, "title", 200),
-        );
-        break;
-      case "session.pin":
-        if (typeof params.pinned !== "boolean") {
-          throw new ProtocolError("invalid_params", "pinned must be a boolean");
-        }
-        result = await runtime.pinSession(
-          requireString(params, "session_id", 128),
-          params.pinned,
-        );
-        break;
-      case "session.delete":
-        result = await runtime.deleteSession(
-          requireString(params, "session_id", 128),
-        );
-        break;
-      case "roles.list":
-        result = await runtime.roleService.list();
-        break;
-      case "role.create":
-        result = await runtime.roleService.create(requireRole(params));
-        break;
-      case "role.update":
-        result = await runtime.roleService.update(
-          requireString(params, "role_id", 128),
-          requireRole(params),
-        );
-        break;
-      case "role.copy":
-        result = await runtime.roleService.copy(
-          requireString(params, "source_role_id", 128),
-          requireString(params, "role_id", 128),
-          optionalString(params, "name", 200),
-        );
-        break;
-      case "role.delete":
-        result = await runtime.roleService.delete(
-          requireString(params, "role_id", 128),
-        );
-        break;
-      case "organization.start":
-        result = await runtime.startOrganization({
-          sessions: params.sessions,
-          locale: params.locale,
-        });
-        break;
-      case "prompt":
-        result = await runtime.prompt(
-          requireString(params, "session_id", 128),
-          requireString(params, "text"),
-          parseImages(params.images),
-          optionalString(params, "display_text") ??
+          break;
+        case "session.rename":
+          result = await runtime.renameSession(
+            requireString(params, "session_id", 128),
+            requireString(params, "title", 200),
+          );
+          break;
+        case "session.pin":
+          if (typeof params.pinned !== "boolean") {
+            throw new ProtocolError(
+              "invalid_params",
+              "pinned must be a boolean",
+            );
+          }
+          result = await runtime.pinSession(
+            requireString(params, "session_id", 128),
+            params.pinned,
+          );
+          break;
+        case "session.delete":
+          result = await runtime.deleteSession(
+            requireString(params, "session_id", 128),
+          );
+          break;
+        case "roles.list":
+          result = await runtime.roleService.list();
+          break;
+        case "role.create":
+          result = await runtime.roleService.create(requireRole(params));
+          break;
+        case "role.update":
+          result = await runtime.roleService.update(
+            requireString(params, "role_id", 128),
+            requireRole(params),
+          );
+          break;
+        case "role.copy":
+          result = await runtime.roleService.copy(
+            requireString(params, "source_role_id", 128),
+            requireString(params, "role_id", 128),
+            optionalString(params, "name", 200),
+          );
+          break;
+        case "role.delete":
+          result = await runtime.roleService.delete(
+            requireString(params, "role_id", 128),
+          );
+          break;
+        case "organization.start":
+          result = await runtime.startOrganization({
+            sessions: params.sessions,
+            locale: params.locale,
+          });
+          break;
+        case "prompt":
+          result = await runtime.prompt(
+            requireString(params, "session_id", 128),
             requireString(params, "text"),
-        );
-        break;
-      case "abort":
-        result = runtime.abort(requireString(params, "session_id", 128));
-        break;
-      case "steer":
-        result = runtime.steer(
-          requireString(params, "session_id", 128),
-          requireString(params, "text"),
-          optionalString(params, "display_text") ??
+            parseImages(params.images),
+            optionalString(params, "display_text") ??
+              requireString(params, "text"),
+          );
+          break;
+        case "abort":
+          result = runtime.abort(requireString(params, "session_id", 128));
+          break;
+        case "steer":
+          result = runtime.steer(
+            requireString(params, "session_id", 128),
             requireString(params, "text"),
-        );
-        break;
-      case "follow_up":
-        result = runtime.followUp(
-          requireString(params, "session_id", 128),
-          requireString(params, "text"),
-          optionalString(params, "display_text") ??
+            optionalString(params, "display_text") ??
+              requireString(params, "text"),
+          );
+          break;
+        case "follow_up":
+          result = runtime.followUp(
+            requireString(params, "session_id", 128),
             requireString(params, "text"),
-        );
-        break;
-      case "state":
-        result = runtime.state(requireString(params, "session_id", 128));
-        break;
-      case "sessions.list":
-        result = runtime.listSessions();
-        break;
-      case "events.replay":
-        result = runtime.replay(
-          requireString(params, "session_id", 128),
-          requireInteger(params, "after_seq"),
-        );
-        break;
-      case "providers.list":
-        result = await runtime.providerService.providers();
-        break;
-      case "models.list":
-        result = runtime.providerService.models(
-          requireString(params, "provider_id", 128),
-          optionalString(params, "query", 256) ?? "",
-          optionalInteger(params, "limit") ?? 100,
-        );
-        break;
-      case "models.enabled":
-        result = await runtime.providerService.enabledModels();
-        break;
-      case "models.catalog":
-        result = await runtime.providerService.catalogModels();
-        break;
-      case "custom_model.add": {
-        const name = optionalString(params, "name", 256);
-        const contextWindow = optionalInteger(params, "context_window");
-        const maxTokens = optionalInteger(params, "max_tokens");
-        result = await runtime.providerService.saveCustomModel(
-          requireString(params, "provider_id", 128),
-          {
-            id: requireString(params, "model_id", 512),
-            ...(name ? { name } : {}),
-            ...(typeof params.image === "boolean"
-              ? { input: params.image ? ["text", "image"] : ["text"] }
-              : {}),
-            ...(typeof params.reasoning === "boolean"
-              ? { reasoning: params.reasoning }
-              : {}),
-            ...(contextWindow ? { context_window: contextWindow } : {}),
-            ...(maxTokens ? { max_tokens: maxTokens } : {}),
-          },
-        );
-        break;
-      }
-      case "custom_model.delete":
-        result = await runtime.providerService.deleteCustomModel(
-          requireString(params, "provider_id", 128),
-          requireString(params, "model_id", 512),
-        );
-        break;
-      case "provider.test":
-        result = await runtime.providerService.testProvider(
-          requireString(params, "provider_id", 128),
-          optionalString(params, "model_id", 512),
-        );
-        break;
-      case "provider.enabled.set":
-        if (typeof params.enabled !== "boolean") {
-          throw new ProtocolError(
-            "invalid_params",
-            "enabled must be a boolean",
+            optionalString(params, "display_text") ??
+              requireString(params, "text"),
           );
-        }
-        result = await runtime.providerService.setProviderEnabled(
-          requireString(params, "provider_id", 128),
-          params.enabled,
-        );
-        break;
-      case "models.visibility.set":
-        result = await runtime.providerService.setVisibleModels(
-          requireString(params, "provider_id", 128),
-          parseModelIds(params.model_ids),
-        );
-        break;
-      case "models.refresh":
-        result = await runtime.providerService.refreshModels();
-        break;
-      case "config.get":
-        result = await runtime.providerService.config();
-        break;
-      case "credential.set": {
-        const fields = params.fields;
-        if (fields !== undefined && !isObject(fields)) {
-          throw new ProtocolError("invalid_params", "fields must be an object");
-        }
-        result = await runtime.providerService.saveApiKey(
-          requireString(params, "provider_id", 128),
-          requireString(params, "key", 64 * 1024),
-          fields as Record<string, string> | undefined,
-        );
-        break;
-      }
-      case "provider.logout":
-        result = await runtime.providerService.logoutProvider(
-          requireString(params, "provider_id", 128),
-        );
-        break;
-      case "model.select": {
-        let thinking: ThinkingLevel | undefined;
-        try {
-          thinking = parseThinkingLevel(params.thinking);
-        } catch {
-          throw new ProtocolError("invalid_params", "thinking is invalid");
-        }
-        result = await runtime.providerService.selectModel(
-          optionalString(params, "session_id", 128),
-          {
-            provider: requireString(params, "provider_id", 128),
-            model: requireString(params, "model_id", 512),
-            ...(thinking ? { thinking } : {}),
-          },
-        );
-        break;
-      }
-      case "custom_provider.upsert":
-        if (
-          params.clear_api_key !== undefined &&
-          typeof params.clear_api_key !== "boolean"
-        ) {
-          throw new ProtocolError(
-            "invalid_params",
-            "clear_api_key must be a boolean",
+          break;
+        case "state":
+          result = runtime.state(requireString(params, "session_id", 128));
+          break;
+        case "sessions.list":
+          result = runtime.listSessions();
+          break;
+        case "events.replay":
+          result = runtime.replay(
+            requireString(params, "session_id", 128),
+            requireInteger(params, "after_seq"),
           );
-        }
-        result = await runtime.providerService.saveCustomProvider(
-          parseCustomProvider(params),
-          params.clear_api_key === true,
-        );
-        break;
-      case "custom_provider.delete":
-        result = await runtime.providerService.deleteCustomProvider(
-          requireString(params, "provider_id", 128),
-        );
-        break;
-      case "auth.login.start": {
-        const authType = requireString(params, "auth_type", 16);
-        if (authType !== "api_key" && authType !== "oauth") {
-          throw new ProtocolError(
-            "invalid_params",
-            "auth_type must be api_key or oauth",
+          break;
+        case "tool.result":
+          result = runtime.completeTool(
+            requireString(params, "request_id", 128),
+            requireString(params, "session_id", 128),
+            params.ok === true,
+            params.ok === true ? params.result : params.error,
           );
-        }
-        result = runtime.providerService.startAuthentication(
-          requireString(params, "provider_id", 128),
-          authType,
-        );
-        break;
+          break;
       }
-      case "auth.login.respond":
-        result = runtime.providerService.respondAuthentication(
-          requireString(params, "login_id", 128),
-          requireString(params, "prompt_id", 128),
-          requireString(params, "value", 64 * 1024),
-        );
-        break;
-      case "auth.login.cancel":
-        result = runtime.providerService.cancelAuthentication(
-          requireString(params, "login_id", 128),
-        );
-        break;
-      case "tool.result":
-        result = runtime.completeTool(
-          requireString(params, "request_id", 128),
-          requireString(params, "session_id", 128),
-          params.ok === true,
-          params.ok === true ? params.result : params.error,
-        );
-        break;
-    }
     return { protocol: PROTOCOL_VERSION, id: command.id, ok: true, result };
   } catch (error) {
     const protocolError =
@@ -365,54 +223,4 @@ function requireRole(params: Record<string, unknown>): RoleInput {
     throw new ProtocolError("invalid_params", "role must be an object");
   }
   return params.role as unknown as RoleInput;
-}
-
-// null 表示恢复「该 Provider 全部模型可见」
-function parseModelIds(value: unknown): string[] | null {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value) || value.length > 500) {
-    throw new ProtocolError(
-      "invalid_params",
-      "model_ids must be an array of at most 500 items",
-    );
-  }
-  return value.map((item) => {
-    if (typeof item !== "string" || !item || item.length > 512) {
-      throw new ProtocolError("invalid_params", "model id is invalid");
-    }
-    return item;
-  });
-}
-
-function parseCustomProvider(params: Record<string, unknown>) {
-  const values = params.models;
-  if (!Array.isArray(values)) {
-    throw new ProtocolError("invalid_params", "models must be an array");
-  }
-  const models = values.map((value) => {
-    if (!isObject(value))
-      throw new ProtocolError("invalid_params", "custom model is invalid");
-    const input = value.input;
-    if (!Array.isArray(input))
-      throw new ProtocolError("invalid_params", "model input is invalid");
-    return {
-      id: requireString(value, "id", 512),
-      ...(value.name === undefined
-        ? {}
-        : { name: requireString(value, "name", 256) }),
-      input: input as Array<"text" | "image">,
-      reasoning: value.reasoning === true,
-      context_window: requireInteger(value, "context_window"),
-      max_tokens: requireInteger(value, "max_tokens"),
-    };
-  });
-  return {
-    id: requireString(params, "provider_id", 128),
-    name: requireString(params, "name", 256),
-    base_url: requireString(params, "base_url", 4_096),
-    ...(params.api_key === undefined
-      ? {}
-      : { api_key: requireString(params, "api_key", 64 * 1024) }),
-    models,
-  };
 }
