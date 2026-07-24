@@ -22,7 +22,7 @@ import { useHistoryResourcePane } from "../modules/migration/useHistoryResourceP
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
 import { AppShell } from "./AppShell.jsx";
-import { AppOverlays } from "./AppOverlays.jsx";
+import { AppOverlayController } from "./AppOverlayController.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useRailNavigation } from "./useRailNavigation.js";
@@ -589,19 +589,18 @@ export default function App() {
         />
       </AppShell>
 
-      <AppOverlays
+      <AppOverlayController
         t={t}
         organization={{
           open: organizerOpen,
           sessions,
-          onClose: () => setOrganizerOpen(false),
-          onApplied: () => {
-            reloadMetadata();
-            doScan();
-          },
+          setOpen: setOrganizerOpen,
+          reloadMetadata,
+          scan: doScan,
         }}
         peek={{
-          open: Boolean(peekId && cur),
+          id: peekId,
+          current: cur,
           selectedId: selId,
           meta: detailMeta,
           detail,
@@ -612,131 +611,74 @@ export default function App() {
           applying,
           navigationTarget,
           refreshing,
-          onClose: () => setPeekId(null),
-          onOpenLibrary: () => {
-            setPeekId(null);
-            setView("library");
-          },
+          setId: setPeekId,
+          setView,
         }}
         migration={{
-          open: Boolean(mig && cur),
-          meta: cur,
-          scope: mig?.scope,
+          state: mig,
+          current: cur,
           env,
-          defaultProbe: Boolean(settings.runtimeProbe),
-          terminalApp: settings.terminalApp,
-          onClose: () => setMig(null),
-          onDone: loadHistory,
+          settings,
+          setState: setMig,
+          loadHistory,
         }}
         editing={{
           diff,
           dirtyOps,
           confirmApply,
-          onCloseDiff: () => setDiff(null),
-          onCancelApply: () => setConfirmApply(false),
-          onConfirmApply: applyEdit,
+          setDiff,
+          setConfirmApply,
+          apply: applyEdit,
         }}
         search={{
           open: searchOpen,
           pane: paneCfg,
-          results: (view === "askferry"
-            ? ferrySessions.map(session => ({
-                id: session.session_id,
-                title: session.title || t("askferry:chat.untitled"),
-                tool: null,
-                meta: session.model_id,
-                onClick: () => ferry.openSession(session.session_id),
-              }))
-            : view === "history"
-              ? histGroups.flatMap(group => group.rows).map(item => ({
-                  id: item.id,
-                  title: item.title,
-                  tool: item.tool,
-                  meta: `${item.from} → ${item.to}`,
-                  onClick: () => selectHistory(item.id),
-                }))
-              : libGroups.flatMap(group => group.rows).map(row => ({
-                  id: row.key,
-                  title: row.title,
-                  tool: row.tool,
-                  meta: row.repo,
-                  onClick: () => {
-                    setMultiSel([]);
-                    select(row.key);
-                  },
-                }))
-          ).slice(0, 60),
-          onClose: () => setSearchOpen(false),
+          view,
+          ferrySessions,
+          historyGroups: histGroups,
+          libraryGroups: libGroups,
+          ferry,
+          selectHistory,
+          setMultiSelection: setMultiSel,
+          selectSession: select,
+          setOpen: setSearchOpen,
         }}
         contextMenu={{
-          open: Boolean(ctxMenu),
-          x: ctxMenu?.x,
-          y: ctxMenu?.y,
+          value: ctxMenu,
           items: ctxItems,
-          onClose: () => setCtxMenu(null),
+          setValue: setCtxMenu,
         }}
-        sessionDelete={{
+        deletion={{
           session: delConfirm,
-          onCancel: () => setDelConfirm(null),
-          onConfirm: () => {
-            const session = delConfirm;
-            setDelConfirm(null);
-            deleteSession(session);
-          },
-        }}
-        historyDelete={{
           history: histDel,
-          onCancel: () => setHistDel(null),
-          onConfirm: () => {
-            if (histDel._id === histSelectedId) selectHistory(null);
-            setHistDel(null);
-            deleteHistory(histDel.id).catch(() => {});
-          },
-        }}
-        batchDelete={{
-          sessions: batchDel,
-          onCancel: () => setBatchDel(null),
-          onConfirm: doBatchDelete,
+          batch: batchDel,
+          setSession: setDelConfirm,
+          setHistory: setHistDel,
+          setBatch: setBatchDel,
+          deleteSession,
+          deleteHistory,
+          selectedHistoryId: histSelectedId,
+          selectHistory,
+          deleteBatch: doBatchDelete,
         }}
         rename={{
           session: renameFor,
-          initial: renameFor
-            ? metaFor(renameFor).name || renameFor.title || ""
-            : "",
-          onCancel: () => setRenameFor(null),
-          onConfirm: value => {
-            setRenameFor(null);
-            setMetaFor(renameFor, { name: value });
-          },
+          setSession: setRenameFor,
+          metaFor,
+          updateMetadata: setMetaFor,
         }}
         agentRename={{
           session: agentRenameFor,
-          onCancel: () => setAgentRenameFor(null),
-          onConfirm: title => {
-            setAgentRenameFor(null);
-            if (title) {
-              ferry.rename(agentRenameFor.session_id, title).catch(ferry.reportError);
-            }
-          },
+          setSession: setAgentRenameFor,
+          ferry,
         }}
         tags={{
           selection: tagFor,
-          initial: tagFor && !tagFor.batch
-            ? (metaFor(tagFor.sessions[0]).tags || []).join(", ")
-            : "",
-          onCancel: () => setTagFor(null),
-          onConfirm: async value => {
-            setTagFor(null);
-            const nextTags = value.split(/[,，]/).map(tag => tag.trim()).filter(Boolean);
-            for (const session of tagFor.sessions) {
-              const merged = tagFor.batch
-                ? [...new Set([...(metaFor(session).tags || []), ...nextTags])]
-                : nextTags;
-              await setMetaFor(session, { tags: merged });
-            }
-          },
+          setSelection: setTagFor,
+          metaFor,
+          updateMetadata: setMetaFor,
         }}
-        toast={{ value: toast, onDismiss: () => setToast(null) }}
+        toast={{ value: toast, setValue: setToast }}
         railTip={{ value: rail.railTip, railOnly }}
         settings={{
           open: settingsOpen,
@@ -744,40 +686,33 @@ export default function App() {
           onChange: setSettings,
           updater,
           ferry,
-          initialSection: settingsSection,
-          scan,
+          section: settingsSection,
+          scanResult: scan,
           env,
           scanning,
-          onRescan: doScan,
+          scan: doScan,
           guideSeen,
-          onOpenGuide: () => {
-            setSettingsOpen(false);
-            openGuide();
-          },
-          onFirstRun: () => {
-            setSettingsOpen(false);
-            setView("firstrun");
-          },
-          onClose: () => setSettingsOpen(false),
+          setOpen: setSettingsOpen,
+          openGuide,
+          setView,
         }}
-        libraryFilter={{
-          open: popover === "lib",
-          value: libF,
-          onChange: setLibF,
-          counts,
-          dirs,
-          tags: allTags,
+        filters={{
+          popover,
           anchor: popAnchor.current,
           onClose: () => setPopover(null),
-          onClear: clearLibF,
-        }}
-        historyFilter={{
-          open: popover === "hist",
-          value: histF,
-          onChange: setHistF,
-          anchor: popAnchor.current,
-          onClose: () => setPopover(null),
-          onClear: clearHistF,
+          library: {
+            value: libF,
+            onChange: setLibF,
+            counts,
+            dirs,
+            tags: allTags,
+            onClear: clearLibF,
+          },
+          history: {
+            value: histF,
+            onChange: setHistF,
+            onClear: clearHistF,
+          },
         }}
         guide={{ step: guideStep, onGo: setGuideStep, onFinish: finishGuide }}
       />

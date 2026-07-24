@@ -30,11 +30,12 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
     assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
     assert (FRONTEND / "shell/AppOverlays.jsx").is_file()
+    assert (FRONTEND / "shell/AppOverlayController.jsx").is_file()
     app = (FRONTEND / "shell/AppController.jsx").read_text()
     assert "browser/SessionDetail.jsx" not in app
     assert "shared/ui/primitives.jsx" not in app
     assert "shared/ui/Overlays.jsx" not in app
-    assert "AppOverlays" in app
+    assert "AppOverlayController" in app
 
 
 def test_operation_flow_has_one_module_controller():
