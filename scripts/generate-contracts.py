@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 AGENTS_SOURCE = ROOT / "contracts" / "agents.json"
 ENGINE_METHODS_SOURCE = ROOT / "contracts" / "engine-methods.json"
+IPC_SOURCE = ROOT / "contracts" / "ipc.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
@@ -19,6 +20,12 @@ AGENT_OUTPUTS = {
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
+}
+IPC_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/ipc.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
+    ROOT / "engine/contracts/ipc.py": "python",
+    ROOT / "agent-runtime/src/contracts/ipc.ts": "runtime",
 }
 
 
@@ -78,6 +85,34 @@ def load_engine_methods() -> list[dict[str, object]]:
     if len(names) != len(set(names)):
         raise ValueError("Engine method name 必须唯一")
     return methods
+
+
+def load_ipc() -> dict[str, object]:
+    document = json.loads(IPC_SOURCE.read_text())
+    expected = {
+        "protocol": "ferry-ipc/1",
+        "request": {
+            "required": ["protocol", "id", "method", "params"],
+            "additional_properties": False,
+        },
+        "response": {
+            "success_required": ["protocol", "id", "ok", "result"],
+            "failure_required": ["protocol", "id", "ok", "error"],
+            "additional_properties": False,
+        },
+        "error": {
+            "required": ["code", "category", "retryable", "params"],
+            "additional_properties": False,
+        },
+        "event": {
+            "required": ["protocol", "type", "payload"],
+            "optional": ["correlation_id", "context"],
+            "additional_properties": False,
+        },
+    }
+    if document != expected:
+        raise ValueError("IPC 契约字段必须精确为当前 envelope 定义")
+    return document
 
 
 def frontend(agents: list[dict[str, object]]) -> str:
@@ -225,8 +260,82 @@ def engine_methods_python(methods: list[dict[str, object]]) -> str:
     ))
 
 
+def ipc_frontend(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const FERRY_IPC_PROTOCOL = {json.dumps(contract['protocol'])};",
+        "",
+    ))
+
+
+def ipc_rust(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f'pub(crate) const FERRY_IPC_PROTOCOL: &str = "{contract["protocol"]}";',
+        "",
+    ))
+
+
+def ipc_python(contract: dict[str, object]) -> str:
+    return "\n".join((
+        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
+        "from __future__ import annotations",
+        "",
+        f"FERRY_IPC_PROTOCOL = {contract['protocol']!r}",
+        "",
+    ))
+
+
+def ipc_runtime(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f'export const FERRY_IPC_PROTOCOL = "{contract["protocol"]}" as const;',
+        "",
+        "export interface IpcRequest<Method extends string = string> {",
+        "  protocol: typeof FERRY_IPC_PROTOCOL;",
+        "  id: string;",
+        "  method: Method;",
+        "  params: Record<string, unknown>;",
+        "}",
+        "",
+        "export interface IpcError {",
+        "  code: string;",
+        "  category: string;",
+        "  retryable: boolean;",
+        "  params: Record<string, unknown>;",
+        "}",
+        "",
+        "export interface IpcSuccessResponse {",
+        "  protocol: typeof FERRY_IPC_PROTOCOL;",
+        "  id: string;",
+        "  ok: true;",
+        "  result: unknown;",
+        "}",
+        "",
+        "export interface IpcFailureResponse {",
+        "  protocol: typeof FERRY_IPC_PROTOCOL;",
+        "  id: string;",
+        "  ok: false;",
+        "  error: IpcError;",
+        "}",
+        "",
+        "export type IpcResponse = IpcSuccessResponse | IpcFailureResponse;",
+        "",
+        "export interface IpcEvent {",
+        "  protocol: typeof FERRY_IPC_PROTOCOL;",
+        "  type: string;",
+        "  correlation_id?: string;",
+        "  context?: Record<string, unknown>;",
+        "  payload: Record<string, unknown>;",
+        "}",
+        "",
+    ))
+
+
 def generated_contents(
-    agents: list[dict[str, object]], engine_methods: list[dict[str, object]]
+    agents: list[dict[str, object]],
+    engine_methods: list[dict[str, object]],
+    ipc: dict[str, object],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
@@ -236,14 +345,25 @@ def generated_contents(
         path: {"rust": engine_methods_rust, "python": engine_methods_python}[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }
-    return agent_contents | engine_contents
+    ipc_contents = {
+        path: {
+            "frontend": ipc_frontend,
+            "rust": ipc_rust,
+            "python": ipc_python,
+            "runtime": ipc_runtime,
+        }[kind](ipc)
+        for path, kind in IPC_OUTPUTS.items()
+    }
+    return agent_contents | engine_contents | ipc_contents
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    contents = generated_contents(load_agents(), load_engine_methods())
+    contents = generated_contents(
+        load_agents(), load_engine_methods(), load_ipc(),
+    )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:
         if stale:

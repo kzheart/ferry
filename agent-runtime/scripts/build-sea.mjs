@@ -4,6 +4,7 @@ import {
   chmodSync,
   copyFileSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -14,6 +15,9 @@ import { build } from "esbuild";
 
 const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(runtimeRoot, "..");
+const ipcProtocol = JSON.parse(
+  readFileSync(join(repositoryRoot, "contracts", "ipc.json"), "utf8"),
+).protocol;
 const seaNode = process.env.FERRY_SEA_NODE || process.execPath;
 const target = process.argv[2] ?? hostTarget();
 const expected = hostTarget();
@@ -123,7 +127,7 @@ async function smokeSea(executable, dataDirectory) {
   });
   const send = (id, method, params = {}) => {
     child.stdin.write(
-      `${JSON.stringify({ protocol: "ferry-agent/v1", id, method, params })}\n`,
+      `${JSON.stringify({ protocol: ipcProtocol, id, method, params })}\n`,
     );
   };
   const waitFor = async (predicate, label) => {

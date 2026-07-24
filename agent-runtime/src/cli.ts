@@ -57,7 +57,7 @@ async function main() {
             protocol: PROTOCOL_VERSION,
             id,
             ok: false,
-            error: { code: failure.code, message: failure.message },
+            error: failure.toEnvelope(),
           };
           write(response);
         }
@@ -70,7 +70,12 @@ async function main() {
       ok: false,
       error: {
         code: "invalid_framing",
-        message: error instanceof Error ? error.message : "invalid JSONL input",
+        category: "validation",
+        retryable: false,
+        params: {
+          message:
+            error instanceof Error ? error.message : "invalid JSONL input",
+        },
       },
     };
     write(response);
@@ -83,7 +88,12 @@ void main().catch(() => {
     protocol: PROTOCOL_VERSION,
     id: "startup",
     ok: false,
-    error: { code: "startup_failed", message: "Agent runtime failed to start" },
+    error: {
+      code: "startup_failed",
+      category: "internal",
+      retryable: true,
+      params: { message: "Ferry runtime failed to start" },
+    },
   } satisfies ResponseEnvelope);
   process.exitCode = 1;
 });

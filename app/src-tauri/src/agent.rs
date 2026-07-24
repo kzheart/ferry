@@ -8,9 +8,9 @@ use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
+use crate::contracts::ipc::FERRY_IPC_PROTOCOL;
 use crate::sidecar::engine_request_blocking;
 
-const AGENT_PROTOCOL: &str = "ferry-agent/v1";
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const ORGANIZATION_TIMEOUT: Duration = Duration::from_secs(130);
@@ -201,7 +201,7 @@ fn read_agent_output(
     }
     let _ = app.emit(
         "ferry-agent-event",
-        json!({"protocol": AGENT_PROTOCOL, "type": "runtime.disconnected"}),
+        json!({"protocol": FERRY_IPC_PROTOCOL, "type": "runtime.disconnected"}),
     );
 }
 
@@ -246,7 +246,7 @@ fn complete_tool_request(
                         let _ = app.emit(
                             "ferry-agent-event",
                             json!({
-                                "protocol": AGENT_PROTOCOL,
+                                "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
                                 "run_id": run_id,
                                 "type": "operation.applied",
@@ -261,7 +261,7 @@ fn complete_tool_request(
                         let _ = app.emit(
                             "ferry-agent-event",
                             json!({
-                                "protocol": AGENT_PROTOCOL,
+                                "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
                                 "run_id": run_id,
                                 "type": "operation.failed",
@@ -276,7 +276,7 @@ fn complete_tool_request(
                 let _ = app.emit(
                     "ferry-agent-event",
                     json!({
-                        "protocol": AGENT_PROTOCOL,
+                        "protocol": FERRY_IPC_PROTOCOL,
                         "session_id": session_id,
                         "run_id": run_id,
                         "type": "operation.proposed",
@@ -310,7 +310,7 @@ fn send_gateway_result(
         }),
     };
     let command = json!({
-        "protocol": AGENT_PROTOCOL,
+        "protocol": FERRY_IPC_PROTOCOL,
         "id": next_id("tool_result"),
         "method": "tool.result",
         "params": params,
@@ -537,7 +537,7 @@ fn request_agent(
     if guard.is_none() {
         let mut candidate = spawn_agent(app, resource_dir)?;
         let health = json!({
-            "protocol": AGENT_PROTOCOL,
+            "protocol": FERRY_IPC_PROTOCOL,
             "id": next_id("health"),
             "method": "health",
             "params": {},
@@ -545,7 +545,7 @@ fn request_agent(
         let response = candidate.request(&health.to_string(), Duration::from_secs(10))?;
         let value: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
         if value.get("ok").and_then(Value::as_bool) != Some(true)
-            || value.pointer("/result/protocol").and_then(Value::as_str) != Some(AGENT_PROTOCOL)
+            || value.pointer("/result/protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL)
         {
             return Err("Agent 协议握手失败".to_owned());
         }
@@ -577,7 +577,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
         return Err("Agent 命令 framing 非法".to_owned());
     }
     let value: Value = serde_json::from_str(request).map_err(|error| error.to_string())?;
-    if value.get("protocol").and_then(Value::as_str) != Some(AGENT_PROTOCOL) {
+    if value.get("protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL) {
         return Err("Agent 协议不兼容".to_owned());
     }
     let method = value.get("method").and_then(Value::as_str).unwrap_or("");
@@ -748,7 +748,7 @@ pub(crate) async fn agent_command(
 
 pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
     std::thread::spawn(move || {
-        let request = json!({"protocol": AGENT_PROTOCOL, "id": next_id("warmup"),
+        let request = json!({"protocol": FERRY_IPC_PROTOCOL, "id": next_id("warmup"),
                              "method": "health", "params": {}});
         let _ = request_agent(&app, &resource_dir, &request.to_string());
     });
@@ -973,7 +973,7 @@ mod tests {
 
     #[test]
     fn frontend_cannot_submit_tool_results() {
-        let request = json!({"protocol": AGENT_PROTOCOL, "id": "x",
+        let request = json!({"protocol": FERRY_IPC_PROTOCOL, "id": "x",
                              "method": "tool.result", "params": {}});
         assert!(validate_public_command(&request.to_string()).is_err());
     }
