@@ -8,7 +8,6 @@ from threading import Barrier, Event
 import pytest
 
 from engine.application import operations, session_meta
-from engine.application.ports import current
 from engine.domain.edit import AssistantReply
 from engine.domain.errors import (
     AgentRequestError,
@@ -28,7 +27,7 @@ def operation_service(monkeypatch, agent_environment):
         if state["service"] is not None:
             state["service"].shutdown()
         state["service"] = operations.OperationService(
-            current(), agent_environment["index"],
+            agent_environment["ports"], agent_environment["index"],
         )
         for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
             monkeypatch.setattr(
@@ -89,8 +88,8 @@ def _delete_plan(**overrides):
     return operations.plan(value)
 
 
-def _attach_reply_editing(monkeypatch, *, inplace=True):
-    editor = current().adapter("claude").editor
+def _attach_reply_editing(monkeypatch, ports, *, inplace=True):
+    editor = ports.adapter("claude").editor
     calls = []
 
     def replace_reply(_doc, turn, reply: AssistantReply):
@@ -107,7 +106,7 @@ def _attach_reply_editing(monkeypatch, *, inplace=True):
     return calls
 
 
-def _attach_lifecycle(monkeypatch, transcript):
+def _attach_lifecycle(monkeypatch, transcript, ports):
     class Lifecycle:
         delete_undoable = True
 
@@ -123,7 +122,6 @@ def _attach_lifecycle(monkeypatch, transcript):
                 "undoable": True,
             }
 
-    ports = current()
     original_adapter = ports.adapter
     lifecycle = Lifecycle()
     plugin = replace(original_adapter("claude"), lifecycle=lifecycle)
@@ -183,7 +181,7 @@ def test_restart_marks_interrupted_apply_failed(agent_environment, operation_ser
 
 def test_operation_audit_contains_digests_not_raw_content(
         agent_environment, monkeypatch):
-    _attach_reply_editing(monkeypatch)
+    _attach_reply_editing(monkeypatch, agent_environment["ports"])
     secret = "Bearer operation-audit-secret"
     plan = _plan([{
         "op": "replace-assistant-reply",
@@ -263,7 +261,7 @@ def test_metadata_query_does_not_fail_an_applying_operation(agent_environment):
     database = StateDatabase(agent_environment["root"].parent / "ferry-state.sqlite3")
     assert database.claim(plan["plan_id"], 2_000)
 
-    assert session_meta.list_all(current()) == {}
+    assert session_meta.list_all(agent_environment["ports"]) == {}
     assert operations.status(plan["plan_id"])["status"] == "applying"
 
 
@@ -278,20 +276,20 @@ def test_metadata_plan_applies_with_independent_cas(agent_environment):
     applied = _apply(plan["plan_id"])
 
     assert applied["result"]["metadata"] == {"name": "新名称"}
-    assert session_meta.list_all(current())["claude\0private-id"] == {"name": "新名称"}
+    assert session_meta.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "新名称"}
 
 
 def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
     plan = _metadata_plan()
     session_meta.set_entry(
-        "claude", "private-id", {"name": "并发名称"}, current())
+        "claude", "private-id", {"name": "并发名称"}, agent_environment["ports"])
 
     with pytest.raises(
             ConcurrentModificationError, match="元数据在审批后已变化"):
         _apply(plan["plan_id"])
 
     assert operations.status(plan["plan_id"])["status"] == "failed"
-    assert session_meta.list_all(current())["claude\0private-id"] == {"name": "并发名称"}
+    assert session_meta.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "并发名称"}
 
 
 @pytest.mark.parametrize("patch", [
@@ -308,7 +306,7 @@ def test_metadata_plan_rejects_invalid_patch(agent_environment, patch):
 def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
         agent_environment, monkeypatch):
     lifecycle = _attach_lifecycle(
-        monkeypatch, agent_environment["transcript"],
+        monkeypatch, agent_environment["transcript"], agent_environment["ports"],
     )
 
     plan = _delete_plan()
@@ -356,7 +354,7 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
 def test_delete_plan_rejects_revision_change(
         agent_environment, monkeypatch):
     lifecycle = _attach_lifecycle(
-        monkeypatch, agent_environment["transcript"],
+        monkeypatch, agent_environment["transcript"], agent_environment["ports"],
     )
     plan = _delete_plan()
     agent_environment["claude_browser"].fingerprint_value = "changed"
@@ -370,7 +368,7 @@ def test_delete_plan_rejects_revision_change(
 
 def test_replace_assistant_reply_plans_and_applies_as_edit(
         agent_environment, monkeypatch):
-    calls = _attach_reply_editing(monkeypatch)
+    calls = _attach_reply_editing(monkeypatch, agent_environment["ports"])
     requested = {
         "items": [{"kind": "text", "text": "新的回答"}],
     }
@@ -397,7 +395,7 @@ def test_replace_assistant_reply_plans_and_applies_as_edit(
 
 def test_replace_reply_can_be_combined_with_native_edit_ops(
         agent_environment, monkeypatch):
-    _attach_reply_editing(monkeypatch)
+    _attach_reply_editing(monkeypatch, agent_environment["ports"])
 
     plan = _plan([
         {"op": "delete-turn", "turn": 1},
@@ -463,7 +461,7 @@ def test_replace_reply_requires_editor_operation(agent_environment):
 
 def test_replace_reply_requires_inplace_editor_operation(
         agent_environment, monkeypatch):
-    _attach_reply_editing(monkeypatch, inplace=False)
+    _attach_reply_editing(monkeypatch, agent_environment["ports"], inplace=False)
 
     with pytest.raises(OperationUnsupportedError):
         _plan([{
@@ -476,7 +474,7 @@ def test_replace_reply_requires_inplace_editor_operation(
 
 def test_replace_reply_keeps_document_revision_cas(
         agent_environment, monkeypatch):
-    calls = _attach_reply_editing(monkeypatch)
+    calls = _attach_reply_editing(monkeypatch, agent_environment["ports"])
     plan = _plan([{
         "op": "replace-assistant-reply",
         "turn": 1,
@@ -502,7 +500,7 @@ def test_replace_reply_keeps_document_revision_cas(
 
 def test_replace_reply_keeps_probe_in_mutation_finish(
         agent_environment, monkeypatch):
-    _attach_reply_editing(monkeypatch)
+    _attach_reply_editing(monkeypatch, agent_environment["ports"])
     calls = []
     monkeypatch.setattr(
         operations.OperationService,

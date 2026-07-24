@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from engine.application import summaries
-from engine.application.ports import current
 from engine.domain.errors import SummaryBackboneMissingError
 from engine.infrastructure.state_db import StateDatabase
 
@@ -83,7 +82,7 @@ def test_fingerprint_tracks_content():
     assert summaries.session_fingerprint(a) != summaries.session_fingerprint(b)
 
 
-def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
+def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch, ports):
     database = _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "改支付", "u1"),
@@ -91,7 +90,6 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    ports = current()
     first = summaries.build_backbone("claude", "fsr_x", ports)
     assert first["segment_count"] == 2
     assert len(first["pending"]) == 2
@@ -116,18 +114,17 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch):
     assert len(rebuilt["pending"]) == 2
 
 
-def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch):
+def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch, ports):
     _use_database(tmp_path, monkeypatch)
     session = _session([_msg("user", "只此一轮", "u1")])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
-    ports = current()
     first = summaries.build_backbone("claude", "fsr_x", ports)
     again = summaries.build_backbone("claude", "fsr_x", ports)
     assert first["fingerprint"] == again["fingerprint"]
 
 
 def test_build_backbone_refreshes_structure_for_textless_message(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, ports):
     _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "改支付", "u1"),
@@ -136,7 +133,6 @@ def test_build_backbone_refreshes_structure_for_textless_message(
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    ports = current()
     first = summaries.build_backbone("claude", "fsr_x", ports)
     first_hash = first["segments"][0]["hash"]
     summaries.set_summaries(
@@ -151,7 +147,7 @@ def test_build_backbone_refreshes_structure_for_textless_message(
     assert rebuilt["segments"][0]["digest"] == "已修改支付逻辑"
 
 
-def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
+def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch, ports):
     _use_database(tmp_path, monkeypatch)
     session = _session([
         _msg("user", "第一轮", "u1"),
@@ -159,7 +155,6 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
     ])
     monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
 
-    ports = current()
     first = summaries.build_backbone("claude", "fsr_x", ports)
     second_hash = first["segments"][1]["hash"]
     summaries.set_summaries(
@@ -174,14 +169,14 @@ def test_build_backbone_refreshes_compaction_boundary(tmp_path, monkeypatch):
     assert rebuilt["segments"][1]["digest"] == "第二轮摘要"
 
 
-def test_set_summaries_requires_backbone(tmp_path, monkeypatch):
+def test_set_summaries_requires_backbone(tmp_path, monkeypatch, ports):
     _use_database(tmp_path, monkeypatch)
     with pytest.raises(SummaryBackboneMissingError):
-        summaries.set_summaries("claude", "missing", {"sha256:x": "y"}, current())
+        summaries.set_summaries("claude", "missing", {"sha256:x": "y"}, ports)
 
 
 def test_summary_cache_is_scoped_by_tool_and_native_session_id(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, ports):
     database = _use_database(tmp_path, monkeypatch)
     database.store_session_summary({
         "tool": "claude", "id": "shared", "fingerprint": "claude-fp",
@@ -192,7 +187,6 @@ def test_summary_cache_is_scoped_by_tool_and_native_session_id(
         "segments": [],
     }, 2)
 
-    ports = current()
     assert summaries.get_backbone("claude", "shared", ports)["fingerprint"] == "claude-fp"
     assert summaries.get_backbone("codex", "shared", ports)["fingerprint"] == "codex-fp"
 
