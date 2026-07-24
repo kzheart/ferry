@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from ...errors import SessionNotFoundError
-from ...storage.snapshots import snapshot_file
+from ...operations.snapshots import snapshot_file
 
 
 def resolve(ref: str) -> Path:

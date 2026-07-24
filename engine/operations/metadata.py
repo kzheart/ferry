@@ -10,7 +10,7 @@ from pathlib import Path
 from ..context import EngineContext
 from ..errors import ConcurrentModificationError
 from ..storage.database import StateDatabase
-from ..storage.session_metadata import metadata_key
+from .metadata_store import metadata_key
 
 
 def _database(ports: EngineContext) -> StateDatabase:

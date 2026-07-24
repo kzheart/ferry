@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import ConcurrentModificationError, OperationUnsupportedError
-from ...storage.snapshots import snapshot_payload
+from ...operations.snapshots import snapshot_payload
 from ..shared.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import reader as opencode_reader
