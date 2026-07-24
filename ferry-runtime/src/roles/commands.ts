@@ -5,7 +5,7 @@ import {
   requireString,
   type CommandEnvelope,
 } from "../server/messages.js";
-import type { RoleInput } from "./role-repository.js";
+import type { RoleInput } from "./role-store.js";
 import type { RoleService } from "./role-service.js";
 
 type RoleCommandResult =
