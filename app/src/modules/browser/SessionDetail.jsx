@@ -1,284 +1,27 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { supportsAssistantReplyEditing, supportsSessionEditing,
   TOOL_NAME, resumeDescriptor, TOOLS } from "../../shared/contracts/tools.js";
-import { ACCENT, fmtSize } from "../../shared/ui/toolDisplay.js";
+import { fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
-import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
-  PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../shared/ui/icons.jsx";
-import Markdown from "../../shared/ui/Markdown.jsx";
-import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
+import {
+  CheckIcon,
+  CopyIcon,
+  MigrateIcon,
+  RefreshIcon,
+  Spinner,
+  TerminalIcon,
+  ToolIcon,
+} from "../../shared/ui/icons.jsx";
 import PendingEditBar from "./PendingEditBar.jsx";
 import {
   CompactionBoundary,
   ContextStatusChip,
 } from "./SessionContext.jsx";
 import SessionImagePreview from "./SessionImagePreview.jsx";
-
-const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」
-const LONG_TEXT = 800;  // 超过此长度(或行数)的消息默认折叠
-const LONG_LINES = 12;
-const FOLD_MAX_H = 250;
-
-const withoutImagePlaceholders = text => String(text || "")
-  .replace(/\s*\[Image #\d+\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
-
-function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
-  return (
-    <button title={title} onClick={onClick} {...rest}
-      className={`ficon-btn${danger ? " danger" : ""}${accent ? " accent" : ""}`}
-      style={style}>{children}</button>
-  );
-}
-
-// 过长的消息默认折叠,点击展开;fade 为折叠时渐隐遮罩贴合的背景色
-function Foldable({ text, fade, children }) {
-  const { t: tt } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const long = text.length > LONG_TEXT ||
-    (text.match(/\n/g)?.length || 0) > LONG_LINES;
-  if (!long) return children;
-  return (
-    <>
-      <div style={{ position: "relative", overflow: "hidden",
-        maxHeight: open ? undefined : FOLD_MAX_H }}>
-        {children}
-        {!open && (
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 52,
-            pointerEvents: "none", background: `linear-gradient(to bottom, transparent, ${fade})` }} />
-        )}
-      </div>
-      <button type="button" onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
-        style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6, padding: 0,
-          border: "none", background: "transparent", color: "var(--tx4)", fontFamily: "inherit",
-          fontSize: 11, fontWeight: 600, cursor: "default" }}>
-        <Caret open={open} size={9} />
-        {open ? tt("browser:round.collapse") : tt("browser:round.expand", { n: text.length })}
-      </button>
-    </>
-  );
-}
-
-function ToolCard({ t, tt, open, onToggle }) {
-  const big = (t.size || 0) > BIG_OUT;
-  const cmd = typeof t.input === "object"
-    ? (t.input.command || t.input.file_path || t.input.pattern ||
-       JSON.stringify(t.input).slice(0, 80))
-    : String(t.input || "").slice(0, 80);
-  const out = t.output || tt("browser:tool.noOutput");
-  return (
-    <div style={{ margin: "5px 0", border: "1px solid var(--line3)", borderRadius: 8,
-      overflow: "hidden", background: "var(--fill)" }}>
-      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9,
-        padding: "7px 11px", cursor: "default" }}>
-        <Caret open={open} size={10} />
-        <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--tx2b)" }}>{t.name}</span>
-        <span className="mono" style={{ fontSize: 11, color: "var(--tx4)", whiteSpace: "nowrap",
-          overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{cmd}</span>
-        {big && (
-          <span style={{ fontSize: 10, color: "var(--warn-deep)", background: "var(--warn-bg)",
-            padding: "1px 7px", borderRadius: 20, flex: "none" }}>{tt("browser:tool.bigOutput", { size: fmtSize(t.size) })}</span>
-        )}
-      </div>
-      {open && (
-        <pre className="mono fscroll selectable" style={{ margin: 0, padding: "11px 13px",
-          fontSize: 11, lineHeight: 1.6, color: "var(--tx2b)", whiteSpace: "pre-wrap",
-          maxHeight: 200, overflow: "auto", background: "var(--surface)",
-          borderTop: "1px solid var(--line5)" }}>
-          {out.slice(0, 200000)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
-  onRewrite, onUpdateRewrite, onCancelRewrite, migratable,
-  replyOp, canEditReply, replyEditBlocked, onStartReply, onUpdateReply, onCancelReply,
-  scopeOn, onScope, onClearScope, onMigrateScope, scopeStats, onOpenImages }) {
-  const { t: tt } = useTranslation();
-  const [open, setOpen] = useState({});
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [rewEditing, setRewEditing] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const taRef = useRef(null);
-  const userText = useMemo(() => withoutImagePlaceholders(r.user), [r.user]);
-  const shownUserText = rewOp ? withoutImagePlaceholders(rewOp.text) : userText;
-  const images = r.images || [];
-  const fullAiText = r.final || "";
-  const aiText = fullAiText.slice(0, 8000);
-  const deleted = !!delOp;
-
-  const copyAi = async () => {
-    try {
-      await writeClipboardText(fullAiText);
-      setCopied(true); setTimeout(() => setCopied(false), 1400);
-    } catch {}
-  };
-  const fitTa = el => {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight, 48)}px`;
-  };
-  const startRewrite = () => {
-    onRewrite();
-    setRewEditing(true);
-    setTimeout(() => { const el = taRef.current; if (el) { fitTa(el); el.focus(); } }, 0);
-  };
-
-  return (
-    <div className="fround" data-round={r.n} style={{ marginBottom: editable ? 10 : 30 }}>
-      {editable && (
-        <div className={deleted || rewOp ? undefined : "fhact"}
-          style={{ display: "flex", alignItems: "center", gap: 9, margin: "10px 0 8px" }}>
-          <span style={{ width: 20, height: 20, flex: "none", borderRadius: "50%",
-            border: "1.5px solid var(--line2)", display: "inline-flex", alignItems: "center",
-            justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--tx4b)" }}>{r.n}</span>
-          <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-          <div style={{ display: "flex", gap: 3 }}>
-            {deleted ? (
-              <IconBtn title={tt("browser:round.undoDelete")} onClick={onUndoDelete}><UndoIcon /></IconBtn>
-            ) : (
-              <IconBtn title={tt("browser:round.deleteTurn", { n: r.n })} danger onClick={onDelete}><TrashIcon /></IconBtn>
-            )}
-            {r.locator && !deleted &&
-              <IconBtn title={tt("browser:round.rewriteUser")} onClick={startRewrite}><PencilIcon /></IconBtn>}
-          </div>
-        </div>
-      )}
-      <div className={deleted ? "fdel" : undefined}>
-        {images.length > 0 && (
-          <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0 4px" }}>
-            <button type="button" title={tt("browser:round.openImages", { n: images.length })} onClick={() => onOpenImages(images)}
-              style={{ display: "inline-flex", alignItems: "center",
-              gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--chip)",
-              color: "var(--tx3b)", fontSize: 11, fontWeight: 600, border: "1px solid var(--line4)",
-              cursor: "pointer", boxShadow: "0 1px 0 rgba(255, 255, 255, .08)" }}>
-              <ImageGlyph /> {tt("browser:round.viewImages", { n: images.length })}</button>
-          </div>
-        )}
-        {(shownUserText || (rewOp && rewEditing)) && (
-          <div style={{ display: "flex", justifyContent: "flex-end", margin: "6px 0" }}>
-            {rewOp && rewEditing && !deleted ? (
-              <div style={{ maxWidth: "82%", width: "82%", position: "relative" }}>
-                <textarea ref={el => { taRef.current = el; if (el) fitTa(el); }}
-                  className="fscroll selectable" value={rewOp.text}
-                  onChange={e => { onUpdateRewrite(e.target.value); fitTa(e.target); }}
-                  onKeyDown={e => {
-                    if (e.key === "Escape") { e.preventDefault(); onCancelRewrite(); setRewEditing(false); }
-                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                      e.preventDefault(); setRewEditing(false);
-                    }
-                  }}
-                  style={{ width: "100%", display: "block", resize: "none", overflow: "hidden",
-                    boxSizing: "border-box", background: "var(--fill4)", color: "var(--tx1b)",
-                    border: `1.5px solid ${ACCENT}`, padding: "9px 14px", borderRadius: 16,
-                    fontSize: 13, lineHeight: 1.65, userSelect: "text",
-                    fontFamily: "inherit", whiteSpace: "pre-wrap", overflowWrap: "break-word" }} />
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 3, marginTop: 6 }}>
-                  <IconBtn title={tt("browser:round.cancelRewrite")} onClick={() => { onCancelRewrite(); setRewEditing(false); }}>
-                    <CloseIcon /></IconBtn>
-                  <IconBtn title={tt("browser:round.confirmRewrite")} accent onClick={() => setRewEditing(false)}>
-                    <CheckIcon /></IconBtn>
-                </div>
-              </div>
-            ) : (
-              <div className="fdel-text selectable" onClick={rewOp && !deleted ? startRewrite : undefined}
-                title={rewOp && !deleted ? tt("browser:round.clickToEdit") : undefined}
-                style={{ maxWidth: "82%", background: "var(--fill4)", color: "var(--tx1b)",
-                  padding: "9px 14px", borderRadius: 16, fontSize: 13, lineHeight: 1.65,
-                  overflowWrap: "break-word",
-                  cursor: rewOp && !deleted ? "text" : undefined }}>
-                <Foldable text={shownUserText} fade="var(--fill4)">
-                  <div style={{ whiteSpace: "pre-wrap" }}>{shownUserText.slice(0, 4000)}</div>
-                </Foldable>
-                {rewOp && !deleted && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 8,
-                    color: ACCENT, fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    <PencilIcon size={10} /> {tt("browser:round.rewritten")}</span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        {!replyOp && r.steps.length > 0 && (
-          <div style={{ margin: "8px 0" }}>
-            <div onClick={() => setToolsOpen(v => !v)} style={{ display: "inline-flex",
-              alignItems: "center", gap: 6, padding: "3px 8px 3px 4px", borderRadius: 6,
-              cursor: "default", color: "var(--tx4)", fontSize: 12 }} className="hov-ghost">
-              <Caret open={toolsOpen} size={9} />
-              <span>{tt("browser:tool.stepCount", { n: r.steps.length })}</span>
-            </div>
-            {toolsOpen && (
-              <div style={{ marginLeft: 18, marginTop: 2, borderLeft: "2px solid var(--line5)",
-                paddingLeft: 13 }}>
-                {r.steps.map((s, i) => s.kind === "text" ? (
-                  <div key={i} className="selectable" style={{ margin: "7px 0", fontSize: 12,
-                    lineHeight: 1.65, color: "var(--tx3b)", whiteSpace: "pre-wrap",
-                    overflowWrap: "break-word" }}>{s.text.slice(0, 4000)}</div>
-                ) : (
-                  <ToolCard key={i} t={s.tool} tt={tt} open={open[i] ?? false}
-                    onToggle={() => setOpen(o => ({ ...o, [i]: !(o[i] ?? false) }))} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {!replyOp && (aiText || (canEditReply && !deleted)) && (
-          <div style={{ margin: aiText ? "10px 0 0" : "6px 0 0" }}>
-            {aiText && <div className="fdel-text"><Markdown text={aiText} /></div>}
-            <div className="fhact" style={{ display: "flex", gap: 3, marginTop: 4 }}>
-              {aiText && (
-                <IconBtn title={copied ? tt("browser:round.copiedAi") : tt("browser:round.copyAi")} onClick={copyAi}>
-                  {copied ? <CheckIcon /> : <CopyIcon />}</IconBtn>
-              )}
-              {canEditReply && !deleted && (
-                <IconBtn onClick={onStartReply} disabled={replyEditBlocked}
-                  title={replyEditBlocked ? tt("browser:replyEditor.blockedHint") : tt("browser:replyEditor.startHint")}>
-                  <PencilIcon /></IconBtn>
-              )}
-            </div>
-          </div>
-        )}
-        {!deleted && replyOp && (
-          <div style={{ marginTop: 7 }}>
-            <AssistantReplyEditor op={replyOp}
-              onChange={onUpdateReply} onCancel={onCancelReply} />
-          </div>
-        )}
-      </div>
-      {migratable && (
-        <div style={{ margin: "10px 0 0" }}>
-          {!scopeOn ? (
-            <div className={r.n === 1 ? undefined : "fhact"}
-              style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-              <button data-guide={r.n === 1 ? "scope" : undefined}
-                className="ficon-btn accent" onClick={onScope}
-                style={{ width: "auto", padding: "0 11px", gap: 6, fontSize: 11, fontWeight: 500,
-                  border: "1px dashed var(--acc-line2)", borderRadius: 13 }}>
-                <BookmarkIcon /> {tt("browser:round.scopeHere")}</button>
-              <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-            </div>
-          ) : (
-            <div style={{ border: "1px solid var(--acc-line2)", background: "var(--acc-soft5)", borderRadius: 8,
-              padding: "11px 13px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 600, color: "var(--acc-text)", fontSize: 12 }}>{tt("browser:round.scopeOnly", { n: r.n })}</span>
-                <IconBtn title={tt("browser:round.cancel")} onClick={onClearScope} style={{ marginLeft: "auto" }}><CloseIcon /></IconBtn>
-              </div>
-              <div style={{ fontSize: 12, color: "var(--tx2b)", marginTop: 5 }}>{scopeStats}</div>
-              <button className="fbtn-primary" onClick={onMigrateScope}
-                style={{ marginTop: 9, height: 28, padding: "0 13px", fontSize: 12 }}>{tt("browser:round.migrateWithScope")}</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import SessionRound from "./SessionRound.jsx";
 
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({ meta, data, error,
@@ -398,7 +141,7 @@ export default memo(function SessionDetail({ meta, data, error,
             }
             const r = item.round;
             return (
-            <Round key={item.key} r={r} editable={canEdit}
+            <SessionRound key={item.key} r={r} editable={canEdit}
               delOp={opFor(r.n, "delete")} rewOp={opFor(r.n, "rewrite")}
               replyOp={opFor(r.n, "assistant-reply")}
               canEditReply={canEditReply && !!r.assistantReply}
