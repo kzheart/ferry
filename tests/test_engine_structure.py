@@ -92,3 +92,11 @@ def test_runtime_session_storage_is_its_own_sqlite_capability():
     assert "def load_runtime_sessions(" not in database
     assert "def commit_runtime_session(" not in database
     assert "def delete_runtime_session(" not in database
+
+
+def test_metadata_and_history_are_separate_sqlite_capabilities():
+    database = (ENGINE / "storage/database.py").read_text()
+    assert (ENGINE / "storage/session_metadata.py").is_file()
+    assert (ENGINE / "storage/migration_history.py").is_file()
+    assert "def list_session_metadata(" not in database
+    assert "def append_migration_history(" not in database

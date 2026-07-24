@@ -232,16 +232,16 @@ def test_state_database_rejects_previous_current_schema_without_migration(tmp_pa
 
 def test_session_metadata_batch_cas_is_atomic(tmp_path):
     database = StateDatabase(tmp_path / "ferry-state.sqlite3", recover_interrupted=False)
-    database.set_session_metadata("claude", "one", {"name": "before"}, 1)
-    database.set_session_metadata("codex", "two", {"pinned": True}, 1)
+    database.metadata.set("claude", "one", {"name": "before"}, 1)
+    database.metadata.set("codex", "two", {"pinned": True}, 1)
 
-    changed = database.compare_and_set_session_metadata([
+    changed = database.metadata.compare_and_set([
         ("claude", "one", {"name": "before"}, {"name": "after"}),
         ("codex", "two", {}, {"archived": True}),
     ], 2)
 
     assert changed is None
-    assert database.list_session_metadata() == {
+    assert database.metadata.list_all() == {
         "claude\0one": {"name": "before"},
         "codex\0two": {"pinned": True},
     }
@@ -249,10 +249,10 @@ def test_session_metadata_batch_cas_is_atomic(tmp_path):
 
 def test_session_metadata_isolated_by_tool_and_native_session_id(tmp_path):
     database = StateDatabase(tmp_path / "ferry-state.sqlite3", recover_interrupted=False)
-    database.set_session_metadata("claude", "shared-id", {"name": "Claude"}, 1)
-    database.set_session_metadata("codex", "shared-id", {"name": "Codex"}, 2)
+    database.metadata.set("claude", "shared-id", {"name": "Claude"}, 1)
+    database.metadata.set("codex", "shared-id", {"name": "Codex"}, 2)
 
-    assert database.list_session_metadata() == {
+    assert database.metadata.list_all() == {
         "claude\0shared-id": {"name": "Claude"},
         "codex\0shared-id": {"name": "Codex"},
     }

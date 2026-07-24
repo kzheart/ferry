@@ -10,6 +10,7 @@ from pathlib import Path
 from ..context import EngineContext
 from ..errors import ConcurrentModificationError
 from ..storage.database import StateDatabase
+from ..storage.session_metadata import metadata_key
 
 
 def _database(ports: EngineContext) -> StateDatabase:
@@ -24,23 +25,25 @@ def _now_ms() -> int:
 
 
 def list_all(ports: EngineContext) -> dict:
-    return _database(ports).list_session_metadata()
+    return _database(ports).metadata.list_all()
 
 
 def key(tool: str, session_id: str) -> str:
-    return StateDatabase.metadata_key(tool, session_id)
+    return metadata_key(tool, session_id)
 
 
 def set_entry(tool: str, session_id: str, patch: dict,
               ports: EngineContext) -> dict:
-    return _database(ports).set_session_metadata(tool, session_id, patch, _now_ms())
+    return _database(ports).metadata.set(
+        tool, session_id, patch, _now_ms(),
+    )
 
 
 def compare_and_set_entry(
         tool: str, session_id: str, expected: dict, patch: dict,
         ports: EngineContext,
 ) -> dict:
-    result = _database(ports).compare_and_set_session_metadata(
+    result = _database(ports).metadata.compare_and_set(
         [(tool, session_id, expected, patch)], _now_ms(),
     )
     if result is None:
@@ -56,7 +59,7 @@ def compare_and_set_entries(changes: list[dict], ports: EngineContext) -> dict:
         )
         for change in changes
     ]
-    result = _database(ports).compare_and_set_session_metadata(encoded, _now_ms())
+    result = _database(ports).metadata.compare_and_set(encoded, _now_ms())
     if result is None:
         raise ConcurrentModificationError("会话元数据在整理提案审批后已变化")
     return result

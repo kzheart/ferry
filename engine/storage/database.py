@@ -11,7 +11,14 @@ import threading
 from dataclasses import asdict
 from pathlib import Path
 
+from .migration_history import MigrationHistoryStore
 from .runtime_sessions import RuntimeSessionStore
+from .session_metadata import (
+    SessionMetadataStore,
+    merge_metadata,
+    metadata_entry,
+    metadata_key,
+)
 
 
 SCHEMA_VERSION = 8
@@ -24,6 +31,11 @@ class StateDatabase:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize(recover_interrupted=recover_interrupted)
         self.runtime_sessions = RuntimeSessionStore(
+            self._connect,
+            self._lock,
+        )
+        self.metadata = SessionMetadataStore(self._connect, self._lock)
+        self.migration_history = MigrationHistoryStore(
             self._connect,
             self._lock,
         )
@@ -379,41 +391,6 @@ class StateDatabase:
             ).rowcount
             return changed == 1
 
-    def append_migration_history(self, history_id: str, entry: dict) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute(
-                "INSERT INTO migration_history(history_id, entry_json) VALUES (?, ?)",
-                (
-                    history_id,
-                    json.dumps(
-                        entry, ensure_ascii=False, sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                ),
-            )
-
-    def list_migration_history(self) -> list[dict]:
-        with self._lock, self._connect() as connection:
-            rows = connection.execute(
-                "SELECT history_id, entry_json FROM migration_history ORDER BY sequence DESC"
-            ).fetchall()
-        return [
-            {**json.loads(row["entry_json"]), "id": row["history_id"]}
-            for row in rows
-        ]
-
-    def delete_migration_history(self, history_id: str) -> dict:
-        with self._lock, self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            deleted = connection.execute(
-                "DELETE FROM migration_history WHERE history_id = ?", (history_id,)
-            ).rowcount == 1
-            remaining = connection.execute(
-                "SELECT COUNT(*) FROM migration_history"
-            ).fetchone()[0]
-            connection.commit()
-        return {"deleted": deleted, "id": history_id, "remaining": remaining}
-
     def get_session_summary(self, tool: str, session_id: str) -> dict | None:
         with self._lock, self._connect() as connection:
             row = connection.execute(
@@ -654,7 +631,7 @@ class StateDatabase:
 
             current_metadata: dict[str, dict] = {}
             for target in proposal["targets"]:
-                key = self.metadata_key(target["tool"], target["id"])
+                key = metadata_key(target["tool"], target["id"])
                 metadata = connection.execute(
                     """
                     SELECT value_json FROM session_metadata
@@ -662,7 +639,7 @@ class StateDatabase:
                     """,
                     (target["tool"], target["id"]),
                 ).fetchone()
-                value = self._metadata_entry(metadata)
+                value = metadata_entry(metadata)
                 if value != target["current"]:
                     proposal["status"] = "stale"
                     proposal["updated_at"] = now
@@ -677,8 +654,8 @@ class StateDatabase:
 
             applied: dict[str, dict] = {}
             for target in proposal["targets"]:
-                key = self.metadata_key(target["tool"], target["id"])
-                entry = self._merge_metadata(
+                key = metadata_key(target["tool"], target["id"])
+                entry = merge_metadata(
                     current_metadata[key], target["suggested"],
                 )
                 if entry:
@@ -762,82 +739,3 @@ class StateDatabase:
                     (proposal_id,),
                 ).fetchall()
         return [json.loads(row["payload_json"]) for row in rows]
-
-    @staticmethod
-    def _metadata_entry(row: sqlite3.Row | None) -> dict:
-        return json.loads(row["value_json"]) if row is not None else {}
-
-    @staticmethod
-    def _merge_metadata(current: dict, patch: dict) -> dict:
-        merged = {**current, **patch}
-        return {
-            key: value for key, value in merged.items()
-            if value not in (None, False, "", [])
-        }
-
-    @staticmethod
-    def metadata_key(tool: str, session_id: str) -> str:
-        return f"{tool}\0{session_id}"
-
-    def list_session_metadata(self) -> dict[str, dict]:
-        with self._lock, self._connect() as connection:
-            rows = connection.execute(
-                "SELECT tool, session_id, value_json FROM session_metadata"
-            ).fetchall()
-        return {
-            self.metadata_key(row["tool"], row["session_id"]): json.loads(row["value_json"])
-            for row in rows
-        }
-
-    def set_session_metadata(
-            self, tool: str, session_id: str, patch: dict, now: int,
-    ) -> dict:
-        return self.compare_and_set_session_metadata(
-            [(tool, session_id, None, patch)], now,
-        )[self.metadata_key(tool, session_id)]
-
-    def compare_and_set_session_metadata(
-            self, changes: list[tuple[str, str, dict | None, dict]], now: int,
-    ) -> dict[str, dict] | None:
-        """原子更新元数据；expected 为 None 时不进行 CAS。"""
-        with self._lock, self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            current: dict[str, dict] = {}
-            for tool, session_id, expected, _patch in changes:
-                key = self.metadata_key(tool, session_id)
-                row = connection.execute(
-                    "SELECT value_json FROM session_metadata WHERE tool = ? AND session_id = ?",
-                    (tool, session_id),
-                ).fetchone()
-                value = self._metadata_entry(row)
-                if expected is not None and value != expected:
-                    connection.rollback()
-                    return None
-                current[key] = value
-
-            result: dict[str, dict] = {}
-            for tool, session_id, _expected, patch in changes:
-                key = self.metadata_key(tool, session_id)
-                entry = self._merge_metadata(current[key], patch)
-                if entry:
-                    connection.execute(
-                        """
-                        INSERT INTO session_metadata(tool, session_id, value_json, updated_at)
-                        VALUES (?, ?, ?, ?)
-                        ON CONFLICT(tool, session_id) DO UPDATE SET
-                            value_json = excluded.value_json,
-                            updated_at = excluded.updated_at
-                        """,
-                        (tool, session_id, json.dumps(
-                            entry, ensure_ascii=False, sort_keys=True,
-                            separators=(",", ":"),
-                        ), now),
-                    )
-                else:
-                    connection.execute(
-                        "DELETE FROM session_metadata WHERE tool = ? AND session_id = ?",
-                        (tool, session_id),
-                    )
-                result[key] = entry
-            connection.commit()
-            return result
