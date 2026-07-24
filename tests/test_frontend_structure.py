@@ -39,6 +39,7 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/browser/SessionImagePreview.jsx").is_file()
     assert (FRONTEND / "modules/browser/SessionContext.jsx").is_file()
     assert (FRONTEND / "modules/browser/PendingEditBar.jsx").is_file()
+    assert (FRONTEND / "modules/browser/SessionRound.jsx").is_file()
     assert (FRONTEND / "modules/browser/BrowserOverlays.jsx").is_file()
     assert (FRONTEND / "modules/editing/EditOverlays.jsx").is_file()
     assert (FRONTEND / "modules/migration/HistoryOverlays.jsx").is_file()
@@ -57,6 +58,13 @@ def test_module_models_live_with_their_consuming_capability():
     assert "AppOverlayController" in app
     assert "document.addEventListener(\"keydown\"" not in app
     assert app.index("metadata: metaMap") < app.index("useLibraryResourcePane({")
+
+    session_detail = (
+        FRONTEND / "modules/browser/SessionDetail.jsx"
+    ).read_text()
+    assert "function Round(" not in session_detail
+    assert "function ToolCard(" not in session_detail
+    assert "SessionRound" in session_detail
 
     tool_trace = (FRONTEND / "modules/askferry/AgentToolTrace.jsx").read_text()
     workflow_cards = (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").read_text()
