@@ -16,6 +16,7 @@ from ..domain.errors import (
     ConcurrentModificationError,
     LocatorStaleError,
     OperationUnsupportedError,
+    SnapshotInvalidSourceError,
 )
 from . import agent_tools, services, verification as probe_mod
 from . import session_meta
@@ -656,13 +657,29 @@ class OperationService:
         if not self._database().claim_recovery(recovery_id, _now_ms()):
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
         try:
-            result = services.session_undelete(recovery["snapshot"])
+            result = self._restore_deleted_session(recovery["snapshot"])
         except Exception:
             self._database().release_recovery(recovery_id, _now_ms())
             raise
         if not self._database().complete_recovery(recovery_id, _now_ms()):
             raise RuntimeError("删除恢复状态提交失败")
         return {**result, "recovery_id": recovery_id}
+
+    def _restore_deleted_session(self, snapshot: str) -> dict:
+        path = Path(snapshot)
+        if path.parent != Path(self._ports.snapshot_dir()):
+            raise SnapshotInvalidSourceError(
+                "只允许从快照目录恢复", {"snapshot": snapshot})
+        try:
+            metadata = json.loads(path.with_suffix(".meta.json").read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise SnapshotInvalidSourceError(
+                "快照缺少元数据,无法撤销", {"snapshot": snapshot}) from error
+        tool = metadata.get("tool")
+        if not isinstance(tool, str) or not tool:
+            raise SnapshotInvalidSourceError(
+                "快照缺少来源 Agent", {"snapshot": snapshot})
+        return self._ports.adapter(tool).lifecycle.restore_delete(path, metadata)
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
