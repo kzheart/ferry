@@ -318,9 +318,9 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
 
     restored = []
     monkeypatch.setattr(
-        operations.services,
-        "session_undelete",
-        lambda snapshot: restored.append(snapshot) or {
+        operations.OperationService,
+        "_restore_deleted_session",
+        lambda _self, snapshot: restored.append(snapshot) or {
             "ok": True,
             "target": str(agent_environment["transcript"]),
         },
