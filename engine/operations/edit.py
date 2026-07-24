@@ -9,6 +9,7 @@ from ..errors import (
 )
 from ..sessions import catalog as agent_tools
 from ..sessions.index import AgentSessionIndex
+from ..sessions.safety import bounded_json, finalize_dto, record_session_id, redact
 from .plan_store import OperationPlan
 from .types import AssistantReply
 
@@ -201,15 +202,15 @@ class EditOperationHandler:
             )
         except LocatorStaleError as error:
             raise self.public_locator_error(ops) from error
-        return agent_tools._finalize_dto({
+        return finalize_dto({
             "tool": record.tool,
             "ref": record.opaque_ref,
             "mode": "edit",
-            "session_id": agent_tools._record_session_id(record),
-            "revision": agent_tools._redact(str(result["revision"]), 256),
-            "before": agent_tools._bounded_json(result["before"], 12 * 1024),
-            "after": agent_tools._bounded_json(result["after"], 12 * 1024),
-            "changes": agent_tools._bounded_json(result["changes"], 12 * 1024),
+            "session_id": record_session_id(record),
+            "revision": redact(str(result["revision"]), 256),
+            "before": bounded_json(result["before"], 12 * 1024),
+            "after": bounded_json(result["after"], 12 * 1024),
+            "changes": bounded_json(result["changes"], 12 * 1024),
         })
 
     @staticmethod
@@ -221,7 +222,7 @@ class EditOperationHandler:
             and isinstance(operation.get("turn"), str)
         ), None)
         if authored is None:
-            return agent_tools._public_locator_error(ops)
+            return agent_tools.public_locator_error(ops)
         return LocatorStaleError(
             "轮次定位信息与当前会话不匹配",
             {

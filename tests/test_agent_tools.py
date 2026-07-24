@@ -15,6 +15,7 @@ from engine.adapters.contracts import (
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.sessions import catalog as agent_tools
 from engine.sessions.index import AgentSessionIndex
+from engine.sessions.safety import redact
 from engine.sessions import scan as scanning
 from engine.app import EngineService
 from engine.context import EngineContext
@@ -523,7 +524,7 @@ def test_redaction_covers_cross_platform_paths_and_common_credentials():
         "-----END ENCRYPTED PRIVATE KEY----- "
         "-----BEGIN DSA PRIVATE KEY-----\ndsa\n-----END DSA PRIVATE KEY----- "
         + private_key)
-    redacted = agent_tools._redact(value)
+    redacted = redact(value)
     for secret in ("/root", "/Volumes", "/mnt", "C:/", "D:\\", "server", "ghp_",
                    "github_pat_", "gho_", "ghu_", "ghs_", "ghr_", "AKIA",
                    "abc123", "enc", "dsa"):

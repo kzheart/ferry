@@ -9,6 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from ..contracts.operations import OPERATION_KINDS
 from ..sessions import catalog as agent_tools
 from ..sessions.index import AgentSessionIndex
+from ..sessions.safety import record_session_id, redact
 from ..context import EngineContext
 from ..errors import (
     AgentReferenceError,
@@ -107,7 +108,7 @@ class OperationService:
         source_tool = operation_input["source_tool"]
         ref = operation_input["ref"]
         before = self._index.resolve(source_tool, ref)
-        session = agent_tools._read_record(self._index, before)
+        session = agent_tools.read_indexed_session(self._index, before)
         preview = self._migration.preview(
             source_tool,
             operation_input["target_tool"],
@@ -176,8 +177,8 @@ class OperationService:
         preview = {
             "tool": record.tool,
             "ref": record.opaque_ref,
-            "session_id": agent_tools._record_session_id(record),
-            "title": agent_tools._redact(str(record.row.get("title") or ""), 512),
+            "session_id": record_session_id(record),
+            "title": redact(str(record.row.get("title") or ""), 512),
             "undoable": bool(getattr(lifecycle, "delete_undoable", False)),
         }
         after = self._index.resolve(
@@ -363,7 +364,7 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在迁移计划生成后已变化，请重新计划"
             )
-        session = agent_tools._read_record(self._index, record)
+        session = agent_tools.read_indexed_session(self._index, record)
         result = self._migration.apply(
             params["source_tool"],
             params["target_tool"],
