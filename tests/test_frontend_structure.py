@@ -143,3 +143,35 @@ def test_desktop_webview_has_a_restricted_content_security_policy():
     html = (ROOT / "app/index.html").read_text()
     assert '<script type="module" src="/src/themeBootstrap.js">' in html
     assert "localStorage.getItem" not in html
+
+
+def test_agent_icons_are_resources_not_inline_code():
+    """Agent 图标是 assets 资源；新增 Agent 放一个 svg 即可，不必改 icons.jsx。"""
+    icons = (FRONTEND / "shared/ui/icons.jsx").read_text(encoding="utf-8")
+    assert "import.meta.glob" in icons, "Agent 图标应从 assets/icons 静态收集"
+    assert "CLAUDE_PATH" not in icons
+    assert "CODEX_PATH" not in icons
+    assert "OPENCODE_FRAME_PATH" not in icons
+
+    declared = {
+        agent["icon"]
+        for agent in json.loads(
+            (ROOT / "contracts/agents.json").read_text(encoding="utf-8")
+        )["agents"]
+    }
+    available = {
+        path.stem for path in (FRONTEND / "assets/icons").glob("*.svg")
+    }
+    assert declared <= available, (
+        f"契约声明的图标缺少资源: {sorted(declared - available)}"
+    )
+
+
+def test_agent_icon_assets_are_self_contained():
+    """svg 自带底色与留白，渲染端零参数；不得引用外部资源。"""
+    for path in (FRONTEND / "assets/icons").glob("*.svg"):
+        markup = path.read_text(encoding="utf-8")
+        assert 'viewBox="0 0 24 24"' in markup, path.name
+        assert "<rect" in markup, f"{path.name} 缺少烘焙底色"
+        assert "http://www.w3.org/2000/svg" in markup, path.name
+        assert "xlink:href" not in markup and "<image" not in markup, path.name

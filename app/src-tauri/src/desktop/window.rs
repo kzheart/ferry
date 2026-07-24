@@ -41,13 +41,39 @@ fn align_traffic_lights(window: &tauri::Window) {
     }
 }
 
+/// 窗口首次显示前后 AppKit 会重排标题栏(vibrancy 层、webview 挂载、窗口状态恢复),
+/// 单次对齐会被覆盖成默认位置且此后没有事件再触发,红绿灯就一直偏上。
+/// 因此启动时立即摆一次,再在显示完成后的几个时间点补摆。
+#[cfg(target_os = "macos")]
+const STARTUP_REALIGN_DELAYS_MS: [u64; 4] = [50, 150, 400, 800];
+
+#[cfg(target_os = "macos")]
+pub(crate) fn install(window: &tauri::Window) {
+    align_traffic_lights(window);
+    let window = window.clone();
+    std::thread::spawn(move || {
+        for delay in STARTUP_REALIGN_DELAYS_MS {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+            let target = window.clone();
+            if window
+                .run_on_main_thread(move || align_traffic_lights(&target))
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
+}
+
 pub(crate) fn handle_window_event(_window: &tauri::Window, _event: &tauri::WindowEvent) {
     #[cfg(target_os = "macos")]
     if matches!(
         _event,
         tauri::WindowEvent::Resized(_)
+            | tauri::WindowEvent::Moved(_)
             | tauri::WindowEvent::Focused(_)
             | tauri::WindowEvent::ThemeChanged(_)
+            | tauri::WindowEvent::ScaleFactorChanged { .. }
     ) {
         align_traffic_lights(_window);
     }
