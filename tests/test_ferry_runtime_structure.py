@@ -56,6 +56,8 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/tools/gateway.ts").is_file()
     assert "new WorkflowRun(" not in runtime
     assert (RUNTIME / "src/agents/delegation-runner.ts").is_file()
+    assert "runOrganizationWorkflow(" not in runtime
+    assert (RUNTIME / "src/organizing/coordinator.ts").is_file()
     runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
     assert runtime_session.is_file()
     assert "class RuntimeSession" not in runtime
