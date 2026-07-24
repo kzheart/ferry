@@ -25,6 +25,7 @@ def test_frontend_uses_shell_platform_shared_and_vertical_modules():
 def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/browser/sessionModel.js").is_file()
     assert (FRONTEND / "modules/browser/sessionAttachment.js").is_file()
+    assert (FRONTEND / "modules/browser/sessionContextMenu.js").is_file()
     assert (FRONTEND / "modules/askferry/agentChatModel.js").is_file()
     assert (FRONTEND / "modules/askferry/ferryEntities.js").is_file()
     assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
