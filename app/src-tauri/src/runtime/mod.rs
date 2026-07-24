@@ -9,6 +9,10 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
+use crate::contracts::operations::{
+    OPERATION_PLAN_ID_PREFIX, OPERATION_STATUSES, OPERATION_SUCCESS_STATUS,
+    OPERATION_TERMINAL_STATUSES,
+};
 use crate::contracts::runtime_methods;
 use crate::engine::engine_request_blocking;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
@@ -619,8 +623,10 @@ fn wait_for_operation(
     let deadline = std::time::Instant::now() + OPERATION_WAIT_TIMEOUT;
     loop {
         match status.get("status").and_then(Value::as_str) {
-            Some("applied") => return Ok(status.get("result").cloned().unwrap_or(Value::Null)),
-            Some("failed" | "cancelled" | "expired") => {
+            Some(value) if value == OPERATION_SUCCESS_STATUS => {
+                return Ok(status.get("result").cloned().unwrap_or(Value::Null));
+            }
+            Some(value) if OPERATION_TERMINAL_STATUSES.contains(&value) => {
                 let error_type = status
                     .get("error_type")
                     .and_then(Value::as_str)
@@ -635,7 +641,10 @@ fn wait_for_operation(
                     json!({"plan_id": plan_id}),
                 )?;
             }
-            Some(_) => return Err("operation.invalid_status".to_owned()),
+            Some(value) if OPERATION_STATUSES.contains(&value) => {
+                return Err("operation.invalid_status".to_owned());
+            }
+            Some(_) => return Err("operation.unknown_status".to_owned()),
             None => return Err("operation.invalid_status".to_owned()),
         }
     }
@@ -645,7 +654,7 @@ fn operation_plan_id(operation: &Value) -> Result<&str, String> {
     operation
         .get("plan_id")
         .and_then(Value::as_str)
-        .filter(|plan_id| plan_id.starts_with("op_"))
+        .filter(|plan_id| plan_id.starts_with(OPERATION_PLAN_ID_PREFIX))
         .ok_or_else(|| "Engine 未返回可审批的 operation plan_id".to_owned())
 }
 

@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from ..contracts.operations import (
+    OPERATION_PLAN_ID_PREFIX,
+    OPERATION_STATUSES,
+)
 from ..errors import AgentRequestError
 from ..storage.database import StateDatabase
 
@@ -61,6 +65,12 @@ class OperationState:
     error_type: str | None = None
     updated_at: int = 0
 
+    def __post_init__(self):
+        if self.status not in OPERATION_STATUSES:
+            raise AgentRequestError(
+                "operation status 非法", {"status": self.status},
+            )
+
 
 class OperationPlanStore:
     def __init__(self, snapshot_dir: Callable[[], str | Path]):
@@ -87,7 +97,7 @@ class OperationPlanStore:
         preview_json = canonical_json(preview)
         created_at = now_ms()
         operation = OperationPlan(
-            plan_id="op_" + secrets.token_urlsafe(18),
+            plan_id=OPERATION_PLAN_ID_PREFIX + secrets.token_urlsafe(18),
             kind=operation_input["kind"],
             input_json=input_json,
             preview_json=preview_json,
@@ -102,7 +112,10 @@ class OperationPlanStore:
         return public_plan(operation)
 
     def get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
-        if not isinstance(plan_id, str) or not plan_id.startswith("op_"):
+        if (
+            not isinstance(plan_id, str)
+            or not plan_id.startswith(OPERATION_PLAN_ID_PREFIX)
+        ):
             raise AgentRequestError("plan_id 非法")
         row = self.database().get(plan_id)
         if row is None:

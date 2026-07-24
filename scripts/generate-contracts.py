@@ -14,6 +14,7 @@ ENGINE_METHODS_SOURCE = ROOT / "contracts" / "engine-methods.json"
 RUNTIME_METHODS_SOURCE = ROOT / "contracts" / "runtime-methods.json"
 IPC_SOURCE = ROOT / "contracts" / "ipc.json"
 SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
+OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
@@ -40,6 +41,12 @@ SESSION_REF_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
     ROOT / "engine/contracts/session_ref.py": "python",
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
+}
+OPERATIONS_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/operations.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
+    ROOT / "engine/contracts/operations.py": "python",
+    ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
 }
 
 
@@ -161,6 +168,39 @@ def load_session_ref() -> dict[str, object]:
     }
     if document != expected:
         raise ValueError("SessionRef 契约字段必须精确为当前 opaque ref 定义")
+    return document
+
+
+def load_operations() -> dict[str, object]:
+    document = json.loads(OPERATIONS_SOURCE.read_text())
+    expected_keys = {
+        "plan_id_prefix",
+        "kinds",
+        "edit_operations",
+        "statuses",
+        "terminal_statuses",
+        "success_status",
+    }
+    if not isinstance(document, dict) or set(document) != expected_keys:
+        raise ValueError("Operation 契约字段不完整")
+    list_fields = ("kinds", "edit_operations", "statuses", "terminal_statuses")
+    for field in list_fields:
+        values = document[field]
+        if (
+            not isinstance(values, list)
+            or not values
+            or not all(isinstance(value, str) and value for value in values)
+            or len(values) != len(set(values))
+        ):
+            raise ValueError(f"Operation {field} 必须是非空唯一字符串数组")
+    if document["plan_id_prefix"] != "op_":
+        raise ValueError("Operation plan_id_prefix 必须为 op_")
+    statuses = set(document["statuses"])
+    terminal = set(document["terminal_statuses"])
+    if not terminal < statuses:
+        raise ValueError("Operation terminal_statuses 必须是 statuses 的真子集")
+    if document["success_status"] not in terminal:
+        raise ValueError("Operation success_status 必须是终态")
     return document
 
 
@@ -446,12 +486,95 @@ def session_ref_runtime(contract: dict[str, object]) -> str:
     ))
 
 
+def operations_frontend(contract: dict[str, object]) -> str:
+    def array(values: list[str]) -> str:
+        return "[\n" + "\n".join(
+            f"  {json.dumps(value)}," for value in values
+        ) + "\n]"
+
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const OPERATION_PLAN_ID_PREFIX = {json.dumps(contract['plan_id_prefix'])};",
+        f"export const OPERATION_KINDS = Object.freeze({array(contract['kinds'])});",
+        "export const EDIT_OPERATION_KINDS = "
+        f"Object.freeze({array(contract['edit_operations'])});",
+        f"export const OPERATION_STATUSES = Object.freeze({array(contract['statuses'])});",
+        "export const OPERATION_TERMINAL_STATUSES = "
+        f"Object.freeze({array(contract['terminal_statuses'])});",
+        f"export const OPERATION_SUCCESS_STATUS = {json.dumps(contract['success_status'])};",
+        "",
+    ))
+
+
+def operations_rust(contract: dict[str, object]) -> str:
+    def compact_declaration(name: str, values: list[str]) -> str:
+        items = ", ".join(json.dumps(value) for value in values)
+        return f"pub(crate) const {name}: &[&str] =\n    &[{items}];"
+
+    def expanded_declaration(name: str, values: list[str]) -> str:
+        body = "\n".join(f"    {json.dumps(value)}," for value in values)
+        return f"pub(crate) const {name}: &[&str] = &[\n{body}\n];"
+
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f'pub(crate) const OPERATION_PLAN_ID_PREFIX: &str = "{contract["plan_id_prefix"]}";',
+        compact_declaration("OPERATION_KINDS", contract["kinds"]),
+        compact_declaration("EDIT_OPERATION_KINDS", contract["edit_operations"]),
+        expanded_declaration("OPERATION_STATUSES", contract["statuses"]),
+        compact_declaration(
+            "OPERATION_TERMINAL_STATUSES", contract["terminal_statuses"],
+        ),
+        f'pub(crate) const OPERATION_SUCCESS_STATUS: &str = "{contract["success_status"]}";',
+        "",
+    ))
+
+
+def operations_python(contract: dict[str, object]) -> str:
+    return "\n".join((
+        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
+        "from __future__ import annotations",
+        "",
+        f"OPERATION_PLAN_ID_PREFIX = {contract['plan_id_prefix']!r}",
+        f"OPERATION_KINDS = frozenset({tuple(contract['kinds'])!r})",
+        f"EDIT_OPERATION_KINDS = frozenset({tuple(contract['edit_operations'])!r})",
+        f"OPERATION_STATUSES = frozenset({tuple(contract['statuses'])!r})",
+        "OPERATION_TERMINAL_STATUSES = "
+        f"frozenset({tuple(contract['terminal_statuses'])!r})",
+        f"OPERATION_SUCCESS_STATUS = {contract['success_status']!r}",
+        "",
+    ))
+
+
+def operations_runtime(contract: dict[str, object]) -> str:
+    def array(values: list[str]) -> str:
+        return "[\n" + "\n".join(
+            f"  {json.dumps(value)}," for value in values
+        ) + "\n]"
+
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f'export const OPERATION_PLAN_ID_PREFIX = "{contract["plan_id_prefix"]}" as const;',
+        f"export const OPERATION_KINDS = {array(contract['kinds'])} as const;",
+        "export const EDIT_OPERATION_KINDS = "
+        f"{array(contract['edit_operations'])} as const;",
+        f"export const OPERATION_STATUSES = {array(contract['statuses'])} as const;",
+        "export const OPERATION_TERMINAL_STATUSES = "
+        f"{array(contract['terminal_statuses'])} as const;",
+        f'export const OPERATION_SUCCESS_STATUS = "{contract["success_status"]}" as const;',
+        "export type OperationKind = (typeof OPERATION_KINDS)[number];",
+        "export type EditOperationKind = (typeof EDIT_OPERATION_KINDS)[number];",
+        "export type OperationStatus = (typeof OPERATION_STATUSES)[number];",
+        "",
+    ))
+
+
 def contract_hash(
     agents: list[dict[str, object]],
     methods: list[dict[str, object]],
     runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
     session_ref: dict[str, object],
+    operations: dict[str, object],
 ) -> str:
     payload = json.dumps(
         {
@@ -460,6 +583,7 @@ def contract_hash(
             "runtime_methods": runtime_methods,
             "ipc": ipc,
             "session_ref": session_ref,
+            "operations": operations,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -552,6 +676,7 @@ def generated_contents(
     runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
     session_ref: dict[str, object],
+    operations: dict[str, object],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
@@ -578,8 +703,17 @@ def generated_contents(
         }[kind](session_ref)
         for path, kind in SESSION_REF_OUTPUTS.items()
     }
+    operation_contents = {
+        path: {
+            "frontend": operations_frontend,
+            "rust": operations_rust,
+            "python": operations_python,
+            "runtime": operations_runtime,
+        }[kind](operations)
+        for path, kind in OPERATIONS_OUTPUTS.items()
+    }
     digest = contract_hash(
-        agents, engine_methods, runtime_methods, ipc, session_ref,
+        agents, engine_methods, runtime_methods, ipc, session_ref, operations,
     )
     ipc_contents = {
         path: {
@@ -595,6 +729,7 @@ def generated_contents(
         | engine_contents
         | runtime_method_contents
         | session_ref_contents
+        | operation_contents
         | ipc_contents
     )
 
@@ -609,6 +744,7 @@ def main() -> int:
         load_runtime_methods(),
         load_ipc(),
         load_session_ref(),
+        load_operations(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:

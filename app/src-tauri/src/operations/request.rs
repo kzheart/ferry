@@ -4,11 +4,12 @@
 //! plan id，不能重新注入业务参数或任意 Engine method。
 
 use super::input::OperationPlanInput;
+use crate::contracts::operations::OPERATION_PLAN_ID_PREFIX;
 use serde_json::json;
 
 pub(crate) fn validate_plan_id(plan_id: &str) -> Result<(), String> {
     if !(8..=128).contains(&plan_id.len())
-        || !plan_id.starts_with("op_")
+        || !plan_id.starts_with(OPERATION_PLAN_ID_PREFIX)
         || !plan_id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
