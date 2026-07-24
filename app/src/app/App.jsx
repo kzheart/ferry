@@ -24,16 +24,7 @@ import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
-import {
-  buildLibraryGroups,
-  buildLibraryIndex,
-  libraryDirectories,
-  libraryFilterCount,
-  libraryTags,
-  libraryTokenDescriptors,
-  libraryToolCounts,
-  visibleLibraryIds,
-} from "../features/browser/libraryResourcePaneModel.js";
+import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
@@ -90,10 +81,7 @@ export default function App() {
   const [aq, setAq] = useState("");
 
   // ----- 搜索与筛选 -----
-  const [q, setQ] = useState("");
   const [hq, setHq] = useState("");
-  const [libF, setLibF] = useState(
-    { src: [...TOOLS], time: "all", dir: null, mig: false, sub: false, tag: null });
   const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
   const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
@@ -104,7 +92,6 @@ export default function App() {
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
   const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
   const [tagFor, setTagFor] = useState(null);       // {sessions} 待编辑标签的会话
-  const [multiSel, setMultiSel] = useState([]);     // 多选中的会话 UI 身份
   const [metaMap, setMetaMap] = useState({});       // 会话元数据 sidecar
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
@@ -118,7 +105,6 @@ export default function App() {
   const suppressRailClick = useRef(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
-  const [collapsedGroups, setCollapsedGroups] = useState({ earlier: true });
   const visibleIds = useRef({});
 
   const sessions = scan?.sessions || [];
@@ -133,6 +119,32 @@ export default function App() {
     })).filter(Boolean)),
     [historyRows],
   );
+  const library = useLibraryResourcePane({
+    sessions,
+    metadata: metaMap,
+    migratedSessionKeys,
+    t,
+    toolIds: TOOLS,
+    toolNames: TOOL_NAME,
+  });
+  const {
+    query: q,
+    setQuery: setQ,
+    filter: libF,
+    setFilter: setLibF,
+    counts,
+    dirs,
+    tags: allTags,
+    groups: libGroups,
+    collapsedGroups,
+    toggleGroup: onToggleGroup,
+    visibleIds: libraryVisibleIds,
+    filterCount: libFilterCount,
+    tokens: libTokens,
+    clear: clearLibF,
+    multiIds: multiSel,
+    setMultiIds: setMultiSel,
+  } = library;
   const cur = selId ? byKey[selId] : null;
   const editing = useSessionEditing({ current: cur,
     runtimeProbe: !!settings.runtimeProbe, doScan,
@@ -449,7 +461,7 @@ export default function App() {
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const ids = visibleIds.current[view] || [];
+        const ids = view === "library" ? libraryVisibleIds : (visibleIds.current[view] || []);
         if (!ids.length) return;
         const curSel = view === "library" ? selId : selHist;
         let i = ids.indexOf(curSel);
@@ -555,10 +567,6 @@ export default function App() {
     localStorage.setItem("ferry-guide-seen", "1");
   };
 
-  // ----- 资源栏数据:会话库 -----
-  const counts = useMemo(() => libraryToolCounts(sessions), [sessions]);
-  const dirs = useMemo(() => libraryDirectories(sessions), [sessions]);
-
   // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
   const rowHandlers = useRef({});
   rowHandlers.current.click = (key, e) => {
@@ -571,7 +579,7 @@ export default function App() {
       return;
     }
     if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
-      const ids = visibleIds.current.library || [];
+      const ids = libraryVisibleIds;
       const a = ids.indexOf(selId), b = ids.indexOf(key);
       if (a >= 0 && b >= 0) {
         setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
@@ -645,34 +653,6 @@ export default function App() {
   const detailMeta = useMemo(() => cur && metaFor(cur).name
     ? { ...cur, title: metaFor(cur).name } : cur, [cur, metaMap]);
 
-  // 行展示数据与过滤用字段只依赖会话/元数据,预计算一次;
-  // 之后筛选条件怎么变都只做轻量匹配,不再重建 3000+ 行的时间/文案字符串
-  const libIndex = useMemo(() => buildLibraryIndex({
-    sessions, metadata: metaMap, migratedSessionKeys, t,
-  }), [sessions, metaMap, migratedSessionKeys, t]);
-  const libGroups = useMemo(() => buildLibraryGroups({
-    index: libIndex, filter: libF, query: q, t,
-  }), [libIndex, libF, q, t]);
-  const onToggleGroup = useCallback(key =>
-    setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })), []);
-  visibleIds.current.library = visibleLibraryIds(libGroups, collapsedGroups);
-
-  const libTokens = libraryTokenDescriptors(libF, TOOLS, TOOL_NAME, t).map(token => ({
-    label: token.label,
-    onRemove: () => {
-      if (token.kind === "source") {
-        setLibF(value => ({ ...value, src: value.src.filter(tool => tool !== token.tool).length
-          ? value.src.filter(tool => tool !== token.tool) : [...TOOLS] }));
-      } else if (token.kind === "time") setLibF(value => ({ ...value, time: "all" }));
-      else if (token.kind === "dir") setLibF(value => ({ ...value, dir: null }));
-      else if (token.kind === "mig") setLibF(value => ({ ...value, mig: false }));
-      else if (token.kind === "sub") setLibF(value => ({ ...value, sub: false }));
-      else if (token.kind === "tag") setLibF(value => ({ ...value, tag: null }));
-    },
-  }));
-
-  const allTags = useMemo(() => libraryTags(metaMap), [metaMap]);
-
   // ----- 资源栏数据:迁移历史 -----
   // 优先用引擎给的稳定 id:删除后下标会整体前移,按下标编号会让选中项跳到别的记录上
   const histItems = useMemo(() => historyRows.map((h, i) => ({
@@ -734,7 +714,7 @@ export default function App() {
       footer: t("askferry:pane.footer", { n: ferry.sessions.length }) },
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
       query: q, onQuery: e => setQ(e.target.value),
-      filterCount: libraryFilterCount(libF, TOOLS),
+      filterCount: libFilterCount,
       tokens: libTokens,
       footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
         : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
@@ -746,11 +726,6 @@ export default function App() {
       tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
   }[view] || null;
 
-  const clearLibF = () => {
-    setLibF({ src: [...TOOLS], time: "all", dir: null, mig: false, sub: false,
-      tag: null });
-    setQ("");
-  };
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
   const railOnly = !paneCfg || collapsed;
   const railLabels = {
