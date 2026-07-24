@@ -7,6 +7,7 @@ import Markdown from "../../shared/ui/Markdown.jsx";
 import { Caret, Spinner } from "../../shared/ui/icons.jsx";
 import { readClipboardText } from "../../platform/desktop/client.js";
 import { TOOL_LEVEL } from "./agentChatModel.js";
+import { groupAgentTimeline } from "./agentTimelineModel.js";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
@@ -32,9 +33,6 @@ const preStyle = { margin: 0, padding: "8px 12px", fontSize: 11, lineHeight: 1.5
   borderRadius: 9, overflow: "auto", maxHeight: 260, whiteSpace: "pre-wrap",
   wordBreak: "break-word" };
 const secLabel = { fontSize: 10.5, color: "var(--tx5)", margin: "0 0 3px 2px" };
-
-// 只读类工具:过程步骤,默认收在时间线里不吐卡
-const READ_TOOLS = new Set(["session_search", "session_read", "usage"]);
 
 // 工具语义小图标(单色线性,坐落在时间线上;状态靠 spinner 表达而非颜色)
 const TRACE_ICON = {
@@ -186,38 +184,6 @@ function Trace({ rows, onNavigate }) {
         <ToolRow key={row.callId || i} item={row} onNavigate={onNavigate} />))}
     </div>
   );
-}
-
-// 合并连续、同名、已完成的只读调用(如重读 ×6);mutate/进行中各自独立
-function mergeReads(run) {
-  const rows = [];
-  for (const it of run) {
-    const mergeable = READ_TOOLS.has(it.name) && it.status !== "running";
-    const prev = rows[rows.length - 1];
-    if (mergeable && prev?._merge && prev.name === it.name) {
-      prev.merged.push(it);
-      prev.endedAt = it.endedAt;
-    } else if (mergeable) {
-      rows.push({ ...it, _merge: true, merged: [it] });
-    } else {
-      rows.push(it);
-    }
-  }
-  return rows.map(r => (r._merge && r.merged.length === 1)
-    ? (({ _merge, merged, ...rest }) => rest)(r) : r);
-}
-
-// 把连续的工具项收进时间线段,其余项(用户/助手/审批/状态)保持独立
-function groupTimeline(items) {
-  const out = [];
-  let i = 0;
-  while (i < items.length) {
-    if (items[i].kind !== "tool") { out.push(items[i]); i++; continue; }
-    const run = [];
-    while (i < items.length && items[i].kind === "tool") { run.push(items[i]); i++; }
-    out.push({ kind: "trace", rows: mergeReads(run) });
-  }
-  return out;
 }
 
 // ----- 消息项分发 -----
@@ -430,7 +396,7 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
             style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 24px" }}>
             <div style={{ maxWidth: 680, margin: "0 auto", display: "flex",
               flexDirection: "column", gap: 14 }}>
-              {groupTimeline(items).map((g, i) => (
+              {groupAgentTimeline(items).map((g, i) => (
                 g.kind === "trace"
                   ? <Trace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
                   : <ChatItem key={`item-${i}`} item={g} sessionId={activeId}
