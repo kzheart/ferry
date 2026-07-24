@@ -24,6 +24,7 @@ import { AppShell } from "./AppShell.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
+import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
 import { useRailNavigation } from "./useRailNavigation.js";
 
 export default function App() {
@@ -253,65 +254,6 @@ export default function App() {
     askDelete,
   });
 
-  // ----- 键盘 -----
-  useEffect(() => {
-    const onKey = e => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && paneCfg) {
-        e.preventDefault(); setSearchOpen(true); return;
-      }
-      if (e.key === "Escape") {
-        if (ctxMenu) setCtxMenu(null);
-        else if (renameFor) setRenameFor(null);
-        else if (tagFor) setTagFor(null);
-        else if (batchDel) setBatchDel(null);
-        else if (delConfirm) setDelConfirm(null);
-        else if (histDel) setHistDel(null);
-        else if (settingsOpen) setSettingsOpen(false);
-        else if (popover) setPopover(null);
-        else if (confirmApply) setConfirmApply(false);
-        else if (diff) setDiff(null);
-        else if (mig) setMig(null);
-        else if (peekId) setPeekId(null);
-        else if (multiSel.length) setMultiSel([]);
-        else if (guideStep) finishGuide();
-        return;
-      }
-      if (document.activeElement &&
-          ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-      // 会话库快捷键:仅在没有弹层时生效
-      const overlayOpen = ctxMenu || delConfirm || histDel || batchDel || renameFor || tagFor ||
-        settingsOpen || popover || confirmApply || diff || mig || guideStep || searchOpen;
-      if (!overlayOpen && view === "library" && cur) {
-        if (e.key === "F2") { e.preventDefault(); setRenameFor(cur); return; }
-        if (e.key === "Backspace" || e.key === "Delete") {
-          e.preventDefault();
-          if (multiSel.length > 1) setBatchDel(multiSel.map(key => byKey[key]).filter(Boolean));
-          else askDelete(cur);
-          return;
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          resumeDescriptor(cur.tool, sessionRef(cur))
-            .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {});
-          return;
-        }
-      }
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        const ids = view === "library" ? libraryVisibleIds
-          : view === "history" ? historyVisibleIds : [];
-        if (!ids.length) return;
-        const curSel = view === "library" ? selId : histSelectedId;
-        let i = ids.indexOf(curSel);
-        i = i < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
-        if (view === "library") select(ids[i]);
-        else selectHistory(ids[i]);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  });
-
   // ----- 拖拽分栏 -----
   const startDrag = e => {
     if (collapsed) return;
@@ -437,6 +379,41 @@ export default function App() {
     setView("library"); doScan();
     if (!guideSeen) setTimeout(() => setGuideStep(1), 300);
   };
+  useAppKeyboardShortcuts({
+    paneAvailable: Boolean(paneCfg),
+    onOpenSearch: () => setSearchOpen(true),
+    dismissers: [
+      { open: Boolean(ctxMenu), dismiss: () => setCtxMenu(null) },
+      { open: Boolean(renameFor), dismiss: () => setRenameFor(null) },
+      { open: Boolean(tagFor), dismiss: () => setTagFor(null) },
+      { open: Boolean(batchDel), dismiss: () => setBatchDel(null) },
+      { open: Boolean(delConfirm), dismiss: () => setDelConfirm(null) },
+      { open: Boolean(histDel), dismiss: () => setHistDel(null) },
+      { open: settingsOpen, dismiss: () => setSettingsOpen(false) },
+      { open: Boolean(popover), dismiss: () => setPopover(null) },
+      { open: confirmApply, dismiss: () => setConfirmApply(false) },
+      { open: Boolean(diff), dismiss: () => setDiff(null) },
+      { open: Boolean(mig), dismiss: () => setMig(null) },
+      { open: Boolean(peekId), dismiss: () => setPeekId(null) },
+      { open: searchOpen, dismiss: () => setSearchOpen(false) },
+      { open: multiSel.length > 0, dismiss: () => setMultiSel([]) },
+      { open: guideStep > 0, dismiss: finishGuide },
+    ],
+    view,
+    currentSession: cur,
+    multiIds: multiSel,
+    sessionsByKey: byKey,
+    onRename: setRenameFor,
+    onBatchDelete: setBatchDel,
+    onDelete: askDelete,
+    onResume: detailActs.onResume,
+    libraryVisibleIds,
+    historyVisibleIds,
+    selectedSessionId: selId,
+    selectedHistoryId: histSelectedId,
+    selectSession: select,
+    selectHistory,
+  });
 
   return (
     <div data-ferry-win="1" style={{ height: "100vh", display: "flex",

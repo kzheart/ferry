@@ -43,12 +43,14 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "shell/AppOverlays.jsx").is_file()
     assert (FRONTEND / "shell/AppOverlayController.jsx").is_file()
     assert (FRONTEND / "shell/SearchPalette.jsx").is_file()
+    assert (FRONTEND / "shell/useAppKeyboardShortcuts.js").is_file()
     assert not (FRONTEND / "shared/ui/Overlays.jsx").exists()
     app = (FRONTEND / "shell/AppController.jsx").read_text()
     assert "browser/SessionDetail.jsx" not in app
     assert "shared/ui/primitives.jsx" not in app
     assert "shared/ui/Overlays.jsx" not in app
     assert "AppOverlayController" in app
+    assert "document.addEventListener(\"keydown\"" not in app
     assert app.index("metadata: metaMap") < app.index("useLibraryResourcePane({")
 
     tool_trace = (FRONTEND / "modules/askferry/AgentToolTrace.jsx").read_text()
