@@ -345,7 +345,11 @@ export class WorkflowRun {
           this.controller.signal.addEventListener("abort", abort, {
             once: true,
           });
-          const timeout = setTimeout(() => controller.abort(), config.timeout);
+          let timedOut = false;
+          const timeout = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, config.timeout);
           const dependencyResults = Object.fromEntries(
             (task.depends_on ?? []).map((dependency) => [
               dependency,
@@ -363,6 +367,18 @@ export class WorkflowRun {
           })
             .then((output) => {
               if (controller.signal.aborted) {
+                if (timedOut) {
+                  failed = true;
+                  state.status = "failed";
+                  state.error = "task timed out";
+                  this.onEvent({
+                    type: "task.failed",
+                    task_id: task.id,
+                    error: state.error,
+                  });
+                  if (config.failurePolicy === "fail_fast") this.cancel();
+                  return;
+                }
                 state.status = "cancelled";
                 this.onEvent({
                   type: "task.cancelled",
@@ -385,6 +401,18 @@ export class WorkflowRun {
             })
             .catch((error) => {
               if (controller.signal.aborted) {
+                if (timedOut) {
+                  failed = true;
+                  state.status = "failed";
+                  state.error = "task timed out";
+                  this.onEvent({
+                    type: "task.failed",
+                    task_id: task.id,
+                    error: state.error,
+                  });
+                  if (config.failurePolicy === "fail_fast") this.cancel();
+                  return;
+                }
                 state.status = "cancelled";
                 this.onEvent({
                   type: "task.cancelled",
