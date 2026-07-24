@@ -140,6 +140,7 @@ class OperationService:
             max_turn=operation_input.get("max_turn"),
             probe_model=operation_input.get("probe_model"),
             _session=session,
+            ports=self._ports,
         )
         try:
             after = agent_tools._INDEX.resolve(source_tool, ref)
@@ -570,6 +571,7 @@ class OperationService:
             max_turn=params.get("max_turn"),
             probe_model=params.get("probe_model"),
             _session=session,
+            ports=self._ports,
         )
         structure = result.get("validation", {}).get("structure", {})
         if result.get("rolled_back") or structure.get("ok") is not True:

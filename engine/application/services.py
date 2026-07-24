@@ -13,23 +13,38 @@ from pathlib import Path
 from ..domain.errors import SnapshotInvalidSourceError
 from . import verification as probe_mod
 from ..adapters.base import narration
-from .ports import current
+from .ports import ApplicationPorts, current
 
 
-def adapter(tool):
-    return current().adapter(tool)
+def _application_ports(ports: ApplicationPorts | None = None) -> ApplicationPorts:
+    return ports or current()
 
 
-def adapters():
-    return current().adapters()
+def adapter(tool, ports: ApplicationPorts | None = None):
+    return _application_ports(ports).adapter(tool)
 
 
-def resource_path(*parts):
-    return current().resource_path(*parts)
+def _adapter_for(tool: str, ports: ApplicationPorts | None):
+    """显式 ports 走注入依赖；默认路径保留可替换的公开 seam。"""
+    return ports.adapter(tool) if ports is not None else adapter(tool)
 
 
-def snapshot_dir():
-    return current().snapshot_dir()
+def _call_with_ports(fn, *args, ports: ApplicationPorts | None, **kwargs):
+    if ports is None:
+        return fn(*args, **kwargs)
+    return fn(*args, ports=ports, **kwargs)
+
+
+def adapters(ports: ApplicationPorts | None = None):
+    return _application_ports(ports).adapters()
+
+
+def resource_path(*parts, ports: ApplicationPorts | None = None):
+    return _application_ports(ports).resource_path(*parts)
+
+
+def snapshot_dir(ports: ApplicationPorts | None = None):
+    return _application_ports(ports).snapshot_dir()
 
 from . import history as _history
 from .pricing import pricing  # noqa: F401  暴露给 RPC
@@ -37,8 +52,9 @@ from .pricing import pricing  # noqa: F401  暴露给 RPC
 
 # ---------- 迁移 ----------
 
-def resume_command(tool: str, sid: str, cwd: str) -> dict:
-    return adapter(tool).lifecycle.resume_descriptor(sid, cwd)
+def resume_command(tool: str, sid: str, cwd: str,
+                   *, ports: ApplicationPorts | None = None) -> dict:
+    return adapter(tool, ports).lifecycle.resume_descriptor(sid, cwd)
 
 
 # ---------- 范围截断 ----------
@@ -95,11 +111,13 @@ def _migration_counts(sess) -> tuple[int, int]:
 def _prepare_migration(src: str, dst: str, ref: str,
                        cwd: str | None = None,
                        max_turn: int | None = None,
-                       probe_model: str | None = None, *, _session=None):
-    sess = _session if _session is not None else _read_tree(src, ref)
+                       probe_model: str | None = None, *, _session=None,
+                       ports: ApplicationPorts | None = None):
+    sess = _session if _session is not None else _call_with_ports(
+        _read_tree, src, ref, ports=ports)
     if max_turn:
         _truncate_rounds(sess, int(max_turn))
-    target = adapter(dst).migration_target
+    target = _adapter_for(dst, ports).migration_target
     target_cwd = str(Path(cwd or sess.cwd or ".").resolve())
     stats = target.plan(sess)
     tree_count, message_count = _migration_counts(sess)
@@ -124,9 +142,10 @@ def preview_migration(src: str, dst: str, ref: str,
                       cwd: str | None = None,
                       max_turn: int | None = None,
                       probe_model: str | None = None,
-                      content_locale: str | None = None, *, _session=None) -> dict:
+                      content_locale: str | None = None, *, _session=None,
+                      ports: ApplicationPorts | None = None) -> dict:
     sess, target, target_cwd, base = _prepare_migration(
-        src, dst, ref, cwd, max_turn, probe_model, _session=_session,
+        src, dst, ref, cwd, max_turn, probe_model, _session=_session, ports=ports,
     )
     with narration.content_locale(content_locale):
         preview = target.preview(sess, target_cwd)
@@ -137,9 +156,10 @@ def apply_migration(src: str, dst: str, ref: str,
                     cwd: str | None = None, probe: bool = False,
                     max_turn: int | None = None,
                     probe_model: str | None = None,
-                    content_locale: str | None = None, *, _session=None) -> dict:
+                    content_locale: str | None = None, *, _session=None,
+                    ports: ApplicationPorts | None = None) -> dict:
     sess, target, target_cwd, base = _prepare_migration(
-        src, dst, ref, cwd, max_turn, probe_model, _session=_session,
+        src, dst, ref, cwd, max_turn, probe_model, _session=_session, ports=ports,
     )
 
     with narration.content_locale(content_locale):
@@ -149,18 +169,21 @@ def apply_migration(src: str, dst: str, ref: str,
         # 写回阶段可能追加新的损耗(writer 分发时才知道)
         base["loss"] = target.plan(sess)
         result = {**base, "session_id": sid, "dest": str(dest),
-                  "resume": resume_command(dst, sid, target_cwd)}
+                  "resume": _call_with_ports(
+                      resume_command, dst, sid, target_cwd, ports=ports)}
 
         # 静态结构验证始终执行:重读产物,校验节点数 / 父子边 / 拓扑,不调用模型
-        ok, tree_detail = validate_written_tree(dst, sid, dest, _tree_shape(sess))
+        ok, tree_detail = _call_with_ports(
+            validate_written_tree, dst, sid, dest, _tree_shape(sess), ports=ports)
         validation = {"structure": {"ok": ok, "detail": tree_detail},
                       "runtime": {"status": "skipped"}}
         runtime_report = None
         if ok and probe:
             # 运行时探针只打在临时影子副本上,正式产物不接收探针消息
             with narration.content_locale(content_locale):
-                runtime_report = _isolated_migrate_probe(
-                    dst, sess, target_cwd, model=probe_model)
+                runtime_report = _call_with_ports(
+                    _isolated_migrate_probe, dst, sess, target_cwd,
+                    model=probe_model, ports=ports)
             validation["runtime"] = {**runtime_report,
                                      "model": probe_model or None}
             ok = runtime_report["status"] == "passed"
@@ -175,19 +198,21 @@ def apply_migration(src: str, dst: str, ref: str,
             if probe:
                 result["probe"]["model"] = probe_model or None
         if not ok:                      # 验收失败:删除产物,不留半成品
-            _cleanup_artifact(dst, sid, dest)
+            _call_with_ports(_cleanup_artifact, dst, sid, dest, ports=ports)
             artifact_active = False
             result["rolled_back"] = True
-        _append_history({**result, "time": int(time.time() * 1000)})
+        _call_with_ports(
+            _append_history, {**result, "time": int(time.time() * 1000)}, ports=ports)
         return result
     except Exception:
         if artifact_active:
-            _cleanup_artifact(dst, sid, dest)
+            _call_with_ports(_cleanup_artifact, dst, sid, dest, ports=ports)
         raise
 
 
 def _isolated_migrate_probe(dst: str, sess, cwd: str,
-                            model: str | None = None) -> dict:
+                            model: str | None = None,
+                            *, ports: ApplicationPorts | None = None) -> dict:
     """把同一棵会话树再写一份影子副本,对影子 resume 探测,结束后清理。
 
     writer 每次生成全新随机 session id,影子与正式产物互不冲突;
@@ -196,8 +221,9 @@ def _isolated_migrate_probe(dst: str, sess, cwd: str,
     saved_loss = [(node, list(node.loss)) for node in sess.walk()]
     shadow_sid = shadow_dest = None
     try:
-        shadow_sid, shadow_dest = adapter(dst).migration_target.write(sess, cwd)
-        rep = run_probe(dst, shadow_sid, cwd, model=model)
+        shadow_sid, shadow_dest = _adapter_for(dst, ports).migration_target.write(sess, cwd)
+        rep = _call_with_ports(
+            run_probe, dst, shadow_sid, cwd, model=model, ports=ports)
         rep.setdefault("isolation", {"kind": "shadow_copy", "id": shadow_sid,
                                      "cleaned": True})
         return rep
@@ -205,15 +231,18 @@ def _isolated_migrate_probe(dst: str, sess, cwd: str,
         for node, loss in saved_loss:
             node.loss = loss
         if shadow_sid is not None:
-            _cleanup_artifact(dst, shadow_sid, shadow_dest)
+            _call_with_ports(
+                _cleanup_artifact, dst, shadow_sid, shadow_dest, ports=ports)
 
 
 def run_probe(tool: str, sid: str, cwd: str,
-              model: str | None = None) -> dict:
+              model: str | None = None,
+              *, ports: ApplicationPorts | None = None) -> dict:
+    resolved_ports = _application_ports(ports)
     try:
         return probe_mod.run_probe(
-            tool, sid, adapter(tool).lifecycle.probe_cwd(cwd), model,
-            ports=current())
+            tool, sid, _adapter_for(tool, ports).lifecycle.probe_cwd(cwd), model,
+            ports=resolved_ports)
     except probe_mod.ProbeTimeout as error:
         return probe_mod.timeout_report(tool, error)
 
@@ -224,10 +253,11 @@ def _tree_shape(sess) -> tuple:
 
 
 def validate_written_tree(tool: str, sid: str, dest,
-                          expected_shape: tuple) -> tuple[bool, str]:
+                          expected_shape: tuple,
+                          *, ports: ApplicationPorts | None = None) -> tuple[bool, str]:
     try:
-        ref = adapter(tool).lifecycle.validation_ref(sid, dest)
-        restored = adapter(tool).browser.read(ref)
+        ref = _adapter_for(tool, ports).lifecycle.validation_ref(sid, dest)
+        restored = _adapter_for(tool, ports).browser.read(ref)
         nodes = list(restored.walk())
         ids = [node.source_id for node in nodes]
         edge_count = sum(len(node.children) for node in nodes)
@@ -249,8 +279,9 @@ def _shape_nodes(shape):
         yield from _shape_nodes(child)
 
 
-def _cleanup_artifact(dst: str, sid: str, dest):
-    adapter(dst).lifecycle.cleanup(sid, dest)
+def _cleanup_artifact(dst: str, sid: str, dest,
+                      *, ports: ApplicationPorts | None = None):
+    _adapter_for(dst, ports).lifecycle.cleanup(sid, dest)
 
 
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------
@@ -386,8 +417,8 @@ def scan() -> dict:
     return _scanning.scan(current())
 
 
-def _append_history(entry: dict) -> str:
-    return _history.append(entry, current())
+def _append_history(entry: dict, *, ports: ApplicationPorts | None = None) -> str:
+    return _history.append(entry, _application_ports(ports))
 
 
 def history() -> list[dict]:
@@ -398,8 +429,9 @@ def history_delete(history_id: str) -> dict:
     return _history.delete(history_id, current())
 
 
-def _read_tree(tool_name: str, ref: str):
-    return _sessions.read_tree(tool_name, ref, current())
+def _read_tree(tool_name: str, ref: str,
+               *, ports: ApplicationPorts | None = None):
+    return _sessions.read_tree(tool_name, ref, _application_ports(ports))
 
 
 def show(tool_name: str, ref: str) -> dict:
