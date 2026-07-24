@@ -1,4 +1,4 @@
-import i18n from "../../i18n/index.js";
+import i18n from "../../shared/i18n/index.js";
 import {
   FERRY_ERROR_POLICIES,
   isFerryErrorCode,

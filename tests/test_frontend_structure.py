@@ -7,11 +7,12 @@ FRONTEND = ROOT / "app/src"
 
 def test_frontend_uses_shell_platform_shared_and_vertical_modules():
     assert {
+        "assets",
         "modules",
         "platform",
         "shared",
         "shell",
-    } <= {
+    } == {
         path.name for path in FRONTEND.iterdir() if path.is_dir()
     }
     assert not (FRONTEND / "api").exists()

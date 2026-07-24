@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { initI18n } from "./i18n/index.js";
+import { initI18n } from "./shared/i18n/index.js";
 import { preloadBrowserCache } from "./modules/browser/useBrowserData.js";
 import App from "./shell/AppController.jsx";
 import "./shared/styles/app.css";

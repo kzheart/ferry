@@ -1,4 +1,4 @@
-import i18n from "../../i18n/index.js";
+import i18n from "../i18n/index.js";
 
 const t = (key, params) => i18n.t(key, params);
 

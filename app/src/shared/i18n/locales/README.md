@@ -10,7 +10,7 @@ Ferry 使用 [i18next](https://www.i18next.com/) + [react-i18next](https://react
 ## 目录结构
 
 ```
-app/src/locales/
+app/src/shared/i18n/locales/
   zh-CN/           # 简体中文文案
     common.json    # 通用:语言名、状态码、时间桶、相对时间、空态
     errors.json    # 引擎结构化错误码
@@ -28,11 +28,11 @@ app/src/locales/
 
 1. 复制 `zh-CN/` 目录到新语言代码目录，例如 `ja-JP/`：
    ```
-   cp -r app/src/locales/zh-CN app/src/locales/ja-JP
+   cp -r app/src/shared/i18n/locales/zh-CN app/src/shared/i18n/locales/ja-JP
    ```
 2. 翻译 `ja-JP/` 下每个 JSON 文件的值为目标语言。**保持 key 不变**，只翻译 value。
-3. 在 `app/src/i18n/index.js` 注册新语言：
-   - 顶部 import：`import jaJPCommon from "../locales/ja-JP/common.json";`（每个 namespace 都要）
+3. 在 `app/src/shared/i18n/index.js` 注册新语言：
+   - 顶部 import：`import jaJPCommon from "./locales/ja-JP/common.json";`（每个 namespace 都要）
    - `LOCALE_META` 数组加入 `{ code: "ja-JP", nativeName: "日本語" }`（`nativeName` 用该语言的自称）
    - `RESOURCES` 对象加入 `"ja-JP": { common: jaJPCommon, errors: jaJPErrors, ... }`
 
