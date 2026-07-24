@@ -6,6 +6,7 @@ import json
 import secrets
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from ..infrastructure.state_db import StateDatabase
 
 
 PLAN_TTL_MS = 10 * 60 * 1000
+MUTATION_WORKERS = 1
 
 
 def _now_ms() -> int:
@@ -77,6 +79,13 @@ class OperationService:
         self._ports = ports
         self._migration = MigrationService(ports)
         self._lock = threading.RLock()
+        # 所有写操作都在同一个持久化队列中串行执行。这样 IPC 请求可立即
+        # 返回，同时不放宽已有 Adapter/原生文件的写入并发假设。
+        self._executor = ThreadPoolExecutor(
+            max_workers=MUTATION_WORKERS,
+            thread_name_prefix="engine-operation",
+        )
+        self._jobs: dict[str, Future[None]] = {}
         self._database_instance: StateDatabase | None = None
         self._database_path: Path | None = None
 
@@ -273,13 +282,22 @@ class OperationService:
                     "operation plan 当前状态不可执行",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().claim(plan_id, _now_ms()):
+            if not self._database().enqueue(plan_id, _now_ms()):
                 _operation, current_state = self._get(plan_id)
                 raise AgentRequestError(
                     "operation plan 当前状态不可执行",
                     {"plan_id": plan_id, "status": current_state.status},
                 )
+            self._jobs[plan_id] = self._executor.submit(self._run, plan_id)
+        return self.status(plan_id)
 
+    def _run(self, plan_id: str) -> None:
+        with self._lock:
+            operation, state = self._get(plan_id)
+            if state.status != "queued":
+                return
+            if not self._database().claim_queued(plan_id, _now_ms()):
+                return
         try:
             if operation.kind == "edit":
                 result = self._apply_edit(operation)
@@ -307,11 +325,6 @@ class OperationService:
             self._database().finish(
                 plan_id, result_json, _digest_json(result_json), _now_ms(),
             )
-        return {
-            "plan_id": plan_id,
-            "status": "applied",
-            "result": json.loads(result_json),
-        }
 
     def status(self, plan_id: str) -> dict:
         with self._lock:
@@ -335,17 +348,29 @@ class OperationService:
         with self._lock:
             operation, state = self._get(plan_id)
             self._expire(operation, state)
-            if state.status != "planned":
+            if state.status not in {"planned", "queued"}:
                 raise AgentRequestError(
-                    "仅 planned operation 可以取消",
+                    "仅 planned 或 queued operation 可以取消",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().cancel(plan_id, _now_ms()):
+            if not self._database().cancel(plan_id, state.status, _now_ms()):
                 raise AgentRequestError(
                     "operation plan 当前状态不可取消",
                     {"plan_id": plan_id},
                 )
             return {"plan_id": plan_id, "status": "cancelled"}
+
+    def wait(self, plan_id: str, timeout: float | None = None) -> dict:
+        """测试与进程内编排辅助：等待已排队任务，不属于 RPC surface。"""
+        with self._lock:
+            job = self._jobs.get(plan_id)
+        if job is not None:
+            job.result(timeout=timeout)
+        return self.status(plan_id)
+
+    def shutdown(self) -> None:
+        """仅在 Engine 重建或测试清理时调用，确保不遗留后台写入线程。"""
+        self._executor.shutdown(wait=True, cancel_futures=True)
 
     def audit(self, plan_id: str) -> list[dict]:
         with self._lock:
@@ -891,6 +916,8 @@ def _service() -> OperationService:
 
 def reset_service() -> None:
     global _SERVICE
+    if _SERVICE is not None:
+        _SERVICE.shutdown()
     _SERVICE = None
 
 
@@ -908,6 +935,10 @@ def status(plan_id: str) -> dict:
 
 def cancel(plan_id: str) -> dict:
     return _service().cancel(plan_id)
+
+
+def wait(plan_id: str, timeout: float | None = None) -> dict:
+    return _service().wait(plan_id, timeout)
 
 
 def audit(plan_id: str) -> list[dict]:

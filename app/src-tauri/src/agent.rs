@@ -14,6 +14,8 @@ const AGENT_PROTOCOL: &str = "ferry-agent/v1";
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const ORGANIZATION_TIMEOUT: Duration = Duration::from_secs(130);
+const OPERATION_POLL_INTERVAL: Duration = Duration::from_millis(125);
+const OPERATION_WAIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static AUTO_SESSIONS: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
@@ -637,7 +639,40 @@ fn engine_value(resource_dir: &Path, method: &str, params: Value) -> Result<Valu
 }
 
 fn apply_operation_plan(resource_dir: &Path, plan_id: &str) -> Result<Value, String> {
-    engine_value(resource_dir, "operation.apply", json!({"plan_id": plan_id}))
+    let accepted = engine_value(resource_dir, "operation.apply", json!({"plan_id": plan_id}))?;
+    wait_for_operation(resource_dir, plan_id, accepted)
+}
+
+/// Runtime 工具调用需要一个最终工具结果；它只轮询 Engine 状态，绝不把长写
+/// 操作维持在同一个 IPC request 上。
+fn wait_for_operation(
+    resource_dir: &Path,
+    plan_id: &str,
+    mut status: Value,
+) -> Result<Value, String> {
+    let deadline = std::time::Instant::now() + OPERATION_WAIT_TIMEOUT;
+    loop {
+        match status.get("status").and_then(Value::as_str) {
+            Some("applied") => return Ok(status.get("result").cloned().unwrap_or(Value::Null)),
+            Some("failed" | "cancelled" | "expired") => {
+                let error_type = status
+                    .get("error_type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("OperationNotApplied");
+                return Err(format!("operation.{error_type}"));
+            }
+            Some("queued" | "applying") if std::time::Instant::now() < deadline => {
+                std::thread::sleep(OPERATION_POLL_INTERVAL);
+                status = engine_value(
+                    resource_dir,
+                    "operation.status",
+                    json!({"plan_id": plan_id}),
+                )?;
+            }
+            Some(_) => return Err("operation.invalid_status".to_owned()),
+            None => return Err("operation.invalid_status".to_owned()),
+        }
+    }
 }
 
 fn operation_plan_id(operation: &Value) -> Result<&str, String> {

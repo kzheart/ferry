@@ -47,8 +47,8 @@ def load_engine_methods() -> list[dict[str, object]]:
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
     required = {"name", "kind", "public", "timeout", "retry", "dispatch"}
-    allowed_kinds = {"read", "index-refresh", "mutation", "long"}
-    allowed_timeouts = {"normal", "lookup", "commit"}
+    allowed_kinds = {"read", "index-refresh", "mutation"}
+    allowed_timeouts = {"normal", "lookup"}
     allowed_retries = {"safe-read", "never"}
     allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
@@ -137,9 +137,18 @@ def runtime(agents: list[dict[str, object]]) -> str:
 
 
 def engine_methods_rust(methods: list[dict[str, object]]) -> str:
+    timeout_variants = {
+        "normal": "Normal",
+        "lookup": "Lookup",
+    }
+    used_timeout_variants = [
+        timeout_variants[timeout]
+        for timeout in timeout_variants
+        if any(method["timeout"] == timeout for method in methods)
+    ]
     rows = []
     for method in methods:
-        timeout = {"normal": "Normal", "lookup": "Lookup", "commit": "Commit"}[method["timeout"]]
+        timeout = timeout_variants[method["timeout"]]
         retry = {"safe-read": "SafeRead", "never": "Never"}[method["retry"]]
         rows.extend((
             f'        {json.dumps(method["name"])} => Some(EngineMethodPolicy {{',
@@ -152,9 +161,7 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub(crate) enum TimeoutClass {",
-        "    Normal,",
-        "    Lookup,",
-        "    Commit,",
+        *(f"    {variant}," for variant in used_timeout_variants),
         "}",
         "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",

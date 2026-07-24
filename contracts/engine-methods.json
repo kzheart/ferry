@@ -27,7 +27,7 @@
     {"name": "agent_session_read", "kind": "read", "public": true, "timeout": "lookup", "retry": "never", "dispatch": "serial"},
     {"name": "agent_get_usage", "kind": "read", "public": true, "timeout": "lookup", "retry": "never", "dispatch": "serial"},
     {"name": "operation.plan", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never", "dispatch": "serial"},
-    {"name": "operation.apply", "kind": "long", "public": false, "timeout": "commit", "retry": "never", "dispatch": "serial"},
+    {"name": "operation.apply", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never", "dispatch": "serial"},
     {"name": "operation.status", "kind": "read", "public": false, "timeout": "normal", "retry": "safe-read", "dispatch": "serial"},
     {"name": "operation.cancel", "kind": "mutation", "public": false, "timeout": "normal", "retry": "never", "dispatch": "serial"}
   ]

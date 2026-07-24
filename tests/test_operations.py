@@ -3,7 +3,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from threading import Barrier
+from threading import Barrier, Event
 
 import pytest
 
@@ -35,6 +35,13 @@ def _plan(ops=None, probe=False):
         "ops": ops or [{"op": "delete-turn", "turn": 1}],
         "probe": probe,
     })
+
+
+def _apply(plan_id):
+    """断言 Engine 的异步 apply 已入队，并等待测试所需的最终状态。"""
+    accepted = operations.apply(plan_id)
+    assert accepted["status"] in {"queued", "applying", "applied"}
+    return operations.wait(plan_id, timeout=5)
 
 
 def _migration_plan(**overrides):
@@ -135,7 +142,7 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     assert plan["input_digest"]
     assert plan["preview_digest"]
 
-    applied = operations.apply(plan["plan_id"])
+    applied = _apply(plan["plan_id"])
 
     assert applied["status"] == "applied"
     assert agent_environment["editor"].last_ops == [
@@ -151,7 +158,7 @@ def test_plan_survives_operation_service_restart(agent_environment):
     operations.reset_service()
 
     assert operations.status(plan["plan_id"])["status"] == "planned"
-    result = operations.apply(plan["plan_id"])
+    result = _apply(plan["plan_id"])
     assert result["status"] == "applied"
     assert agent_environment["editor"].commits == 1
 
@@ -180,14 +187,14 @@ def test_operation_audit_contains_digests_not_raw_content(
         "reply": {"items": [{"kind": "text", "text": secret}]},
     }])
 
-    operations.apply(plan["plan_id"])
+    _apply(plan["plan_id"])
     encoded = json.dumps(
         operations.audit(plan["plan_id"]), ensure_ascii=False,
     )
 
     assert secret not in encoded
     assert [item["event"] for item in operations.audit(plan["plan_id"])] == [
-        "planned", "applying", "applied",
+        "planned", "queued", "applying", "applied",
     ]
 
 
@@ -264,7 +271,7 @@ def test_metadata_plan_applies_with_independent_cas(agent_environment):
     assert plan["preview"]["before"] == {}
     assert plan["preview"]["after_patch"] == {"name": "新名称"}
 
-    applied = operations.apply(plan["plan_id"])
+    applied = _apply(plan["plan_id"])
 
     assert applied["result"]["metadata"] == {"name": "新名称"}
     assert session_meta.list_all(current())["claude\0private-id"] == {"name": "新名称"}
@@ -277,7 +284,7 @@ def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
 
     with pytest.raises(
             ConcurrentModificationError, match="元数据在审批后已变化"):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert operations.status(plan["plan_id"])["status"] == "failed"
     assert session_meta.list_all(current())["claude\0private-id"] == {"name": "并发名称"}
@@ -309,7 +316,7 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
     assert agent_environment["transcript"].exists()
     assert lifecycle.calls == []
 
-    applied = operations.apply(plan["plan_id"])
+    applied = _apply(plan["plan_id"])
 
     assert applied["result"]["recovery_id"].startswith("recovery_")
     assert "snapshot" not in applied["result"]
@@ -329,7 +336,7 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
         "kind": "restore-delete",
         "recovery_id": applied["result"]["recovery_id"],
     })
-    restore_result = operations.apply(restore_plan["plan_id"])
+    restore_result = _apply(restore_plan["plan_id"])
 
     assert restore_plan["preview"]["tool"] == "claude"
     assert restore_result["result"]["recovery_id"] == \
@@ -351,7 +358,7 @@ def test_delete_plan_rejects_revision_change(
     agent_environment["claude_browser"].fingerprint_value = "changed"
 
     with pytest.raises(ConcurrentModificationError):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert lifecycle.calls == []
     assert agent_environment["transcript"].exists()
@@ -374,7 +381,7 @@ def test_replace_assistant_reply_plans_and_applies_as_edit(
         "code": "reply.replaced",
         "turn": 1,
     }]
-    result = operations.apply(plan["plan_id"])["result"]
+    result = _apply(plan["plan_id"])["result"]
 
     assert result["snapshot"] == "snapshot-before-agent-edit"
     assert calls == [
@@ -401,7 +408,7 @@ def test_replace_reply_can_be_combined_with_native_edit_ops(
         {"code": "turn.deleted"},
         {"code": "reply.replaced", "turn": 1},
     ]
-    operations.apply(plan["plan_id"])
+    _apply(plan["plan_id"])
     assert agent_environment["editor"].last_ops == [{
         "op": "delete-turn",
         "turn": 1,
@@ -482,7 +489,7 @@ def test_replace_reply_keeps_document_revision_cas(
     monkeypatch.setattr(editor, "load", stale_load)
 
     with pytest.raises(ConcurrentModificationError):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
     assert calls == [
         (1, {"items": [{"kind": "text", "text": "x"}]}),
     ]
@@ -505,7 +512,7 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
         "turn": "turn-locator-1",
         "reply": {"items": [{"kind": "text", "text": "x"}]},
     }], probe=True)
-    operations.apply(plan["plan_id"])
+    _apply(plan["plan_id"])
 
     assert calls == [(True, "snapshot-before-agent-edit")]
 
@@ -552,7 +559,7 @@ def test_migration_plan_and_apply_reuse_current_migration_service(
     assert calls[0][3]["probe_model"] == "provider/model"
     assert calls[0][3]["session"].source_id == "private-source-id"
 
-    applied = operations.apply(plan["plan_id"])
+    applied = _apply(plan["plan_id"])
 
     assert applied["status"] == "applied"
     assert applied["result"]["session_id"] == "migrated"
@@ -579,7 +586,7 @@ def test_migration_apply_rejects_changed_source_revision(
     agent_environment["claude_browser"].fingerprint_value = "changed"
 
     with pytest.raises(ConcurrentModificationError):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert len(calls) == 1
     assert operations.status(plan["plan_id"])["status"] == "failed"
@@ -607,7 +614,7 @@ def test_migration_failed_validation_marks_operation_failed(
     plan = _migration_plan()
 
     with pytest.raises(RuntimeError, match="结构校验失败"):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     status = operations.status(plan["plan_id"])
     assert status["status"] == "failed"
@@ -651,7 +658,7 @@ def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
     )
 
     plan = _plan(probe=True)
-    operations.apply(plan["plan_id"])
+    _apply(plan["plan_id"])
 
     assert calls == [True]
 
@@ -664,7 +671,7 @@ def test_cancelled_plan_never_writes(agent_environment):
         "status": "cancelled",
     }
     with pytest.raises(AgentRequestError, match="不可执行"):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert agent_environment["editor"].commits == 0
     assert operations.status(plan["plan_id"])["status"] == "cancelled"
@@ -673,11 +680,47 @@ def test_cancelled_plan_never_writes(agent_environment):
 def test_plan_can_only_be_applied_once(agent_environment):
     plan = _plan()
 
-    operations.apply(plan["plan_id"])
+    _apply(plan["plan_id"])
 
     with pytest.raises(AgentRequestError, match="不可执行"):
         operations.apply(plan["plan_id"])
     assert agent_environment["editor"].commits == 1
+
+
+def test_queued_operation_returns_immediately_and_can_be_cancelled(
+        agent_environment, monkeypatch):
+    started = Event()
+    release = Event()
+    original_apply_edit = operations.OperationService._apply_edit
+
+    def blocking_apply(self, operation):
+        started.set()
+        assert release.wait(timeout=5)
+        return original_apply_edit(self, operation)
+
+    monkeypatch.setattr(
+        operations.OperationService, "_apply_edit", blocking_apply,
+    )
+    first = _plan()
+    accepted = operations.apply(first["plan_id"])
+    assert accepted["status"] in {"queued", "applying"}
+    assert started.wait(timeout=5)
+
+    second = _plan()
+    queued = operations.apply(second["plan_id"])
+    assert queued["status"] == "queued"
+    assert operations.cancel(second["plan_id"]) == {
+        "plan_id": second["plan_id"],
+        "status": "cancelled",
+    }
+
+    release.set()
+    assert operations.wait(first["plan_id"], timeout=5)["status"] == "applied"
+    assert operations.status(second["plan_id"])["status"] == "cancelled"
+    assert agent_environment["editor"].commits == 1
+    assert [item["event"] for item in operations.audit(second["plan_id"])] == [
+        "planned", "queued", "cancelled",
+    ]
 
 
 def test_concurrent_apply_only_commits_once(agent_environment):
@@ -687,7 +730,7 @@ def test_concurrent_apply_only_commits_once(agent_environment):
     def apply_plan():
         barrier.wait()
         try:
-            return ("ok", operations.apply(plan["plan_id"]))
+            return ("ok", _apply(plan["plan_id"]))
         except Exception as error:
             return ("error", error)
 
@@ -708,7 +751,7 @@ def test_apply_rejects_changed_index_revision(agent_environment):
     agent_environment["claude_browser"].fingerprint_value = "changed"
 
     with pytest.raises(ConcurrentModificationError):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     status = operations.status(plan["plan_id"])
     assert status["status"] == "failed"
@@ -730,7 +773,7 @@ def test_apply_rejects_changed_document_revision(
     monkeypatch.setattr(editor, "load", stale_load)
 
     with pytest.raises(ConcurrentModificationError):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert operations.status(plan["plan_id"])["status"] == "failed"
     assert editor.commits == 0
@@ -752,7 +795,7 @@ def test_commit_failure_restores_snapshot_and_marks_plan_failed(
     )
 
     with pytest.raises(RuntimeError, match="commit failed"):
-        operations.apply(plan["plan_id"])
+        _apply(plan["plan_id"])
 
     assert restored[0][0] == "snapshot-before-agent-edit"
     assert operations.status(plan["plan_id"])["status"] == "failed"

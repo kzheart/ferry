@@ -608,7 +608,7 @@ mod tests {
     use crate::operation_request::{
         operation_plan_id_request, operation_plan_request, validate_plan_id,
     };
-    use crate::sidecar_policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT};
+    use crate::sidecar_policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_TIMEOUT};
     use std::collections::HashMap;
     use std::io::Cursor;
     use std::sync::{mpsc, Arc, Mutex};
@@ -678,10 +678,10 @@ mod tests {
     }
 
     #[test]
-    fn mutation_commit_is_not_killed_by_normal_rpc_timeout() {
+    fn operation_enqueue_uses_normal_rpc_timeout() {
         assert_eq!(
             request_timeout(r#"{"method":"operation.apply"}"#),
-            ENGINE_COMMIT_TIMEOUT
+            ENGINE_TIMEOUT
         );
         assert_eq!(request_attempts(r#"{"method":"operation.apply"}"#), 1);
         assert_eq!(request_attempts(r#"{"method":"operation.plan"}"#), 1);

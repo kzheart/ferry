@@ -19,8 +19,14 @@ def test_operations_stay_outside_generic_public_rpc():
         assert ENGINE_METHOD_POLICIES[method]["public"] is False
 
 
-def test_commit_and_agent_lookup_policies_are_explicit():
-    assert ENGINE_METHOD_POLICIES["operation.apply"]["timeout"] == "commit"
+def test_operation_enqueue_and_agent_lookup_policies_are_explicit():
+    assert ENGINE_METHOD_POLICIES["operation.apply"] == {
+        "kind": "mutation",
+        "public": False,
+        "timeout": "normal",
+        "retry": "never",
+        "dispatch": "serial",
+    }
     for method in ("agent_search_sessions", "agent_session_read", "agent_get_usage"):
         assert ENGINE_METHOD_POLICIES[method]["timeout"] == "lookup"
         assert ENGINE_METHOD_POLICIES[method]["retry"] == "never"

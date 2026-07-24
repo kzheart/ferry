@@ -72,9 +72,13 @@ Every mutation converges on:
 operation.plan -> approval -> operation.apply
 ```
 
+`operation.apply` only queues the immutable plan and returns its job status;
+the Engine's single mutation worker performs the native write separately.
 Status and cancellation are addressed through `operation.status` and
-`operation.cancel`. A plan is immutable and applying it does not accept a
-second copy of the business parameters.
+`operation.cancel`: a queued task can be cancelled before it starts, while an
+already-applying native write is allowed to finish so snapshot/CAS/rollback
+semantics are never interrupted halfway through. A plan is immutable and
+applying it does not accept a second copy of the business parameters.
 
 ### Ferry Runtime
 

@@ -44,6 +44,37 @@ export const operationStatus = planId =>
 export const operationCancel = planId =>
   nativeOperation("operation_cancel", { planId });
 
+const OPERATION_TERMINAL_STATUSES = new Set([
+  "applied", "failed", "cancelled", "expired",
+]);
+
+const wait = milliseconds => new Promise(resolve => {
+  globalThis.setTimeout(resolve, milliseconds);
+});
+
+/**
+ * WebView 只观察 Operation job；真正的写入仍在 Engine 的单写入队列中。
+ * 组件可通过 onStatus 渲染进度，而不是让长迁移占用一次 Tauri 调用。
+ */
+export async function operationApplyAndWait(planId, { onStatus } = {}) {
+  const accepted = await operationApply(planId);
+  onStatus?.(accepted);
+  let current = accepted;
+  while (!OPERATION_TERMINAL_STATUSES.has(current.status)) {
+    await wait(125);
+    current = await operationStatus(planId);
+    onStatus?.(current);
+  }
+  if (current.status !== "applied") {
+    throwEngineError({
+      code: "operation.not_applied",
+      params: { plan_id: planId, status: current.status,
+        error_type: current.error_type || "" },
+    });
+  }
+  return current;
+}
+
 // 启动描述符仍由引擎生成；终端偏好只决定原生层用哪个应用承载它。
 export const openTerminal = (launch, terminalApp = "auto") =>
   invoke("open_terminal", { launch, terminalApp });

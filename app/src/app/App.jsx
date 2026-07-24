@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, rpc,
-  operationApply, operationPlan,
+  operationApplyAndWait, operationPlan,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
 import { fmtTime, operationRef, repoOf,
@@ -198,7 +198,7 @@ export default function App() {
         ref: operationRef(session),
         patch,
       });
-      const applied = await operationApply(plan.plan_id);
+      const applied = await operationApplyAndWait(plan.plan_id);
       const entry = applied.result.metadata;
       setMetaMap(m => {
         const next = { ...m };
@@ -324,7 +324,7 @@ export default function App() {
         kind: "restore-delete",
         recovery_id: recoveryId,
       });
-      await operationApply(plan.plan_id);
+      await operationApplyAndWait(plan.plan_id);
       doScan();
       setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
     } catch (e) {
@@ -340,7 +340,7 @@ export default function App() {
         tool: s.tool,
         ref: operationRef(s),
       });
-      const r = (await operationApply(plan.plan_id)).result;
+      const r = (await operationApplyAndWait(plan.plan_id)).result;
       const key = sessionIdentity(s);
       detailCache.current.delete(key);
       if (selId === key) { setSelId(null); setDetail(null); }
@@ -370,7 +370,7 @@ export default function App() {
           tool: s.tool,
           ref: operationRef(s),
         });
-        await operationApply(plan.plan_id);
+        await operationApplyAndWait(plan.plan_id);
         detailCache.current.delete(sessionIdentity(s));
         done++;
       } catch { fail++; }
