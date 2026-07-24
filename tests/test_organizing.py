@@ -48,7 +48,7 @@ def _seed(tool: str, session_id: str, digest: str,
         }],
     }
     database = summaries._database(_ports())
-    database.store_session_summary(record, 0)
+    database.summaries.store(record, 0)
     database.invalidate_organization_proposals(
         tool, session_id, record["fingerprint"], 0,
     )
@@ -321,7 +321,7 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
         organization_environment):
     record = _seed("claude", "session-a", "摘要")
     record["segments"][0]["digest"] = None
-    summaries._database(_ports()).store_session_summary(record, 0)
+    summaries._database(_ports()).summaries.store(record, 0)
     context = _digest_context([
         {"tool": "claude", "id": "session-a"},
     ])

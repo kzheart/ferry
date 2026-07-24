@@ -30,7 +30,7 @@ def _now_ms() -> int:
 
 
 def get_backbone(tool: str, session_id: str, ports: EngineContext) -> dict | None:
-    return _database(ports).get_session_summary(tool, session_id)
+    return _database(ports).summaries.get(tool, session_id)
 
 
 def _locator(message, index: int) -> str:
@@ -133,7 +133,7 @@ def build_backbone(tool: str, ref: str, ports: EngineContext) -> dict:
         for segment in segments
     }
     database = _database(ports)
-    previous = database.get_session_summary(tool, session.source_id)
+    previous = database.summaries.get(tool, session.source_id)
     prior = {
         segment["hash"]: segment["digest"]
         for segment in (previous or {}).get("segments", [])
@@ -150,7 +150,7 @@ def build_backbone(tool: str, ref: str, ports: EngineContext) -> dict:
     }
     if previous != record:
         now = _now_ms()
-        database.store_session_summary(record, now)
+        database.summaries.store(record, now)
         database.invalidate_organization_proposals(
             tool, session.source_id, fingerprint, now,
         )
@@ -169,7 +169,7 @@ def set_summaries(tool: str, session_id: str, digests: dict,
     编辑后仍存在的段稳健。"""
     updates = digests if isinstance(digests, dict) else {}
     database = _database(ports)
-    record = database.get_session_summary(tool, session_id)
+    record = database.summaries.get(tool, session_id)
     if not record:
         raise SummaryBackboneMissingError(
             "请先调用 session_backbone 建立底座",
@@ -180,5 +180,5 @@ def set_summaries(tool: str, session_id: str, digests: dict,
         if isinstance(digest, str) and digest.strip():
             segment["digest"] = digest.strip()[:MAX_DIGEST_CHARS]
             applied += 1
-    database.store_session_summary(record, _now_ms())
+    database.summaries.store(record, _now_ms())
     return {**_view(record), "applied": applied}

@@ -19,6 +19,7 @@ from .session_metadata import (
     metadata_entry,
     metadata_key,
 )
+from .session_summaries import SessionSummaryStore
 
 
 SCHEMA_VERSION = 8
@@ -35,6 +36,7 @@ class StateDatabase:
             self._lock,
         )
         self.metadata = SessionMetadataStore(self._connect, self._lock)
+        self.summaries = SessionSummaryStore(self._connect, self._lock)
         self.migration_history = MigrationHistoryStore(
             self._connect,
             self._lock,
@@ -390,38 +392,6 @@ class StateDatabase:
                 (status, now, recovery_id, expected),
             ).rowcount
             return changed == 1
-
-    def get_session_summary(self, tool: str, session_id: str) -> dict | None:
-        with self._lock, self._connect() as connection:
-            row = connection.execute(
-                """
-                SELECT record_json FROM session_summaries
-                WHERE tool = ? AND session_id = ?
-                """,
-                (tool, session_id),
-            ).fetchone()
-        return json.loads(row["record_json"]) if row is not None else None
-
-    def store_session_summary(self, record: dict, now: int) -> None:
-        with self._lock, self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO session_summaries(tool, session_id, record_json, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(tool, session_id) DO UPDATE SET
-                    record_json = excluded.record_json,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    record["tool"],
-                    record["id"],
-                    json.dumps(
-                        record, ensure_ascii=False, sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    now,
-                ),
-            )
 
     @staticmethod
     def _organization_proposal(row: sqlite3.Row) -> dict:
