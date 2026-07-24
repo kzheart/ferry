@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from engine.contracts.ipc import FERRY_IPC_PROTOCOL
+from engine.contracts.ipc import FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,7 +19,10 @@ def test_all_runtimes_use_the_generated_ferry_ipc_protocol():
     for path in generated:
         text = path.read_text()
         assert FERRY_IPC_PROTOCOL in text
+        assert FERRY_CONTRACT_HASH in text
         assert "ferry-agent/v1" not in text
+    assert FERRY_CONTRACT_HASH.startswith("sha256:")
+    assert len(FERRY_CONTRACT_HASH) == len("sha256:") + 64
 
 
 def test_ipc_envelope_fields_are_exact():

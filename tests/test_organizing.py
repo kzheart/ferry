@@ -12,7 +12,7 @@ from engine.domain.errors import (
     OrganizationProposalError,
     OrganizationProposalStaleError,
 )
-from engine.interfaces.rpc import rpc
+from engine.interfaces.rpc import PROTOCOL, rpc
 from engine.infrastructure.state_db import StateDatabase
 
 
@@ -338,6 +338,8 @@ def test_rpc_exposes_context_proposal_list_and_decision(
         organization_environment):
     record = _seed("claude", "session-a", "整理 RPC")
     context = rpc(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "organization-context",
         "method": "organization_digest_context",
         "params": {"targets": [{"tool": "claude", "id": "session-a"}]},
     }))
@@ -345,6 +347,8 @@ def test_rpc_exposes_context_proposal_list_and_decision(
     assert context["result"]["sessions"][0]["segments"][0]["digest"] == "整理 RPC"
 
     proposed = rpc(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "organization-propose",
         "method": "organization_propose",
         "params": {"targets": [_target(record, {
             "name": "RPC 整理", "dead_candidate": True,
@@ -352,12 +356,16 @@ def test_rpc_exposes_context_proposal_list_and_decision(
     }))
     proposal_id = proposed["result"]["proposal_id"]
     listed = rpc(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "organization-list",
         "method": "organization_proposals_list",
         "params": {"status": "pending"},
     }))
     assert [item["proposal_id"] for item in listed["result"]] == [proposal_id]
 
     rejected = rpc(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "organization-decide",
         "method": "organization_proposal_decide",
         "params": {"proposal_id": proposal_id, "decision": "reject"},
     }))

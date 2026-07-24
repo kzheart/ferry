@@ -55,7 +55,9 @@ describe("JSONL protocol", () => {
     expect(health).toMatchObject({
       ok: true,
       result: {
-        status: "ok",
+        status: "ready",
+        service: "ferry-runtime",
+        contract_hash: expect.stringMatching(/^sha256:/),
         pi_version: "0.81.1",
         provider: "protocol-test",
         model: "protocol-test-driver",

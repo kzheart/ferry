@@ -10,6 +10,7 @@ from . import scanning, session_meta, sessions, summaries
 from .operations import OperationService
 from .ports import ApplicationPorts
 from .pricing import pricing
+from ..contracts.ipc import FERRY_CONTRACT_HASH
 
 
 class EngineApplication:
@@ -24,10 +25,14 @@ class EngineApplication:
         self._operations.shutdown()
 
     def health(self) -> dict:
-        return {"status": "ok", **self.version()}
+        return {
+            "status": "ready",
+            "service": "engine",
+            "contract_hash": FERRY_CONTRACT_HASH,
+        }
 
     def version(self) -> dict:
-        return {"version": self._ports.version, "protocol": 2}
+        return {"version": self._ports.version}
 
     def scan(self) -> dict:
         return scanning.scan(self._ports, self._index)

@@ -194,11 +194,13 @@ def test_summary_cache_is_scoped_by_tool_and_native_session_id(
 def test_rpc_wiring_returns_structured_error(tmp_path, monkeypatch):
     import json
 
-    from engine.interfaces.rpc import rpc
+    from engine.interfaces.rpc import PROTOCOL, rpc
 
     _use_database(tmp_path, monkeypatch)
     response = rpc(json.dumps({
-        "method": "session_summaries_set", "request_id": "s-1",
+        "protocol": PROTOCOL,
+        "id": "s-1",
+        "method": "session_summaries_set",
         "params": {"tool": "claude", "id": "missing", "digests": {"sha256:x": "y"}},
     }))
     assert response["ok"] is False

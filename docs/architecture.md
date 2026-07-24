@@ -159,15 +159,18 @@ only current built-in Agent identities and launch policy, never external Agent
 version ranges or compatibility status.
 
 `contracts/engine-methods.json` is the equivalent policy source for every
-Session Engine endpoint: WebView exposure, read/index/mutation classification,
-timeout class, and retry safety. It is generated into Rust and Python. The
-Rust host owns a correlation ID for every Engine request and multiplexes JSONL
+Session Engine endpoint: public/trusted UI/internal exposure,
+read/index/mutation classification, timeout class, and retry safety.
+`contracts/ipc.json` defines the exact `ferry-ipc/1` request, response, error,
+and event envelopes. Generated constants include a contract hash; both
+sidecars must return the expected service identity and hash during handshake.
+The Rust host owns an `id` for every Engine request and multiplexes JSONL
 responses by that ID, so an individual caller never holds the process-manager
 lock while waiting. The Engine uses a bounded four-worker lane only for the
 contract's explicitly declared pure reads; index refreshes, native-session
 reads and every mutation remain on the ordered serial lane. Protocol output
-has a single writer, so parallel responses may be
-out-of-order but are always correlated by `request_id`.
+has a single writer, so parallel responses may arrive out of order but remain
+correlated by the top-level `id`, including structured error responses.
 
 ## Cross-platform boundary
 

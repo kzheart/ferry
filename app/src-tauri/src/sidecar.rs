@@ -1,4 +1,5 @@
 use crate::contracts::engine_methods::{self, Exposure};
+use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::sidecar_policy::{request_attempts, request_timeout};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -10,8 +11,6 @@ use std::sync::{
     mpsc, Arc, Mutex, OnceLock,
 };
 use std::time::Duration;
-
-const ENGINE_PROTOCOL: u64 = 2;
 
 /// 常驻引擎进程:按行请求/响应,避免每次 RPC 冷启动(release 下 PyInstaller 解压开销显著)。
 type PendingResult = Result<String, String>;
@@ -42,24 +41,43 @@ static ENGINE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static ENGINE_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 fn stamp_engine_request(request: &str) -> Result<(String, String), String> {
-    let mut value: Value = serde_json::from_str(request)
+    let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
     let object = value
-        .as_object_mut()
+        .as_object()
         .ok_or_else(|| "Engine 请求必须是 JSON object".to_owned())?;
+    let method = object
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Engine 请求缺少 method".to_owned())?;
+    let params = object
+        .get("params")
+        .cloned()
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+    if !params.is_object() {
+        return Err("Engine 请求 params 必须是 JSON object".to_owned());
+    }
     let request_id = format!(
         "engine_{:x}",
         ENGINE_REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed),
     );
-    object.insert("request_id".to_owned(), Value::String(request_id.clone()));
-    Ok((value.to_string(), request_id))
+    let envelope = serde_json::json!({
+        "protocol": FERRY_IPC_PROTOCOL,
+        "id": request_id,
+        "method": method,
+        "params": params,
+    });
+    Ok((envelope.to_string(), request_id))
 }
 
 fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), String> {
     let value: Value = serde_json::from_str(response)
         .map_err(|error| format!("Engine 响应不是有效 JSON: {error}"))?;
-    if value.get("request_id").and_then(Value::as_str) != Some(request_id) {
-        return Err("Engine 响应 request_id 不匹配".to_owned());
+    if value.get("protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL) {
+        return Err("Engine 响应 protocol 不匹配".to_owned());
+    }
+    if value.get("id").and_then(Value::as_str) != Some(request_id) {
+        return Err("Engine 响应 id 不匹配".to_owned());
     }
     Ok(())
 }
@@ -108,12 +126,14 @@ fn handshake(engine: &EngineClient) -> Result<(), String> {
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     let health: Value = serde_json::from_str(&line)
         .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
-    let protocol = health.get("protocol").and_then(Value::as_u64);
-    if health.get("ok").and_then(Value::as_bool) != Some(true) || protocol != Some(ENGINE_PROTOCOL)
+    if health.get("ok").and_then(Value::as_bool) != Some(true)
+        || health.pointer("/result/service").and_then(Value::as_str) != Some("engine")
+        || health
+            .pointer("/result/contract_hash")
+            .and_then(Value::as_str)
+            != Some(FERRY_CONTRACT_HASH)
     {
-        return Err(format!(
-            "引擎协议不兼容: 需要 {ENGINE_PROTOCOL}，实际 {protocol:?}"
-        ));
+        return Err("引擎协议或契约握手失败".to_owned());
     }
     Ok(())
 }
@@ -123,9 +143,9 @@ impl EngineClient {
         let value: Value = serde_json::from_str(request)
             .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
         let request_id = value
-            .get("request_id")
+            .get("id")
             .and_then(Value::as_str)
-            .ok_or("Engine 请求缺少 request_id")?
+            .ok_or("Engine 请求缺少 id")?
             .to_owned();
         let (sender, receiver) = mpsc::channel();
         self.pending
@@ -173,14 +193,9 @@ fn read_engine_output(mut stdout: impl BufRead, pending: Pending) {
         let response = line.trim_end();
         let request_id = serde_json::from_str::<Value>(response)
             .ok()
-            .and_then(|value| {
-                value
-                    .get("request_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            });
+            .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned));
         let Some(request_id) = request_id else {
-            fail_engine_pending(&pending, "Engine 响应缺少 request_id".to_owned());
+            fail_engine_pending(&pending, "Engine 响应缺少 id".to_owned());
             return;
         };
         if let Some(sender) = pending
@@ -357,7 +372,7 @@ fn validate_engine_request_exposure(request: &str, expected: Exposure) -> Result
 mod tests {
     use super::{
         read_engine_output, request_attempts, request_timeout, stamp_engine_request,
-        validate_engine_request_exposure, validate_engine_response_id,
+        validate_engine_request_exposure, validate_engine_response_id, FERRY_IPC_PROTOCOL,
     };
     use crate::contracts::engine_methods::Exposure;
     use crate::operation_commands::validate_operation_plan_input;
@@ -375,7 +390,7 @@ mod tests {
     use std::sync::{mpsc, Arc, Mutex};
 
     #[test]
-    fn engine_output_is_dispatched_by_request_id_even_when_responses_are_reordered() {
+    fn engine_output_is_dispatched_by_id_even_when_responses_are_reordered() {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let (first_sender, first_receiver) = mpsc::channel();
         let (second_sender, second_receiver) = mpsc::channel();
@@ -390,7 +405,7 @@ mod tests {
 
         read_engine_output(
             Cursor::new(
-                b"{\"request_id\":\"engine_second\",\"ok\":true}\n{\"request_id\":\"engine_first\",\"ok\":true}\n",
+                b"{\"id\":\"engine_second\",\"ok\":true}\n{\"id\":\"engine_first\",\"ok\":true}\n",
             ),
             pending,
         );
@@ -418,10 +433,7 @@ mod tests {
 
         read_engine_output(Cursor::new(b"not-json\n"), pending);
 
-        assert_eq!(
-            receiver.recv().unwrap().unwrap_err(),
-            "Engine 响应缺少 request_id"
-        );
+        assert_eq!(receiver.recv().unwrap().unwrap_err(), "Engine 响应缺少 id");
     }
 
     #[test]
@@ -867,15 +879,31 @@ mod tests {
             stamp_engine_request(r#"{"method":"health","request_id":"untrusted"}"#).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
-            value.get("request_id").and_then(serde_json::Value::as_str),
+            value.get("id").and_then(serde_json::Value::as_str),
             Some(request_id.as_str()),
+        );
+        assert_eq!(
+            value.get("protocol").and_then(serde_json::Value::as_str),
+            Some(FERRY_IPC_PROTOCOL),
         );
         assert_ne!(request_id, "untrusted");
         assert!(validate_engine_response_id(
-            &serde_json::json!({"request_id": request_id}).to_string(),
+            &serde_json::json!({
+                "protocol": FERRY_IPC_PROTOCOL,
+                "id": request_id,
+            })
+            .to_string(),
             &request_id,
         )
         .is_ok());
-        assert!(validate_engine_response_id(r#"{"request_id":"other"}"#, &request_id).is_err());
+        assert!(validate_engine_response_id(
+            &serde_json::json!({
+                "protocol": FERRY_IPC_PROTOCOL,
+                "id": "other",
+            })
+            .to_string(),
+            &request_id,
+        )
+        .is_err());
     }
 }
