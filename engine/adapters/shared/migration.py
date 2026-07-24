@@ -7,24 +7,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...events import event
+from ...sessions.loss import outcome as _loss_outcome
 from ...sessions.model import tool_result_text
 from ...sessions.tool_ops import has_valid_tool_input
 from .narration import narrate
-
-_DEGRADED_LOSS_CODES = {
-    "migration.apply_patch_unparsed",
-    "migration.fork_parent_fallback",
-    "migration.reasoning_metadata_dropped",
-    "session.unpaired_tool_use",
-}
-_DROPPED_LOSS_CODES = {
-    "migration.children_not_migrated",
-    "migration.reasoning_dropped",
-    "migration.truncated",
-    "migration.unknown_block_dropped",
-    "session.child_foreign_ignored",
-    "session.child_parent_conflict",
-}
 
 
 class Fidelity:
@@ -76,15 +62,6 @@ class RenderDecision:
             "consumed_fields": sorted(self.consumed_fields),
             "ignored_fields": sorted(self.ignored_fields),
         }
-
-
-def _loss_outcome(loss):
-    code = loss.get("code") if isinstance(loss, dict) else None
-    if code in _DEGRADED_LOSS_CODES:
-        return "degraded"
-    if code in _DROPPED_LOSS_CODES:
-        return "dropped"
-    return None
 
 
 def _walk_meta(nodes):

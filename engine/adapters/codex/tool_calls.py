@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 import re
 
+from ...sessions.loss import DEGRADED, declare as declare_loss
 from ...sessions.model import Session, ToolCall
 from ...sessions.tool_ops import CanonicalOp
+
+# apply_patch 是 Codex 私有的工具形态：解析不出补丁时降级叙述，不丢内容。
+declare_loss({"migration.apply_patch_unparsed": DEGRADED})
 
 _FS_PATCH = getattr(CanonicalOp, "FS_PATCH", "fs.patch")
 _TOOL_INVOKE = getattr(CanonicalOp, "TOOL_INVOKE", "tool.invoke")
