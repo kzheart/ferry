@@ -35,19 +35,19 @@ export interface TaskResult {
   finished_at?: number;
 }
 
-export interface SchedulerResult {
+export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled";
   tasks: TaskResult[];
 }
 
-export type SchedulerEvent =
+export type WorkflowRunEvent =
   | { type: "workflow.started"; task_count: number }
   | { type: "task.started"; task_id: string; role_id: string }
   | { type: "task.completed"; task_id: string }
   | { type: "task.failed"; task_id: string; error: string }
   | { type: "task.cancelled"; task_id: string }
   | { type: "task.skipped"; task_id: string; reason: string }
-  | { type: "workflow.completed"; status: SchedulerResult["status"] };
+  | { type: "workflow.completed"; status: WorkflowRunResult["status"] };
 
 export interface TaskExecutionContext {
   signal: AbortSignal;
@@ -212,7 +212,8 @@ function errorText(error: unknown) {
   return value.slice(0, 1_000);
 }
 
-export class Scheduler {
+/** 一次有界多 Agent 协作的运行实例。 */
+export class WorkflowRun {
   private readonly controller = new AbortController();
   private readonly taskControllers = new Map<string, AbortController>();
   private started = false;
@@ -220,7 +221,7 @@ export class Scheduler {
   constructor(
     private readonly spec: TaskGraph,
     private readonly executor: TaskExecutor,
-    private readonly onEvent: (event: SchedulerEvent) => void = () => {},
+    private readonly onEvent: (event: WorkflowRunEvent) => void = () => {},
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -229,7 +230,7 @@ export class Scheduler {
     for (const controller of this.taskControllers.values()) controller.abort();
   }
 
-  async start(): Promise<SchedulerResult> {
+  async start(): Promise<WorkflowRunResult> {
     if (this.started) {
       throw new ProtocolError(
         "workflow_already_started",
@@ -258,7 +259,7 @@ export class Scheduler {
       task_count: config.tasks.length,
     });
 
-    const final = await new Promise<SchedulerResult>((resolve) => {
+    const final = await new Promise<WorkflowRunResult>((resolve) => {
       const finish = () => {
         if (settled || active > 0) return;
         const pending = [...states.values()].some(

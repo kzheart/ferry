@@ -1,6 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import type { SchedulerResult, TaskGraph } from "./workflow.js";
+import type { TaskGraph, WorkflowRunResult } from "./workflow.js";
 
 const task = Type.Object(
   {
@@ -43,7 +43,7 @@ export function createDelegationTool(
     spec: TaskGraph,
     onUpdate: (payload: unknown) => void,
     signal?: AbortSignal,
-  ) => Promise<SchedulerResult>,
+  ) => Promise<WorkflowRunResult>,
 ): AgentTool {
   return {
     name: "delegate_agents",
