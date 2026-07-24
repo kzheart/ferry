@@ -3,7 +3,7 @@ import {
   organizerPrompt,
   parseOrganizerInput,
   validateOrganizerResult,
-} from "../src/workflows/organizer.js";
+} from "../src/organizing/organizer.js";
 import { ProviderHost } from "../src/providers/provider-host.js";
 
 const input = parseOrganizerInput({

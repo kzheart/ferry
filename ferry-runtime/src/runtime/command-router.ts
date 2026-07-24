@@ -2,7 +2,7 @@ import {
   parseThinkingLevel,
   type ThinkingLevel,
 } from "../providers/provider-config.js";
-import { FERRY_CONTRACT_HASH } from "../protocol/generated/ipc.js";
+import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { RoleInput } from "../roles/role-repository.js";
 import {
@@ -15,7 +15,7 @@ import {
   requireString,
   type CommandEnvelope,
   type ResponseEnvelope,
-} from "../protocol/messages.js";
+} from "../server/messages.js";
 
 export async function dispatch(
   runtime: AgentRuntime,

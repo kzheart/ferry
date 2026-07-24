@@ -46,7 +46,7 @@ mkdirSync(work, { recursive: true });
 mkdirSync(dirname(output), { recursive: true });
 
 await build({
-  entryPoints: [join(runtimeRoot, "src", "protocol", "server.ts")],
+  entryPoints: [join(runtimeRoot, "src", "server", "server.ts")],
   outfile: bundle,
   bundle: true,
   platform: "node",

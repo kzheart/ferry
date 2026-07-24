@@ -2,7 +2,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FileModelsStore } from "../src/infrastructure/model-catalog-store.js";
+import { FileModelsStore } from "../src/providers/model-store.js";
 
 describe("FileModelsStore", () => {
   it("persists Pi dynamic model catalogs atomically", async () => {

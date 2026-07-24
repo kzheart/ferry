@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AGENT_IDS, AGENT_LABELS } from "../protocol/generated/agents.js";
+import { AGENT_IDS, AGENT_LABELS } from "../server/generated/agents.js";
 import {
   Agent,
   type AgentEvent,
@@ -21,11 +21,11 @@ import type {
   ThinkingLevel,
 } from "../providers/provider-config.js";
 import type { ProviderHost } from "../providers/provider-host.js";
-import { parseOrganizerInput } from "../workflows/organizer.js";
+import { parseOrganizerInput } from "../organizing/organizer.js";
 import {
   runOrganizationWorkflow,
   type OrganizationEngineMethod,
-} from "../workflows/organization.js";
+} from "../organizing/organization.js";
 import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
@@ -37,7 +37,7 @@ import {
   PROTOCOL_VERSION,
   ProtocolError,
   type EventEnvelope,
-} from "../protocol/messages.js";
+} from "../server/messages.js";
 import {
   createFerryTools,
   FERRY_TOOL_NAMES,
@@ -48,7 +48,7 @@ import {
   WorkflowRun,
   type TaskGraph,
   type WorkflowRunEvent,
-} from "../core/workflow.js";
+} from "../agents/scheduler.js";
 
 export interface AgentBackend {
   model: Model<string>;
@@ -150,7 +150,7 @@ function summarizeToolResult(result: unknown) {
 export interface RuntimeOptions {
   store?: SessionStore;
   storeFactory?: (
-    invoke: import("../infrastructure/engine-session-repository.js").RuntimeEngineInvoke,
+    invoke: import("../sessions/engine-store.js").RuntimeEngineInvoke,
   ) => SessionStore;
   deferRestore?: boolean;
   backendFactory?: BackendFactory;
@@ -1537,7 +1537,7 @@ export class AgentRuntime {
   private async invokeInternalEngine(
     method:
       | OrganizationEngineMethod
-      | import("../infrastructure/engine-session-repository.js").RuntimeEngineMethod,
+      | import("../sessions/engine-store.js").RuntimeEngineMethod,
     params: Record<string, unknown>,
     sessionId: string,
   ) {

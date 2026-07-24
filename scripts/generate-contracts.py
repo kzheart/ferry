@@ -16,7 +16,7 @@ AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
     ROOT / "engine/contracts/agents.py": "python",
-    ROOT / "ferry-runtime/src/protocol/generated/agents.ts": "runtime",
+    ROOT / "ferry-runtime/src/server/generated/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
@@ -26,7 +26,7 @@ IPC_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/ipc.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ROOT / "engine/contracts/ipc.py": "python",
-    ROOT / "ferry-runtime/src/protocol/generated/ipc.ts": "runtime",
+    ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
 }
 
 

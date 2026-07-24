@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorkflowRun, type WorkflowRunEvent } from "../src/core/workflow.js";
+import { WorkflowRun, type WorkflowRunEvent } from "../src/agents/scheduler.js";
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
