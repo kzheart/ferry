@@ -14,11 +14,11 @@ from engine.adapters.opencode.editor import OpenCodeBackend
 from engine.adapters.opencode.probe import OpenCodeVerifier
 from engine.adapters.opencode.session import _parse_session
 from engine.operations.edit import apply_mutation
-from engine.application.sessions import session_json
-from engine.domain.edit import AssistantReply
-from engine.domain.errors import ConcurrentModificationError
-from engine.domain.model import tool_result_text
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.read import session_json
+from engine.operations.types import AssistantReply
+from engine.errors import ConcurrentModificationError
+from engine.sessions.model import tool_result_text
+from engine.sessions.tool_ops import CanonicalOp
 
 
 ROOT = Path(__file__).parents[1]
@@ -576,7 +576,7 @@ def test_image_blocks_normalize_codex_and_opencode(tmp_path):
 
 
 def test_session_asset_returns_image_only_on_demand(tmp_path, monkeypatch):
-    from engine.application import sessions
+    from engine.sessions import read as sessions
 
     data = [
         {"type": "user", "uuid": "u1", "message": {"role": "user", "content": [

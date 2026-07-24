@@ -1,29 +1,29 @@
-"""迁移历史：由 Python Engine 独占的 SQLite 状态边界持久化。"""
+"""迁移历史：由 Python Engine 独占的 SQLite 状态持久化。"""
 from __future__ import annotations
 
 import secrets
 from pathlib import Path
 
-from ..infrastructure.state_db import StateDatabase
-from .ports import ApplicationPorts
+from ..storage.database import StateDatabase
+from ..context import EngineContext
 
 
-def _database(ports: ApplicationPorts) -> StateDatabase:
+def _database(ports: EngineContext) -> StateDatabase:
     return StateDatabase(
         Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
     )
 
 
-def append(entry: dict, ports: ApplicationPorts) -> str:
+def append(entry: dict, ports: EngineContext) -> str:
     history_id = "history_" + secrets.token_urlsafe(18)
     _database(ports).append_migration_history(history_id, entry)
     return history_id
 
 
-def list_entries(ports: ApplicationPorts) -> list[dict]:
+def list_entries(ports: EngineContext) -> list[dict]:
     return _database(ports).list_migration_history()
 
 
-def delete(history_id: str, ports: ApplicationPorts) -> dict:
+def delete(history_id: str, ports: EngineContext) -> dict:
     return _database(ports).delete_migration_history(history_id)

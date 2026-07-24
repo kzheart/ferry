@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from engine.interfaces.cli import serve
-from engine.interfaces.rpc import PROTOCOL
+from engine.server.cli import serve
+from engine.server.rpc import PROTOCOL
 
 
 def test_parallel_read_requests_can_finish_out_of_input_order():

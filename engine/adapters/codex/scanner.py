@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from ...domain.usage import has_tokens, iso_ms
+from ...sessions.usage import has_tokens, iso_ms
 from ..base.scanner import clip_text, scan_jsonl
 from .reader import session_id
 

@@ -2,7 +2,7 @@ import json
 
 from engine.adapters.claude.reader import read
 from engine.adapters.claude.writer import write
-from engine.domain.model import (
+from engine.sessions.model import (
     AgentEdge,
     Block,
     Message,
@@ -11,7 +11,7 @@ from engine.domain.model import (
     ToolResult,
     ToolResultBlock,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def test_claude_child_forks_from_agent_call_after_text_in_same_message(tmp_path):

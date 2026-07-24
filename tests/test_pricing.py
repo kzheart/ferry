@@ -1,6 +1,6 @@
 """models.dev 单价扁平化与缓存/兜底行为。"""
 
-from engine.application import pricing as pr
+from engine.system import pricing as pr
 
 
 def test_flatten_extracts_cost_per_model():

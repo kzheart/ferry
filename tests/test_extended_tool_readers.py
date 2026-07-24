@@ -2,7 +2,7 @@ import json
 
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.opencode import session as opencode_session
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def _tools(session):

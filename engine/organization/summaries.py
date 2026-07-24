@@ -10,15 +10,15 @@ import hashlib
 import time
 from pathlib import Path
 
-from ..application.ports import ApplicationPorts
-from ..application.sessions import read_tree
-from ..domain.errors import SummaryBackboneMissingError
-from ..infrastructure.state_db import StateDatabase
+from ..context import EngineContext
+from ..sessions.read import read_tree
+from ..errors import SummaryBackboneMissingError
+from ..storage.database import StateDatabase
 
 MAX_DIGEST_CHARS = 4000
 
 
-def _database(ports: ApplicationPorts) -> StateDatabase:
+def _database(ports: EngineContext) -> StateDatabase:
     return StateDatabase(
         Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
@@ -29,7 +29,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def get_backbone(tool: str, session_id: str, ports: ApplicationPorts) -> dict | None:
+def get_backbone(tool: str, session_id: str, ports: EngineContext) -> dict | None:
     return _database(ports).get_session_summary(tool, session_id)
 
 
@@ -122,7 +122,7 @@ def _view(record: dict) -> dict:
     }
 
 
-def build_backbone(tool: str, ref: str, ports: ApplicationPorts) -> dict:
+def build_backbone(tool: str, ref: str, ports: EngineContext) -> dict:
     """读取会话 → 分段 → 算指纹。每次都以当前会话重建段结构,并按内容
     hash 复用既有摘要(编辑结构或某段时不牵连未变内容的摘要)。"""
     session = read_tree(tool, ref, ports)
@@ -164,7 +164,7 @@ def build_backbone(tool: str, ref: str, ports: ApplicationPorts) -> dict:
 
 
 def set_summaries(tool: str, session_id: str, digests: dict,
-                  ports: ApplicationPorts) -> dict:
+                  ports: EngineContext) -> dict:
     """ferry-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
     编辑后仍存在的段稳健。"""
     updates = digests if isinstance(digests, dict) else {}

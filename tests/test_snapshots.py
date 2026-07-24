@@ -9,7 +9,7 @@ import pytest
 
 from engine.operations import edit as editing
 from engine.operations.delete import SessionDeletionService
-from engine.infrastructure.snapshots import backup_dir
+from engine.storage.snapshots import backup_dir
 
 
 def _turns(n):
@@ -66,7 +66,7 @@ def test_delete_is_undoable(session, ports):
 
 
 def test_undelete_refuses_to_overwrite_a_live_session(session, ports):
-    from engine.domain.errors import SnapshotInvalidSourceError
+    from engine.errors import SnapshotInvalidSourceError
     service = SessionDeletionService(ports)
     result = service.delete("claude", str(session))
     service.restore(result["snapshot"])
@@ -75,7 +75,7 @@ def test_undelete_refuses_to_overwrite_a_live_session(session, ports):
 
 
 def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path, ports):
-    from engine.domain.errors import SnapshotInvalidSourceError
+    from engine.errors import SnapshotInvalidSourceError
     stray = tmp_path / "stray.jsonl"
     stray.write_text("{}\n")
     with pytest.raises(SnapshotInvalidSourceError):

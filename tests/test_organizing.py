@@ -9,13 +9,13 @@ import pytest
 from engine.operations import metadata
 from engine.organization import proposals as organizing
 from engine.organization import summaries
-from engine.composition import create_ports
-from engine.domain.errors import (
+from engine.bootstrap import create_context
+from engine.errors import (
     OrganizationProposalError,
     OrganizationProposalStaleError,
 )
-from engine.interfaces.rpc import PROTOCOL, rpc
-from engine.infrastructure.state_db import StateDatabase
+from engine.server.rpc import PROTOCOL, rpc
+from engine.storage.database import StateDatabase
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def _target(record: dict, suggested: dict) -> dict:
 
 
 def _ports():
-    return create_ports()
+    return create_context()
 
 
 def _digest_context(targets: list[dict]) -> dict:

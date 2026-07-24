@@ -9,7 +9,7 @@ import contextvars
 import json
 from contextlib import contextmanager
 
-from ...domain.model import tool_result_text
+from ...sessions.model import tool_result_text
 
 DEFAULT_TEMPLATE = "historical-tool-call-v1"
 # 降级叙述固定写英文：目标 Agent 读的是上下文而非界面文案，英文最通用，

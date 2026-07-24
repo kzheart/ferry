@@ -129,7 +129,9 @@ engine/
   adapters/        current Claude, Codex, and OpenCode structures
   storage/         SQLite state, snapshots, and scan cache
   system/          paths, executables, resources, and probes
-  app.py           process composition
+  app.py           process capability facade
+  bootstrap.py     process composition
+  context.py       explicit shared dependencies
 ```
 
 ### Ferry Runtime
@@ -270,8 +272,8 @@ Windows sidecar builds and Rust compilation remain CI gates.
 UI -> generated Agent contract and desktop command layer
 Rust host -> generated Agent policy and IPC boundary
 Ferry Runtime -> tool port -> Rust gateway
-Rust gateway -> Session Engine application API
-Session Engine application -> adapter contracts
+Rust gateway -> Session Engine capability API
+Session Engine capability API -> adapter contracts
 adapter -> current native store
 ```
 

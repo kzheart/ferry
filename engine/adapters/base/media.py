@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import re
 
-from ...domain.model import ImageAsset
+from ...sessions.model import ImageAsset
 
 
 SUPPORTED_IMAGE_MIME_TYPES = {

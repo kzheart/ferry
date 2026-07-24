@@ -2,7 +2,7 @@ from engine.contracts.engine_methods import (
     ENGINE_METHOD_POLICIES,
     PARALLEL_READ_METHOD_NAMES,
 )
-from engine.interfaces.rpc import RPC_METHODS
+from engine.server.rpc import RPC_METHODS
 
 
 def test_engine_rpc_methods_exactly_match_generated_policy_contract():

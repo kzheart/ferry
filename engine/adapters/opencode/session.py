@@ -13,12 +13,12 @@ import tempfile
 import time
 from pathlib import Path
 
-from ...domain.errors import (
+from ...errors import (
     AgentFormatChangedError,
     SessionNotFoundError,
     SessionStoreUnavailableError,
 )
-from ...domain.model import (
+from ...sessions.model import (
     AgentEdge,
     Block,
     ContextCompaction,
@@ -29,11 +29,11 @@ from ...domain.model import (
     ToolResultBlock,
     tool_result_text,
 )
-from ...domain.reasoning import visible_text
-from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
-from ...domain.usage import iso_ms
-from ...infrastructure import executables
-from ...infrastructure.platform_paths import opencode_database_path
+from ...sessions.reasoning import visible_text
+from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
+from ...sessions.usage import iso_ms
+from ...system import executables
+from ...system.paths import opencode_database_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
 from .native_schema import templates

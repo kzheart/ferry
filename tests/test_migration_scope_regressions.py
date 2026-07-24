@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
-from engine.application import agent_tools
+from engine.sessions import catalog as agent_tools
 from engine.operations import migrate as migration
-from engine.domain.model import AgentEdge, Block, Message, Session
+from engine.sessions.model import AgentEdge, Block, Message, Session
 
 
 def _tree():

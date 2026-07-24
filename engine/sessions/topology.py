@@ -1,4 +1,4 @@
-"""会话树的纯领域规则。"""
+"""会话树规则。"""
 
 
 def session_roots(rows: list[dict]) -> list[dict]:

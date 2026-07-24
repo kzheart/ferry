@@ -7,8 +7,8 @@ import os
 import shutil
 from pathlib import Path
 
-from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError, SessionNotFoundError
-from ...infrastructure.snapshots import snapshot_file
+from ...errors import ConcurrentModificationError, OperationUnsupportedError, SessionNotFoundError
+from ...storage.snapshots import snapshot_file
 from ..base.codec import positive_turn, select_span
 from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
 from . import native as codex_native

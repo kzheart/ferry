@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import shutil
 
-from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
+from ...errors import ConcurrentModificationError, OperationUnsupportedError
 from ..base.codec import positive_turn, select_span
 from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size
 from . import editing as claude_edit

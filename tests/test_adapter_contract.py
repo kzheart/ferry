@@ -13,9 +13,9 @@ from engine.adapters.registry import AdapterRegistry, create_registry
 from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
 from engine.adapters.codex.codec import TURN_INDEX as CODEX_INDEX
 from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
-from engine.application.sessions import session_json
-from engine.domain.edit import AssistantReply
-from engine.domain.errors import ToolUnknownError
+from engine.sessions.read import session_json
+from engine.operations.types import AssistantReply
+from engine.errors import ToolUnknownError
 from engine.contracts.agents import AGENT_IDS
 
 from test_reply_editing import (

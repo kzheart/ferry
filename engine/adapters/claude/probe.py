@@ -6,7 +6,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from ...infrastructure import executables, probes
+from ...system import executables, probes
 from . import editing as claude_edit
 
 

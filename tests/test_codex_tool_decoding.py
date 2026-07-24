@@ -4,15 +4,15 @@ import pytest
 
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import writer as codex_writer
-from engine.domain.errors import AgentFormatChangedError
-from engine.domain.model import (
+from engine.errors import AgentFormatChangedError
+from engine.sessions.model import (
     Session,
     ToolCall,
     ToolResult,
     ToolResultBlock,
     tool_result_text,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def _read(tmp_path, records):

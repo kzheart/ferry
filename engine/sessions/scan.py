@@ -1,10 +1,10 @@
-"""跨工具会话扫描用例。"""
+"""跨工具会话扫描。"""
 
-from .ports import ApplicationPorts
-from . import agent_tools
+from ..context import EngineContext
+from . import catalog
 
 
-def scan(ports: ApplicationPorts, index: agent_tools.AgentSessionIndex) -> dict:
+def scan(ports: EngineContext, index: catalog.AgentSessionIndex) -> dict:
     tools, scanned = {}, []
     cache = ports.cache_factory()
     for name in ports.adapters():

@@ -2,7 +2,7 @@ import pytest
 
 from engine.operations import edit as editing
 from engine.operations import migrate as migration
-from engine.domain.model import Session
+from engine.sessions.model import Session
 
 
 class Target:

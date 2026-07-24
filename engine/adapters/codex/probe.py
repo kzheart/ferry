@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from ...infrastructure import executables, probes
+from ...system import executables, probes
 
 
 def _probe_in_env(session_id, model=None, env=None):

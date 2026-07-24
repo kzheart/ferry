@@ -3,10 +3,10 @@ import sqlite3
 
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex.writer import write
-from engine.domain.model import (
+from engine.sessions.model import (
     AgentEdge, Block, Message, Session, ToolCall, text_tool_result,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 SCHEMA = """

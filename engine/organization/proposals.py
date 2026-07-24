@@ -11,14 +11,14 @@ import secrets
 import time
 from pathlib import Path
 
-from ..application.ports import ApplicationPorts
-from ..domain.errors import (
+from ..context import EngineContext
+from ..errors import (
     ConcurrentModificationError,
     OrganizationProposalError,
     OrganizationProposalNotFoundError,
     OrganizationProposalStaleError,
 )
-from ..infrastructure.state_db import StateDatabase
+from ..storage.database import StateDatabase
 from ..operations import metadata as metadata_store
 from . import summaries
 
@@ -28,7 +28,7 @@ _PATCH_FIELDS = {
 }
 
 
-def _database(ports: ApplicationPorts) -> StateDatabase:
+def _database(ports: EngineContext) -> StateDatabase:
     return StateDatabase(
         Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
@@ -48,7 +48,7 @@ def _digest(value) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
-def _backbone(tool: str, session_id: str, ports: ApplicationPorts) -> dict:
+def _backbone(tool: str, session_id: str, ports: EngineContext) -> dict:
     record = summaries.get_backbone(tool, session_id, ports)
     if not record:
         raise OrganizationProposalError(
@@ -56,7 +56,7 @@ def _backbone(tool: str, session_id: str, ports: ApplicationPorts) -> dict:
     return record
 
 
-def digest_context(targets: list[dict], ports: ApplicationPorts) -> dict:
+def digest_context(targets: list[dict], ports: EngineContext) -> dict:
     """返回 runtime 生成标题/标签/聚类所需的最小、无原文 digest 语料。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
@@ -114,7 +114,7 @@ def _validated_patch(patch) -> dict:
 
 
 def _validated_target(target: dict, current_metadata: dict,
-                      ports: ApplicationPorts) -> dict:
+                      ports: EngineContext) -> dict:
     tool, session_id = target.get("tool"), target.get("id")
     fingerprint = target.get("fingerprint")
     if not all(isinstance(value, str) and value
@@ -158,7 +158,7 @@ def _validated_target(target: dict, current_metadata: dict,
     }
 
 
-def propose(targets: list[dict], ports: ApplicationPorts) -> dict:
+def propose(targets: list[dict], ports: EngineContext) -> dict:
     """接收 runtime 的结构化整理结果；同一内容指纹只产生一个提案。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
@@ -186,7 +186,7 @@ def propose(targets: list[dict], ports: ApplicationPorts) -> dict:
     return {**result["proposal"], "cache_hit": result["cache_hit"]}
 
 
-def list_proposals(status: str | None, ports: ApplicationPorts) -> list[dict]:
+def list_proposals(status: str | None, ports: EngineContext) -> list[dict]:
     return _database(ports).list_organization_proposals(status)
 
 
@@ -201,7 +201,7 @@ def _get_pending(proposal: dict | None, proposal_id: str) -> dict:
     return proposal
 
 
-def modify(proposal_id: str, changes: list[dict], ports: ApplicationPorts) -> dict:
+def modify(proposal_id: str, changes: list[dict], ports: EngineContext) -> dict:
     """用户可在批准前改写建议值；修改本身不会落入会话元数据。"""
     if not isinstance(changes, list) or not changes:
         raise OrganizationProposalError("changes 必须是非空数组")
@@ -234,7 +234,7 @@ def modify(proposal_id: str, changes: list[dict], ports: ApplicationPorts) -> di
     return result["proposal"]
 
 
-def decide(proposal_id: str, decision: str, ports: ApplicationPorts) -> dict:
+def decide(proposal_id: str, decision: str, ports: EngineContext) -> dict:
     """批准才批量写 sidecar；拒绝仅改变提案状态并记录信号。"""
     if decision not in {"approve", "reject"}:
         raise OrganizationProposalError("decision 必须是 approve/reject")

@@ -4,8 +4,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from ...domain.errors import AgentFormatChangedError
-from ...domain.model import (
+from ...errors import AgentFormatChangedError
+from ...sessions.model import (
     AgentEdge,
     Block,
     ContextCompaction,
@@ -16,9 +16,9 @@ from ...domain.model import (
     ToolResultBlock,
     tool_result_text,
 )
-from ...domain.reasoning import codex_summary_text
-from ...domain.tool_ops import CanonicalOp
-from ...infrastructure.scan_cache import ScanCache
+from ...sessions.reasoning import codex_summary_text
+from ...sessions.tool_ops import CanonicalOp
+from ...storage.scan_cache import ScanCache
 from ..base.media import image_from_data_url
 
 _META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"

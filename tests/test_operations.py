@@ -9,14 +9,14 @@ import pytest
 
 from engine.operations import metadata
 from engine.operations import service as operations
-from engine.domain.edit import AssistantReply
-from engine.domain.errors import (
+from engine.operations.types import AssistantReply
+from engine.errors import (
     AgentRequestError,
     ConcurrentModificationError,
     InvalidReplyError,
     OperationUnsupportedError,
 )
-from engine.infrastructure.state_db import StateDatabase
+from engine.storage.database import StateDatabase
 from test_agent_tools import _claude_ref, agent_environment
 
 

@@ -7,12 +7,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from ..application.ports import ApplicationPorts
-from ..domain.errors import ConcurrentModificationError
-from ..infrastructure.state_db import StateDatabase
+from ..context import EngineContext
+from ..errors import ConcurrentModificationError
+from ..storage.database import StateDatabase
 
 
-def _database(ports: ApplicationPorts) -> StateDatabase:
+def _database(ports: EngineContext) -> StateDatabase:
     path = Path(ports.snapshot_dir()) / "ferry-state.sqlite3"
     # 元数据调用不能把正在执行的 Operation 标为中断；该恢复动作仅由
     # OperationService 重启时执行。
@@ -23,7 +23,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def list_all(ports: ApplicationPorts) -> dict:
+def list_all(ports: EngineContext) -> dict:
     return _database(ports).list_session_metadata()
 
 
@@ -32,13 +32,13 @@ def key(tool: str, session_id: str) -> str:
 
 
 def set_entry(tool: str, session_id: str, patch: dict,
-              ports: ApplicationPorts) -> dict:
+              ports: EngineContext) -> dict:
     return _database(ports).set_session_metadata(tool, session_id, patch, _now_ms())
 
 
 def compare_and_set_entry(
         tool: str, session_id: str, expected: dict, patch: dict,
-        ports: ApplicationPorts,
+        ports: EngineContext,
 ) -> dict:
     result = _database(ports).compare_and_set_session_metadata(
         [(tool, session_id, expected, patch)], _now_ms(),
@@ -48,7 +48,7 @@ def compare_and_set_entry(
     return result[key(tool, session_id)]
 
 
-def compare_and_set_entries(changes: list[dict], ports: ApplicationPorts) -> dict:
+def compare_and_set_entries(changes: list[dict], ports: EngineContext) -> dict:
     encoded = [
         (
             change["tool"], change["id"],

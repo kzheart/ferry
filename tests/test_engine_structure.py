@@ -25,12 +25,19 @@ def test_business_capabilities_live_in_top_level_packages():
         "__init__.py",
         "delete.py",
         "edit.py",
+        "history.py",
         "metadata.py",
         "migrate.py",
         "service.py",
+        "types.py",
         "verification.py",
     }
-    assert not (ENGINE / "application/organization").exists()
-    assert not (ENGINE / "application/operations").exists()
-    assert not (ENGINE / "application/organizing.py").exists()
-    assert not (ENGINE / "application/summaries.py").exists()
+    directories = {
+        path.name for path in ENGINE.iterdir() if path.is_dir()
+    }
+    assert not {
+        "application",
+        "domain",
+        "infrastructure",
+        "interfaces",
+    } & directories

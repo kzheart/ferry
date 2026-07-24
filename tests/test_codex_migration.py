@@ -9,10 +9,10 @@ from engine.adapters.claude.writer import write as write_claude
 from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import session as opencode_session
-from engine.domain.model import (
+from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 SCHEMA = """

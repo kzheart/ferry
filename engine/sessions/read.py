@@ -1,10 +1,10 @@
 """规范会话读取、树装配与 RPC DTO。"""
 
 from ..adapters.base.migration import assemble_tree
-from ..domain.errors import SessionAssetNotFoundError
-from ..domain.model import tool_result_text
-from ..domain.tool_ops import CanonicalOp
-from .ports import ApplicationPorts
+from ..errors import SessionAssetNotFoundError
+from ..context import EngineContext
+from .model import tool_result_text
+from .tool_ops import CanonicalOp
 
 
 def _tool_view(call):
@@ -16,7 +16,7 @@ def _tool_view(call):
     return name, value
 
 
-def read_tree(tool_name: str, ref: str, ports: ApplicationPorts):
+def read_tree(tool_name: str, ref: str, ports: EngineContext):
     tool = ports.adapter(tool_name)
     return assemble_tree(tool.browser, ref, ports.cache_factory())
 
@@ -147,11 +147,11 @@ def session_json(session):
         "agent_edges": edges}
 
 
-def show(tool: str, ref: str, ports: ApplicationPorts) -> dict:
+def show(tool: str, ref: str, ports: EngineContext) -> dict:
     return session_json(read_tree(tool, ref, ports))
 
 
-def session_asset(tool: str, ref: str, asset_id: str, ports: ApplicationPorts) -> dict:
+def session_asset(tool: str, ref: str, asset_id: str, ports: EngineContext) -> dict:
     for session in read_tree(tool, ref, ports).walk():
         for message in session.messages:
             for block in message.blocks:

@@ -10,13 +10,14 @@ import time
 from pathlib import Path
 
 from ..adapters.base import narration
-from ..application import history, sessions
-from ..application.ports import ApplicationPorts
+from ..context import EngineContext
+from ..sessions import read as sessions
+from . import history
 from . import verification as probe_mod
 
 
 class MigrationService:
-    def __init__(self, ports: ApplicationPorts):
+    def __init__(self, ports: EngineContext):
         self._ports = ports
 
     def resume_command(self, tool: str, session_id: str, cwd: str) -> dict:

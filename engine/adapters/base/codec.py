@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from ...domain.errors import LocatorStaleError, TurnOutOfRangeError
+from ...errors import LocatorStaleError, TurnOutOfRangeError
 
 
 @dataclass(frozen=True)

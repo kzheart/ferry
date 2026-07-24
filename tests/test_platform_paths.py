@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from engine.infrastructure.platform_paths import opencode_database_path
+from engine.system.paths import opencode_database_path
 
 
 def test_opencode_database_path_uses_xdg_data_home():

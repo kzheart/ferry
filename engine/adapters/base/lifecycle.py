@@ -4,8 +4,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from ...domain.errors import OperationUnsupportedError, SnapshotInvalidSourceError
-from ...infrastructure.snapshots import snapshot_file
+from ...errors import OperationUnsupportedError, SnapshotInvalidSourceError
+from ...storage.snapshots import snapshot_file
 
 
 class BaseLifecycle:

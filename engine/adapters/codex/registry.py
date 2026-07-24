@@ -6,7 +6,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from ...domain.model import Session
+from ...sessions.model import Session
 
 
 def _columns(db: sqlite3.Connection, table: str) -> list[tuple]:

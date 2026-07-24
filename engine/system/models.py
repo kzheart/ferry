@@ -1,9 +1,9 @@
-"""模型发现与用户扩展合并用例。"""
+"""模型发现与用户扩展合并。"""
 
 import json
 from pathlib import Path
 
-from .ports import ApplicationPorts
+from ..context import EngineContext
 
 MODELS_CONFIG = Path.home() / ".resume-harness/models.json"
 
@@ -21,7 +21,7 @@ def _user_model_ids(tool):
             or (isinstance(item, dict) and item.get("id"))]
 
 
-def list_models(tool_name: str, ports: ApplicationPorts):
+def list_models(tool_name: str, ports: EngineContext):
     catalog = ports.adapter(tool_name).models
     error = default = None
     try:

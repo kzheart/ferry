@@ -1,4 +1,4 @@
-"""纯领域模型与规则。"""
+"""会话读取、索引与规范化语义。"""
 
 from .model import AgentEdge, Block, Message, Session, ToolCall
 

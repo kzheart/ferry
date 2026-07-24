@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...infrastructure.snapshots import snapshot_file
+from ...storage.snapshots import snapshot_file
 from ..base.lifecycle import FileSessionLifecycle
 from .native import CodexCloneError, CodexStore, discover_closure
 from .registry import unregister_tree

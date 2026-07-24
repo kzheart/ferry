@@ -5,7 +5,7 @@ from engine.adapters.codex.scanner import _tokens_from_usage
 from engine.adapters.opencode.scanner import _msg_tokens
 from datetime import datetime, timezone
 
-from engine.domain.usage import (
+from engine.sessions.usage import (
     add_tokens, dominant_model, empty_tokens, has_tokens, iso_ms,
 )
 

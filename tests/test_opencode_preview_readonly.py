@@ -7,7 +7,7 @@ import pytest
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.base.editing import EditDocument
 from engine.adapters.opencode.editor import OpenCodeBackend, OpenCodeDocument
-from engine.domain.errors import (
+from engine.errors import (
     AgentFormatChangedError,
     SessionStoreUnavailableError,
 )

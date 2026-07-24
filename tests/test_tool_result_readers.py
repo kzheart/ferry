@@ -1,6 +1,6 @@
 import json
 
-from engine.domain.model import tool_result_text
+from engine.sessions.model import tool_result_text
 from engine.adapters.claude.reader import (
     _agent_id,
     _decode_transcript,

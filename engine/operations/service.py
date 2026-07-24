@@ -10,10 +10,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..application import agent_tools
-from ..application.ports import ApplicationPorts
-from ..domain.edit import AssistantReply
-from ..domain.errors import (
+from ..sessions import catalog as agent_tools
+from ..context import EngineContext
+from ..operations.types import AssistantReply
+from ..errors import (
     AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
@@ -24,7 +24,7 @@ from . import metadata, verification as probe_mod
 from .delete import SessionDeletionService
 from .edit import apply_mutation, preview_mutation
 from .migrate import MigrationService
-from ..infrastructure.state_db import StateDatabase
+from ..storage.database import StateDatabase
 
 
 PLAN_TTL_MS = 10 * 60 * 1000
@@ -75,7 +75,7 @@ class OperationState:
 
 
 class OperationService:
-    def __init__(self, ports: ApplicationPorts,
+    def __init__(self, ports: EngineContext,
                  index: agent_tools.AgentSessionIndex):
         self._ports = ports
         self._index = index

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import subprocess
 
-from ...infrastructure import executables
+from ...system import executables
 from ..base.lifecycle import BaseLifecycle
 from . import session as opencode_session
 

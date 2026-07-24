@@ -1,7 +1,7 @@
 """结构化 RPC envelope 与错误码测试。"""
 import json
 
-from engine.interfaces.rpc import PROTOCOL, rpc
+from engine.server.rpc import PROTOCOL, rpc
 
 
 def request(method: str, params: dict | None = None, request_id: str = "req-1"):

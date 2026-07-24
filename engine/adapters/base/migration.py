@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...domain.events import event
-from ...domain.model import tool_result_text
-from ...domain.tool_ops import has_valid_tool_input
+from ...events import event
+from ...sessions.model import tool_result_text
+from ...sessions.tool_ops import has_valid_tool_input
 from .narration import narrate
 
 _DEGRADED_LOSS_CODES = {

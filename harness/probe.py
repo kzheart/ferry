@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""外部验证器 CLI；生产实现由 engine.application.verification 所有。"""
+"""外部验证器 CLI；生产实现由 engine.operations.verification 所有。"""
 
 import argparse
 import sys
 
-from engine.application.verification import ProbeTimeout, run_probe
+from engine.operations.verification import ProbeTimeout, run_probe
 
 PROBES = ("claude", "codex", "opencode")
 
