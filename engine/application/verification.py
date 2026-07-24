@@ -1,6 +1,6 @@
 """探针应用门面；具体 CLI 执行由 infrastructure 持有。"""
 
-from .ports import current
+from .ports import ApplicationPorts
 
 
 class ProbeTimeout(RuntimeError):
@@ -14,9 +14,10 @@ def timeout_report(tool, error) -> dict:
                            "truncated": False}}
 
 
-def run_probe(tool, session_id, dirpath=None, model=None):
+def run_probe(tool, session_id, dirpath=None, model=None, *,
+              ports: ApplicationPorts):
     try:
-        return current().adapter(tool).verifier.probe(
+        return ports.adapter(tool).verifier.probe(
             session_id, dirpath, model)
     except Exception as error:
         if error.__class__.__name__ == "ProbeTimeout":
