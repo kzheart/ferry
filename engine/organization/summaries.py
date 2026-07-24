@@ -151,7 +151,7 @@ def build_backbone(tool: str, ref: str, ports: EngineContext) -> dict:
     if previous != record:
         now = _now_ms()
         database.summaries.store(record, now)
-        database.invalidate_organization_proposals(
+        database.organization.invalidate(
             tool, session.source_id, fingerprint, now,
         )
     view = _view(record)

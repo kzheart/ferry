@@ -175,7 +175,7 @@ def propose(targets: list[dict], ports: EngineContext) -> dict:
         for target in normalized
     ])
     now = _now_ms()
-    result = _database(ports).create_or_get_organization_proposal({
+    result = _database(ports).organization.create_or_get({
         "proposal_id": "org_" + secrets.token_urlsafe(18),
         "generation_key": generation_key,
         "status": "pending",
@@ -187,7 +187,7 @@ def propose(targets: list[dict], ports: EngineContext) -> dict:
 
 
 def list_proposals(status: str | None, ports: EngineContext) -> list[dict]:
-    return _database(ports).list_organization_proposals(status)
+    return _database(ports).organization.list(status)
 
 
 def _get_pending(proposal: dict | None, proposal_id: str) -> dict:
@@ -211,7 +211,7 @@ def modify(proposal_id: str, changes: list[dict], ports: EngineContext) -> dict:
         by_identity[identity] = _validated_patch(change.get("suggested"))
     database = _database(ports)
     proposal = _get_pending(
-        database.get_organization_proposal(proposal_id), proposal_id,
+        database.organization.get(proposal_id), proposal_id,
     )
     known = {(target["tool"], target["id"]) for target in proposal["targets"]}
     if not set(by_identity) <= known:
@@ -220,7 +220,7 @@ def modify(proposal_id: str, changes: list[dict], ports: EngineContext) -> dict:
         patch = by_identity.get((target["tool"], target["id"]))
         if patch is not None:
             target["suggested"] = patch
-    result = database.modify_organization_proposal(proposal, _now_ms())
+    result = database.organization.modify(proposal, _now_ms())
     if result["outcome"] == "missing":
         raise OrganizationProposalNotFoundError(
             "整理提案不存在", {"proposal_id": proposal_id})
@@ -238,7 +238,7 @@ def decide(proposal_id: str, decision: str, ports: EngineContext) -> dict:
     """批准才批量写 sidecar；拒绝仅改变提案状态并记录信号。"""
     if decision not in {"approve", "reject"}:
         raise OrganizationProposalError("decision 必须是 approve/reject")
-    result = _database(ports).decide_organization_proposal(
+    result = _database(ports).organization.decide(
         proposal_id, decision, _now_ms(),
     )
     if result["outcome"] == "missing":

@@ -49,7 +49,7 @@ def _seed(tool: str, session_id: str, digest: str,
     }
     database = summaries._database(_ports())
     database.summaries.store(record, 0)
-    database.invalidate_organization_proposals(
+    database.organization.invalidate(
         tool, session_id, record["fingerprint"], 0,
     )
     return record
@@ -94,7 +94,7 @@ def _set_metadata(tool: str, session_id: str, patch: dict) -> dict:
 
 
 def _signals() -> list[dict]:
-    return organizing._database(_ports()).list_organization_signals()
+    return organizing._database(_ports()).organization.list_signals()
 
 
 def test_digest_context_only_exposes_cached_digest(organization_environment):
