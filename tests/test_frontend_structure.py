@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -120,3 +121,25 @@ def test_frontend_core_uses_strict_typescript():
     assert not (FRONTEND / "shared/contracts/generated/operations.js").exists()
     assert (FRONTEND / "platform/desktop/client.ts").is_file()
     assert not (FRONTEND / "api/transport/rpc.js").exists()
+
+
+def test_desktop_webview_has_a_restricted_content_security_policy():
+    config = json.loads(
+        (ROOT / "app/src-tauri/tauri.conf.json").read_text()
+    )
+    security = config["app"]["security"]
+    csp = security["csp"]
+    dev_csp = security["devCsp"]
+
+    assert csp["default-src"] == "'self'"
+    assert csp["connect-src"] == "'self' ipc: http://ipc.localhost"
+    assert csp["img-src"] == "'self' data: blob:"
+    assert csp["object-src"] == "'none'"
+    assert csp["frame-src"] == "'none'"
+    assert "*" not in " ".join(csp.values())
+    assert "localhost:5173" not in " ".join(csp.values())
+    assert "ws://localhost:5173" in dev_csp["connect-src"]
+
+    html = (ROOT / "app/index.html").read_text()
+    assert '<script type="module" src="/src/themeBootstrap.js">' in html
+    assert "localStorage.getItem" not in html
