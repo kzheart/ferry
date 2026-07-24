@@ -18,6 +18,7 @@ import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
 import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
+import { initialWorkspace, useOnboarding } from "../modules/onboarding/useOnboarding.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
 import { AppShell } from "./AppShell.jsx";
@@ -35,8 +36,7 @@ export default function App() {
     doScan, loadHistory, deleteHistory } = useBrowserData();
 
   // ----- 导航与选中 -----
-  const [view, setView] = useState(
-    () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
+  const [view, setView] = useState(initialWorkspace);
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [organizerOpen, setOrganizerOpen] = useState(false);
   const [peekId, setPeekId] = useState(null);  // Ask Ferry 卡片就地预览的会话 id
@@ -67,8 +67,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
-  const [guideStep, setGuideStep] = useState(0);
-  const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
+  const onboarding = useOnboarding({
+    setView,
+    closeSettings: () => setSettingsOpen(false),
+    closeMigration: () => setMig(null),
+    scan: doScan,
+  });
 
   const sessions = scan?.sessions || [];
   const selectionReset = useRef(() => {});
@@ -252,17 +256,6 @@ export default function App() {
     askDelete,
   });
 
-  // ----- 引导 -----
-  const openGuide = () => {
-    setView("library"); setSettingsOpen(false);
-    setMig(null); setGuideStep(1);
-  };
-
-  const finishGuide = () => {
-    setGuideStep(0); setGuideSeen(true);
-    localStorage.setItem("ferry-guide-seen", "1");
-  };
-
   const { onRowClick, onRowMore, onRowPin, onRowDelete } = useLibraryResourcePaneActions({
     sessionsByKey: byKey,
     selectedId: selId,
@@ -357,11 +350,6 @@ export default function App() {
     storageKey: "ferry-rail-order",
   });
 
-  const firstDone = () => {
-    localStorage.setItem("ferry-first-done", "1");
-    setView("library"); doScan();
-    if (!guideSeen) setTimeout(() => setGuideStep(1), 300);
-  };
   useAppKeyboardShortcuts({
     paneAvailable: Boolean(paneCfg),
     onOpenSearch: () => setSearchOpen(true),
@@ -380,7 +368,7 @@ export default function App() {
       { open: Boolean(peekId), dismiss: () => setPeekId(null) },
       { open: searchOpen, dismiss: () => setSearchOpen(false) },
       { open: multiSel.length > 0, dismiss: () => setMultiSel([]) },
-      { open: guideStep > 0, dismiss: finishGuide },
+      { open: onboarding.step > 0, dismiss: onboarding.finishGuide },
     ],
     view,
     currentSession: cur,
@@ -513,7 +501,7 @@ export default function App() {
             setSettingsSection(section); setSettingsOpen(true); }}
           environment={env}
           scan={scan}
-          onFirstDone={firstDone}
+          onFirstDone={onboarding.completeFirstRun}
           scanningLabel={t("app:detail.scanningSessions")}
           emptyLibraryLabel={t("app:detail.noSessionToDisplay")}
         />
@@ -621,9 +609,9 @@ export default function App() {
           env,
           scanning,
           scan: doScan,
-          guideSeen,
+          guideSeen: onboarding.seen,
           setOpen: setSettingsOpen,
-          openGuide,
+          openGuide: onboarding.openGuide,
           setView,
         }}
         filters={{
@@ -644,7 +632,11 @@ export default function App() {
             onClear: clearHistF,
           },
         }}
-        guide={{ step: guideStep, onGo: setGuideStep, onFinish: finishGuide }}
+        guide={{
+          step: onboarding.step,
+          onGo: onboarding.setStep,
+          onFinish: onboarding.finishGuide,
+        }}
       />
     </div>
   );
