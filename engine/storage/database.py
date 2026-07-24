@@ -11,10 +11,10 @@ from pathlib import Path
 
 from .migration_history import MigrationHistoryStore
 from ..operations.state_store import OperationStore
-from .organization_store import OrganizationStore
+from ..organization.store import OrganizationStore
+from ..organization.summary_store import SessionSummaryStore
 from .runtime_sessions import RuntimeSessionStore
 from .session_metadata import SessionMetadataStore
-from .session_summaries import SessionSummaryStore
 
 
 SCHEMA_VERSION = 8

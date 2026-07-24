@@ -55,7 +55,13 @@ def test_business_capabilities_live_in_top_level_packages():
     organization = ENGINE / "organization"
     assert {
         path.name for path in organization.glob("*.py")
-    } == {"__init__.py", "proposals.py", "summaries.py"}
+    } == {
+        "__init__.py",
+        "proposals.py",
+        "store.py",
+        "summaries.py",
+        "summary_store.py",
+    }
     operations = ENGINE / "operations"
     assert {
         path.name for path in operations.glob("*.py")
@@ -145,7 +151,8 @@ def test_metadata_and_history_are_separate_sqlite_capabilities():
     assert (ENGINE / "storage/migration_history.py").is_file()
     assert "def list_session_metadata(" not in database
     assert "def append_migration_history(" not in database
-    assert (ENGINE / "storage/session_summaries.py").is_file()
+    assert (ENGINE / "organization/summary_store.py").is_file()
+    assert not (ENGINE / "storage/session_summaries.py").exists()
     assert "def get_session_summary(" not in database
 
 
@@ -162,9 +169,10 @@ def test_operation_state_is_a_separate_sqlite_capability():
 
 def test_organization_transaction_is_a_separate_sqlite_capability():
     database = (ENGINE / "storage/database.py").read_text()
-    organization_store = (ENGINE / "storage/organization_store.py").read_text()
+    organization_store = (ENGINE / "organization/store.py").read_text()
     assert "class OrganizationStore" in organization_store
     assert "self.organization = OrganizationStore" in database
+    assert not (ENGINE / "storage/organization_store.py").exists()
     assert "def create_or_get(" not in database
     assert "def decide(" not in database
     assert "def invalidate(" not in database
