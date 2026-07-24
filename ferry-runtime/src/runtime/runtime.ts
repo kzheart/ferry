@@ -13,11 +13,7 @@ import {
   ProviderService,
   type AgentBackend,
 } from "../providers/provider-service.js";
-import { parseOrganizerInput } from "../organizing/organizer.js";
-import {
-  runOrganizationWorkflow,
-  type OrganizationEngineMethod,
-} from "../organizing/organization.js";
+import { OrganizationCoordinator } from "../organizing/coordinator.js";
 import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
@@ -63,13 +59,13 @@ export class AgentRuntime {
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly events: RuntimeEventBus;
-  private readonly organizationRuns = new Map<string, Promise<unknown>>();
   private readonly backendFactory: BackendFactory;
   private readonly providerHost: ProviderHost | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
   private readonly providersService: ProviderService;
   private readonly gateway: RuntimeGateway;
+  private readonly organization: OrganizationCoordinator;
 
   private constructor(
     options: RuntimeOptions,
@@ -98,6 +94,12 @@ export class AgentRuntime {
       ...(options.toolDeadlinesMs
         ? { toolDeadlinesMs: options.toolDeadlinesMs }
         : {}),
+    });
+    this.organization = new OrganizationCoordinator({
+      ...(this.providerHost ? { providerHost: this.providerHost } : {}),
+      newId: this.idFactory,
+      invokeEngine: (method, params, workflowId) =>
+        this.gateway.invokeEngine(method, params, workflowId),
     });
     this.providersService = new ProviderService({
       ...(this.providerHost ? { host: this.providerHost } : {}),
@@ -320,49 +322,7 @@ export class AgentRuntime {
   }
 
   async startOrganization(input: unknown) {
-    if (!this.providerHost) {
-      throw new ProtocolError(
-        "unsupported",
-        "organization generation unavailable",
-      );
-    }
-    let key: string;
-    try {
-      key = JSON.stringify(input);
-    } catch {
-      throw new ProtocolError(
-        "invalid_params",
-        "organization input is invalid",
-      );
-    }
-    const running = this.organizationRuns.get(key);
-    if (running) return running;
-    const task = this.runOrganization(input).finally(() => {
-      this.organizationRuns.delete(key);
-    });
-    this.organizationRuns.set(key, task);
-    return task;
-  }
-
-  private async runOrganization(input: unknown) {
-    try {
-      const workflowId = this.newId();
-      return await runOrganizationWorkflow(
-        input,
-        workflowId,
-        {
-          invoke: (method, params, id) =>
-            this.invokeOrganizationEngine(method, params, id),
-        },
-        (value) => this.providerHost!.organize(parseOrganizerInput(value)),
-      );
-    } catch (error) {
-      if (error instanceof ProtocolError) throw error;
-      throw new ProtocolError(
-        "organization_failed",
-        error instanceof Error ? error.message : "organization failed",
-      );
-    }
+    return this.organization.start(input);
   }
 
   async copyRole(sourceId: string, id: string, name?: string) {
@@ -555,14 +515,6 @@ export class AgentRuntime {
     context: ToolRequestContext,
   ) {
     return this.gateway.invokeTool(name, args, context);
-  }
-
-  private async invokeOrganizationEngine(
-    method: OrganizationEngineMethod,
-    params: Record<string, unknown>,
-    workflowId: string,
-  ) {
-    return this.gateway.invokeEngine(method, params, workflowId);
   }
 
   completeTool(
