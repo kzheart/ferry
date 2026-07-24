@@ -636,8 +636,8 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在删除计划生成后已变化，请重新计划"
             )
-        plugin = self._ports.adapter(params["tool"])
-        result = plugin.lifecycle.delete(plugin, record.canonical_ref)
+        result = SessionDeletionService(self._ports).delete(
+            params["tool"], record.canonical_ref)
         snapshot = result.pop("snapshot", None)
         if result.get("undoable") is True:
             if not isinstance(snapshot, str) or not snapshot:
