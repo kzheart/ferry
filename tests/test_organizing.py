@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.application import organizing, services, session_meta, summaries
+from engine.application import organizing, session_meta, summaries
 from engine.application.ports import current
 from engine.domain.errors import (
     OrganizationProposalError,
@@ -152,7 +152,7 @@ def test_reject_records_signal_without_changing_metadata(
     result = _decide(proposal["proposal_id"], "reject")
 
     assert result["status"] == "rejected"
-    assert services.session_meta_list()["claude\0session-a"] == {"name": "原名"}
+    assert session_meta.list_all(current())["claude\0session-a"] == {"name": "原名"}
     assert _signals()[-1]["event"] == "rejected"
 
 
@@ -177,11 +177,11 @@ def test_modify_then_approve_writes_only_local_metadata(
             "dead_candidate": False,
         },
     }])
-    assert services.session_meta_list() == {}
+    assert session_meta.list_all(current()) == {}
     result = _decide(changed["proposal_id"], "approve")
 
     assert result["status"] == "approved"
-    assert services.session_meta_list()["claude\0session-a"] == {
+    assert session_meta.list_all(current())["claude\0session-a"] == {
         "name": "登录与认证",
         "summary": "完成登录和认证流程",
         "tags": ["认证", "前端"],
@@ -217,7 +217,7 @@ def test_cross_agent_cluster_is_approved_atomically(
     assert set(result["applied"]) == {
         "claude\0session-claude", "codex\0session-codex",
     }
-    metadata = services.session_meta_list()
+    metadata = session_meta.list_all(current())
     assert metadata["claude\0session-claude"]["cluster_id"] == "project:payments"
     assert metadata["codex\0session-codex"]["cluster_id"] == "project:payments"
     assert metadata["claude\0session-claude"]["cluster_name"] == "支付项目"
@@ -240,7 +240,7 @@ def test_same_native_id_from_different_tools_keeps_metadata_and_cas_isolated(
         {"name": "Codex 原名"},
     ]
     _decide(proposal["proposal_id"], "approve")
-    assert services.session_meta_list() == {
+    assert session_meta.list_all(current()) == {
         "claude\0shared-id": {"name": "Claude 新名"},
         "codex\0shared-id": {"name": "Codex 新名"},
     }
@@ -277,7 +277,7 @@ def test_approval_detects_stale_content_without_metadata_pollution(
     with pytest.raises(OrganizationProposalStaleError):
         _decide(proposal["proposal_id"], "approve")
 
-    assert services.session_meta_list() == {}
+    assert session_meta.list_all(current()) == {}
     assert _list_proposals()[0]["status"] == "stale"
 
 
@@ -295,8 +295,8 @@ def test_metadata_cas_failure_does_not_partially_apply_cluster(
     with pytest.raises(Exception):
         _decide(proposal["proposal_id"], "approve")
 
-    assert "claude\0session-a" not in services.session_meta_list()
-    assert services.session_meta_list()["codex\0session-b"] == {"name": "concurrent"}
+    assert "claude\0session-a" not in session_meta.list_all(current())
+    assert session_meta.list_all(current())["codex\0session-b"] == {"name": "concurrent"}
     assert _list_proposals()[0]["status"] == "stale"
     assert _signals()[-1]["reason"] == "metadata_changed"
 

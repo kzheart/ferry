@@ -7,8 +7,9 @@ import json
 
 import pytest
 
-from engine.application import editing, services
+from engine.application import editing
 from engine.application.ports import current
+from engine.application.session_deletion import SessionDeletionService
 from engine.infrastructure.snapshots import backup_dir
 
 
@@ -54,22 +55,24 @@ def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
 def test_delete_is_undoable(session):
     """Toast 的「撤销」依赖这条链路。"""
     original = session.read_bytes()
-    result = services.session_delete("claude", str(session))
+    service = SessionDeletionService(current())
+    result = service.delete("claude", str(session))
 
     assert result["undoable"] is True
     assert not session.exists()
 
-    services.session_undelete(result["snapshot"])
+    service.restore(result["snapshot"])
     assert session.exists()
     assert session.read_bytes() == original
 
 
 def test_undelete_refuses_to_overwrite_a_live_session(session):
     from engine.domain.errors import SnapshotInvalidSourceError
-    result = services.session_delete("claude", str(session))
-    services.session_undelete(result["snapshot"])
+    service = SessionDeletionService(current())
+    result = service.delete("claude", str(session))
+    service.restore(result["snapshot"])
     with pytest.raises(SnapshotInvalidSourceError):
-        services.session_undelete(result["snapshot"])   # 源已回来，不得覆盖
+        service.restore(result["snapshot"])   # 源已回来，不得覆盖
 
 
 def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path):
@@ -77,7 +80,7 @@ def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path):
     stray = tmp_path / "stray.jsonl"
     stray.write_text("{}\n")
     with pytest.raises(SnapshotInvalidSourceError):
-        services.session_undelete(str(stray))
+        SessionDeletionService(current()).restore(str(stray))
 
 
 def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
@@ -98,8 +101,11 @@ def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
     class Plugin:
         lifecycle = Lifecycle()
 
-    monkeypatch.setattr(services, "adapter", lambda tool: Plugin() if tool == "fake" else None)
+    ports = type("Ports", (), {
+        "snapshot_dir": lambda _self: root,
+        "adapter": lambda _self, tool: Plugin() if tool == "fake" else None,
+    })()
 
-    assert services.session_undelete(str(snapshot)) == {
+    assert SessionDeletionService(ports).restore(str(snapshot)) == {
         "ok": True, "target": "/work/session.jsonl"}
     assert calls == [(snapshot, {"tool": "fake", "source": "/work/session.jsonl"})]
