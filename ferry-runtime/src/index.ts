@@ -15,6 +15,7 @@ export * from "./security/redaction.js";
 export * from "./server/jsonl.js";
 export * from "./server/messages.js";
 export * from "./sessions/engine-store.js";
+export * from "./sessions/runtime-session.js";
 export * from "./sessions/session-repository.js";
 export * from "./tools/catalog.js";
 export * from "./tools/delegation.js";
