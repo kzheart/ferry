@@ -36,10 +36,10 @@ async function checkDirectory(directory, check) {
 const violations = [
   ...["domain"].filter(directory => topLevelDirectories.has(directory))
     .map(directory => `app/src/${directory}: 不允许重新引入横向 DDD 目录`),
-  ...(await checkDirectory(join(appSource, "features"), (file, source) => {
+  ...(await checkDirectory(join(appSource, "modules"), (file, source) => {
     const relative = file.slice(root.length + 1);
     return /\b(?:from\s+|import\s*\()["']@tauri-apps\//.test(source)
-      ? [`${relative}: feature 不允许直接依赖 Tauri`]
+      ? [`${relative}: module 不允许直接依赖 Tauri`]
       : [];
   })),
   ...(await checkDirectory(join(appSource, "shell"), (file, source) => {

@@ -35,7 +35,7 @@ def test_operation_contract_is_generated_for_every_runtime():
 
 def test_operation_consumers_use_generated_status_and_identity_contract():
     frontend = (
-        ROOT / "app/src/features/operations/operationController.ts"
+        ROOT / "app/src/modules/operations/operationController.ts"
     ).read_text()
     rust_request = (
         ROOT / "app/src-tauri/src/operations/request.rs"

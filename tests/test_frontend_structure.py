@@ -5,11 +5,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "app/src"
 
 
-def test_frontend_uses_shell_platform_shared_and_vertical_features():
+def test_frontend_uses_shell_platform_shared_and_vertical_modules():
     assert {
         "app",
         "components",
-        "features",
+        "modules",
         "platform",
         "shared",
         "shell",
@@ -18,25 +18,25 @@ def test_frontend_uses_shell_platform_shared_and_vertical_features():
     }
     assert not (FRONTEND / "api").exists()
     assert not (FRONTEND / "domain").exists()
-    assert not (FRONTEND / "features/shell").exists()
+    assert not (FRONTEND / "modules/shell").exists()
     assert not (FRONTEND / "components/layout").exists()
 
 
-def test_feature_models_live_with_their_consuming_capability():
-    assert (FRONTEND / "features/browser/sessionModel.js").is_file()
-    assert (FRONTEND / "features/browser/sessionAttachment.js").is_file()
-    assert (FRONTEND / "features/askferry/agentChatModel.js").is_file()
-    assert (FRONTEND / "features/askferry/ferryEntities.js").is_file()
-    assert (FRONTEND / "features/overview/overviewModel.js").is_file()
-    assert (FRONTEND / "features/browser/SessionPeekSheet.jsx").is_file()
+def test_module_models_live_with_their_consuming_capability():
+    assert (FRONTEND / "modules/browser/sessionModel.js").is_file()
+    assert (FRONTEND / "modules/browser/sessionAttachment.js").is_file()
+    assert (FRONTEND / "modules/askferry/agentChatModel.js").is_file()
+    assert (FRONTEND / "modules/askferry/ferryEntities.js").is_file()
+    assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
+    assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
     app = (FRONTEND / "app/App.jsx").read_text()
     assert "browser/SessionDetail.jsx" not in app
     assert "components/ui/primitives.jsx" not in app
 
 
-def test_operation_flow_has_one_feature_controller():
-    controller = FRONTEND / "features/operations/operationController.ts"
-    composition = FRONTEND / "features/operations/operations.ts"
+def test_operation_flow_has_one_module_controller():
+    controller = FRONTEND / "modules/operations/operationController.ts"
+    composition = FRONTEND / "modules/operations/operations.ts"
     assert controller.is_file()
     assert composition.is_file()
 
@@ -45,8 +45,8 @@ def test_operation_flow_has_one_feature_controller():
 
     for relative_path in (
         "app/App.jsx",
-        "features/editing/useSessionEditing.js",
-        "features/migration/MigrateSheet.jsx",
+        "modules/editing/useSessionEditing.js",
+        "modules/migration/MigrateSheet.jsx",
     ):
         source = (FRONTEND / relative_path).read_text()
         assert "operationPlan" not in source
@@ -57,8 +57,8 @@ def test_operation_flow_has_one_feature_controller():
 
 def test_session_mutations_live_in_browser_capability():
     app = (FRONTEND / "app/App.jsx").read_text()
-    metadata = FRONTEND / "features/browser/useSessionMetadata.js"
-    deletion = FRONTEND / "features/browser/useSessionDeletion.js"
+    metadata = FRONTEND / "modules/browser/useSessionMetadata.js"
+    deletion = FRONTEND / "modules/browser/useSessionDeletion.js"
 
     assert metadata.is_file()
     assert deletion.is_file()
