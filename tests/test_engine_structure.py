@@ -81,29 +81,20 @@ def test_business_capabilities_live_in_top_level_packages():
 def test_session_reference_index_is_isolated_from_query_catalog():
     sessions = ENGINE / "sessions"
     index = (sessions / "index.py").read_text()
-    catalog = (sessions / "catalog.py").read_text()
     assert "class AgentSessionIndex" in index
     assert "class IndexedSession" in index
-    assert "class AgentSessionIndex" not in catalog
-    assert "class IndexedSession" not in catalog
+    assert not (sessions / "catalog.py").exists()
     assert (sessions / "search.py").is_file()
     assert "def search_sessions" in (sessions / "search.py").read_text()
-    assert "def search_sessions" not in catalog
     assert "def get_usage" in (sessions / "usage.py").read_text()
-    assert "def get_usage" not in catalog
     assert (sessions / "agent_read.py").is_file()
     assert "def session_read" in (sessions / "agent_read.py").read_text()
-    assert "def session_read" not in catalog
-    assert "def preview_edit" not in catalog
-    assert "def resolve_edit_ops" not in catalog
     assert "def preview(self, record" in (
         ENGINE / "operations/edit.py"
     ).read_text()
     safety = (sessions / "safety.py").read_text()
     assert "def redact(" in safety
     assert "def validate_json_shape(" in safety
-    assert "def _redact(" not in catalog
-    assert "def _validate_json_shape(" not in catalog
 
 
 def test_adapter_shared_code_is_not_a_base_layer():

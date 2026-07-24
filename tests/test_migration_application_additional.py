@@ -2,8 +2,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.sessions import catalog as agent_tools
-from engine.sessions.index import AgentSessionIndex
 from engine.operations import migrate as migration
 from engine.sessions.model import AgentEdge, Block, Message, Session
 
@@ -169,20 +167,19 @@ def test_probe_exception_cleans_both_shadow_and_actual_artifacts(monkeypatch, tm
     assert removed == ["shadow", "actual"]
 
 
-def test_preview_reports_same_scope_counts_as_migration(monkeypatch):
+def test_preview_reports_same_scope_counts_as_migration():
     session = _scoped_tree()
     target = _migrate_target(lambda *_: (_ for _ in ()).throw(AssertionError()))
     ports = SimpleNamespace(
-        adapters=lambda: ["opencode"],
         adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
-    index = AgentSessionIndex(ports)
-    monkeypatch.setattr(index, "resolve", lambda *_: SimpleNamespace(
-        revision="revision"))
-    monkeypatch.setattr(agent_tools, "read_indexed_session", lambda *_: session)
+    preview = migration.MigrationService(ports).preview(
+        "claude",
+        "opencode",
+        "ignored",
+        max_turn=1,
+        session=session,
+    )
 
-    preview = agent_tools.preview_migration(
-        "claude", "opaque", "opencode", max_turn=1, index=index)
-
-    assert (preview["message_count"], preview["root_message_count"],
+    assert (preview["msg_count"], preview["root_msg_count"],
             preview["tree_count"]) == (3, 2, 2)

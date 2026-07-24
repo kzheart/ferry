@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-from engine.sessions import catalog as agent_tools
-from engine.sessions.index import AgentSessionIndex
 from engine.operations import migrate as migration
 from engine.sessions.model import AgentEdge, Block, Message, Session
 
@@ -89,26 +87,28 @@ def test_migration_counts_include_the_retained_subtree(monkeypatch, tmp_path):
     assert result["tree_count"] == 3
 
 
-def test_preview_migration_counts_the_actual_tree_after_scope_pruning(monkeypatch):
+def test_preview_migration_counts_the_actual_tree_after_scope_pruning():
     session = _tree()
-    record = SimpleNamespace(revision="revision-1")
 
     class Target:
         def plan(self, value):
             return {"messages": value.message_count()}
 
+        def preview(self, value, _cwd=None):
+            return self.plan(value)
+
     target = Target()
     ports = SimpleNamespace(
-        adapters=lambda: ["opencode"],
         adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
-    index = AgentSessionIndex(ports)
-    monkeypatch.setattr(index, "resolve", lambda *_: record)
-    monkeypatch.setattr(agent_tools, "read_indexed_session", lambda *_: session)
+    preview = migration.MigrationService(ports).preview(
+        "claude",
+        "opencode",
+        "ignored",
+        max_turn=1,
+        session=session,
+    )
 
-    preview = agent_tools.preview_migration(
-        "claude", "opaque", "opencode", max_turn=1, index=index)
-
-    assert preview["message_count"] == 5
-    assert preview["root_message_count"] == 2
+    assert preview["msg_count"] == 5
+    assert preview["root_msg_count"] == 2
     assert preview["tree_count"] == 3

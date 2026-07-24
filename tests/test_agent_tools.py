@@ -14,7 +14,7 @@ from engine.adapters.contracts import (
 )
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.operations.edit import EditOperationHandler
-from engine.sessions import catalog as agent_tools
+from engine.operations.migrate import MigrationService
 from engine.sessions import agent_read
 from engine.sessions import search as session_search
 from engine.sessions import usage as session_usage
@@ -250,11 +250,6 @@ def agent_environment(tmp_path, monkeypatch):
         snapshot_dir=lambda: tmp_path, version="test",
     )
     index = AgentSessionIndex(ports)
-    monkeypatch.setattr(
-        agent_tools,
-        "preview_migration",
-        partial(agent_tools.preview_migration, index=index),
-    )
     for name in (
         "get_session_context", "search_session_content", "session_read",
     ):
@@ -672,11 +667,22 @@ def test_search_dto_is_byte_bounded(agent_environment):
     assert result["truncation"]["reason"] == "byte_budget"
 
 
-def test_previews_are_narrow_and_do_not_write(agent_environment):
+def test_edit_and_migration_previews_do_not_write(agent_environment):
     ref = _claude_ref()
-    migration = agent_tools.preview_migration("claude", ref, "opencode", max_turn=1)
-    assert migration["source_tool"] == "claude"
-    assert "cwd" not in migration and "source_id" not in migration
+    record = agent_environment["index"].resolve("claude", ref)
+    session = agent_read.read_indexed_session(
+        agent_environment["index"], record,
+    )
+    migration = MigrationService(agent_environment["ports"]).preview(
+        "claude",
+        "opencode",
+        record.canonical_ref,
+        max_turn=1,
+        session=session,
+    )
+    assert migration["src"] == "claude"
+    assert migration["dst"] == "opencode"
+    assert migration["msg_count"] == 2
 
     edit = _preview_edit(
         agent_environment,
