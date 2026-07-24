@@ -26,3 +26,7 @@ def test_feature_models_live_with_their_consuming_capability():
     assert (FRONTEND / "features/askferry/agentChatModel.js").is_file()
     assert (FRONTEND / "features/askferry/ferryEntities.js").is_file()
     assert (FRONTEND / "features/overview/overviewModel.js").is_file()
+    assert (FRONTEND / "features/browser/SessionPeekSheet.jsx").is_file()
+    app = (FRONTEND / "app/App.jsx").read_text()
+    assert "browser/SessionDetail.jsx" not in app
+    assert "components/ui/primitives.jsx" not in app

@@ -9,8 +9,7 @@ import { fmtTime, operationRef, repoOf, sessionRef } from "../features/browser/s
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../features/browser/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
-import { Sheet } from "../components/ui/primitives.jsx";
-import SessionDetail from "../features/browser/SessionDetail.jsx";
+import { SessionPeekSheet } from "../features/browser/SessionPeekSheet.jsx";
 import MigrateSheet from "../features/migration/MigrateSheet.jsx";
 import SettingsPage from "../features/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
@@ -677,45 +676,23 @@ export default function App() {
           }} />
       )}
       {peekId && cur && (
-        <Sheet width="min(940px, 94vw)" maxHeight="90vh"
-          onClose={() => setPeekId(null)}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8,
-            padding: "9px 12px 9px 16px", borderBottom: "1px solid var(--line5)" }}>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {detailMeta?.title || detailMeta?.id}
-            </span>
-            <button type="button"
-              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 7,
-                border: "1px solid var(--line3)", background: "var(--surface)",
-                color: "var(--acc)", cursor: "pointer" }}
-              onClick={() => { setPeekId(null); setView("library"); }}>
-              {t("askferry:peek.openInLibrary")} ↗
-            </button>
-            <button type="button"
-              style={{ fontSize: 12, padding: "4px 10px", borderRadius: 7,
-                border: "1px solid var(--line3)", background: "var(--surface)",
-                color: "var(--tx3)", cursor: "pointer" }}
-              onClick={() => setPeekId(null)}>
-              {t("askferry:peek.close")}
-            </button>
-          </div>
-          <div style={{ height: "min(720px, 78vh)", display: "flex", minHeight: 0 }}>
-            <SessionDetail key={selId}
-              meta={detailMeta}
-              data={detail?.data} error={detail?.error}
-              onDiscardAll={detailActs.onDiscardAll}
-              scope={scope} setScope={detailActs.setScope}
-              ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
-              updateOp={detailActs.updateOp}
-              startReplyEdit={detailActs.startReplyEdit} replyEditError={detailActs.replyEditError}
-              onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
-              onOpenMigrate={detailActs.onOpenMigrate}
-              navigationTarget={navigationTarget}
-              onRefresh={detailActs.onRefresh} refreshing={refreshing}
-              onResume={detailActs.onResume} />
-          </div>
-        </Sheet>
+        <SessionPeekSheet
+          selectedId={selId}
+          meta={detailMeta}
+          detail={detail}
+          actions={detailActs}
+          scope={scope}
+          ops={ops}
+          dirtyOps={dirtyOps}
+          applying={applying}
+          navigationTarget={navigationTarget}
+          refreshing={refreshing}
+          onClose={() => setPeekId(null)}
+          onOpenLibrary={() => {
+            setPeekId(null);
+            setView("library");
+          }}
+        />
       )}
       {mig && cur && (
         <MigrateSheet meta={cur} scope={mig.scope} env={env}
