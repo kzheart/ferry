@@ -3,7 +3,7 @@ import { parseThinkingLevel } from "../providers/provider-config-validation.js";
 import { dispatchProviderCommand } from "../providers/commands.js";
 import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
-import type { RoleInput } from "../roles/role-repository.js";
+import { dispatchRoleCommand } from "../roles/commands.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -27,8 +27,11 @@ export async function dispatch(
       runtime.providerService,
       command,
     );
+    const roleCommand = await dispatchRoleCommand(runtime.roleService, command);
     if (providerCommand.handled) {
       result = providerCommand.result;
+    } else if (roleCommand.handled) {
+      result = roleCommand.result;
     } else
       switch (command.method) {
         case "health":
@@ -91,30 +94,6 @@ export async function dispatch(
         case "session.delete":
           result = await runtime.deleteSession(
             requireString(params, "session_id", 128),
-          );
-          break;
-        case "roles.list":
-          result = await runtime.roleService.list();
-          break;
-        case "role.create":
-          result = await runtime.roleService.create(requireRole(params));
-          break;
-        case "role.update":
-          result = await runtime.roleService.update(
-            requireString(params, "role_id", 128),
-            requireRole(params),
-          );
-          break;
-        case "role.copy":
-          result = await runtime.roleService.copy(
-            requireString(params, "source_role_id", 128),
-            requireString(params, "role_id", 128),
-            optionalString(params, "name", 200),
-          );
-          break;
-        case "role.delete":
-          result = await runtime.roleService.delete(
-            requireString(params, "role_id", 128),
           );
           break;
         case "organization.start":
@@ -216,11 +195,4 @@ function parseImages(value: unknown) {
     }
     return { type: "image" as const, data, mimeType };
   });
-}
-
-function requireRole(params: Record<string, unknown>): RoleInput {
-  if (!isObject(params.role)) {
-    throw new ProtocolError("invalid_params", "role must be an object");
-  }
-  return params.role as unknown as RoleInput;
 }
