@@ -102,3 +102,13 @@ def test_metadata_and_history_are_separate_sqlite_capabilities():
     assert "def append_migration_history(" not in database
     assert (ENGINE / "storage/session_summaries.py").is_file()
     assert "def get_session_summary(" not in database
+
+
+def test_operation_state_is_a_separate_sqlite_capability():
+    database = (ENGINE / "storage/database.py").read_text()
+    operation_store = (ENGINE / "storage/operation_store.py").read_text()
+    assert "class OperationStore" in operation_store
+    assert "self.operations = OperationStore" in database
+    assert "def store_plan(" not in database
+    assert "def store_recovery(" not in database
+    assert "def audit(" not in database

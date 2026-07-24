@@ -172,7 +172,7 @@ def test_restart_marks_interrupted_apply_failed(agent_environment, operation_ser
     database = StateDatabase(
         agent_environment["root"].parent / "ferry-state.sqlite3",
     )
-    assert database.claim(plan["plan_id"], 2_000)
+    assert database.operations.claim(plan["plan_id"], 2_000)
 
     operation_service["reset"]()
 
@@ -261,7 +261,7 @@ def test_session_metadata_isolated_by_tool_and_native_session_id(tmp_path):
 def test_metadata_query_does_not_fail_an_applying_operation(agent_environment):
     plan = _plan()
     database = StateDatabase(agent_environment["root"].parent / "ferry-state.sqlite3")
-    assert database.claim(plan["plan_id"], 2_000)
+    assert database.operations.claim(plan["plan_id"], 2_000)
 
     assert metadata.list_all(agent_environment["ports"]) == {}
     assert operations.status(plan["plan_id"])["status"] == "applying"
