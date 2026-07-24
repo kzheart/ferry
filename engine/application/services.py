@@ -212,7 +212,8 @@ def run_probe(tool: str, sid: str, cwd: str,
               model: str | None = None) -> dict:
     try:
         return probe_mod.run_probe(
-            tool, sid, adapter(tool).lifecycle.probe_cwd(cwd), model)
+            tool, sid, adapter(tool).lifecycle.probe_cwd(cwd), model,
+            ports=current())
     except probe_mod.ProbeTimeout as error:
         return probe_mod.timeout_report(tool, error)
 
