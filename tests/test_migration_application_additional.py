@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from engine.sessions import catalog as agent_tools
+from engine.sessions.index import AgentSessionIndex
 from engine.operations import migrate as migration
 from engine.sessions.model import AgentEdge, Block, Message, Session
 
@@ -175,7 +176,7 @@ def test_preview_reports_same_scope_counts_as_migration(monkeypatch):
         adapters=lambda: ["opencode"],
         adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
-    index = agent_tools.AgentSessionIndex(ports)
+    index = AgentSessionIndex(ports)
     monkeypatch.setattr(index, "resolve", lambda *_: SimpleNamespace(
         revision="revision"))
     monkeypatch.setattr(agent_tools, "_read_record", lambda *_: session)

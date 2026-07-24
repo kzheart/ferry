@@ -8,6 +8,7 @@ from ..errors import (
     OperationUnsupportedError,
 )
 from ..sessions import catalog as agent_tools
+from ..sessions.index import AgentSessionIndex
 from .plan_store import OperationPlan
 from .types import AssistantReply
 
@@ -65,7 +66,7 @@ def apply(editor, ref: str, ops: list[dict],
 
 
 class EditOperationHandler:
-    def __init__(self, ports: EngineContext, index: agent_tools.AgentSessionIndex):
+    def __init__(self, ports: EngineContext, index: AgentSessionIndex):
         self._ports = ports
         self._index = index
 
