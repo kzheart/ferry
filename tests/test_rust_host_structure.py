@@ -39,6 +39,22 @@ def test_desktop_package_keeps_windows_platform_boundary():
     assert (platform / "unsupported.rs").is_file()
 
 
+def test_bundle_targets_stay_in_platform_configs():
+    import json
+
+    tauri = ROOT / "app/src-tauri"
+    common = json.loads((tauri / "tauri.conf.json").read_text())
+    macos = json.loads((tauri / "tauri.macos.conf.json").read_text())
+    windows = json.loads(
+        (tauri / "tauri.windows.conf.json").read_text()
+    )
+
+    assert "targets" not in common["bundle"]
+    assert macos["bundle"]["targets"] == ["app", "dmg"]
+    assert windows["bundle"]["targets"] == ["nsis", "msi"]
+    assert windows["app"]["windows"][0]["transparent"] is False
+
+
 def test_engine_and_runtime_share_one_process_supervisor():
     supervisor = HOST / "process/supervisor.rs"
     assert supervisor.is_file()

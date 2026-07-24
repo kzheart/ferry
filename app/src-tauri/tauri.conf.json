@@ -54,7 +54,6 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["app", "dmg"],
     "externalBin": ["binaries/ferry-engine", "binaries/ferry-runtime"],
     "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
   }
