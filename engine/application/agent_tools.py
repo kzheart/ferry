@@ -14,7 +14,7 @@ from pathlib import Path
 from ..domain.errors import AgentReferenceError, AgentRequestError, LocatorStaleError
 from ..domain.model import tool_result_text
 from ..domain.usage import add_tokens, empty_tokens
-from .ports import current
+from .ports import ApplicationPorts, current
 
 MAX_SEARCH_RESULTS = 50
 MAX_CONTENT_SEARCH_RESULTS = 50
@@ -164,7 +164,8 @@ def _agent_fingerprint(browser, ref: str):
 
 
 class AgentSessionIndex:
-    def __init__(self):
+    def __init__(self, ports: ApplicationPorts):
+        self._ports = ports
         self._by_opaque: dict[str, IndexedSession] = {}
         self._opaque_by_key: dict[tuple[str, str, str], str] = {}
         self._messages_by_opaque: dict[str, IndexedMessage] = {}
@@ -172,11 +173,10 @@ class AgentSessionIndex:
         self._lock = threading.RLock()
 
     def refresh(self) -> list[IndexedSession]:
-        ports = current()
-        cache = ports.cache_factory()
+        cache = self._ports.cache_factory()
         scanned = []
-        for tool_name in ports.adapters():
-            plugin = ports.adapter(tool_name)
+        for tool_name in self._ports.adapters():
+            plugin = self._ports.adapter(tool_name)
             scanned.extend(
                 (tool_name, plugin, row)
                 for row in plugin.browser.scan(cache)
@@ -233,7 +233,7 @@ class AgentSessionIndex:
                 raise AgentReferenceError("ref 指向的会话已失效") from error
             if not resolved.is_relative_to(root) or not resolved.is_file():
                 raise AgentReferenceError("ref 超出 Agent 会话根目录")
-            browser = current().adapter(tool).browser
+            browser = self._ports.adapter(tool).browser
             fingerprint = _agent_fingerprint(browser, str(resolved))
             identity = (_path_identity(resolved), fingerprint)
             if fingerprint is None or record.source_identity != identity:
@@ -242,7 +242,7 @@ class AgentSessionIndex:
             if Path(plugin_ref).resolve(strict=True) != resolved:
                 raise AgentReferenceError("adapter 未能规范解析 ref")
         else:
-            browser = current().adapter(tool).browser
+            browser = self._ports.adapter(tool).browser
             fingerprint = _agent_fingerprint(browser, record.canonical_ref)
             if fingerprint is None or fingerprint != record.source_identity:
                 raise AgentReferenceError("ref 在扫描后已变化，请重新搜索")
@@ -311,13 +311,13 @@ class AgentSessionIndex:
         return native.canonical_ref, None, False, fingerprint
 
 
-_INDEX = AgentSessionIndex()
+_INDEX = AgentSessionIndex(current())
 
 
-def reset_index() -> None:
+def reset_index(ports: ApplicationPorts | None = None) -> None:
     """仅供 composition 切换和测试隔离。"""
     global _INDEX
-    _INDEX = AgentSessionIndex()
+    _INDEX = AgentSessionIndex(ports or current())
 
 
 def _string_set(value, name: str, maximum: int, item_size: int) -> set[str]:
