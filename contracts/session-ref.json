@@ -1,0 +1,6 @@
+{
+  "opaque_prefix": "fsr_",
+  "minimum_length": 8,
+  "maximum_length": 128,
+  "allowed_suffix": "ascii-alphanumeric-underscore-hyphen"
+}

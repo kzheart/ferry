@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..contracts.session_ref import is_opaque_session_ref
 from ..errors import AgentReferenceError, AgentRequestError, LocatorStaleError
 from ..context import EngineContext
 from .model import tool_result_text
@@ -223,7 +224,7 @@ class AgentSessionIndex:
         return records
 
     def resolve(self, tool: str, opaque_ref: str) -> IndexedSession:
-        if not isinstance(opaque_ref, str) or not opaque_ref.startswith("fsr_"):
+        if not is_opaque_session_ref(opaque_ref):
             raise AgentReferenceError("ref 不是 Engine 签发的 opaque ref")
         with self._lock:
             record = self._by_opaque.get(opaque_ref)
