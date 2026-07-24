@@ -13,6 +13,7 @@ from engine.adapters.contracts import (
     AgentManifest, AgentAdapter, id_reference, jsonl_reference,
 )
 from engine.adapters.opencode import scanner as opencode_scanner
+from engine.operations.edit import EditOperationHandler
 from engine.sessions import catalog as agent_tools
 from engine.sessions import agent_read
 from engine.sessions import search as session_search
@@ -249,10 +250,11 @@ def agent_environment(tmp_path, monkeypatch):
         snapshot_dir=lambda: tmp_path, version="test",
     )
     index = AgentSessionIndex(ports)
-    for name in ("preview_migration", "preview_edit"):
-        monkeypatch.setattr(
-            agent_tools, name, partial(getattr(agent_tools, name), index=index),
-        )
+    monkeypatch.setattr(
+        agent_tools,
+        "preview_migration",
+        partial(agent_tools.preview_migration, index=index),
+    )
     for name in (
         "get_session_context", "search_session_content", "session_read",
     ):
@@ -277,6 +279,14 @@ def agent_environment(tmp_path, monkeypatch):
 def _claude_ref():
     result = session_search.search_sessions("支付", limit=20)
     return result["sessions"][0]["ref"]
+
+
+def _preview_edit(environment, tool, ref, ops):
+    index = environment["index"]
+    record = index.resolve(tool, ref)
+    return EditOperationHandler(environment["ports"], index).preview(
+        record, ops,
+    )
 
 
 def test_search_never_exposes_storage_locations(agent_environment):
@@ -465,22 +475,22 @@ def test_context_locator_is_required_for_agent_rewrite(agent_environment):
     locator = next(item["locator"] for item in context["messages"]
                    if item["role"] == "user" and item["editable"])
 
-    preview = agent_tools.preview_edit(
-        "claude", ref,
+    preview = _preview_edit(
+        agent_environment, "claude", ref,
         ops=[{"op": "rewrite", "locator": locator, "text": "委婉文本"}])
     assert preview["mode"] == "edit"
     assert agent_environment["editor"].last_ops[0]["locator"] == "index:0"
     assert not agent_environment["editor"].last_ops[0]["locator"].startswith("fml_")
 
     with pytest.raises(AgentReferenceError, match="Engine 签发") as error:
-        agent_tools.preview_edit(
-            "claude", ref,
+        _preview_edit(
+            agent_environment, "claude", ref,
             ops=[{"op": "rewrite", "locator": "turn:1", "text": "错误定位"}])
     assert "messages[].locator" in error.value.params["hint"]
 
     with pytest.raises(LocatorStaleError) as stale:
-        agent_tools.preview_edit(
-            "claude", ref,
+        _preview_edit(
+            agent_environment, "claude", ref,
             ops=[{"op": "rewrite", "locator": "fml_missing", "text": "错误定位"}])
     assert stale.value.retryable is True
     assert "messages[].locator" in stale.value.params["hint"]
@@ -499,8 +509,8 @@ def test_content_search_returns_editable_message_locators(agent_environment):
     assert all(isinstance(item["complete"], bool) for item in result["matches"])
 
     user = next(item for item in result["matches"] if item["role"] == "user")
-    agent_tools.preview_edit(
-        "claude", ref,
+    _preview_edit(
+        agent_environment, "claude", ref,
         ops=[{"op": "rewrite", "locator": user["locator"], "text": "新的第二轮"}])
     assert agent_environment["editor"].last_ops[0]["locator"] == "index:2"
 
@@ -597,8 +607,8 @@ def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment)
         session_search.search_sessions(time_range={"from": float("nan")})
     ref = _claude_ref()
     with pytest.raises(AgentRequestError):
-        agent_tools.preview_edit(
-            "claude", ref,
+        _preview_edit(
+            agent_environment, "claude", ref,
             ops=[{"op": "delete-turn", "turn": 1}] * 51)
     nested = {}
     cursor = nested
@@ -606,8 +616,8 @@ def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment)
         cursor["next"] = {}
         cursor = cursor["next"]
     with pytest.raises(AgentRequestError):
-        agent_tools.preview_edit(
-            "claude", ref,
+        _preview_edit(
+            agent_environment, "claude", ref,
             ops=[{"op": "rewrite", "locator": "fml_invalid", "text": nested}])
 
 
@@ -668,8 +678,12 @@ def test_previews_are_narrow_and_do_not_write(agent_environment):
     assert migration["source_tool"] == "claude"
     assert "cwd" not in migration and "source_id" not in migration
 
-    edit = agent_tools.preview_edit(
-        "claude", ref, ops=[{"op": "delete-turn", "turn": 1}])
+    edit = _preview_edit(
+        agent_environment,
+        "claude",
+        ref,
+        ops=[{"op": "delete-turn", "turn": 1}],
+    )
     assert edit["mode"] == "edit"
     assert edit["revision"] == "revision-1"
     assert agent_environment["editor"].commits == 0

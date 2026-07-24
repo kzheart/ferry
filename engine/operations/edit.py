@@ -1,17 +1,25 @@
 """会话编辑计划与写入处理。"""
 
+import json
+
 from ..context import EngineContext
 from ..errors import (
     AgentReferenceError,
+    AgentRequestError,
     ConcurrentModificationError,
     LocatorStaleError,
     OperationUnsupportedError,
 )
-from ..sessions import catalog as agent_tools
 from ..sessions.index import AgentSessionIndex
-from ..sessions.safety import bounded_json, finalize_dto, record_session_id, redact
+from ..sessions.safety import (
+    bounded_json,
+    finalize_dto,
+    record_session_id,
+    redact,
+)
 from .plan_store import OperationPlan
 from .types import AssistantReply
+from .validation import validate_ops
 
 
 def preview_mutation(editor, ref: str, mutate, loader=None) -> dict:
@@ -129,10 +137,23 @@ class EditOperationHandler:
         for operation in ops:
             if operation["op"] == "replace-assistant-reply":
                 resolved.append(dict(operation))
-            else:
-                resolved.extend(agent_tools.resolve_edit_ops(
-                    self._index, record, [operation],
-                ))
+                continue
+            item = dict(operation)
+            if item["op"] == "rewrite":
+                message = self._index.resolve_message_locator(
+                    record, item["locator"],
+                )
+                if not message.editable:
+                    raise AgentRequestError(
+                        "目标消息不支持文本改写",
+                        {
+                            "field": "locator",
+                            "locator": item["locator"],
+                            "hint": "仅使用 editable=true 的消息引用",
+                        },
+                    )
+                item["locator"] = message.native_locator
+            resolved.append(item)
         return resolved
 
     @staticmethod
@@ -180,16 +201,15 @@ class EditOperationHandler:
         return mutate
 
     def preview(self, record, ops: list[dict]) -> dict:
-        if not any(
+        ops = validate_ops(ops)
+        if len(json.dumps(
+            ops, ensure_ascii=False, default=str,
+        ).encode()) > 64 * 1024:
+            raise AgentRequestError("ops 超过 64 KiB")
+        has_replacement = any(
             operation["op"] == "replace-assistant-reply"
             for operation in ops
-        ):
-            return agent_tools.preview_edit(
-                record.tool,
-                record.opaque_ref,
-                ops=ops,
-                index=self._index,
-            )
+        )
         adapter = self._ports.adapter(record.tool)
         editor = adapter.editor
         native_ops = self.ensure_supported(record, ops)
@@ -197,7 +217,13 @@ class EditOperationHandler:
             result = preview_mutation(
                 editor,
                 record.canonical_ref,
-                self.mutation(editor, native_ops),
+                (
+                    self.mutation(editor, native_ops)
+                    if has_replacement
+                    else lambda document: editor.apply_ops(
+                        document, native_ops,
+                    )
+                ),
                 loader=getattr(editor, "load_preview", None),
             )
         except LocatorStaleError as error:
@@ -222,7 +248,22 @@ class EditOperationHandler:
             and isinstance(operation.get("turn"), str)
         ), None)
         if authored is None:
-            return agent_tools.public_locator_error(ops)
+            locator = next((
+                operation.get("locator")
+                for operation in ops
+                if operation.get("op") == "rewrite"
+            ), None)
+            return LocatorStaleError(
+                "消息定位信息与当前会话不匹配",
+                {
+                    "field": "locator",
+                    "locator": locator,
+                    "hint": (
+                        "重新调用 ferry_get_session_context，"
+                        "并原样使用 messages[].locator"
+                    ),
+                },
+            )
         return LocatorStaleError(
             "轮次定位信息与当前会话不匹配",
             {
