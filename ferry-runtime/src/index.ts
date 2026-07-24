@@ -8,6 +8,7 @@ export * from "./providers/provider-host.js";
 export * from "./roles/role-repository.js";
 export * from "./runtime/command-router.js";
 export * from "./runtime/runtime.js";
+export * from "./security/redaction.js";
 export * from "./server/jsonl.js";
 export * from "./server/messages.js";
 export * from "./sessions/engine-store.js";

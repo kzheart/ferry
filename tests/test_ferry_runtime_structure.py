@@ -13,6 +13,7 @@ def test_runtime_source_is_grouped_by_responsibility():
         "providers",
         "roles",
         "runtime",
+        "security",
         "server",
         "sessions",
         "tools",
@@ -31,6 +32,9 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert {
         path.name for path in (RUNTIME / "src").glob("*.ts")
     } == {"index.ts"}
+    runtime = (RUNTIME / "src/runtime/runtime.ts").read_text()
+    assert "function safeText" not in runtime
+    assert (RUNTIME / "src/security/redaction.ts").is_file()
 
 
 def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():
