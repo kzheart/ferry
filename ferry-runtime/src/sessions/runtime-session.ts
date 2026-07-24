@@ -11,6 +11,7 @@ import {
   ProtocolError,
   type EventEnvelope,
 } from "../server/messages.js";
+import type { RuntimeEventType } from "../server/generated/events.js";
 import type { AgentBackend } from "../providers/provider-service.js";
 import type { ModelSelection } from "../providers/provider-config.js";
 import type { ApplyPolicy } from "../roles/role-repository.js";
@@ -161,7 +162,7 @@ export class RuntimeSession {
   }
 
   async emit(
-    type: string,
+    type: RuntimeEventType,
     payload: Record<string, unknown>,
     runId = this.activeRunId,
   ) {

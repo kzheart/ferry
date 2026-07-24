@@ -6,14 +6,10 @@ import type {
   AuthType,
   Credential,
 } from "@earendil-works/pi-ai";
+import type { RuntimeEventType } from "../server/generated/events.js";
 
 export interface AuthCoordinatorEvent {
-  type:
-    | "auth.prompt"
-    | "auth.event"
-    | "auth.completed"
-    | "auth.failed"
-    | "auth.cancelled";
+  type: Extract<RuntimeEventType, `auth.${string}`>;
   payload: Record<string, unknown>;
 }
 

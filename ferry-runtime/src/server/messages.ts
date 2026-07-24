@@ -8,6 +8,7 @@ import {
   isRuntimeMethod,
   type RuntimeMethod,
 } from "./generated/runtime-methods.js";
+import type { RuntimeEventType } from "./generated/events.js";
 
 export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 
@@ -21,7 +22,7 @@ export interface EventEnvelope {
   run_id: string | null;
   seq: number;
   timestamp: string;
-  type: string;
+  type: RuntimeEventType;
   payload: Record<string, unknown>;
 }
 

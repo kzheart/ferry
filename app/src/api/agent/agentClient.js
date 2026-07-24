@@ -1,6 +1,7 @@
 // Ask Ferry 传输层:经 Tauri `agent_command` 走统一 ferry-ipc/1 协议,
 // 审批走独立可信命令(approve 与 apply 在 Rust 内一次完成,凭证不进 WebView)
 import { invoke } from "@tauri-apps/api/core";
+import { isFerryEventType } from "../contract/generated/events.js";
 import { FERRY_IPC_PROTOCOL } from "../contract/generated/ipc.js";
 import { isPublicRuntimeMethod } from "../contract/generated/runtime-methods.js";
 
@@ -42,7 +43,9 @@ export async function agentCommand(method, params) {
 // 事件流:runtime 事件与 Rust 补发的 operation.proposed / runtime.disconnected 共用同一通道
 export async function onAgentEvent(handler) {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen("ferry-runtime-event", e => handler(e.payload));
+  return listen("ferry-runtime-event", e => {
+    if (isFerryEventType(e.payload?.type)) handler(e.payload);
+  });
 }
 
 export const operationPlanApply = planId =>

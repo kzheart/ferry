@@ -15,6 +15,7 @@ RUNTIME_METHODS_SOURCE = ROOT / "contracts" / "runtime-methods.json"
 IPC_SOURCE = ROOT / "contracts" / "ipc.json"
 SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
 OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
+EVENTS_SOURCE = ROOT / "contracts" / "events.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
@@ -47,6 +48,12 @@ OPERATIONS_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
     ROOT / "engine/contracts/operations.py": "python",
     ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
+}
+EVENT_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/events.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
+    ROOT / "engine/contracts/events.py": "python",
+    ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
 }
 
 
@@ -202,6 +209,32 @@ def load_operations() -> dict[str, object]:
     if document["success_status"] not in terminal:
         raise ValueError("Operation success_status 必须是终态")
     return document
+
+
+def load_events() -> list[dict[str, object]]:
+    document = json.loads(EVENTS_SOURCE.read_text())
+    events = document.get("events")
+    if not isinstance(events, list) or not events:
+        raise ValueError("contracts/events.json 必须包含非空 events 数组")
+    names: list[str] = []
+    for event in events:
+        if (
+            not isinstance(event, dict)
+            or set(event) != {"type", "source", "forward_to_ui"}
+            or not isinstance(event["type"], str)
+            or not event["type"]
+            or event["source"] not in {"runtime", "host"}
+            or not isinstance(event["forward_to_ui"], bool)
+        ):
+            raise ValueError("Event 契约字段必须精确为 type/source/forward_to_ui")
+        if event["source"] == "host" and not event["forward_to_ui"]:
+            raise ValueError("Host Event 必须面向 UI")
+        names.append(event["type"])
+    if len(names) != len(set(names)):
+        raise ValueError("Event type 必须唯一")
+    if names != sorted(names):
+        raise ValueError("Event type 必须按字典序排列")
+    return events
 
 
 def frontend(agents: list[dict[str, object]]) -> str:
@@ -568,6 +601,106 @@ def operations_runtime(contract: dict[str, object]) -> str:
     ))
 
 
+def events_frontend(events: list[dict[str, object]]) -> str:
+    policies = {
+        event["type"]: {
+            "source": event["source"],
+            "forwardToUi": event["forward_to_ui"],
+        }
+        for event in events
+    }
+    source = json.dumps(policies, ensure_ascii=False, indent=2)
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const FERRY_EVENTS = Object.freeze({source});",
+        "export const FERRY_EVENT_TYPES = Object.freeze(Object.keys(FERRY_EVENTS));",
+        "export const isFerryEventType = value =>",
+        '  typeof value === "string" &&',
+        "  Object.prototype.hasOwnProperty.call(FERRY_EVENTS, value);",
+        "",
+    ))
+
+
+def events_rust(events: list[dict[str, object]]) -> str:
+    rows = []
+    for event in events:
+        source = "Runtime" if event["source"] == "runtime" else "Host"
+        forward = str(event["forward_to_ui"]).lower()
+        rows.extend((
+            f'        {json.dumps(event["type"])} => Some(EventPolicy {{',
+            f"            source: EventSource::{source},",
+            f"            forward_to_ui: {forward},",
+            "        }),",
+        ))
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) enum EventSource {",
+        "    Runtime,",
+        "    Host,",
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) struct EventPolicy {",
+        "    pub(crate) source: EventSource,",
+        "    pub(crate) forward_to_ui: bool,",
+        "}",
+        "",
+        "pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {",
+        "    match event_type {",
+        *rows,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+    ))
+
+
+def events_python(events: list[dict[str, object]]) -> str:
+    policies = {
+        event["type"]: {
+            "source": event["source"],
+            "forward_to_ui": event["forward_to_ui"],
+        }
+        for event in events
+    }
+    return "\n".join((
+        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
+        "from __future__ import annotations",
+        "",
+        f"FERRY_EVENT_POLICIES = {policies!r}",
+        "FERRY_EVENT_TYPES = frozenset(FERRY_EVENT_POLICIES)",
+        "",
+    ))
+
+
+def events_runtime(events: list[dict[str, object]]) -> str:
+    all_types = [event["type"] for event in events]
+    runtime_types = [
+        event["type"] for event in events if event["source"] == "runtime"
+    ]
+
+    def array(values: list[str]) -> str:
+        return "[\n" + "\n".join(
+            f"  {json.dumps(value)}," for value in values
+        ) + "\n]"
+
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const FERRY_EVENT_TYPES = {array(all_types)} as const;",
+        f"export const RUNTIME_EVENT_TYPES = {array(runtime_types)} as const;",
+        "export type FerryEventType = (typeof FERRY_EVENT_TYPES)[number];",
+        "export type RuntimeEventType = (typeof RUNTIME_EVENT_TYPES)[number];",
+        "export function isRuntimeEventType(value: unknown): value is RuntimeEventType {",
+        "  return (",
+        '    typeof value === "string" &&',
+        "    (RUNTIME_EVENT_TYPES as readonly string[]).includes(value)",
+        "  );",
+        "}",
+        "",
+    ))
+
+
 def contract_hash(
     agents: list[dict[str, object]],
     methods: list[dict[str, object]],
@@ -575,6 +708,7 @@ def contract_hash(
     ipc: dict[str, object],
     session_ref: dict[str, object],
     operations: dict[str, object],
+    events: list[dict[str, object]],
 ) -> str:
     payload = json.dumps(
         {
@@ -584,6 +718,7 @@ def contract_hash(
             "ipc": ipc,
             "session_ref": session_ref,
             "operations": operations,
+            "events": events,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -677,6 +812,7 @@ def generated_contents(
     ipc: dict[str, object],
     session_ref: dict[str, object],
     operations: dict[str, object],
+    events: list[dict[str, object]],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
@@ -712,8 +848,18 @@ def generated_contents(
         }[kind](operations)
         for path, kind in OPERATIONS_OUTPUTS.items()
     }
+    event_contents = {
+        path: {
+            "frontend": events_frontend,
+            "rust": events_rust,
+            "python": events_python,
+            "runtime": events_runtime,
+        }[kind](events)
+        for path, kind in EVENT_OUTPUTS.items()
+    }
     digest = contract_hash(
         agents, engine_methods, runtime_methods, ipc, session_ref, operations,
+        events,
     )
     ipc_contents = {
         path: {
@@ -730,6 +876,7 @@ def generated_contents(
         | runtime_method_contents
         | session_ref_contents
         | operation_contents
+        | event_contents
         | ipc_contents
     )
 
@@ -745,6 +892,7 @@ def main() -> int:
         load_ipc(),
         load_session_ref(),
         load_operations(),
+        load_events(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:
