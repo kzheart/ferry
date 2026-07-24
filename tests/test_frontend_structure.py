@@ -38,7 +38,7 @@ def test_operation_flow_has_one_feature_controller():
     assert controller.is_file()
     assert composition.is_file()
 
-    transport = (FRONTEND / "api/transport/rpc.js").read_text()
+    transport = (FRONTEND / "api/transport/desktopClient.ts").read_text()
     assert "operationApplyAndWait" not in transport
 
     for relative_path in (
@@ -63,3 +63,5 @@ def test_frontend_core_uses_strict_typescript():
     assert '"typecheck": "tsc --noEmit"' in package
     assert (FRONTEND / "api/contract/generated/operations.ts").is_file()
     assert not (FRONTEND / "api/contract/generated/operations.js").exists()
+    assert (FRONTEND / "api/transport/desktopClient.ts").is_file()
+    assert not (FRONTEND / "api/transport/rpc.js").exists()

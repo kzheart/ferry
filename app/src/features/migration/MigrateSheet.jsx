@@ -1,7 +1,7 @@
 // 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal, rpc } from "../../api/transport/rpc.js";
+import { engine, openTerminal } from "../../api/transport/desktopClient.js";
 import { operations } from "../operations/operations.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../components/ui/toolDisplay.js";
@@ -180,7 +180,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     setModelLoad(prev => ({ ...prev, [tgt]: true }));
     setModelErr(prev => ({ ...prev, [tgt]: null }));
     try {
-      const r = await rpc("models", { tool: tgt });
+      const r = await engine("models", { tool: tgt });
       setModelCatalog(prev => ({ ...prev, [tgt]: r }));
     } catch (e) {
       setModelErr(prev => ({ ...prev, [tgt]: errorMessage(e) }));

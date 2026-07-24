@@ -1,6 +1,6 @@
 // 内置会话源是编译期契约，不通过 Engine manifest 动态水合。
 // 安装状态与扫描结果由 env/scan 查询提供，格式细节不泄漏给前端。
-import { rpc } from "../transport/rpc.js";
+import { engine } from "../transport/desktopClient.js";
 export { AGENTS } from "./generated/agents.js";
 import { AGENTS, AGENT_IDS } from "./generated/agents.js";
 
@@ -12,4 +12,4 @@ export { supportsAssistantReplyEditing, supportsSessionEditing } from "./agentEd
 
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, ref) =>
-  rpc("resume", { tool, ref });
+  engine("resume", { tool, ref });

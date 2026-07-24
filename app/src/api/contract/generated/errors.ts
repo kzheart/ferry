@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const FERRY_ERROR_POLICIES = Object.freeze({
+export const FERRY_ERROR_POLICIES = {
   "agent.approval_invalid": {
     "category": "permission",
     "retryable": false,
@@ -441,7 +441,8 @@ export const FERRY_ERROR_POLICIES = Object.freeze({
       "runtime"
     ]
   }
-});
-export const isFerryErrorCode = value =>
+} as const;
+export type FerryErrorCode = keyof typeof FERRY_ERROR_POLICIES;
+export const isFerryErrorCode = (value: unknown): value is FerryErrorCode =>
   typeof value === "string" &&
   Object.prototype.hasOwnProperty.call(FERRY_ERROR_POLICIES, value);

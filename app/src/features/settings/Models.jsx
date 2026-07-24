@@ -1,7 +1,7 @@
 // 设置 · 模型:凭据配好后 Provider 的模型自动进入这里,勾选哪些出现在对话的模型选择器
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { agentCommand } from "../../api/agent/agentClient.js";
+import { runtime } from "../../api/transport/desktopClient.js";
 import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 
@@ -13,7 +13,7 @@ export default function Models({ ferry, onOpenProviders }) {
   const [notice, setNotice] = useState(null);
 
   const load = useCallback(async () => {
-    const list = await agentCommand("models.catalog");
+    const list = await runtime("models.catalog");
     setCatalog(list || []);
   }, []);
   // 失败也要落地成空列表,否则 catalog 停在 null,骨架 spinner 会一直转
@@ -31,7 +31,10 @@ export default function Models({ ferry, onOpenProviders }) {
   // visible_models 缺省表示全部可见:全勾选时写回 null,避免新模型上线后被旧白名单挡住
   const write = (providerId, nextIds, all) => act(async () => {
     const payload = nextIds.length === all.length ? null : nextIds;
-    await agentCommand("models.visibility.set", { provider_id: providerId, model_ids: payload });
+    await runtime("models.visibility.set", {
+      provider_id: providerId,
+      model_ids: payload,
+    });
     await load();
     await ferry?.loadModels?.();
   });
@@ -53,7 +56,7 @@ export default function Models({ ferry, onOpenProviders }) {
   const shownTotal = (catalog || []).filter(m => m.shown).length;
 
   const refresh = () => act(async () => {
-    const r = await agentCommand("models.refresh");
+    const r = await runtime("models.refresh");
     setNotice(r.failed_provider_ids?.length
       ? t("settings:models.refreshPartial", { list: r.failed_provider_ids.join(", ") })
       : t("settings:models.refreshDone"));

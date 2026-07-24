@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const PUBLIC_RUNTIME_METHODS = Object.freeze([
+export const PUBLIC_RUNTIME_METHODS = [
   "health",
   "session.create",
   "session.rename",
@@ -37,6 +37,10 @@ export const PUBLIC_RUNTIME_METHODS = Object.freeze([
   "auth.login.start",
   "auth.login.respond",
   "auth.login.cancel",
-]);
-export const isPublicRuntimeMethod = method =>
-  PUBLIC_RUNTIME_METHODS.includes(method);
+] as const;
+export type PublicRuntimeMethod =
+  (typeof PUBLIC_RUNTIME_METHODS)[number];
+export const isPublicRuntimeMethod =
+  (method: unknown): method is PublicRuntimeMethod =>
+    typeof method === "string" &&
+    (PUBLIC_RUNTIME_METHODS as readonly string[]).includes(method);

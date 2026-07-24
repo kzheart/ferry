@@ -3,7 +3,7 @@ import {
   operationCancel,
   operationPlan,
   operationStatus,
-} from "../../api/transport/rpc.js";
+} from "../../api/transport/desktopClient.js";
 import { OperationController } from "./operationController.js";
 
 export const operations = new OperationController({

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { rpc } from "../../api/transport/rpc.js";
+import { engine } from "../../api/transport/desktopClient.js";
 import { cacheGet, cacheSet } from "../../api/platform/idbCache.js";
 
 // 秒开:上次结果落 IndexedDB;main.jsx 挂载前先 preloadBrowserCache 预读(毫秒级),
@@ -32,7 +32,7 @@ export function useBrowserData() {
     if (scanning) return;
     setScanning(true);
     try {
-      const result = await rpc("scan");
+      const result = await engine("scan");
       const now = Date.now();
       setScan(result); setLastScan(now);
       persist({ scan: result, lastScan: now });
@@ -40,24 +40,22 @@ export function useBrowserData() {
     catch (error) { setScan(current => ({ tools: {}, sessions: [], error: error.message, ...(current || {}) })); }
     setScanning(false);
   };
-  const loadHistory = () => rpc("history")
+  const loadHistory = () => engine("history")
     .then(rows => { setHistoryRows(rows); persist({ history: rows }); })
     .catch(() => {});
   // 只删 Ferry 自己的迁移记录,已迁到目标工具里的会话不受影响
-  const deleteHistory = id => rpc("history_delete", { id }).then(loadHistory);
-  const loadPricing = () => rpc("pricing")
+  const deleteHistory = id => engine("history_delete", { id }).then(loadHistory);
+  const loadPricing = () => engine("pricing")
     .then(p => { setPricing(p); persist({ pricing: p }); })
     .catch(() => {});
 
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    rpc("env").then(e => { setEnv(e); persist({ env: e }); }).catch(() => {});
+    engine("env").then(e => { setEnv(e); persist({ env: e }); }).catch(() => {});
     doScan();
     loadHistory();
     loadPricing();
-    // 旧版曾把缓存写进 localStorage(超配额写不进),清掉残留
-    try { localStorage.removeItem("ferry-data-cache"); } catch { /* 忽略 */ }
   }, []);
 
   return { env, scan, scanning, lastScan, historyRows, pricing,

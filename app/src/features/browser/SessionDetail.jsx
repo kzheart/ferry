@@ -5,7 +5,7 @@ import { supportsAssistantReplyEditing, supportsSessionEditing,
   TOOL_NAME, resumeDescriptor, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../components/ui/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
-import { rpc, writeClipboardText } from "../../api/transport/rpc.js";
+import { engine, writeClipboardText } from "../../api/transport/desktopClient.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
   PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
 import Markdown from "../../components/ui/Markdown.jsx";
@@ -39,7 +39,11 @@ function ImagePreview({ images, meta, onClose }) {
     if (source) return;
     let cancelled = false;
     setError("");
-    rpc("session_asset", { tool: meta.tool, ref: sessionRef(meta), asset_id: image.id })
+    engine("session_asset", {
+      tool: meta.tool,
+      ref: sessionRef(meta),
+      asset_id: image.id,
+    })
       .then(asset => {
         if (!cancelled) setSources(current => ({ ...current,
           [image.id]: `data:${asset.mime_type};base64,${asset.data}` }));
