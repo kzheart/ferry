@@ -28,4 +28,20 @@ for (const method of ["scrollTo", "scrollBy", "scrollIntoView"]) {
   if (!Element.prototype[method]) Element.prototype[method] = () => {};
 }
 
+// Tauri 的桥在浏览器里由宿主注入,jsdom 里没有。给一个会拒绝的桩:调用方本来
+// 就要处理 IPC 失败,于是整棵树能挂载起来,而不是在第一次 invoke 时崩掉。
+// 想断言某条 IPC 行为的用例应该自己 mock platform/desktop/client,不要依赖这里。
+globalThis.__TAURI_INTERNALS__ = {
+  transformCallback: () => 0,
+  // 事件订阅要成功,否则挂载期的 listen 会变成没人接的 rejection;真正取数据的
+  // 命令一律失败,让组件走它自己的错误分支。
+  invoke: async (command) => {
+    if (String(command).startsWith("plugin:event|")) return 0;
+    throw new Error("桌面 IPC 在测试环境不可用");
+  },
+  convertFileSrc: (path) => path,
+  metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
+};
+globalThis.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+
 afterEach(cleanup);
