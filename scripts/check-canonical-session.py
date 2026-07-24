@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL = ROOT / "engine" / "domain" / "model.py"
+MODEL = ROOT / "engine" / "sessions" / "model.py"
 
 
 def violations() -> list[str]:
