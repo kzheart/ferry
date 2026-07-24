@@ -10,7 +10,7 @@ from ..errors import (
     AgentRequestError,
     ConcurrentModificationError,
 )
-from ..sessions import catalog as agent_tools
+from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
 from ..sessions.safety import record_session_id, redact
 from ..storage.session_metadata import metadata_key
@@ -87,7 +87,7 @@ class OperationPlanner:
         source_tool = operation_input["source_tool"]
         ref = operation_input["ref"]
         before = self._index.resolve(source_tool, ref)
-        session = agent_tools.read_indexed_session(self._index, before)
+        session = agent_read.read_indexed_session(self._index, before)
         preview = self._migration.preview(
             source_tool,
             operation_input["target_tool"],

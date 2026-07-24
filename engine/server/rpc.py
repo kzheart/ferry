@@ -17,7 +17,7 @@ from ..errors import (
     UnsupportedProtocolError,
 )
 from ..operations.verification import ProbeTimeout
-from ..sessions import catalog as agent_tools
+from ..sessions import agent_read
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class RpcDispatcher:
             "runtime_sessions.commit": lambda p: application.commit_runtime_session(p["update"]),
             "runtime_sessions.delete": lambda p: application.delete_runtime_session(p["session_id"]),
             "agent_search_sessions": lambda p: application.agent_search_sessions(p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"), time_range=p.get("time_range"), limit=p.get("limit", 20)),
-            "agent_session_read": lambda p: application.agent_session_read(p["tool"], ref=p["ref"], terms=p.get("terms"), roles=p.get("roles"), from_message=p.get("from_message", 1), limit=p.get("limit", 20), include_tool_outputs=p.get("include_tool_outputs", False), max_bytes=p.get("max_bytes", agent_tools.DEFAULT_CONTEXT_BYTES)),
+            "agent_session_read": lambda p: application.agent_session_read(p["tool"], ref=p["ref"], terms=p.get("terms"), roles=p.get("roles"), from_message=p.get("from_message", 1), limit=p.get("limit", 20), include_tool_outputs=p.get("include_tool_outputs", False), max_bytes=p.get("max_bytes", agent_read.DEFAULT_CONTEXT_BYTES)),
             "agent_get_usage": lambda p: application.agent_get_usage(agents=p.get("agents"), projects=p.get("projects"), time_range=p.get("time_range")),
             "operation.plan": lambda p: application.operation_plan(p["input"]),
             "operation.apply": lambda p: application.operation_apply(p["plan_id"]),

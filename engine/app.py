@@ -12,7 +12,7 @@ from .operations.service import OperationService
 from .organization import proposals as organizing
 from .organization import summaries
 from .runtime import sessions as runtime_sessions
-from .sessions import catalog as agent_tools
+from .sessions import agent_read
 from .sessions import search as session_search
 from .sessions import usage as session_usage
 from .sessions.index import AgentSessionIndex, IndexedSession
@@ -144,7 +144,7 @@ class EngineService:
         )
 
     def agent_session_read(self, tool: str, **params) -> dict:
-        return agent_tools.session_read(tool, index=self._index, **params)
+        return agent_read.session_read(tool, index=self._index, **params)
 
     def agent_get_usage(self, **params) -> dict:
         return session_usage.get_usage(index=self._index, **params)
