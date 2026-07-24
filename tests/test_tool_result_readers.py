@@ -10,7 +10,7 @@ from engine.adapters.claude.reader import (
     _tool_result as claude_tool_result,
 )
 from engine.adapters.claude.writer import _agent_input as write_claude_agent_input
-from engine.adapters.opencode.session import _parse_session
+from engine.adapters.opencode.reader import parse_session
 
 
 def _tool(session):
@@ -398,7 +398,7 @@ def test_opencode_preserves_bash_and_read_options():
         }],
     }
 
-    session, _ = _parse_session(data)
+    session, _ = parse_session(data)
     tools = [
         block.tool
         for message in session.messages
@@ -458,7 +458,7 @@ def test_opencode_preserves_error_truncation_and_attachments():
         }],
     }
 
-    session, _ = _parse_session(data)
+    session, _ = parse_session(data)
     tool = _tool(session)
     assert tool_result_text(tool.result) == "fixture failure"
     assert tool.result.status == "error"
@@ -501,18 +501,18 @@ def test_opencode_running_and_interrupted_status_are_not_faked():
             }],
         }],
     }
-    running, _ = _parse_session(base)
+    running, _ = parse_session(base)
     assert _tool(running).result.status == "running"
 
     base["messages"][0]["parts"][0]["state"]["metadata"]["interrupted"] = True
-    interrupted, _ = _parse_session(base)
+    interrupted, _ = parse_session(base)
     assert _tool(interrupted).result.status == "interrupted"
 
     base["messages"][0]["parts"][0]["state"]["metadata"] = {}
     base["messages"][0]["parts"][0]["state"]["status"] = "completed"
-    completed, _ = _parse_session(base)
+    completed, _ = parse_session(base)
     assert _tool(completed).result.status == "success"
 
     base["messages"][0]["parts"][0]["state"]["status"] = "future_status"
-    unknown, _ = _parse_session(base)
+    unknown, _ = parse_session(base)
     assert _tool(unknown).result.status == "unknown"

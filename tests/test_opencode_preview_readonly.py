@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import reader as opencode_reader
 from engine.adapters.opencode import store as opencode_store
 from engine.adapters.base.editing import EditDocument
 from engine.adapters.opencode.editor import OpenCodeBackend, OpenCodeDocument
@@ -39,7 +39,7 @@ def _payload():
 
 
 def test_canonical_reader_does_not_retain_native_document():
-    session, _edges = opencode_session._parse_session(_payload())
+    session, _edges = opencode_reader.parse_session(_payload())
 
     assert session.model_provider == "fixture-provider"
     assert session.model == "fixture-model"
@@ -49,7 +49,7 @@ def test_canonical_reader_does_not_retain_native_document():
 
 
 def test_canonical_reader_keeps_missing_model_explicitly_empty():
-    session, _edges = opencode_session._parse_session({
+    session, _edges = opencode_reader.parse_session({
         "info": {"id": "session-1", "directory": "/tmp"},
         "messages": [],
     })
@@ -69,7 +69,7 @@ def test_editor_loads_private_native_document_without_canonical_meta(
     monkeypatch.setattr(
         opencode_store, "load_native_payload", lambda _ref: payload,
     )
-    monkeypatch.setattr(opencode_session, tree_loader, lambda _ref: tree)
+    monkeypatch.setattr(opencode_reader, tree_loader, lambda _ref: tree)
 
     document = getattr(OpenCodeBackend(), method)("session-1")
 
@@ -96,7 +96,7 @@ def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):
     with pytest.raises(SessionStoreUnavailableError):
         OpenCodeBackend().load_preview("session-1")
     with pytest.raises(SessionStoreUnavailableError):
-        opencode_session.read("session-1")
+        opencode_reader.read("session-1")
 
 
 def test_current_sqlite_schema_mismatch_fails_explicitly(tmp_path, monkeypatch):
@@ -119,7 +119,7 @@ def test_current_sqlite_schema_mismatch_fails_explicitly(tmp_path, monkeypatch):
     with pytest.raises(
         AgentFormatChangedError,
     ) as excinfo:
-        opencode_session.read("session-1")
+        opencode_reader.read("session-1")
     assert excinfo.value.code == "agent.format_changed"
     assert excinfo.value.params["location"] == "sqlite.session"
 

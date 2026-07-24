@@ -10,7 +10,7 @@ from .migration import OpenCodeMigrationTarget
 from .models import discover, fallback
 from .probe import OpenCodeVerifier
 from .scanner import fingerprint, scan
-from .session import read, read_preview
+from .reader import read, read_preview
 
 MANIFEST = AgentManifest(id="opencode", **AGENTS["opencode"])
 

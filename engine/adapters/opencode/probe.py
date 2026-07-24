@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from ...system import executables, probes
-from . import session as rw_opencode
+from . import reader as opencode_reader
+from . import session as opencode_writer
 from . import store as opencode_store
 
 
@@ -32,11 +33,11 @@ class OpenCodeVerifier:
         authored = editor.load(result["session_id"])
         tree = authored.tree
         cwd = doc.data.get("info", {}).get("directory") or "."
-        shadow_id, _ = rw_opencode.write(
+        shadow_id, _ = opencode_writer.write(
             tree,
             cwd=cwd,
             native_payloads={
-                tree.source_id: rw_opencode._clone(authored.data),
+                tree.source_id: opencode_writer._clone(authored.data),
             },
         )
         try:
@@ -46,7 +47,7 @@ class OpenCodeVerifier:
             return rep
         finally:
             try:
-                shadow = rw_opencode.read(shadow_id)
+                shadow = opencode_reader.read(shadow_id)
                 ids = [
                     node.source_id
                     for node in reversed(list(shadow.walk()))

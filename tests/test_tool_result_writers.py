@@ -9,6 +9,7 @@ from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import reader as opencode_reader
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
 from engine.sessions.model import (
     Block,
@@ -91,7 +92,7 @@ def _roundtrip_opencode(session, _tmp_path):
         session, "fixture-session", "/tmp", None,
         opencode_session._template(), tool_decider=target.evaluate_tool,
     )
-    return opencode_session._parse_session(payload)[0]
+    return opencode_reader.parse_session(payload)[0]
 
 
 @pytest.mark.parametrize("roundtrip", [
