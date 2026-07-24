@@ -1,6 +1,6 @@
 // Agent 事件 → 聊天时间线的纯归约:实时事件与 events.replay 共用同一入口,
 // 带 seq 的事件按序去重,重载后回放能得到一致的消息与工具状态
-import { entitiesFromToolResult } from "../entities/ferryEntities.js";
+import { entitiesFromToolResult } from "./ferryEntities.js";
 
 export const emptyLog = () => ({
   items: [],

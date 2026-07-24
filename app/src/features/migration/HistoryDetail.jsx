@@ -2,8 +2,8 @@
 import { useTranslation } from "react-i18next";
 import { probeText } from "../../api/contract/events.js";
 import { TOOL_NAME } from "../../api/contract/tools.js";
-import { fmtSize } from "../../domain/tools/toolDisplay.js";
-import { fmtTime } from "../../domain/sessions/sessionModel.js";
+import { fmtSize } from "../../components/ui/toolDisplay.js";
+import { fmtTime } from "../browser/sessionModel.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";
 import { ToolIcon, TrashIcon } from "../../components/ui/icons.jsx";
 import { CmdRow, LossCols, StatusPill } from "../../components/ui/primitives.jsx";

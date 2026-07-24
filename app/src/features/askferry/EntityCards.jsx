@@ -3,7 +3,7 @@ import { renderEvents } from "../../api/contract/events.js";
 import { ToolIcon } from "../../components/ui/icons.jsx";
 import { LossCols } from "../../components/ui/primitives.jsx";
 import { navigationActionFor, rendererForEntity }
-  from "../../domain/entities/ferryEntities.js";
+  from "./ferryEntities.js";
 import { useTranslation } from "react-i18next";
 
 const shell = {

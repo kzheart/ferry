@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { operationApplyAndWait, operationPlan } from "../../api/transport/rpc.js";
 import { supportsAssistantReplyEditing } from "../../api/contract/tools.js";
-import { ACCENT } from "../../domain/tools/toolDisplay.js";
-import { sessionRef } from "../../domain/sessions/sessionModel.js";
+import { ACCENT } from "../../components/ui/toolDisplay.js";
+import { sessionRef } from "../browser/sessionModel.js";
 
 export function useSessionEditing({ current, runtimeProbe, doScan,
   onInplaceApplied }) {

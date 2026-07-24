@@ -1,6 +1,6 @@
-import { Spinner } from "../../components/ui/icons.jsx";
-import { HistoryList, LibraryList, Pane } from "../../components/layout/ResourcePane.jsx";
-import AgentSessionList from "../askferry/AgentSessionList.jsx";
+import { Spinner } from "../components/ui/icons.jsx";
+import AgentSessionList from "../features/askferry/AgentSessionList.jsx";
+import { HistoryList, LibraryList, Pane } from "./ResourcePane.jsx";
 
 export function ResourcePaneHost({
   view,

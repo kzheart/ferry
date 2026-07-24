@@ -2,8 +2,8 @@ export const BUCKETS = ["today", "yesterday", "last7", "last30", "earlier"];
 
 const pad2 = n => String(n).padStart(2, "0");
 
-// 相对时间格式化。t 为 i18n t 函数,由调用方注入(domain 层不依赖 React/i18next)。
-// 不传 t 时回退到 key 字符串,保证 domain 纯函数可独立测试。
+// 相对时间格式化。t 为 i18n t 函数，由调用方注入。
+// 不传 t 时回退到 key 字符串，保证纯函数可独立测试。
 export function fmtTime(ms, t) {
   if (!ms) return t ? t("common:time.dash") : "—";
   const d = Date.now() - ms;

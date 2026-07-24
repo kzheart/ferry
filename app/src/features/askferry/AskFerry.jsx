@@ -7,11 +7,11 @@ import Markdown from "../../components/ui/Markdown.jsx";
 import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrowIcon,
   Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { readClipboardText } from "../../api/transport/rpc.js";
-import { TOOL_LEVEL } from "../../domain/agent/agentChatModel.js";
+import { TOOL_LEVEL } from "./agentChatModel.js";
 import { TOOL_NAME } from "../../api/contract/tools.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
-  from "../../domain/sessions/sessionAttachment.js";
+  from "../browser/sessionAttachment.js";
 
 const fmtDur = (a, b) => {
   if (!a || !b) return "";
