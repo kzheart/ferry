@@ -80,6 +80,12 @@ already-applying native write is allowed to finish so snapshot/CAS/rollback
 semantics are never interrupted halfway through. A plan is immutable and
 applying it does not accept a second copy of the business parameters.
 
+The process composition root creates one `EngineApplication` for each sidecar
+lifetime. That application owns its `AgentSessionIndex` and single-worker
+`OperationService`; RPC dispatchers and CLI commands receive that same object
+explicitly. `ApplicationPorts` is passed into use cases as a dependency and has
+no implicit process-global `current()` or reconfiguration API.
+
 ### Ferry Runtime
 
 Owns providers, authentication, model selection, roles, conversations, workflow
