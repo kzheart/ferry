@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from engine.application import organizing, session_meta, summaries
+from engine.application import session_meta
+from engine.application.organization import proposals as organizing
+from engine.application.organization import summaries
 from engine.composition import create_ports
 from engine.domain.errors import (
     OrganizationProposalError,
