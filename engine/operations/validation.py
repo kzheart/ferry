@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from ..errors import AgentRequestError
-from ..sessions import catalog as agent_tools
+from ..sessions.safety import validate_agent_edit_ops, validate_json_shape
 from .plan_store import canonical_json
 from .types import AssistantReply
 
@@ -117,7 +117,7 @@ def validate_metadata_input(value: dict) -> dict:
     allowed_fields = {"name", "pinned", "archived", "tags"}
     if not isinstance(patch, dict) or not patch or not set(patch) <= allowed_fields:
         raise AgentRequestError("metadata patch 字段非法")
-    agent_tools._validate_json_shape(patch, max_depth=3, max_nodes=50)
+    validate_json_shape(patch, max_depth=3, max_nodes=50)
     if (
         "name" in patch
         and (not isinstance(patch["name"], str) or len(patch["name"]) > 200)
@@ -191,7 +191,7 @@ def validate_restore_delete_input(value: dict) -> dict:
 def validate_ops(ops) -> list[dict]:
     if not isinstance(ops, list) or not ops or len(ops) > 50:
         raise AgentRequestError("ops 必须是 1 到 50 项的数组")
-    agent_tools._validate_json_shape(ops)
+    validate_json_shape(ops)
     ordinary = []
     normalized = []
     replaced_turns = []
@@ -226,5 +226,5 @@ def validate_ops(ops) -> list[dict]:
             "reply": reply.to_dict(),
         })
     if ordinary:
-        agent_tools._validate_ops(ordinary)
+        validate_agent_edit_ops(ordinary)
     return normalized

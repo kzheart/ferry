@@ -1,17 +1,25 @@
 """会话目录与 Agent 只读查询；输出均经过限量、脱敏和引用收窄。"""
 from __future__ import annotations
 
-import hashlib
 import json
-import math
-import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ..errors import AgentReferenceError, AgentRequestError, LocatorStaleError
 from ..context import EngineContext
 from .model import tool_result_text
 from .index import AgentSessionIndex, IndexedSession
+from .safety import (
+    MAX_AGENT_DTO_BYTES,
+    bounded_int,
+    bounded_json,
+    finalize_dto,
+    record_session_id,
+    redact,
+    safe_project,
+    string_set,
+    validate_agent_edit_ops,
+    validated_interval,
+)
 from .usage import add_tokens, empty_tokens
 
 MAX_SEARCH_RESULTS = 50
@@ -19,154 +27,6 @@ MAX_CONTENT_SEARCH_RESULTS = 50
 MAX_CONTEXT_MESSAGES = 50
 MAX_CONTEXT_BYTES = 64 * 1024
 DEFAULT_CONTEXT_BYTES = 24 * 1024
-MAX_AGENT_DTO_BYTES = 64 * 1024
-
-_SECRET_PATTERNS = (
-    re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(
-        r"(?i)\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY)"
-        r"[A-Z0-9_]*\s*[:=]\s*[^\s,;]+"
-    ),
-    re.compile(
-        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)"
-        r"\s*[:=]\s*[^\s,;]+"
-    ),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
-    re.compile(r"\b(?:gh[opusr]|github_pat)_[A-Za-z0-9_]{16,}\b"),
-    re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
-    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{12,}\b"),
-    re.compile(
-        r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----.*?"
-        r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----",
-        re.DOTALL,
-    ),
-)
-_FILE_URI = re.compile(r"(?i)\bfile://(?:/|\\)[^\s\]\[\)\(\}\{\"']+")
-_HOME_PATH = re.compile(r"(?<!\w)~[/\\][^\s\]\[\)\(\}\{\"']+")
-_POSIX_PATH = re.compile(r"(?<![:\w])/(?:[^/\s]+/)*[^\s\]\[\)\(\}\{\"']+")
-_WINDOWS_PATH = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\]\[\)\(\}\{\"']+")
-_UNC_PATH = re.compile(r"\\\\[^\\\s]+\\[^\s\]\[\)\(\}\{\"']+")
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-def _redact(value: str, limit: int | None = None) -> str:
-    text = _CONTROL_CHARS.sub("", value)
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[REDACTED]", text)
-    for pattern in (_FILE_URI, _HOME_PATH, _POSIX_PATH, _WINDOWS_PATH, _UNC_PATH):
-        text = pattern.sub("[ABSOLUTE_PATH]", text)
-    if limit is not None and len(text) > limit:
-        return text[:limit] + "…"
-    return text
-
-
-def _safe_project(value: object) -> str:
-    if not isinstance(value, str) or not value:
-        return ""
-    return _redact(Path(value).name, 120)
-
-
-def _record_session_id(record, session=None) -> str:
-    row = getattr(record, "row", None)
-    value = row.get("id") if isinstance(row, dict) else None
-    value = value or getattr(session, "source_id", None)
-    return _redact(str(value or ""), 512)
-
-
-def _timestamp(value) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise AgentRequestError("时间必须为毫秒时间戳或 ISO8601")
-    if isinstance(value, (int, float)):
-        if not math.isfinite(value):
-            raise AgentRequestError("时间必须是有限数值")
-        return int(value)
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return int(parsed.timestamp() * 1000)
-    except (TypeError, ValueError):
-        raise AgentRequestError("时间必须为毫秒时间戳或 ISO8601")
-
-
-def _bounded_int(value, default: int, minimum: int, maximum: int, name: str) -> int:
-    if value is None:
-        return default
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise AgentRequestError(f"{name} 必须是整数", {"field": name})
-    if value < minimum or value > maximum:
-        raise AgentRequestError(
-            f"{name} 超出范围", {"field": name, "minimum": minimum, "maximum": maximum}
-        )
-    return value
-
-
-def _string_set(value, name: str, maximum: int, item_size: int) -> set[str]:
-    if value is None:
-        return set()
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise AgentRequestError(f"{name} 必须是字符串数组", {"field": name})
-    if len(value) > maximum:
-        raise AgentRequestError(
-            f"{name} 数量超出范围", {"field": name, "maximum": maximum})
-    if any(not item or len(item) > item_size for item in value):
-        raise AgentRequestError(
-            f"{name} 项长度超出范围", {"field": name, "maximum": item_size})
-    return set(value)
-
-
-def _validate_json_shape(value, *, max_depth: int = 8,
-                         max_nodes: int = 2000) -> None:
-    nodes = 0
-
-    def visit(item, depth):
-        nonlocal nodes
-        nodes += 1
-        if nodes > max_nodes or depth > max_depth:
-            raise AgentRequestError("JSON 结构过深或项目过多")
-        if isinstance(item, float) and not math.isfinite(item):
-            raise AgentRequestError("JSON 不允许 NaN/Infinity")
-        if isinstance(item, dict):
-            if not all(isinstance(key, str) and len(key) <= 128 for key in item):
-                raise AgentRequestError("JSON key 必须是不超过 128 字符的字符串")
-            for child in item.values():
-                visit(child, depth + 1)
-        elif isinstance(item, list):
-            for child in item:
-                visit(child, depth + 1)
-        elif not isinstance(item, (str, int, float, bool, type(None))):
-            raise AgentRequestError("JSON 包含不支持的值")
-
-    visit(value, 0)
-
-
-def _validate_ops(ops) -> None:
-    if not isinstance(ops, list) or not ops or len(ops) > 50:
-        raise AgentRequestError("ops 必须是 1 到 50 项的数组")
-    _validate_json_shape(ops)
-    rewrite_locators = []
-    for op in ops:
-        if not isinstance(op, dict):
-            raise AgentRequestError("每个 edit op 必须是 object")
-        if op.get("op") == "delete-turn":
-            if set(op) != {"op", "turn"} or isinstance(op.get("turn"), bool) \
-                    or not isinstance(op.get("turn"), int) or op["turn"] < 1:
-                raise AgentRequestError("delete-turn 参数非法")
-        elif op.get("op") == "rewrite":
-            if set(op) != {"op", "locator", "text"}:
-                raise AgentRequestError("rewrite 参数非法")
-            locator, text = op.get("locator"), op.get("text")
-            if (not isinstance(locator, str) or not 1 <= len(locator) <= 512
-                    or not isinstance(text, str) or not 1 <= len(text) <= 20_000):
-                raise AgentRequestError("rewrite locator/text 超出范围")
-            rewrite_locators.append(locator)
-        else:
-            raise AgentRequestError("Agent edit 仅允许 delete-turn/rewrite")
-    if len(rewrite_locators) != len(set(rewrite_locators)):
-        raise AgentRequestError(
-            "同一消息不能在一次编辑中重复改写", {"field": "ops.locator"})
 
 
 def resolve_edit_ops(index: AgentSessionIndex, record: IndexedSession,
@@ -187,7 +47,7 @@ def resolve_edit_ops(index: AgentSessionIndex, record: IndexedSession,
     return resolved
 
 
-def _public_locator_error(ops: list[dict]) -> LocatorStaleError:
+def public_locator_error(ops: list[dict]) -> LocatorStaleError:
     locator = next((op.get("locator") for op in ops
                     if op.get("op") == "rewrite"), None)
     return LocatorStaleError(
@@ -196,62 +56,20 @@ def _public_locator_error(ops: list[dict]) -> LocatorStaleError:
          "hint": "重新调用 ferry_get_session_context，并原样使用 messages[].locator"})
 
 
-def _validated_interval(value) -> tuple[int | None, int | None]:
-    interval = value or {}
-    if not isinstance(interval, dict) or not set(interval) <= {"from", "to"}:
-        raise AgentRequestError("time_range 必须且只能包含 from/to")
-    start, end = _timestamp(interval.get("from")), _timestamp(interval.get("to"))
-    if start is not None and end is not None and start > end:
-        raise AgentRequestError("time_range.from 不得晚于 to")
-    return start, end
-
-
-def _safe_json(value, depth: int = 0):
-    if depth > 6:
-        return "[truncated]"
-    if isinstance(value, str):
-        return _redact(value, 1000)
-    if isinstance(value, (int, float, bool)) or value is None:
-        return value
-    if isinstance(value, list):
-        return [_safe_json(item, depth + 1) for item in value[:100]]
-    if isinstance(value, dict):
-        return {
-            _redact(str(key), 100): _safe_json(item, depth + 1)
-            for key, item in list(value.items())[:50]
-        }
-    return _redact(str(value), 1000)
-
-
-def _bounded_json(value, max_bytes: int = 32 * 1024):
-    safe = _safe_json(value)
-    encoded = json.dumps(safe, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    if len(encoded) <= max_bytes:
-        return safe
-    return {"truncated": True, "sha256": hashlib.sha256(encoded).hexdigest(),
-            "preview": encoded[:4000].decode("utf-8", errors="ignore")}
-
-
-def _finalize_dto(result: dict) -> dict:
-    if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > MAX_AGENT_DTO_BYTES:
-        raise AgentRequestError("Agent DTO 超过 64 KiB")
-    return result
-
-
 def search_sessions(query: str = "", agents=None, projects=None, time_range=None,
                     limit: int = 20, *, index: AgentSessionIndex) -> dict:
-    limit = _bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
+    limit = bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
     if not isinstance(query, str) or len(query) > 500:
         raise AgentRequestError("query 必须是不超过 500 字符的字符串")
-    allowed_agents = _string_set(agents, "agents", 8, 32)
+    allowed_agents = string_set(agents, "agents", 8, 32)
     allowed_projects = {
-        item.casefold() for item in _string_set(projects, "projects", 20, 256)}
-    start, end = _validated_interval(time_range)
+        item.casefold() for item in string_set(projects, "projects", 20, 256)}
+    start, end = validated_interval(time_range)
     needle = query.strip().casefold()
     matches = []
     for record in index.refresh():
         row = record.row
-        project = _safe_project(row.get("dir"))
+        project = safe_project(row.get("dir"))
         updated = int(row.get("updated") or 0)
         haystack = " ".join((
             str(row.get("title") or ""), project, record.tool,
@@ -270,12 +88,12 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
         matches.append({
             "tool": record.tool,
             "ref": record.opaque_ref,
-            "session_id": _record_session_id(record),
-            "title": _redact(str(row.get("title") or ""), 200),
+            "session_id": record_session_id(record),
+            "title": redact(str(row.get("title") or ""), 200),
             "project": project,
             "updated": updated,
             "message_count": int(row.get("count") or 0),
-            "model": _redact(str(row.get("model") or ""), 120),
+            "model": redact(str(row.get("model") or ""), 120),
             "revision": record.revision,
         })
     matches.sort(key=lambda item: item["updated"], reverse=True)
@@ -307,7 +125,7 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
             "budget_bytes": MAX_AGENT_DTO_BYTES,
         },
     }
-    return _finalize_dto(result)
+    return finalize_dto(result)
 
 
 def _take(text: str, remaining: int) -> tuple[str, int, bool]:
@@ -339,7 +157,7 @@ def _validate_read_scope(record: IndexedSession) -> None:
             raise AgentReferenceError("会话子树超出 Agent 会话根目录")
 
 
-def _read_record(index: AgentSessionIndex, record: IndexedSession):
+def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
     _validate_read_scope(record)
     browser = index.ports.adapter(record.tool).browser
     session = getattr(browser, "read_agent", browser.read)(record.canonical_ref)
@@ -384,13 +202,13 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                         max_bytes: int = DEFAULT_CONTEXT_BYTES, *,
                         index: AgentSessionIndex) -> dict:
     record = index.resolve(tool, opaque_ref)
-    first = _bounded_int(from_message, 1, 1, 1_000_000, "from_message")
-    count = _bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")
-    budget = _bounded_int(max_bytes, DEFAULT_CONTEXT_BYTES, 1024,
+    first = bounded_int(from_message, 1, 1, 1_000_000, "from_message")
+    count = bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")
+    budget = bounded_int(max_bytes, DEFAULT_CONTEXT_BYTES, 1024,
                           MAX_CONTEXT_BYTES, "max_bytes")
     if not isinstance(include_tool_outputs, bool):
         raise AgentRequestError("include_tool_outputs 必须是 boolean")
-    session = _read_record(index, record)
+    session = read_indexed_session(index, record)
     total_turns = sum(message.role == "user" for message in session.messages)
     messages, current_turn, remaining = [], 0, budget
     omitted_blocks = omitted_bytes = 0
@@ -407,7 +225,7 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
         for block in message.blocks:
             item = None
             if block.kind == "text":
-                original = _redact(block.text)
+                original = redact(block.text)
                 value, remaining, clipped = _take(original, remaining)
                 item = {"kind": "text", "text": value}
                 if clipped:
@@ -415,13 +233,13 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                     omitted_bytes += len(original.encode("utf-8")) - len(value.encode("utf-8"))
             elif block.kind == "tool" and block.tool:
                 result = block.tool.result
-                item = {"kind": "tool", "name": _redact(block.tool.name, 120),
-                        "op": _redact(str(block.tool.op), 120) if block.tool.op else None,
-                        "status": _redact(result.status, 80) if result else None,
+                item = {"kind": "tool", "name": redact(block.tool.name, 120),
+                        "op": redact(str(block.tool.op), 120) if block.tool.op else None,
+                        "status": redact(result.status, 80) if result else None,
                         "input": "[omitted]", "output": "[omitted]"}
                 clipped = False
                 if include_tool_outputs and remaining:
-                    output = _redact(tool_result_text(result))
+                    output = redact(tool_result_text(result))
                     value, remaining, output_clipped = _take(output, remaining)
                     item["output"] = value
                     clipped = clipped or output_clipped
@@ -429,9 +247,9 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                     message_clipped = True
                     omitted_blocks += 1
             elif block.kind == "image" and block.image:
-                item = {"kind": "image", "id": _redact(block.image.id, 200),
-                        "mime_type": _redact(block.image.mime_type, 120),
-                        "filename": _redact(Path(block.image.filename).name, 255)
+                item = {"kind": "image", "id": redact(block.image.id, 200),
+                        "mime_type": redact(block.image.mime_type, 120),
+                        "filename": redact(Path(block.image.filename).name, 255)
                         if block.image.filename else None,
                         "data": "[omitted]"}
             else:
@@ -455,9 +273,9 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
     result = {
         "tool": tool,
         "ref": opaque_ref,
-        "session_id": _record_session_id(record, session),
-        "title": _redact(session.title, 200),
-        "project": _safe_project(session.cwd),
+        "session_id": record_session_id(record, session),
+        "title": redact(session.title, 200),
+        "project": safe_project(session.cwd),
         "revision": record.revision,
         "message_count": len(session.messages),
         "turn_count": total_turns,
@@ -479,17 +297,17 @@ def search_session_content(tool: str, opaque_ref: str, terms,
                            index: AgentSessionIndex) -> dict:
     """在单个会话的可见文本中检索，返回可直接用于改写的消息引用。"""
     record = index.resolve(tool, opaque_ref)
-    wanted = _string_set(terms, "terms", 20, 100)
+    wanted = string_set(terms, "terms", 20, 100)
     if not wanted:
         raise AgentRequestError("terms 至少包含一个检索词", {"field": "terms"})
-    allowed_roles = _string_set(roles, "roles", 2, 16)
+    allowed_roles = string_set(roles, "roles", 2, 16)
     if not allowed_roles <= {"user", "assistant"}:
         raise AgentRequestError(
             "roles 仅允许 user/assistant", {"field": "roles"})
-    maximum = _bounded_int(
+    maximum = bounded_int(
         limit, 20, 1, MAX_CONTENT_SEARCH_RESULTS, "limit")
     normalized = [(term, term.casefold()) for term in sorted(wanted)]
-    session = _read_record(index, record)
+    session = read_indexed_session(index, record)
     total_turns = sum(message.role == "user" for message in session.messages)
     matches = []
     current_turn = 0
@@ -524,7 +342,7 @@ def search_session_content(tool: str, opaque_ref: str, terms,
             "locator": index.issue_message_locator(
                 record, _message_native_locator(message, message_index), message.role, editable),
             "matched_terms": hit_terms,
-            "snippet": _redact(snippet, 900),
+            "snippet": redact(snippet, 900),
             "complete": start == 0 and end == len(text),
         }
         candidate = {"matches": [*matches, item], "message_count": len(session.messages),
@@ -535,10 +353,10 @@ def search_session_content(tool: str, opaque_ref: str, terms,
             continue
         matches.append(item)
     has_more = total_matches > len(matches)
-    return _finalize_dto({
+    return finalize_dto({
         "tool": tool,
         "ref": opaque_ref,
-        "session_id": _record_session_id(record, session),
+        "session_id": record_session_id(record, session),
         "revision": record.revision,
         "message_count": len(session.messages),
         "turn_count": total_turns,
@@ -576,16 +394,16 @@ def session_read(tool: str, ref: str | None = None, terms=None, roles=None,
 
 def get_usage(agents=None, projects=None, time_range=None, *,
               index: AgentSessionIndex) -> dict:
-    allowed_agents = _string_set(agents, "agents", 8, 32)
+    allowed_agents = string_set(agents, "agents", 8, 32)
     allowed_projects = {
-        item.casefold() for item in _string_set(projects, "projects", 20, 256)}
-    start, end = _validated_interval(time_range)
+        item.casefold() for item in string_set(projects, "projects", 20, 256)}
+    start, end = validated_interval(time_range)
     total = empty_tokens()
     by_agent: dict[str, dict] = {}
     sessions = 0
     for record in index.refresh():
         row, updated = record.row, int(record.row.get("updated") or 0)
-        project = _safe_project(row.get("dir"))
+        project = safe_project(row.get("dir"))
         if allowed_agents and record.tool not in allowed_agents:
             continue
         if allowed_projects and project.casefold() not in allowed_projects:
@@ -600,7 +418,7 @@ def get_usage(agents=None, projects=None, time_range=None, *,
         sessions += 1
         add_tokens(total, tokens)
         add_tokens(by_agent.setdefault(record.tool, empty_tokens()), tokens)
-    return _finalize_dto({
+    return finalize_dto({
         "sessions": sessions,
         "tokens": total,
         "by_agent": by_agent,
@@ -620,9 +438,9 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
     record = index.resolve(source_tool, opaque_ref)
     if target_tool not in index.ports.adapters():
         raise AgentRequestError("未知目标 Agent", {"target_tool": target_tool})
-    session = _read_record(index, record)
+    session = read_indexed_session(index, record)
     if max_turn is not None:
-        max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
+        max_turn = bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
         from ..operations.migrate import _truncate_rounds
         _truncate_rounds(session, max_turn)
     target = index.ports.adapter(target_tool).migration_target
@@ -632,12 +450,12 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
     edge_count = sum(len(node.agent_edges) for node in session.walk())
     topology = {"nodes": tree_count, "edges": max(0, tree_count - 1),
                 "agent_edges": edge_count, "preserved": True}
-    return _finalize_dto({"source_tool": source_tool, "target_tool": target_tool,
+    return finalize_dto({"source_tool": source_tool, "target_tool": target_tool,
             "ref": opaque_ref, "revision": record.revision,
-            "source_session_id": _record_session_id(record, session),
+            "source_session_id": record_session_id(record, session),
             "message_count": message_count,
             "root_message_count": len(session.messages), "tree_count": tree_count,
-            "child_count": tree_count - 1, "loss": _bounded_json(loss),
+            "child_count": tree_count - 1, "loss": bounded_json(loss),
             "topology": topology, "max_turn": max_turn})
 
 
@@ -645,7 +463,7 @@ def preview_edit(tool: str, opaque_ref: str, *, ops,
                  index: AgentSessionIndex) -> dict:
     record = index.resolve(tool, opaque_ref)
     adapter = index.ports.adapter(tool)
-    _validate_ops(ops)
+    validate_agent_edit_ops(ops)
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
     from ..operations.edit import preview
@@ -655,11 +473,11 @@ def preview_edit(tool: str, opaque_ref: str, *, ops,
         result = preview(editor, record.canonical_ref, native_ops,
                          loader=getattr(editor, "load_preview", None))
     except LocatorStaleError as error:
-        raise _public_locator_error(ops) from error
+        raise public_locator_error(ops) from error
     index.resolve(tool, opaque_ref)
-    return _finalize_dto({"tool": tool, "ref": opaque_ref, "mode": "edit",
-            "session_id": _record_session_id(record),
-            "revision": _redact(str(result["revision"]), 256),
-            "before": _bounded_json(result["before"], 12 * 1024),
-            "after": _bounded_json(result["after"], 12 * 1024),
-            "changes": _bounded_json(result["changes"], 12 * 1024)})
+    return finalize_dto({"tool": tool, "ref": opaque_ref, "mode": "edit",
+            "session_id": record_session_id(record),
+            "revision": redact(str(result["revision"]), 256),
+            "before": bounded_json(result["before"], 12 * 1024),
+            "after": bounded_json(result["after"], 12 * 1024),
+            "changes": bounded_json(result["changes"], 12 * 1024)})
