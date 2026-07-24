@@ -1,4 +1,6 @@
 import i18n from "../../i18n/index.js";
+import { FERRY_ERROR_POLICIES }
+  from "../contract/generated/errors.js";
 
 function translateError(code, params) {
   const p = params || {};
@@ -36,12 +38,13 @@ function translateError(code, params) {
 export class EngineError extends Error {
   constructor(payload) {
     const { code = "internal.unexpected", params = {} } = payload || {};
+    const policy = FERRY_ERROR_POLICIES[code];
     super(translateError(code, params));
     this.name = "EngineError";
     this.code = code;
     this.params = params;
-    this.category = payload?.category;
-    this.retryable = !!payload?.retryable;
+    this.category = policy?.category ?? payload?.category;
+    this.retryable = policy?.retryable ?? !!payload?.retryable;
   }
 }
 

@@ -8,6 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
+use crate::contracts::errors::error_policy;
 use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::contracts::operations::{
@@ -395,18 +396,21 @@ fn route_tool(
 
 fn structured_engine_error(envelope: &Value) -> String {
     let error = envelope.get("error").and_then(Value::as_object);
+    let code = error
+        .and_then(|value| value.get("code"))
+        .and_then(Value::as_str)
+        .filter(|value| error_policy(value).is_some())
+        .unwrap_or("engine.request_failed");
+    let policy = error_policy(code).expect("fallback error policy exists");
     let params = error
         .and_then(|value| value.get("params"))
         .cloned()
         .filter(|value| value.to_string().len() <= 4096)
         .unwrap_or_else(|| json!({}));
     json!({
-        "code": error.and_then(|value| value.get("code")).and_then(Value::as_str)
-            .unwrap_or("engine.request_failed"),
-        "category": error.and_then(|value| value.get("category")).and_then(Value::as_str)
-            .unwrap_or("internal"),
-        "retryable": error.and_then(|value| value.get("retryable")).and_then(Value::as_bool)
-            .unwrap_or(false),
+        "code": code,
+        "category": policy.category,
+        "retryable": policy.retryable,
         "params": params,
     })
     .to_string()

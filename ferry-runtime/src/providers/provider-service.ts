@@ -1,5 +1,6 @@
 import type { AuthType, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type { RuntimeErrorCode } from "../server/generated/errors.js";
 import { ProtocolError } from "../server/messages.js";
 import {
   AuthCoordinator,
@@ -311,7 +312,7 @@ export class ProviderService {
   }
 }
 
-function failure(code: string, error: unknown, fallback: string) {
+function failure(code: RuntimeErrorCode, error: unknown, fallback: string) {
   return new ProtocolError(
     code,
     error instanceof Error ? error.message : fallback,

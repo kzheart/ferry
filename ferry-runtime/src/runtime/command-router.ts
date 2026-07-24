@@ -319,11 +319,7 @@ export async function dispatch(
     const protocolError =
       error instanceof ProtocolError
         ? error
-        : new ProtocolError(
-            "internal_error",
-            "internal runtime error",
-            "internal",
-          );
+        : new ProtocolError("internal_error", "internal runtime error");
     return {
       protocol: PROTOCOL_VERSION,
       id: command.id,
