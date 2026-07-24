@@ -6,6 +6,7 @@ import secrets
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
+from ..contracts.operations import OPERATION_KINDS
 from ..sessions import catalog as agent_tools
 from ..context import EngineContext
 from ..operations.types import AssistantReply
@@ -56,6 +57,10 @@ class OperationService:
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
             raise AgentRequestError("operation input 必须是 object")
+        if value.get("kind") not in OPERATION_KINDS:
+            raise AgentRequestError(
+                "operation kind 非法", {"kind": value.get("kind")},
+            )
         if value.get("kind") == "edit":
             return self._plan_edit(value)
         if value.get("kind") == "migration":
@@ -66,9 +71,7 @@ class OperationService:
             return self._plan_delete(value)
         if value.get("kind") == "restore-delete":
             return self._plan_restore_delete(value)
-        raise AgentRequestError(
-            "operation kind 非法", {"kind": value.get("kind")},
-        )
+        raise AssertionError("Operation contract kind 未绑定处理器")
 
     def _plan_edit(self, value: dict) -> dict:
         operation_input = self._validate_edit_input(value)

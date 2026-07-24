@@ -1,0 +1,31 @@
+{
+  "plan_id_prefix": "op_",
+  "kinds": [
+    "edit",
+    "migration",
+    "metadata",
+    "delete",
+    "restore-delete"
+  ],
+  "edit_operations": [
+    "delete-turn",
+    "rewrite",
+    "replace-assistant-reply"
+  ],
+  "statuses": [
+    "planned",
+    "queued",
+    "applying",
+    "applied",
+    "failed",
+    "cancelled",
+    "expired"
+  ],
+  "terminal_statuses": [
+    "applied",
+    "failed",
+    "cancelled",
+    "expired"
+  ],
+  "success_status": "applied"
+}

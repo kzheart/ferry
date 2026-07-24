@@ -13,6 +13,7 @@ use self::input::{
 };
 use self::request::{operation_plan_id_request, operation_plan_request};
 use self::validation::{is_known_agent, validate_opaque_ref, validate_reply};
+use crate::contracts::operations::{EDIT_OPERATION_KINDS, OPERATION_KINDS};
 use crate::engine::engine_request_blocking;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -37,7 +38,11 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
         let fields = operation
             .as_object()
             .ok_or_else(|| "Operation edit op 必须是 object".to_owned())?;
-        match fields.get("op").and_then(Value::as_str) {
+        let kind = fields.get("op").and_then(Value::as_str);
+        if kind.is_none_or(|value| !EDIT_OPERATION_KINDS.contains(&value)) {
+            return Err("Operation edit op 不受支持".to_owned());
+        }
+        match kind {
             Some("delete-turn") => {
                 if fields.len() != 2
                     || !fields.contains_key("turn")
@@ -195,6 +200,9 @@ fn validate_restore_delete_operation_input(
 }
 
 pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
+    if !OPERATION_KINDS.contains(&input.kind()) {
+        return Err("Operation kind 未在共享契约中声明".to_owned());
+    }
     match input {
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),

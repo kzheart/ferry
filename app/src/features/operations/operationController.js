@@ -1,9 +1,10 @@
-const TERMINAL_STATUSES = new Set([
-  "applied",
-  "failed",
-  "cancelled",
-  "expired",
-]);
+import {
+  OPERATION_PLAN_ID_PREFIX,
+  OPERATION_SUCCESS_STATUS,
+  OPERATION_TERMINAL_STATUSES,
+} from "../../api/contract/generated/operations.js";
+
+const TERMINAL_STATUSES = new Set(OPERATION_TERMINAL_STATUSES);
 
 const wait = milliseconds =>
   new Promise(resolve => globalThis.setTimeout(resolve, milliseconds));
@@ -49,7 +50,7 @@ export class OperationController {
   async apply(planOrId, { onStatus } = {}) {
     const planId =
       typeof planOrId === "string" ? planOrId : planOrId?.plan_id;
-    if (!planId) {
+    if (!planId?.startsWith(OPERATION_PLAN_ID_PREFIX)) {
       throw new Error("operation plan_id is required");
     }
     let current = await this.client.apply(planId);
@@ -59,7 +60,7 @@ export class OperationController {
       current = await this.client.status(planId);
       onStatus?.(current);
     }
-    if (current.status !== "applied") {
+    if (current.status !== OPERATION_SUCCESS_STATUS) {
       throw new OperationNotAppliedError(
         planId,
         current.status,

@@ -21,6 +21,18 @@ pub(crate) enum OperationPlanInput {
     RestoreDelete(RestoreDeleteOperationPlanInput),
 }
 
+impl OperationPlanInput {
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::Edit(_) => "edit",
+            Self::Migration(_) => "migration",
+            Self::Metadata(_) => "metadata",
+            Self::Delete(_) => "delete",
+            Self::RestoreDelete(_) => "restore-delete",
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct EditOperationPlanInput {
