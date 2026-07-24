@@ -101,7 +101,7 @@ def main(argv=None):
         elif cmd == "history":
             result = application.migration_history()
         elif cmd == "env":
-            result = system.environment()
+            result = application.environment()
         else:
             sys.exit(f"未知命令: {cmd}")
         print(json.dumps(result, ensure_ascii=False, indent=2))
