@@ -3,8 +3,9 @@ use crate::operation_input::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
     MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
 };
+use crate::operation_request::{operation_plan_id_request, operation_plan_request};
 use crate::sidecar_policy::{request_attempts, request_timeout};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -646,42 +647,6 @@ fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), Strin
     }
 }
 
-fn validate_plan_id(plan_id: &str) -> Result<(), String> {
-    if !(8..=128).contains(&plan_id.len())
-        || !plan_id.starts_with("op_")
-        || !plan_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    {
-        return Err("Operation plan_id 无效".to_owned());
-    }
-    Ok(())
-}
-
-fn operation_plan_request(input: &OperationPlanInput) -> Result<String, String> {
-    validate_operation_plan_input(input)?;
-    serde_json::to_string(&json!({
-        "method": "operation.plan",
-        "params": {"input": input},
-    }))
-    .map_err(|error| error.to_string())
-}
-
-fn operation_plan_id_request(method: &'static str, plan_id: &str) -> Result<String, String> {
-    validate_plan_id(plan_id)?;
-    if !matches!(
-        method,
-        "operation.apply" | "operation.status" | "operation.cancel"
-    ) {
-        return Err("Operation Engine 方法无效".to_owned());
-    }
-    serde_json::to_string(&json!({
-        "method": method,
-        "params": {"plan_id": plan_id},
-    }))
-    .map_err(|error| error.to_string())
-}
-
 async fn operation_engine_request(
     app: tauri::AppHandle,
     request: String,
@@ -701,7 +666,11 @@ pub(crate) async fn operation_plan(
     app: tauri::AppHandle,
     input: OperationPlanInput,
 ) -> Result<String, String> {
-    operation_engine_request(app, operation_plan_request(&input)?).await
+    operation_engine_request(
+        app,
+        operation_plan_request(&input, validate_operation_plan_input)?,
+    )
+    .await
 }
 
 /// 此命令只接受已经生成的 plan_id；业务参数不会在应用阶段再次进入 Engine。
@@ -750,14 +719,16 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        operation_plan_id_request, operation_plan_request, read_engine_output, request_attempts,
-        request_timeout, stamp_engine_request, validate_engine_response_id,
-        validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
+        read_engine_output, request_attempts, request_timeout, stamp_engine_request,
+        validate_engine_response_id, validate_operation_plan_input, validate_public_engine_request,
     };
     use crate::operation_input::{
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
         MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
         RestoreDeleteOperationPlanInput,
+    };
+    use crate::operation_request::{
+        operation_plan_id_request, operation_plan_request, validate_plan_id,
     };
     use crate::sidecar_policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT};
     use std::collections::HashMap;
@@ -864,8 +835,11 @@ mod tests {
 
     #[test]
     fn operation_plan_request_has_a_fixed_method_and_tagged_input() {
-        let request =
-            operation_plan_request(&OperationPlanInput::Edit(edit_operation_input())).unwrap();
+        let request = operation_plan_request(
+            &OperationPlanInput::Edit(edit_operation_input()),
+            validate_operation_plan_input,
+        )
+        .unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value.get("method").and_then(serde_json::Value::as_str),
@@ -968,7 +942,7 @@ mod tests {
         });
         assert!(validate_operation_plan_input(&input).is_ok());
 
-        let request = operation_plan_request(&input).unwrap();
+        let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value
@@ -992,7 +966,7 @@ mod tests {
         });
         assert!(validate_operation_plan_input(&input).is_ok());
 
-        let request = operation_plan_request(&input).unwrap();
+        let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value
@@ -1017,7 +991,7 @@ mod tests {
         });
         assert!(validate_operation_plan_input(&input).is_ok());
 
-        let request = operation_plan_request(&input).unwrap();
+        let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value
@@ -1034,7 +1008,7 @@ mod tests {
         let input = OperationPlanInput::Migration(migration_operation_input());
         assert!(validate_operation_plan_input(&input).is_ok());
 
-        let request = operation_plan_request(&input).unwrap();
+        let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value
@@ -1143,7 +1117,7 @@ mod tests {
 
         let input = OperationPlanInput::Edit(input);
         assert!(validate_operation_plan_input(&input).is_ok());
-        let request = operation_plan_request(&input).unwrap();
+        let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
         let value: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert_eq!(
             value
