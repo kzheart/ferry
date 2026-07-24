@@ -4,17 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ferry</title>
-  <script>
-    // 首帧防白闪:CSS/JS 就绪前按已存主题先落 data-theme 与底色
-    // (底色由 main.jsx 在首帧后清掉,macOS 下要透出毛玻璃)
-    try {
-      var s = JSON.parse(localStorage.getItem("ferry-settings") || "{}");
-      var dark = s.theme === "dark" ||
-        (s.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-      document.documentElement.dataset.theme = dark ? "dark" : "light";
-      document.documentElement.style.background = dark ? "#141416" : "#FBFCFD";
-    } catch (e) { /* 无缓存时保持默认浅色 */ }
-  </script>
+  <script type="module" src="/src/themeBootstrap.js"></script>
 </head>
 <body>
   <div id="root"></div>

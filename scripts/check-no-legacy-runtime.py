@@ -31,6 +31,7 @@ FORBIDDEN = (
     "engine" + "Bridge",
 )
 FORBIDDEN_PATHS = (
+    ROOT / "app/scripts/check-tool-contract.mjs",
     ROOT / "engine/adapters/base/plugin.py",
     ROOT / "engine/adapters/claude/plugin.py",
     ROOT / "engine/adapters/codex/plugin.py",
