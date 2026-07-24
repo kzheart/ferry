@@ -4,7 +4,7 @@ from __future__ import annotations
 from ..base.migration import MigrationTargetBase, linked_agent_edge
 from ...sessions.model import tool_result_text
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
-from .session import OP_FIDELITY, write
+from .writer import OP_FIDELITY, write
 
 
 class OpenCodeMigrationTarget(MigrationTargetBase):

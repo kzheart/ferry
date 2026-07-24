@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ...system import executables, probes
 from . import reader as opencode_reader
-from . import session as opencode_writer
+from . import writer as opencode_writer
 from . import store as opencode_store
 
 

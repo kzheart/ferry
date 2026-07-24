@@ -13,17 +13,19 @@ def test_adapter_contract_has_no_plugin_layer():
     assert not (ENGINE / "adapters/base/plugin.py").exists()
 
 
-def test_opencode_store_is_separate_from_session_codec():
+def test_opencode_adapter_has_explicit_reader_writer_and_store():
     opencode = ENGINE / "adapters/opencode"
     assert (opencode / "store.py").is_file()
     assert (opencode / "reader.py").is_file()
-    session = (opencode / "session.py").read_text()
-    assert "sqlite3.connect" not in session
-    assert "subprocess.run" not in session
-    assert "def load_native_payload" not in session
-    assert "def import_payload" not in session
-    assert "def parse_session" not in session
-    assert "def read(" not in session
+    assert (opencode / "writer.py").is_file()
+    assert not (opencode / "session.py").exists()
+    writer = (opencode / "writer.py").read_text()
+    assert "sqlite3.connect" not in writer
+    assert "subprocess.run" not in writer
+    assert "def load_native_payload" not in writer
+    assert "def import_payload" not in writer
+    assert "def parse_session" not in writer
+    assert "def read(" not in writer
 
 
 def test_business_capabilities_live_in_top_level_packages():

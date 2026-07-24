@@ -1,4 +1,4 @@
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
@@ -49,7 +49,7 @@ def test_raw_remap_makes_tied_messages_and_parts_stably_ordered():
         ],
     }
 
-    remapped = opencode_session._remap_payload(
+    remapped = opencode_writer._remap_payload(
         payload, "new-session", "/new", None,
         {"old-session": "new-session", "old-child": "new-child"})
 
@@ -97,7 +97,7 @@ def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(
         spawn_message_id="spawn-message", prompt="review",
         status="async_launched")]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     root_payload, root_sid = imported[0]
     assert len(root_payload["messages"]) == 4
@@ -143,7 +143,7 @@ def test_missing_native_task_link_is_inserted_at_spawn_message_before_remap(
     root.agent_edges = [AgentEdge(
         "old-root", "old-child", spawn_message_id="spawn", prompt="review")]
 
-    opencode_session.write(
+    opencode_writer.write(
         root,
         cwd=str(tmp_path),
         native_payloads={

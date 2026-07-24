@@ -8,7 +8,7 @@ from engine.adapters.claude.reader import read as read_claude
 from engine.adapters.claude.writer import write as write_claude
 from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
@@ -119,7 +119,9 @@ def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypat
         lambda payload, sid, cwd: imported.append((payload, sid, cwd)),
     )
 
-    root_id, destination = opencode_session.write(_tree(tmp_path), cwd=str(tmp_path))
+    root_id, destination = opencode_writer.write(
+        _tree(tmp_path), cwd=str(tmp_path)
+    )
 
     assert destination == database
     assert len(imported) == 2
@@ -165,7 +167,7 @@ def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
         ]),
     ]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     tools = [part for message in imported[0]["messages"]
              for part in message.get("parts", []) if part.get("type") == "tool"]
@@ -192,7 +194,7 @@ def test_opencode_writer_preserves_source_message_chronology(tmp_path, monkeypat
                 created_at="2026-07-22T10:22:34.060Z"),
     ]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     messages = imported[0]["messages"]
     assert [message["parts"][0]["text"] for message in messages] == [
@@ -219,7 +221,7 @@ def test_opencode_writer_rolls_back_partially_imported_session(tmp_path, monkeyp
     )
 
     with pytest.raises(RuntimeError, match="invalid schema"):
-        opencode_session.write(_tree(tmp_path), cwd=str(tmp_path))
+        opencode_writer.write(_tree(tmp_path), cwd=str(tmp_path))
 
     assert len(deleted) == 1
     assert deleted[0][:2] == ["session", "delete"]
