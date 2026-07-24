@@ -133,8 +133,7 @@ const schemas = {
   session_read: Type.Object(
     {
       tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
-      session_id: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+      ref: Type.String({ minLength: 1, maxLength: 512 }),
       terms: Type.Optional(
         Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
           minItems: 1,
@@ -187,7 +186,7 @@ const descriptions: Record<FerryToolName, string> = {
   session_search:
     "Search session metadata (title, project, source tool, and model). Returns fsr_ refs; it does not search message bodies or native session IDs.",
   session_read:
-    "Read one indexed session. Provide either ref (an fsr_ value from session_search) or session_id (a native ID from a session attachment, resolved internally) — exactly one. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
+    "Read one indexed session using an fsr_ ref returned by session_search. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage: "Get privacy-filtered aggregate usage.",
   migrate: `Migrate a session into another agent's format (targets: ${AGENT_IDS.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit:

@@ -50,7 +50,7 @@ RPC_METHODS = {
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),
     "agent_session_read": lambda p: agent_tools.session_read(
-        p["tool"], ref=p.get("ref"), session_id=p.get("session_id"),
+        p["tool"], ref=p["ref"],
         terms=p.get("terms"), roles=p.get("roles"),
         from_message=p.get("from_message", 1), limit=p.get("limit", 20),
         include_tool_outputs=p.get("include_tool_outputs", False),

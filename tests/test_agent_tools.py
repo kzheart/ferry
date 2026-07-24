@@ -287,40 +287,22 @@ def test_library_scan_issues_operation_refs(agent_environment):
     ).canonical_ref == str(agent_environment["transcript"])
 
 
-def test_native_session_id_resolves_to_scoped_reference(agent_environment):
-    result = agent_tools.resolve_session("claude", "private-id")
-    assert result["tool"] == "claude"
-    assert result["ref"].startswith("fsr_")
-    assert result["title"] == "支付重构"
-    assert "id" not in result and "path" not in result and "dir" not in result
-    assert agent_tools.get_session_context("claude", result["ref"])["tool"] == "claude"
-
-    with pytest.raises(AgentReferenceError, match="找不到"):
-        agent_tools.resolve_session("claude", "missing-id")
-    with pytest.raises(AgentRequestError):
-        agent_tools.resolve_session("claude", "bad\nid")
-
-
-def test_session_read_merges_resolve_context_and_content(agent_environment):
-    # native session_id 直接读:内部完成 resolve → ref,默认走上下文分页
-    by_id = agent_tools.session_read("claude", session_id="private-id")
-    assert by_id["tool"] == "claude"
-    assert by_id["mode"] == "context"
-    assert by_id["resolved_from_session_id"] is True
-    assert by_id["ref"].startswith("fsr_")
+def test_session_read_requires_engine_issued_reference(agent_environment):
+    ref = _claude_ref()
+    by_ref = agent_tools.session_read("claude", ref=ref)
+    assert by_ref["tool"] == "claude"
+    assert by_ref["mode"] == "context"
+    assert by_ref["ref"] == ref
 
     # 显式 ref + terms:切到正文搜索,返回 matches
-    ref = by_id["ref"]
     searched = agent_tools.session_read("claude", ref=ref, terms=["支付"])
     assert searched["mode"] == "search"
     assert "matches" in searched
-    assert "resolved_from_session_id" not in searched
 
-    # ref/session_id 二选一约束
     with pytest.raises(AgentRequestError):
         agent_tools.session_read("claude")
     with pytest.raises(AgentRequestError):
-        agent_tools.session_read("claude", ref=ref, session_id="private-id")
+        agent_tools.session_read("claude", ref="")
 
 
 def test_only_current_index_refs_are_accepted(agent_environment):
