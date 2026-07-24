@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Scheduler, type SchedulerEvent } from "../src/workflow.js";
+import { WorkflowRun, type WorkflowRunEvent } from "../src/workflow.js";
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -14,7 +14,7 @@ describe("bounded multi-agent workflow", () => {
     const first = deferred<string>();
     const second = deferred<string>();
     const started: string[] = [];
-    const run = new Scheduler(
+    const run = new WorkflowRun(
       {
         max_concurrency: 2,
         tasks: [
@@ -62,7 +62,7 @@ describe("bounded multi-agent workflow", () => {
     let active = 0;
     let peak = 0;
     const gates = Array.from({ length: 5 }, () => deferred<string>());
-    const run = new Scheduler(
+    const run = new WorkflowRun(
       {
         max_concurrency: 2,
         tasks: gates.map((_, index) => ({
@@ -93,8 +93,8 @@ describe("bounded multi-agent workflow", () => {
   });
 
   it("propagates cancellation to running and pending tasks", async () => {
-    const events: SchedulerEvent[] = [];
-    const run = new Scheduler(
+    const events: WorkflowRunEvent[] = [];
+    const run = new WorkflowRun(
       {
         max_concurrency: 1,
         tasks: [
@@ -128,7 +128,7 @@ describe("bounded multi-agent workflow", () => {
   });
 
   it("continues independent tasks but skips failed dependencies", async () => {
-    const run = new Scheduler(
+    const run = new WorkflowRun(
       {
         failure_policy: "continue",
         max_concurrency: 2,
@@ -164,7 +164,7 @@ describe("bounded multi-agent workflow", () => {
   });
 
   it("fails a task that would exceed the total output budget", async () => {
-    const run = new Scheduler(
+    const run = new WorkflowRun(
       {
         max_concurrency: 1,
         max_output_chars: 1_000,
@@ -192,7 +192,7 @@ describe("bounded multi-agent workflow", () => {
 
   it("rejects cycles, excessive depth and task budgets", async () => {
     await expect(
-      new Scheduler(
+      new WorkflowRun(
         {
           tasks: [
             {
@@ -214,7 +214,7 @@ describe("bounded multi-agent workflow", () => {
     ).rejects.toThrow("cycle");
 
     await expect(
-      new Scheduler(
+      new WorkflowRun(
         {
           max_depth: 2,
           tasks: [
@@ -238,7 +238,7 @@ describe("bounded multi-agent workflow", () => {
     ).rejects.toThrow("too deep");
 
     await expect(
-      new Scheduler(
+      new WorkflowRun(
         {
           tasks: Array.from({ length: 33 }, (_, index) => ({
             id: `task_${index}`,
