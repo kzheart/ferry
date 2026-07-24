@@ -5,8 +5,7 @@ import { openTerminal, revealPath, rpc,
   operationApplyAndWait, operationPlan,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
-import { fmtTime, operationRef, repoOf,
-  sessionRef } from "../domain/sessions/sessionModel.js";
+import { fmtTime, operationRef, repoOf } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
@@ -24,6 +23,7 @@ import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
 import { useLibraryResourcePaneActions } from "../features/browser/useLibraryResourcePaneActions.js";
+import { useSessionSelection } from "../features/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
@@ -56,9 +56,6 @@ export default function App() {
   // ----- 导航与选中 -----
   const [view, setView] = useState(
     () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
-  const [selId, setSelId] = useState(null); // UI 内部会话身份: tool + native id
-  const [detail, setDetail] = useState(null);   // {id, data, error}
-  const [refreshing, setRefreshing] = useState(false);
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [organizerOpen, setOrganizerOpen] = useState(false);
   const [peekId, setPeekId] = useState(null);  // Ask Ferry 卡片就地预览的会话 id
@@ -104,10 +101,23 @@ export default function App() {
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
 
   const sessions = scan?.sessions || [];
-  const byKey = useMemo(
-    () => Object.fromEntries(sessions.map(s => [sessionIdentity(s), s])),
-    [sessions],
-  );
+  const selectionReset = useRef(() => {});
+  const selection = useSessionSelection({
+    sessions,
+    onSelect: () => selectionReset.current(),
+    onFallbackLoad: doScan,
+  });
+  const {
+    selectedId: selId,
+    detail,
+    refreshing,
+    sessionsByKey: byKey,
+    select,
+    loadEntitySession,
+    refreshDetail,
+    clearSelection,
+    discardCachedDetail,
+  } = selection;
   const migratedSessionKeys = useMemo(
     () => new Set(historyRows.map(history => sessionIdentity({
       tool: history.src,
@@ -172,6 +182,7 @@ export default function App() {
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
     resetSelection, addOp, startReplyEdit,
     removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
+  selectionReset.current = resetSelection;
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -210,53 +221,6 @@ export default function App() {
       setToast({ kind: "fail", title: t("app:toast.metaSaveFail"), desc: e.message });
     }
   };
-  // 详情 LRU 缓存:切回看过的会话立即渲染旧内容,后台再取最新
-  const detailCache = useRef(new Map());
-  const cacheDetail = (id, data) => {
-    const c = detailCache.current;
-    c.delete(id); c.set(id, data);
-    if (c.size > 30) c.delete(c.keys().next().value);
-  };
-
-  const select = key => {
-    setSelId(key); resetSelection();
-    const s = byKey[key] || sessions.find(x => sessionIdentity(x) === key);
-    if (!s) return;
-    setDetail({ id: key, data: detailCache.current.get(key) || null });
-    rpc("show", { tool: s.tool, ref: sessionRef(s) })
-      .then(data => { cacheDetail(key, data);
-        setDetail(d => d?.id === key ? { ...d, data } : d); })
-      .catch(e => setDetail(d => d?.id === key ? { ...d, error: e.message } : d));
-  };
-
-  // 把实体对应的会话装入选中态与详情缓存,不切换主视图。返回装入的会话 id。
-  const loadEntitySession = (action, entity) => {
-    const candidate = sessions.find(session =>
-      (action.sessionId && session.tool === action.tool && session.id === action.sessionId) ||
-      (action.ref && sessionRef(session) === action.ref) ||
-      (entity?.title && session.tool === action.tool &&
-        session.title === entity.title &&
-        (!entity.project || repoOf(session.dir) === entity.project)));
-    if (candidate) {
-      const key = sessionIdentity(candidate);
-      select(key);
-      return key;
-    }
-    if (action.tool && (action.ref || action.sessionId)) {
-      const key = sessionIdentity({ tool: action.tool, id: action.sessionId || action.ref });
-      setSelId(key); resetSelection();
-      setDetail({ id: key, data: null });
-      rpc("show", { tool: action.tool, ref: action.ref || action.sessionId })
-        .then(data => setDetail(current =>
-          current?.id === key ? { ...current, data } : current))
-        .catch(error => setDetail(current =>
-          current?.id === key ? { ...current, error: error.message } : current));
-      doScan();
-      return key;
-    }
-    return null;
-  };
-
   // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
   // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
   const peekEntity = (action, entity) => {
@@ -289,21 +253,6 @@ export default function App() {
       return;
     }
     setView(action.view);
-  };
-
-  // 刷新当前会话:只重读这一个会话的正文,不触发全量扫描
-  const refreshDetail = async () => {
-    const s = selId && (byKey[selId] || sessions.find(x => sessionIdentity(x) === selId));
-    if (!s || refreshing) return;
-    setRefreshing(true);
-    try {
-      const data = await rpc("show", { tool: s.tool, ref: sessionRef(s) });
-      cacheDetail(selId, data);
-      setDetail(d => d?.id === selId ? { id: selId, data } : d);
-    } catch (e) {
-      setDetail(d => d?.id === selId ? { ...d, error: e.message } : d);
-    }
-    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -339,8 +288,8 @@ export default function App() {
       });
       const r = (await operationApplyAndWait(plan.plan_id)).result;
       const key = sessionIdentity(s);
-      detailCache.current.delete(key);
-      if (selId === key) { setSelId(null); setDetail(null); }
+      discardCachedDetail(s);
+      if (selId === key) clearSelection();
       doScan();
       setToast({ kind: "ok", title: t("app:toast.deleteDone"),
         desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
@@ -368,11 +317,11 @@ export default function App() {
           ref: operationRef(s),
         });
         await operationApplyAndWait(plan.plan_id);
-        detailCache.current.delete(sessionIdentity(s));
+        discardCachedDetail(s);
         done++;
       } catch { fail++; }
     }
-    if (targets.some(s => sessionIdentity(s) === selId)) { setSelId(null); setDetail(null); }
+    if (targets.some(s => sessionIdentity(s) === selId)) clearSelection();
     setMultiSel([]); doScan();
     setToast(fail
       ? { kind: "fail", title: t("app:toast.batchPartialFail"), desc: t("app:toast.batchPartialFailDesc", { done, fail }) }
