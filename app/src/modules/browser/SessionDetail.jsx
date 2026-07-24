@@ -10,6 +10,7 @@ import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, Migrat
   PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../shared/ui/icons.jsx";
 import Markdown from "../../shared/ui/Markdown.jsx";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
+import PendingEditBar from "./PendingEditBar.jsx";
 import {
   CompactionBoundary,
   ContextStatusChip,
@@ -279,51 +280,6 @@ function Round({ r, editable, delOp, rewOp, onDelete, onUndoDelete,
   );
 }
 
-function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onDiscardAll }) {
-  const { t: tt } = useTranslation();
-  const [listOpen, setListOpen] = useState(false);
-  const jump = n => document.querySelector(`[data-round="${n}"]`)
-    ?.scrollIntoView({ behavior: "smooth", block: "center" });
-  return (
-    <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
-      zIndex: 5 }}>
-      {listOpen && (
-        <div className="fscroll" style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0,
-          minWidth: 250, maxHeight: 262, overflowY: "auto", background: "var(--bg)",
-          border: "1px solid var(--line3)", borderRadius: 10,
-          boxShadow: "var(--shadow-menu)", padding: 5 }}>
-          {ops.map(o => (
-            <div key={o.id} className="hov-ghost" style={{ display: "flex", alignItems: "center",
-              gap: 8, padding: "5px 4px 5px 9px", borderRadius: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: o.dot, flex: "none" }} />
-              <a onClick={() => jump(o.n)} style={{ flex: 1, fontSize: 12, color: "var(--tx2)",
-                cursor: "default", whiteSpace: "nowrap" }}>{o.labelKey ? tt(o.labelKey, o.labelParams) : o.label}</a>
-              <IconBtn title={tt("browser:pendingBar.undoOp")} onClick={() => removeOp(o.id)}><CloseIcon size={11} /></IconBtn>
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: 7,
-        background: "var(--bg)", border: "1px solid var(--line3)", borderRadius: 24,
-        boxShadow: "var(--shadow-sheet)" }}>
-        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18, fontWeight: 600 }}
-          onClick={() => setListOpen(v => !v)}>
-          {tt("browser:pendingBar.pendingCount", { n: ops.length })} <Caret open={listOpen} size={9} /></button>
-        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18 }}
-          disabled={!!invalid} title={invalid || undefined} onClick={onOpenDiff}>{tt("browser:pendingBar.previewDiff")}</button>
-        <button className="fbtn-primary" style={{ height: 28, fontSize: 12, padding: "0 14px",
-          borderRadius: 18 }} disabled={applying || !!invalid} title={invalid || undefined} onClick={onApply}>
-          {applying ? tt("browser:pendingBar.applying") : tt("browser:pendingBar.applyChanges")}</button>
-        <button className="fbtn" style={{ height: 28, fontSize: 12, borderRadius: 18,
-          color: "var(--tx4)" }} onClick={onDiscardAll}>{tt("browser:pendingBar.discard")}</button>
-      </div>
-      {invalid && <div style={{ position: "absolute", right: 14, bottom: "calc(100% + 5px)",
-        maxWidth: 360, padding: "5px 9px", borderRadius: 6, background: "var(--err-bg2)",
-        color: "var(--err-text)", fontSize: 11 }}>{invalid}</div>}
-    </div>
-  );
-}
-
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
@@ -470,7 +426,7 @@ export default memo(function SessionDetail({ meta, data, error,
         </div>
       </div>
       {dirtyOps.length > 0 && (
-        <PendingBar ops={dirtyOps} removeOp={removeOp}
+        <PendingEditBar ops={dirtyOps} removeOp={removeOp}
           onOpenDiff={onOpenDiff} onApply={onApply} applying={applying}
           invalid={replyEditError(dirtyOps.find(op => op.type === "assistant-reply"))}
           onDiscardAll={onDiscardAll} />
