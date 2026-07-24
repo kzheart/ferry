@@ -6,11 +6,10 @@ import { openTerminal, revealPath, rpc,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor,
   toolHasCapability } from "../api/contract/tools.js";
-import { BUCKETS, bucketOf, fmtTime, operationRef, repoOf,
+import { fmtTime, operationRef, repoOf,
   sessionRef } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
-import { histStatus, STATUS_CODE } from "../features/migration/migrationModel.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
 import { Sheet } from "../components/ui/primitives.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
@@ -25,6 +24,7 @@ import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
+import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
@@ -81,8 +81,6 @@ export default function App() {
   const [aq, setAq] = useState("");
 
   // ----- 搜索与筛选 -----
-  const [hq, setHq] = useState("");
-  const [histF, setHistF] = useState({ src: [...TOOLS], target: "all", status: "all", time: "all" });
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
   const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
@@ -145,6 +143,28 @@ export default function App() {
     multiIds: multiSel,
     setMultiIds: setMultiSel,
   } = library;
+  const history = useHistoryResourcePane({
+    historyRows,
+    selectedId: selHist,
+    onSelect: setSelHist,
+    t,
+    toolIds: TOOLS,
+    toolNames: TOOL_NAME,
+  });
+  const {
+    query: hq,
+    setQuery: setHq,
+    filter: histF,
+    setFilter: setHistF,
+    items: histItems,
+    filtered: histFiltered,
+    groups: histGroups,
+    selected: histSel,
+    visibleIds: historyVisibleIds,
+    filterCount: histFilterCount,
+    tokens: histTokens,
+    clear: clearHistF,
+  } = history;
   const cur = selId ? byKey[selId] : null;
   const editing = useSessionEditing({ current: cur,
     runtimeProbe: !!settings.runtimeProbe, doScan,
@@ -654,47 +674,7 @@ export default function App() {
     ? { ...cur, title: metaFor(cur).name } : cur, [cur, metaMap]);
 
   // ----- 资源栏数据:迁移历史 -----
-  // 优先用引擎给的稳定 id:删除后下标会整体前移,按下标编号会让选中项跳到别的记录上
-  const histItems = useMemo(() => historyRows.map((h, i) => ({
-    ...h, _id: h.id ? `h${h.id}` : `h${i}-${h.time}`, status: histStatus(h),
-  })), [historyRows]);
-  const hql = hq.trim().toLowerCase();
-  // 迁移历史此前每次渲染都重算分组;memo 后仅在数据/筛选/选中变化时重建
-  const { histFiltered, histGroups } = useMemo(() => {
-    const matchHist = h => histF.src.includes(h.src) &&
-      (histF.target === "all" || h.dst === histF.target) &&
-      (histF.status === "all" || h.status === histF.status) &&
-      (histF.time === "all" || bucketOf(h.time) === histF.time ||
-        (histF.time === "earlier" && !["today", "yesterday"].includes(bucketOf(h.time)))) &&
-      (!hql || (h.title || "").toLowerCase().includes(hql) ||
-        (h.session_id || "").toLowerCase().includes(hql));
-    const histFiltered = histItems.filter(matchHist);
-    const histGroups = [["today", t("app:historyToken.today")], ["yesterday", t("app:historyToken.yesterday")], ["earlier", t("app:historyToken.earlier")]].map(([k, label]) => ({
-      label,
-      rows: histFiltered.filter(h => k === "earlier"
-        ? !["today", "yesterday"].includes(bucketOf(h.time)) : bucketOf(h.time) === k)
-        .map(h => ({ id: h._id, title: h.title || h.source_id, short: fmtTime(h.time, t),
-          from: TOOL_NAME[h.src], to: TOOL_NAME[h.dst], status: h.status,
-          statusLabel: t(`common:${h.status}`),
-          stColor: { [STATUS_CODE.success]: "var(--ok)", [STATUS_CODE.failed]: "var(--err)",
-            [STATUS_CODE.rolledBack]: "var(--tx3b)" }[h.status],
-          tool: h.src, selected: h._id === (selHist ?? histFiltered[0]?._id),
-          // 旧缓存里的记录没有引擎 id,删不了,索性不给删除按钮
-          deletable: !!h.id,
-          onClick: () => setSelHist(h._id) })),
-    })).filter(g => g.rows.length);
-    return { histFiltered, histGroups };
-  }, [histItems, histF, hql, selHist, t]);
-  visibleIds.current.history = histFiltered.map(h => h._id);
-  const histSel = histItems.find(h => h._id === selHist) || histFiltered[0] || null;
-  const histTokens = [];
-  if (histF.target !== "all") histTokens.push({ label: t("app:historyToken.target", { tool: TOOL_NAME[histF.target] }),
-    onRemove: () => setHistF(v => ({ ...v, target: "all" })) });
-  if (histF.status !== "all") histTokens.push({ label: t(`common:${histF.status}`),
-    onRemove: () => setHistF(v => ({ ...v, status: "all" })) });
-  if (histF.time !== "all") histTokens.push({
-    label: t(`app:historyToken.${histF.time}`),
-    onRemove: () => setHistF(v => ({ ...v, time: "all" })) });
+  visibleIds.current.history = historyVisibleIds;
 
   // ----- 资源栏数据:Ask Ferry 对话 -----
   const aql = aq.trim().toLowerCase();
@@ -721,8 +701,7 @@ export default function App() {
         : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan, t) }) : "" }) },
     history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
       query: hq, onQuery: e => setHq(e.target.value),
-      filterCount: (histF.src.length < TOOLS.length ? 1 : 0) + (histF.target !== "all" ? 1 : 0) +
-        (histF.status !== "all" ? 1 : 0) + (histF.time !== "all" ? 1 : 0),
+      filterCount: histFilterCount,
       tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
   }[view] || null;
 
@@ -799,10 +778,7 @@ export default function App() {
             history={{
               groups: histGroups, filtered: histFiltered,
               onDelete: id => setHistDel(histItems.find(item => item._id === id)),
-              onClear: () => {
-                setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" });
-                setHq("");
-              },
+              onClear: clearHistF,
             }}
             agent={{
               sessions: ferrySessions, activeId: ferry.activeId,
@@ -1026,8 +1002,7 @@ export default function App() {
           onClose={() => setPopover(null)} onClear={clearLibF} />)}
       {popover === "hist" && (
         <HistoryFilter f={histF} setF={setHistF} anchor={popAnchor.current}
-          onClose={() => setPopover(null)}
-          onClear={() => { setHistF({ src: [...TOOLS], target: "all", status: "all", time: "all" }); setHq(""); }} />)}
+          onClose={() => setPopover(null)} onClear={clearHistF} />)}
       {guideStep > 0 && (
         <Guide step={guideStep} onGo={setGuideStep} onFinish={finishGuide} />)}
     </div>
