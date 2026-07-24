@@ -10,6 +10,7 @@ from ...storage.snapshots import snapshot_payload
 from ..base.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import session as rw_opencode
+from . import store as opencode_store
 from .codec import CODEC
 
 
@@ -32,12 +33,12 @@ class OpenCodeBackend(EditBackend):
         self._api_factory = api_factory or (lambda cwd: opencode_api.OpenCodeApi(cwd))
 
     def load(self, ref):
-        payload = rw_opencode.load_native_payload(ref)
+        payload = opencode_store.load_native_payload(ref)
         tree = rw_opencode.read(ref)
         return self._document(ref, payload, tree)
 
     def load_preview(self, ref):
-        payload = rw_opencode.load_native_payload(ref)
+        payload = opencode_store.load_native_payload(ref)
         tree = rw_opencode.read_preview(ref)
         return self._document(ref, payload, tree)
 
@@ -103,7 +104,7 @@ class OpenCodeBackend(EditBackend):
 
     def restore_snapshot(self, snapshot, doc):
         original = json.loads(Path(snapshot).read_text())
-        current = rw_opencode._oc_export(doc.ref)
+        current = opencode_store.export_session(doc.ref)
         current_parts = self._part_map(current)
         original_parts = self._part_map(original)
         if set(current_parts) != set(original_parts):
@@ -128,13 +129,13 @@ class OpenCodeBackend(EditBackend):
                     raise RuntimeError("OpenCode 快照恢复失败且补偿回滚不完整: " +
                                        "; ".join(rollback_errors))
                 raise
-        restored = self._part_map(rw_opencode._oc_export(doc.ref))
+        restored = self._part_map(opencode_store.export_session(doc.ref))
         if any(restored.get(part_id, (None, None))[1] != part
                for part_id, (_, part) in original_parts.items()):
             raise RuntimeError("OpenCode 快照恢复后静态校验失败")
 
     def commit(self, doc):
-        fresh = rw_opencode._oc_export(doc.ref)
+        fresh = opencode_store.export_session(doc.ref)
         fresh_raw = json.dumps(fresh, ensure_ascii=False, sort_keys=True).encode()
         if hash_bytes(fresh_raw) != doc.revision:
             raise ConcurrentModificationError("源会话在预览后已变化，请重新预览")
@@ -169,11 +170,11 @@ class OpenCodeBackend(EditBackend):
                     raise RuntimeError("OpenCode API 更新失败且补偿回滚不完整: " +
                                        "; ".join(rollback_errors))
                 raise
-        return {"session_id": doc.ref, "saved_as": str(rw_opencode.OPENCODE_DB),
+        return {"session_id": doc.ref, "saved_as": str(opencode_store.DB_PATH),
                 "resume": f"cd {cwd} && opencode -s {doc.ref}",
                 "updated_parts": len(changed)}
 
     def saved_revision(self, result, doc):
-        payload = rw_opencode._oc_export(result["session_id"])
+        payload = opencode_store.export_session(result["session_id"])
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
         return hash_bytes(raw)

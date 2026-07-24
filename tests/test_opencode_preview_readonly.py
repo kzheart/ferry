@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import store as opencode_store
 from engine.adapters.base.editing import EditDocument
 from engine.adapters.opencode.editor import OpenCodeBackend, OpenCodeDocument
 from engine.errors import (
@@ -66,7 +67,7 @@ def test_editor_loads_private_native_document_without_canonical_meta(
     payload = _payload()
     tree = SimpleNamespace()
     monkeypatch.setattr(
-        opencode_session, "load_native_payload", lambda _ref: payload,
+        opencode_store, "load_native_payload", lambda _ref: payload,
     )
     monkeypatch.setattr(opencode_session, tree_loader, lambda _ref: tree)
 
@@ -85,10 +86,10 @@ def test_all_reads_refuse_cli_and_tempfile_fallback(monkeypatch):
     def unavailable():
         raise SessionStoreUnavailableError("opencode", "fixture")
 
-    monkeypatch.setattr(opencode_session, "_db_conn", unavailable)
+    monkeypatch.setattr(opencode_store, "open_database", unavailable)
     monkeypatch.setattr(
-        opencode_session,
-        "_oc_export",
+        opencode_store,
+        "export_session",
         lambda _ref: pytest.fail("preview must not invoke opencode export"),
     )
 
@@ -108,10 +109,10 @@ def test_current_sqlite_schema_mismatch_fails_explicitly(tmp_path, monkeypatch):
         connection.execute(
             "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, data TEXT)"
         )
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", database)
+    monkeypatch.setattr(opencode_store, "DB_PATH", database)
     monkeypatch.setattr(
-        opencode_session,
-        "_oc_export",
+        opencode_store,
+        "export_session",
         lambda _ref: pytest.fail("schema mismatch must not invoke opencode export"),
     )
 
@@ -136,7 +137,7 @@ def test_snapshot_restore_reads_unicode_line_separators_as_json(tmp_path, monkey
     }
     snapshot = tmp_path / "snapshot.jsonl"
     snapshot.write_text(json.dumps(payload, ensure_ascii=False) + "\n")
-    monkeypatch.setattr(opencode_session, "_oc_export", lambda _ref: payload)
+    monkeypatch.setattr(opencode_store, "export_session", lambda _ref: payload)
 
     class Client:
         def __enter__(self):

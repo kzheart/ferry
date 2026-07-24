@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ...system import executables, probes
 from . import session as rw_opencode
+from . import store as opencode_store
 
 
 def _probe(session_id, cwd, model=None):
@@ -53,4 +54,4 @@ class OpenCodeVerifier:
             except Exception:
                 ids = [shadow_id]
             for session_id in ids:
-                rw_opencode._oc(["session", "delete", session_id])
+                opencode_store.delete_session(session_id)

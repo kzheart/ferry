@@ -302,8 +302,8 @@ def test_opencode_probe_clones_authored_result(monkeypatch):
         lambda _sid: shadow_tree,
     )
     monkeypatch.setattr(
-        "engine.adapters.opencode.probe.rw_opencode._oc",
-        lambda args: deleted.append(args),
+        "engine.adapters.opencode.probe.opencode_store.delete_session",
+        lambda session_id: deleted.append(["session", "delete", session_id]),
     )
     doc = type("Doc", (), {"ref": "original",
                             "data": {"info": {"directory": "/work"}}})()

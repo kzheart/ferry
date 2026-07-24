@@ -4,19 +4,15 @@
     {"info": <session 行>, "messages": [{"info": <message.data>, "parts": [<part.data>...]}]}
 """
 import json
-import os
 import re
 import secrets
 import sqlite3
-import subprocess
-import tempfile
 import time
 from pathlib import Path
 
 from ...errors import (
     AgentFormatChangedError,
     SessionNotFoundError,
-    SessionStoreUnavailableError,
 )
 from ...sessions.model import (
     AgentEdge,
@@ -32,11 +28,10 @@ from ...sessions.model import (
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from ...sessions.usage import iso_ms
-from ...system import executables
-from ...system.paths import opencode_database_path
 from ..base.media import image_from_data_url
 from ..base.narration import narrate
 from .native_schema import templates
+from . import store as native_store
 
 TOOL_OPS = {
     "bash": CanonicalOp.SHELL_EXEC,
@@ -49,23 +44,6 @@ TOOL_OPS = {
     "webfetch": CanonicalOp.WEB_FETCH,
     "websearch": CanonicalOp.WEB_SEARCH,
 }
-OPENCODE_DB = opencode_database_path()
-
-
-_CURRENT_DB_COLUMNS = {
-    "session": {
-        "id", "slug", "project_id", "directory", "path", "title", "version",
-        "summary_additions", "summary_deletions", "summary_files", "cost",
-        "tokens_input", "tokens_output", "tokens_reasoning",
-        "tokens_cache_read", "tokens_cache_write", "time_created",
-        "time_updated", "parent_id", "agent", "model", "permission",
-        "share_url", "revert", "time_archived", "time_compacting",
-    },
-    "message": {"id", "session_id", "data", "time_created"},
-    "part": {"id", "message_id", "session_id", "data", "time_created"},
-}
-
-
 def _patch_operations(patch: str) -> list[dict]:
     return [
         {"operation": operation.lower(), "path": path.strip()}
@@ -152,36 +130,6 @@ def _canonical_tool_input(name: str, source_input):
     return op, inp
 
 
-def _oc(args, **kw):
-    r = subprocess.run(executables.argv("opencode", *args),
-                       capture_output=True, text=True,
-                       timeout=120, **executables.RUN_FLAGS, **kw)
-    if r.returncode != 0:
-        raise RuntimeError(f"opencode {' '.join(args)} 失败: {r.stderr[-400:]}")
-    return r.stdout
-
-
-def _oc_export(session_id: str) -> dict:
-    """export 大会话经 pipe 会被截断到 64KB(Bun/opencode 管道缓冲),改写临时文件。"""
-    fd, path = tempfile.mkstemp(prefix="rh-oc-export-", suffix=".json")
-    os.close(fd)
-    try:
-        with open(path, "w") as f:
-            r = subprocess.run(
-                executables.argv("opencode", "export", session_id),
-                stdout=f, stderr=subprocess.PIPE, text=True, timeout=120,
-                **executables.RUN_FLAGS)
-        if r.returncode != 0:
-            raise RuntimeError(
-                f"opencode export 失败: {(r.stderr or '')[-400:]}")
-        return json.loads(Path(path).read_text())
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-
-
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(6)}{secrets.token_urlsafe(12)[:14]}"
 
@@ -264,128 +212,6 @@ def _opencode_result(state: dict) -> ToolResult:
         truncated=truncated,
         attachments=attachments,
     )
-
-def _db_conn():
-    """只读打开并严格校验 Ferry 当前支持的 OpenCode SQLite 结构。"""
-    if not OPENCODE_DB.exists():
-        raise SessionStoreUnavailableError(
-            "opencode", f"数据库不存在: {OPENCODE_DB}"
-        )
-    try:
-        conn = sqlite3.connect(f"file:{OPENCODE_DB.resolve()}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        conn.execute("BEGIN")
-    except (OSError, sqlite3.Error) as error:
-        raise SessionStoreUnavailableError(
-            "opencode", f"数据库不可只读访问: {error}"
-        ) from error
-
-    try:
-        for table, required in _CURRENT_DB_COLUMNS.items():
-            columns = {
-                str(row["name"])
-                for row in conn.execute(f'PRAGMA table_info("{table}")')
-            }
-            missing = sorted(required - columns)
-            if missing:
-                raise AgentFormatChangedError(
-                    "opencode",
-                    f"sqlite.{table}",
-                    sorted(required),
-                    sorted(columns),
-                )
-        return conn
-    except AgentFormatChangedError:
-        conn.close()
-        raise
-    except sqlite3.Error as error:
-        conn.close()
-        raise AgentFormatChangedError(
-            "opencode",
-            "sqlite.schema",
-            "readable current schema",
-            str(error),
-        ) from error
-
-
-def _db_info(row) -> dict:
-    """由 session 行构造官方 export 的 info 形状(已与 `opencode export` 对拍)。"""
-    cost = row["cost"]
-    if isinstance(cost, float) and cost.is_integer():
-        cost = int(cost)
-    info = {"id": row["id"], "slug": row["slug"], "projectID": row["project_id"],
-            "directory": row["directory"], "path": row["path"] or "",
-            "title": row["title"], "version": row["version"],
-            "summary": {"additions": row["summary_additions"] or 0,
-                        "deletions": row["summary_deletions"] or 0,
-                        "files": row["summary_files"] or 0},
-            "cost": cost,
-            "tokens": {"input": row["tokens_input"], "output": row["tokens_output"],
-                       "reasoning": row["tokens_reasoning"],
-                       "cache": {"read": row["tokens_cache_read"],
-                                 "write": row["tokens_cache_write"]}},
-            "time": {"created": row["time_created"], "updated": row["time_updated"]}}
-    if row["parent_id"]:
-        info["parentID"] = row["parent_id"]
-    if row["agent"]:
-        info["agent"] = row["agent"]
-    if row["model"]:
-        info["model"] = json.loads(row["model"])
-    if row["permission"]:
-        info["permission"] = json.loads(row["permission"])
-    if row["share_url"]:
-        info["share"] = {"url": row["share_url"]}
-    if row["revert"]:
-        info["revert"] = json.loads(row["revert"])
-    if row["time_archived"]:
-        info["time"]["archived"] = row["time_archived"]
-    if row["time_compacting"]:
-        info["time"]["compacting"] = row["time_compacting"]
-    return info
-
-
-def _db_export(conn, session_id: str) -> dict | None:
-    """直读 SQLite 构造 export 形状,免去每会话一次 `opencode export` 子进程。"""
-    try:
-        row = conn.execute("SELECT * FROM session WHERE id = ?", (session_id,)).fetchone()
-        if row is None:
-            return None
-        parts_by_mid: dict[str, list] = {}
-        for part in conn.execute(
-                "SELECT id, message_id, session_id, data FROM part "
-                "WHERE session_id = ? ORDER BY time_created, id", (session_id,)):
-            data = json.loads(part["data"])
-            data.update(id=part["id"], sessionID=part["session_id"],
-                        messageID=part["message_id"])
-            parts_by_mid.setdefault(part["message_id"], []).append(data)
-        messages = []
-        for message in conn.execute(
-                "SELECT id, session_id, data FROM message "
-                "WHERE session_id = ? ORDER BY time_created, id", (session_id,)):
-            data = json.loads(message["data"])
-            data.update(id=message["id"], sessionID=message["session_id"])
-            messages.append({"info": data, "parts": parts_by_mid.get(message["id"], [])})
-        return {"info": _db_info(row), "messages": messages}
-    except (sqlite3.Error, json.JSONDecodeError, KeyError, IndexError) as error:
-        raise AgentFormatChangedError(
-            "opencode",
-            f"session.{session_id}",
-            "current session/message/part JSON",
-            type(error).__name__,
-        ) from error
-
-
-def load_native_payload(session_id: str) -> dict:
-    """Load the current OpenCode payload without constructing a Canonical Session."""
-    conn = _db_conn()
-    try:
-        payload = _db_export(conn, session_id)
-        if payload is None:
-            raise SessionNotFoundError("opencode", session_id)
-        return payload
-    finally:
-        conn.close()
-
 
 def _message_model(data: dict) -> tuple[str | None, str | None]:
     for message in data.get("messages", []):
@@ -540,10 +366,10 @@ def _parse_session(data: dict) -> tuple[Session, list[AgentEdge]]:
 
 def _read(session_id: str) -> Session:
     seen: dict[str, Session] = {}
-    conn = _db_conn()
+    conn = native_store.open_database()
 
     def export(sid: str) -> dict:
-        data = _db_export(conn, sid)
+        data = native_store.export_from_database(conn, sid)
         if data is None:
             raise SessionNotFoundError("opencode", sid)
         return data
@@ -1254,23 +1080,6 @@ def _ensure_task_links(payload: dict, sess: Session, sid: str,
         info["time"] = session_time
 
 
-def _import_payload(payload: dict, sid: str, cwd: str) -> None:
-    fd, path = tempfile.mkstemp(prefix=f"rh-import-{sid}-", suffix=".json")
-    os.close(fd)
-    tmp = Path(path)
-    try:
-        tmp.write_text(json.dumps(payload, ensure_ascii=False))
-        # import 会把会话挂到进程 cwd 对应的项目,JSON 里的 directory 不生效
-        out = _oc(["import", str(tmp)], cwd=cwd)
-        if sid not in out:
-            raise RuntimeError(f"import 结果异常: {out[-300:]}")
-    finally:
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-
-
 def write(sess: Session, cwd: str | None = None,
           tool_decider=None,
           native_payloads: dict[str, dict] | None = None) -> tuple[str, Path]:
@@ -1318,13 +1127,13 @@ def write(sess: Session, cwd: str | None = None,
             # import 可能先插入 session 再因消息 schema 失败；调用前登记，
             # 确保半写入的当前会话也进入回滚。
             imported.append(sid)
-            _import_payload(payload, sid, node_cwd)
+            native_store.import_payload(payload, sid, node_cwd)
     except Exception:
         for imported_sid in reversed(imported):
             try:
-                _oc(["session", "delete", imported_sid], cwd=target_cwd)
+                native_store.delete_session(imported_sid, cwd=target_cwd)
             except Exception:
                 pass
         raise
 
-    return sid_map[sess.source_id], OPENCODE_DB
+    return sid_map[sess.source_id], native_store.DB_PATH

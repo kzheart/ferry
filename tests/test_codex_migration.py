@@ -9,6 +9,7 @@ from engine.adapters.claude.writer import write as write_claude
 from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -112,9 +113,9 @@ def test_claude_semantic_rewrite_uses_current_shape_without_unknown_fields(
 def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypatch):
     imported = []
     database = tmp_path / "opencode.db"
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", database)
+    monkeypatch.setattr(opencode_store, "DB_PATH", database)
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda payload, sid, cwd: imported.append((payload, sid, cwd)),
     )
 
@@ -146,9 +147,9 @@ def test_opencode_writer_imports_every_session_for_discovery(tmp_path, monkeypat
 
 def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda payload, sid, cwd: imported.append(payload),
     )
     root = Session("claude", "tools-root", str(tmp_path), title="tools")
@@ -176,9 +177,9 @@ def test_opencode_tool_parts_include_required_state_time(tmp_path, monkeypatch):
 
 def test_opencode_writer_preserves_source_message_chronology(tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda payload, sid, cwd: imported.append(payload),
     )
     root = Session("claude", "ordered-root", str(tmp_path), title="ordered")
@@ -204,14 +205,17 @@ def test_opencode_writer_preserves_source_message_chronology(tmp_path, monkeypat
 
 def test_opencode_writer_rolls_back_partially_imported_session(tmp_path, monkeypatch):
     deleted = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("invalid schema")),
     )
     monkeypatch.setattr(
-        opencode_session, "_oc",
-        lambda args, **_kwargs: deleted.append(args) or "",
+        opencode_store,
+        "delete_session",
+        lambda session_id, cwd=None: deleted.append(
+            ["session", "delete", session_id]
+        ),
     )
 
     with pytest.raises(RuntimeError, match="invalid schema"):
