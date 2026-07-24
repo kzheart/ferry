@@ -6,7 +6,6 @@ import os
 
 from ..application import services
 from ..application import agent_tools
-from ..application import organizing
 from ..application import operations
 from ..application import runtime_sessions
 from ..application.verification import ProbeTimeout
@@ -36,14 +35,14 @@ RPC_METHODS = {
     "session_backbone": lambda p: services.session_backbone(p["tool"], p["ref"]),
     "session_summaries_set": lambda p: services.set_session_summaries(
         p["tool"], p["id"], p.get("digests") or {}),
-    "organization_digest_context": lambda p: organizing.digest_context(
+    "organization_digest_context": lambda p: services.organization_digest_context(
         p["targets"]),
-    "organization_propose": lambda p: organizing.propose(p["targets"]),
-    "organization_proposals_list": lambda p: organizing.list_proposals(
+    "organization_propose": lambda p: services.organization_propose(p["targets"]),
+    "organization_proposals_list": lambda p: services.organization_proposals_list(
         p.get("status")),
-    "organization_proposal_modify": lambda p: organizing.modify(
+    "organization_proposal_modify": lambda p: services.organization_proposal_modify(
         p["proposal_id"], p["changes"]),
-    "organization_proposal_decide": lambda p: organizing.decide(
+    "organization_proposal_decide": lambda p: services.organization_proposal_decide(
         p["proposal_id"], p["decision"]),
     "runtime_sessions.load_all": lambda p: runtime_sessions.load_all(),
     "runtime_sessions.commit": lambda p: runtime_sessions.commit(p["update"]),

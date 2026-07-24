@@ -22,8 +22,8 @@ def organization_environment(tmp_path, monkeypatch):
         tmp_path / "ferry-state.sqlite3", recover_interrupted=False,
     )
     monkeypatch.setattr(summaries, "_database", lambda _ports: database)
-    monkeypatch.setattr(organizing, "_database", lambda: database)
-    monkeypatch.setattr(session_meta, "_database", lambda: database)
+    monkeypatch.setattr(organizing, "_database", lambda _ports: database)
+    monkeypatch.setattr(session_meta, "_database", lambda _ports: database)
     return tmp_path
 
 
@@ -63,14 +63,42 @@ def _target(record: dict, suggested: dict) -> dict:
     }
 
 
+def _ports():
+    return current()
+
+
+def _digest_context(targets: list[dict]) -> dict:
+    return organizing.digest_context(targets, _ports())
+
+
+def _propose(targets: list[dict]) -> dict:
+    return organizing.propose(targets, _ports())
+
+
+def _list_proposals(status: str | None = None) -> list[dict]:
+    return organizing.list_proposals(status, _ports())
+
+
+def _modify(proposal_id: str, changes: list[dict]) -> dict:
+    return organizing.modify(proposal_id, changes, _ports())
+
+
+def _decide(proposal_id: str, decision: str) -> dict:
+    return organizing.decide(proposal_id, decision, _ports())
+
+
+def _set_metadata(tool: str, session_id: str, patch: dict) -> dict:
+    return session_meta.set_entry(tool, session_id, patch, _ports())
+
+
 def _signals() -> list[dict]:
-    return organizing._database().list_organization_signals()
+    return organizing._database(_ports()).list_organization_signals()
 
 
 def test_digest_context_only_exposes_cached_digest(organization_environment):
     record = _seed("claude", "session-a", "修复支付回调并补测试")
 
-    context = organizing.digest_context([{
+    context = _digest_context([{
         "tool": "claude", "id": "session-a",
     }])
 
@@ -98,8 +126,8 @@ def test_proposal_caches_by_content_fingerprint_and_has_sources(
         "dead_candidate": False,
     })
 
-    first = organizing.propose([target])
-    second = organizing.propose([{
+    first = _propose([target])
+    second = _propose([{
         **target, "suggested": {"name": "不同的重复生成结果"},
     }])
 
@@ -116,12 +144,12 @@ def test_proposal_caches_by_content_fingerprint_and_has_sources(
 def test_reject_records_signal_without_changing_metadata(
         organization_environment):
     record = _seed("claude", "session-a", "一次性探索")
-    session_meta.set_entry("claude", "session-a", {"name": "原名"})
-    proposal = organizing.propose([
+    _set_metadata("claude", "session-a", {"name": "原名"})
+    proposal = _propose([
         _target(record, {"name": "建议名", "dead_candidate": True}),
     ])
 
-    result = organizing.decide(proposal["proposal_id"], "reject")
+    result = _decide(proposal["proposal_id"], "reject")
 
     assert result["status"] == "rejected"
     assert services.session_meta_list()["claude\0session-a"] == {"name": "原名"}
@@ -134,13 +162,13 @@ def test_modify_then_approve_writes_only_local_metadata(
     original.write_text('{"original": true}\n')
     before = original.read_bytes()
     record = _seed("claude", "session-a", "完成登录流程")
-    proposal = organizing.propose([_target(record, {
+    proposal = _propose([_target(record, {
         "name": "登录",
         "summary": "完成登录流程",
         "tags": ["认证"],
     })])
 
-    changed = organizing.modify(proposal["proposal_id"], [{
+    changed = _modify(proposal["proposal_id"], [{
         "tool": "claude", "id": "session-a",
         "suggested": {
             "name": "登录与认证",
@@ -150,7 +178,7 @@ def test_modify_then_approve_writes_only_local_metadata(
         },
     }])
     assert services.session_meta_list() == {}
-    result = organizing.decide(changed["proposal_id"], "approve")
+    result = _decide(changed["proposal_id"], "approve")
 
     assert result["status"] == "approved"
     assert services.session_meta_list()["claude\0session-a"] == {
@@ -169,7 +197,7 @@ def test_cross_agent_cluster_is_approved_atomically(
         organization_environment):
     claude = _seed("claude", "session-claude", "设计支付接口")
     codex = _seed("codex", "session-codex", "实现支付接口")
-    proposal = organizing.propose([
+    proposal = _propose([
         _target(claude, {
             "cluster_id": "project:payments",
             "cluster_name": "支付项目",
@@ -184,7 +212,7 @@ def test_cross_agent_cluster_is_approved_atomically(
         }),
     ])
 
-    result = organizing.decide(proposal["proposal_id"], "approve")
+    result = _decide(proposal["proposal_id"], "approve")
 
     assert set(result["applied"]) == {
         "claude\0session-claude", "codex\0session-codex",
@@ -199,10 +227,10 @@ def test_same_native_id_from_different_tools_keeps_metadata_and_cas_isolated(
         organization_environment):
     claude = _seed("claude", "shared-id", "分析需求")
     codex = _seed("codex", "shared-id", "实现需求")
-    session_meta.set_entry("claude", "shared-id", {"name": "Claude 原名"})
-    session_meta.set_entry("codex", "shared-id", {"name": "Codex 原名"})
+    _set_metadata("claude", "shared-id", {"name": "Claude 原名"})
+    _set_metadata("codex", "shared-id", {"name": "Codex 原名"})
 
-    proposal = organizing.propose([
+    proposal = _propose([
         _target(claude, {"name": "Claude 新名"}),
         _target(codex, {"name": "Codex 新名"}),
     ])
@@ -211,7 +239,7 @@ def test_same_native_id_from_different_tools_keeps_metadata_and_cas_isolated(
         {"name": "Claude 原名"},
         {"name": "Codex 原名"},
     ]
-    organizing.decide(proposal["proposal_id"], "approve")
+    _decide(proposal["proposal_id"], "approve")
     assert services.session_meta_list() == {
         "claude\0shared-id": {"name": "Claude 新名"},
         "codex\0shared-id": {"name": "Codex 新名"},
@@ -221,55 +249,55 @@ def test_same_native_id_from_different_tools_keeps_metadata_and_cas_isolated(
 def test_changed_fingerprint_invalidates_and_can_regenerate(
         organization_environment):
     first_record = _seed("opencode", "session-a", "初始工作")
-    old = organizing.propose([
+    old = _propose([
         _target(first_record, {"name": "初始工作"}),
     ])
     new_record = _seed(
         "opencode", "session-a", "续写后的工作", fingerprint="sha256:new")
 
-    assert organizing.list_proposals()[0]["status"] == "stale"
-    fresh = organizing.propose([
+    assert _list_proposals()[0]["status"] == "stale"
+    fresh = _propose([
         _target(new_record, {"name": "续写后的工作"}),
     ])
 
     assert fresh["proposal_id"] != old["proposal_id"]
     assert fresh["cache_hit"] is False
     with pytest.raises(OrganizationProposalStaleError):
-        organizing.decide(old["proposal_id"], "approve")
+        _decide(old["proposal_id"], "approve")
 
 
 def test_approval_detects_stale_content_without_metadata_pollution(
         organization_environment):
     record = _seed("claude", "session-a", "旧摘要")
-    proposal = organizing.propose([
+    proposal = _propose([
         _target(record, {"name": "旧建议"}),
     ])
     _seed("claude", "session-a", "新摘要", fingerprint="sha256:changed")
 
     with pytest.raises(OrganizationProposalStaleError):
-        organizing.decide(proposal["proposal_id"], "approve")
+        _decide(proposal["proposal_id"], "approve")
 
     assert services.session_meta_list() == {}
-    assert organizing.list_proposals()[0]["status"] == "stale"
+    assert _list_proposals()[0]["status"] == "stale"
 
 
 def test_metadata_cas_failure_does_not_partially_apply_cluster(
         organization_environment):
     first = _seed("claude", "session-a", "A")
     second = _seed("codex", "session-b", "B")
-    session_meta.set_entry("codex", "session-b", {"name": "before"})
-    proposal = organizing.propose([
+    _set_metadata("codex", "session-b", {"name": "before"})
+    proposal = _propose([
         _target(first, {"cluster_id": "cluster:x"}),
         _target(second, {"cluster_id": "cluster:x"}),
     ])
-    session_meta.set_entry("codex", "session-b", {"name": "concurrent"})
+    _set_metadata("codex", "session-b", {"name": "concurrent"})
 
     with pytest.raises(Exception):
-        organizing.decide(proposal["proposal_id"], "approve")
+        _decide(proposal["proposal_id"], "approve")
 
     assert "claude\0session-a" not in services.session_meta_list()
     assert services.session_meta_list()["codex\0session-b"] == {"name": "concurrent"}
-    assert organizing.list_proposals()[0]["status"] == "stale"
+    assert _list_proposals()[0]["status"] == "stale"
     assert _signals()[-1]["reason"] == "metadata_changed"
 
 
@@ -280,11 +308,11 @@ def test_invalid_source_is_retryable_without_persisting_failure(
     target["sources"] = ["sha256:not-current"]
 
     with pytest.raises(OrganizationProposalError):
-        organizing.propose([target])
-    assert organizing.list_proposals() == []
+        _propose([target])
+    assert _list_proposals() == []
 
     target["sources"] = [record["segments"][0]["hash"]]
-    assert organizing.propose([target])["status"] == "pending"
+    assert _propose([target])["status"] == "pending"
 
 
 def test_incomplete_digest_blocks_proposal_but_reports_pending(
@@ -292,7 +320,7 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
     record = _seed("claude", "session-a", "摘要")
     record["segments"][0]["digest"] = None
     summaries._database(current()).store_session_summary(record, 0)
-    context = organizing.digest_context([
+    context = _digest_context([
         {"tool": "claude", "id": "session-a"},
     ])
     assert context["sessions"][0]["pending"] == [
@@ -300,10 +328,10 @@ def test_incomplete_digest_blocks_proposal_but_reports_pending(
     ]
 
     with pytest.raises(OrganizationProposalError):
-        organizing.propose([
+        _propose([
             _target(record, {"name": "不完整建议"}),
         ])
-    assert organizing.list_proposals() == []
+    assert _list_proposals() == []
 
 
 def test_rpc_exposes_context_proposal_list_and_decision(

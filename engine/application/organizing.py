@@ -17,9 +17,9 @@ from ..domain.errors import (
     OrganizationProposalNotFoundError,
     OrganizationProposalStaleError,
 )
-from . import services, session_meta, summaries
+from . import session_meta, summaries
 from ..infrastructure.state_db import StateDatabase
-from .ports import current
+from .ports import ApplicationPorts
 
 _PATCH_FIELDS = {
     "name", "summary", "tags", "cluster_id", "cluster_name",
@@ -27,9 +27,9 @@ _PATCH_FIELDS = {
 }
 
 
-def _database() -> StateDatabase:
+def _database(ports: ApplicationPorts) -> StateDatabase:
     return StateDatabase(
-        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
     )
 
@@ -47,15 +47,15 @@ def _digest(value) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
-def _backbone(tool: str, session_id: str) -> dict:
-    record = summaries.get_backbone(tool, session_id, current())
+def _backbone(tool: str, session_id: str, ports: ApplicationPorts) -> dict:
+    record = summaries.get_backbone(tool, session_id, ports)
     if not record:
         raise OrganizationProposalError(
             "会话尚无摘要底座", {"tool": tool, "id": session_id})
     return record
 
 
-def digest_context(targets: list[dict]) -> dict:
+def digest_context(targets: list[dict], ports: ApplicationPorts) -> dict:
     """返回 runtime 生成标题/标签/聚类所需的最小、无原文 digest 语料。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
@@ -64,7 +64,7 @@ def digest_context(targets: list[dict]) -> dict:
         tool, session_id = target.get("tool"), target.get("id")
         if not isinstance(tool, str) or not isinstance(session_id, str):
             raise OrganizationProposalError("target 缺少 tool/id")
-        record = _backbone(tool, session_id)
+        record = _backbone(tool, session_id, ports)
         segments = [{
             "hash": item["hash"],
             "digest": item["digest"],
@@ -112,13 +112,14 @@ def _validated_patch(patch) -> dict:
     return result
 
 
-def _validated_target(target: dict, metadata: dict) -> dict:
+def _validated_target(target: dict, metadata: dict,
+                      ports: ApplicationPorts) -> dict:
     tool, session_id = target.get("tool"), target.get("id")
     fingerprint = target.get("fingerprint")
     if not all(isinstance(value, str) and value
                for value in (tool, session_id, fingerprint)):
         raise OrganizationProposalError("target 缺少 tool/id/fingerprint")
-    record = _backbone(tool, session_id)
+    record = _backbone(tool, session_id, ports)
     if record["fingerprint"] != fingerprint:
         raise OrganizationProposalStaleError(
             "摘要内容已变化，请重新生成整理建议",
@@ -156,12 +157,12 @@ def _validated_target(target: dict, metadata: dict) -> dict:
     }
 
 
-def propose(targets: list[dict]) -> dict:
+def propose(targets: list[dict], ports: ApplicationPorts) -> dict:
     """接收 runtime 的结构化整理结果；同一内容指纹只产生一个提案。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
-    metadata = services.session_meta_list()
-    normalized = [_validated_target(target, metadata) for target in targets]
+    metadata = session_meta.list_all(ports)
+    normalized = [_validated_target(target, metadata, ports) for target in targets]
     identities = [(target["tool"], target["id"]) for target in normalized]
     if len(set(identities)) != len(identities):
         raise OrganizationProposalError("targets 不得重复")
@@ -170,7 +171,7 @@ def propose(targets: list[dict]) -> dict:
         for target in normalized
     ])
     now = _now_ms()
-    result = _database().create_or_get_organization_proposal({
+    result = _database(ports).create_or_get_organization_proposal({
         "proposal_id": "org_" + secrets.token_urlsafe(18),
         "generation_key": generation_key,
         "status": "pending",
@@ -181,8 +182,8 @@ def propose(targets: list[dict]) -> dict:
     return {**result["proposal"], "cache_hit": result["cache_hit"]}
 
 
-def list_proposals(status: str | None = None) -> list[dict]:
-    return _database().list_organization_proposals(status)
+def list_proposals(status: str | None, ports: ApplicationPorts) -> list[dict]:
+    return _database(ports).list_organization_proposals(status)
 
 
 def _get_pending(proposal: dict | None, proposal_id: str) -> dict:
@@ -196,7 +197,7 @@ def _get_pending(proposal: dict | None, proposal_id: str) -> dict:
     return proposal
 
 
-def modify(proposal_id: str, changes: list[dict]) -> dict:
+def modify(proposal_id: str, changes: list[dict], ports: ApplicationPorts) -> dict:
     """用户可在批准前改写建议值；修改本身不会落入会话元数据。"""
     if not isinstance(changes, list) or not changes:
         raise OrganizationProposalError("changes 必须是非空数组")
@@ -204,7 +205,7 @@ def modify(proposal_id: str, changes: list[dict]) -> dict:
     for change in changes:
         identity = (change.get("tool"), change.get("id"))
         by_identity[identity] = _validated_patch(change.get("suggested"))
-    database = _database()
+    database = _database(ports)
     proposal = _get_pending(
         database.get_organization_proposal(proposal_id), proposal_id,
     )
@@ -229,11 +230,11 @@ def modify(proposal_id: str, changes: list[dict]) -> dict:
     return result["proposal"]
 
 
-def decide(proposal_id: str, decision: str) -> dict:
+def decide(proposal_id: str, decision: str, ports: ApplicationPorts) -> dict:
     """批准才批量写 sidecar；拒绝仅改变提案状态并记录信号。"""
     if decision not in {"approve", "reject"}:
         raise OrganizationProposalError("decision 必须是 approve/reject")
-    result = _database().decide_organization_proposal(
+    result = _database(ports).decide_organization_proposal(
         proposal_id, decision, _now_ms(),
     )
     if result["outcome"] == "missing":
