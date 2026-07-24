@@ -35,11 +35,8 @@ import {
   type EngineHandler,
   type ToolHandler,
 } from "../tools/gateway.js";
-import {
-  WorkflowRun,
-  type TaskGraph,
-  type WorkflowRunEvent,
-} from "../agents/scheduler.js";
+import type { TaskGraph } from "../agents/scheduler.js";
+import { runDelegatedWorkflow as runDelegation } from "../agents/delegation-runner.js";
 import { RuntimeEventBus } from "./event-bus.js";
 
 export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
@@ -521,68 +518,35 @@ export class AgentRuntime {
     onUpdate: (payload: unknown) => void,
     signal?: AbortSignal,
   ) {
-    let eventQueue = Promise.resolve();
-    const publish = (event: WorkflowRunEvent) => {
-      onUpdate(event);
-      const { type, ...payload } = event;
-      eventQueue = eventQueue.then(() =>
-        parent.emit(type, payload, parentRunId).then(() => undefined),
-      );
-    };
-    const workflow = new WorkflowRun(
+    return runDelegation(
+      parent,
+      parentRunId,
       spec,
-      async (task, context) => {
-        const childId = `wf_${this.newId()}`.slice(0, 128);
-        await this.createSession(childId, undefined, task.role_id, false, [
-          "session_search",
-          "session_read",
-          "usage",
-        ]);
-        const dependencyContext = Object.keys(context.dependency_results).length
-          ? `\n\nDependency results:\n${JSON.stringify(
-              context.dependency_results,
-            )}`
-          : "";
-        const instruction =
-          "Complete this delegated read-only task. Do not propose or execute mutations. " +
-          "Return a concise result for the parent agent.\n\n" +
-          task.instruction +
-          dependencyContext;
-        const abort = () => {
-          const child = this.sessions.get(childId);
-          if (child?.isRunning) child.abort();
-        };
-        context.signal.addEventListener("abort", abort, { once: true });
-        try {
-          await this.prompt(childId, instruction, [], task.instruction);
-          await this.waitForIdle(childId);
-          if (context.signal.aborted) throw new Error("task cancelled");
-          const output = this.session(childId).finalText();
-          if (!output) throw new Error("delegated agent returned no result");
-          return output;
-        } finally {
-          context.signal.removeEventListener("abort", abort);
-          const child = this.sessions.get(childId);
-          if (child?.isRunning) {
-            child.abort();
-            await child.waitForIdle();
-          }
-          if (this.sessions.has(childId)) await this.deleteSession(childId);
-        }
+      onUpdate,
+      {
+        createTaskSession: async (roleId) => {
+          const id = `wf_${this.newId()}`.slice(0, 128);
+          await this.createSession(id, undefined, roleId, false, [
+            "session_search",
+            "session_read",
+            "usage",
+          ]);
+          return id;
+        },
+        prompt: (sessionId, instruction) =>
+          this.prompt(sessionId, instruction, [], instruction).then(
+            () => undefined,
+          ),
+        waitForIdle: (sessionId) => this.waitForIdle(sessionId),
+        finalText: (sessionId) => this.session(sessionId).finalText(),
+        abort: (sessionId) => this.session(sessionId).abort(),
+        isRunning: (sessionId) =>
+          this.sessions.get(sessionId)?.isRunning ?? false,
+        deleteSession: (sessionId) => this.deleteSession(sessionId),
+        now: () => this.now().getTime(),
       },
-      publish,
-      () => this.now().getTime(),
+      signal,
     );
-    const abortWorkflow = () => workflow.cancel();
-    if (signal?.aborted) workflow.cancel();
-    else signal?.addEventListener("abort", abortWorkflow, { once: true });
-    try {
-      const result = await workflow.start();
-      await eventQueue;
-      return result;
-    } finally {
-      signal?.removeEventListener("abort", abortWorkflow);
-    }
   }
 
   async invokeTool(
