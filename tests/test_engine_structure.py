@@ -13,6 +13,16 @@ def test_adapter_contract_has_no_plugin_layer():
     assert not (ENGINE / "adapters/base/plugin.py").exists()
 
 
+def test_opencode_store_is_separate_from_session_codec():
+    opencode = ENGINE / "adapters/opencode"
+    assert (opencode / "store.py").is_file()
+    session = (opencode / "session.py").read_text()
+    assert "sqlite3.connect" not in session
+    assert "subprocess.run" not in session
+    assert "def load_native_payload" not in session
+    assert "def import_payload" not in session
+
+
 def test_business_capabilities_live_in_top_level_packages():
     organization = ENGINE / "organization"
     assert {

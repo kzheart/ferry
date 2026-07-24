@@ -2,6 +2,7 @@ import json
 
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import store as opencode_store
 from engine.sessions.tool_ops import CanonicalOp
 
 
@@ -164,10 +165,10 @@ def test_opencode_repeated_task_calls_remain_distinct_from_one_tree_child(
         def close(self):
             return None
 
-    monkeypatch.setattr(opencode_session, "_db_conn", Connection)
+    monkeypatch.setattr(opencode_store, "open_database", Connection)
     monkeypatch.setattr(
-        opencode_session,
-        "_db_export",
+        opencode_store,
+        "export_from_database",
         lambda _connection, session_id: exports.get(session_id),
     )
 

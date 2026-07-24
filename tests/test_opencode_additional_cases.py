@@ -1,6 +1,7 @@
 import pytest
 
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
     Block,
@@ -87,8 +88,8 @@ def test_empty_native_payload_gets_a_valid_session_time():
 def test_multiple_tasks_in_one_message_link_distinct_children(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append((payload, sid)))
     root = _tree_with_children(tmp_path)
 
@@ -109,8 +110,8 @@ def test_multiple_tasks_in_one_message_link_distinct_children(
 def test_multiple_tasks_match_children_by_call_id_not_edge_order(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append((payload, sid)))
     root = _tree_with_children(tmp_path)
     root.messages[1].blocks.reverse()
@@ -126,8 +127,8 @@ def test_multiple_tasks_match_children_by_call_id_not_edge_order(
 
 def test_duplicate_edge_does_not_duplicate_task_part(tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append(payload))
     root = _tree_with_children(tmp_path, count=1)
     root.agent_edges.append(root.agent_edges[0])
@@ -142,8 +143,8 @@ def test_duplicate_edge_does_not_duplicate_task_part(tmp_path, monkeypatch):
 def test_child_without_edge_and_empty_parent_gets_a_synthetic_user(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append(payload))
     root = Session("claude", "root", str(tmp_path), title="root")
     child = Session("claude", "child", str(tmp_path), title="child",
@@ -162,10 +163,10 @@ def test_child_without_edge_and_empty_parent_gets_a_synthetic_user(
 
 def test_writer_uses_explicit_session_model_fields(tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session,
-        "_import_payload",
+        opencode_store,
+        "import_payload",
         lambda payload, sid, cwd: imported.append(payload),
     )
     session = Session(
@@ -195,8 +196,8 @@ def test_writer_uses_explicit_session_model_fields(tmp_path, monkeypatch):
 def test_empty_native_parent_with_missing_time_can_link_a_child(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append(payload))
     root = Session("opencode", "root", str(tmp_path), title="root")
     root_payload = {
@@ -227,8 +228,8 @@ def test_empty_native_parent_with_missing_time_can_link_a_child(
 def test_native_payload_keeps_multiple_tasks_without_adding_duplicates(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
-    monkeypatch.setattr(opencode_session, "_import_payload",
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "import_payload",
                         lambda payload, sid, cwd: imported.append((payload, sid)))
     root = _tree_with_children(tmp_path)
     task_parts = []
@@ -272,17 +273,18 @@ def test_native_payload_keeps_multiple_tasks_without_adding_duplicates(
 def test_second_import_failure_rolls_back_child_then_parent(tmp_path, monkeypatch):
     attempts = []
     deleted = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
 
     def fail_second(payload, sid, cwd):
         attempts.append(sid)
         if len(attempts) == 2:
             raise RuntimeError("child import failed")
 
-    monkeypatch.setattr(opencode_session, "_import_payload", fail_second)
+    monkeypatch.setattr(opencode_store, "import_payload", fail_second)
     monkeypatch.setattr(
-        opencode_session, "_oc",
-        lambda args, **kwargs: deleted.append(args[2]) if args[:2] == ["session", "delete"] else "",
+        opencode_store,
+        "delete_session",
+        lambda session_id, cwd=None: deleted.append(session_id),
     )
     root = _tree_with_children(tmp_path, count=1)
 

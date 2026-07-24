@@ -1,4 +1,5 @@
 from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
     Block,
@@ -71,9 +72,9 @@ def test_raw_remap_makes_tied_messages_and_parts_stably_ordered():
 def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda payload, sid, cwd: imported.append((payload, sid)),
     )
     root = Session("claude", "root", str(tmp_path), title="root")
@@ -116,9 +117,9 @@ def test_agent_spawn_is_native_at_its_source_message_without_duplicate_text(
 def test_missing_native_task_link_is_inserted_at_spawn_message_before_remap(
         tmp_path, monkeypatch):
     imported = []
-    monkeypatch.setattr(opencode_session, "OPENCODE_DB", tmp_path / "opencode.db")
+    monkeypatch.setattr(opencode_store, "DB_PATH", tmp_path / "opencode.db")
     monkeypatch.setattr(
-        opencode_session, "_import_payload",
+        opencode_store, "import_payload",
         lambda payload, sid, cwd: imported.append((payload, sid)),
     )
     root = Session("opencode", "old-root", str(tmp_path), title="root")
