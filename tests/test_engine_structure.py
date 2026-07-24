@@ -46,6 +46,7 @@ def test_business_capabilities_live_in_top_level_packages():
         "plan_store.py",
         "service.py",
         "types.py",
+        "validation.py",
         "verification.py",
     }
     directories = {
@@ -61,3 +62,6 @@ def test_business_capabilities_live_in_top_level_packages():
     assert "class OperationPlan:" not in operation_service
     assert "class OperationState:" not in operation_service
     assert "hashlib.sha256" not in operation_service
+    assert "def _validate_edit_input" not in operation_service
+    assert "def _validate_migration_input" not in operation_service
+    assert "def validate_edit_input" in (operations / "validation.py").read_text()
