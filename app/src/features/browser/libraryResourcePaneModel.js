@@ -3,8 +3,8 @@ import {
   bucketOf,
   fmtTime,
   repoOf,
-} from "../../domain/sessions/sessionModel.js";
-import { sessionIdentity } from "../../domain/sessions/sessionAttachment.js";
+} from "./sessionModel.js";
+import { sessionIdentity } from "./sessionAttachment.js";
 
 export function libraryToolCounts(sessions) {
   const counts = {};

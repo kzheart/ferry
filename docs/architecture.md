@@ -77,6 +77,21 @@ Owns presentation, local form drafts, navigation, workflow visualization, and
 user approval interactions. It may start work and subscribe to state, but it
 does not coordinate a transaction or a workflow across processes.
 
+```text
+app/src/
+  app/             root composition and global style
+  shell/           desktop layout, navigation, workspace routing
+  features/        vertical product capabilities and their local models
+  api/             desktop transport and generated contracts
+  components/      reusable visual primitives
+  i18n/            translation bootstrap
+  locales/         localized copy
+```
+
+Feature-specific models stay beside the feature that owns them. The frontend
+does not recreate a cross-feature `domain/` layer; shared display helpers must
+be concrete UI modules, not a generic business bucket.
+
 ### Tauri / Rust Host
 
 Owns desktop integration, cross-platform process supervision, IPC routing,

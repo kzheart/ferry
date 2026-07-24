@@ -1,8 +1,8 @@
-import Overview from "../overview/Overview.jsx";
-import SessionDetail from "../browser/SessionDetail.jsx";
-import HistoryDetail from "../migration/HistoryDetail.jsx";
-import FirstRun from "../onboarding/FirstRun.jsx";
-import AskFerry from "../askferry/AskFerry.jsx";
+import Overview from "../features/overview/Overview.jsx";
+import SessionDetail from "../features/browser/SessionDetail.jsx";
+import HistoryDetail from "../features/migration/HistoryDetail.jsx";
+import FirstRun from "../features/onboarding/FirstRun.jsx";
+import AskFerry from "../features/askferry/AskFerry.jsx";
 
 export function WorkspaceRouter({
   view,

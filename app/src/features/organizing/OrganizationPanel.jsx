@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { agentCommand } from "../../api/agent/agentClient.js";
 import { trustedRpc } from "../../api/transport/rpc.js";
-import { sessionRef } from "../../domain/sessions/sessionModel.js";
+import { sessionRef } from "../browser/sessionModel.js";
 
 function generateOrganizationProposal(sessions, locale) {
   return agentCommand("organization.start", {

@@ -1,9 +1,9 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+搜索/筛选图标/标签/列表/页脚)
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ACCENT } from "../../domain/tools/toolDisplay.js";
+import { ACCENT } from "../components/ui/toolDisplay.js";
 import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
-  SearchIcon, ToolIcon, TrashIcon } from "../ui/icons.jsx";
+  SearchIcon, ToolIcon, TrashIcon } from "../components/ui/icons.jsx";
 
 export function Pane({ collapsed, width, dragging, title, count, placeholder,
   query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter, footer,

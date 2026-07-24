@@ -5,9 +5,9 @@ import { openTerminal, revealPath, rpc,
   operationApplyAndWait, operationPlan,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
-import { fmtTime, operationRef, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
+import { fmtTime, operationRef, repoOf, sessionRef } from "../features/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
-  from "../domain/sessions/sessionAttachment.js";
+  from "../features/browser/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
 import { Sheet } from "../components/ui/primitives.jsx";
 import SessionDetail from "../features/browser/SessionDetail.jsx";
@@ -26,12 +26,12 @@ import { useLibraryResourcePaneActions } from "../features/browser/useLibraryRes
 import { useSessionSelection } from "../features/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
-import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
-import { AppRail } from "../features/shell/AppRail.jsx";
-import { AppShell } from "../features/shell/AppShell.jsx";
-import { WorkspaceRouter } from "../features/shell/WorkspaceRouter.jsx";
-import { ResourcePaneHost } from "../features/shell/ResourcePaneHost.jsx";
-import { useRailNavigation } from "../features/shell/useRailNavigation.js";
+import { useDesktopChrome } from "../shell/useDesktopChrome.js";
+import { AppRail } from "../shell/AppRail.jsx";
+import { AppShell } from "../shell/AppShell.jsx";
+import { WorkspaceRouter } from "../shell/WorkspaceRouter.jsx";
+import { ResourcePaneHost } from "../shell/ResourcePaneHost.jsx";
+import { useRailNavigation } from "../shell/useRailNavigation.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { rpc } from "../../api/transport/rpc.js";
-import { repoOf, sessionRef } from "../../domain/sessions/sessionModel.js";
-import { sessionIdentity } from "../../domain/sessions/sessionAttachment.js";
+import { repoOf, sessionRef } from "./sessionModel.js";
+import { sessionIdentity } from "./sessionAttachment.js";
 
 const DETAIL_CACHE_LIMIT = 30;
 

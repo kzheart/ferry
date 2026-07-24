@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 import { renderEvents } from "../../api/contract/events.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { STATUS_CODE } from "../../features/migration/migrationModel.js";
-import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
-import { fmtTime } from "../../domain/sessions/sessionModel.js";
+import { fmtTime } from "../../features/browser/sessionModel.js";
+import { ACCENT, fmtSize } from "./toolDisplay.js";
 import { CloseIcon, SearchIcon, Spinner, ToolIcon } from "./icons.jsx";
 import { CheckSquare, RadioDot, Sheet } from "./primitives.jsx";
 

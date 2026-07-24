@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { agentCommand, onAgentEvent,
   operationPlanApply } from "../../api/agent/agentClient.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
-  from "../../domain/agent/agentChatModel.js";
+  from "./agentChatModel.js";
 
 const MODE_KEY = "ferry-askferry-mode";
 const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
