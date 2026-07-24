@@ -5,7 +5,7 @@ import { openTerminal, revealPath, rpc,
   operationApplyAndWait, operationPlan,
   writeClipboardText } from "../api/transport/rpc.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
-import { fmtTime, operationRef, repoOf } from "../domain/sessions/sessionModel.js";
+import { fmtTime, operationRef, repoOf, sessionRef } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../domain/sessions/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
@@ -333,7 +333,7 @@ export default function App() {
   ] : ctxSess ? [
     { label: t("app:ctx.addToAgent"), onClick: () => addToAgent(ctxSess) },
     { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
-        ctxSess.tool, ctxSess.id, ctxSess.dir)
+        ctxSess.tool, sessionRef(ctxSess))
         .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
     ...(TOOLS.includes(ctxSess.tool) ? [{
       label: t("app:ctx.migrateTo"), onClick: () => {
@@ -350,7 +350,7 @@ export default function App() {
       onClick: () => copySessionReference(ctxSess) },
     { label: t("app:ctx.copyId"), onClick: () => writeClipboardText(ctxSess.id).catch(() => {}) },
     { label: t("app:ctx.copyResume"), onClick: () => resumeDescriptor(
-        ctxSess.tool, ctxSess.id, ctxSess.dir)
+        ctxSess.tool, sessionRef(ctxSess))
         .then(d => writeClipboardText(d.display_command))
         .catch(() => {}) },
     { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path,
@@ -398,7 +398,7 @@ export default function App() {
         }
         if (e.key === "Enter") {
           e.preventDefault();
-          resumeDescriptor(cur.tool, cur.id, cur.dir)
+          resumeDescriptor(cur.tool, sessionRef(cur))
             .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {});
           return;
         }
@@ -472,7 +472,7 @@ export default function App() {
       setToast({ kind: "run", title: t("app:toast.openingTerminal"),
         desc: t("app:toast.openingTerminalDesc", { title: meta.title || meta.id }) });
       try {
-        const launch = await resumeDescriptor(meta.tool, meta.id, meta.dir);
+        const launch = await resumeDescriptor(meta.tool, sessionRef(meta));
         await openTerminal(launch, settings.terminalApp);
         setToast({ kind: "ok", title: t("app:toast.terminalOpened"),
           desc: t("app:toast.terminalOpenedDesc") });

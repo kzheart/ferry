@@ -160,7 +160,7 @@ export interface RuntimeOptions {
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
 }
 
-export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and a native session_id. Sessions can be migrated between ${AGENT_IDS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
+export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated between ${AGENT_IDS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
 
 function systemPrompt(persona: string) {
   return persona.trim()

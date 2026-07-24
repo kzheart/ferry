@@ -548,7 +548,7 @@ export default memo(function SessionDetail({ meta, data, error,
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
 
   const copyResume = () => {
-    resumeDescriptor(meta.tool, meta.id, meta.dir)
+    resumeDescriptor(meta.tool, sessionRef(meta))
       .then(d => writeClipboardText(d.display_command))
       .catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 1600);

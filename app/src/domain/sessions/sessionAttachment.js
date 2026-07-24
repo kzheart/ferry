@@ -2,18 +2,21 @@ const SCHEME = "ferry-session://";
 
 export function sessionAttachment(session) {
   const tool = String(session?.tool || "").trim();
-  const sessionId = String(session?.id || session?.session_id || "").trim();
-  if (!tool || tool.length > 32 || !sessionId || sessionId.length > 512
-      || /[\0\r\n]/.test(sessionId)) return null;
-  return { tool, sessionId, title: String(session?.title || sessionId).slice(0, 200) };
+  const ref = String(session?.ref || "").trim();
+  if (!tool || tool.length > 32 || !ref.startsWith("fsr_") || ref.length > 512
+      || /[\0\r\n]/.test(ref)) return null;
+  return { tool, ref, title: String(session?.title || ref).slice(0, 200) };
 }
 
 export const sessionAttachmentKey = attachment =>
-  `${attachment.tool}\u0000${attachment.sessionId}`;
+  `${attachment.tool}\u0000${attachment.ref}`;
 
 export function sessionIdentity(session) {
-  const attachment = sessionAttachment(session);
-  return attachment ? sessionAttachmentKey(attachment) : "";
+  const tool = String(session?.tool || "").trim();
+  const sessionId = String(session?.id || session?.session_id || "").trim();
+  if (!tool || tool.length > 32 || !sessionId || sessionId.length > 512
+      || /[\0\r\n]/.test(sessionId)) return "";
+  return `${tool}\u0000${sessionId}`;
 }
 
 export function addSessionAttachment(list, candidate) {
@@ -29,7 +32,7 @@ export function serializeSessionAttachment(candidate) {
   const attachment = sessionAttachment(candidate);
   if (!attachment) return "";
   const query = new URLSearchParams({ title: attachment.title });
-  return `${SCHEME}${encodeURIComponent(attachment.tool)}/${encodeURIComponent(attachment.sessionId)}?${query}`;
+  return `${SCHEME}${encodeURIComponent(attachment.tool)}/${encodeURIComponent(attachment.ref)}?${query}`;
 }
 
 export function parseSessionAttachments(text) {
@@ -39,11 +42,11 @@ export function parseSessionAttachments(text) {
     try {
       const url = new URL(ref);
       const tool = decodeURIComponent(url.hostname);
-      const sessionId = decodeURIComponent(url.pathname.slice(1));
+      const sessionRef = decodeURIComponent(url.pathname.slice(1));
       const attachment = sessionAttachment({
         tool,
-        id: sessionId,
-        title: url.searchParams.get("title") || sessionId,
+        ref: sessionRef,
+        title: url.searchParams.get("title") || sessionRef,
       });
       return attachment ? [attachment] : [];
     } catch {
@@ -54,9 +57,9 @@ export function parseSessionAttachments(text) {
 
 export function buildSessionPrompt(text, attachments) {
   if (!attachments.length) return text;
-  const sessions = attachments.map(({ tool, sessionId }) => ({
+  const sessions = attachments.map(({ tool, ref }) => ({
     tool,
-    session_id: sessionId,
+    ref,
   }));
   return `<ferry_session_refs>${JSON.stringify({ sessions })}</ferry_session_refs>\n\n${text}`;
 }
