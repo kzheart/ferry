@@ -12,7 +12,7 @@ from .opencode.adapter import build as build_opencode
 
 
 class AdapterRegistry:
-    """Immutable adapter lookup owned by the application composition root."""
+    """Immutable adapter lookup owned by the Engine composition root."""
 
     def __init__(self, adapters: Iterable[AgentAdapter]):
         items: dict[str, AgentAdapter] = {}
