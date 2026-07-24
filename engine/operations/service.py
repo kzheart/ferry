@@ -197,7 +197,7 @@ class OperationService:
 
     def _plan_restore_delete(self, value: dict) -> dict:
         operation_input = validate_restore_delete_input(value)
-        recovery = self._database().get_recovery(
+        recovery = self._database().operations.get_recovery(
             operation_input["recovery_id"],
         )
         if recovery is None or recovery["status"] != "available":
@@ -236,7 +236,7 @@ class OperationService:
                     "operation plan 当前状态不可执行",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().enqueue(plan_id, now_ms()):
+            if not self._database().operations.enqueue(plan_id, now_ms()):
                 _operation, current_state = self._get(plan_id)
                 raise AgentRequestError(
                     "operation plan 当前状态不可执行",
@@ -250,7 +250,7 @@ class OperationService:
             operation, state = self._get(plan_id)
             if state.status != "queued":
                 return
-            if not self._database().claim_queued(plan_id, now_ms()):
+            if not self._database().operations.claim_queued(plan_id, now_ms()):
                 return
         try:
             if operation.kind == "edit":
@@ -269,14 +269,14 @@ class OperationService:
                 )
         except Exception as error:
             with self._lock:
-                self._database().fail(
+                self._database().operations.fail(
                     plan_id, type(error).__name__, now_ms(),
                 )
             raise
 
         result_json = canonical_json(result)
         with self._lock:
-            self._database().finish(
+            self._database().operations.finish(
                 plan_id, result_json, digest_json(result_json), now_ms(),
             )
 
@@ -307,7 +307,9 @@ class OperationService:
                     "仅 planned 或 queued operation 可以取消",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().cancel(plan_id, state.status, now_ms()):
+            if not self._database().operations.cancel(
+                plan_id, state.status, now_ms(),
+            ):
                 raise AgentRequestError(
                     "operation plan 当前状态不可取消",
                     {"plan_id": plan_id},
@@ -329,7 +331,7 @@ class OperationService:
     def audit(self, plan_id: str) -> list[dict]:
         with self._lock:
             self._get(plan_id)
-            return self._database().audit(plan_id)
+            return self._database().operations.audit(plan_id)
 
     def _apply_edit(self, operation: OperationPlan) -> dict:
         return self._edit.apply(operation, self._finish_mutation)
@@ -426,7 +428,7 @@ class OperationService:
             if not isinstance(snapshot, str) or not snapshot:
                 raise RuntimeError("可恢复删除未返回快照")
             recovery_id = "recovery_" + secrets.token_urlsafe(18)
-            self._database().store_recovery(
+            self._database().operations.store_recovery(
                 recovery_id, params["tool"], snapshot, now_ms(),
             )
             result["recovery_id"] = recovery_id
@@ -434,17 +436,23 @@ class OperationService:
 
     def _apply_restore_delete(self, operation: OperationPlan) -> dict:
         recovery_id = operation.input()["recovery_id"]
-        recovery = self._database().get_recovery(recovery_id)
+        recovery = self._database().operations.get_recovery(recovery_id)
         if recovery is None or recovery["status"] != "available":
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
-        if not self._database().claim_recovery(recovery_id, now_ms()):
+        if not self._database().operations.claim_recovery(
+            recovery_id, now_ms(),
+        ):
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
         try:
             result = self._restore_deleted_session(recovery["snapshot"])
         except Exception:
-            self._database().release_recovery(recovery_id, now_ms())
+            self._database().operations.release_recovery(
+                recovery_id, now_ms(),
+            )
             raise
-        if not self._database().complete_recovery(recovery_id, now_ms()):
+        if not self._database().operations.complete_recovery(
+            recovery_id, now_ms(),
+        ):
             raise RuntimeError("删除恢复状态提交失败")
         return {**result, "recovery_id": recovery_id}
 

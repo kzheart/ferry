@@ -108,7 +108,7 @@ class OperationPlanStore:
             created_at=created_at,
             expires_at=created_at + PLAN_TTL_MS,
         )
-        self.database().store_plan(operation, created_at)
+        self.database().operations.store_plan(operation, created_at)
         return public_plan(operation)
 
     def get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
@@ -117,7 +117,7 @@ class OperationPlanStore:
             or not plan_id.startswith(OPERATION_PLAN_ID_PREFIX)
         ):
             raise AgentRequestError("plan_id 非法")
-        row = self.database().get(plan_id)
+        row = self.database().operations.get(plan_id)
         if row is None:
             raise AgentRequestError("operation plan 不存在或已因重启失效")
         return (
@@ -146,7 +146,7 @@ class OperationPlanStore:
     ) -> None:
         if state.status == "planned" and operation.expires_at < now_ms():
             updated_at = now_ms()
-            self.database().expire(operation.plan_id, updated_at)
+            self.database().operations.expire(operation.plan_id, updated_at)
             state.status = "expired"
             state.updated_at = updated_at
 
