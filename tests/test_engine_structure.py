@@ -128,6 +128,15 @@ def test_session_reference_index_is_isolated_from_query_catalog():
     safety = (sessions / "safety.py").read_text()
     assert "def redact(" in safety
     assert "def validate_json_shape(" in safety
+    assert (sessions / "scan_cache.py").is_file()
+    assert not (ENGINE / "storage/scan_cache.py").exists()
+
+
+def test_storage_package_only_owns_database_composition():
+    storage = ENGINE / "storage"
+    assert {
+        path.name for path in storage.glob("*.py")
+    } == {"__init__.py", "database.py"}
 
 
 def test_adapter_shared_code_is_not_a_base_layer():

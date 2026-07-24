@@ -9,7 +9,7 @@ from typing import Callable
 
 from ...sessions.model import AgentEdge, Session, ToolCall, tool_result_text
 from ...sessions.tool_ops import CanonicalOp
-from ...storage.scan_cache import ScanCache
+from ...sessions.scan_cache import ScanCache
 
 _META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
 
