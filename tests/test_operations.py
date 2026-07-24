@@ -8,6 +8,7 @@ from threading import Barrier, Event
 import pytest
 
 from engine.operations import metadata
+from engine.operations import executor as operation_executor
 from engine.operations import plan_store
 from engine.operations import service as operations
 from engine.operations.types import AssistantReply
@@ -329,8 +330,8 @@ def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
 
     restored = []
     monkeypatch.setattr(
-        operations.OperationService,
-        "_restore_deleted_session",
+        operation_executor.SessionDeletionService,
+        "restore",
         lambda _self, snapshot: restored.append(snapshot) or {
             "ok": True,
             "target": str(agent_environment["transcript"]),
@@ -505,7 +506,7 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
     _attach_reply_editing(monkeypatch, agent_environment["ports"])
     calls = []
     monkeypatch.setattr(
-        operations.OperationService,
+        operation_executor.OperationExecutor,
         "_finish_mutation",
         lambda _self, tool, editor, result, doc, snapshot, probe:
             calls.append((probe, snapshot)) or result,
@@ -655,7 +656,7 @@ def test_migration_plan_rejects_invalid_current_input(
 def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        operations.OperationService,
+        operation_executor.OperationExecutor,
         "_finish_mutation",
         lambda _self, tool, editor, result, doc, snapshot, probe:
             calls.append(probe) or result,
@@ -695,7 +696,7 @@ def test_queued_operation_returns_immediately_and_can_be_cancelled(
         agent_environment, monkeypatch):
     started = Event()
     release = Event()
-    original_apply_edit = operations.OperationService._apply_edit
+    original_apply_edit = operation_executor.OperationExecutor._apply_edit
 
     def blocking_apply(self, operation):
         started.set()
@@ -703,7 +704,7 @@ def test_queued_operation_returns_immediately_and_can_be_cancelled(
         return original_apply_edit(self, operation)
 
     monkeypatch.setattr(
-        operations.OperationService, "_apply_edit", blocking_apply,
+        operation_executor.OperationExecutor, "_apply_edit", blocking_apply,
     )
     first = _plan()
     accepted = operations.apply(first["plan_id"])
