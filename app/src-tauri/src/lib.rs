@@ -6,6 +6,7 @@ mod contracts;
 mod menu;
 mod operation_input;
 mod operation_request;
+mod operation_validation;
 mod platform;
 mod reveal;
 mod sidecar;
