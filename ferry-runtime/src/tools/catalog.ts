@@ -1,6 +1,16 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 import { AGENT_IDS } from "../server/generated/agents.js";
+import {
+  OPAQUE_SESSION_REF_MAX_LENGTH,
+  OPAQUE_SESSION_REF_MIN_LENGTH,
+} from "../server/generated/session-ref.js";
+
+const opaqueSessionRef = Type.String({
+  minLength: OPAQUE_SESSION_REF_MIN_LENGTH,
+  maxLength: OPAQUE_SESSION_REF_MAX_LENGTH,
+  pattern: "^[A-Za-z0-9_-]+$",
+});
 
 const timeRange = Type.Object(
   {
@@ -67,7 +77,7 @@ const sessionEditSchema = Type.Unsafe({
   type: "object",
   properties: {
     tool: Type.String({ minLength: 1, maxLength: 32 }),
-    ref: Type.String({ minLength: 1, maxLength: 512 }),
+    ref: opaqueSessionRef,
     ops: editOps,
     patch: metadataPatch,
     intent: operationIntent,
@@ -133,7 +143,7 @@ const schemas = {
   session_read: Type.Object(
     {
       tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      ref: opaqueSessionRef,
       terms: Type.Optional(
         Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
           minItems: 1,
@@ -170,7 +180,7 @@ const schemas = {
   migrate: Type.Object(
     {
       source_tool: Type.String({ minLength: 1, maxLength: 32 }),
-      ref: Type.String({ minLength: 1, maxLength: 512 }),
+      ref: opaqueSessionRef,
       target_tool: Type.String({ minLength: 1, maxLength: 32 }),
       max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
       intent: operationIntent,

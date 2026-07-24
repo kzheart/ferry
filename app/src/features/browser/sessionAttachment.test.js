@@ -20,6 +20,14 @@ test("会话身份包含来源工具，避免相同原生 id 串联", () => {
 
 test("会话附件只接受 Engine 签发的 opaque ref", () => {
   assert.equal(sessionAttachment({ tool: "claude", id: "native-id" }), null);
+  assert.equal(
+    sessionAttachment({ tool: "claude", ref: "fsr_bad/path" }),
+    null,
+  );
+  assert.equal(
+    sessionAttachment({ tool: "claude", ref: `fsr_${"a".repeat(125)}` }),
+    null,
+  );
   assert.deepEqual(
     sessionAttachment({
       tool: "claude",

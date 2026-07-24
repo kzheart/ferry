@@ -7,12 +7,7 @@ pub(crate) fn is_known_agent(agent: &str) -> bool {
 }
 
 pub(crate) fn validate_opaque_ref(reference: &str, label: &str) -> Result<(), String> {
-    if !(8..=128).contains(&reference.len())
-        || !reference.starts_with("fsr_")
-        || !reference
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    {
+    if !crate::contracts::session_ref::is_opaque_session_ref(reference) {
         return Err(format!("{label} ref 不是有效 opaque ref"));
     }
     Ok(())

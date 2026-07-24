@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { rpc } from "../../api/transport/rpc.js";
+import { isOpaqueSessionRef } from "../../api/contract/generated/session-ref.js";
 import { repoOf, sessionRef } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";
 
@@ -51,7 +52,7 @@ export function useSessionSelection({ sessions, onSelect, onFallbackLoad }) {
       select(key);
       return key;
     }
-    if (action.tool && action.ref?.startsWith("fsr_")) {
+    if (action.tool && isOpaqueSessionRef(action.ref)) {
       const key = `${action.tool}\u0000${action.ref}`;
       setSelectedId(key);
       onSelect();

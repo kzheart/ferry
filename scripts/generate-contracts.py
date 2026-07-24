@@ -13,6 +13,7 @@ AGENTS_SOURCE = ROOT / "contracts" / "agents.json"
 ENGINE_METHODS_SOURCE = ROOT / "contracts" / "engine-methods.json"
 RUNTIME_METHODS_SOURCE = ROOT / "contracts" / "runtime-methods.json"
 IPC_SOURCE = ROOT / "contracts" / "ipc.json"
+SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
@@ -33,6 +34,12 @@ IPC_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ROOT / "engine/contracts/ipc.py": "python",
     ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
+}
+SESSION_REF_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/session-ref.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
+    ROOT / "engine/contracts/session_ref.py": "python",
+    ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
 }
 
 
@@ -144,6 +151,19 @@ def load_ipc() -> dict[str, object]:
     return document
 
 
+def load_session_ref() -> dict[str, object]:
+    document = json.loads(SESSION_REF_SOURCE.read_text())
+    expected = {
+        "opaque_prefix": "fsr_",
+        "minimum_length": 8,
+        "maximum_length": 128,
+        "allowed_suffix": "ascii-alphanumeric-underscore-hyphen",
+    }
+    if document != expected:
+        raise ValueError("SessionRef 契约字段必须精确为当前 opaque ref 定义")
+    return document
+
+
 def frontend(agents: list[dict[str, object]]) -> str:
     payload = {
         agent["id"]: {
@@ -200,6 +220,7 @@ def runtime(agents: list[dict[str, object]]) -> str:
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"export const AGENT_IDS = {json.dumps(identifiers)} as const;",
         f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
+        "export type AgentId = (typeof AGENT_IDS)[number];",
         "",
     ))
 
@@ -343,11 +364,94 @@ def runtime_methods_runtime(methods: list[dict[str, object]]) -> str:
     ))
 
 
+def session_ref_frontend(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const OPAQUE_SESSION_REF_PREFIX = {json.dumps(contract['opaque_prefix'])};",
+        f"export const OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']};",
+        f"export const OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']};",
+        "export const isOpaqueSessionRef = value =>",
+        '  typeof value === "string" &&',
+        "  value.length >= OPAQUE_SESSION_REF_MIN_LENGTH &&",
+        "  value.length <= OPAQUE_SESSION_REF_MAX_LENGTH &&",
+        "  value.startsWith(OPAQUE_SESSION_REF_PREFIX) &&",
+        "  /^[A-Za-z0-9_-]+$/.test(value);",
+        "",
+    ))
+
+
+def session_ref_rust(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f'const OPAQUE_SESSION_REF_PREFIX: &str = "{contract["opaque_prefix"]}";',
+        f"const OPAQUE_SESSION_REF_MIN_LENGTH: usize = {contract['minimum_length']};",
+        f"const OPAQUE_SESSION_REF_MAX_LENGTH: usize = {contract['maximum_length']};",
+        "",
+        "pub(crate) fn is_opaque_session_ref(value: &str) -> bool {",
+        "    (OPAQUE_SESSION_REF_MIN_LENGTH..=OPAQUE_SESSION_REF_MAX_LENGTH).contains(&value.len())",
+        "        && value.starts_with(OPAQUE_SESSION_REF_PREFIX)",
+        "        && value",
+        "            .bytes()",
+        "            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))",
+        "}",
+        "",
+    ))
+
+
+def session_ref_python(contract: dict[str, object]) -> str:
+    return "\n".join((
+        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
+        "from __future__ import annotations",
+        "",
+        f"OPAQUE_SESSION_REF_PREFIX = {contract['opaque_prefix']!r}",
+        f"OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']}",
+        f"OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']}",
+        "",
+        "def is_opaque_session_ref(value: object) -> bool:",
+        "    return (",
+        "        isinstance(value, str)",
+        "        and OPAQUE_SESSION_REF_MIN_LENGTH <= len(value) <= OPAQUE_SESSION_REF_MAX_LENGTH",
+        "        and value.startswith(OPAQUE_SESSION_REF_PREFIX)",
+        "        and all(character.isascii() and (character.isalnum() or character in '_-')",
+        "                for character in value)",
+        "    )",
+        "",
+    ))
+
+
+def session_ref_runtime(contract: dict[str, object]) -> str:
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        'import type { AgentId } from "./agents.js";',
+        "",
+        f'export const OPAQUE_SESSION_REF_PREFIX = "{contract["opaque_prefix"]}" as const;',
+        f"export const OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']} as const;",
+        f"export const OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']} as const;",
+        "",
+        "export interface SessionRef {",
+        "  tool: AgentId;",
+        "  ref: string;",
+        "}",
+        "",
+        "export function isOpaqueSessionRef(value: unknown): value is string {",
+        "  return (",
+        '    typeof value === "string" &&',
+        "    value.length >= OPAQUE_SESSION_REF_MIN_LENGTH &&",
+        "    value.length <= OPAQUE_SESSION_REF_MAX_LENGTH &&",
+        "    value.startsWith(OPAQUE_SESSION_REF_PREFIX) &&",
+        "    /^[A-Za-z0-9_-]+$/.test(value)",
+        "  );",
+        "}",
+        "",
+    ))
+
+
 def contract_hash(
     agents: list[dict[str, object]],
     methods: list[dict[str, object]],
     runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
+    session_ref: dict[str, object],
 ) -> str:
     payload = json.dumps(
         {
@@ -355,6 +459,7 @@ def contract_hash(
             "engine_methods": methods,
             "runtime_methods": runtime_methods,
             "ipc": ipc,
+            "session_ref": session_ref,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -446,6 +551,7 @@ def generated_contents(
     engine_methods: list[dict[str, object]],
     runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
+    session_ref: dict[str, object],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
@@ -463,7 +569,18 @@ def generated_contents(
         }[kind](runtime_methods)
         for path, kind in RUNTIME_METHOD_OUTPUTS.items()
     }
-    digest = contract_hash(agents, engine_methods, runtime_methods, ipc)
+    session_ref_contents = {
+        path: {
+            "frontend": session_ref_frontend,
+            "rust": session_ref_rust,
+            "python": session_ref_python,
+            "runtime": session_ref_runtime,
+        }[kind](session_ref)
+        for path, kind in SESSION_REF_OUTPUTS.items()
+    }
+    digest = contract_hash(
+        agents, engine_methods, runtime_methods, ipc, session_ref,
+    )
     ipc_contents = {
         path: {
             "frontend": ipc_frontend,
@@ -473,7 +590,13 @@ def generated_contents(
         }[kind](ipc, digest)
         for path, kind in IPC_OUTPUTS.items()
     }
-    return agent_contents | engine_contents | runtime_method_contents | ipc_contents
+    return (
+        agent_contents
+        | engine_contents
+        | runtime_method_contents
+        | session_ref_contents
+        | ipc_contents
+    )
 
 
 def main() -> int:
@@ -481,7 +604,11 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     contents = generated_contents(
-        load_agents(), load_engine_methods(), load_runtime_methods(), load_ipc(),
+        load_agents(),
+        load_engine_methods(),
+        load_runtime_methods(),
+        load_ipc(),
+        load_session_ref(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:

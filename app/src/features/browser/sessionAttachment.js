@@ -1,10 +1,11 @@
+import { isOpaqueSessionRef } from "../../api/contract/generated/session-ref.js";
+
 const SCHEME = "ferry-session://";
 
 export function sessionAttachment(session) {
   const tool = String(session?.tool || "").trim();
   const ref = String(session?.ref || "").trim();
-  if (!tool || tool.length > 32 || !ref.startsWith("fsr_") || ref.length > 512
-      || /[\0\r\n]/.test(ref)) return null;
+  if (!tool || tool.length > 32 || !isOpaqueSessionRef(ref)) return null;
   return { tool, ref, title: String(session?.title || ref).slice(0, 200) };
 }
 
