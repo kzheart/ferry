@@ -17,9 +17,9 @@ import { OrganizationCoordinator } from "../organizing/coordinator.js";
 import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
-  type RoleInput,
   type RoleStore,
 } from "../roles/role-repository.js";
+import { RoleService } from "../roles/role-service.js";
 import { ProtocolError, type EventEnvelope } from "../server/messages.js";
 import {
   FERRY_TOOL_NAMES,
@@ -55,7 +55,7 @@ export interface RuntimeOptions {
 
 export class AgentRuntime {
   store: SessionStore;
-  readonly roleStore: RoleStore;
+  readonly roleService: RoleService;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly events: RuntimeEventBus;
@@ -73,7 +73,9 @@ export class AgentRuntime {
     defaultSelection?: ModelSelection,
   ) {
     this.store = options.store ?? new EphemeralSessionStore();
-    this.roleStore = options.roleStore ?? new EphemeralRoleStore();
+    this.roleService = new RoleService(
+      options.roleStore ?? new EphemeralRoleStore(),
+    );
     this.now = options.now ?? (() => new Date());
     this.events = new RuntimeEventBus(this.now);
     this.idFactory = options.idFactory ?? randomUUID;
@@ -208,8 +210,7 @@ export class AgentRuntime {
       throw new ProtocolError("session_exists", "session already exists");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
       throw new ProtocolError("invalid_params", "invalid session_id");
-    const role = await this.roleStore.get(requestedRoleId);
-    if (!role) throw new ProtocolError("role_not_found", "role not found");
+    const role = await this.roleService.resolve(requestedRoleId);
     const fallbackSelection = this.providerHost
       ? await this.providerHost.defaultModel()
       : {
@@ -304,42 +305,8 @@ export class AgentRuntime {
     return this.providersService.providers();
   }
 
-  roles() {
-    return this.roleStore.list();
-  }
-
-  async createRole(input: RoleInput) {
-    return this.mutateRole(() => this.roleStore.create(input));
-  }
-
-  async updateRole(id: string, input: RoleInput) {
-    return this.mutateRole(() => this.roleStore.update(id, input));
-  }
-
-  async deleteRole(id: string) {
-    await this.mutateRole(() => this.roleStore.delete(id));
-    return { role_id: id, deleted: true };
-  }
-
   async startOrganization(input: unknown) {
     return this.organization.start(input);
-  }
-
-  async copyRole(sourceId: string, id: string, name?: string) {
-    return this.mutateRole(() =>
-      this.roleStore.copy(sourceId, { id, ...(name ? { name } : {}) }),
-    );
-  }
-
-  private async mutateRole<T>(operation: () => Promise<T>) {
-    try {
-      return await operation();
-    } catch (error) {
-      throw new ProtocolError(
-        "invalid_role",
-        error instanceof Error ? error.message : "role is invalid",
-      );
-    }
   }
 
   models(providerId: string, query = "", limit = 100) {
