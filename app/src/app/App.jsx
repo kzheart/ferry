@@ -1,11 +1,10 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { engine, openTerminal, revealPath, writeClipboardText }
+import { openTerminal, revealPath, writeClipboardText }
   from "../api/transport/desktopClient.js";
-import { operations } from "../features/operations/operations.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
-import { fmtTime, operationRef, repoOf, sessionRef } from "../features/browser/sessionModel.js";
+import { fmtTime, repoOf, sessionRef } from "../features/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../features/browser/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
@@ -22,6 +21,8 @@ import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
 import { useLibraryResourcePaneActions } from "../features/browser/useLibraryResourcePaneActions.js";
+import { useSessionDeletion } from "../features/browser/useSessionDeletion.js";
+import { useSessionMetadata } from "../features/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../features/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
@@ -71,7 +72,6 @@ export default function App() {
   const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
   const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
   const [tagFor, setTagFor] = useState(null);       // {sessions} 待编辑标签的会话
-  const [metaMap, setMetaMap] = useState({});       // 会话元数据 sidecar
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
@@ -161,6 +161,21 @@ export default function App() {
     resetSelection, addOp, startReplyEdit,
     removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
   selectionReset.current = resetSelection;
+  const {
+    metadata: metaMap,
+    metaFor,
+    reloadMetadata,
+    updateMetadata: setMetaFor,
+  } = useSessionMetadata({ setToast, t });
+  const { deleteSession, deleteSessions } = useSessionDeletion({
+    clearSelection,
+    discardCachedDetail,
+    doScan,
+    selectedId: selId,
+    setMultiIds: setMultiSel,
+    setToast,
+    t,
+  });
 
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
@@ -173,32 +188,6 @@ export default function App() {
     onRescan: doScan,
   });
 
-  // ----- 会话元数据(重命名/置顶/归档/标签,sidecar 存储) -----
-  useEffect(() => {
-    engine("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
-  }, []);
-  const metaFor = session => metaMap[sessionIdentity(session)] || {};
-  const setMetaFor = async (session, patch) => {
-    try {
-      const plan = await operations.plan({
-        kind: "metadata",
-        tool: session.tool,
-        ref: operationRef(session),
-        patch,
-      });
-      const applied = await operations.apply(plan);
-      const entry = applied.result.metadata;
-      setMetaMap(m => {
-        const next = { ...m };
-        const key = sessionIdentity(session);
-        if (entry && Object.keys(entry).length) next[key] = entry;
-        else delete next[key];
-        return next;
-      });
-    } catch (e) {
-      setToast({ kind: "fail", title: t("app:toast.metaSaveFail"), desc: e.message });
-    }
-  };
   // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
   // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
   const peekEntity = (action, entity) => {
@@ -240,43 +229,6 @@ export default function App() {
     if (view === "library" && selId) refreshDetail();
   }, [ferry.mutationVersion]);
 
-  // ----- 会话删除(先落一份备份,可撤销) -----
-  const undoDelete = async recoveryId => {
-    setToast({ kind: "run", title: t("app:toast.restoring"), desc: t("app:toast.restoringDesc") });
-    try {
-      const plan = await operations.plan({
-        kind: "restore-delete",
-        recovery_id: recoveryId,
-      });
-      await operations.apply(plan);
-      doScan();
-      setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
-    } catch (e) {
-      setToast({ kind: "fail", title: t("app:toast.restoreFail"), desc: e.message });
-    }
-  };
-  const deleteSession = async s => {
-    setDelConfirm(null);
-    setToast({ kind: "run", title: t("app:toast.deleting"), desc: t("app:toast.deletingDesc") });
-    try {
-      const plan = await operations.plan({
-        kind: "delete",
-        tool: s.tool,
-        ref: operationRef(s),
-      });
-      const r = (await operations.apply(plan)).result;
-      const key = sessionIdentity(s);
-      discardCachedDetail(s);
-      if (selId === key) clearSelection();
-      doScan();
-      setToast({ kind: "ok", title: t("app:toast.deleteDone"),
-        desc: t("app:toast.deleteDoneDesc", { title: s.title || s.id }),
-        action: r.undoable
-          ? { label: t("app:toast.undo"), onClick: () => undoDelete(r.recovery_id) } : undefined });
-    } catch (e) {
-      setToast({ kind: "fail", title: t("app:toast.deleteFail"), desc: e.message });
-    }
-  };
   const askDelete = s => {
     if (s.tool === "opencode" || (s.tree_count || 1) > 1) setDelConfirm(s);
     else deleteSession(s);
@@ -284,27 +236,7 @@ export default function App() {
   const doBatchDelete = async () => {
     const targets = batchDel;
     setBatchDel(null);
-    let done = 0, fail = 0;
-    for (const s of targets) {
-      setToast({ kind: "run", title: t("app:toast.batchDeleting"),
-        desc: t("app:toast.batchProgress", { done: done + fail, total: targets.length }) });
-      try {
-        const plan = await operations.plan({
-          kind: "delete",
-          tool: s.tool,
-          ref: operationRef(s),
-        });
-        await operations.apply(plan);
-        discardCachedDetail(s);
-        done++;
-      } catch { fail++; }
-    }
-    if (targets.some(s => sessionIdentity(s) === selId)) clearSelection();
-    setMultiSel([]); doScan();
-    setToast(fail
-      ? { kind: "fail", title: t("app:toast.batchPartialFail"), desc: t("app:toast.batchPartialFailDesc", { done, fail }) }
-      : { kind: "ok", title: t("app:toast.batchDone"),
-          desc: t("app:toast.batchDoneDesc", { done }) });
+    await deleteSessions(targets);
   };
 
   const ctxSess = ctxMenu ? byKey[ctxMenu.key] : null;
@@ -671,7 +603,7 @@ export default function App() {
           }))}
           onClose={() => setOrganizerOpen(false)}
           onApplied={() => {
-            engine("session_meta_list").then(value => setMetaMap(value || {}));
+            reloadMetadata();
             doScan();
           }} />
       )}
@@ -729,7 +661,11 @@ export default function App() {
       {delConfirm && (
         <SessionDeleteConfirm sess={delConfirm}
           onCancel={() => setDelConfirm(null)}
-          onConfirm={() => deleteSession(delConfirm)} />)}
+          onConfirm={() => {
+            const session = delConfirm;
+            setDelConfirm(null);
+            deleteSession(session);
+          }} />)}
       {histDel && (
         <HistoryDeleteConfirm h={histDel}
           onCancel={() => setHistDel(null)}

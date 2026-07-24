@@ -53,6 +53,19 @@ def test_operation_flow_has_one_feature_controller():
         assert "operationCancel" not in source
 
 
+def test_session_mutations_live_in_browser_capability():
+    app = (FRONTEND / "app/App.jsx").read_text()
+    metadata = FRONTEND / "features/browser/useSessionMetadata.js"
+    deletion = FRONTEND / "features/browser/useSessionDeletion.js"
+
+    assert metadata.is_file()
+    assert deletion.is_file()
+    assert "operations.plan" not in app
+    assert 'engine("session_meta_list")' not in app
+    assert "useSessionMetadata" in app
+    assert "useSessionDeletion" in app
+
+
 def test_frontend_core_uses_strict_typescript():
     tsconfig = (ROOT / "app/tsconfig.json").read_text()
     package = (ROOT / "app/package.json").read_text()
