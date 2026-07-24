@@ -1,8 +1,8 @@
 # Ferry Architecture
 
-This document is the architectural source of truth for the ongoing refactor.
-It describes the intended ownership boundaries rather than preserving the
-shape of the current implementation.
+This document is the architectural source of truth for the current
+implementation. Structure tests and generated-contract drift checks keep the
+repository aligned with these ownership boundaries.
 
 ## Package convention
 
@@ -111,6 +111,7 @@ does not coordinate a transaction or a workflow across processes.
 ```text
 app/src/
   main.jsx         frontend bootstrap
+  themeBootstrap.js pre-render theme restoration without inline script
   shell/           desktop layout, navigation, routing, global overlays
   modules/         vertical product capabilities and their local models
   platform/        typed desktop client, cache, updater, platform errors
@@ -136,7 +137,7 @@ app/src-tauri/src/
   engine/          Python Engine client, policy, public commands
   runtime/         Ferry Runtime gateway and approval routing
   operations/      typed operation input, validation, request encoding
-  process/         shared JSONL process transport
+  process/         shared JSONL transport, supervision, and sidecar commands
   desktop/         terminal, reveal, window, menu, platform implementations
   contracts/       generated shared contracts
 ```
@@ -177,6 +178,12 @@ digest inputs/results and `proposals.py` manages proposal validation and
 decisions. Model execution remains in Ferry Runtime and reaches these use cases
 only through the Rust/Engine gateway.
 
+Organization generation itself is a cancellable, in-memory Ferry Runtime job.
+`organization.start` returns immediately; `organization.status` reports the
+result and `organization.cancel` is accepted until the workflow enters its
+SQLite commit phase. Jobs are bounded and pruned rather than becoming a
+long-term-memory subsystem.
+
 The target Engine packages are capability-oriented:
 
 ```text
@@ -187,7 +194,7 @@ engine/
   organization/    summaries and organization proposals
   adapters/        current Claude, Codex, and OpenCode structures
     shared/        codec, editing, migration, scan primitives reused by adapters
-  storage/         SQLite composition plus capability-owned stores
+  storage/         SQLite connection and exact schema composition root
   system/          paths, executables, resources, and probes
   app.py           process capability facade
   bootstrap.py     process composition
@@ -305,20 +312,33 @@ correlated by the top-level `id`, including structured error responses.
 
 ## Cross-platform boundary
 
-Windows support is retained. `app/src-tauri/src/platform/` is the Rust platform
-boundary. It owns reveal-in-file-manager and terminal launch behavior: macOS
-has the native implementation and Windows has explicit, compilable unsupported
-stubs. The following capabilities still need to move behind the same boundary:
+Windows support is retained. `app/src-tauri/src/desktop/platform/` owns
+reveal-in-file-manager and terminal launch behavior: macOS has the native
+implementation and Windows has explicit, compilable unsupported stubs.
+`app/src-tauri/src/process/command.rs` separately owns cross-platform sidecar
+naming, bundled-binary lookup, repository development commands, and the
+Windows hidden-console flag. Engine and Ferry Runtime never reproduce those
+branches.
 
-- process spawning and hidden-console policy;
-- executable and bundled-sidecar naming;
-- window decoration and visual effects.
+Native bundle targets are also platform-owned:
+`tauri.macos.conf.json` selects `app/dmg`, while
+`tauri.windows.conf.json` selects `nsis/msi`. The common Tauri configuration
+contains neither platform's bundle target.
 
 macOS implementations may use private or native APIs. Windows implementations
 must not be emulated with scattered `cfg` branches in business modules. A
 feature may remain unavailable on Windows during development only through an
 explicit platform implementation that returns a structured unsupported error.
 Windows sidecar builds and Rust compilation remain CI gates.
+
+The repository build entry is `python scripts/build.py`. It validates the
+native target and exact Python/Node requirements, builds both sidecars, and
+only then invokes Tauri. Frozen sidecars are never cross-built.
+
+The WebView has a production CSP that permits only bundled scripts, local
+styles, Tauri IPC, and `data:`/`blob:` session images. Development adds only
+the local Vite HTTP/WebSocket endpoints. The pre-render theme bootstrap is an
+external module so the policy does not require inline script execution.
 
 ## Non-negotiable safety properties
 

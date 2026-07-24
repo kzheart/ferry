@@ -20,7 +20,7 @@ Chinese description.
 - Keep one current fixture family per session source.
 - Add structural-change failure tests.
 
-## 3. Canonical semantics and native documents — in progress
+## 3. Canonical semantics and native documents — complete
 
 - Make `ToolResult` the sole tool-result representation.
 - Move editing fidelity into adapter-private `NativeDocument` types.
@@ -35,11 +35,12 @@ Chinese description.
 - Delete `save_as`, `dry_run` permission routing, migration handoff, and the
   preview/propose/authorize API families.
 
-## 5. Concurrent Session Engine — in progress
+## 5. Concurrent Session Engine — complete
 
 - Multiplex requests by ID.
-- Separate bounded read execution from per-session mutation queues.
-- Move long work to cancellable jobs with progress events.
+- Separate bounded pure reads from the ordered serial lane.
+- Move native writes to one cancellable mutation job queue with durable status
+  snapshots.
 
 ## 6. Ferry Runtime — complete for bounded multi-agent workflows
 
@@ -50,21 +51,23 @@ Chinese description.
   and fan-out/fan-in synthesis.
 - Do not introduce long-term memory.
 
-## 7. Backend-owned workflows and UI — in progress
+## 7. Backend-owned workflows and UI — complete
 
 - Keep organization generation in Ferry Runtime, not React.
 - Continue thinning the application shell after workspace and overlay split.
 - Add workflow graph, parallel worker status, approval, and synthesis views.
 - Move contracts, query/state models, and module controllers to TypeScript.
 
-## 8. Contracts, IPC, storage, and final cleanup — in progress
+## 8. Contracts, IPC, storage, and final cleanup — complete
 
 - Converge Engine and Ferry Runtime on one IPC framing.
 - Generate stable method, operation, event, and error definitions.
 - Add contract-drift checks.
 - Keep Python Engine as the one SQLite owner and isolate capability stores.
 - Isolate macOS and Windows platform implementations.
+- Enable a restrictive production CSP and platform-owned bundle targets.
+- Build both sidecars through one repository entry point.
 - Delete obsolete paths, dependencies, locale keys, tests, and documentation.
 
-The refactor is complete only after the repository-wide verification commands
-pass and searches confirm that the deleted runtime concepts no longer exist.
+Repository-wide verification and deleted-concept guards remain permanent CI
+gates rather than a temporary migration phase.
