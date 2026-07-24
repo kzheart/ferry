@@ -36,7 +36,9 @@ def serve(input_stream=None, output_stream=None, handler=rpc) -> None:
     reads = ThreadPoolExecutor(
         max_workers=MAX_PARALLEL_READS, thread_name_prefix="engine-read"
     )
-    futures = []
+    # 常驻引擎可能运行数天；已完成任务不能无限保留在列表中。
+    # executor.shutdown(wait=True) 仍会在 EOF 时等待全部在途请求结束。
+    futures = set()
     try:
         for line in input_stream:
             request = line.strip()
@@ -47,8 +49,10 @@ def serve(input_stream=None, output_stream=None, handler=rpc) -> None:
                 if _request_method(request) in PARALLEL_READ_METHOD_NAMES
                 else serial
             )
-            futures.append(executor.submit(complete, request))
-        for future in futures:
+            future = executor.submit(complete, request)
+            futures.add(future)
+            future.add_done_callback(futures.discard)
+        for future in tuple(futures):
             future.result()
     finally:
         reads.shutdown(wait=True)
