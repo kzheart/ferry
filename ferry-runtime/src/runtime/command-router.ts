@@ -29,7 +29,7 @@ export async function dispatch(
           service: "ferry-runtime",
           contract_hash: FERRY_CONTRACT_HASH,
           pi_version: "0.81.1",
-          ...(await runtime.providerStatus()),
+          ...(await runtime.providerService.status()),
         };
         break;
       case "session.create":
@@ -153,26 +153,26 @@ export async function dispatch(
         );
         break;
       case "providers.list":
-        result = await runtime.providers();
+        result = await runtime.providerService.providers();
         break;
       case "models.list":
-        result = runtime.models(
+        result = runtime.providerService.models(
           requireString(params, "provider_id", 128),
           optionalString(params, "query", 256) ?? "",
           optionalInteger(params, "limit") ?? 100,
         );
         break;
       case "models.enabled":
-        result = await runtime.enabledModels();
+        result = await runtime.providerService.enabledModels();
         break;
       case "models.catalog":
-        result = await runtime.catalogModels();
+        result = await runtime.providerService.catalogModels();
         break;
       case "custom_model.add": {
         const name = optionalString(params, "name", 256);
         const contextWindow = optionalInteger(params, "context_window");
         const maxTokens = optionalInteger(params, "max_tokens");
-        result = await runtime.saveCustomModel(
+        result = await runtime.providerService.saveCustomModel(
           requireString(params, "provider_id", 128),
           {
             id: requireString(params, "model_id", 512),
@@ -190,13 +190,13 @@ export async function dispatch(
         break;
       }
       case "custom_model.delete":
-        result = await runtime.deleteCustomModel(
+        result = await runtime.providerService.deleteCustomModel(
           requireString(params, "provider_id", 128),
           requireString(params, "model_id", 512),
         );
         break;
       case "provider.test":
-        result = await runtime.testProvider(
+        result = await runtime.providerService.testProvider(
           requireString(params, "provider_id", 128),
           optionalString(params, "model_id", 512),
         );
@@ -208,29 +208,29 @@ export async function dispatch(
             "enabled must be a boolean",
           );
         }
-        result = await runtime.setProviderEnabled(
+        result = await runtime.providerService.setProviderEnabled(
           requireString(params, "provider_id", 128),
           params.enabled,
         );
         break;
       case "models.visibility.set":
-        result = await runtime.setVisibleModels(
+        result = await runtime.providerService.setVisibleModels(
           requireString(params, "provider_id", 128),
           parseModelIds(params.model_ids),
         );
         break;
       case "models.refresh":
-        result = await runtime.refreshModels();
+        result = await runtime.providerService.refreshModels();
         break;
       case "config.get":
-        result = await runtime.config();
+        result = await runtime.providerService.config();
         break;
       case "credential.set": {
         const fields = params.fields;
         if (fields !== undefined && !isObject(fields)) {
           throw new ProtocolError("invalid_params", "fields must be an object");
         }
-        result = await runtime.saveApiKey(
+        result = await runtime.providerService.saveApiKey(
           requireString(params, "provider_id", 128),
           requireString(params, "key", 64 * 1024),
           fields as Record<string, string> | undefined,
@@ -238,7 +238,7 @@ export async function dispatch(
         break;
       }
       case "provider.logout":
-        result = await runtime.logoutProvider(
+        result = await runtime.providerService.logoutProvider(
           requireString(params, "provider_id", 128),
         );
         break;
@@ -249,7 +249,7 @@ export async function dispatch(
         } catch {
           throw new ProtocolError("invalid_params", "thinking is invalid");
         }
-        result = await runtime.selectModel(
+        result = await runtime.providerService.selectModel(
           optionalString(params, "session_id", 128),
           {
             provider: requireString(params, "provider_id", 128),
@@ -269,13 +269,13 @@ export async function dispatch(
             "clear_api_key must be a boolean",
           );
         }
-        result = await runtime.saveCustomProvider(
+        result = await runtime.providerService.saveCustomProvider(
           parseCustomProvider(params),
           params.clear_api_key === true,
         );
         break;
       case "custom_provider.delete":
-        result = await runtime.deleteCustomProvider(
+        result = await runtime.providerService.deleteCustomProvider(
           requireString(params, "provider_id", 128),
         );
         break;
@@ -287,21 +287,21 @@ export async function dispatch(
             "auth_type must be api_key or oauth",
           );
         }
-        result = runtime.startAuthentication(
+        result = runtime.providerService.startAuthentication(
           requireString(params, "provider_id", 128),
           authType,
         );
         break;
       }
       case "auth.login.respond":
-        result = runtime.respondAuthentication(
+        result = runtime.providerService.respondAuthentication(
           requireString(params, "login_id", 128),
           requireString(params, "prompt_id", 128),
           requireString(params, "value", 64 * 1024),
         );
         break;
       case "auth.login.cancel":
-        result = runtime.cancelAuthentication(
+        result = runtime.providerService.cancelAuthentication(
           requireString(params, "login_id", 128),
         );
         break;

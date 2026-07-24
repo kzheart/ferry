@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { AuthType, ImageContent } from "@earendil-works/pi-ai";
+import type { ImageContent } from "@earendil-works/pi-ai";
 import type { SessionStore } from "../sessions/session-repository.js";
 import { EphemeralSessionStore } from "../sessions/session-repository.js";
 import { RuntimeSession } from "../sessions/runtime-session.js";
 import type {
-  CustomProviderConfig,
   ModelSelection,
   ThinkingLevel,
 } from "../providers/provider-config.js";
@@ -63,7 +62,7 @@ export class AgentRuntime {
   private readonly providerHost: ProviderHost | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
-  private readonly providersService: ProviderService;
+  readonly providerService: ProviderService;
   private readonly gateway: RuntimeGateway;
   private readonly organization: OrganizationCoordinator;
 
@@ -103,7 +102,7 @@ export class AgentRuntime {
       invokeEngine: (method, params, workflowId) =>
         this.gateway.invokeEngine(method, params, workflowId),
     });
-    this.providersService = new ProviderService({
+    this.providerService = new ProviderService({
       ...(this.providerHost ? { host: this.providerHost } : {}),
       fallbackBackend: this.backendInfo,
       emitAuth: (event) => this.events.emit(event.type, event.payload),
@@ -184,10 +183,6 @@ export class AgentRuntime {
 
   newId() {
     return this.idFactory();
-  }
-
-  async providerStatus() {
-    return this.providersService.status();
   }
 
   subscribe(listener: (event: EventEnvelope) => void) {
@@ -301,102 +296,8 @@ export class AgentRuntime {
     return { session_id: sessionId, deleted: true };
   }
 
-  async providers() {
-    return this.providersService.providers();
-  }
-
   async startOrganization(input: unknown) {
     return this.organization.start(input);
-  }
-
-  models(providerId: string, query = "", limit = 100) {
-    return this.providersService.models(providerId, query, limit);
-  }
-
-  async enabledModels() {
-    return this.providersService.enabledModels();
-  }
-
-  async catalogModels() {
-    return this.providersService.catalogModels();
-  }
-
-  async testProvider(providerId: string, modelId?: string) {
-    return this.providersService.testProvider(providerId, modelId);
-  }
-
-  async saveCustomModel(
-    providerId: string,
-    input: {
-      id: string;
-      name?: string;
-      input?: Array<"text" | "image">;
-      reasoning?: boolean;
-      context_window?: number;
-      max_tokens?: number;
-    },
-  ) {
-    return this.providersService.saveCustomModel(providerId, input);
-  }
-
-  async deleteCustomModel(providerId: string, modelId: string) {
-    return this.providersService.deleteCustomModel(providerId, modelId);
-  }
-
-  async setProviderEnabled(providerId: string, enabled: boolean) {
-    return this.providersService.setProviderEnabled(providerId, enabled);
-  }
-
-  async setVisibleModels(providerId: string, modelIds: string[] | null) {
-    return this.providersService.setVisibleModels(providerId, modelIds);
-  }
-
-  async refreshModels() {
-    return this.providersService.refreshModels();
-  }
-
-  async config() {
-    return this.providersService.config();
-  }
-
-  async saveApiKey(
-    providerId: string,
-    key: string,
-    fields?: Record<string, string>,
-  ) {
-    return this.providersService.saveApiKey(providerId, key, fields);
-  }
-
-  async logoutProvider(providerId: string) {
-    return this.providersService.logoutProvider(providerId);
-  }
-
-  startAuthentication(providerId: string, type: AuthType) {
-    return this.providersService.startAuthentication(providerId, type);
-  }
-
-  respondAuthentication(loginId: string, promptId: string, value: string) {
-    return this.providersService.respondAuthentication(
-      loginId,
-      promptId,
-      value,
-    );
-  }
-
-  cancelAuthentication(loginId: string) {
-    return this.providersService.cancelAuthentication(loginId);
-  }
-
-  async selectModel(sessionId: string | undefined, selection: ModelSelection) {
-    return this.providersService.selectModel(sessionId, selection);
-  }
-
-  async saveCustomProvider(config: CustomProviderConfig, clearApiKey = false) {
-    return this.providersService.saveCustomProvider(config, clearApiKey);
-  }
-
-  async deleteCustomProvider(providerId: string) {
-    return this.providersService.deleteCustomProvider(providerId);
   }
 
   abort(sessionId: string) {

@@ -31,7 +31,7 @@ describe("DeepSeek provider integration", () => {
           return { sessions: [] };
         },
       });
-      await expect(runtime.providerStatus()).resolves.toMatchObject({
+      await expect(runtime.providerService.status()).resolves.toMatchObject({
         provider: DEEPSEEK_PROVIDER_ID,
         model: DEEPSEEK_MODEL_ID,
         credential: "available",

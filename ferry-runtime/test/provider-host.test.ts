@@ -261,12 +261,12 @@ describe("ProviderHost", () => {
     await runtime.waitForIdle("conversation");
 
     await expect(
-      runtime.selectModel("conversation", {
+      runtime.providerService.selectModel("conversation", {
         provider: "switch-test",
         model: "text-only",
       }),
     ).rejects.toMatchObject({ code: "model_capability_mismatch" });
-    await runtime.selectModel("conversation", {
+    await runtime.providerService.selectModel("conversation", {
       provider: "switch-test",
       model: "vision-b",
       thinking: "high",
@@ -287,7 +287,7 @@ describe("ProviderHost", () => {
       thinking_level: "high",
     });
     await expect(
-      restored.selectModel("conversation", {
+      restored.providerService.selectModel("conversation", {
         provider: "switch-test",
         model: "text-only",
       }),
