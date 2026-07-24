@@ -6,14 +6,16 @@ import {
 } from "../modules/browser/BrowserOverlays.jsx";
 import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
 import { ApplyConfirm, DiffSheet } from "../modules/editing/EditOverlays.jsx";
+import {
+  HistoryDeleteConfirm,
+  HistoryFilter,
+} from "../modules/migration/HistoryOverlays.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
 import {
   ContextMenu,
   Guide,
-  HistoryDeleteConfirm,
-  HistoryFilter,
   PromptBox,
   SearchPalette,
   Toast,
@@ -123,7 +125,7 @@ export function AppOverlays({
       )}
       {historyDelete.history && (
         <HistoryDeleteConfirm
-          h={historyDelete.history}
+          history={historyDelete.history}
           onCancel={historyDelete.onCancel}
           onConfirm={historyDelete.onConfirm}
         />
