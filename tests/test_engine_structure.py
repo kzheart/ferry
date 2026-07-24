@@ -70,6 +70,7 @@ def test_business_capabilities_live_in_top_level_packages():
         "planner.py",
         "plan_store.py",
         "service.py",
+        "state_store.py",
         "types.py",
         "validation.py",
         "verification.py",
@@ -150,9 +151,10 @@ def test_metadata_and_history_are_separate_sqlite_capabilities():
 
 def test_operation_state_is_a_separate_sqlite_capability():
     database = (ENGINE / "storage/database.py").read_text()
-    operation_store = (ENGINE / "storage/operation_store.py").read_text()
+    operation_store = (ENGINE / "operations/state_store.py").read_text()
     assert "class OperationStore" in operation_store
     assert "self.operations = OperationStore" in database
+    assert not (ENGINE / "storage/operation_store.py").exists()
     assert "def store_plan(" not in database
     assert "def store_recovery(" not in database
     assert "def audit(" not in database
