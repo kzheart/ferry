@@ -2,7 +2,7 @@
 import json
 
 from engine.sessions.model import Session
-from engine.storage import snapshots
+from engine.operations import snapshots
 
 
 def test_lose_records_structured_event():
