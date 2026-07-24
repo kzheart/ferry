@@ -14,12 +14,10 @@ import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import { Guide } from "../modules/onboarding/Guide.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
-import {
-  ContextMenu,
-  PromptBox,
-  SearchPalette,
-  Toast,
-} from "../shared/ui/Overlays.jsx";
+import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
+import { PromptBox } from "../shared/ui/PromptBox.jsx";
+import { Toast } from "../shared/ui/Toast.jsx";
+import { SearchPalette } from "./SearchPalette.jsx";
 
 export function AppOverlays({
   t,
