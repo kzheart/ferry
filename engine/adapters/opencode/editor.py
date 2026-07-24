@@ -31,11 +31,6 @@ class OpenCodeBackend(EditBackend):
     def __init__(self, api_factory=None):
         self._api_factory = api_factory or (lambda cwd: opencode_api.OpenCodeApi(cwd))
 
-    def capabilities(self):
-        result = super().capabilities()
-        result["operation_roles"] = {"rewrite": ["user", "assistant"]}
-        return result
-
     def load(self, ref):
         payload = rw_opencode.load_native_payload(ref)
         tree = rw_opencode.read(ref)
@@ -155,8 +150,7 @@ class OpenCodeBackend(EditBackend):
         cwd = doc.data.get("info", {}).get("directory") or "."
         applied = []
         with self._api_factory(cwd) as client:
-            caps = client.capabilities()
-            if not caps.get("patch_part"):
+            if not client.supports_part_patch():
                 raise RuntimeError("当前 OpenCode server 不支持官方 part 更新 API")
             if hasattr(client, "assert_idle"):
                 client.assert_idle(doc.ref)

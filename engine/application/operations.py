@@ -755,18 +755,15 @@ class OperationService:
         replacements = [
             op for op in ops if op["op"] == "replace-assistant-reply"
         ]
-        modes = editor.capabilities().get("operation_modes", {})
         if ordinary and not all(
-                "inplace" in modes.get(op["op"], []) for op in ordinary):
+                op["op"] in editor.operations for op in ordinary):
             operation_names = ",".join(
                 sorted({item["op"] for item in ordinary})
             )
             raise OperationUnsupportedError(
                 plugin.id, operation_names, "inplace",
             )
-        if replacements and "inplace" not in modes.get(
-            "replace-assistant-reply", []
-        ):
+        if replacements and "replace-assistant-reply" not in editor.operations:
             raise OperationUnsupportedError(
                 plugin.id, "replace-assistant-reply", "inplace",
             )
@@ -818,9 +815,6 @@ class OperationService:
             "before": agent_tools._bounded_json(result["before"], 12 * 1024),
             "after": agent_tools._bounded_json(result["after"], 12 * 1024),
             "changes": agent_tools._bounded_json(result["changes"], 12 * 1024),
-            "capabilities": agent_tools._bounded_json(
-                editor.capabilities(), 12 * 1024
-            ),
         })
 
     @staticmethod

@@ -40,16 +40,13 @@ def apply_mutation(editor, ref: str, mutate,
 
 
 def preview(editor, ref: str, ops: list[dict], loader=None) -> dict:
-    result = preview_mutation(
+    return preview_mutation(
         editor, ref, lambda doc: editor.apply_ops(doc, ops), loader=loader)
-    result["capabilities"] = editor.capabilities()
-    return result
 
 
 def apply(editor, ref: str, ops: list[dict],
           expected_revision: str | None = None):
-    modes = editor.capabilities().get("operation_modes", {})
-    if not all("inplace" in modes.get(op.get("op"), []) for op in ops):
+    if not all(op.get("op") in editor.operations for op in ops):
         raise OperationUnsupportedError(
             editor.name, ",".join(op.get("op", "?") for op in ops),
             "inplace")

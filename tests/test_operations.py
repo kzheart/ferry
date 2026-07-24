@@ -80,25 +80,17 @@ def _delete_plan(**overrides):
 def _attach_reply_editing(monkeypatch, *, inplace=True):
     editor = current().adapter("claude").editor
     calls = []
-    original_capabilities = editor.capabilities
-
-    def capabilities():
-        result = original_capabilities()
-        result["operation_modes"] = dict(result["operation_modes"])
-        result["operation_modes"]["replace-assistant-reply"] = (
-            ["inplace"] if inplace else []
-        )
-        result["operations"] = [
-            *result["operations"],
-            "replace-assistant-reply",
-        ]
-        return result
 
     def replace_reply(_doc, turn, reply: AssistantReply):
         calls.append((turn, reply.to_dict()))
         return [{"code": "reply.replaced", "turn": turn}]
 
-    monkeypatch.setattr(editor, "capabilities", capabilities)
+    operations = tuple(editor.operations)
+    monkeypatch.setattr(
+        editor,
+        "operations",
+        (*operations, "replace-assistant-reply") if inplace else operations,
+    )
     monkeypatch.setattr(editor, "replace_reply", replace_reply, raising=False)
     return calls
 
@@ -821,12 +813,10 @@ def test_unknown_operation_kind_is_rejected(agent_environment):
         })
 
 
-def test_plan_rejects_edit_without_inplace_support(
+def test_plan_rejects_edit_without_declared_operation(
         agent_environment, monkeypatch):
     monkeypatch.setattr(
-        agent_environment["editor"], "capabilities",
-        lambda: {"inplace": False, "operations": [],
-                 "operation_modes": {}},
+        agent_environment["editor"], "operations", (),
     )
 
     with pytest.raises(OperationUnsupportedError):

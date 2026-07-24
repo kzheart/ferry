@@ -190,14 +190,12 @@ def test_invalid_or_structural_input_is_rejected(value):
         AssistantReply.from_dict(value)
 
 
-def test_turn_bounds_and_opencode_capability_are_explicit():
+def test_turn_bounds_and_opencode_operations_are_explicit():
     reply = AssistantReply.from_dict({"items": [{"kind": "text", "text": "x"}]})
     editor = ClaudeBackend()
     with pytest.raises(ValueError, match="轮次超界"):
         editor.replace_reply(_document("claude", _native("claude")), 2, reply)
-    assert "replace-assistant-reply" not in OpenCodeBackend().capabilities()[
-        "operations"
-    ]
+    assert "replace-assistant-reply" not in OpenCodeBackend().operations
 
 
 def test_show_dto_exposes_ordered_reply_draft(tmp_path):
