@@ -214,7 +214,8 @@ abstract class BaseRoleStore implements RoleStore {
   protected abstract changed(): Promise<void>;
 }
 
-export class MemoryRoleStore extends BaseRoleStore {
+/** 未注入文件存储时的进程内角色草稿；不跨 Runtime 生命周期保存。 */
+export class EphemeralRoleStore extends BaseRoleStore {
   protected async changed() {}
 }
 

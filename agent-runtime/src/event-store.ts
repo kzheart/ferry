@@ -36,8 +36,8 @@ export interface SessionStore {
   delete(sessionId: string): Promise<void>;
 }
 
-/** 仅供测试与显式注入使用；生产会话持久化由 EngineSessionStore 承担。 */
-export class MemorySessionStore implements SessionStore {
+/** 仅供测试与显式注入使用；不构成跨会话或长期记忆。 */
+export class EphemeralSessionStore implements SessionStore {
   readonly records = new Map<
     string,
     { state: PersistedSession; events: EventEnvelope[] }

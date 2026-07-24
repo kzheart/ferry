@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileProviderConfigStore } from "../src/provider-config.js";
 import { FileModelsStore } from "../src/model-catalog-store.js";
-import { MemorySessionStore } from "../src/event-store.js";
+import { EphemeralSessionStore } from "../src/event-store.js";
 import {
   ProviderHost,
   UNSUPPORTED_PROVIDER_IDS,
@@ -227,7 +227,7 @@ describe("ProviderHost", () => {
       provider: "switch-test",
       model: "vision-a",
     });
-    const sessions = new MemorySessionStore();
+    const sessions = new EphemeralSessionStore();
     const backendFactory = (selection?: {
       provider: string;
       model: string;
