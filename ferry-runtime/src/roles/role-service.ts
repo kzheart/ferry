@@ -1,5 +1,5 @@
 import { ProtocolError } from "../server/messages.js";
-import type { RoleInput, RoleStore } from "./role-repository.js";
+import type { RoleInput, RoleStore } from "./role-store.js";
 
 export class RoleService {
   constructor(private readonly store: RoleStore) {}

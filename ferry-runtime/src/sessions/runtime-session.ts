@@ -14,7 +14,7 @@ import {
 import type { RuntimeEventType } from "../server/generated/events.js";
 import type { AgentBackend } from "../providers/provider-service.js";
 import type { ModelSelection } from "../providers/provider-config.js";
-import type { ApplyPolicy } from "../roles/role-repository.js";
+import type { ApplyPolicy } from "../roles/role-store.js";
 import {
   providerFailure,
   safeEvents,
@@ -28,7 +28,7 @@ import {
 } from "../tools/catalog.js";
 import { createDelegationTool } from "../tools/delegation.js";
 import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
-import type { PersistedSession, SessionStore } from "./session-repository.js";
+import type { PersistedSession, SessionStore } from "./session-store.js";
 
 export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated between ${AGENT_IDS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
 

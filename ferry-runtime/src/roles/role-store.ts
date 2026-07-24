@@ -1,3 +1,4 @@
+/** 角色定义与持久化存储。 */
 import { randomUUID } from "node:crypto";
 import {
   chmod,

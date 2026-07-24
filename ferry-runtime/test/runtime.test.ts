@@ -3,10 +3,10 @@ import {
   EphemeralSessionStore,
   type PersistedSession,
   type SessionCommit,
-} from "../src/sessions/session-repository.js";
+} from "../src/sessions/session-store.js";
 import { AgentRuntime } from "../src/runtime/runtime.js";
 import { FERRY_SAFETY_PROMPT } from "../src/sessions/runtime-session.js";
-import { EphemeralRoleStore } from "../src/roles/role-repository.js";
+import { EphemeralRoleStore } from "../src/roles/role-store.js";
 import {
   PROTOCOL_VERSION,
   type EventEnvelope,

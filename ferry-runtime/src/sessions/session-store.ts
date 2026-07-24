@@ -1,3 +1,4 @@
+/** Ferry 对话会话的持久化端口与进程内实现。 */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { EventEnvelope } from "../server/messages.js";
 

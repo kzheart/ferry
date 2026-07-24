@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileProviderConfigStore } from "../src/providers/provider-config-store.js";
 import { FileModelsStore } from "../src/providers/model-store.js";
-import { EphemeralSessionStore } from "../src/sessions/session-repository.js";
+import { EphemeralSessionStore } from "../src/sessions/session-store.js";
 import { ProviderHost } from "../src/providers/provider-host.js";
 import { UNSUPPORTED_PROVIDER_IDS } from "../src/providers/provider-models.js";
 import { AgentRuntime } from "../src/runtime/runtime.js";

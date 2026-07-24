@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { SessionStore } from "../sessions/session-repository.js";
-import { EphemeralSessionStore } from "../sessions/session-repository.js";
+import type { SessionStore } from "../sessions/session-store.js";
+import { EphemeralSessionStore } from "../sessions/session-store.js";
 import { RuntimeSession } from "../sessions/runtime-session.js";
 import type {
   ModelSelection,
@@ -17,7 +17,7 @@ import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
   type RoleStore,
-} from "../roles/role-repository.js";
+} from "../roles/role-store.js";
 import { RoleService } from "../roles/role-service.js";
 import { ProtocolError, type EventEnvelope } from "../server/messages.js";
 import {

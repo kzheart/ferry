@@ -2,7 +2,7 @@ import type {
   PersistedSession,
   SessionCommit,
   SessionStore,
-} from "./session-repository.js";
+} from "./session-store.js";
 import type { EventEnvelope } from "../server/messages.js";
 
 export type RuntimeEngineMethod =

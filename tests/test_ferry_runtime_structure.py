@@ -53,6 +53,8 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
     assert (RUNTIME / "src/providers/commands.ts").is_file()
     assert (RUNTIME / "src/roles/role-service.ts").is_file()
+    assert (RUNTIME / "src/roles/role-store.ts").is_file()
+    assert not (RUNTIME / "src/roles/role-repository.ts").exists()
     assert (RUNTIME / "src/roles/commands.ts").is_file()
     assert "runtime.providerService" not in runtime
     assert "runtime.roleService" not in runtime
@@ -69,6 +71,8 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/organizing/coordinator.ts").is_file()
     runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
     assert runtime_session.is_file()
+    assert (RUNTIME / "src/sessions/session-store.ts").is_file()
+    assert not (RUNTIME / "src/sessions/session-repository.ts").exists()
     assert (RUNTIME / "src/sessions/commands.ts").is_file()
     assert "class RuntimeSession" not in runtime
     assert "export class RuntimeSession" in runtime_session.read_text()
