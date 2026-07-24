@@ -1,4 +1,4 @@
-"""探针应用门面；具体 CLI 执行由 infrastructure 持有。"""
+"""Operation 探针入口；具体 CLI 执行由 adapter verifier 持有。"""
 
 from ..context import EngineContext
 

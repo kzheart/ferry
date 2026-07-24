@@ -79,16 +79,15 @@ does not coordinate a transaction or a workflow across processes.
 
 ```text
 app/src/
-  app/             root composition and global style
-  shell/           desktop layout, navigation, workspace routing
-  features/        vertical product capabilities and their local models
-  api/             desktop transport and generated contracts
-  components/      reusable visual primitives
-  i18n/            translation bootstrap
-  locales/         localized copy
+  main.jsx         frontend bootstrap
+  shell/           desktop layout, navigation, routing, global overlays
+  modules/         vertical product capabilities and their local models
+  platform/        typed desktop client, cache, updater, platform errors
+  shared/          generated contracts, i18n, styles, concrete UI primitives
+  assets/          bundled images and icons
 ```
 
-Feature-specific models stay beside the feature that owns them. The frontend
+Module-specific models stay beside the capability that owns them. The frontend
 does not recreate a cross-feature `domain/` layer; shared display helpers must
 be concrete UI modules, not a generic business bucket.
 
@@ -156,7 +155,8 @@ engine/
   operations/      plan, apply, edit, migrate, metadata, delete, verify
   organization/    summaries and organization proposals
   adapters/        current Claude, Codex, and OpenCode structures
-  storage/         SQLite state, snapshots, and scan cache
+    shared/        codec, editing, migration, scan primitives reused by adapters
+  storage/         SQLite composition plus capability-owned stores
   system/          paths, executables, resources, and probes
   app.py           process capability facade
   bootstrap.py     process composition
@@ -226,6 +226,13 @@ SQLite transaction. The
 database uses WAL plus `BEGIN IMMEDIATE` for every state transition and
 metadata CAS. A schema other than the exact current version fails at startup;
 old JSON metadata and older SQLite schemas are not read or migrated.
+
+`engine/storage/database.py` owns only the connection, exact schema, and store
+composition. Runtime sessions, operation plans/recovery, metadata, migration
+history, summaries, and organization transactions each have a named store.
+The organization store deliberately owns its cross-table transaction as one
+capability; it is not split into repository abstractions that could break
+atomic approval.
 
 The UI uses the same pair as its local session identity for list keys,
 selection, multi-selection, context menus, and detail caching. Native session

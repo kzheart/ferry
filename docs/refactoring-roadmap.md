@@ -1,4 +1,4 @@
-# Clean Architecture Refactoring Roadmap
+# Capability Architecture Refactoring Roadmap
 
 Each phase must leave one implementation path, pass its focused tests plus the
 relevant full regression suites, and end in a Conventional Commit with a
@@ -52,17 +52,17 @@ Chinese description.
 
 ## 7. Backend-owned workflows and UI — in progress
 
-- Move organization generation out of React.
-- Split the application shell and workspaces.
+- Keep organization generation in Ferry Runtime, not React.
+- Continue thinning the application shell after workspace and overlay split.
 - Add workflow graph, parallel worker status, approval, and synthesis views.
-- Move contract, domain, and feature-controller code to TypeScript.
+- Move contracts, query/state models, and module controllers to TypeScript.
 
 ## 8. Contracts, IPC, storage, and final cleanup — in progress
 
 - Converge Engine and Ferry Runtime on one IPC framing.
 - Generate stable method, operation, event, and error definitions.
 - Add contract-drift checks.
-- Select one SQLite owner and migrate Ferry-owned durable state transactionally.
+- Keep Python Engine as the one SQLite owner and isolate capability stores.
 - Isolate macOS and Windows platform implementations.
 - Delete obsolete paths, dependencies, locale keys, tests, and documentation.
 

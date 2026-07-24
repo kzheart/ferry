@@ -1,6 +1,6 @@
 """Claude Code 会话文件原语：解析、快照、原子写入与结构校验。
 
-轮次/编辑语义统一由 ``claude.codec`` 持有；跨工具编排见 application 层。
+轮次/编辑语义统一由 ``claude.codec`` 持有；跨工具编排由 operations 包负责。
 """
 import glob
 import json
