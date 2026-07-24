@@ -42,10 +42,20 @@ export async function dispatch(
           };
           break;
         case "organization.start":
-          result = await runtime.startOrganization({
+          result = runtime.startOrganization({
             sessions: params.sessions,
             locale: params.locale,
           });
+          break;
+        case "organization.status":
+          result = runtime.organizationStatus(
+            requireString(params, "job_id", 128),
+          );
+          break;
+        case "organization.cancel":
+          result = runtime.cancelOrganization(
+            requireString(params, "job_id", 128),
+          );
           break;
         case "tool.result":
           result = runtime.completeTool(
