@@ -40,7 +40,7 @@ class RpcDispatcher:
             "version": lambda p: application.version(),
             "scan": lambda p: application.scan(),
             "env": lambda p: application.environment(),
-            "resume": lambda p: application.resume_command(p["tool"], p["session_id"], p.get("cwd") or "."),
+            "resume": lambda p: application.resume_command(p["tool"], p["ref"]),
             "models": lambda p: application.list_models(p["tool"]),
             "history": lambda p: application.migration_history(),
             "history_delete": lambda p: application.delete_migration_history(p["id"]),
