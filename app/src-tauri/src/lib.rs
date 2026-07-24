@@ -7,6 +7,7 @@ mod menu;
 mod platform;
 mod reveal;
 mod sidecar;
+mod sidecar_policy;
 mod terminal;
 mod window;
 
