@@ -172,6 +172,10 @@ class AgentSessionIndex:
         self._opaque_by_message_key: dict[tuple[str, str, str], str] = {}
         self._lock = threading.RLock()
 
+    @property
+    def ports(self) -> ApplicationPorts:
+        return self._ports
+
     def refresh(self) -> list[IndexedSession]:
         cache = self._ports.cache_factory()
         scanned = []
@@ -557,7 +561,7 @@ def _validate_read_scope(record: IndexedSession) -> None:
 
 def _read_record(record: IndexedSession):
     _validate_read_scope(record)
-    browser = current().adapter(record.tool).browser
+    browser = _INDEX.ports.adapter(record.tool).browser
     session = getattr(browser, "read_agent", browser.read)(record.canonical_ref)
     _INDEX.resolve(record.tool, record.opaque_ref)
     _validate_read_scope(record)
@@ -827,14 +831,14 @@ def get_usage(agents=None, projects=None, time_range=None) -> dict:
 def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
                       max_turn: int | None = None) -> dict:
     record = _INDEX.resolve(source_tool, opaque_ref)
-    if target_tool not in current().adapters():
+    if target_tool not in _INDEX.ports.adapters():
         raise AgentRequestError("未知目标 Agent", {"target_tool": target_tool})
     session = _read_record(record)
     if max_turn is not None:
         max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
         from .services import _truncate_rounds
         _truncate_rounds(session, max_turn)
-    target = current().adapter(target_tool).migration_target
+    target = _INDEX.ports.adapter(target_tool).migration_target
     loss = target.plan(session)
     from .services import _migration_counts
     tree_count, message_count = _migration_counts(session)
@@ -852,7 +856,7 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
 
 def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
     record = _INDEX.resolve(tool, opaque_ref)
-    plugin = current().adapter(tool)
+    plugin = _INDEX.ports.adapter(tool)
     _validate_ops(ops)
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
