@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { agentCommand } from "../../api/agent/agentClient.js";
-import { trustedRpc } from "../../api/transport/rpc.js";
+import {
+  runtime,
+  trustedEngine,
+} from "../../api/transport/desktopClient.js";
 import { sessionRef } from "../browser/sessionModel.js";
 
 function generateOrganizationProposal(sessions, locale) {
-  return agentCommand("organization.start", {
+  return runtime("organization.start", {
     locale,
     sessions: sessions.slice(0, 50).map(session => ({
       tool: session.tool,
@@ -46,7 +48,7 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
 
   useEffect(() => {
     const allowed = new Set(targets.map(target => `${target.tool}\0${target.id}`));
-    trustedRpc("organization_proposals_list", { status: "pending" })
+    trustedEngine("organization_proposals_list", { status: "pending" })
       .then(list => {
         const match = list?.find(item => item.targets?.every(target =>
           allowed.has(`${target.tool}\0${target.id}`)));
@@ -80,7 +82,7 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
           },
         };
       });
-      adopt(await trustedRpc("organization_proposal_modify", {
+      adopt(await trustedEngine("organization_proposal_modify", {
         proposal_id: proposal.proposal_id, changes,
       }));
     } catch (error2) {
@@ -92,7 +94,7 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
   const decide = async decision => {
     setBusy(true); setError("");
     try {
-      const value = await trustedRpc("organization_proposal_decide", {
+      const value = await trustedEngine("organization_proposal_decide", {
         proposal_id: proposal.proposal_id, decision,
       });
       adopt(value);

@@ -18,28 +18,29 @@ OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 EVENTS_SOURCE = ROOT / "contracts" / "events.json"
 ERRORS_SOURCE = ROOT / "contracts" / "errors.json"
 AGENT_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/agents.js": "frontend",
+    ROOT / "app/src/api/contract/generated/agents.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
     ROOT / "engine/contracts/agents.py": "python",
     ROOT / "ferry-runtime/src/server/generated/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
 }
 RUNTIME_METHOD_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/runtime-methods.js": "frontend",
+    ROOT / "app/src/api/contract/generated/runtime-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/runtime_methods.rs": "rust",
     ROOT / "ferry-runtime/src/server/generated/runtime-methods.ts": "runtime",
 }
 IPC_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/ipc.js": "frontend",
+    ROOT / "app/src/api/contract/generated/ipc.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ROOT / "engine/contracts/ipc.py": "python",
     ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
 }
 SESSION_REF_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/session-ref.js": "frontend",
+    ROOT / "app/src/api/contract/generated/session-ref.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
     ROOT / "engine/contracts/session_ref.py": "python",
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
@@ -51,13 +52,13 @@ OPERATIONS_OUTPUTS = {
     ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
 }
 EVENT_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/events.js": "frontend",
+    ROOT / "app/src/api/contract/generated/events.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
     ROOT / "engine/contracts/events.py": "python",
     ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
 }
 ERROR_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/errors.js": "frontend",
+    ROOT / "app/src/api/contract/generated/errors.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/errors.rs": "rust",
     ROOT / "engine/contracts/errors.py": "python",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
@@ -296,9 +297,10 @@ def frontend(agents: list[dict[str, object]]) -> str:
     executables = [executable for agent in agents for executable in agent["executables"]]
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const AGENTS = Object.freeze({source});",
-        "export const AGENT_IDS = Object.freeze(Object.keys(AGENTS));",
-        f"export const ALLOWED_EXECUTABLES = Object.freeze({json.dumps(executables)});",
+        f"export const AGENTS = {source} as const;",
+        "export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];",
+        f"export const ALLOWED_EXECUTABLES = {json.dumps(executables)} as const;",
+        "export type AgentId = keyof typeof AGENTS;",
         "",
     ))
 
@@ -341,6 +343,29 @@ def runtime(agents: list[dict[str, object]]) -> str:
         f"export const AGENT_IDS = {json.dumps(identifiers)} as const;",
         f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
         "export type AgentId = (typeof AGENT_IDS)[number];",
+        "",
+    ))
+
+
+def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
+    public = [method["name"] for method in methods if method["exposure"] == "public"]
+    trusted = [
+        method["name"] for method in methods
+        if method["exposure"] == "trusted-ui"
+    ]
+
+    def array(values: list[str]) -> str:
+        return "[\n" + "\n".join(
+            f"  {json.dumps(value)}," for value in values
+        ) + "\n]"
+
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const PUBLIC_ENGINE_METHODS = {array(public)} as const;",
+        f"export const TRUSTED_UI_ENGINE_METHODS = {array(trusted)} as const;",
+        "export type PublicEngineMethod = (typeof PUBLIC_ENGINE_METHODS)[number];",
+        "export type TrustedUiEngineMethod =",
+        "  (typeof TRUSTED_UI_ENGINE_METHODS)[number];",
         "",
     ))
 
@@ -437,9 +462,13 @@ def runtime_methods_frontend(methods: list[dict[str, object]]) -> str:
     ) + "\n]"
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const PUBLIC_RUNTIME_METHODS = Object.freeze({values});",
-        "export const isPublicRuntimeMethod = method =>",
-        "  PUBLIC_RUNTIME_METHODS.includes(method);",
+        f"export const PUBLIC_RUNTIME_METHODS = {values} as const;",
+        "export type PublicRuntimeMethod =",
+        "  (typeof PUBLIC_RUNTIME_METHODS)[number];",
+        "export const isPublicRuntimeMethod =",
+        "  (method: unknown): method is PublicRuntimeMethod =>",
+        '    typeof method === "string" &&',
+        "    (PUBLIC_RUNTIME_METHODS as readonly string[]).includes(method);",
         "",
     ))
 
@@ -487,10 +516,16 @@ def runtime_methods_runtime(methods: list[dict[str, object]]) -> str:
 def session_ref_frontend(contract: dict[str, object]) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const OPAQUE_SESSION_REF_PREFIX = {json.dumps(contract['opaque_prefix'])};",
-        f"export const OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']};",
-        f"export const OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']};",
-        "export const isOpaqueSessionRef = value =>",
+        'import type { AgentId } from "./agents.js";',
+        "",
+        f"export const OPAQUE_SESSION_REF_PREFIX = {json.dumps(contract['opaque_prefix'])} as const;",
+        f"export const OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']} as const;",
+        f"export const OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']} as const;",
+        "export interface SessionRef {",
+        "  tool: AgentId;",
+        "  ref: string;",
+        "}",
+        "export const isOpaqueSessionRef = (value: unknown): value is string =>",
         '  typeof value === "string" &&',
         "  value.length >= OPAQUE_SESSION_REF_MIN_LENGTH &&",
         "  value.length <= OPAQUE_SESSION_REF_MAX_LENGTH &&",
@@ -662,9 +697,10 @@ def events_frontend(events: list[dict[str, object]]) -> str:
     source = json.dumps(policies, ensure_ascii=False, indent=2)
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const FERRY_EVENTS = Object.freeze({source});",
-        "export const FERRY_EVENT_TYPES = Object.freeze(Object.keys(FERRY_EVENTS));",
-        "export const isFerryEventType = value =>",
+        f"export const FERRY_EVENTS = {source} as const;",
+        "export type FerryEventType = keyof typeof FERRY_EVENTS;",
+        "export const FERRY_EVENT_TYPES = Object.keys(FERRY_EVENTS) as FerryEventType[];",
+        "export const isFerryEventType = (value: unknown): value is FerryEventType =>",
         '  typeof value === "string" &&',
         "  Object.prototype.hasOwnProperty.call(FERRY_EVENTS, value);",
         "",
@@ -768,8 +804,9 @@ def errors_frontend(errors: list[dict[str, object]]) -> str:
     )
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const FERRY_ERROR_POLICIES = Object.freeze({source});",
-        "export const isFerryErrorCode = value =>",
+        f"export const FERRY_ERROR_POLICIES = {source} as const;",
+        "export type FerryErrorCode = keyof typeof FERRY_ERROR_POLICIES;",
+        "export const isFerryErrorCode = (value: unknown): value is FerryErrorCode =>",
         '  typeof value === "string" &&',
         "  Object.prototype.hasOwnProperty.call(FERRY_ERROR_POLICIES, value);",
         "",
@@ -873,8 +910,29 @@ def contract_hash(
 def ipc_frontend(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const FERRY_IPC_PROTOCOL = {json.dumps(contract['protocol'])};",
-        f"export const FERRY_CONTRACT_HASH = {json.dumps(digest)};",
+        f"export const FERRY_IPC_PROTOCOL = {json.dumps(contract['protocol'])} as const;",
+        f"export const FERRY_CONTRACT_HASH = {json.dumps(digest)} as const;",
+        "export interface IpcRequest<Method extends string = string> {",
+        "  protocol: typeof FERRY_IPC_PROTOCOL;",
+        "  id: string;",
+        "  method: Method;",
+        "  params: Record<string, unknown>;",
+        "}",
+        "export interface IpcError {",
+        "  code: string;",
+        "  category?: string;",
+        "  retryable?: boolean;",
+        "  params?: Record<string, unknown>;",
+        "  message?: string;",
+        "}",
+        "export type IpcResponse<Result = unknown> =",
+        "  | { ok: true; result: Result }",
+        "  | { ok: false; error: IpcError };",
+        "export interface FerryEvent {",
+        "  type: string;",
+        "  payload?: Record<string, unknown>;",
+        "  [key: string]: unknown;",
+        "}",
         "",
     ))
 
@@ -963,7 +1021,11 @@ def generated_contents(
         for path, kind in AGENT_OUTPUTS.items()
     }
     engine_contents = {
-        path: {"rust": engine_methods_rust, "python": engine_methods_python}[kind](engine_methods)
+        path: {
+            "frontend": engine_methods_frontend,
+            "rust": engine_methods_rust,
+            "python": engine_methods_python,
+        }[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }
     runtime_method_contents = {

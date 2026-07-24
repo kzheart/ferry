@@ -1,8 +1,8 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal, revealPath, rpc, writeClipboardText }
-  from "../api/transport/rpc.js";
+import { engine, openTerminal, revealPath, writeClipboardText }
+  from "../api/transport/desktopClient.js";
 import { operations } from "../features/operations/operations.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
 import { fmtTime, operationRef, repoOf, sessionRef } from "../features/browser/sessionModel.js";
@@ -175,7 +175,7 @@ export default function App() {
 
   // ----- 会话元数据(重命名/置顶/归档/标签,sidecar 存储) -----
   useEffect(() => {
-    rpc("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
+    engine("session_meta_list").then(m => setMetaMap(m || {})).catch(() => {});
   }, []);
   const metaFor = session => metaMap[sessionIdentity(session)] || {};
   const setMetaFor = async (session, patch) => {
@@ -671,7 +671,7 @@ export default function App() {
           }))}
           onClose={() => setOrganizerOpen(false)}
           onApplied={() => {
-            rpc("session_meta_list").then(value => setMetaMap(value || {}));
+            engine("session_meta_list").then(value => setMetaMap(value || {}));
             doScan();
           }} />
       )}

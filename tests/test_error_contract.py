@@ -22,7 +22,7 @@ def test_error_contract_is_generated_for_every_runtime():
     assert set(codes) == set(FERRY_ERROR_POLICIES)
 
     for path in (
-        "app/src/api/contract/generated/errors.js",
+        "app/src/api/contract/generated/errors.ts",
         "app/src-tauri/src/contracts/errors.rs",
         "engine/contracts/errors.py",
         "ferry-runtime/src/server/generated/errors.ts",

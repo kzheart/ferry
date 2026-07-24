@@ -21,7 +21,7 @@ def test_event_contract_is_generated_for_every_runtime():
     } == FERRY_EVENT_POLICIES
 
     for path in (
-        "app/src/api/contract/generated/events.js",
+        "app/src/api/contract/generated/events.ts",
         "app/src-tauri/src/contracts/events.rs",
         "engine/contracts/events.py",
         "ferry-runtime/src/server/generated/events.ts",
@@ -41,7 +41,7 @@ def test_event_routing_uses_generated_policy():
     )
 
     rust = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
-    frontend = (ROOT / "app/src/api/agent/agentClient.js").read_text()
+    frontend = (ROOT / "app/src/api/transport/desktopClient.ts").read_text()
     runtime_messages = (
         ROOT / "ferry-runtime/src/server/messages.ts"
     ).read_text()

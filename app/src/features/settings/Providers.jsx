@@ -1,7 +1,7 @@
 // 设置 · 提供商:左侧是已添加的 Provider,右侧只配置凭据;配好凭据它的模型就自动进入「模型」页
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { agentCommand } from "../../api/agent/agentClient.js";
+import { runtime } from "../../api/transport/desktopClient.js";
 import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 
@@ -186,10 +186,10 @@ export default function Providers({ ferry }) {
   const [addingModel, setAddingModel] = useState(false);
 
   const load = useCallback(async () => {
-    const list = await agentCommand("providers.list");
+    const list = await runtime("providers.list");
     setProviders(list);
     // 模型目录里带 custom 标记,能区分手填模型与 Provider 自带的
-    setCatalog(await agentCommand("models.catalog").catch(() => []));
+    setCatalog(await runtime("models.catalog").catch(() => []));
     return list;
   }, []);
 
@@ -202,7 +202,7 @@ export default function Providers({ ferry }) {
   useEffect(() => {
     if (ferry?.auth?.status !== "completed") return;
     load().catch(() => {});
-    agentCommand("models.refresh").catch(() => {});
+    runtime("models.refresh").catch(() => {});
     ferry.loadModels?.();
   }, [ferry?.auth?.status]);
 
@@ -228,49 +228,61 @@ export default function Providers({ ferry }) {
   };
 
   const addProvider = p => act(async () => {
-    await agentCommand("provider.enabled.set", { provider_id: p.id, enabled: true });
+    await runtime("provider.enabled.set", {
+      provider_id: p.id,
+      enabled: true,
+    });
     await load();
     setSelId(p.id);
     setAdding(false);
   });
 
   const removeProvider = () => sel && act(async () => {
-    if (sel.custom) await agentCommand("custom_provider.delete", { provider_id: sel.id });
-    else await agentCommand("provider.enabled.set", { provider_id: sel.id, enabled: false });
+    if (sel.custom) {
+      await runtime("custom_provider.delete", { provider_id: sel.id });
+    } else {
+      await runtime("provider.enabled.set", {
+        provider_id: sel.id,
+        enabled: false,
+      });
+    }
     setSelId(null);
     await load();
     await syncFerry();
   });
 
   const saveKey = () => act(async () => {
-    await agentCommand("credential.set", { provider_id: sel.id, key });
+    await runtime("credential.set", { provider_id: sel.id, key });
     setKey("");
     // 有了凭据才能问 Provider 要动态模型表,存完 Key 立刻拉一次
-    await agentCommand("models.refresh").catch(() => {});
+    await runtime("models.refresh").catch(() => {});
     await load();
     await syncFerry();
   });
 
   const testProvider = () => act(async () => {
-    const r = await agentCommand("provider.test", { provider_id: sel.id });
+    const r = await runtime("provider.test", { provider_id: sel.id });
     setNotice(t("settings:providers.testOk", { model: r.model, ms: r.latency_ms }));
   });
 
   const addModel = payload => act(async () => {
-    await agentCommand("custom_model.add", { provider_id: sel.id, ...payload });
+    await runtime("custom_model.add", { provider_id: sel.id, ...payload });
     setAddingModel(false);
     await load();
     await syncFerry();
   });
 
   const deleteModel = modelId => act(async () => {
-    await agentCommand("custom_model.delete", { provider_id: sel.id, model_id: modelId });
+    await runtime("custom_model.delete", {
+      provider_id: sel.id,
+      model_id: modelId,
+    });
     await load();
     await syncFerry();
   });
 
   const logout = () => act(async () => {
-    await agentCommand("provider.logout", { provider_id: sel.id });
+    await runtime("provider.logout", { provider_id: sel.id });
     await load();
     await syncFerry();
   });

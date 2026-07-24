@@ -1,8 +1,14 @@
+import json
+from pathlib import Path
+
 from engine.contracts.engine_methods import (
     ENGINE_METHOD_POLICIES,
     PARALLEL_READ_METHOD_NAMES,
 )
 from engine.server.rpc import RPC_METHODS
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_engine_rpc_methods_exactly_match_generated_policy_contract():
@@ -62,3 +68,21 @@ def test_only_declared_pure_reads_can_use_parallel_dispatch():
         ENGINE_METHOD_POLICIES[method]["kind"] == "read"
         for method in PARALLEL_READ_METHOD_NAMES
     )
+
+
+def test_frontend_client_only_accepts_generated_engine_method_unions():
+    contract = json.loads(
+        (ROOT / "contracts/engine-methods.json").read_text()
+    )["methods"]
+    generated = (
+        ROOT / "app/src/api/contract/generated/engine-methods.ts"
+    ).read_text()
+    client = (ROOT / "app/src/api/transport/desktopClient.ts").read_text()
+
+    for method in contract:
+        if method["exposure"] in {"public", "trusted-ui"}:
+            assert json.dumps(method["name"]) in generated
+        else:
+            assert json.dumps(method["name"]) not in generated
+    assert "method: PublicEngineMethod" in client
+    assert "method: TrustedUiEngineMethod" in client

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { rpc } from "../../api/transport/rpc.js";
+import { engine } from "../../api/transport/desktopClient.js";
 import { isOpaqueSessionRef } from "../../api/contract/generated/session-ref.js";
 import { repoOf, sessionRef } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";
@@ -30,7 +30,7 @@ export function useSessionSelection({ sessions, onSelect, onFallbackLoad }) {
     const session = sessionsByKey[key] || sessions.find(item => sessionIdentity(item) === key);
     if (!session) return;
     setDetail({ id: key, data: detailCache.current.get(key) || null });
-    rpc("show", { tool: session.tool, ref: sessionRef(session) })
+    engine("show", { tool: session.tool, ref: sessionRef(session) })
       .then(data => {
         cacheDetail(key, data);
         setDetail(current => current?.id === key ? { ...current, data } : current);
@@ -57,7 +57,7 @@ export function useSessionSelection({ sessions, onSelect, onFallbackLoad }) {
       setSelectedId(key);
       onSelect();
       setDetail({ id: key, data: null });
-      rpc("show", { tool: action.tool, ref: action.ref })
+      engine("show", { tool: action.tool, ref: action.ref })
         .then(data => setDetail(current => current?.id === key ? { ...current, data } : current))
         .catch(error => setDetail(current => current?.id === key
           ? { ...current, error: error.message }
@@ -74,7 +74,10 @@ export function useSessionSelection({ sessions, onSelect, onFallbackLoad }) {
     if (!session || refreshing) return;
     setRefreshing(true);
     try {
-      const data = await rpc("show", { tool: session.tool, ref: sessionRef(session) });
+      const data = await engine("show", {
+        tool: session.tool,
+        ref: sessionRef(session),
+      });
       cacheDetail(selectedId, data);
       setDetail(current => current?.id === selectedId ? { id: selectedId, data } : current);
     } catch (error) {

@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const FERRY_EVENTS = Object.freeze({
+export const FERRY_EVENTS = {
   "auth.cancelled": {
     "source": "runtime",
     "forwardToUi": true
@@ -120,8 +120,9 @@ export const FERRY_EVENTS = Object.freeze({
     "source": "runtime",
     "forwardToUi": true
   }
-});
-export const FERRY_EVENT_TYPES = Object.freeze(Object.keys(FERRY_EVENTS));
-export const isFerryEventType = value =>
+} as const;
+export type FerryEventType = keyof typeof FERRY_EVENTS;
+export const FERRY_EVENT_TYPES = Object.keys(FERRY_EVENTS) as FerryEventType[];
+export const isFerryEventType = (value: unknown): value is FerryEventType =>
   typeof value === "string" &&
   Object.prototype.hasOwnProperty.call(FERRY_EVENTS, value);
