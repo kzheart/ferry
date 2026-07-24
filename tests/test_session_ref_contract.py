@@ -16,7 +16,7 @@ def test_session_ref_contract_is_generated_for_every_runtime():
         "allowed_suffix": "ascii-alphanumeric-underscore-hyphen",
     }
     for path in (
-        "app/src/api/contract/generated/session-ref.ts",
+        "app/src/shared/contracts/generated/session-ref.ts",
         "app/src-tauri/src/contracts/session_ref.rs",
         "engine/contracts/session_ref.py",
         "ferry-runtime/src/server/generated/session-ref.ts",

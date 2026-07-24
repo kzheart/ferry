@@ -1,7 +1,7 @@
 // 外观设置:主题 / 减少动效 / 语言
 // 落 localStorage,并以 data-* 属性作用到根节点;配色为黑白中性色,由 style.css 变量定义
 import { useEffect, useState } from "react";
-import { setWindowTheme } from "../../api/transport/desktopClient.js";
+import { setWindowTheme } from "../../platform/desktop/client.js";
 import { changeLanguage } from "../../i18n/index.js";
 
 const KEY = "ferry-settings";

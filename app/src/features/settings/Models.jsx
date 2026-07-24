@@ -1,7 +1,7 @@
 // 设置 · 模型:凭据配好后 Provider 的模型自动进入这里,勾选哪些出现在对话的模型选择器
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { runtime } from "../../api/transport/desktopClient.js";
+import { runtime } from "../../platform/desktop/client.js";
 import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 

@@ -1,14 +1,14 @@
 // 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { engine, openTerminal } from "../../api/transport/desktopClient.js";
+import { engine, openTerminal } from "../../platform/desktop/client.js";
 import { operations } from "../operations/operations.js";
-import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../components/ui/toolDisplay.js";
 import { sessionRef } from "../browser/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../components/ui/primitives.jsx";
-import { probeFailed, probeText } from "../../api/contract/events.js";
+import { probeFailed, probeText } from "../../shared/contracts/events.js";
 import MigrationSessionPreview from "./MigrationSessionPreview.jsx";
 import {
   matchingMigrationPlan,

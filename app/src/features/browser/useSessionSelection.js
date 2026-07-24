@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { engine } from "../../api/transport/desktopClient.js";
-import { isOpaqueSessionRef } from "../../api/contract/generated/session-ref.js";
+import { engine } from "../../platform/desktop/client.js";
+import { isOpaqueSessionRef } from "../../shared/contracts/generated/session-ref.js";
 import { repoOf, sessionRef } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";
 

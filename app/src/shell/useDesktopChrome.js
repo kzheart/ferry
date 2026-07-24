@@ -4,7 +4,7 @@ import {
   preloadWindow,
   startWindowDrag,
   toggleWindowMaximize,
-} from "../api/transport/desktopClient.js";
+} from "../platform/desktop/client.js";
 
 export function useDesktopChrome({ onOpenSettings, onToggleSidebar, onRescan }) {
   const menuActions = useRef({});

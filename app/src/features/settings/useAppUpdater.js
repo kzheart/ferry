@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkAppUpdate, closeAppUpdate, downloadAppUpdate, getAppVersion,
-  installAppUpdate, isNativeApp, relaunchApp } from "../../api/platform/appUpdater.js";
+  installAppUpdate, isNativeApp, relaunchApp } from "../../platform/desktop/updater.js";
 
 const INITIAL = {
   phase: "idle",

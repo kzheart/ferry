@@ -1,7 +1,7 @@
 // 设置 · 提供商:左侧是已添加的 Provider,右侧只配置凭据;配好凭据它的模型就自动进入「模型」页
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { runtime } from "../../api/transport/desktopClient.js";
+import { runtime } from "../../platform/desktop/client.js";
 import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 

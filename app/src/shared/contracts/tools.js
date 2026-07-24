@@ -1,6 +1,6 @@
 // 内置会话源是编译期契约，不通过 Engine manifest 动态水合。
 // 安装状态与扫描结果由 env/scan 查询提供，格式细节不泄漏给前端。
-import { engine } from "../transport/desktopClient.js";
+import { engine } from "../../platform/desktop/client.js";
 export { AGENTS } from "./generated/agents.js";
 import { AGENTS, AGENT_IDS } from "./generated/agents.js";
 

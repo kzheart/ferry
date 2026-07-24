@@ -75,9 +75,9 @@ def test_frontend_client_only_accepts_generated_engine_method_unions():
         (ROOT / "contracts/engine-methods.json").read_text()
     )["methods"]
     generated = (
-        ROOT / "app/src/api/contract/generated/engine-methods.ts"
+        ROOT / "app/src/shared/contracts/generated/engine-methods.ts"
     ).read_text()
-    client = (ROOT / "app/src/api/transport/desktopClient.ts").read_text()
+    client = (ROOT / "app/src/platform/desktop/client.ts").read_text()
 
     for method in contract:
         if method["exposure"] in {"public", "trusted-ui"}:

@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { renderEvents } from "../../api/contract/events.js";
-import { writeClipboardText } from "../../api/transport/desktopClient.js";
+import { renderEvents } from "../../shared/contracts/events.js";
+import { writeClipboardText } from "../../platform/desktop/client.js";
 
 // 居中模态(带遮罩)
 export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 }) {

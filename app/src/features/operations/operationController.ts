@@ -4,7 +4,7 @@ import {
   OPERATION_PLAN_ID_PREFIX,
   OPERATION_SUCCESS_STATUS,
   OPERATION_TERMINAL_STATUSES,
-} from "../../api/contract/generated/operations.js";
+} from "../../shared/contracts/generated/operations.js";
 
 export type OperationInput = {
   kind: OperationKind;

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
+import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { LOCALE_META } from "../../i18n/index.js";
 import { SetGlyph, TerminalIcon, ToolIcon } from "../../components/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { engine } from "../../api/transport/desktopClient.js";
-import { cacheGet, cacheSet } from "../../api/platform/idbCache.js";
+import { engine } from "../../platform/desktop/client.js";
+import { cacheGet, cacheSet } from "../../platform/desktop/cache.js";
 
 // 秒开:上次结果落 IndexedDB;main.jsx 挂载前先 preloadBrowserCache 预读(毫秒级),
 // 首帧即带旧数据渲染,引擎就绪后后台静默刷新

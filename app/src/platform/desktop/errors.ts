@@ -2,8 +2,8 @@ import i18n from "../../i18n/index.js";
 import {
   FERRY_ERROR_POLICIES,
   isFerryErrorCode,
-} from "../contract/generated/errors.js";
-import type { IpcError } from "../contract/generated/ipc.js";
+} from "../../shared/contracts/generated/errors.js";
+import type { IpcError } from "../../shared/contracts/generated/ipc.js";
 
 type ErrorParams = Record<string, unknown>;
 
