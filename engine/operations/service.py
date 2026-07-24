@@ -10,6 +10,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..application import agent_tools
+from ..application.ports import ApplicationPorts
 from ..domain.edit import AssistantReply
 from ..domain.errors import (
     AgentReferenceError,
@@ -18,12 +20,10 @@ from ..domain.errors import (
     LocatorStaleError,
     OperationUnsupportedError,
 )
-from . import agent_tools, verification as probe_mod
-from . import session_meta
-from .editing import apply_mutation, preview_mutation
-from .migration import MigrationService
-from .ports import ApplicationPorts
-from .session_deletion import SessionDeletionService
+from . import metadata, verification as probe_mod
+from .delete import SessionDeletionService
+from .edit import apply_mutation, preview_mutation
+from .migrate import MigrationService
 from ..infrastructure.state_db import StateDatabase
 
 
@@ -181,7 +181,7 @@ class OperationService:
         session_id = before_record.row.get("id")
         if not isinstance(session_id, str) or not session_id:
             raise AgentRequestError("会话缺少可用的 metadata id")
-        metadata_before = session_meta.list_all(self._ports).get(
+        metadata_before = metadata.list_all(self._ports).get(
             StateDatabase.metadata_key(tool, session_id), {}
         )
         operation_input["session_id"] = session_id
@@ -558,7 +558,7 @@ class OperationService:
             if not any(
                 op["op"] == "replace-assistant-reply" for op in native_ops
             ):
-                from .editing import apply
+                from .edit import apply
                 result, doc, snapshot = apply(
                     editor,
                     record.canonical_ref,
@@ -641,7 +641,7 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话标识在元数据计划生成后已变化，请重新计划"
             )
-        result = session_meta.compare_and_set_entry(
+        result = metadata.compare_and_set_entry(
             params["tool"], params["session_id"],
             params["metadata_before"],
             params["patch"],

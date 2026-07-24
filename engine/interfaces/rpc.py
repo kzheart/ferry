@@ -7,7 +7,6 @@ import os
 from ..application import agent_tools
 from ..application.engine import EngineApplication
 from ..composition import build_application
-from ..application.verification import ProbeTimeout
 from ..contracts.engine_methods import ENGINE_METHOD_NAMES
 from ..contracts.ipc import FERRY_IPC_PROTOCOL
 from ..domain.errors import (
@@ -18,6 +17,7 @@ from ..domain.errors import (
     UnknownMethodError,
     UnsupportedProtocolError,
 )
+from ..operations.verification import ProbeTimeout
 
 log = logging.getLogger(__name__)
 

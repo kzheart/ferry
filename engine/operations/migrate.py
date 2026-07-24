@@ -10,8 +10,9 @@ import time
 from pathlib import Path
 
 from ..adapters.base import narration
-from . import history, sessions, verification as probe_mod
-from .ports import ApplicationPorts
+from ..application import history, sessions
+from ..application.ports import ApplicationPorts
+from . import verification as probe_mod
 
 
 class MigrationService:

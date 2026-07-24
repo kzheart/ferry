@@ -11,15 +11,15 @@ import secrets
 import time
 from pathlib import Path
 
-from ...domain.errors import (
+from ..application.ports import ApplicationPorts
+from ..domain.errors import (
     ConcurrentModificationError,
     OrganizationProposalError,
     OrganizationProposalNotFoundError,
     OrganizationProposalStaleError,
 )
-from .. import session_meta
-from ...infrastructure.state_db import StateDatabase
-from ..ports import ApplicationPorts
+from ..infrastructure.state_db import StateDatabase
+from ..operations import metadata as metadata_store
 from . import summaries
 
 _PATCH_FIELDS = {
@@ -113,7 +113,7 @@ def _validated_patch(patch) -> dict:
     return result
 
 
-def _validated_target(target: dict, metadata: dict,
+def _validated_target(target: dict, current_metadata: dict,
                       ports: ApplicationPorts) -> dict:
     tool, session_id = target.get("tool"), target.get("id")
     fingerprint = target.get("fingerprint")
@@ -148,7 +148,7 @@ def _validated_target(target: dict, metadata: dict,
         "tool": tool,
         "id": session_id,
         "fingerprint": fingerprint,
-        "current": metadata.get(session_meta.key(tool, session_id), {}),
+        "current": current_metadata.get(metadata_store.key(tool, session_id), {}),
         "suggested": suggested,
         "sources": [{
             "segment_hash": source,
@@ -162,8 +162,11 @@ def propose(targets: list[dict], ports: ApplicationPorts) -> dict:
     """接收 runtime 的结构化整理结果；同一内容指纹只产生一个提案。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
-    metadata = session_meta.list_all(ports)
-    normalized = [_validated_target(target, metadata, ports) for target in targets]
+    current_metadata = metadata_store.list_all(ports)
+    normalized = [
+        _validated_target(target, current_metadata, ports)
+        for target in targets
+    ]
     identities = [(target["tool"], target["id"]) for target in normalized]
     if len(set(identities)) != len(identities):
         raise OrganizationProposalError("targets 不得重复")

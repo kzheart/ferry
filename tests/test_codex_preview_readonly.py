@@ -2,7 +2,7 @@ import json
 
 from engine.adapters.codex.editor import CodexBackend
 from engine.adapters.codex.native import CodexStore
-from engine.application import editing
+from engine.operations import edit as editing
 
 
 def _rollout(path, thread_id):
