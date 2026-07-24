@@ -31,6 +31,11 @@ import {
   type ToolRequestContext,
 } from "../tools/catalog.js";
 import {
+  RuntimeGateway,
+  type EngineHandler,
+  type ToolHandler,
+} from "../tools/gateway.js";
+import {
   WorkflowRun,
   type TaskGraph,
   type WorkflowRunEvent,
@@ -38,25 +43,6 @@ import {
 import { RuntimeEventBus } from "./event-bus.js";
 
 export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
-export type ToolHandler = (
-  name: FerryToolName,
-  args: Record<string, unknown>,
-  context: ToolRequestContext,
-) => Promise<unknown>;
-export type EngineHandler = (
-  method: OrganizationEngineMethod,
-  params: Record<string, unknown>,
-  workflowId: string,
-) => Promise<unknown>;
-
-// 新增工具时 TypeScript 会强制补齐策略；长任务不能被短读取工具的截止时间误伤。
-const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
-  session_search: 25_000,
-  session_read: 25_000,
-  usage: 25_000,
-  migrate: 125_000,
-  session_edit: 125_000,
-};
 
 export interface RuntimeOptions {
   store?: SessionStore;
@@ -74,29 +60,19 @@ export interface RuntimeOptions {
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
 }
 
-interface DeferredTool {
-  sessionId: string;
-  resolve(value: unknown): void;
-  reject(error: Error): void;
-  cleanup(): void;
-}
-
 export class AgentRuntime {
   store: SessionStore;
   readonly roleStore: RoleStore;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly events: RuntimeEventBus;
-  private readonly pendingTools = new Map<string, DeferredTool>();
   private readonly organizationRuns = new Map<string, Promise<unknown>>();
   private readonly backendFactory: BackendFactory;
   private readonly providerHost: ProviderHost | undefined;
-  private readonly toolHandler: ToolHandler | undefined;
-  private readonly engineHandler: EngineHandler | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
   private readonly providersService: ProviderService;
-  private readonly toolDeadlinesMs: Record<FerryToolName, number>;
+  private readonly gateway: RuntimeGateway;
 
   private constructor(
     options: RuntimeOptions,
@@ -108,12 +84,24 @@ export class AgentRuntime {
     this.now = options.now ?? (() => new Date());
     this.events = new RuntimeEventBus(this.now);
     this.idFactory = options.idFactory ?? randomUUID;
-    this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
-    this.toolHandler = options.toolHandler;
-    this.engineHandler = options.engineHandler;
     this.providerHost = options.providerHost;
     this.backendFactory = backendFactory;
     this.backendInfo = this.backendFactory(defaultSelection);
+    this.gateway = new RuntimeGateway({
+      newId: this.idFactory,
+      events: this.events,
+      emitToolRequest: (sessionId, runId, payload) =>
+        this.session(sessionId)
+          .emit("tool.request", payload, runId)
+          .then(() => undefined),
+      ...(options.toolHandler ? { toolHandler: options.toolHandler } : {}),
+      ...(options.engineHandler
+        ? { engineHandler: options.engineHandler }
+        : {}),
+      ...(options.toolDeadlinesMs
+        ? { toolDeadlinesMs: options.toolDeadlinesMs }
+        : {}),
+    });
     this.providersService = new ProviderService({
       ...(this.providerHost ? { host: this.providerHost } : {}),
       fallbackBackend: this.backendInfo,
@@ -144,7 +132,7 @@ export class AgentRuntime {
     const runtime = new AgentRuntime(options, backendFactory, defaultSelection);
     if (options.storeFactory) {
       runtime.store = options.storeFactory((method, params, sessionId) =>
-        runtime.invokeInternalEngine(method, params, sessionId),
+        runtime.gateway.invokeEngine(method, params, sessionId),
       );
     }
     if (!options.deferRestore) await runtime.restore();
@@ -602,63 +590,7 @@ export class AgentRuntime {
     args: Record<string, unknown>,
     context: ToolRequestContext,
   ) {
-    if (this.toolHandler) return this.toolHandler(name, args, context);
-    const requestId = this.newId();
-    let abortListener: (() => void) | undefined;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const result = new Promise<unknown>((resolve, reject) => {
-      const cleanup = () => {
-        if (abortListener)
-          context.signal?.removeEventListener("abort", abortListener);
-        if (timeout) clearTimeout(timeout);
-      };
-      const deferred: DeferredTool = {
-        sessionId: context.sessionId,
-        resolve,
-        reject,
-        cleanup,
-      };
-      this.pendingTools.set(requestId, deferred);
-      abortListener = () => {
-        this.pendingTools.delete(requestId);
-        cleanup();
-        reject(new Error("tool request aborted"));
-      };
-      if (context.signal?.aborted) {
-        abortListener();
-      } else {
-        context.signal?.addEventListener("abort", abortListener, {
-          once: true,
-        });
-        timeout = setTimeout(() => {
-          if (!this.pendingTools.delete(requestId)) return;
-          cleanup();
-          reject(new Error("tool gateway timed out"));
-        }, this.toolDeadlinesMs[name]);
-      }
-    });
-    if (!this.pendingTools.has(requestId)) return result;
-    try {
-      await this.session(context.sessionId).emit(
-        "tool.request",
-        {
-          request_id: requestId,
-          tool_call_id: context.toolCallId,
-          name,
-          args,
-          apply_policy: context.applyPolicy,
-        },
-        context.runId,
-      );
-    } catch (error) {
-      const pending = this.pendingTools.get(requestId);
-      this.pendingTools.delete(requestId);
-      pending?.cleanup();
-      pending?.reject(
-        error instanceof Error ? error : new Error("tool request failed"),
-      );
-    }
-    return result;
+    return this.gateway.invokeTool(name, args, context);
   }
 
   private async invokeOrganizationEngine(
@@ -666,48 +598,7 @@ export class AgentRuntime {
     params: Record<string, unknown>,
     workflowId: string,
   ) {
-    return this.invokeInternalEngine(method, params, workflowId);
-  }
-
-  private async invokeInternalEngine(
-    method:
-      | OrganizationEngineMethod
-      | import("../sessions/engine-store.js").RuntimeEngineMethod,
-    params: Record<string, unknown>,
-    sessionId: string,
-  ) {
-    if (this.engineHandler && !method.startsWith("runtime_sessions.")) {
-      return this.engineHandler(
-        method as OrganizationEngineMethod,
-        params,
-        sessionId,
-      );
-    }
-    const requestId = this.newId();
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const result = new Promise<unknown>((resolve, reject) => {
-      const cleanup = () => {
-        if (timeout) clearTimeout(timeout);
-      };
-      this.pendingTools.set(requestId, {
-        sessionId,
-        resolve,
-        reject,
-        cleanup,
-      });
-      timeout = setTimeout(() => {
-        if (!this.pendingTools.delete(requestId)) return;
-        cleanup();
-        reject(new Error("organization engine gateway timed out"));
-      }, 125_000);
-    });
-    this.events.emit(
-      "engine.request",
-      { request_id: requestId, method, params },
-      sessionId,
-      sessionId,
-    );
-    return result;
+    return this.gateway.invokeEngine(method, params, workflowId);
   }
 
   completeTool(
@@ -716,20 +607,7 @@ export class AgentRuntime {
     ok: boolean,
     value: unknown,
   ) {
-    const pending = this.pendingTools.get(requestId);
-    if (!pending || pending.sessionId !== sessionId) {
-      throw new ProtocolError("unknown_tool_request", "tool request not found");
-    }
-    this.pendingTools.delete(requestId);
-    pending.cleanup();
-    if (ok) pending.resolve(value);
-    else
-      pending.reject(
-        new Error(
-          typeof value === "string" ? value : "tool gateway rejected request",
-        ),
-      );
-    return { accepted: true };
+    return this.gateway.complete(requestId, sessionId, ok, value);
   }
 
   private session(id: string) {
