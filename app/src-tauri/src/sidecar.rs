@@ -76,7 +76,7 @@ fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), S
 fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut command = engine_command(resource_dir)?;
     command.arg("serve");
-    hide_console(&mut command);
+    crate::platform::configure_background_command(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -320,15 +320,6 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
             .join("; ")
     ))
 }
-
-#[cfg(target_os = "windows")]
-fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(0x0800_0000);
-}
-
-#[cfg(not(target_os = "windows"))]
-fn hide_console(_command: &mut Command) {}
 
 /// 应用启动即预热常驻引擎:PyInstaller 解压与 webview 启动并行,
 /// 首个前端 RPC 到达时引擎大概率已就绪。失败静默,错误会在首个真实 RPC 上重现。

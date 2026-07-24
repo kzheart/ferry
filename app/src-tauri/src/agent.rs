@@ -108,7 +108,7 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
         .join(".ferry");
     std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     command.env("FERRY_AGENT_DATA_DIR", data_dir);
-    hide_console(&mut command);
+    crate::platform::configure_background_command(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -759,15 +759,6 @@ fn agent_binary_command(resource_dir: &Path) -> Result<Command, String> {
             .join("; ")
     ))
 }
-
-#[cfg(target_os = "windows")]
-fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(0x0800_0000);
-}
-
-#[cfg(not(target_os = "windows"))]
-fn hide_console(_command: &mut Command) {}
 
 #[cfg(test)]
 mod tests {
