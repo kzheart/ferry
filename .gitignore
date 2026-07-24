@@ -10,3 +10,4 @@ docs/*
 !docs/architecture.md
 !docs/refactoring-roadmap.md
 scripts/demo/
+.idea
