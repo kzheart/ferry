@@ -13,7 +13,7 @@ from ..errors import (
 from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
 from ..sessions.safety import record_session_id, redact
-from ..storage.session_metadata import metadata_key
+from .metadata_store import metadata_key
 from . import metadata
 from .edit import EditOperationHandler
 from .migrate import MigrationService

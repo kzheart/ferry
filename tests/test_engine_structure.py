@@ -71,11 +71,14 @@ def test_business_capabilities_live_in_top_level_packages():
         "edit.py",
         "executor.py",
         "history.py",
+        "history_store.py",
         "metadata.py",
+        "metadata_store.py",
         "migrate.py",
         "planner.py",
         "plan_store.py",
         "service.py",
+        "snapshots.py",
         "state_store.py",
         "types.py",
         "validation.py",
@@ -148,8 +151,11 @@ def test_runtime_session_storage_is_its_own_sqlite_capability():
 
 def test_metadata_and_history_are_separate_sqlite_capabilities():
     database = (ENGINE / "storage/database.py").read_text()
-    assert (ENGINE / "storage/session_metadata.py").is_file()
-    assert (ENGINE / "storage/migration_history.py").is_file()
+    assert (ENGINE / "operations/metadata_store.py").is_file()
+    assert (ENGINE / "operations/history_store.py").is_file()
+    assert not (ENGINE / "storage/session_metadata.py").exists()
+    assert not (ENGINE / "storage/migration_history.py").exists()
+    assert not (ENGINE / "storage/snapshots.py").exists()
     assert "def list_session_metadata(" not in database
     assert "def append_migration_history(" not in database
     assert (ENGINE / "organization/summary_store.py").is_file()

@@ -9,12 +9,12 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from .migration_history import MigrationHistoryStore
+from ..operations.history_store import MigrationHistoryStore
+from ..operations.metadata_store import SessionMetadataStore
 from ..operations.state_store import OperationStore
 from ..organization.store import OrganizationStore
 from ..organization.summary_store import SessionSummaryStore
 from ..runtime.store import RuntimeSessionStore
-from .session_metadata import SessionMetadataStore
 
 
 SCHEMA_VERSION = 8

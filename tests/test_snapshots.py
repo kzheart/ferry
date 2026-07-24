@@ -9,7 +9,7 @@ import pytest
 
 from engine.operations import edit as editing
 from engine.operations.delete import SessionDeletionService
-from engine.storage.snapshots import backup_dir
+from engine.operations.snapshots import backup_dir
 
 
 def _turns(n):
