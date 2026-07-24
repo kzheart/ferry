@@ -5,7 +5,7 @@ import subprocess
 
 from ...system import executables
 from ..base.lifecycle import BaseLifecycle
-from . import session as opencode_session
+from . import reader as opencode_reader
 
 
 class OpenCodeLifecycle(BaseLifecycle):
@@ -16,7 +16,7 @@ class OpenCodeLifecycle(BaseLifecycle):
 
     def cleanup(self, session_id, _dest):
         try:
-            tree = opencode_session.read(session_id)
+            tree = opencode_reader.read(session_id)
             ids = [node.source_id for node in reversed(list(tree.walk()))]
         except Exception:
             ids = [session_id]

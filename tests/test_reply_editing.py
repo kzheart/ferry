@@ -12,7 +12,7 @@ from engine.adapters.codex.editor import CodexBackend
 from engine.adapters.codex.reader import read as read_codex
 from engine.adapters.opencode.editor import OpenCodeBackend
 from engine.adapters.opencode.probe import OpenCodeVerifier
-from engine.adapters.opencode.session import _parse_session
+from engine.adapters.opencode.reader import parse_session
 from engine.operations.edit import apply_mutation
 from engine.sessions.read import session_json
 from engine.operations.types import AssistantReply
@@ -78,7 +78,7 @@ def _roundtrip(tool, data, tmp_path):
         path = tmp_path / "codex.jsonl"
         path.write_text("\n".join(json.dumps(row) for row in data) + "\n")
         return read_codex(str(path), sessions_dir=tmp_path)
-    return _parse_session(data)[0]
+    return parse_session(data)[0]
 
 
 def _items(session):
@@ -294,11 +294,11 @@ def test_opencode_probe_clones_authored_result(monkeypatch):
         lambda sid, cwd, model: {"status": "passed", "code": None,
                                  "params": {}, "diagnostic": {}})
     monkeypatch.setattr(
-        "engine.adapters.opencode.probe.rw_opencode.write",
+        "engine.adapters.opencode.probe.opencode_writer.write",
         lambda authored_tree, **kwargs: ("probe-shadow", "unused"),
     )
     monkeypatch.setattr(
-        "engine.adapters.opencode.probe.rw_opencode.read",
+        "engine.adapters.opencode.probe.opencode_reader.read",
         lambda _sid: shadow_tree,
     )
     monkeypatch.setattr(

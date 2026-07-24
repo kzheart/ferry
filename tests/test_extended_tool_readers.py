@@ -1,7 +1,7 @@
 import json
 
 from engine.adapters.claude import reader as claude_reader
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import reader as opencode_reader
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.tool_ops import CanonicalOp
 
@@ -83,7 +83,7 @@ def test_opencode_reader_normalizes_patch_search_web_and_opaque_tools():
     }
 
     patch, grep, search, opaque = _tools(
-        opencode_session._parse_session(payload)[0])
+        opencode_reader.parse_session(payload)[0])
 
     assert patch.op == CanonicalOp.FS_PATCH
     assert patch.input["operations"] == [
@@ -99,7 +99,7 @@ def test_opencode_reader_normalizes_patch_search_web_and_opaque_tools():
 
 
 def test_opencode_reader_does_not_restore_removed_native_field_aliases():
-    canonical = opencode_session._canonical_tool_input
+    canonical = opencode_reader._canonical_tool_input
 
     assert canonical("bash", {"command": "pwd", "timeout_ms": 10,
                                "background": True})[1] == {"command": "pwd"}
@@ -172,7 +172,7 @@ def test_opencode_repeated_task_calls_remain_distinct_from_one_tree_child(
         lambda _connection, session_id: exports.get(session_id),
     )
 
-    session = opencode_session._read("root")
+    session = opencode_reader._read("root")
 
     assert [child.source_id for child in session.children] == ["child"]
     assert [edge.source_call_id for edge in session.agent_edges] == [

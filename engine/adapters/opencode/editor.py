@@ -1,6 +1,7 @@
 """OpenCode 会话编辑后端：经官方 HTTP API 原地更新。"""
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +10,7 @@ from ...errors import ConcurrentModificationError, OperationUnsupportedError
 from ...storage.snapshots import snapshot_payload
 from ..base.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
-from . import session as rw_opencode
+from . import reader as opencode_reader
 from . import store as opencode_store
 from .codec import CODEC
 
@@ -34,12 +35,12 @@ class OpenCodeBackend(EditBackend):
 
     def load(self, ref):
         payload = opencode_store.load_native_payload(ref)
-        tree = rw_opencode.read(ref)
+        tree = opencode_reader.read(ref)
         return self._document(ref, payload, tree)
 
     def load_preview(self, ref):
         payload = opencode_store.load_native_payload(ref)
-        tree = rw_opencode.read_preview(ref)
+        tree = opencode_reader.read_preview(ref)
         return self._document(ref, payload, tree)
 
     def _document(self, ref, payload, tree):
@@ -48,9 +49,9 @@ class OpenCodeBackend(EditBackend):
             tool=self.name,
             ref=ref,
             handle=ref,
-            data=rw_opencode._clone(payload),
+            data=copy.deepcopy(payload),
             revision=hash_bytes(raw),
-            original=rw_opencode._clone(payload),
+            original=copy.deepcopy(payload),
             tree=tree,
         )
 

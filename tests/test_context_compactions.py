@@ -2,7 +2,7 @@ import json
 
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.codex import reader as codex_reader
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import reader as opencode_reader
 from engine.sessions.read import session_json
 
 
@@ -41,7 +41,7 @@ def test_opencode_exposes_compaction_without_repeating_summary():
         ],
     }
 
-    session, _ = opencode_session._parse_session(payload)
+    session, _ = opencode_reader.parse_session(payload)
     dto = session_json(session)
 
     assert len(session.messages) == 4
