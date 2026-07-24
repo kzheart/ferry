@@ -40,6 +40,7 @@ def test_business_capabilities_live_in_top_level_packages():
         "__init__.py",
         "delete.py",
         "edit.py",
+        "executor.py",
         "history.py",
         "metadata.py",
         "migrate.py",
@@ -67,8 +68,11 @@ def test_business_capabilities_live_in_top_level_packages():
     assert "def _validate_migration_input" not in operation_service
     assert "def validate_edit_input" in (operations / "validation.py").read_text()
     assert "class OperationPlanner" in (operations / "planner.py").read_text()
+    assert "class OperationExecutor" in (operations / "executor.py").read_text()
     assert "def _plan_edit" not in operation_service
     assert "def _plan_migration" not in operation_service
+    assert "def _apply_edit" not in operation_service
+    assert "def _apply_migration" not in operation_service
     assert "def _resolve_ops" not in operation_service
     assert "def _preview_edit" not in operation_service
     assert "class EditOperationHandler" in (operations / "edit.py").read_text()
