@@ -89,6 +89,21 @@ export default function App() {
     clearSelection,
     discardCachedDetail,
   } = selection;
+  const cur = selId ? byKey[selId] : null;
+  const editing = useSessionEditing({ current: cur,
+    runtimeProbe: !!settings.runtimeProbe, doScan,
+    onInplaceApplied: () => select(selId) });
+  const { ops, dirtyOps, setOps, diff, setDiff,
+    confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
+    resetSelection, addOp, startReplyEdit,
+    removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
+  selectionReset.current = resetSelection;
+  const {
+    metadata: metaMap,
+    metaFor,
+    reloadMetadata,
+    updateMetadata: setMetaFor,
+  } = useSessionMetadata({ setToast, t });
   const migratedSessionKeys = useMemo(
     () => new Set(historyRows.map(history => sessionIdentity({
       tool: history.src,
@@ -144,22 +159,6 @@ export default function App() {
     tokens: histTokens,
     clear: clearHistF,
   } = history;
-  const cur = selId ? byKey[selId] : null;
-  const editing = useSessionEditing({ current: cur,
-    runtimeProbe: !!settings.runtimeProbe, doScan,
-    onInplaceApplied: () => select(selId) });
-
-  const { ops, dirtyOps, setOps, diff, setDiff,
-    confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    resetSelection, addOp, startReplyEdit,
-    removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
-  selectionReset.current = resetSelection;
-  const {
-    metadata: metaMap,
-    metaFor,
-    reloadMetadata,
-    updateMetadata: setMetaFor,
-  } = useSessionMetadata({ setToast, t });
   const { deleteSession, deleteSessions } = useSessionDeletion({
     clearSelection,
     discardCachedDetail,
