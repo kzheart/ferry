@@ -10,7 +10,7 @@ from ..errors import (
     AgentRequestError,
     ConcurrentModificationError,
 )
-from ..sessions import catalog as agent_tools
+from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
 from . import metadata, verification as probe_mod
 from .delete import SessionDeletionService
@@ -83,7 +83,7 @@ class OperationExecutor:
             raise ConcurrentModificationError(
                 "会话在迁移计划生成后已变化，请重新计划"
             )
-        session = agent_tools.read_indexed_session(self._index, record)
+        session = agent_read.read_indexed_session(self._index, record)
         result = self._migration.apply(
             params["source_tool"],
             params["target_tool"],
