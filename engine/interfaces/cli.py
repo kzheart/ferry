@@ -6,7 +6,7 @@ import sys
 import threading
 
 from ..application.engine import EngineApplication
-from ..application.ports import current
+from ..composition import build_application
 from ..contracts.engine_methods import PARALLEL_READ_METHOD_NAMES
 from .rpc import rpc
 
@@ -86,7 +86,7 @@ def main(argv=None):
         # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应
         serve()
         return
-    application = EngineApplication(current())
+    application = build_application()
     if cmd == "health":
         result = application.health()
     elif cmd in ("version", "--version"):

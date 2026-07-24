@@ -14,7 +14,7 @@ from pathlib import Path
 from ..domain.errors import AgentReferenceError, AgentRequestError, LocatorStaleError
 from ..domain.model import tool_result_text
 from ..domain.usage import add_tokens, empty_tokens
-from .ports import ApplicationPorts, current
+from .ports import ApplicationPorts
 
 MAX_SEARCH_RESULTS = 50
 MAX_CONTENT_SEARCH_RESULTS = 50
@@ -315,15 +315,6 @@ class AgentSessionIndex:
         return native.canonical_ref, None, False, fingerprint
 
 
-_INDEX = AgentSessionIndex(current())
-
-
-def reset_index(ports: ApplicationPorts | None = None) -> None:
-    """仅供 composition 切换和测试隔离。"""
-    global _INDEX
-    _INDEX = AgentSessionIndex(ports or current())
-
-
 def _string_set(value, name: str, maximum: int, item_size: int) -> set[str]:
     if value is None:
         return set()
@@ -390,13 +381,14 @@ def _validate_ops(ops) -> None:
             "同一消息不能在一次编辑中重复改写", {"field": "ops.locator"})
 
 
-def resolve_edit_ops(record: IndexedSession, ops: list[dict]) -> list[dict]:
+def resolve_edit_ops(index: AgentSessionIndex, record: IndexedSession,
+                     ops: list[dict]) -> list[dict]:
     """把 Agent 可见的 fml_ 定位符换成适配器原生定位符。"""
     resolved = []
     for op in ops:
         item = dict(op)
         if item.get("op") == "rewrite":
-            message = _INDEX.resolve_message_locator(record, item["locator"])
+            message = index.resolve_message_locator(record, item["locator"])
             if not message.editable:
                 raise AgentRequestError(
                     "目标消息不支持文本改写",
@@ -459,7 +451,7 @@ def _finalize_dto(result: dict) -> dict:
 
 
 def search_sessions(query: str = "", agents=None, projects=None, time_range=None,
-                    limit: int = 20) -> dict:
+                    limit: int = 20, *, index: AgentSessionIndex) -> dict:
     limit = _bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
     if not isinstance(query, str) or len(query) > 500:
         raise AgentRequestError("query 必须是不超过 500 字符的字符串")
@@ -469,7 +461,7 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
     start, end = _validated_interval(time_range)
     needle = query.strip().casefold()
     matches = []
-    for record in _INDEX.refresh():
+    for record in index.refresh():
         row = record.row
         project = _safe_project(row.get("dir"))
         updated = int(row.get("updated") or 0)
@@ -559,11 +551,11 @@ def _validate_read_scope(record: IndexedSession) -> None:
             raise AgentReferenceError("会话子树超出 Agent 会话根目录")
 
 
-def _read_record(record: IndexedSession):
+def _read_record(index: AgentSessionIndex, record: IndexedSession):
     _validate_read_scope(record)
-    browser = _INDEX.ports.adapter(record.tool).browser
+    browser = index.ports.adapter(record.tool).browser
     session = getattr(browser, "read_agent", browser.read)(record.canonical_ref)
-    _INDEX.resolve(record.tool, record.opaque_ref)
+    index.resolve(record.tool, record.opaque_ref)
     _validate_read_scope(record)
     return session
 
@@ -601,24 +593,25 @@ def _message_is_rewritable(_tool: str, message) -> bool:
 def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                         limit: int = 20,
                         include_tool_outputs: bool = False,
-                        max_bytes: int = DEFAULT_CONTEXT_BYTES) -> dict:
-    record = _INDEX.resolve(tool, opaque_ref)
+                        max_bytes: int = DEFAULT_CONTEXT_BYTES, *,
+                        index: AgentSessionIndex) -> dict:
+    record = index.resolve(tool, opaque_ref)
     first = _bounded_int(from_message, 1, 1, 1_000_000, "from_message")
     count = _bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")
     budget = _bounded_int(max_bytes, DEFAULT_CONTEXT_BYTES, 1024,
                           MAX_CONTEXT_BYTES, "max_bytes")
     if not isinstance(include_tool_outputs, bool):
         raise AgentRequestError("include_tool_outputs 必须是 boolean")
-    session = _read_record(record)
+    session = _read_record(index, record)
     total_turns = sum(message.role == "user" for message in session.messages)
     messages, current_turn, remaining = [], 0, budget
     omitted_blocks = omitted_bytes = 0
     exhausted = False
     selected_until = min(len(session.messages), first - 1 + count)
-    for index, message in enumerate(session.messages):
+    for message_index, message in enumerate(session.messages):
         if message.role == "user":
             current_turn += 1
-        message_number = index + 1
+        message_number = message_index + 1
         if message_number < first or message_number > selected_until:
             continue
         blocks = []
@@ -664,8 +657,8 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
         item = {"message": message_number, "turn": current_turn,
                 "role": message.role, "blocks": blocks, "editable": editable,
                 "complete": not message_clipped}
-        item["locator"] = _INDEX.issue_message_locator(
-            record, _message_native_locator(message, index), message.role, editable)
+        item["locator"] = index.issue_message_locator(
+            record, _message_native_locator(message, message_index), message.role, editable)
         messages.append(item)
         if exhausted:
             break
@@ -694,9 +687,10 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
 
 
 def search_session_content(tool: str, opaque_ref: str, terms,
-                           roles=None, limit: int = 20) -> dict:
+                           roles=None, limit: int = 20, *,
+                           index: AgentSessionIndex) -> dict:
     """在单个会话的可见文本中检索，返回可直接用于改写的消息引用。"""
-    record = _INDEX.resolve(tool, opaque_ref)
+    record = index.resolve(tool, opaque_ref)
     wanted = _string_set(terms, "terms", 20, 100)
     if not wanted:
         raise AgentRequestError("terms 至少包含一个检索词", {"field": "terms"})
@@ -707,13 +701,13 @@ def search_session_content(tool: str, opaque_ref: str, terms,
     maximum = _bounded_int(
         limit, 20, 1, MAX_CONTENT_SEARCH_RESULTS, "limit")
     normalized = [(term, term.casefold()) for term in sorted(wanted)]
-    session = _read_record(record)
+    session = _read_record(index, record)
     total_turns = sum(message.role == "user" for message in session.messages)
     matches = []
     current_turn = 0
     total_matches = 0
     byte_limited = False
-    for index, message in enumerate(session.messages):
+    for message_index, message in enumerate(session.messages):
         if message.role == "user":
             current_turn += 1
         if allowed_roles and message.role not in allowed_roles:
@@ -735,12 +729,12 @@ def search_session_content(tool: str, opaque_ref: str, terms,
             ("…" if end < len(text) else "")
         editable = _message_is_rewritable(tool, message)
         item = {
-            "message": index + 1,
+                "message": message_index + 1,
             "turn": current_turn,
             "role": message.role,
             "editable": editable,
-            "locator": _INDEX.issue_message_locator(
-                record, _message_native_locator(message, index), message.role, editable),
+            "locator": index.issue_message_locator(
+                record, _message_native_locator(message, message_index), message.role, editable),
             "matched_terms": hit_terms,
             "snippet": _redact(snippet, 900),
             "complete": start == 0 and end == len(text),
@@ -774,22 +768,26 @@ def search_session_content(tool: str, opaque_ref: str, terms,
 def session_read(tool: str, ref: str | None = None, terms=None, roles=None,
                  from_message: int = 1, limit: int = 20,
                  include_tool_outputs: bool = False,
-                 max_bytes: int = DEFAULT_CONTEXT_BYTES) -> dict:
+                 max_bytes: int = DEFAULT_CONTEXT_BYTES, *,
+                 index: AgentSessionIndex) -> dict:
     """读取 Engine 索引会话；只接受 scan/search 签发的 opaque ref。"""
     if not isinstance(ref, str) or not ref:
         raise AgentRequestError("必须提供 Engine 签发的 ref", {"field": "ref"})
     if terms is not None:
-        result = search_session_content(tool, ref, terms, roles=roles, limit=limit)
+        result = search_session_content(
+            tool, ref, terms, roles=roles, limit=limit, index=index)
         result["mode"] = "search"
     else:
         result = get_session_context(
             tool, ref, from_message=from_message, limit=limit,
-            include_tool_outputs=include_tool_outputs, max_bytes=max_bytes)
+            include_tool_outputs=include_tool_outputs, max_bytes=max_bytes,
+            index=index)
         result["mode"] = "context"
     return result
 
 
-def get_usage(agents=None, projects=None, time_range=None) -> dict:
+def get_usage(agents=None, projects=None, time_range=None, *,
+              index: AgentSessionIndex) -> dict:
     allowed_agents = _string_set(agents, "agents", 8, 32)
     allowed_projects = {
         item.casefold() for item in _string_set(projects, "projects", 20, 256)}
@@ -797,7 +795,7 @@ def get_usage(agents=None, projects=None, time_range=None) -> dict:
     total = empty_tokens()
     by_agent: dict[str, dict] = {}
     sessions = 0
-    for record in _INDEX.refresh():
+    for record in index.refresh():
         row, updated = record.row, int(record.row.get("updated") or 0)
         project = _safe_project(row.get("dir"))
         if allowed_agents and record.tool not in allowed_agents:
@@ -829,16 +827,17 @@ def get_usage(agents=None, projects=None, time_range=None) -> dict:
 
 
 def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
-                      max_turn: int | None = None) -> dict:
-    record = _INDEX.resolve(source_tool, opaque_ref)
-    if target_tool not in _INDEX.ports.adapters():
+                      max_turn: int | None = None, *,
+                      index: AgentSessionIndex) -> dict:
+    record = index.resolve(source_tool, opaque_ref)
+    if target_tool not in index.ports.adapters():
         raise AgentRequestError("未知目标 Agent", {"target_tool": target_tool})
-    session = _read_record(record)
+    session = _read_record(index, record)
     if max_turn is not None:
         max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
         from .migration import _truncate_rounds
         _truncate_rounds(session, max_turn)
-    target = _INDEX.ports.adapter(target_tool).migration_target
+    target = index.ports.adapter(target_tool).migration_target
     loss = target.plan(session)
     from .migration import _migration_counts
     tree_count, message_count = _migration_counts(session)
@@ -854,21 +853,22 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
             "topology": topology, "max_turn": max_turn})
 
 
-def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
-    record = _INDEX.resolve(tool, opaque_ref)
-    plugin = _INDEX.ports.adapter(tool)
+def preview_edit(tool: str, opaque_ref: str, *, ops,
+                 index: AgentSessionIndex) -> dict:
+    record = index.resolve(tool, opaque_ref)
+    plugin = index.ports.adapter(tool)
     _validate_ops(ops)
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
     from .editing import preview
     editor = plugin.editor
-    native_ops = resolve_edit_ops(record, ops)
+    native_ops = resolve_edit_ops(index, record, ops)
     try:
         result = preview(editor, record.canonical_ref, native_ops,
                          loader=getattr(editor, "load_preview", None))
     except LocatorStaleError as error:
         raise _public_locator_error(ops) from error
-    _INDEX.resolve(tool, opaque_ref)
+    index.resolve(tool, opaque_ref)
     return _finalize_dto({"tool": tool, "ref": opaque_ref, "mode": "edit",
             "session_id": _record_session_id(record),
             "revision": _redact(str(result["revision"]), 256),
