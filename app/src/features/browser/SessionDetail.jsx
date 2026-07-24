@@ -1,7 +1,8 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME, resumeDescriptor, TOOLS } from "../../api/contract/tools.js";
+import { supportsAssistantReplyEditing, supportsSessionEditing,
+  TOOL_NAME, resumeDescriptor, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "../../domain/sessions/sessionModel.js";
 import { rpc, writeClipboardText } from "../../api/transport/rpc.js";
@@ -520,7 +521,7 @@ function PendingBar({ ops, removeOp, onOpenDiff, onApply, applying, invalid, onD
 export default memo(function SessionDetail({ meta, data, error,
   scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
   startReplyEdit, replyEditError, onOpenDiff, onApply, applying, onDiscardAll,
-  onOpenMigrate, onRefresh, refreshing, onResume, editCaps,
+  onOpenMigrate, onRefresh, refreshing, onResume,
   navigationTarget }) {
   const { t: tt } = useTranslation();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
@@ -528,9 +529,8 @@ export default memo(function SessionDetail({ meta, data, error,
     () => toTimeline(rounds, data?.context_compactions),
     [rounds, data?.context_compactions],
   );
-  const canEdit = !!editCaps?.inplace;
-  const canEditReply = editCaps?.operation_modes
-    ?.["replace-assistant-reply"]?.includes("inplace") === true;
+  const canEdit = supportsSessionEditing(meta.tool);
+  const canEditReply = supportsAssistantReplyEditing(meta.tool);
   const canMigrate = TOOLS.includes(meta.tool);
   const [copied, setCopied] = useState(false);
   const [resuming, setResuming] = useState(false);

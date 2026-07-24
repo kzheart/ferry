@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { operationApplyAndWait, operationPlan, rpc } from "../../api/transport/rpc.js";
+import { operationApplyAndWait, operationPlan } from "../../api/transport/rpc.js";
+import { supportsAssistantReplyEditing } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
@@ -13,10 +14,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const [toast, setToast] = useState(null);
   const [applying, setApplying] = useState(false);
   const [scope, setScope] = useState(null);
-  const [editCaps, setEditCaps] = useState(null);
   const [plannedEdit, setPlannedEdit] = useState(null);
-  const capabilityRequest = useRef(0);
-  const capsCache = useRef({});   // tool -> edit capabilities
 
   const invalidateEditPlan = () => {
     setPlannedEdit(null);
@@ -29,23 +27,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
   const resetSelection = () => {
     setScope(null);
     replaceOps([]);
-  };
-  const loadCapabilities = tool => {
-    const request = ++capabilityRequest.current;
-    const cached = capsCache.current[tool];
-    if (cached) {
-      setEditCaps(cached);
-      return;
-    }
-    setEditCaps(null);
-    rpc("edit_capabilities", { tool }).then(caps => {
-      capsCache.current[tool] = caps;
-      if (request !== capabilityRequest.current) return;
-      setEditCaps(caps);
-    }).catch(() => {
-      if (request === capabilityRequest.current)
-        setEditCaps({ operations: [], inplace: false, operation_modes: {} });
-    });
   };
   const addOp = (type, round) => {
     let op;
@@ -82,8 +63,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     } : {}) });
   const startReplyEdit = turn => {
     if (!turn || ops.length) return;
-    const allowed = editCaps?.operation_modes?.["replace-assistant-reply"] || [];
-    if (!allowed.includes("inplace")) return;
+    if (!supportsAssistantReplyEditing(current?.tool)) return;
     invalidateEditPlan();
     const source = turn.assistant_reply?.items || [];
     const items = source.length ? source.map(draftItem) : [draftItem({ kind: "text", text: "" })];
@@ -215,6 +195,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
 
   return { ops, dirtyOps, setOps: replaceOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
+    resetSelection, addOp, startReplyEdit,
     removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit };
 }

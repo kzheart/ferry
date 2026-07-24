@@ -37,7 +37,6 @@ RPC_METHODS = {
     "pricing": lambda p: application().pricing(force=p.get("force", False)),
     "show": lambda p: application().show_session(p["tool"], p["ref"]),
     "session_asset": lambda p: application().session_asset(p["tool"], p["ref"], p["asset_id"]),
-    "edit_capabilities": lambda p: application().edit_capabilities(p["tool"]),
     "session_meta_list": lambda p: application().list_session_metadata(),
     "session_backbone": lambda p: application().session_backbone(p["tool"], p["ref"]),
     "session_summaries_set": lambda p: application().set_session_summaries(

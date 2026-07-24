@@ -75,11 +75,6 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
         }),
-        "edit_capabilities" => Some(EngineMethodPolicy {
-            is_public: true,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::SafeRead,
-        }),
         "session_meta_list" => Some(EngineMethodPolicy {
             is_public: true,
             timeout: TimeoutClass::Normal,
