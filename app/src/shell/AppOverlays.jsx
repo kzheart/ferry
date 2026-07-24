@@ -12,10 +12,10 @@ import {
 } from "../modules/migration/HistoryOverlays.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
+import { Guide } from "../modules/onboarding/Guide.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
 import {
   ContextMenu,
-  Guide,
   PromptBox,
   SearchPalette,
   Toast,

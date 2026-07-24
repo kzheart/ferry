@@ -33,6 +33,7 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/browser/BrowserOverlays.jsx").is_file()
     assert (FRONTEND / "modules/editing/EditOverlays.jsx").is_file()
     assert (FRONTEND / "modules/migration/HistoryOverlays.jsx").is_file()
+    assert (FRONTEND / "modules/onboarding/Guide.jsx").is_file()
     assert (FRONTEND / "shell/AppOverlays.jsx").is_file()
     assert (FRONTEND / "shell/AppOverlayController.jsx").is_file()
     app = (FRONTEND / "shell/AppController.jsx").read_text()
