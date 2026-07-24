@@ -1,7 +1,7 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME, resumeDescriptor, toolHasCapability } from "../../api/contract/tools.js";
+import { TOOL_NAME, resumeDescriptor, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT, fmtSize } from "../../domain/tools/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "../../domain/sessions/sessionModel.js";
 import { rpc, writeClipboardText } from "../../api/transport/rpc.js";
@@ -531,7 +531,7 @@ export default memo(function SessionDetail({ meta, data, error,
   const canEdit = !!editCaps?.inplace;
   const canEditReply = editCaps?.operation_modes
     ?.["replace-assistant-reply"]?.includes("inplace") === true;
-  const canMigrate = toolHasCapability(meta.tool, "migrate-source");
+  const canMigrate = TOOLS.includes(meta.tool);
   const [copied, setCopied] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
