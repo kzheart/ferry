@@ -4,28 +4,28 @@ import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, writeClipboardText }
   from "../platform/desktop/client.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js";
-import { fmtTime, repoOf, sessionRef } from "../features/browser/sessionModel.js";
+import { fmtTime, repoOf, sessionRef } from "../modules/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
-  from "../features/browser/sessionAttachment.js";
+  from "../modules/browser/sessionAttachment.js";
 import { SidebarIcon } from "../components/ui/icons.jsx";
-import { SessionPeekSheet } from "../features/browser/SessionPeekSheet.jsx";
-import MigrateSheet from "../features/migration/MigrateSheet.jsx";
-import SettingsPage from "../features/settings/Settings.jsx";
+import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
+import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
+import SettingsPage from "../modules/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
   HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
   SessionDeleteConfirm, Toast } from "../components/ui/Overlays.jsx";
-import { useAskFerry } from "../features/askferry/useAskFerry.js";
-import { useSettings } from "../features/settings/useSettings.js";
-import { useAppUpdater } from "../features/settings/useAppUpdater.js";
-import { useBrowserData } from "../features/browser/useBrowserData.js";
-import { useSessionEditing } from "../features/editing/useSessionEditing.js";
-import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
-import { useLibraryResourcePaneActions } from "../features/browser/useLibraryResourcePaneActions.js";
-import { useSessionDeletion } from "../features/browser/useSessionDeletion.js";
-import { useSessionMetadata } from "../features/browser/useSessionMetadata.js";
-import { useSessionSelection } from "../features/browser/useSessionSelection.js";
-import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
-import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
+import { useAskFerry } from "../modules/askferry/useAskFerry.js";
+import { useSettings } from "../modules/settings/useSettings.js";
+import { useAppUpdater } from "../modules/settings/useAppUpdater.js";
+import { useBrowserData } from "../modules/browser/useBrowserData.js";
+import { useSessionEditing } from "../modules/editing/useSessionEditing.js";
+import { useLibraryResourcePane } from "../modules/browser/useLibraryResourcePane.js";
+import { useLibraryResourcePaneActions } from "../modules/browser/useLibraryResourcePaneActions.js";
+import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
+import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
+import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
+import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
+import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../shell/useDesktopChrome.js";
 import { AppRail } from "../shell/AppRail.jsx";
 import { AppShell } from "../shell/AppShell.jsx";
