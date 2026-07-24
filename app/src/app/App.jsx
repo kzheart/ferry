@@ -1,5 +1,5 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, rpc,
   operationApplyAndWait, operationPlan,
@@ -31,21 +31,7 @@ import { AppRail } from "../features/shell/AppRail.jsx";
 import { AppShell } from "../features/shell/AppShell.jsx";
 import { WorkspaceRouter } from "../features/shell/WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "../features/shell/ResourcePaneHost.jsx";
-
-const RAIL_ORDER_KEY = "ferry-rail-order";
-const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
-
-function loadRailOrder() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(RAIL_ORDER_KEY) || "null");
-    if (!Array.isArray(saved)) return [...DEFAULT_RAIL_ORDER];
-    const known = new Set(DEFAULT_RAIL_ORDER);
-    const order = saved.filter((key, index) => known.has(key) && saved.indexOf(key) === index);
-    return [...order, ...DEFAULT_RAIL_ORDER.filter(key => !order.includes(key))];
-  } catch {
-    return [...DEFAULT_RAIL_ORDER];
-  }
-}
+import { useRailNavigation } from "../features/shell/useRailNavigation.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -90,13 +76,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
-  const [railTip, setRailTip] = useState(null);  // {label, top}
-  const [railOrder, setRailOrder] = useState(loadRailOrder);
-  const [railDragging, setRailDragging] = useState(null);
-  const [railDrop, setRailDrop] = useState(null); // {key, position}
-  const tipTimer = useRef(null);
-  const railPointer = useRef(null);
-  const suppressRailClick = useRef(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
 
@@ -461,73 +440,6 @@ export default function App() {
     setMig(null); setGuideStep(1);
   };
 
-  // ----- 导航轨悬停提示(延迟 450ms,与原型一致) -----
-  const railEnter = (label, e) => {
-    const el = e.currentTarget.getBoundingClientRect();
-    const root = document.querySelector("[data-ferry-win]");
-    if (!root) return;
-    const top = el.top - root.getBoundingClientRect().top + el.height / 2;
-    clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => setRailTip({ label, top }), 450);
-  };
-  const railLeave = () => { clearTimeout(tipTimer.current); setRailTip(null); };
-  useEffect(() => () => clearTimeout(tipTimer.current), []);
-
-  const railDropAt = (x, y) => {
-    const target = document.elementFromPoint(x, y)?.closest?.("[data-rail-key]");
-    const key = target?.dataset.railKey;
-    if (!DEFAULT_RAIL_ORDER.includes(key)) return null;
-    const rect = target.getBoundingClientRect();
-    return { key, position: y < rect.top + rect.height / 2 ? "before" : "after" };
-  };
-  const reorderRail = useCallback((source, target, position) => {
-    if (!source || !target || source === target) return;
-    setRailOrder(order => {
-      const next = order.filter(key => key !== source);
-      const index = next.indexOf(target) + (position === "after" ? 1 : 0);
-      next.splice(index, 0, source);
-      try { localStorage.setItem(RAIL_ORDER_KEY, JSON.stringify(next)); } catch { /* 私密模式等存储不可用时仅本次生效 */ }
-      return next;
-    });
-  }, []);
-  const endRailDrag = e => {
-    const drag = railPointer.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    if (drag.dragging) {
-      const drop = railDropAt(e.clientX, e.clientY);
-      if (drop) reorderRail(drag.key, drop.key, drop.position);
-      suppressRailClick.current = true;
-      window.setTimeout(() => { suppressRailClick.current = false; }, 0);
-    }
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    railPointer.current = null;
-    setRailDragging(null);
-    setRailDrop(null);
-  };
-  const startRailDrag = e => {
-    if (e.button !== 0 || e.isPrimary === false) return;
-    railPointer.current = { key: e.currentTarget.dataset.railKey, pointerId: e.pointerId,
-      x: e.clientX, y: e.clientY, dragging: false };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  };
-  const moveRailDrag = e => {
-    const drag = railPointer.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    if (!drag.dragging) {
-      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
-      drag.dragging = true;
-      setRailDragging(drag.key);
-      railLeave();
-    }
-    e.preventDefault();
-    setRailDrop(railDropAt(e.clientX, e.clientY));
-  };
-  const cancelRailDrag = e => {
-    if (railPointer.current?.pointerId !== e.pointerId) return;
-    railPointer.current = null;
-    setRailDragging(null);
-    setRailDrop(null);
-  };
   const finishGuide = () => {
     setGuideStep(0); setGuideSeen(true);
     localStorage.setItem("ferry-guide-seen", "1");
@@ -617,13 +529,15 @@ export default function App() {
 
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
   const railOnly = !paneCfg || collapsed;
-  const railLabels = {
-    overview: t("app:rail.overview"),
-    library: t("app:rail.library"),
-    history: t("app:rail.history"),
-    askferry: t("askferry:rail"),
-  };
-  const railItems = railOrder.map(key => ({ key, label: railLabels[key] })).filter(item => item.label);
+  const rail = useRailNavigation({
+    labels: {
+      overview: t("app:rail.overview"),
+      library: t("app:rail.library"),
+      history: t("app:rail.history"),
+      askferry: t("askferry:rail"),
+    },
+    storageKey: "ferry-rail-order",
+  });
 
   const firstDone = () => {
     localStorage.setItem("ferry-first-done", "1");
@@ -638,31 +552,26 @@ export default function App() {
         rail={<AppRail
           railOnly={railOnly}
           resizing={dragging}
-          items={railItems}
+          items={rail.items}
           activeView={view}
-          draggingKey={railDragging}
-          dropTarget={railDrop}
+          draggingKey={rail.draggingKey}
+          dropTarget={rail.dropTarget}
           scanning={scanning}
           settingsOpen={settingsOpen}
           scanningLabel={t("app:titlebar.scanning")}
           rescanLabel={t("app:titlebar.rescan")}
           settingsLabel={t("app:rail.settings")}
           onSelect={key => {
-            if (suppressRailClick.current) return;
-            setView(key); setSettingsOpen(false); setPopover(null); railLeave();
+            if (rail.shouldSuppressClick()) return;
+            setView(key); setSettingsOpen(false); setPopover(null); rail.leave();
           }}
-          onRescan={() => { doScan(); railLeave(); }}
+          onRescan={() => { doScan(); rail.leave(); }}
           onToggleSettings={() => {
-            setSettingsSection("prefs"); setSettingsOpen(value => !value); railLeave();
+            setSettingsSection("prefs"); setSettingsOpen(value => !value); rail.leave();
           }}
-          onEnter={railEnter}
-          onLeave={railLeave}
-          pointerHandlers={{
-            down: startRailDrag,
-            move: moveRailDrag,
-            up: endRailDrag,
-            cancel: cancelRailDrag,
-          }}
+          onEnter={rail.enter}
+          onLeave={rail.leave}
+          pointerHandlers={rail.pointerHandlers}
         />}
         resourcePane={paneCfg && (
           <ResourcePaneHost
@@ -890,12 +799,12 @@ export default function App() {
             }
           }} />)}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-      {railTip && (
-        <div style={{ position: "absolute", left: railOnly ? 86 : 62, top: railTip.top,
+      {rail.railTip && (
+        <div style={{ position: "absolute", left: railOnly ? 86 : 62, top: rail.railTip.top,
           transform: "translateY(-50%)", zIndex: 60, background: "var(--tooltip)", color: "#fff",
           fontSize: 11, padding: "5px 9px", borderRadius: 6,
           boxShadow: "var(--shadow-menu)", pointerEvents: "none",
-          whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{railTip.label}</div>)}
+          whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{rail.railTip.label}</div>)}
       {settingsOpen && (
         <SettingsPage settings={settings} setSettings={setSettings}
           updater={updater} ferry={ferry} initialSection={settingsSection}
