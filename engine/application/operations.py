@@ -17,7 +17,7 @@ from ..domain.errors import (
     LocatorStaleError,
     OperationUnsupportedError,
 )
-from . import agent_tools, services
+from . import agent_tools, services, verification as probe_mod
 from . import session_meta
 from .editing import apply_mutation, preview_mutation
 from .ports import ApplicationPorts, current
@@ -545,9 +545,25 @@ class OperationService:
                 )
         except LocatorStaleError as error:
             raise self._public_locator_error(params["ops"]) from error
-        return services._finish_mutation(
+        return self._finish_mutation(
             params["tool"], editor, result, doc, snapshot, params["probe"],
         )
+
+    def _finish_mutation(self, tool, editor, result, document, snapshot, probe):
+        if not probe:
+            return result
+        try:
+            report = self._ports.adapter(tool).verifier.probe_edited(
+                editor, document, result)
+        except probe_mod.ProbeTimeout as error:
+            report = probe_mod.timeout_report(tool, error)
+        result["probe"] = report
+        if report["status"] == "passed":
+            return result
+        if snapshot:
+            editor.restore_snapshot(snapshot, document)
+            result.update(ok=False, error="隔离探针未通过,已自动还原快照")
+        return result
 
     def _apply_migration(self, operation: OperationPlan) -> dict:
         params = operation.input()

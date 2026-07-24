@@ -494,9 +494,9 @@ def test_replace_reply_keeps_probe_in_mutation_finish(
     _attach_reply_editing(monkeypatch)
     calls = []
     monkeypatch.setattr(
-        operations.services,
+        operations.OperationService,
         "_finish_mutation",
-        lambda tool, editor, result, doc, snapshot, probe:
+        lambda _self, tool, editor, result, doc, snapshot, probe:
             calls.append((probe, snapshot)) or result,
     )
 
@@ -654,9 +654,9 @@ def test_migration_plan_rejects_invalid_current_input(
 def test_probe_setting_is_frozen_in_the_plan(agent_environment, monkeypatch):
     calls = []
     monkeypatch.setattr(
-        operations.services,
+        operations.OperationService,
         "_finish_mutation",
-        lambda tool, editor, result, doc, snapshot, probe:
+        lambda _self, tool, editor, result, doc, snapshot, probe:
             calls.append(probe) or result,
     )
 
