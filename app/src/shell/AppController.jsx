@@ -7,13 +7,13 @@ import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js
 import { fmtTime, repoOf, sessionRef } from "../modules/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../modules/browser/sessionAttachment.js";
-import { SidebarIcon } from "../components/ui/icons.jsx";
+import { SidebarIcon } from "../shared/ui/icons.jsx";
 import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
 import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
   HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
-  SessionDeleteConfirm, Toast } from "../components/ui/Overlays.jsx";
+  SessionDeleteConfirm, Toast } from "../shared/ui/Overlays.jsx";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
 import { useAppUpdater } from "../modules/settings/useAppUpdater.js";
@@ -26,12 +26,12 @@ import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
-import { useDesktopChrome } from "../shell/useDesktopChrome.js";
-import { AppRail } from "../shell/AppRail.jsx";
-import { AppShell } from "../shell/AppShell.jsx";
-import { WorkspaceRouter } from "../shell/WorkspaceRouter.jsx";
-import { ResourcePaneHost } from "../shell/ResourcePaneHost.jsx";
-import { useRailNavigation } from "../shell/useRailNavigation.js";
+import { useDesktopChrome } from "./useDesktopChrome.js";
+import { AppRail } from "./AppRail.jsx";
+import { AppShell } from "./AppShell.jsx";
+import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
+import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
+import { useRailNavigation } from "./useRailNavigation.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();

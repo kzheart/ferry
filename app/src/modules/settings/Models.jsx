@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { runtime } from "../../platform/desktop/client.js";
-import { ProviderIcon, Spinner } from "../../components/ui/icons.jsx";
+import { ProviderIcon, Spinner } from "../../shared/ui/icons.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 
 export default function Models({ ferry, onOpenProviders }) {

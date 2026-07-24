@@ -1,7 +1,7 @@
 // 首次启动:检测到的工具 + 开始扫描
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
-import { ToolIcon } from "../../components/ui/icons.jsx";
+import { ToolIcon } from "../../shared/ui/icons.jsx";
 import appIcon from "../../assets/app-icon.png";
 
 export default function FirstRun({ env, scan, onStart }) {

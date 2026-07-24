@@ -1,7 +1,7 @@
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { renderEvents } from "../../shared/contracts/events.js";
-import { ToolIcon } from "../../components/ui/icons.jsx";
-import { LossCols } from "../../components/ui/primitives.jsx";
+import { ToolIcon } from "../../shared/ui/icons.jsx";
+import { LossCols } from "../../shared/ui/primitives.jsx";
 import { navigationActionFor, rendererForEntity }
   from "./ferryEntities.js";
 import { useTranslation } from "react-i18next";

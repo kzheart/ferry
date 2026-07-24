@@ -1,5 +1,5 @@
-import { ACCENT } from "../components/ui/toolDisplay.js";
-import { RailGlyph, RescanIcon, Spinner } from "../components/ui/icons.jsx";
+import { ACCENT } from "../shared/ui/toolDisplay.js";
+import { RailGlyph, RescanIcon, Spinner } from "../shared/ui/icons.jsx";
 
 export function AppRail({
   railOnly,

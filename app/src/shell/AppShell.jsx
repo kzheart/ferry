@@ -1,4 +1,4 @@
-import { ACCENT } from "../components/ui/toolDisplay.js";
+import { ACCENT } from "../shared/ui/toolDisplay.js";
 
 export function AppShell({
   rail,

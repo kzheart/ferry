@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ACCENT } from "../../components/ui/toolDisplay.js";
-import { CloseIcon, TrashIcon } from "../../components/ui/icons.jsx";
+import { ACCENT } from "../../shared/ui/toolDisplay.js";
+import { CloseIcon, TrashIcon } from "../../shared/ui/icons.jsx";
 
 const uid = () => globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random()}`;
 

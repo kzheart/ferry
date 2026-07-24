@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Sheet } from "../../components/ui/primitives.jsx";
+import { Sheet } from "../../shared/ui/primitives.jsx";
 import SessionDetail from "./SessionDetail.jsx";
 
 export function SessionPeekSheet({

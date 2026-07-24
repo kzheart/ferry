@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../../shared/contracts/tools.js";
-import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../components/ui/icons.jsx";
+import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../shared/ui/icons.jsx";
 import { computeOverview } from "./overviewModel.js";
 
 const TOOL_COLOR = { claude: "var(--t-claude)", codex: "var(--t-codex)", opencode: "var(--t-opencode)" };

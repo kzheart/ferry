@@ -1,8 +1,8 @@
 import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { renderEvent } from "../../shared/contracts/events.js";
-import Markdown from "../../components/ui/Markdown.jsx";
-import { Caret } from "../../components/ui/icons.jsx";
+import Markdown from "../../shared/ui/Markdown.jsx";
+import { Caret } from "../../shared/ui/icons.jsx";
 
 const MAX_TOOL_OUTPUT = 5000;
 const MESSAGE_COLLAPSE_LIMIT = 1800;

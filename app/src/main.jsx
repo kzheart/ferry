@@ -2,8 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { initI18n } from "./i18n/index.js";
 import { preloadBrowserCache } from "./modules/browser/useBrowserData.js";
-import App from "./app/App.jsx";
-import "./app/style.css";
+import App from "./shell/AppController.jsx";
+import "./shared/styles/app.css";
 
 // 平台标记供 CSS 判断(macOS 下窗口透明走 vibrancy);
 // 屏蔽 WebView 默认右键菜单,输入框与可选中文本放行(保留系统的复制/粘贴菜单)
