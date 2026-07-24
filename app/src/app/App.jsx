@@ -56,7 +56,6 @@ export default function App() {
   const [view, setView] = useState(
     () => localStorage.getItem("ferry-first-done") ? "overview" : "firstrun");
   const [selId, setSelId] = useState(null); // UI 内部会话身份: tool + native id
-  const [selHist, setSelHist] = useState(null);
   const [detail, setDetail] = useState(null);   // {id, data, error}
   const [refreshing, setRefreshing] = useState(false);
   const [navigationTarget, setNavigationTarget] = useState(null);
@@ -102,7 +101,6 @@ export default function App() {
   const suppressRailClick = useRef(false);
   const [guideStep, setGuideStep] = useState(0);
   const [guideSeen, setGuideSeen] = useState(() => localStorage.getItem("ferry-guide-seen") === "1");
-  const visibleIds = useRef({});
 
   const sessions = scan?.sessions || [];
   const byKey = useMemo(
@@ -144,8 +142,6 @@ export default function App() {
   } = library;
   const history = useHistoryResourcePane({
     historyRows,
-    selectedId: selHist,
-    onSelect: setSelHist,
     t,
     toolIds: TOOLS,
     toolNames: TOOL_NAME,
@@ -159,6 +155,8 @@ export default function App() {
     filtered: histFiltered,
     groups: histGroups,
     selected: histSel,
+    selectedId: histSelectedId,
+    select: selectHistory,
     visibleIds: historyVisibleIds,
     filterCount: histFilterCount,
     tokens: histTokens,
@@ -288,7 +286,7 @@ export default function App() {
         (action.migrationId && (item.id === action.migrationId ||
           item._id === action.migrationId)) ||
         (action.ref && (item.source_ref === action.ref || item.ref === action.ref)));
-      if (candidate) setSelHist(candidate._id);
+      if (candidate) selectHistory(candidate._id);
       return;
     }
     setView(action.view);
@@ -480,13 +478,14 @@ export default function App() {
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const ids = view === "library" ? libraryVisibleIds : (visibleIds.current[view] || []);
+        const ids = view === "library" ? libraryVisibleIds
+          : view === "history" ? historyVisibleIds : [];
         if (!ids.length) return;
-        const curSel = view === "library" ? selId : selHist;
+        const curSel = view === "library" ? selId : histSelectedId;
         let i = ids.indexOf(curSel);
         i = i < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
         if (view === "library") select(ids[i]);
-        else setSelHist(ids[i]);
+        else selectHistory(ids[i]);
       }
     };
     document.addEventListener("keydown", onKey);
@@ -671,9 +670,6 @@ export default function App() {
   }), []);
   const detailMeta = useMemo(() => cur && metaFor(cur).name
     ? { ...cur, title: metaFor(cur).name } : cur, [cur, metaMap]);
-
-  // ----- 资源栏数据:迁移历史 -----
-  visibleIds.current.history = historyVisibleIds;
 
   // ----- 资源栏数据:Ask Ferry 对话 -----
   const aql = aq.trim().toLowerCase();
@@ -922,7 +918,7 @@ export default function App() {
             : view === "history"
             ? histGroups.flatMap(g => g.rows).map(h => ({
                 id: h.id, title: h.title, tool: h.tool, meta: `${h.from} → ${h.to}`,
-                onClick: () => setSelHist(h.id) }))
+                onClick: () => selectHistory(h.id) }))
             : libGroups.flatMap(g => g.rows).map(r => ({
                 id: r.key, title: r.title, tool: r.tool, meta: r.repo,
                 onClick: () => { setMultiSel([]); select(r.key); } }))
@@ -940,7 +936,7 @@ export default function App() {
           onCancel={() => setHistDel(null)}
           onConfirm={() => {
             // 删的正好是选中项才清选中,列表回落到第一条;删别的不该打断当前查看
-            if (histDel._id === selHist) setSelHist(null);
+            if (histDel._id === histSelectedId) selectHistory(null);
             setHistDel(null);
             deleteHistory(histDel.id).catch(() => {});
           }} />)}

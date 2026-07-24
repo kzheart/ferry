@@ -15,14 +15,13 @@ function defaultFilter(toolIds) {
 /** 迁移历史资源栏的本地状态与展示投影。 */
 export function useHistoryResourcePane({
   historyRows,
-  selectedId,
-  onSelect,
   t,
   toolIds,
   toolNames,
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(() => defaultFilter(toolIds));
+  const [selectedId, setSelectedId] = useState(null);
   const items = useMemo(() => buildHistoryItems(historyRows), [historyRows]);
   const filtered = useMemo(
     () => filterHistoryItems({ items, filter, query }),
@@ -32,8 +31,8 @@ export function useHistoryResourcePane({
     items: filtered, selectedId, t, toolNames,
   }).map(group => ({
     ...group,
-    rows: group.rows.map(row => ({ ...row, onClick: () => onSelect(row.id) })),
-  })), [filtered, onSelect, selectedId, t, toolNames]);
+    rows: group.rows.map(row => ({ ...row, onClick: () => setSelectedId(row.id) })),
+  })), [filtered, selectedId, t, toolNames]);
   const selected = items.find(item => item._id === selectedId) || filtered[0] || null;
   const visibleIds = useMemo(() => filtered.map(item => item._id), [filtered]);
   const clear = useCallback(() => {
@@ -54,6 +53,8 @@ export function useHistoryResourcePane({
     filtered,
     groups,
     selected,
+    selectedId,
+    select: setSelectedId,
     visibleIds,
     filterCount: historyFilterCount(filter, toolIds),
     tokens,
