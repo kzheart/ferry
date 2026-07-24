@@ -8,6 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
+use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::contracts::operations::{
     OPERATION_PLAN_ID_PREFIX, OPERATION_STATUSES, OPERATION_SUCCESS_STATUS,
@@ -41,6 +42,18 @@ struct RuntimeProcess {
 
 static RUNTIME_PROCESS: OnceLock<Mutex<Option<RuntimeProcess>>> = OnceLock::new();
 static RUNTIME_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+fn emit_host_event(app: &tauri::AppHandle, event: Value) {
+    let Some(event_type) = event.get("type").and_then(Value::as_str) else {
+        return;
+    };
+    let Some(policy) = event_policy(event_type) else {
+        return;
+    };
+    if policy.source == EventSource::Host && policy.forward_to_ui {
+        let _ = app.emit("ferry-runtime-event", event);
+    }
+}
 
 fn next_id(prefix: &str) -> String {
     format!(
@@ -142,8 +155,14 @@ fn read_runtime_output(
         let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
             continue;
         };
-        if value.get("type").is_some() {
-            if value.get("type").and_then(Value::as_str) == Some("engine.request") {
+        if let Some(event_type) = value.get("type").and_then(Value::as_str) {
+            let Some(policy) = event_policy(event_type) else {
+                continue;
+            };
+            if policy.source != EventSource::Runtime {
+                continue;
+            }
+            if event_type == "engine.request" {
                 let worker_resource = resource_dir.clone();
                 let worker_stdin = stdin.clone();
                 std::thread::spawn(move || {
@@ -152,15 +171,17 @@ fn read_runtime_output(
                 continue;
             }
             if matches!(
-                value.get("type").and_then(Value::as_str),
+                Some(event_type),
                 Some("run.completed" | "run.failed" | "run.cancelled")
             ) {
                 if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
                     forget_auto_policy(session_id);
                 }
             }
-            let _ = app.emit("ferry-runtime-event", &value);
-            if value.get("type").and_then(Value::as_str) == Some("tool.request") {
+            if policy.forward_to_ui {
+                let _ = app.emit("ferry-runtime-event", &value);
+            }
+            if event_type == "tool.request" {
                 let worker_app = app.clone();
                 let worker_resource = resource_dir.clone();
                 let worker_stdin = stdin.clone();
@@ -177,9 +198,13 @@ fn read_runtime_output(
     pending.fail_all(crate::process::error::ProcessError::Exited(
         "Ferry Runtime 进程已退出".to_owned(),
     ));
-    let _ = app.emit(
-        "ferry-runtime-event",
-        json!({"protocol": FERRY_IPC_PROTOCOL, "type": "runtime.disconnected"}),
+    emit_host_event(
+        &app,
+        json!({
+            "protocol": FERRY_IPC_PROTOCOL,
+            "type": "runtime.disconnected",
+            "payload": {},
+        }),
     );
 }
 
@@ -221,8 +246,8 @@ fn complete_tool_request(
             if auto {
                 match apply_routed_operation(resource_dir, &operation) {
                     Ok(result) => {
-                        let _ = app.emit(
-                            "ferry-runtime-event",
+                        emit_host_event(
+                            app,
                             json!({
                                 "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
@@ -236,8 +261,8 @@ fn complete_tool_request(
                                             "result": result}));
                     }
                     Err(code) => {
-                        let _ = app.emit(
-                            "ferry-runtime-event",
+                        emit_host_event(
+                            app,
                             json!({
                                 "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
@@ -251,8 +276,8 @@ fn complete_tool_request(
                     }
                 }
             } else {
-                let _ = app.emit(
-                    "ferry-runtime-event",
+                emit_host_event(
+                    app,
                     json!({
                         "protocol": FERRY_IPC_PROTOCOL,
                         "session_id": session_id,
