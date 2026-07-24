@@ -5,13 +5,14 @@ use crate::contracts::engine_methods::{self, Exposure};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::error::ProcessError;
+use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Mutex, OnceLock,
+    OnceLock,
 };
 use std::time::Duration;
 
@@ -21,20 +22,9 @@ struct EngineClient {
     transport: JsonlProcessClient,
 }
 
-struct EngineProcess {
-    generation: u64,
-    child: Child,
-    client: EngineClient,
-}
+type EngineProcess = ManagedProcess<EngineClient>;
 
-impl Drop for EngineProcess {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-static ENGINE: OnceLock<Mutex<Option<EngineProcess>>> = OnceLock::new();
+static ENGINE: OnceLock<ProcessSupervisor<EngineClient>> = OnceLock::new();
 static ENGINE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static ENGINE_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -103,13 +93,9 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
         generation,
         transport,
     };
-    let engine = EngineProcess {
-        generation,
-        child,
-        client,
-    };
-    handshake(&engine.client)?;
-    Ok(engine)
+    let process = ManagedProcess::new(generation, child, client.clone());
+    handshake(&client)?;
+    Ok(process)
 }
 
 /// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
@@ -176,24 +162,15 @@ fn read_engine_output(mut stdout: impl BufRead, pending: PendingResponses) {
 }
 
 fn engine_client(resource_dir: &Path) -> Result<EngineClient, String> {
-    let slot = ENGINE.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().map_err(|_| "引擎状态锁损坏".to_owned())?;
-    if guard.is_none() {
-        *guard = Some(spawn_engine(resource_dir)?);
-    }
-    Ok(guard.as_ref().expect("engine just ensured").client.clone())
+    ENGINE
+        .get_or_init(|| ProcessSupervisor::new("引擎"))
+        .ensure(|| spawn_engine(resource_dir))
 }
 
 fn invalidate_engine(generation: u64) {
-    let slot = ENGINE.get_or_init(|| Mutex::new(None));
-    if let Ok(mut guard) = slot.lock() {
-        if guard
-            .as_ref()
-            .is_some_and(|engine| engine.generation == generation)
-        {
-            *guard = None;
-        }
-    }
+    ENGINE
+        .get_or_init(|| ProcessSupervisor::new("引擎"))
+        .invalidate(generation);
 }
 
 pub(crate) fn engine_request_blocking(
