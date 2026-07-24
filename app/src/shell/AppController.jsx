@@ -26,6 +26,7 @@ import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
 import { useRailNavigation } from "./useRailNavigation.js";
+import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -44,10 +45,7 @@ export default function App() {
   // ----- 迁移 -----
   const [mig, setMig] = useState(null);         // {scope}
 
-  // ----- 布局 -----
-  const [collapsed, setCollapsed] = useState(false);
-  const [paneW, setPaneW] = useState(232);
-  const [dragging, setDragging] = useState(false);
+  const paneLayout = useResourcePaneLayout();
 
   // ----- Ask Ferry -----
   const ferry = useAskFerry();
@@ -177,7 +175,7 @@ export default function App() {
 
   useDesktopChrome({
     onOpenSettings: () => { setSettingsSection("prefs"); setSettingsOpen(true); },
-    onToggleSidebar: () => setCollapsed(value => !value),
+    onToggleSidebar: paneLayout.toggleCollapsed,
     onRescan: doScan,
   });
 
@@ -253,21 +251,6 @@ export default function App() {
     t,
     askDelete,
   });
-
-  // ----- 拖拽分栏 -----
-  const startDrag = e => {
-    if (collapsed) return;
-    const sx = e.clientX, sw = paneW;
-    const move = ev => setPaneW(Math.max(190, Math.min(360, sw + (ev.clientX - sx))));
-    const up = () => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
-      setDragging(false);
-    };
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
-    setDragging(true); e.preventDefault();
-  };
 
   // ----- 引导 -----
   const openGuide = () => {
@@ -363,7 +346,7 @@ export default function App() {
   }[view] || null;
 
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
-  const railOnly = !paneCfg || collapsed;
+  const railOnly = !paneCfg || paneLayout.collapsed;
   const rail = useRailNavigation({
     labels: {
       overview: t("app:rail.overview"),
@@ -421,7 +404,7 @@ export default function App() {
       <AppShell
         rail={<AppRail
           railOnly={railOnly}
-          resizing={dragging}
+          resizing={paneLayout.resizing}
           items={rail.items}
           activeView={view}
           draggingKey={rail.draggingKey}
@@ -447,9 +430,9 @@ export default function App() {
           <ResourcePaneHost
             view={view}
             pane={paneCfg}
-            collapsed={collapsed}
-            width={paneW}
-            resizing={dragging}
+            collapsed={paneLayout.collapsed}
+            width={paneLayout.width}
+            resizing={paneLayout.resizing}
             filterOpen={popover === { library: "lib", history: "hist" }[view]}
             onOpenSearch={() => setSearchOpen(true)}
             onFilter={e => {
@@ -478,16 +461,18 @@ export default function App() {
             }}
           />
         )}
-        showDivider={Boolean(paneCfg && !collapsed)}
-        resizing={dragging}
-        onResizeStart={startDrag}
-        onResizeReset={() => setPaneW(232)}
+        showDivider={Boolean(paneCfg && !paneLayout.collapsed)}
+        resizing={paneLayout.resizing}
+        onResizeStart={paneLayout.startResize}
+        onResizeReset={paneLayout.resetWidth}
         dividerTitle={t("app:drag.hint")}
         toolbar={<>
           {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
           <button className={paneCfg ? "hov" : undefined} disabled={!paneCfg}
-            onClick={() => setCollapsed(v => !v)}
-            title={collapsed ? t("app:titlebar.expand") : t("app:titlebar.collapse")}
+            onClick={paneLayout.toggleCollapsed}
+            title={paneLayout.collapsed
+              ? t("app:titlebar.expand")
+              : t("app:titlebar.collapse")}
             style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
               justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
               cursor: "default", color: "var(--tx3b)", opacity: paneCfg ? 1 : .35 }}>
