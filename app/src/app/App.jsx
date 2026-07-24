@@ -4,8 +4,7 @@ import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, rpc,
   operationApply, operationPlan,
   writeClipboardText } from "../api/transport/rpc.js";
-import { TOOLS, TOOL_NAME, resumeDescriptor,
-  toolHasCapability } from "../api/contract/tools.js";
+import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
 import { fmtTime, operationRef, repoOf,
   sessionRef } from "../domain/sessions/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
@@ -411,7 +410,7 @@ export default function App() {
     { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
         ctxSess.tool, ctxSess.id, ctxSess.dir)
         .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
-    ...(toolHasCapability(ctxSess.tool, "migrate-source") ? [{
+    ...(TOOLS.includes(ctxSess.tool) ? [{
       label: t("app:ctx.migrateTo"), onClick: () => {
         if (sessionIdentity(ctxSess) !== selId) select(sessionIdentity(ctxSess));
         setMig({ scope: null }); },

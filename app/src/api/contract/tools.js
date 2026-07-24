@@ -9,33 +9,6 @@ export const TOOL_NAME = Object.freeze(Object.fromEntries(
   TOOLS.map(tool => [tool, AGENTS[tool].displayName]),
 ));
 
-const CAPABILITIES = Object.freeze([
-  "browse",
-  "migrate-source",
-  "migrate-target",
-  "edit",
-  "inplace",
-  "verified",
-]);
-
-export function toolManifest(tool) {
-  const agent = AGENTS[tool];
-  return agent ? {
-    id: tool,
-    display_name: agent.displayName,
-    icon: agent.icon,
-    capabilities: CAPABILITIES,
-  } : null;
-}
-
-export function toolHasCapability(tool, capability) {
-  return Boolean(AGENTS[tool]) && CAPABILITIES.includes(capability);
-}
-
-export function toolsWithCapability(capability) {
-  return CAPABILITIES.includes(capability) ? TOOLS : [];
-}
-
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, sessionId, cwd) =>
   rpc("resume", { tool, session_id: sessionId, cwd: cwd || "." });

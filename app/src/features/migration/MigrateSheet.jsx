@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { operationApply, operationPlan, openTerminal, rpc } from "../../api/transport/rpc.js";
-import { TOOL_NAME, toolsWithCapability } from "../../api/contract/tools.js";
+import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../components/ui/icons.jsx";
@@ -97,8 +97,7 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
 
 export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalApp, onClose, onDone }) {
   const { t } = useTranslation();
-  // Only agents that declare migrate-target are valid write destinations.
-  const targets = toolsWithCapability("migrate-target").filter(t2 => t2 !== meta.tool);
+  const targets = TOOLS.filter(t2 => t2 !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0] || "");
   const [probeOn, setProbeOn] = useState(!!defaultProbe);
