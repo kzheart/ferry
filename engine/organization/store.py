@@ -4,7 +4,11 @@ import json
 import sqlite3
 from typing import Callable
 
-from .session_metadata import merge_metadata, metadata_entry, metadata_key
+from ..storage.session_metadata import (
+    merge_metadata,
+    metadata_entry,
+    metadata_key,
+)
 
 
 class OrganizationStore:
