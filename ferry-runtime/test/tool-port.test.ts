@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createFerryTools } from "../src/tool-port.js";
+import { createFerryTools } from "../src/tools/catalog.js";
 
 const requireFromPiAi = createRequire(
   import.meta.resolve("@earendil-works/pi-ai"),

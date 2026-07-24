@@ -7,7 +7,7 @@ import {
   DEFAULT_ENABLED_PROVIDERS,
   FileProviderConfigStore,
   parseProviderConfig,
-} from "../src/provider-config.js";
+} from "../src/providers/provider-config.js";
 
 async function store() {
   const directory = await mkdtemp(join(tmpdir(), "ferry-provider-config-"));

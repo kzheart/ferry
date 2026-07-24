@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { AgentRuntime } from "./runtime.js";
-import { EngineSessionStore } from "./engine-session-store.js";
-import { FileProviderConfigStore } from "./provider-config.js";
-import { FileRoleStore } from "./roles.js";
-import { ProviderHost } from "./provider-host.js";
-import { dispatch } from "./commands.js";
+import { AgentRuntime } from "../application/runtime.js";
+import { EngineSessionStore } from "../infrastructure/engine-session-repository.js";
+import { FileProviderConfigStore } from "../providers/provider-config.js";
+import { FileRoleStore } from "../roles/role-repository.js";
+import { ProviderHost } from "../providers/provider-host.js";
+import { dispatch } from "../application/command-router.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
   parseCommand,
   type ResponseEnvelope,
-} from "./protocol.js";
+} from "./messages.js";
 import { readJsonLines } from "./jsonl.js";
 
 function write(value: unknown) {

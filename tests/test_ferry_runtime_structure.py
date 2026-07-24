@@ -1,0 +1,45 @@
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME = ROOT / "ferry-runtime"
+
+
+def test_runtime_source_is_grouped_by_responsibility():
+    expected = {
+        "application",
+        "core",
+        "infrastructure",
+        "protocol",
+        "providers",
+        "roles",
+        "sessions",
+        "tools",
+        "workflows",
+    }
+    assert expected <= {
+        path.name for path in (RUNTIME / "src").iterdir() if path.is_dir()
+    }
+    assert {
+        path.name for path in (RUNTIME / "src").glob("*.ts")
+    } == {"index.ts"}
+
+
+def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():
+    package = json.loads((RUNTIME / "package.json").read_text())
+    assert package["bin"] == {
+        "ferry-runtime": "dist/protocol/server.js",
+    }
+
+    tauri = json.loads((ROOT / "app/src-tauri/tauri.conf.json").read_text())
+    assert "binaries/ferry-runtime" in tauri["bundle"]["externalBin"]
+
+    host = (ROOT / "app/src-tauri/src/agent.rs").read_text()
+    assert '"ferry-runtime.exe"' in host
+    assert '"ferry-runtime"' in host
+    assert "ferry-runtime/dist/protocol/server.js" in host
+
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "ferry-runtime-x86_64-pc-windows-msvc.exe" in workflow
+    assert "working-directory: ferry-runtime" in workflow

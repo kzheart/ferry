@@ -1,5 +1,5 @@
 import type { OrganizerInput, OrganizerResult } from "./organizer.js";
-import { ProtocolError } from "./protocol.js";
+import { ProtocolError } from "../protocol/messages.js";
 
 export type OrganizationEngineMethod =
   | "session_backbone"

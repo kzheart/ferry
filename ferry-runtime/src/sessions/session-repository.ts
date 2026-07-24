@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { EventEnvelope } from "./protocol.js";
+import type { EventEnvelope } from "../protocol/messages.js";
 
 export interface PersistedSession {
   session_id: string;

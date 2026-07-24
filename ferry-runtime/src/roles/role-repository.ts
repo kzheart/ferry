@@ -8,12 +8,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname } from "node:path";
-import { FERRY_TOOL_NAMES, type FerryToolName } from "./tool-port.js";
+import { FERRY_TOOL_NAMES, type FerryToolName } from "../tools/catalog.js";
 import {
   parseThinkingLevel,
   type ModelSelection,
   type ThinkingLevel,
-} from "./provider-config.js";
+} from "../providers/provider-config.js";
 
 export const ROLE_STORE_VERSION = 1 as const;
 export const DEFAULT_ROLE_ID = "default";

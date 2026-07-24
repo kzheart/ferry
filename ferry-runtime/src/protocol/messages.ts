@@ -3,7 +3,7 @@ import {
   type IpcError,
   type IpcRequest,
   type IpcResponse,
-} from "./contracts/ipc.js";
+} from "./generated/ipc.js";
 
 export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 

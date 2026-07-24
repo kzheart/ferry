@@ -3,8 +3,8 @@ import {
   organizerPrompt,
   parseOrganizerInput,
   validateOrganizerResult,
-} from "../src/organizer.js";
-import { ProviderHost } from "../src/provider-host.js";
+} from "../src/workflows/organizer.js";
+import { ProviderHost } from "../src/providers/provider-host.js";
 
 const input = parseOrganizerInput({
   locale: "zh-CN",

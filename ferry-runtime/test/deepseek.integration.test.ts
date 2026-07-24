@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileProviderConfigStore } from "../src/provider-config.js";
-import { ProviderHost } from "../src/provider-host.js";
-import { AgentRuntime } from "../src/runtime.js";
+import { FileProviderConfigStore } from "../src/providers/provider-config.js";
+import { ProviderHost } from "../src/providers/provider-host.js";
+import { AgentRuntime } from "../src/application/runtime.js";
 
 const DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";
 const DEEPSEEK_PROVIDER_ID = "deepseek";

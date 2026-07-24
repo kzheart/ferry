@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AGENT_IDS, AGENT_LABELS } from "./contracts/agents.js";
+import { AGENT_IDS, AGENT_LABELS } from "../protocol/generated/agents.js";
 import {
   Agent,
   type AgentEvent,
@@ -8,44 +8,47 @@ import {
 } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model } from "@earendil-works/pi-ai";
 import type { AuthType } from "@earendil-works/pi-ai";
-import { AuthCoordinator } from "./auth-coordinator.js";
-import { createDelegationTool } from "./delegation-tool.js";
-import type { PersistedSession, SessionStore } from "./event-store.js";
-import { EphemeralSessionStore } from "./event-store.js";
+import { AuthCoordinator } from "../providers/auth-coordinator.js";
+import { createDelegationTool } from "../tools/delegation.js";
+import type {
+  PersistedSession,
+  SessionStore,
+} from "../sessions/session-repository.js";
+import { EphemeralSessionStore } from "../sessions/session-repository.js";
 import type {
   CustomProviderConfig,
   ModelSelection,
   ThinkingLevel,
-} from "./provider-config.js";
-import type { ProviderHost } from "./provider-host.js";
-import { parseOrganizerInput } from "./organizer.js";
+} from "../providers/provider-config.js";
+import type { ProviderHost } from "../providers/provider-host.js";
+import { parseOrganizerInput } from "../workflows/organizer.js";
 import {
   runOrganizationWorkflow,
   type OrganizationEngineMethod,
-} from "./organization-workflow.js";
+} from "../workflows/organization.js";
 import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
   type ApplyPolicy,
   type RoleInput,
   type RoleStore,
-} from "./roles.js";
+} from "../roles/role-repository.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
   type EventEnvelope,
-} from "./protocol.js";
+} from "../protocol/messages.js";
 import {
   createFerryTools,
   FERRY_TOOL_NAMES,
   type FerryToolName,
   type ToolRequestContext,
-} from "./tool-port.js";
+} from "../tools/catalog.js";
 import {
   WorkflowRun,
   type TaskGraph,
   type WorkflowRunEvent,
-} from "./workflow.js";
+} from "../core/workflow.js";
 
 export interface AgentBackend {
   model: Model<string>;
@@ -147,7 +150,7 @@ function summarizeToolResult(result: unknown) {
 export interface RuntimeOptions {
   store?: SessionStore;
   storeFactory?: (
-    invoke: import("./engine-session-store.js").RuntimeEngineInvoke,
+    invoke: import("../infrastructure/engine-session-repository.js").RuntimeEngineInvoke,
   ) => SessionStore;
   deferRestore?: boolean;
   backendFactory?: BackendFactory;
@@ -1534,7 +1537,7 @@ export class AgentRuntime {
   private async invokeInternalEngine(
     method:
       | OrganizationEngineMethod
-      | import("./engine-session-store.js").RuntimeEngineMethod,
+      | import("../infrastructure/engine-session-repository.js").RuntimeEngineMethod,
     params: Record<string, unknown>,
     sessionId: string,
   ) {
