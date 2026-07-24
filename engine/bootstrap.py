@@ -6,7 +6,7 @@ from .sessions.index import AgentSessionIndex
 from .app import EngineService
 from .context import EngineContext
 from .system.resources import resource_path
-from .storage.scan_cache import ScanCache
+from .sessions.scan_cache import ScanCache
 from .operations.snapshots import backup_dir
 from .operations.service import OperationService
 
