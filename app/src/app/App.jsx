@@ -23,6 +23,7 @@ import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
 import { useLibraryResourcePane } from "../features/browser/useLibraryResourcePane.js";
+import { useLibraryResourcePaneActions } from "../features/browser/useLibraryResourcePaneActions.js";
 import { useHistoryResourcePane } from "../features/migration/useHistoryResourcePane.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
@@ -585,52 +586,19 @@ export default function App() {
     localStorage.setItem("ferry-guide-seen", "1");
   };
 
-  // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
-  const rowHandlers = useRef({});
-  rowHandlers.current.click = (key, e) => {
-    if (e.metaKey || e.ctrlKey) {           // ⌘点击:切换多选
-      setMultiSel(sel => {
-        const base = sel.length ? sel : (selId ? [selId] : []);
-        return base.includes(key)
-          ? base.filter(x => x !== key) : [...base, key];
-      });
-      return;
-    }
-    if (e.shiftKey && selId) {              // Shift 点击:按可见顺序范围选
-      const ids = libraryVisibleIds;
-      const a = ids.indexOf(selId), b = ids.indexOf(key);
-      if (a >= 0 && b >= 0) {
-        setMultiSel(ids.slice(Math.min(a, b), Math.max(a, b) + 1));
-        return;
-      }
-    }
-    setMultiSel([]); select(key);
-  };
-  // 更多按钮锚定在按钮下方;右键则锚定在指针位置
-  rowHandlers.current.more = (key, e) => {
-    const pos = e.type === "contextmenu"
-      ? { x: e.clientX, y: e.clientY }
-      : (() => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          return { x: rect.right - 208, y: rect.bottom + 4 };
-        })();
-    if (multiSel.length > 1 && multiSel.includes(key)) {
-      setCtxMenu({ ...pos, key, multi: true });
-      return;
-    }
-    setMultiSel([]);
-    if (key !== selId) select(key);
-    setCtxMenu({ ...pos, key });
-  };
-  rowHandlers.current.pin = key => {
-    const session = byKey[key];
-    if (session) setMetaFor(session, { pinned: !metaFor(session).pinned });
-  };
-  rowHandlers.current.delete = key => { const s = byKey[key]; if (s) askDelete(s); };
-  const onRowClick = useCallback((key, e) => rowHandlers.current.click(key, e), []);
-  const onRowMore = useCallback((key, e) => rowHandlers.current.more(key, e), []);
-  const onRowPin = useCallback(key => rowHandlers.current.pin(key), []);
-  const onRowDelete = useCallback(key => rowHandlers.current.delete(key), []);
+  const { onRowClick, onRowMore, onRowPin, onRowDelete } = useLibraryResourcePaneActions({
+    sessionsByKey: byKey,
+    selectedId: selId,
+    visibleIds: libraryVisibleIds,
+    multiIds: multiSel,
+    setMultiIds: setMultiSel,
+    onSelect: select,
+    onTogglePin: session => setMetaFor(
+      session, { pinned: !metaFor(session).pinned },
+    ),
+    onDelete: askDelete,
+    onOpenMenu: setCtxMenu,
+  });
 
   // 详情区回调:同样经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会
   // 因侧边栏交互(展开分组/多选/悬停)产生的新闭包全量重渲染整条时间线
