@@ -39,6 +39,19 @@ def serve(input_stream=None, output_stream=None, handler=rpc) -> None:
     # 常驻引擎可能运行数天；已完成任务不能无限保留在列表中。
     # executor.shutdown(wait=True) 仍会在 EOF 时等待全部在途请求结束。
     futures = set()
+    failures = []
+    future_lock = threading.Lock()
+
+    def release(future) -> None:
+        try:
+            future.result()
+        except BaseException as error:
+            with future_lock:
+                failures.append(error)
+        finally:
+            with future_lock:
+                futures.discard(future)
+
     try:
         for line in input_stream:
             request = line.strip()
@@ -50,13 +63,14 @@ def serve(input_stream=None, output_stream=None, handler=rpc) -> None:
                 else serial
             )
             future = executor.submit(complete, request)
-            futures.add(future)
-            future.add_done_callback(futures.discard)
-        for future in tuple(futures):
-            future.result()
+            with future_lock:
+                futures.add(future)
+            future.add_done_callback(release)
     finally:
         reads.shutdown(wait=True)
         serial.shutdown(wait=True)
+    if failures:
+        raise failures[0]
 
 
 def main(argv=None):
