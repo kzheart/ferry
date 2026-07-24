@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from engine.adapters.codex import reader as codex_reader
+from engine.adapters.codex import topology as codex_topology
 from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.writer import write
 from engine.sessions.model import (
@@ -61,7 +62,7 @@ def _root_with_children(tmp_path, statuses=("running", "completed")):
 
 def test_codex_writer_handles_empty_and_tool_only_sessions(tmp_path, monkeypatch):
     sessions, _database = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "cache.json")
 
     empty_id, empty_path = write(Session("claude", "empty", str(tmp_path)), sessions_dir=sessions)
     assert codex_reader.read(str(empty_path), sessions_dir=sessions).source_id == empty_id
@@ -78,7 +79,7 @@ def test_codex_writer_handles_empty_and_tool_only_sessions(tmp_path, monkeypatch
 
 def test_codex_writer_disambiguates_duplicate_agent_paths_and_maps_statuses(tmp_path, monkeypatch):
     sessions, database = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "cache.json")
 
     _root_id, path = write(_root_with_children(tmp_path), sessions_dir=sessions)
     restored = codex_reader.read(str(path), sessions_dir=sessions)
@@ -96,7 +97,7 @@ def test_codex_writer_disambiguates_duplicate_agent_paths_and_maps_statuses(tmp_
 
 def test_codex_reader_tolerates_missing_or_invalid_registry(tmp_path, monkeypatch):
     sessions, database = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "cache.json")
     _root_id, path = write(_root_with_children(tmp_path, statuses=(None,)), sessions_dir=sessions)
 
     database.unlink()

@@ -3,6 +3,7 @@ import json
 import pytest
 
 from engine.adapters.codex import reader as codex_reader
+from engine.adapters.codex import topology as codex_topology
 from engine.adapters.codex import writer as codex_writer
 from engine.errors import AgentFormatChangedError
 from engine.sessions.model import (
@@ -412,13 +413,13 @@ def test_sqlite_parent_edge_attaches_child_when_rollout_metadata_lacks_parent(
         "child": (child_path, {"parent_id": None}),
     }
     monkeypatch.setattr(
-        codex_reader, "_rollout_index",
+        codex_topology, "rollout_index",
         lambda _rollout, _sessions_dir: index)
     monkeypatch.setattr(
         codex_reader, "_read_one",
         lambda path: root if path == root_path else child)
     monkeypatch.setattr(
-        codex_reader, "_registry_edges",
+        codex_topology, "_registry_edges",
         lambda _root: {"child": ("root", "open")})
 
     restored = codex_reader.read(str(root_path), sessions_dir=tmp_path)

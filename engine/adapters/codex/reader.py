@@ -1,12 +1,11 @@
 """Codex reader: current rollout JSONL → canonical session model."""
+
 import json
 import re
-import sqlite3
 from pathlib import Path
 
 from ...errors import AgentFormatChangedError
 from ...sessions.model import (
-    AgentEdge,
     Block,
     ContextCompaction,
     Message,
@@ -14,23 +13,23 @@ from ...sessions.model import (
     ToolCall,
     ToolResult,
     ToolResultBlock,
-    tool_result_text,
 )
 from ...sessions.reasoning import codex_summary_text
 from ...sessions.tool_ops import CanonicalOp
-from ...storage.scan_cache import ScanCache
 from ..shared.media import image_from_data_url
-
-_META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
+from . import topology
 
 _FS_PATCH = getattr(CanonicalOp, "FS_PATCH", "fs.patch")
 _TOOL_INVOKE = getattr(CanonicalOp, "TOOL_INVOKE", "tool.invoke")
 _LOCAL_SHELL_NAMES = frozenset({"shell", "exec", "exec_command"})
-_PATCH_HEADER_RE = re.compile(
-    r"^\*\*\* (Add|Update|Delete) File: ([^\r\n]+)$", re.M)
+_PATCH_HEADER_RE = re.compile(r"^\*\*\* (Add|Update|Delete) File: ([^\r\n]+)$", re.M)
 _PATCH_MOVE_RE = re.compile(r"^\*\*\* Move to: ([^\r\n]+)$", re.M)
-_SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",
-                      "<ENVIRONMENT_CONTEXT>", "<turn_aborted>")
+_SKIP_USER_PREFIX = (
+    "<environment_context>",
+    "<user_instructions>",
+    "<ENVIRONMENT_CONTEXT>",
+    "<turn_aborted>",
+)
 _RESULT_STATUS = {
     "success": "success",
     "completed": "success",
@@ -40,11 +39,6 @@ _RESULT_STATUS = {
     "pending": "pending",
     "unknown": "unknown",
 }
-
-
-def session_id(meta: dict, fallback: str) -> str:
-    del fallback
-    return str(meta["id"])
 
 
 def _result_status(value) -> str:
@@ -93,7 +87,7 @@ def _balanced_js_argument(source: str, open_paren: int) -> tuple[str, int] | Non
         elif char == ")":
             depth -= 1
             if depth == 0:
-                return source[open_paren + 1:index], index + 1
+                return source[open_paren + 1 : index], index + 1
         index += 1
     return None
 
@@ -111,12 +105,13 @@ def _scan_tool_invocations(source: str) -> list[tuple[str, str]]:
             index = _skip_js_comment(source, index)
             continue
         if source.startswith("tools.", index) and (
-                index == 0 or not (source[index - 1].isalnum() or
-                                   source[index - 1] in "_$")):
+            index == 0 or not (source[index - 1].isalnum() or source[index - 1] in "_$")
+        ):
             name_start = index + len("tools.")
             name_end = name_start
             while name_end < len(source) and (
-                    source[name_end].isalnum() or source[name_end] in "_$"):
+                source[name_end].isalnum() or source[name_end] in "_$"
+            ):
                 name_end += 1
             cursor = name_end
             while cursor < len(source) and source[cursor].isspace():
@@ -144,8 +139,11 @@ def _decode_js_value(source: str):
         quote = source[0]
         body = source[1:-1]
         replacements = {
-            "\\n": "\n", "\\r": "\r", "\\t": "\t",
-            "\\\\": "\\", f"\\{quote}": quote,
+            "\\n": "\n",
+            "\\r": "\r",
+            "\\t": "\t",
+            "\\\\": "\\",
+            f"\\{quote}": quote,
         }
         for escaped, value in replacements.items():
             body = body.replace(escaped, value)
@@ -179,8 +177,11 @@ def _extract_patch_text(source, argument=None) -> str | None:
     candidates.append(source)
     for candidate in candidates:
         if isinstance(candidate, dict):
-            candidate = (candidate.get("patch_text") or candidate.get("patch") or
-                         candidate.get("input"))
+            candidate = (
+                candidate.get("patch_text")
+                or candidate.get("patch")
+                or candidate.get("input")
+            )
         if isinstance(candidate, str) and "*** Begin Patch" in candidate:
             start = candidate.index("*** Begin Patch")
             end = candidate.find("*** End Patch", start)
@@ -197,8 +198,10 @@ def _patch_changes(patch_text: str) -> list[dict]:
     for index, header in enumerate(headers):
         operation = header.group(1).lower()
         path = header.group(2).strip()
-        end = headers[index + 1].start() if index + 1 < len(headers) else len(patch_text)
-        section = patch_text[header.end():end]
+        end = (
+            headers[index + 1].start() if index + 1 < len(headers) else len(patch_text)
+        )
+        section = patch_text[header.end() : end]
         move = _PATCH_MOVE_RE.search(section) if operation == "update" else None
         change = {
             "operation": "move" if move else operation,
@@ -260,9 +263,11 @@ def _shell_input(args: dict) -> dict | None:
     if command is None:
         return None
     if isinstance(command, list):
-        command = (" ".join(str(part) for part in command[2:])
-                   if command[:2] == ["bash", "-lc"]
-                   else " ".join(str(part) for part in command))
+        command = (
+            " ".join(str(part) for part in command[2:])
+            if command[:2] == ["bash", "-lc"]
+            else " ".join(str(part) for part in command)
+        )
     result = {"command": str(command)}
     for field in ("workdir", "timeout_ms", "background"):
         if field in args and args[field] is not None:
@@ -291,8 +296,7 @@ def _parse_call(payload, sess) -> ToolCall:
         args = _decode_js_value(argument)
         shell_input = _shell_input(args) if isinstance(args, dict) else None
         if shell_input is not None:
-            return ToolCall(name="exec", op=CanonicalOp.SHELL_EXEC,
-                            input=shell_input)
+            return ToolCall(name="exec", op=CanonicalOp.SHELL_EXEC, input=shell_input)
     elif call_name == "apply_patch":
         patch_text = _extract_patch_text(src, argument)
         if patch_text is not None:
@@ -318,9 +322,14 @@ def _parse_result(raw) -> ToolResult:
     if isinstance(native_blocks, dict):
         native_blocks = [native_blocks]
     elif not isinstance(native_blocks, list):
-        native_blocks = [{"type": "input_text",
-                          "text": native_blocks if isinstance(native_blocks, str)
-                          else str(native_blocks)}]
+        native_blocks = [
+            {
+                "type": "input_text",
+                "text": native_blocks
+                if isinstance(native_blocks, str)
+                else str(native_blocks),
+            }
+        ]
 
     for native_block in native_blocks:
         if not isinstance(native_block, dict):
@@ -334,9 +343,17 @@ def _parse_result(raw) -> ToolResult:
             except (json.JSONDecodeError, TypeError):
                 inner = None
             if isinstance(inner, dict) and any(
-                    key in inner for key in (
-                        "output", "stdout", "stderr", "exit_code", "status",
-                        "truncated", "attachments")):
+                key in inner
+                for key in (
+                    "output",
+                    "stdout",
+                    "stderr",
+                    "exit_code",
+                    "status",
+                    "truncated",
+                    "attachments",
+                )
+            ):
                 structured_envelope = True
                 output = inner.get("output")
                 stdout_value = inner.get("stdout", output)
@@ -362,18 +379,23 @@ def _parse_result(raw) -> ToolResult:
                 if text.startswith("Script completed\nWall time "):
                     wrapper_blocks.append(block)
         elif kind in {"input_image", "output_image", "image"}:
-            blocks.append(ToolResultBlock(
-                "image",
-                uri=native_block.get("image_url") or native_block.get("url"),
-                data=native_block.get("data"),
-                mime_type=native_block.get("mime_type"),
-            ))
+            blocks.append(
+                ToolResultBlock(
+                    "image",
+                    uri=native_block.get("image_url") or native_block.get("url"),
+                    data=native_block.get("data"),
+                    mime_type=native_block.get("mime_type"),
+                )
+            )
         elif kind == "file":
-            blocks.append(ToolResultBlock(
-                "file", uri=native_block.get("url"),
-                filename=native_block.get("filename"),
-                mime_type=native_block.get("mime_type"),
-            ))
+            blocks.append(
+                ToolResultBlock(
+                    "file",
+                    uri=native_block.get("url"),
+                    filename=native_block.get("filename"),
+                    mime_type=native_block.get("mime_type"),
+                )
+            )
         else:
             blocks.append(ToolResultBlock("json", data=native_block))
 
@@ -386,8 +408,13 @@ def _parse_result(raw) -> ToolResult:
     if stderr and status == "unknown":
         status = "error"
     return ToolResult(
-        status=status, blocks=blocks, stdout=stdout, stderr=stderr,
-        exit_code=exit_code, truncated=truncated, attachments=attachments,
+        status=status,
+        blocks=blocks,
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=exit_code,
+        truncated=truncated,
+        attachments=attachments,
     )
 
 
@@ -406,8 +433,9 @@ def _spawn_input(raw) -> dict:
     result = {
         "description": str(args.get("description") or "migrated subagent"),
         "prompt": str(args.get("prompt") or args.get("message") or ""),
-        "subagent_type": str(args.get("subagent_type") or
-                             args.get("agent_type") or "general"),
+        "subagent_type": str(
+            args.get("subagent_type") or args.get("agent_type") or "general"
+        ),
     }
     aliases = {
         "task_name": ("task_name",),
@@ -417,8 +445,14 @@ def _spawn_input(raw) -> dict:
         "reasoning_effort": ("reasoning_effort",),
     }
     for field, candidates in aliases.items():
-        value = next((args.get(candidate) for candidate in candidates
-                      if args.get(candidate) is not None), None)
+        value = next(
+            (
+                args.get(candidate)
+                for candidate in candidates
+                if args.get(candidate) is not None
+            ),
+            None,
+        )
         if value is not None:
             result[field] = str(value)
     return result
@@ -455,98 +489,6 @@ def _function_call(payload: dict) -> ToolCall:
     )
 
 
-def _subagent_meta(meta: dict) -> dict:
-    source = meta.get("source")
-    if not isinstance(source, dict):
-        return {}
-    subagent = source.get("subagent", {})
-    return subagent if isinstance(subagent, dict) else {}
-
-
-def _identity(meta: dict, fallback: str) -> dict:
-    subagent = _subagent_meta(meta)
-    spawn = subagent.get("thread_spawn", {})
-    if not isinstance(spawn, dict):
-        spawn = {}
-    current_id = session_id(meta, fallback)
-    root_id = meta.get("session_id") or spawn.get("session_id") or current_id
-    parent_id = (meta.get("parent_thread_id") or
-                 spawn.get("parent_thread_id") or
-                 subagent.get("parent_thread_id"))
-    return {
-        "id": current_id,
-        "root_id": root_id,
-        "parent_id": parent_id,
-        "forked_from_id": (meta.get("forked_from_id") or
-                           spawn.get("forked_from_id") or parent_id),
-        "agent_id": (subagent.get("agent_id") or spawn.get("agent_id") or
-                     meta.get("agent_id")),
-        "agent_path": (subagent.get("agent_path") or spawn.get("agent_path") or
-                       meta.get("agent_path")),
-        "agent_type": (subagent.get("agent_type") or spawn.get("agent_type") or
-                       meta.get("agent_type")),
-        "agent_nickname": (
-            spawn.get("agent_nickname") or meta.get("agent_nickname")
-        ),
-        "agent_role": spawn.get("agent_role") or meta.get("agent_role"),
-        "model_provider": meta.get("model_provider"),
-        "model": meta.get("model"),
-        "depth": subagent.get("depth", spawn.get("depth")),
-    }
-
-
-def _first_meta(path: Path) -> dict:
-    try:
-        with path.open() as stream:
-            for line in stream:
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                if record.get("type") == "session_meta":
-                    return record.get("payload") or {}
-    except (OSError, json.JSONDecodeError):
-        pass
-    return {}
-
-
-def _sessions_root(path: Path) -> Path:
-    for parent in (path.parent, *path.parents):
-        if parent.name == "sessions":
-            return parent
-    return path.parent
-
-
-def _rollout_index(path: Path, sessions_dir: str | Path | None) -> dict[str, tuple[Path, dict, dict]]:
-    """Scan the sessions tree once; recursive session loading only uses this index."""
-    root = Path(sessions_dir).expanduser() if sessions_dir else _sessions_root(path)
-    candidates = list(root.rglob("rollout*.jsonl")) if root.exists() else []
-    if path not in candidates:
-        candidates.append(path)
-    cache = ScanCache(_META_CACHE_PATH, version=2)
-    dirty = False
-    index = {}
-    for candidate in candidates:
-        try:
-            stat = candidate.stat()
-        except OSError:
-            continue
-        ident = cache.get(candidate, stat)
-        if ident is None:
-            meta = _first_meta(candidate)
-            ident = _identity(meta, candidate.stem) if meta else {}
-            cache.put(candidate, stat, ident)
-            dirty = True
-        if not ident:
-            continue
-        index[ident["id"]] = (candidate, ident)
-    if dirty:
-        try:
-            cache.flush()
-        except OSError:
-            pass
-    return index
-
-
 def _load_records(path: Path) -> list[dict]:
     records = []
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
@@ -555,39 +497,43 @@ def _load_records(path: Path) -> list[dict]:
         try:
             value = json.loads(line)
         except json.JSONDecodeError as error:
-            records.append({
-                "type": "__resume_harness_malformed_jsonl__",
-                "line_number": line_number,
-                "error": error.msg,
-            })
+            records.append(
+                {
+                    "type": "__resume_harness_malformed_jsonl__",
+                    "line_number": line_number,
+                    "error": error.msg,
+                }
+            )
             continue
         if isinstance(value, dict):
             records.append(value)
         else:
-            records.append({
-                "type": "__resume_harness_malformed_record__",
-                "line_number": line_number,
-                "error": "record is not an object",
-            })
+            records.append(
+                {
+                    "type": "__resume_harness_malformed_record__",
+                    "line_number": line_number,
+                    "error": "record is not an object",
+                }
+            )
     return records
 
 
-def _codex_compaction(record: dict, ordinal: int,
-                      after_message_id: str | None) -> ContextCompaction:
+def _codex_compaction(
+    record: dict, ordinal: int, after_message_id: str | None
+) -> ContextCompaction:
     payload = record.get("payload") or {}
     summary = payload.get("message")
     summary = summary.strip() if isinstance(summary, str) else ""
     replacement = payload.get("replacement_history")
     replacement = replacement if isinstance(replacement, list) else []
     encrypted = any(
-        isinstance(item, dict) and item.get("type") == "compaction"
+        isinstance(item, dict)
+        and item.get("type") == "compaction"
         and isinstance(item.get("encrypted_content"), str)
         and bool(item["encrypted_content"])
         for item in replacement
     )
-    summary_status = (
-        "available" if summary else "protected" if encrypted else "missing"
-    )
+    summary_status = "available" if summary else "protected" if encrypted else "missing"
     window_id = payload.get("window_id")
     return ContextCompaction(
         id=str(window_id or f"record:{ordinal}"),
@@ -612,9 +558,12 @@ def _codex_compaction(record: dict, ordinal: int,
 def _read_one(path: Path, meta: dict | None = None) -> Session:
     lines = _load_records(Path(path))
     response_payload_types = {
-        "message", "reasoning",
-        "function_call", "function_call_output",
-        "custom_tool_call", "custom_tool_call_output",
+        "message",
+        "reasoning",
+        "function_call",
+        "function_call_output",
+        "custom_tool_call",
+        "custom_tool_call_output",
     }
     for line_number, record in enumerate(lines, start=1):
         record_type = record.get("type")
@@ -625,12 +574,16 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 "response_item with payload.type",
                 record_type,
             )
-    meta = meta or next((l.get("payload") or {} for l in lines
-                         if l.get("type") == "session_meta"), {})
-    ident = _identity(meta, path.stem)
-    sess = Session(source_tool="codex",
-                   source_id=ident["id"],
-                   cwd=meta.get("cwd", ""))
+    meta = meta or next(
+        (
+            record.get("payload") or {}
+            for record in lines
+            if record.get("type") == "session_meta"
+        ),
+        {},
+    )
+    ident = topology.identity(meta, path.stem)
+    sess = Session(source_tool="codex", source_id=ident["id"], cwd=meta.get("cwd", ""))
     sess.root_id = ident["root_id"]
     sess.parent_id = ident["parent_id"]
     sess.forked_from_id = ident["forked_from_id"]
@@ -642,21 +595,20 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     sess.model_provider = ident["model_provider"]
     sess.model = ident["model"]
     sess.depth = ident["depth"]
-    sess.parent_association = (
-        "parent-metadata" if ident["parent_id"] else None
-    )
+    sess.parent_association = "parent-metadata" if ident["parent_id"] else None
     for record in lines:
         if record.get("type") in {
-                "__resume_harness_malformed_jsonl__",
-                "__resume_harness_malformed_record__"}:
+            "__resume_harness_malformed_jsonl__",
+            "__resume_harness_malformed_record__",
+        }:
             sess.lose(
                 "session.malformed_record",
                 line_number=record["line_number"],
                 error=record["error"],
             )
     pending: dict[str, ToolCall] = {}
-    cur_tools: list[Block] = []          # 未落消息的工具块,附到下一条 assistant
-    cur_reasoning: list[Block] = []      # 可见 reasoning 降级为 text,附到下一条 assistant
+    cur_tools: list[Block] = []  # 未落消息的工具块,附到下一条 assistant
+    cur_reasoning: list[Block] = []  # 可见 reasoning 降级为 text,附到下一条 assistant
 
     def flush_pending_into(blocks, message_source_id: str | None = None):
         nonlocal cur_tools, cur_reasoning
@@ -671,28 +623,43 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         cur_tools = []
         cur_reasoning = []
 
-    for ordinal, l in enumerate(lines):
-        record_type = l.get("type")
+    for ordinal, record in enumerate(lines):
+        record_type = record.get("type")
         if record_type == "compacted":
-            after_message_id = next((
-                message.source_id for message in reversed(sess.messages)
-                if message.source_id), None)
+            after_message_id = next(
+                (
+                    message.source_id
+                    for message in reversed(sess.messages)
+                    if message.source_id
+                ),
+                None,
+            )
             sess.context_compactions.append(
-                _codex_compaction(l, ordinal, after_message_id))
+                _codex_compaction(record, ordinal, after_message_id)
+            )
             continue
         if record_type == "response_item":
-            p = l.get("payload") or {}
+            p = record.get("payload") or {}
         else:
             continue
         pt = p.get("type")
         if pt == "message":
             content = p.get("content", [])
             if isinstance(content, str):
-                content = [{"type": "input_text" if p.get("role") == "user"
-                            else "output_text", "text": content}]
-            texts = [c.get("text", "") for c in content
-                     if isinstance(c, dict) and
-                     c.get("type") in ("input_text", "output_text")]
+                content = [
+                    {
+                        "type": "input_text"
+                        if p.get("role") == "user"
+                        else "output_text",
+                        "text": content,
+                    }
+                ]
+            texts = [
+                c.get("text", "")
+                for c in content
+                if isinstance(c, dict)
+                and c.get("type") in ("input_text", "output_text")
+            ]
             text = "\n".join(t for t in texts if t)
             image_blocks = []
             for content_index, item in enumerate(content):
@@ -701,7 +668,8 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 if item.get("type") != "input_image":
                     continue
                 image = image_from_data_url(
-                    f"record:{ordinal}:image:{content_index}", item.get("image_url", ""))
+                    f"record:{ordinal}:image:{content_index}", item.get("image_url", "")
+                )
                 if image is None:
                     sess.lose("migration.unknown_block_dropped", kind="input_image")
                 else:
@@ -713,30 +681,53 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 pending_blocks = []
                 source_id = f"record:{ordinal}"
                 flush_pending_into(pending_blocks, source_id)
-                sess.messages.append(Message(role="assistant", blocks=pending_blocks,
-                                             source_id=source_id,
-                                             created_at=l.get("timestamp")))
-            if not text.strip() and not image_blocks and not cur_tools and not cur_reasoning:
+                sess.messages.append(
+                    Message(
+                        role="assistant",
+                        blocks=pending_blocks,
+                        source_id=source_id,
+                        created_at=record.get("timestamp"),
+                    )
+                )
+            if (
+                not text.strip()
+                and not image_blocks
+                and not cur_tools
+                and not cur_reasoning
+            ):
                 continue
             blocks = ([Block("text", text)] if text.strip() else []) + image_blocks
             if role == "assistant":
                 flush_pending_into(blocks, f"record:{ordinal}")
-            sess.messages.append(Message(role=role, blocks=blocks,
-                                         source_id=f"record:{ordinal}",
-                                         created_at=l.get("timestamp")))
+            sess.messages.append(
+                Message(
+                    role=role,
+                    blocks=blocks,
+                    source_id=f"record:{ordinal}",
+                    created_at=record.get("timestamp"),
+                )
+            )
         elif pt in ("custom_tool_call", "function_call"):
             if pt == "function_call":
                 tc = _function_call(p)
             elif p.get("name") == "spawn_agent":
-                tc = ToolCall(name="spawn_agent", op=CanonicalOp.AGENT_SPAWN,
-                              input=_spawn_input(_json_args(p.get("input", ""))))
+                tc = ToolCall(
+                    name="spawn_agent",
+                    op=CanonicalOp.AGENT_SPAWN,
+                    input=_spawn_input(_json_args(p.get("input", ""))),
+                )
             else:
                 tc = _parse_call(p, sess)
             tc.source_call_id = p.get("call_id")
             if tc.op == CanonicalOp.AGENT_SPAWN:
-                tc.source_message_id = next((
-                    message.source_id for message in reversed(sess.messages)
-                    if message.role in {"user", "assistant"}), None)
+                tc.source_message_id = next(
+                    (
+                        message.source_id
+                        for message in reversed(sess.messages)
+                        if message.role in {"user", "assistant"}
+                    ),
+                    None,
+                )
             pending[p.get("call_id")] = tc
             cur_tools.append(Block("tool", tool=tc))
         elif pt in ("custom_tool_call_output", "function_call_output"):
@@ -750,9 +741,14 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             text = codex_summary_text(p)
             if text is not None:
                 cur_reasoning.append(Block("text", text))
-                sess.lose("migration.reasoning_metadata_dropped", metadata_kind="encrypted_content")
+                sess.lose(
+                    "migration.reasoning_metadata_dropped",
+                    metadata_kind="encrypted_content",
+                )
             else:
-                sess.lose("migration.reasoning_dropped", metadata_kind="encrypted_content")
+                sess.lose(
+                    "migration.reasoning_dropped", metadata_kind="encrypted_content"
+                )
         else:
             sess.lose("migration.unknown_block_dropped", kind=pt)
     if cur_tools or cur_reasoning:
@@ -760,7 +756,8 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         flush_pending_into(blocks)
         sess.messages.append(Message(role="assistant", blocks=blocks))
     candidates = [
-        compaction for compaction in sess.context_compactions
+        compaction
+        for compaction in sess.context_compactions
         if compaction.source_meta.get("replacement_history_present")
     ]
     if candidates:
@@ -768,142 +765,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     return sess
 
 
-def _spawn_calls(sess: Session) -> list[ToolCall]:
-    return [block.tool for message in sess.messages for block in message.blocks
-            if block.kind == "tool" and block.tool and
-            block.tool.op == CanonicalOp.AGENT_SPAWN]
-
-
-def _contains_identity(tool: ToolCall, child: Session) -> bool:
-    values = [child.source_id, child.agent_id, child.agent_path]
-    haystack = json.dumps({
-        "input": tool.input,
-        "output": tool_result_text(tool.result),
-    },
-                          ensure_ascii=False)
-    return any(value and value in haystack for value in values)
-
-
-def _attach_tree(sess: Session, by_parent: dict[str, list[Session]], seen: set[str],
-                 edge_statuses: dict[str, str]):
-    if sess.source_id in seen:
-        return
-    seen.add(sess.source_id)
-    spawn_calls = _spawn_calls(sess)
-    candidates = list(by_parent.get(sess.source_id, []))
-    ordered_children = []
-    selected_children: set[int] = set()
-    # 优先按父 rollout 中 spawn_agent 的物理顺序恢复 siblings。writer 的
-    # tool output 包含 agent_path，因此即使目录遍历顺序不同也能
-    # 找回原顺序；无法关联的旧记录再走稳定排序兜底。
-    for tool in spawn_calls:
-        child = next((candidate for candidate in candidates
-                      if id(candidate) not in selected_children and
-                      _contains_identity(tool, candidate)), None)
-        if child is not None:
-            selected_children.add(id(child))
-            ordered_children.append(child)
-    ordered_children.extend(candidate for candidate in candidates
-                            if id(candidate) not in selected_children)
-    used_calls: set[int] = set()
-    for child in ordered_children:
-        if child.source_id in seen:
-            continue
-        matched = next((tool for tool in spawn_calls
-                        if id(tool) not in used_calls and
-                        _contains_identity(tool, child)), None)
-        if matched:
-            used_calls.add(id(matched))
-        elif spawn_calls:
-            sess.lose("session.subagent_unlinked", child_id=child.source_id)
-        prompt = ""
-        if matched and isinstance(matched.input, dict):
-            prompt = str(matched.input.get("prompt") or "")
-        edge = AgentEdge(
-            parent_session_id=sess.source_id,
-            child_session_id=child.source_id,
-            source_call_id=matched.source_call_id if matched else None,
-            spawn_message_id=matched.source_message_id if matched else None,
-            result_message_id=matched.source_result_id if matched else None,
-            agent_id=child.agent_id,
-            agent_path=child.agent_path,
-            agent_type=child.agent_type,
-            prompt=prompt,
-            status=(
-                _canonical_edge_status(matched.result.status)
-                if matched and matched.result else None
-            ) or edge_statuses.get(child.source_id),
-            association=(
-                "spawn-call" if matched else
-                child.parent_association or "parent-metadata"),
-            confidence=(
-                1.0 if matched else 0.95
-                if child.parent_association == "sqlite-parent"
-                else 0.75),
-        )
-        sess.children.append(child)
-        sess.agent_edges.append(edge)
-        _attach_tree(child, by_parent, seen, edge_statuses)
-
-
-def _registry_edges(sessions_root: Path) -> dict[str, tuple[str, str]]:
-    db_path = sessions_root.parent / "state_5.sqlite"
-    if not db_path.exists():
-        return {}
-    try:
-        with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) as db:
-            return {
-                str(child): (str(parent), str(status))
-                for parent, child, status in db.execute(
-                    "SELECT parent_thread_id, child_thread_id, status "
-                    "FROM thread_spawn_edges")
-            }
-    except sqlite3.Error:
-        return {}
-
-
-def _canonical_edge_status(value: str | None) -> str | None:
-    if value in {"open", "closed"}:
-        return value
-    if value in {"completed", "failed", "cancelled", "canceled"}:
-        return "closed"
-    if value in {"in_progress", "queued"}:
-        return "open"
-    return None
-
-
 def read(path: str, sessions_dir: str | Path | None = None) -> Session:
     """Read one rollout and recursively load its descendants from the same root."""
     rollout = Path(path).expanduser().resolve()
-    index = _rollout_index(rollout, sessions_dir)
-    root = _read_one(rollout)
-    registry_edges = _registry_edges(_sessions_root(rollout))
-    sessions = {root.source_id: root}
-    reachable = {root.source_id}
-    while True:
-        added = False
-        for current_id, (candidate, ident) in index.items():
-            registry_parent = registry_edges.get(current_id, (None, None))[0]
-            parent_id = ident["parent_id"] or registry_parent
-            if current_id in reachable or parent_id not in reachable:
-                continue
-            reachable.add(current_id)
-            child = _read_one(candidate)
-            if child.parent_id is None and registry_parent:
-                child.parent_id = registry_parent
-                child.parent_association = "sqlite-parent"
-            sessions[current_id] = child
-            added = True
-        if not added:
-            break
-    by_parent: dict[str, list[Session]] = {}
-    for candidate in sessions.values():
-        if candidate.parent_id:
-            by_parent.setdefault(candidate.parent_id, []).append(candidate)
-    for children in by_parent.values():
-        children.sort(key=lambda child: (child.agent_path or "", child.source_id))
-    _attach_tree(
-        root, by_parent, set(),
-        {child: status for child, (_parent, status) in registry_edges.items()},
-    )
-    return root
+    return topology.read_tree(rollout, _read_one, sessions_dir)
