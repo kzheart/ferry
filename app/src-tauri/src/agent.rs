@@ -1,14 +1,17 @@
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
+use crate::process::client::{JsonlProcessClient, PendingResponses};
+use crate::process::error::ProcessError;
+use crate::process::framing::JsonlWriter;
 use crate::sidecar::engine_request_blocking;
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
@@ -19,48 +22,20 @@ const OPERATION_WAIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static AUTO_SESSIONS: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
-type PendingResult = Result<String, String>;
-type Pending = Arc<Mutex<HashMap<String, mpsc::Sender<PendingResult>>>>;
+#[derive(Clone)]
+struct AgentClient {
+    generation: u64,
+    transport: JsonlProcessClient,
+}
 
 struct AgentProcess {
+    generation: u64,
     child: Child,
-    stdin: Arc<Mutex<ChildStdin>>,
-    pending: Pending,
-}
-
-impl Drop for AgentProcess {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-impl AgentProcess {
-    fn request(&mut self, request: &str, timeout: Duration) -> Result<String, String> {
-        let value: Value = serde_json::from_str(request)
-            .map_err(|error| format!("Agent 命令不是有效 JSON: {error}"))?;
-        let id = value
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or("Agent 命令缺少 id")?
-            .to_owned();
-        let (sender, receiver) = mpsc::channel();
-        self.pending
-            .lock()
-            .map_err(|_| "Agent pending 锁损坏".to_owned())?
-            .insert(id.clone(), sender);
-        if let Err(error) = write_line(&self.stdin, request) {
-            self.pending.lock().ok().and_then(|mut map| map.remove(&id));
-            return Err(error);
-        }
-        receiver.recv_timeout(timeout).map_err(|error| {
-            self.pending.lock().ok().and_then(|mut map| map.remove(&id));
-            format!("Agent 命令等待失败: {error}")
-        })?
-    }
+    client: AgentClient,
 }
 
 static AGENT: OnceLock<Mutex<Option<AgentProcess>>> = OnceLock::new();
+static AGENT_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 fn next_id(prefix: &str) -> String {
     format!(
@@ -70,13 +45,11 @@ fn next_id(prefix: &str) -> String {
     )
 }
 
-fn write_line(stdin: &Arc<Mutex<ChildStdin>>, line: &str) -> Result<(), String> {
-    let mut writer = stdin.lock().map_err(|_| "Agent stdin 锁损坏".to_owned())?;
-    writer
-        .write_all(line.as_bytes())
-        .and_then(|_| writer.write_all(b"\n"))
-        .and_then(|_| writer.flush())
-        .map_err(|error| format!("写入 Agent 失败: {error}"))
+impl Drop for AgentProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProcess, String> {
@@ -118,11 +91,11 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
     let mut child = command
         .spawn()
         .map_err(|error| format!("启动 Agent 失败: {error}"))?;
-    let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or("Agent stdin 不可用")?));
+    let stdin = child.stdin.take().ok_or("Agent stdin 不可用")?;
     let stdout = child.stdout.take().ok_or("Agent stdout 不可用")?;
-    let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
-    let reader_stdin = stdin.clone();
-    let reader_pending = pending.clone();
+    let transport = JsonlProcessClient::new("Ferry Runtime", stdin);
+    let reader_stdin = transport.writer();
+    let reader_pending = transport.pending();
     let reader_app = app.clone();
     let reader_resource = resource_dir.to_owned();
     std::thread::spawn(move || {
@@ -134,10 +107,14 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
             reader_pending,
         )
     });
+    let generation = AGENT_GENERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     Ok(AgentProcess {
+        generation,
         child,
-        stdin,
-        pending,
+        client: AgentClient {
+            generation,
+            transport,
+        },
     })
 }
 
@@ -145,8 +122,8 @@ fn read_agent_output(
     app: tauri::AppHandle,
     resource_dir: PathBuf,
     mut stdout: impl BufRead,
-    stdin: Arc<Mutex<ChildStdin>>,
-    pending: Pending,
+    stdin: JsonlWriter,
+    pending: PendingResponses,
 ) {
     let mut line = String::new();
     loop {
@@ -189,16 +166,12 @@ fn read_agent_output(
             continue;
         }
         if let Some(id) = value.get("id").and_then(Value::as_str) {
-            if let Some(sender) = pending.lock().ok().and_then(|mut map| map.remove(id)) {
-                let _ = sender.send(Ok(trimmed.to_owned()));
-            }
+            pending.complete(id, trimmed.to_owned());
         }
     }
-    if let Ok(mut waiters) = pending.lock() {
-        for (_, sender) in waiters.drain() {
-            let _ = sender.send(Err("Agent 进程已退出".to_owned()));
-        }
-    }
+    pending.fail_all(crate::process::error::ProcessError::Exited(
+        "Ferry Runtime 进程已退出".to_owned(),
+    ));
     let _ = app.emit(
         "ferry-agent-event",
         json!({"protocol": FERRY_IPC_PROTOCOL, "type": "runtime.disconnected"}),
@@ -208,7 +181,7 @@ fn read_agent_output(
 fn complete_tool_request(
     app: &tauri::AppHandle,
     resource_dir: &Path,
-    stdin: &Arc<Mutex<ChildStdin>>,
+    stdin: &JsonlWriter,
     event: &Value,
 ) {
     let session_id = event
@@ -290,7 +263,7 @@ fn complete_tool_request(
 }
 
 fn send_gateway_result(
-    stdin: &Arc<Mutex<ChildStdin>>,
+    stdin: &JsonlWriter,
     session_id: &str,
     request_id: &str,
     outcome: Result<Value, String>,
@@ -315,10 +288,10 @@ fn send_gateway_result(
         "method": "tool.result",
         "params": params,
     });
-    let _ = write_line(stdin, &command.to_string());
+    let _ = stdin.write_line(&command.to_string());
 }
 
-fn complete_engine_request(resource_dir: &Path, stdin: &Arc<Mutex<ChildStdin>>, event: &Value) {
+fn complete_engine_request(resource_dir: &Path, stdin: &JsonlWriter, event: &Value) {
     let session_id = event
         .get("session_id")
         .and_then(Value::as_str)
@@ -524,6 +497,33 @@ fn request_agent(
     resource_dir: &Path,
     request: &str,
 ) -> Result<String, String> {
+    let id = serde_json::from_str::<Value>(request)
+        .ok()
+        .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
+        .ok_or("Agent 命令缺少 id")?;
+    let timeout = serde_json::from_str::<Value>(request)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("method")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .filter(|method| method == "organization.start")
+        .map(|_| ORGANIZATION_TIMEOUT)
+        .unwrap_or(COMMAND_TIMEOUT);
+    let client = ensure_agent(app, resource_dir)?;
+    let result = client.transport.request(&id, request, timeout);
+    if result
+        .as_ref()
+        .is_err_and(ProcessError::invalidates_process)
+    {
+        invalidate_agent(client.generation);
+    }
+    result.map_err(|error| error.to_string())
+}
+
+fn ensure_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentClient, String> {
     let slot = AGENT.get_or_init(|| Mutex::new(None));
     let mut guard = slot.lock().map_err(|_| "Agent 状态锁损坏".to_owned())?;
     let exited = guard
@@ -534,14 +534,22 @@ fn request_agent(
         *guard = None;
     }
     if guard.is_none() {
-        let mut candidate = spawn_agent(app, resource_dir)?;
+        let candidate = spawn_agent(app, resource_dir)?;
         let health = json!({
             "protocol": FERRY_IPC_PROTOCOL,
             "id": next_id("health"),
             "method": "health",
             "params": {},
         });
-        let response = candidate.request(&health.to_string(), Duration::from_secs(10))?;
+        let health_id = health
+            .get("id")
+            .and_then(Value::as_str)
+            .expect("health request has id");
+        let response = candidate
+            .client
+            .transport
+            .request(health_id, &health.to_string(), Duration::from_secs(10))
+            .map_err(|error| error.to_string())?;
         let value: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
         if value.get("ok").and_then(Value::as_bool) != Some(true)
             || value.pointer("/result/service").and_then(Value::as_str) != Some("ferry-runtime")
@@ -554,25 +562,19 @@ fn request_agent(
         }
         *guard = Some(candidate);
     }
-    let timeout = serde_json::from_str::<Value>(request)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("method")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .filter(|method| method == "organization.start")
-        .map(|_| ORGANIZATION_TIMEOUT)
-        .unwrap_or(COMMAND_TIMEOUT);
-    let result = guard
-        .as_mut()
-        .expect("agent ensured")
-        .request(request, timeout);
-    if result.is_err() {
-        *guard = None;
+    Ok(guard.as_ref().expect("agent ensured").client.clone())
+}
+
+fn invalidate_agent(generation: u64) {
+    let slot = AGENT.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = slot.lock() {
+        if guard
+            .as_ref()
+            .is_some_and(|process| process.generation == generation)
+        {
+            *guard = None;
+        }
     }
-    result
 }
 
 fn validate_public_command(request: &str) -> Result<(), String> {
