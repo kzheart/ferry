@@ -100,11 +100,12 @@ def test_preview_migration_counts_the_actual_tree_after_scope_pruning(monkeypatc
         adapters=lambda: ["opencode"],
         adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
-    monkeypatch.setattr(agent_tools, "current", lambda: ports)
-    monkeypatch.setattr(agent_tools._INDEX, "resolve", lambda *_: record)
-    monkeypatch.setattr(agent_tools, "_read_record", lambda _record: session)
+    index = agent_tools.AgentSessionIndex(ports)
+    monkeypatch.setattr(index, "resolve", lambda *_: record)
+    monkeypatch.setattr(agent_tools, "_read_record", lambda *_: session)
 
-    preview = agent_tools.preview_migration("claude", "opaque", "opencode", max_turn=1)
+    preview = agent_tools.preview_migration(
+        "claude", "opaque", "opencode", max_turn=1, index=index)
 
     assert preview["message_count"] == 5
     assert preview["root_message_count"] == 2

@@ -21,10 +21,22 @@ from test_agent_tools import _claude_ref, agent_environment
 
 
 @pytest.fixture(autouse=True)
-def operation_service():
-    operations.reset_service()
-    yield
-    operations.reset_service()
+def operation_service(monkeypatch, agent_environment):
+    state = {"service": None}
+
+    def reset():
+        if state["service"] is not None:
+            state["service"].shutdown()
+        state["service"] = operations.OperationService(
+            current(), agent_environment["index"],
+        )
+        for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
+            monkeypatch.setattr(
+                operations, name, getattr(state["service"], name), raising=False)
+
+    reset()
+    yield {"reset": reset}
+    state["service"].shutdown()
 
 
 def _plan(ops=None, probe=False):
@@ -144,10 +156,10 @@ def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):
     assert operations.status(plan["plan_id"])["status"] == "applied"
 
 
-def test_plan_survives_operation_service_restart(agent_environment):
+def test_plan_survives_operation_service_restart(agent_environment, operation_service):
     plan = _plan()
 
-    operations.reset_service()
+    operation_service["reset"]()
 
     assert operations.status(plan["plan_id"])["status"] == "planned"
     result = _apply(plan["plan_id"])
@@ -155,14 +167,14 @@ def test_plan_survives_operation_service_restart(agent_environment):
     assert agent_environment["editor"].commits == 1
 
 
-def test_restart_marks_interrupted_apply_failed(agent_environment):
+def test_restart_marks_interrupted_apply_failed(agent_environment, operation_service):
     plan = _plan()
     database = StateDatabase(
         agent_environment["root"].parent / "ferry-state.sqlite3",
     )
     assert database.claim(plan["plan_id"], 2_000)
 
-    operations.reset_service()
+    operation_service["reset"]()
 
     status = operations.status(plan["plan_id"])
     assert status["status"] == "failed"

@@ -22,7 +22,7 @@ from . import agent_tools, verification as probe_mod
 from . import session_meta
 from .editing import apply_mutation, preview_mutation
 from .migration import MigrationService
-from .ports import ApplicationPorts, current
+from .ports import ApplicationPorts
 from .session_deletion import SessionDeletionService
 from ..infrastructure.state_db import StateDatabase
 
@@ -75,8 +75,10 @@ class OperationState:
 
 
 class OperationService:
-    def __init__(self, ports: ApplicationPorts):
+    def __init__(self, ports: ApplicationPorts,
+                 index: agent_tools.AgentSessionIndex):
         self._ports = ports
+        self._index = index
         self._migration = MigrationService(ports)
         self._lock = threading.RLock()
         # 所有写操作都在同一个持久化队列中串行执行。这样 IPC 请求可立即
@@ -118,9 +120,9 @@ class OperationService:
         tool = operation_input["tool"]
         ref = operation_input["ref"]
 
-        before = agent_tools._INDEX.resolve(tool, ref)
+        before = self._index.resolve(tool, ref)
         preview = self._preview_edit(before, operation_input["ops"])
-        after = agent_tools._INDEX.resolve(tool, ref)
+        after = self._index.resolve(tool, ref)
         if before.revision != after.revision:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
@@ -144,8 +146,8 @@ class OperationService:
         operation_input = self._validate_migration_input(value)
         source_tool = operation_input["source_tool"]
         ref = operation_input["ref"]
-        before = agent_tools._INDEX.resolve(source_tool, ref)
-        session = agent_tools._read_record(before)
+        before = self._index.resolve(source_tool, ref)
+        session = agent_tools._read_record(self._index, before)
         preview = self._migration.preview(
             source_tool,
             operation_input["target_tool"],
@@ -155,7 +157,7 @@ class OperationService:
             session=session,
         )
         try:
-            after = agent_tools._INDEX.resolve(source_tool, ref)
+            after = self._index.resolve(source_tool, ref)
         except AgentReferenceError as error:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
@@ -175,7 +177,7 @@ class OperationService:
         operation_input = self._validate_metadata_input(value)
         tool = operation_input["tool"]
         ref = operation_input["ref"]
-        before_record = agent_tools._INDEX.resolve(tool, ref)
+        before_record = self._index.resolve(tool, ref)
         session_id = before_record.row.get("id")
         if not isinstance(session_id, str) or not session_id:
             raise AgentRequestError("会话缺少可用的 metadata id")
@@ -190,7 +192,7 @@ class OperationService:
             "before": metadata_before,
             "after_patch": operation_input["patch"],
         }
-        after_record = agent_tools._INDEX.resolve(tool, ref)
+        after_record = self._index.resolve(tool, ref)
         if before_record.revision != after_record.revision:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
@@ -204,7 +206,7 @@ class OperationService:
 
     def _plan_delete(self, value: dict) -> dict:
         operation_input = self._validate_delete_input(value)
-        record = agent_tools._INDEX.resolve(
+        record = self._index.resolve(
             operation_input["tool"], operation_input["ref"],
         )
         plugin = self._ports.adapter(operation_input["tool"])
@@ -216,7 +218,7 @@ class OperationService:
             "title": agent_tools._redact(str(record.row.get("title") or ""), 512),
             "undoable": bool(getattr(lifecycle, "delete_undoable", False)),
         }
-        after = agent_tools._INDEX.resolve(
+        after = self._index.resolve(
             operation_input["tool"], operation_input["ref"],
         )
         if record.revision != after.revision:
@@ -537,7 +539,7 @@ class OperationService:
     def _apply_edit(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
-            record = agent_tools._INDEX.resolve(
+            record = self._index.resolve(
                 params["tool"], params["ref"],
             )
         except AgentReferenceError as error:
@@ -595,7 +597,7 @@ class OperationService:
     def _apply_migration(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
-            record = agent_tools._INDEX.resolve(
+            record = self._index.resolve(
                 params["source_tool"], params["ref"],
             )
         except AgentReferenceError as error:
@@ -606,7 +608,7 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在迁移计划生成后已变化，请重新计划"
             )
-        session = agent_tools._read_record(record)
+        session = agent_tools._read_record(self._index, record)
         result = self._migration.apply(
             params["source_tool"],
             params["target_tool"],
@@ -624,7 +626,7 @@ class OperationService:
     def _apply_metadata(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
-            record = agent_tools._INDEX.resolve(
+            record = self._index.resolve(
                 params["tool"], params["ref"],
             )
         except AgentReferenceError as error:
@@ -650,7 +652,7 @@ class OperationService:
     def _apply_delete(self, operation: OperationPlan) -> dict:
         params = operation.input()
         try:
-            record = agent_tools._INDEX.resolve(
+            record = self._index.resolve(
                 params["tool"], params["ref"],
             )
         except AgentReferenceError as error:
@@ -737,14 +739,13 @@ class OperationService:
             agent_tools._validate_ops(ordinary)
         return normalized
 
-    @staticmethod
-    def _resolve_ops(record, ops: list[dict]) -> list[dict]:
+    def _resolve_ops(self, record, ops: list[dict]) -> list[dict]:
         resolved = []
         for op in ops:
             if op["op"] == "replace-assistant-reply":
                 resolved.append(dict(op))
             else:
-                resolved.extend(agent_tools.resolve_edit_ops(record, [op]))
+                resolved.extend(agent_tools.resolve_edit_ops(self._index, record, [op]))
         return resolved
 
     @staticmethod
@@ -789,7 +790,7 @@ class OperationService:
         if not any(
                 op["op"] == "replace-assistant-reply" for op in ops):
             return agent_tools.preview_edit(
-                record.tool, record.opaque_ref, ops=ops,
+                record.tool, record.opaque_ref, ops=ops, index=self._index,
             )
         plugin = self._ports.adapter(record.tool)
         editor = plugin.editor
@@ -895,45 +896,3 @@ class OperationService:
             "created_at": operation.created_at,
             "expires_at": operation.expires_at,
         }
-
-
-_SERVICE: OperationService | None = None
-
-
-def _service() -> OperationService:
-    global _SERVICE
-    ports = current()
-    if _SERVICE is None or _SERVICE._ports is not ports:
-        _SERVICE = OperationService(ports)
-    return _SERVICE
-
-
-def reset_service() -> None:
-    global _SERVICE
-    if _SERVICE is not None:
-        _SERVICE.shutdown()
-    _SERVICE = None
-
-
-def plan(value: dict) -> dict:
-    return _service().plan(value)
-
-
-def apply(plan_id: str) -> dict:
-    return _service().apply(plan_id)
-
-
-def status(plan_id: str) -> dict:
-    return _service().status(plan_id)
-
-
-def cancel(plan_id: str) -> dict:
-    return _service().cancel(plan_id)
-
-
-def wait(plan_id: str, timeout: float | None = None) -> dict:
-    return _service().wait(plan_id, timeout)
-
-
-def audit(plan_id: str) -> list[dict]:
-    return _service().audit(plan_id)

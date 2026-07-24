@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+from functools import partial
 import sqlite3
 from dataclasses import dataclass
 
@@ -199,7 +200,7 @@ def _session():
 
 
 @pytest.fixture
-def agent_environment(tmp_path):
+def agent_environment(tmp_path, monkeypatch):
     previous = current()
     root = tmp_path / "sessions"
     root.mkdir()
@@ -242,10 +243,17 @@ def agent_environment(tmp_path):
         cache_factory=Cache, resource_path=lambda *_: tmp_path,
         snapshot_dir=lambda: tmp_path, version="test",
     ))
-    agent_tools.reset_index()
+    index = agent_tools.AgentSessionIndex(current())
+    for name in (
+        "search_sessions", "get_session_context", "search_session_content",
+        "session_read", "get_usage", "preview_migration", "preview_edit",
+    ):
+        monkeypatch.setattr(
+            agent_tools, name, partial(getattr(agent_tools, name), index=index),
+        )
     yield {"root": root, "transcript": transcript, "editor": editor,
-           "claude_browser": claude.browser, "opencode_browser": opencode_browser}
-    agent_tools.reset_index()
+           "claude_browser": claude.browser, "opencode_browser": opencode_browser,
+           "index": index}
     configure(previous)
 
 
@@ -267,13 +275,13 @@ def test_search_never_exposes_storage_locations(agent_environment):
 
 def test_library_scan_issues_operation_refs(agent_environment):
     session = next(
-        item for item in scanning.scan(current())["sessions"]
+        item for item in scanning.scan(current(), agent_environment["index"])["sessions"]
         if item["tool"] == "claude"
     )
 
     assert session["ref"].startswith("fsr_")
     assert session["revision"]
-    assert agent_tools._INDEX.resolve(
+    assert agent_environment["index"].resolve(
         session["tool"], session["ref"],
     ).canonical_ref == str(agent_environment["transcript"])
 
@@ -326,7 +334,6 @@ def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
     with pytest.raises(AgentReferenceError, match="扫描索引"):
         agent_tools.get_session_context("claude", ref)
 
-    agent_tools.reset_index()
     ref = _claude_ref()
     child_dir = agent_environment["root"] / "session" / "subagents"
     child_dir.mkdir(parents=True)

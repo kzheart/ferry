@@ -3,11 +3,11 @@
 import json
 import logging
 import os
+from functools import lru_cache
 
-from ..application.engine import EngineApplication
-from ..application.ports import current
 from ..application import agent_tools
-from ..application import operations
+from ..application.engine import EngineApplication
+from ..composition import build_application
 from ..application.verification import ProbeTimeout
 from ..contracts.engine_methods import ENGINE_METHOD_NAMES
 from ..domain.errors import (
@@ -19,9 +19,10 @@ log = logging.getLogger(__name__)
 PROTOCOL = 2
 
 
+@lru_cache(maxsize=1)
 def application() -> EngineApplication:
-    """RPC 是 process-local composition 的唯一读取边界。"""
-    return EngineApplication(current())
+    """RPC 进程在生命周期内复用同一个应用范围对象。"""
+    return build_application()
 
 
 RPC_METHODS = {
@@ -53,22 +54,22 @@ RPC_METHODS = {
     "runtime_sessions.load_all": lambda p: application().load_runtime_sessions(),
     "runtime_sessions.commit": lambda p: application().commit_runtime_session(p["update"]),
     "runtime_sessions.delete": lambda p: application().delete_runtime_session(p["session_id"]),
-    "agent_search_sessions": lambda p: agent_tools.search_sessions(
+    "agent_search_sessions": lambda p: application().agent_search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),
-    "agent_session_read": lambda p: agent_tools.session_read(
+    "agent_session_read": lambda p: application().agent_session_read(
         p["tool"], ref=p["ref"],
         terms=p.get("terms"), roles=p.get("roles"),
         from_message=p.get("from_message", 1), limit=p.get("limit", 20),
         include_tool_outputs=p.get("include_tool_outputs", False),
         max_bytes=p.get("max_bytes", agent_tools.DEFAULT_CONTEXT_BYTES)),
-    "agent_get_usage": lambda p: agent_tools.get_usage(
+    "agent_get_usage": lambda p: application().agent_get_usage(
         agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range")),
-    "operation.plan": lambda p: operations.plan(p["input"]),
-    "operation.apply": lambda p: operations.apply(p["plan_id"]),
-    "operation.status": lambda p: operations.status(p["plan_id"]),
-    "operation.cancel": lambda p: operations.cancel(p["plan_id"]),
+    "operation.plan": lambda p: application().operation_plan(p["input"]),
+    "operation.apply": lambda p: application().operation_apply(p["plan_id"]),
+    "operation.status": lambda p: application().operation_status(p["plan_id"]),
+    "operation.cancel": lambda p: application().operation_cancel(p["plan_id"]),
 }
 
 if set(RPC_METHODS) != ENGINE_METHOD_NAMES:

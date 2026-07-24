@@ -174,12 +174,13 @@ def test_preview_reports_same_scope_counts_as_migration(monkeypatch):
         adapters=lambda: ["opencode"],
         adapter=lambda _name: SimpleNamespace(migration_target=target),
     )
-    monkeypatch.setattr(agent_tools, "current", lambda: ports)
-    monkeypatch.setattr(agent_tools._INDEX, "resolve", lambda *_: SimpleNamespace(
+    index = agent_tools.AgentSessionIndex(ports)
+    monkeypatch.setattr(index, "resolve", lambda *_: SimpleNamespace(
         revision="revision"))
-    monkeypatch.setattr(agent_tools, "_read_record", lambda _record: session)
+    monkeypatch.setattr(agent_tools, "_read_record", lambda *_: session)
 
-    preview = agent_tools.preview_migration("claude", "opaque", "opencode", max_turn=1)
+    preview = agent_tools.preview_migration(
+        "claude", "opaque", "opencode", max_turn=1, index=index)
 
     assert (preview["message_count"], preview["root_message_count"],
             preview["tree_count"]) == (3, 2, 2)

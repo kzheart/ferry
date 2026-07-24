@@ -4,7 +4,7 @@ from .ports import ApplicationPorts
 from . import agent_tools
 
 
-def scan(ports: ApplicationPorts) -> dict:
+def scan(ports: ApplicationPorts, index: agent_tools.AgentSessionIndex) -> dict:
     tools, scanned = {}, []
     cache = ports.cache_factory()
     for name in ports.adapters():
@@ -19,7 +19,7 @@ def scan(ports: ApplicationPorts) -> dict:
     cache.flush()
     sessions = [
         {**record.row, "ref": record.opaque_ref, "revision": record.revision}
-        for record in agent_tools._INDEX.index_rows(scanned)
+        for record in index.index_rows(scanned)
     ]
     sessions.sort(key=lambda session: session["updated"], reverse=True)
     return {"tools": tools, "sessions": sessions}
