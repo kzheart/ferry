@@ -9,6 +9,7 @@ mod operation_input;
 mod operation_request;
 mod operation_validation;
 mod platform;
+mod process;
 mod reveal;
 mod sidecar;
 mod sidecar_policy;
