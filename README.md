@@ -150,26 +150,41 @@ Ferry reads your agents' local session stores directly. Nothing is uploaded, and
 
 **Prerequisites**: Node.js 22.19+, Rust (stable), Python 3.12
 
-The engine ships as a PyInstaller sidecar alongside the Tauri shell.
+The Session Engine and Ferry Runtime ship as native sidecars alongside the
+Tauri shell.
 
 ```bash
-# 1. Build the Python engine sidecar
+# Development uses the Python source process and compiled TypeScript runtime
+python -m pip install -r requirements-test.txt
+cd ferry-runtime && npm ci
+cd ../app && npm ci
+npm run desktop
+```
+
+Build a complete native release from the repository root:
+
+```bash
 python -m pip install -r requirements-build.txt
-python scripts/build-sidecar.py --clean
-
-# 2. Install frontend dependencies and run
-cd app
-npm ci
-npm run tauri dev
+python scripts/build.py
 ```
 
-To produce a release bundle:
+To reuse already installed npm dependencies:
 
 ```bash
-cd app && npm run tauri build
+python scripts/build.py --skip-install
 ```
 
-> Rebuild the sidecar whenever engine code changes — `npm run tauri build` bundles whatever binary is already present; it does not rebuild the sidecar.
+The root build validates the native target and toolchain, creates both
+sidecars, then invokes Tauri. Sidecars are built natively for
+`aarch64-apple-darwin` or `x86_64-pc-windows-msvc`; cross-building a frozen
+sidecar is intentionally rejected.
+
+For frontend-only development:
+
+```bash
+cd app
+npm run dev
+```
 
 ## Architecture
 
