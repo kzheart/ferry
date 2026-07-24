@@ -6,6 +6,7 @@ export * from "./providers/model-store.js";
 export * from "./providers/provider-config.js";
 export * from "./providers/provider-config-store.js";
 export * from "./providers/provider-config-validation.js";
+export * from "./providers/provider-service.js";
 export * from "./providers/provider-host.js";
 export * from "./roles/role-repository.js";
 export * from "./runtime/command-router.js";
