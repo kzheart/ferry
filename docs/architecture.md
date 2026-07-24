@@ -86,6 +86,20 @@ Session Engine operations.
 
 Rust does not parse Claude, Codex, or OpenCode native data.
 
+```text
+app/src-tauri/src/
+  engine/          Python Engine client, policy, public commands
+  runtime/         Ferry Runtime gateway and approval routing
+  operations/      typed operation input, validation, request encoding
+  process/         shared JSONL process transport
+  desktop/         terminal, reveal, window, menu, platform implementations
+  contracts/       generated shared contracts
+```
+
+Windows support remains a first-class platform boundary under
+`desktop/platform/windows.rs`; capability packaging must not remove its build
+or CI path.
+
 ### Python Session Engine
 
 Owns session indexing, current native-format adapters, the canonical semantic

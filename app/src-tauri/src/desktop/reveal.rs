@@ -5,5 +5,5 @@ pub(crate) async fn reveal_path(path: String) -> Result<(), String> {
     if !std::path::Path::new(&path).exists() {
         return Err("文件不存在".to_string());
     }
-    crate::platform::reveal_path(std::path::Path::new(&path))
+    super::platform::reveal_path(std::path::Path::new(&path))
 }

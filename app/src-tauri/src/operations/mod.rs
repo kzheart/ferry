@@ -3,13 +3,17 @@
 //! 这里负责把已类型化的计划输入校验并编码为固定 Engine RPC；sidecar 只负责
 //! 进程监督与请求传输，不能混入具体 operation 的字段规则。
 
-use crate::operation_input::{
+pub(crate) mod input;
+pub(crate) mod request;
+mod validation;
+
+use self::input::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
     MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
 };
-use crate::operation_request::{operation_plan_id_request, operation_plan_request};
-use crate::operation_validation::{is_known_agent, validate_opaque_ref, validate_reply};
-use crate::sidecar::engine_request_blocking;
+use self::request::{operation_plan_id_request, operation_plan_request};
+use self::validation::{is_known_agent, validate_opaque_ref, validate_reply};
+use crate::engine::engine_request_blocking;
 use serde_json::Value;
 use std::collections::HashSet;
 

@@ -42,7 +42,7 @@ def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():
     tauri = json.loads((ROOT / "app/src-tauri/tauri.conf.json").read_text())
     assert "binaries/ferry-runtime" in tauri["bundle"]["externalBin"]
 
-    host = (ROOT / "app/src-tauri/src/agent.rs").read_text()
+    host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
     assert '"ferry-runtime.exe"' in host
     assert '"ferry-runtime"' in host
     assert "ferry-runtime/dist/server/server.js" in host

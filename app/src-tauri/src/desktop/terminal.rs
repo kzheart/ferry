@@ -1,5 +1,5 @@
+use super::platform::{TerminalLaunch, TerminalPreference};
 use crate::contracts::agents::ALLOWED_EXECUTABLES;
-use crate::platform::{TerminalLaunch, TerminalPreference};
 
 /// Tauri command 只执行桌面白名单校验；所有平台细节由 platform/ 持有。
 #[tauri::command]
@@ -16,7 +16,7 @@ pub(crate) async fn open_terminal(
     }
     let preference = TerminalPreference::from_option(terminal_app.as_deref());
     tauri::async_runtime::spawn_blocking(move || {
-        crate::platform::open_terminal(&launch, preference)
+        super::platform::open_terminal(&launch, preference)
     })
     .await
     .map_err(|error| error.to_string())?

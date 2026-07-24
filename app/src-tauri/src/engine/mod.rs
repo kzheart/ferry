@@ -1,8 +1,10 @@
+mod policy;
+
+use self::policy::{request_attempts, request_timeout};
 use crate::contracts::engine_methods::{self, Exposure};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::error::ProcessError;
-use crate::sidecar_policy::{request_attempts, request_timeout};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -81,7 +83,7 @@ fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), S
 fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut command = engine_command(resource_dir)?;
     command.arg("serve");
-    crate::platform::configure_background_command(&mut command);
+    crate::desktop::platform::configure_background_command(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -330,22 +332,22 @@ fn validate_engine_request_exposure(request: &str, expected: Exposure) -> Result
 
 #[cfg(test)]
 mod tests {
+    use super::policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_TIMEOUT};
     use super::{
         read_engine_output, request_attempts, request_timeout, stamp_engine_request,
         validate_engine_request_exposure, validate_engine_response_id, FERRY_IPC_PROTOCOL,
     };
     use crate::contracts::engine_methods::Exposure;
-    use crate::operation_commands::validate_operation_plan_input;
-    use crate::operation_input::{
+    use crate::operations::input::{
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
         MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
         RestoreDeleteOperationPlanInput,
     };
-    use crate::operation_request::{
+    use crate::operations::request::{
         operation_plan_id_request, operation_plan_request, validate_plan_id,
     };
+    use crate::operations::validate_operation_plan_input;
     use crate::process::client::PendingResponses;
-    use crate::sidecar_policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_TIMEOUT};
     use std::io::Cursor;
 
     #[test]

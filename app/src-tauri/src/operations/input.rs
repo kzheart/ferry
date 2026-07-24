@@ -1,7 +1,7 @@
 //! 写操作计划的跨进程输入契约。
 //!
 //! 本模块只表示 WebView 可以提交给可信 Host 的意图；校验、审批与 Engine
-//! 调用仍分别由 sidecar 和 policy 层负责，避免把会话格式知识带入 Rust。
+//! 调用仍分别由 engine 和 policy 层负责，避免把会话格式知识带入 Rust。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
