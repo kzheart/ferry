@@ -836,11 +836,11 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
     session = _read_record(record)
     if max_turn is not None:
         max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
-        from .services import _truncate_rounds
+        from .migration import _truncate_rounds
         _truncate_rounds(session, max_turn)
     target = _INDEX.ports.adapter(target_tool).migration_target
     loss = target.plan(session)
-    from .services import _migration_counts
+    from .migration import _migration_counts
     tree_count, message_count = _migration_counts(session)
     edge_count = sum(len(node.agent_edges) for node in session.walk())
     topology = {"nodes": tree_count, "edges": max(0, tree_count - 1),

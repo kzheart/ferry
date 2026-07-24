@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.application import agent_tools, services
+from engine.application import agent_tools, migration
 from engine.domain.model import AgentEdge, Block, Message, Session
 
 
@@ -43,16 +43,23 @@ def _migrate_target(write):
 
 
 def _install_target(monkeypatch, target):
-    monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
+    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
         migration_target=target))
-    monkeypatch.setattr(services, "resume_command", lambda *_: {"kind": "test"})
-    monkeypatch.setattr(services, "_append_history", lambda _entry: None)
+    monkeypatch.setattr(
+        migration.MigrationService, "__init__",
+        lambda instance, _ports: setattr(instance, "_ports", ports),
+    )
+    monkeypatch.setattr(
+        migration.MigrationService, "resume_command",
+        lambda *_: {"kind": "test"},
+    )
+    monkeypatch.setattr(migration.history, "append", lambda *_: None)
 
 
 def test_truncate_boundary_deduplicates_children_and_edges():
     session = _scoped_tree()
 
-    services._truncate_rounds(session, 1)
+    migration._truncate_rounds(session, 1)
 
     assert [message.source_id for message in session.messages] == ["user-1", "assistant-1"]
     assert [child.source_id for child in session.children] == ["linked"]
@@ -68,7 +75,7 @@ def test_truncate_requires_a_nonempty_message_source_id_for_spawn_link():
     root.children = [child]
     root.agent_edges = [AgentEdge("root", "child", spawn_message_id="")]
 
-    services._truncate_rounds(root, 1)
+    migration._truncate_rounds(root, 1)
 
     assert root.children == []
     assert root.agent_edges == []
@@ -80,14 +87,17 @@ def test_preview_and_apply_report_identical_scope_counts(monkeypatch, tmp_path):
     target = _migrate_target(lambda session, _cwd: (
         writes.append(session) or ("written", tmp_path / "written")))
     _install_target(monkeypatch, target)
-    monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (True, "ok"))
 
-    preview = services.preview_migration(
+    preview = migration.MigrationService(None).preview(
         "claude", "opencode", "ignored", cwd=str(tmp_path),
-        max_turn=1, _session=_scoped_tree(),
+        max_turn=1, session=_scoped_tree(),
     )
-    actual = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
-                              max_turn=1, _session=_scoped_tree())
+    actual = migration.MigrationService(None).apply(
+        "claude", "opencode", "ignored", cwd=str(tmp_path),
+        max_turn=1, session=_scoped_tree(),
+    )
 
     assert writes
     assert (
@@ -102,12 +112,16 @@ def test_validation_failure_rolls_back_the_written_artifact(monkeypatch, tmp_pat
     target = _migrate_target(lambda _session, _cwd: ("written", tmp_path / "written"))
     _install_target(monkeypatch, target)
     removed = []
-    monkeypatch.setattr(services, "validate_written_tree", lambda *_: (False, "invalid"))
-    monkeypatch.setattr(services, "_cleanup_artifact", lambda _dst, sid, _dest:
-                        removed.append(sid))
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (False, "invalid"))
+    monkeypatch.setattr(
+        migration.MigrationService, "_cleanup_artifact", lambda _self, _dst, sid, _dest:
+        removed.append(sid))
 
-    result = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
-                              _session=_scoped_tree())
+    result = migration.MigrationService(None).apply(
+        "claude", "opencode", "ignored", cwd=str(tmp_path),
+        session=_scoped_tree(),
+    )
 
     assert result["rolled_back"] is True
     assert removed == ["written"]
@@ -119,11 +133,11 @@ def test_probe_shadow_write_failure_restores_the_original_loss_state(monkeypatch
         value.lose("probe.shadow_write"),
         (_ for _ in ()).throw(RuntimeError("shadow write failed")),
     )[1])
-    monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
-        migration_target=target))
+    instance = migration.MigrationService(SimpleNamespace(
+        adapter=lambda _name: SimpleNamespace(migration_target=target)))
 
     with pytest.raises(RuntimeError, match="shadow write failed"):
-        services._isolated_migrate_probe("opencode", session, "/tmp/project")
+        instance._isolated_probe("opencode", session, "/tmp/project")
 
     assert session.loss == []
 
@@ -136,15 +150,19 @@ def test_probe_exception_cleans_both_shadow_and_actual_artifacts(monkeypatch, tm
         ("actual" if len(calls) == 1 else "shadow", tmp_path / calls[-1])))
     _install_target(monkeypatch, target)
     removed = []
-    monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
-    monkeypatch.setattr(services, "run_probe", lambda *_args, **_kwargs:
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (True, "ok"))
+    monkeypatch.setattr(migration.MigrationService, "run_probe", lambda *_args, **_kwargs:
                         (_ for _ in ()).throw(RuntimeError("probe failed")))
-    monkeypatch.setattr(services, "_cleanup_artifact", lambda _dst, sid, _dest:
-                        removed.append(sid))
+    monkeypatch.setattr(
+        migration.MigrationService, "_cleanup_artifact", lambda _self, _dst, sid, _dest:
+        removed.append(sid))
 
     with pytest.raises(RuntimeError, match="probe failed"):
-        services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
-                         probe=True, _session=session)
+        migration.MigrationService(None).apply(
+            "claude", "opencode", "ignored", cwd=str(tmp_path),
+            probe=True, session=session,
+        )
 
     assert removed == ["shadow", "actual"]
 

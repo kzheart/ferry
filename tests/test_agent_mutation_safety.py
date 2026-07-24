@@ -1,6 +1,6 @@
 import pytest
 
-from engine.application import editing, services
+from engine.application import editing, migration
 from engine.domain.model import Session
 
 
@@ -18,24 +18,28 @@ class Adapter:
 
 def test_migration_cleans_artifact_when_post_write_audit_fails(monkeypatch):
     cleaned = []
-    monkeypatch.setattr(services, "adapter", lambda _tool: Adapter())
+    ports = type("Ports", (), {"adapter": lambda _self, _tool: Adapter()})()
     monkeypatch.setattr(
-        services, "resume_command", lambda *_args: {"command": "resume"})
-    monkeypatch.setattr(
-        services, "validate_written_tree", lambda *_args: (True, "ok"))
-    monkeypatch.setattr(
-        services, "_cleanup_artifact",
-        lambda tool, sid, dest: cleaned.append((tool, sid, dest)),
+        migration.MigrationService, "__init__",
+        lambda instance, _ports: setattr(instance, "_ports", ports),
     )
     monkeypatch.setattr(
-        services, "_append_history",
-        lambda _entry: (_ for _ in ()).throw(RuntimeError("audit failed")),
+        migration.MigrationService, "resume_command", lambda *_: {"command": "resume"})
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (True, "ok"))
+    monkeypatch.setattr(
+        migration.MigrationService, "_cleanup_artifact",
+        lambda _self, tool, sid, dest: cleaned.append((tool, sid, dest)),
+    )
+    monkeypatch.setattr(
+        migration.history, "append",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("audit failed")),
     )
 
     session = Session("claude", "source", "/tmp/project")
     with pytest.raises(RuntimeError, match="audit failed"):
-        services.apply_migration(
-            "claude", "codex", "unused", _session=session)
+        migration.MigrationService(None).apply(
+            "claude", "codex", "unused", session=session)
     assert cleaned == [("codex", "new-session", "/tmp/new-session")]
 
 
