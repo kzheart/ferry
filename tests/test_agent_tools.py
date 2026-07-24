@@ -314,7 +314,7 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
 
     monkeypatch.setattr("engine.application.sessions.show", show)
     monkeypatch.setattr("engine.application.sessions.session_asset", asset)
-    monkeypatch.setattr("engine.application.summaries.build_backbone", backbone)
+    monkeypatch.setattr("engine.application.organization.summaries.build_backbone", backbone)
     application = EngineApplication(
         agent_environment["ports"], agent_environment["index"], _Operations(),
     )

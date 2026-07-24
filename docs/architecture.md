@@ -86,6 +86,12 @@ lifetime. That application owns its `AgentSessionIndex` and single-worker
 explicitly. `ApplicationPorts` is passed into use cases as a dependency and has
 no implicit process-global `current()` or reconfiguration API.
 
+Deterministic organization state is owned by
+`engine/application/organization/`: `summaries.py` manages content-addressed
+digest inputs/results and `proposals.py` manages proposal validation and
+decisions. Model execution remains in Ferry Runtime and reaches these use cases
+only through the Rust/Engine gateway.
+
 ### Ferry Runtime
 
 Owns providers, authentication, model selection, roles, conversations, workflow

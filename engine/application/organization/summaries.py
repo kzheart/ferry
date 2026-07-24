@@ -3,17 +3,17 @@
 
 分工:engine 负责分段 / 内容指纹 / 缓存失效 / 存储 / RPC;真正的一句蒸馏摘要
 (digest)由常驻、持有 LLM 栈的 ferry-runtime 生成后经 set_summaries 写回。
-召回 / 整理 / 记忆文件三个上层功能共用这一份底座。
+召回与整理功能共用这一份底座；它不是 Ferry Agent 的长期记忆。
 """
 
 import hashlib
 import time
 from pathlib import Path
 
-from ..domain.errors import SummaryBackboneMissingError
-from ..infrastructure.state_db import StateDatabase
-from .ports import ApplicationPorts
-from .sessions import read_tree
+from ...domain.errors import SummaryBackboneMissingError
+from ...infrastructure.state_db import StateDatabase
+from ..ports import ApplicationPorts
+from ..sessions import read_tree
 
 MAX_DIGEST_CHARS = 4000
 

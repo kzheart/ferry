@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.application import summaries
+from engine.application.organization import summaries
 from engine.domain.errors import SummaryBackboneMissingError
 from engine.infrastructure.state_db import StateDatabase
 
