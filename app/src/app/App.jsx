@@ -24,6 +24,16 @@ import { useSettings } from "../features/settings/useSettings.js";
 import { useAppUpdater } from "../features/settings/useAppUpdater.js";
 import { useBrowserData } from "../features/browser/useBrowserData.js";
 import { useSessionEditing } from "../features/editing/useSessionEditing.js";
+import {
+  buildLibraryGroups,
+  buildLibraryIndex,
+  libraryDirectories,
+  libraryFilterCount,
+  libraryTags,
+  libraryTokenDescriptors,
+  libraryToolCounts,
+  visibleLibraryIds,
+} from "../features/browser/libraryResourcePaneModel.js";
 import OrganizationPanel from "../features/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "../features/shell/useDesktopChrome.js";
 import { AppRail } from "../features/shell/AppRail.jsx";
@@ -546,16 +556,8 @@ export default function App() {
   };
 
   // ----- 资源栏数据:会话库 -----
-  const counts = useMemo(() => {
-    const c = {};
-    sessions.forEach(s => { c[s.tool] = (c[s.tool] || 0) + 1; });
-    return c;
-  }, [sessions]);
-  const dirs = useMemo(
-    () => [...new Set(sessions.map(s => repoOf(s.dir)).filter(Boolean))].slice(0, 6),
-    [sessions]);
-
-  const ql = q.trim().toLowerCase();
+  const counts = useMemo(() => libraryToolCounts(sessions), [sessions]);
+  const dirs = useMemo(() => libraryDirectories(sessions), [sessions]);
 
   // 行点击/右键:经 ref 转发保持回调身份稳定,memo 化的行组件才不会因新闭包全量重渲染
   const rowHandlers = useRef({});
@@ -645,75 +647,31 @@ export default function App() {
 
   // 行展示数据与过滤用字段只依赖会话/元数据,预计算一次;
   // 之后筛选条件怎么变都只做轻量匹配,不再重建 3000+ 行的时间/文案字符串
-  const libIndex = useMemo(() => sessions.map(s => {
-    const m = metaFor(s);
-    const tags = m.tags || [];
-    return {
-      tool: s.tool, bucket: bucketOf(s.updated), repo: repoOf(s.dir), tags,
-      pinned: !!m.pinned, sub: (s.tree_count || 1) > 1,
-      mig: migratedSessionKeys.has(sessionIdentity(s)),
-      hay: `${s.title || ""}\n${m.name || ""}\n${tags.join("\n")}\n${s.dir || ""}\n${s.id}`.toLowerCase(),
-      row: { key: sessionIdentity(s), id: s.id,
-        title: m.name || s.title || t("app:library.untitled"), repo: repoOf(s.dir),
-        dir: s.dir, active: fmtTime(s.updated, t), tool: s.tool, dot: "var(--ok)",
-        pinned: !!m.pinned, tags: m.tags,
-        hasSub: (s.tree_count || 1) > 1, subLabel: t("app:library.subLabel", { n: (s.tree_count || 1) - 1 }),
-        hasMig: migratedSessionKeys.has(sessionIdentity(s)) },
-    };
+  const libIndex = useMemo(() => buildLibraryIndex({
+    sessions, metadata: metaMap, migratedSessionKeys, t,
   }), [sessions, metaMap, migratedSessionKeys, t]);
-
-  const libGroups = useMemo(() => {
-    const timeBuckets = { all: [...BUCKETS], today: ["today"],
-      last7: ["today", "yesterday", "last7"],
-      last30: ["today", "yesterday", "last7", "last30"] }[libF.time];
-    const match = e => libF.src.includes(e.tool) &&
-      (!libF.tag || e.tags.includes(libF.tag)) &&
-      (!libF.dir || e.repo === libF.dir) &&
-      (!libF.mig || e.mig) && (!libF.sub || e.sub) &&
-      (!ql || e.hay.includes(ql));
-    const byKey = { pinned: [] };
-    BUCKETS.forEach(k => { byKey[k] = []; });
-    for (const e of libIndex) {
-      if (!match(e)) continue;
-      (e.pinned ? byKey.pinned : byKey[e.bucket]).push(e.row);
-    }
-    const groups = [];
-    if (byKey.pinned.length) {
-      groups.push({ key: "pinned", label: t("app:library.pinned"),
-        count: byKey.pinned.length, rows: byKey.pinned });
-    }
-    BUCKETS.filter(k => timeBuckets.includes(k)).forEach(key => {
-      if (!byKey[key].length) return;
-      groups.push({ key, label: t(`common:bucket.${key}`),
-        count: byKey[key].length, rows: byKey[key] });
-    });
-    return groups;
-    // 折叠状态刻意不进依赖:展开/收起只切换渲染,不重算数据
-  }, [libIndex, libF, ql, t]);
+  const libGroups = useMemo(() => buildLibraryGroups({
+    index: libIndex, filter: libF, query: q, t,
+  }), [libIndex, libF, q, t]);
   const onToggleGroup = useCallback(key =>
     setCollapsedGroups(g => ({ ...g, [key]: !(g[key] ?? false) })), []);
-  visibleIds.current.library = libGroups.filter(g => !(collapsedGroups[g.key] ?? false))
-    .flatMap(g => g.rows.map(r => r.key));
+  visibleIds.current.library = visibleLibraryIds(libGroups, collapsedGroups);
 
-  const libTokens = [];
-  if (libF.src.length < TOOLS.length) libF.src.forEach(tool => libTokens.push({ label: TOOL_NAME[tool],
-    onRemove: () => setLibF(v => ({ ...v, src: v.src.filter(x => x !== tool).length
-      ? v.src.filter(x => x !== tool) : [...TOOLS] })) }));
-  if (libF.time !== "all") libTokens.push({
-    label: t(`common:bucket.${libF.time === "last7" ? "last7" : libF.time === "last30" ? "last30" : libF.time}`),
-    onRemove: () => setLibF(v => ({ ...v, time: "all" })) });
-  if (libF.dir) libTokens.push({ label: t("app:library.tokenDir", { dir: libF.dir }),
-    onRemove: () => setLibF(v => ({ ...v, dir: null })) });
-  if (libF.mig) libTokens.push({ label: t("app:library.tokenOnlyMigrated"),
-    onRemove: () => setLibF(v => ({ ...v, mig: false })) });
-  if (libF.sub) libTokens.push({ label: t("app:library.tokenOnlySub"),
-    onRemove: () => setLibF(v => ({ ...v, sub: false })) });
-  if (libF.tag) libTokens.push({ label: t("app:library.tokenTag", { tag: libF.tag }),
-    onRemove: () => setLibF(v => ({ ...v, tag: null })) });
+  const libTokens = libraryTokenDescriptors(libF, TOOLS, TOOL_NAME, t).map(token => ({
+    label: token.label,
+    onRemove: () => {
+      if (token.kind === "source") {
+        setLibF(value => ({ ...value, src: value.src.filter(tool => tool !== token.tool).length
+          ? value.src.filter(tool => tool !== token.tool) : [...TOOLS] }));
+      } else if (token.kind === "time") setLibF(value => ({ ...value, time: "all" }));
+      else if (token.kind === "dir") setLibF(value => ({ ...value, dir: null }));
+      else if (token.kind === "mig") setLibF(value => ({ ...value, mig: false }));
+      else if (token.kind === "sub") setLibF(value => ({ ...value, sub: false }));
+      else if (token.kind === "tag") setLibF(value => ({ ...value, tag: null }));
+    },
+  }));
 
-  const allTags = useMemo(
-    () => [...new Set(Object.values(metaMap).flatMap(m => m.tags || []))].slice(0, 12),
-    [metaMap]);
+  const allTags = useMemo(() => libraryTags(metaMap), [metaMap]);
 
   // ----- 资源栏数据:迁移历史 -----
   // 优先用引擎给的稳定 id:删除后下标会整体前移,按下标编号会让选中项跳到别的记录上
@@ -776,9 +734,7 @@ export default function App() {
       footer: t("askferry:pane.footer", { n: ferry.sessions.length }) },
     library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
       query: q, onQuery: e => setQ(e.target.value),
-      filterCount: (libF.src.length < TOOLS.length ? 1 : 0) + (libF.time !== "all" ? 1 : 0) +
-        (libF.dir ? 1 : 0) + (libF.mig ? 1 : 0) + (libF.sub ? 1 : 0) +
-        (libF.tag ? 1 : 0),
+      filterCount: libraryFilterCount(libF, TOOLS),
       tokens: libTokens,
       footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
         : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
