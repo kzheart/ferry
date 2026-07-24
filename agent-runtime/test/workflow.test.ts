@@ -250,4 +250,25 @@ describe("bounded multi-agent workflow", () => {
       ).start(),
     ).rejects.toThrow("budget");
   });
+
+  it("enforces the delegated task timeout", async () => {
+    const run = new WorkflowRun(
+      {
+        task_timeout_ms: 1_000,
+        tasks: [{ id: "slow", role_id: "worker", instruction: "wait" }],
+      },
+      (_task, { signal }) =>
+        new Promise<string>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    );
+
+    const result = await run.start();
+    expect(result).toMatchObject({
+      status: "failed",
+      tasks: [{ task_id: "slow", status: "failed", error: "task timed out" }],
+    });
+  }, 2_000);
 });
