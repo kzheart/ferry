@@ -28,6 +28,17 @@ def test_opencode_adapter_has_explicit_reader_writer_and_store():
     assert "def read(" not in writer
 
 
+def test_codex_reader_keeps_rollout_topology_in_its_own_capability():
+    codex = ENGINE / "adapters/codex"
+    reader = (codex / "reader.py").read_text()
+    topology = (codex / "topology.py").read_text()
+    assert "def read_tree" in topology
+    assert "def rollout_index" in topology
+    assert "thread_spawn_edges" in topology
+    assert "sqlite3.connect" not in reader
+    assert "AgentEdge(" not in reader
+
+
 def test_business_capabilities_live_in_top_level_packages():
     organization = ENGINE / "organization"
     assert {

@@ -2,6 +2,7 @@ import json
 import sqlite3
 
 from engine.adapters.codex import reader as codex_reader
+from engine.adapters.codex import topology as codex_topology
 from engine.adapters.codex.writer import write
 from engine.sessions.model import (
     AgentEdge, Block, Message, Session, ToolCall, text_tool_result,
@@ -68,7 +69,7 @@ def _tree(tmp_path):
 
 def test_codex_writer_preserves_message_time_and_spawn_position(tmp_path, monkeypatch):
     sessions, db = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
 
     root_id, path = write(_tree(tmp_path), sessions_dir=sessions)
     records = [json.loads(line) for line in path.read_text().splitlines()]
@@ -101,7 +102,7 @@ def test_codex_writer_preserves_message_time_and_spawn_position(tmp_path, monkey
 
 def test_codex_reader_round_trips_edge_context_and_deterministic_siblings(tmp_path, monkeypatch):
     sessions, _db = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
 
     _root_id, path = write(_tree(tmp_path), sessions_dir=sessions)
     restored = codex_reader.read(str(path), sessions_dir=sessions)
@@ -143,7 +144,7 @@ def test_codex_writer_uses_parent_message_time_for_tools_without_own_time(tmp_pa
 
 def test_codex_reader_preserves_spawn_order_over_agent_path_sort(tmp_path, monkeypatch):
     sessions, _db = _store(tmp_path)
-    monkeypatch.setattr(codex_reader, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
+    monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
     root = _tree(tmp_path)
     root.children[0].agent_path = "/root/z-last-by-name"
     root.children[1].agent_path = "/root/a-first-by-name"

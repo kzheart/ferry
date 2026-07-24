@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ...sessions.usage import has_tokens, iso_ms
 from ..shared.scanner import clip_text, scan_jsonl
-from .reader import session_id
+from .topology import session_id
 
 
 def _tokens_from_usage(usage) -> dict:
