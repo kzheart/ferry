@@ -11,10 +11,28 @@ from ...sessions.model import (
     Session,
     ToolCall,
 )
-from ...sessions.reasoning import codex_summary_text
+from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_data_url
 from . import tool_calls, tool_results, topology
+
+
+def _summary_text(payload: dict) -> str | None:
+    """从 Codex 私有的 reasoning.summary 结构提取可读摘要。"""
+    summary = payload.get("summary") or []
+    if isinstance(summary, str):
+        return visible_text(summary)
+    if not isinstance(summary, list):
+        return None
+    parts = []
+    for item in summary:
+        if isinstance(item, dict):
+            text = item.get("text") or ""
+            if isinstance(text, str) and text.strip():
+                parts.append(text)
+        elif isinstance(item, str) and item.strip():
+            parts.append(item)
+    return "\n".join(parts) if parts else None
 
 _SKIP_USER_PREFIX = (
     "<environment_context>",
@@ -275,7 +293,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             else:
                 sess.lose("session.orphan_tool_result", call_id=p.get("call_id"))
         elif pt == "reasoning":
-            text = codex_summary_text(p)
+            text = _summary_text(p)
             if text is not None:
                 cur_reasoning.append(Block("text", text))
                 sess.lose(
