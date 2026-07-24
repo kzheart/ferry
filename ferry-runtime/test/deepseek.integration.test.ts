@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileProviderConfigStore } from "../src/providers/provider-config.js";
+import { FileProviderConfigStore } from "../src/providers/provider-config-store.js";
 import { ProviderHost } from "../src/providers/provider-host.js";
 import { AgentRuntime } from "../src/runtime/runtime.js";
 

@@ -35,6 +35,17 @@ def test_runtime_source_is_grouped_by_responsibility():
     runtime = (RUNTIME / "src/runtime/runtime.ts").read_text()
     assert "function safeText" not in runtime
     assert (RUNTIME / "src/security/redaction.ts").is_file()
+    provider_config = (
+        RUNTIME / "src/providers/provider-config.ts"
+    ).read_text()
+    assert "class FileProviderConfigStore" not in provider_config
+    assert "function parseProviderConfig" not in provider_config
+    assert (
+        RUNTIME / "src/providers/provider-config-store.ts"
+    ).is_file()
+    assert (
+        RUNTIME / "src/providers/provider-config-validation.ts"
+    ).is_file()
 
 
 def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():

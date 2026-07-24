@@ -10,10 +10,10 @@ import {
 import { dirname } from "node:path";
 import { FERRY_TOOL_NAMES, type FerryToolName } from "../tools/catalog.js";
 import {
-  parseThinkingLevel,
   type ModelSelection,
   type ThinkingLevel,
 } from "../providers/provider-config.js";
+import { parseThinkingLevel } from "../providers/provider-config-validation.js";
 
 export const ROLE_STORE_VERSION = 1 as const;
 export const DEFAULT_ROLE_ID = "default";

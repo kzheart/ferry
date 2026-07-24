@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { AgentRuntime } from "../runtime/runtime.js";
 import { EngineSessionStore } from "../sessions/engine-store.js";
-import { FileProviderConfigStore } from "../providers/provider-config.js";
+import { FileProviderConfigStore } from "../providers/provider-config-store.js";
 import { FileRoleStore } from "../roles/role-repository.js";
 import { ProviderHost } from "../providers/provider-host.js";
 import { dispatch } from "../runtime/command-router.js";
