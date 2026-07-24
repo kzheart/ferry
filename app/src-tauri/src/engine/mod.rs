@@ -4,6 +4,7 @@ use self::policy::{request_attempts, request_timeout};
 use crate::contracts::engine_methods::{self, Exposure};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
+use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use serde_json::Value;
@@ -73,7 +74,7 @@ fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), S
 fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut command = engine_command(resource_dir)?;
     command.arg("serve");
-    crate::desktop::platform::configure_background_command(&mut command);
+    configure_background(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -201,68 +202,25 @@ pub(crate) fn engine_request_blocking(
     Err(format!("引擎通信失败: {last_error}"))
 }
 
-/// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
-/// 否则取本 crate 上两级(app/src-tauri → 仓库根,开发形态)。
-#[cfg(debug_assertions)]
-fn repo_root() -> PathBuf {
-    if let Ok(p) = std::env::var("FERRY_REPO") {
-        return PathBuf::from(p);
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
-/// externalBin 在 macOS 上被放进 Contents/MacOS(主程序旁),Windows 上在安装根目录;
-/// 依次尝试可执行文件所在目录与 resource_dir,取第一个存在的。
-fn bundled_engine_candidates(resource_dir: &Path) -> Vec<PathBuf> {
-    let name = bundled_engine_name(cfg!(target_os = "windows"));
-    let mut candidates = Vec::new();
-    if let Some(exe_dir) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf))
-    {
-        candidates.push(exe_dir.join(name));
-    }
-    candidates.push(resource_dir.join(name));
-    candidates
-}
-
-fn bundled_engine_name(is_windows: bool) -> &'static str {
-    if is_windows {
-        "ferry-engine.exe"
-    } else {
-        "ferry-engine"
-    }
-}
-
 fn engine_command(resource_dir: &Path) -> Result<Command, String> {
-    let candidates = bundled_engine_candidates(resource_dir);
-    if let Some(sidecar) = candidates.iter().find(|path| path.is_file()) {
-        return Ok(Command::new(sidecar));
+    let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-engine");
+    if let Some(command) = command {
+        return Ok(command);
     }
 
     #[cfg(debug_assertions)]
     {
-        let mut command = Command::new(if cfg!(target_os = "windows") {
-            "python"
-        } else {
-            "python3"
-        });
+        let _ = candidates;
+        let mut command = Command::new(crate::process::command::python_program());
         command.args(["-m", "engine.server.cli"]);
-        command.current_dir(repo_root());
+        command.current_dir(crate::process::command::repository_root());
         Ok(command)
     }
 
     #[cfg(not(debug_assertions))]
-    Err(format!(
-        "正式包缺少引擎 sidecar,已尝试: {}",
-        candidates
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join("; ")
+    Err(crate::process::command::missing_sidecar_message(
+        "引擎",
+        &candidates,
     ))
 }
 

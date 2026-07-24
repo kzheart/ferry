@@ -5,7 +5,6 @@
 
 use serde::Deserialize;
 use std::path::Path;
-use std::process::Command;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -53,17 +52,6 @@ pub(crate) fn open_terminal(
 ) -> Result<(), String> {
     imp::open_terminal(launch, preference)
 }
-
-/// sidecar 是后台进程；平台决定是否需要隐藏其控制台窗口。
-/// 进程监督模块不应包含任何 Windows API 细节。
-#[cfg(target_os = "windows")]
-pub(crate) fn configure_background_command(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(0x0800_0000);
-}
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn configure_background_command(_command: &mut Command) {}
 
 #[cfg(target_os = "macos")]
 use macos as imp;

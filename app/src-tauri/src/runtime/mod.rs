@@ -15,6 +15,7 @@ use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::contracts::runtime_methods;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
+use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
@@ -87,7 +88,7 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         .join(".ferry");
     std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     command.env("FERRY_RUNTIME_DATA_DIR", data_dir);
-    crate::desktop::platform::configure_background_command(&mut command);
+    configure_background(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -284,44 +285,26 @@ pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
     });
 }
 
-#[cfg(debug_assertions)]
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
 fn runtime_binary_command(resource_dir: &Path) -> Result<Command, String> {
-    let name = if cfg!(target_os = "windows") {
-        "ferry-runtime.exe"
-    } else {
-        "ferry-runtime"
-    };
-    let candidates = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(|parent| parent.join(name)))
-        .into_iter()
-        .chain(std::iter::once(resource_dir.join(name)))
-        .collect::<Vec<_>>();
-    if let Some(binary) = candidates.iter().find(|path| path.is_file()) {
-        return Ok(Command::new(binary));
+    let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-runtime");
+    if let Some(command) = command {
+        return Ok(command);
     }
+
     #[cfg(debug_assertions)]
     {
+        let _ = candidates;
+        let root = crate::process::command::repository_root();
         let mut command = Command::new("node");
-        command.arg(repo_root().join("ferry-runtime/dist/server/server.js"));
-        command.current_dir(repo_root());
+        command.arg(root.join("ferry-runtime/dist/server/server.js"));
+        command.current_dir(root);
         Ok(command)
     }
+
     #[cfg(not(debug_assertions))]
-    Err(format!(
-        "正式包缺少 Ferry Runtime sidecar: {}",
-        candidates
-            .iter()
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join("; ")
+    Err(crate::process::command::missing_sidecar_message(
+        "Ferry Runtime",
+        &candidates,
     ))
 }
 #[cfg(test)]

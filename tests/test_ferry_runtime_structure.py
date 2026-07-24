@@ -88,9 +88,13 @@ def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():
     assert "binaries/ferry-runtime" in tauri["bundle"]["externalBin"]
 
     host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
-    assert '"ferry-runtime.exe"' in host
-    assert '"ferry-runtime"' in host
+    assert 'bundled_sidecar_command(resource_dir, "ferry-runtime")' in host
     assert "ferry-runtime/dist/server/server.js" in host
+    command = (
+        ROOT / "app/src-tauri/src/process/command.rs"
+    ).read_text()
+    assert 'executable_name_for("ferry-runtime", true)' in command
+    assert '"ferry-runtime.exe"' in command
 
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "ferry-runtime-x86_64-pc-windows-msvc.exe" in workflow
