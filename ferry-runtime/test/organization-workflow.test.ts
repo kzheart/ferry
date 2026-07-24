@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   runOrganizationWorkflow,
   type OrganizationEngineMethod,
-} from "../src/organization-workflow.js";
+} from "../src/workflows/organization.js";
 
 function input() {
   return {

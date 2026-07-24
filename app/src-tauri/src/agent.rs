@@ -784,7 +784,7 @@ fn runtime_binary_command(resource_dir: &Path) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
         let mut command = Command::new("node");
-        command.arg(repo_root().join("ferry-runtime/dist/cli.js"));
+        command.arg(repo_root().join("ferry-runtime/dist/protocol/server.js"));
         command.current_dir(repo_root());
         Ok(command)
     }

@@ -95,6 +95,21 @@ its source and packaged sidecar are both named `ferry-runtime` on macOS and
 Windows. Platform-specific executable suffixes remain isolated in build and
 process-launch code.
 
+Its source packages follow the same responsibility boundaries:
+
+```text
+ferry-runtime/src/
+  application/     command routing and runtime orchestration
+  core/            bounded workflow execution
+  protocol/        JSONL server, envelopes, generated contracts
+  providers/       provider configuration, authentication, model host
+  sessions/        conversation persistence ports
+  roles/           role definitions and repositories
+  tools/           Ferry tool catalog and delegation
+  workflows/       organization and other model workflows
+  infrastructure/  filesystem and Engine-backed repositories
+```
+
 Ferry Runtime cannot write an external session directly. A requested mutation
 travels through the Rust approval gateway to a Session Engine operation.
 

@@ -7,7 +7,7 @@ import {
   type StreamFunction,
   type ToolCall,
 } from "@earendil-works/pi-ai";
-import type { AgentBackend } from "../src/runtime.js";
+import type { AgentBackend } from "../src/application/runtime.js";
 
 const usage = {
   input: 0,

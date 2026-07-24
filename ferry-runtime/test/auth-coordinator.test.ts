@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AuthCoordinator,
   type AuthCoordinatorEvent,
-} from "../src/auth-coordinator.js";
+} from "../src/providers/auth-coordinator.js";
 
 async function until(events: AuthCoordinatorEvent[], type: string) {
   for (let attempt = 0; attempt < 100; attempt += 1) {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { dispatch } from "../src/commands.js";
+import { dispatch } from "../src/application/command-router.js";
 import {
   parseCommand,
   PROTOCOL_VERSION,
   ProtocolError,
-} from "../src/protocol.js";
-import { AgentRuntime } from "../src/runtime.js";
+} from "../src/protocol/messages.js";
+import { AgentRuntime } from "../src/application/runtime.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
 describe("JSONL protocol", () => {

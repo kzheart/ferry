@@ -1,4 +1,4 @@
-import { ProtocolError } from "./protocol.js";
+import { ProtocolError } from "../protocol/messages.js";
 
 const MAX_SESSIONS = 50;
 const MAX_SEGMENTS = 200;

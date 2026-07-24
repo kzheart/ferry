@@ -6,7 +6,7 @@ import {
   FileRoleStore,
   ROLE_STORE_VERSION,
   type RoleInput,
-} from "../src/roles.js";
+} from "../src/roles/role-repository.js";
 
 function input(id: string): RoleInput {
   return {

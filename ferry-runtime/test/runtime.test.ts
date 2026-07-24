@@ -3,11 +3,14 @@ import {
   EphemeralSessionStore,
   type PersistedSession,
   type SessionCommit,
-} from "../src/event-store.js";
-import { AgentRuntime } from "../src/runtime.js";
-import { FERRY_SAFETY_PROMPT } from "../src/runtime.js";
-import { EphemeralRoleStore } from "../src/roles.js";
-import { PROTOCOL_VERSION, type EventEnvelope } from "../src/protocol.js";
+} from "../src/sessions/session-repository.js";
+import { AgentRuntime } from "../src/application/runtime.js";
+import { FERRY_SAFETY_PROMPT } from "../src/application/runtime.js";
+import { EphemeralRoleStore } from "../src/roles/role-repository.js";
+import {
+  PROTOCOL_VERSION,
+  type EventEnvelope,
+} from "../src/protocol/messages.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
 async function createRuntime(
