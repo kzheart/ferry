@@ -31,7 +31,7 @@ def source_files():
     for path in FRONTEND.rglob("*"):
         if path.suffix not in {".js", ".jsx", ".ts", ".tsx"}:
             continue
-        if "generated" in path.parts or path.name.endswith((".test.js", ".test.ts")):
+        if "generated" in path.parts or ".test." in path.name:
             continue
         yield path
 
@@ -88,6 +88,29 @@ def test_modules_are_capabilities_not_horizontal_buckets():
         assert any(module.glob("*.js")) or any(module.glob("*.jsx")) or any(
             module.glob("*.ts")
         ), f"{module.name} 是空能力目录"
+
+
+def test_frontend_can_run_component_tests():
+    """前端测试必须跑在能渲染组件的运行器上。
+
+    纯函数测试挡不住"某个 prop 忘了往下传"——那类回归只在渲染时暴露,
+    而类型检查看不见 props 的传递链路。运行器一旦退回没有 DOM 的形态,
+    组件测试会静默消失,所以把这条能力钉成护栏。
+    """
+    package = json.loads((ROOT / "app/package.json").read_text(encoding="utf-8"))
+    dev = package["devDependencies"]
+
+    assert "vitest" in dev
+    assert "jsdom" in dev
+    assert "@testing-library/react" in dev
+    assert package["scripts"]["test"].startswith("vitest")
+
+    config = (ROOT / "app/vitest.config.js").read_text(encoding="utf-8")
+    assert 'environment: "jsdom"' in config
+    assert "vitest.setup.js" in config
+
+    rendered = sorted(path.name for path in FRONTEND.rglob("*.test.jsx"))
+    assert rendered, "组件测试全部消失了"
 
 
 def test_view_models_live_with_their_consuming_capability():
