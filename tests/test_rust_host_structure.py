@@ -44,11 +44,21 @@ def test_engine_and_runtime_share_one_process_supervisor():
     assert supervisor.is_file()
     assert "struct ManagedProcess" in supervisor.read_text()
     assert "struct ProcessSupervisor" in supervisor.read_text()
+    command = HOST / "process/command.rs"
+    assert command.is_file()
+    command_source = command.read_text()
+    assert "fn bundled_sidecar_command" in command_source
+    assert "fn configure_background" in command_source
+    assert "creation_flags" in command_source
 
     for relative_path in ("engine/mod.rs", "runtime/mod.rs"):
         source = (HOST / relative_path).read_text()
         assert "ProcessSupervisor" in source
         assert "ManagedProcess" in source
+        assert "bundled_sidecar_command" in source
+        assert "configure_background" in source
+        assert 'target_os = "windows"' not in source
+        assert ".exe" not in source
         assert "impl Drop for" not in source
         assert "Mutex<Option<" not in source
 
