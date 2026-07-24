@@ -203,3 +203,46 @@ def test_organization_transaction_is_a_separate_sqlite_capability():
     assert "def create_or_get(" not in database
     assert "def decide(" not in database
     assert "def invalidate(" not in database
+
+
+# 每个 Adapter 都必须提供的模块骨架。这套约定此前只存在于三份实现的巧合里，
+# 新接入者要逆向阅读才能知道该写什么；在此固化为契约。
+ADAPTER_SKELETON = frozenset({
+    "adapter",        # 装配 manifest 与七项能力
+    "codec",          # TurnIndex / NativeEditCodec
+    "editor",         # EditBackend 实现
+    "lifecycle",      # resume/删除/恢复策略
+    "migration",      # 迁移目标渲染
+    "models",         # 模型目录
+    "native_schema",  # 当前原生结构校验
+    "probe",          # 运行时校验
+    "reader",         # 原生 → canonical
+    "scanner",        # 扫描与指纹
+    "writer",         # canonical → 原生
+})
+
+
+def test_every_adapter_provides_the_same_module_skeleton():
+    for agent in AGENT_IDS:
+        package = ENGINE / f"adapters/{agent}"
+        modules = {path.stem for path in package.glob("*.py")} - {"__init__"}
+        missing = ADAPTER_SKELETON - modules
+        assert not missing, f"{agent} Adapter 缺少模块: {sorted(missing)}"
+
+
+def test_adapter_private_modules_are_allowed_beyond_the_skeleton():
+    """格式特有的分解(如 codex/topology、opencode/store)不受骨架限制。"""
+    extra = {
+        path.stem
+        for agent in AGENT_IDS
+        for path in (ENGINE / f"adapters/{agent}").glob("*.py")
+    } - ADAPTER_SKELETON - {"__init__"}
+    assert extra, "骨架不应成为上限"
+
+
+def test_shared_adapter_layer_imports_no_concrete_agent():
+    for path in (ENGINE / "adapters/shared").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for agent in AGENT_IDS:
+            assert f"from ..{agent}" not in source, f"{path.name} 依赖了 {agent}"
+            assert f"import {agent}" not in source, f"{path.name} 依赖了 {agent}"
