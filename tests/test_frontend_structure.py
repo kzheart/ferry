@@ -30,6 +30,7 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/askferry/ferryEntities.js").is_file()
     assert (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").is_file()
     assert (FRONTEND / "modules/askferry/AgentMenus.jsx").is_file()
+    assert (FRONTEND / "modules/askferry/AgentComposer.jsx").is_file()
     assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
     assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
     assert (FRONTEND / "modules/browser/BrowserOverlays.jsx").is_file()
