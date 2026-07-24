@@ -112,3 +112,13 @@ def test_operation_state_is_a_separate_sqlite_capability():
     assert "def store_plan(" not in database
     assert "def store_recovery(" not in database
     assert "def audit(" not in database
+
+
+def test_organization_transaction_is_a_separate_sqlite_capability():
+    database = (ENGINE / "storage/database.py").read_text()
+    organization_store = (ENGINE / "storage/organization_store.py").read_text()
+    assert "class OrganizationStore" in organization_store
+    assert "self.organization = OrganizationStore" in database
+    assert "def create_or_get(" not in database
+    assert "def decide(" not in database
+    assert "def invalidate(" not in database
