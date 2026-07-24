@@ -5,7 +5,7 @@ import {
   onRuntimeEvent,
   operationApply,
   runtime,
-} from "../../api/transport/desktopClient.js";
+} from "../../platform/desktop/client.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
 

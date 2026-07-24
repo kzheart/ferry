@@ -1,5 +1,5 @@
-import { TOOL_NAME } from "../../api/contract/tools.js";
-import { renderEvents } from "../../api/contract/events.js";
+import { TOOL_NAME } from "../../shared/contracts/tools.js";
+import { renderEvents } from "../../shared/contracts/events.js";
 import { ToolIcon } from "../../components/ui/icons.jsx";
 import { LossCols } from "../../components/ui/primitives.jsx";
 import { navigationActionFor, rendererForEntity }

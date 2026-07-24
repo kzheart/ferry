@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { engine } from "../../api/transport/desktopClient.js";
+import { engine } from "../../platform/desktop/client.js";
 import { operations } from "../operations/operations.js";
 import { operationRef } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";

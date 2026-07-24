@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { operations } from "../operations/operations.js";
-import { supportsAssistantReplyEditing } from "../../api/contract/tools.js";
+import { supportsAssistantReplyEditing } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../components/ui/toolDisplay.js";
 import { sessionRef } from "../browser/sessionModel.js";
 

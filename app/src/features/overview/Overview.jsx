@@ -2,7 +2,7 @@
 // 数据全部由 computeOverview 从真实扫描结果聚合;图表手写内联 SVG,随主题变量着色。
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOLS, TOOL_NAME } from "../../api/contract/tools.js";
+import { TOOLS, TOOL_NAME } from "../../shared/contracts/tools.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../components/ui/icons.jsx";
 import { computeOverview } from "./overviewModel.js";
 

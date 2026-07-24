@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, writeClipboardText }
-  from "../api/transport/desktopClient.js";
-import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
+  from "../platform/desktop/client.js";
+import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js";
 import { fmtTime, repoOf, sessionRef } from "../features/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../features/browser/sessionAttachment.js";

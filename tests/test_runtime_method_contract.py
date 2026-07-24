@@ -24,7 +24,7 @@ def test_internal_runtime_commands_never_enter_webview_allowlist():
     assert internal == {"tool.result"}
 
     frontend = (
-        ROOT / "app/src/api/contract/generated/runtime-methods.ts"
+        ROOT / "app/src/shared/contracts/generated/runtime-methods.ts"
     ).read_text()
     for method in public:
         assert json.dumps(method) in frontend

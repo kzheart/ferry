@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { OperationStatus }
-  from "../../api/contract/generated/operations.js";
+  from "../../shared/contracts/generated/operations.js";
 import { OperationController } from "./operationController.js";
 
 test("controller owns plan, apply and status polling", async () => {

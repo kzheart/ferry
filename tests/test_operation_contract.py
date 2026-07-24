@@ -25,7 +25,7 @@ def test_operation_contract_is_generated_for_every_runtime():
     assert OPERATION_SUCCESS_STATUS in OPERATION_TERMINAL_STATUSES
 
     for path in (
-        "app/src/api/contract/generated/operations.ts",
+        "app/src/shared/contracts/generated/operations.ts",
         "app/src-tauri/src/contracts/operations.rs",
         "engine/contracts/operations.py",
         "ferry-runtime/src/server/generated/operations.ts",

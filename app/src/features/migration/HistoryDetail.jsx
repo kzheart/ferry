@@ -1,7 +1,7 @@
 // 迁移历史详情:范围/迁移影响/上下文水位/验收结果/回滚信息/接续命令
 import { useTranslation } from "react-i18next";
-import { probeText } from "../../api/contract/events.js";
-import { TOOL_NAME } from "../../api/contract/tools.js";
+import { probeText } from "../../shared/contracts/events.js";
+import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { fmtSize } from "../../components/ui/toolDisplay.js";
 import { fmtTime } from "../browser/sessionModel.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";

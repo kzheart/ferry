@@ -1,4 +1,4 @@
-import { isOpaqueSessionRef } from "../../api/contract/generated/session-ref.js";
+import { isOpaqueSessionRef } from "../../shared/contracts/generated/session-ref.js";
 
 const SCHEME = "ferry-session://";
 

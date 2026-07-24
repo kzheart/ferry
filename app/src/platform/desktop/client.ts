@@ -1,23 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { FerryEventType } from "../contract/generated/events.js";
-import { isFerryEventType } from "../contract/generated/events.js";
+import type { FerryEventType } from "../../shared/contracts/generated/events.js";
+import { isFerryEventType } from "../../shared/contracts/generated/events.js";
 import type {
   PublicEngineMethod,
   TrustedUiEngineMethod,
-} from "../contract/generated/engine-methods.js";
+} from "../../shared/contracts/generated/engine-methods.js";
 import {
   FERRY_IPC_PROTOCOL,
   type FerryEvent,
   type IpcRequest,
   type IpcResponse,
-} from "../contract/generated/ipc.js";
+} from "../../shared/contracts/generated/ipc.js";
 import type {
   OperationInput,
   OperationPlan,
   OperationState,
 } from "../../features/operations/operationController.js";
-import type { PublicRuntimeMethod } from "../contract/generated/runtime-methods.js";
+import type { PublicRuntimeMethod } from "../../shared/contracts/generated/runtime-methods.js";
 import { throwEngineError } from "./errors.js";
 
 export type DesktopParams = Record<string, unknown>;

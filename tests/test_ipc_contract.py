@@ -12,7 +12,7 @@ def test_all_runtimes_use_the_generated_ferry_ipc_protocol():
     assert source["protocol"] == FERRY_IPC_PROTOCOL == "ferry-ipc/1"
 
     generated = (
-        ROOT / "app/src/api/contract/generated/ipc.ts",
+        ROOT / "app/src/shared/contracts/generated/ipc.ts",
         ROOT / "app/src-tauri/src/contracts/ipc.rs",
         ROOT / "ferry-runtime/src/server/generated/ipc.ts",
     )

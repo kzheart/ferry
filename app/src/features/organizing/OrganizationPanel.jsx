@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   runtime,
   trustedEngine,
-} from "../../api/transport/desktopClient.js";
+} from "../../platform/desktop/client.js";
 import { sessionRef } from "../browser/sessionModel.js";
 
 function generateOrganizationProposal(sessions, locale) {

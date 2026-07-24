@@ -6,9 +6,9 @@ import { useTranslation } from "react-i18next";
 import Markdown from "../../components/ui/Markdown.jsx";
 import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrowIcon,
   Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
-import { readClipboardText } from "../../api/transport/desktopClient.js";
+import { readClipboardText } from "../../platform/desktop/client.js";
 import { TOOL_LEVEL } from "./agentChatModel.js";
-import { TOOL_NAME } from "../../api/contract/tools.js";
+import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../browser/sessionAttachment.js";

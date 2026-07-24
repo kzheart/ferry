@@ -5,16 +5,18 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "app/src"
 
 
-def test_frontend_uses_shell_and_vertical_features():
+def test_frontend_uses_shell_platform_shared_and_vertical_features():
     assert {
-        "api",
         "app",
         "components",
         "features",
+        "platform",
+        "shared",
         "shell",
     } <= {
         path.name for path in FRONTEND.iterdir() if path.is_dir()
     }
+    assert not (FRONTEND / "api").exists()
     assert not (FRONTEND / "domain").exists()
     assert not (FRONTEND / "features/shell").exists()
     assert not (FRONTEND / "components/layout").exists()
@@ -38,7 +40,7 @@ def test_operation_flow_has_one_feature_controller():
     assert controller.is_file()
     assert composition.is_file()
 
-    transport = (FRONTEND / "api/transport/desktopClient.ts").read_text()
+    transport = (FRONTEND / "platform/desktop/client.ts").read_text()
     assert "operationApplyAndWait" not in transport
 
     for relative_path in (
@@ -74,7 +76,7 @@ def test_frontend_core_uses_strict_typescript():
     assert '"noUncheckedIndexedAccess": true' in tsconfig
     assert '"exactOptionalPropertyTypes": true' in tsconfig
     assert '"typecheck": "tsc --noEmit"' in package
-    assert (FRONTEND / "api/contract/generated/operations.ts").is_file()
-    assert not (FRONTEND / "api/contract/generated/operations.js").exists()
-    assert (FRONTEND / "api/transport/desktopClient.ts").is_file()
+    assert (FRONTEND / "shared/contracts/generated/operations.ts").is_file()
+    assert not (FRONTEND / "shared/contracts/generated/operations.js").exists()
+    assert (FRONTEND / "platform/desktop/client.ts").is_file()
     assert not (FRONTEND / "api/transport/rpc.js").exists()

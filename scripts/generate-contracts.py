@@ -18,47 +18,47 @@ OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 EVENTS_SOURCE = ROOT / "contracts" / "events.json"
 ERRORS_SOURCE = ROOT / "contracts" / "errors.json"
 AGENT_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/agents.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/agents.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
     ROOT / "engine/contracts/agents.py": "python",
     ROOT / "ferry-runtime/src/server/generated/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/engine-methods.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
 }
 RUNTIME_METHOD_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/runtime-methods.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/runtime-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/runtime_methods.rs": "rust",
     ROOT / "ferry-runtime/src/server/generated/runtime-methods.ts": "runtime",
 }
 IPC_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/ipc.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/ipc.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ROOT / "engine/contracts/ipc.py": "python",
     ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
 }
 SESSION_REF_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/session-ref.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/session-ref.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
     ROOT / "engine/contracts/session_ref.py": "python",
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
 }
 OPERATIONS_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/operations.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/operations.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
     ROOT / "engine/contracts/operations.py": "python",
     ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
 }
 EVENT_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/events.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/events.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
     ROOT / "engine/contracts/events.py": "python",
     ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
 }
 ERROR_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/errors.ts": "frontend",
+    ROOT / "app/src/shared/contracts/generated/errors.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/errors.rs": "rust",
     ROOT / "engine/contracts/errors.py": "python",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
