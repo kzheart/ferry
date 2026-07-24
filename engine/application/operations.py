@@ -19,7 +19,7 @@ from ..domain.errors import (
 )
 from . import agent_tools, services
 from .editing import apply_mutation, preview_mutation
-from .ports import current
+from .ports import ApplicationPorts, current
 from ..infrastructure.state_db import StateDatabase
 
 
@@ -70,13 +70,14 @@ class OperationState:
 
 
 class OperationService:
-    def __init__(self):
+    def __init__(self, ports: ApplicationPorts):
+        self._ports = ports
         self._lock = threading.RLock()
         self._database_instance: StateDatabase | None = None
         self._database_path: Path | None = None
 
     def _database(self) -> StateDatabase:
-        path = Path(current().snapshot_dir()) / "ferry-state.sqlite3"
+        path = Path(self._ports.snapshot_dir()) / "ferry-state.sqlite3"
         if self._database_instance is None or self._database_path != path:
             self._database_instance = StateDatabase(path)
             self._database_path = path
@@ -111,7 +112,7 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
             )
-        plugin = current().adapter(tool)
+        plugin = self._ports.adapter(tool)
         editor = plugin.editor
         try:
             native_ops = self._resolve_ops(after, operation_input["ops"])
@@ -193,7 +194,7 @@ class OperationService:
         record = agent_tools._INDEX.resolve(
             operation_input["tool"], operation_input["ref"],
         )
-        plugin = current().adapter(operation_input["tool"])
+        plugin = self._ports.adapter(operation_input["tool"])
         lifecycle = plugin.lifecycle
         preview = {
             "tool": record.tool,
@@ -371,8 +372,7 @@ class OperationService:
             "probe": probe,
         }))
 
-    @staticmethod
-    def _validate_migration_input(value: dict) -> dict:
+    def _validate_migration_input(self, value: dict) -> dict:
         allowed = {
             "kind", "source_tool", "ref", "target_tool",
             "max_turn", "probe", "probe_model",
@@ -390,7 +390,7 @@ class OperationService:
             raise AgentRequestError("migration source_tool 非法")
         if not isinstance(target_tool, str) or not 1 <= len(target_tool) <= 64:
             raise AgentRequestError("migration target_tool 非法")
-        adapters = current().adapters()
+        adapters = self._ports.adapters()
         if source_tool not in adapters or target_tool not in adapters:
             raise AgentRequestError("migration Agent 非法")
         if source_tool == target_tool:
@@ -470,8 +470,7 @@ class OperationService:
             "patch": patch,
         }))
 
-    @staticmethod
-    def _validate_delete_input(value: dict) -> dict:
+    def _validate_delete_input(self, value: dict) -> dict:
         allowed = {"kind", "tool", "ref"}
         unknown = set(value) - allowed
         if unknown:
@@ -481,7 +480,7 @@ class OperationService:
             )
         tool = value.get("tool")
         ref = value.get("ref")
-        if tool not in current().adapters():
+        if tool not in self._ports.adapters():
             raise AgentRequestError("delete tool 非法")
         if (not isinstance(ref, str) or not 1 <= len(ref) <= 512
                 or any(ord(character) < 33 for character in ref)):
@@ -520,7 +519,7 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在操作计划生成后已变化，请重新计划"
             )
-        plugin = current().adapter(params["tool"])
+        plugin = self._ports.adapter(params["tool"])
         editor = plugin.editor
         native_ops = self._resolve_ops(record, params["ops"])
         self._require_inplace_support(plugin, editor, native_ops)
@@ -747,7 +746,7 @@ class OperationService:
             return agent_tools.preview_edit(
                 record.tool, record.opaque_ref, ops=ops,
             )
-        plugin = current().adapter(record.tool)
+        plugin = self._ports.adapter(record.tool)
         editor = plugin.editor
         native_ops = self._resolve_ops(record, ops)
         self._require_inplace_support(
@@ -856,29 +855,37 @@ class OperationService:
         }
 
 
-_SERVICE = OperationService()
+_SERVICE: OperationService | None = None
+
+
+def _service() -> OperationService:
+    global _SERVICE
+    ports = current()
+    if _SERVICE is None or _SERVICE._ports is not ports:
+        _SERVICE = OperationService(ports)
+    return _SERVICE
 
 
 def reset_service() -> None:
     global _SERVICE
-    _SERVICE = OperationService()
+    _SERVICE = None
 
 
 def plan(value: dict) -> dict:
-    return _SERVICE.plan(value)
+    return _service().plan(value)
 
 
 def apply(plan_id: str) -> dict:
-    return _SERVICE.apply(plan_id)
+    return _service().apply(plan_id)
 
 
 def status(plan_id: str) -> dict:
-    return _SERVICE.status(plan_id)
+    return _service().status(plan_id)
 
 
 def cancel(plan_id: str) -> dict:
-    return _SERVICE.cancel(plan_id)
+    return _service().cancel(plan_id)
 
 
 def audit(plan_id: str) -> list[dict]:
-    return _SERVICE.audit(plan_id)
+    return _service().audit(plan_id)
