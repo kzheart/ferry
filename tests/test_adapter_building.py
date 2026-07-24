@@ -32,15 +32,15 @@ def test_scan_jsonl_reuses_cached_adapter_metadata(tmp_path):
     assert calls == [source]
 
 
-def test_bundled_plugins_explicitly_wire_complete_static_contract():
+def test_bundled_adapters_explicitly_wire_complete_static_contract():
     registry = create_registry()
 
     for tool in registry.ids():
-        plugin = registry.get(tool)
-        assert plugin.migration_source is not None
-        assert plugin.migration_target is not None
-        assert plugin.editor is not None
-        assert plugin.verifier is not None
-        assert plugin.lifecycle is not None
-        assert plugin.models is not None
-        assert plugin.lifecycle.executable == plugin.manifest.executables[0]
+        adapter = registry.get(tool)
+        assert adapter.migration_source is not None
+        assert adapter.migration_target is not None
+        assert adapter.editor is not None
+        assert adapter.verifier is not None
+        assert adapter.lifecycle is not None
+        assert adapter.models is not None
+        assert adapter.lifecycle.executable == adapter.manifest.executables[0]

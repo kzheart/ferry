@@ -5,24 +5,24 @@ from collections.abc import Iterable
 
 from ..contracts.agents import AGENT_IDS
 from ..domain.errors import ToolUnknownError
-from .base.plugin import ToolPlugin
-from .claude.plugin import build as build_claude
-from .codex.plugin import build as build_codex
-from .opencode.plugin import build as build_opencode
+from .contracts import AgentAdapter
+from .claude.adapter import build as build_claude
+from .codex.adapter import build as build_codex
+from .opencode.adapter import build as build_opencode
 
 
 class AdapterRegistry:
     """Immutable adapter lookup owned by the application composition root."""
 
-    def __init__(self, plugins: Iterable[ToolPlugin]):
-        items: dict[str, ToolPlugin] = {}
-        for plugin in plugins:
-            if plugin.id in items:
-                raise ValueError(f"重复的 adapter id: {plugin.id}")
-            items[plugin.id] = plugin
+    def __init__(self, adapters: Iterable[AgentAdapter]):
+        items: dict[str, AgentAdapter] = {}
+        for adapter in adapters:
+            if adapter.id in items:
+                raise ValueError(f"重复的 adapter id: {adapter.id}")
+            items[adapter.id] = adapter
         self._items = items
 
-    def get(self, tool: str) -> ToolPlugin:
+    def get(self, tool: str) -> AgentAdapter:
         try:
             return self._items[tool]
         except KeyError as error:

@@ -4,9 +4,9 @@ import copy
 import pytest
 
 from engine.adapters.base.codec import select_span
-from engine.adapters.base.plugin import (
+from engine.adapters.contracts import (
     MigrationSource, MigrationTarget, ModelCatalog, SessionBrowser,
-    SessionEditor, SessionLifecycle, SessionVerifier, ToolManifest, ToolPlugin,
+    SessionEditor, SessionLifecycle, SessionVerifier, AgentManifest, AgentAdapter,
     id_reference,
 )
 from engine.adapters.registry import AdapterRegistry, create_registry
@@ -129,7 +129,7 @@ class _FakeLifecycle:
     def probe_cwd(self, cwd):
         return cwd
 
-    def delete(self, _plugin, _ref):
+    def delete(self, _adapter, _ref):
         raise AssertionError("fake lifecycle 不应删除")
 
     def restore_delete(self, _snapshot, _meta):
@@ -144,9 +144,9 @@ class _FakeModels:
         return []
 
 
-def _fake_plugin() -> ToolPlugin:
-    return ToolPlugin(
-        manifest=ToolManifest(id="fake", display_name="Fake Agent", icon="fake",
+def _fake_adapter() -> AgentAdapter:
+    return AgentAdapter(
+        manifest=AgentManifest(id="fake", display_name="Fake Agent", icon="fake",
                               source_path="~/.fake/sessions",
                               executables=("fake",)),
         browser=_FakeBrowser(),
@@ -159,16 +159,16 @@ def _fake_plugin() -> ToolPlugin:
     )
 
 
-def test_fake_plugin_satisfies_complete_static_contract():
-    plugin = _fake_plugin()
-    assert isinstance(plugin.browser, SessionBrowser)
-    assert isinstance(plugin.migration_source, MigrationSource)
-    assert isinstance(plugin.migration_target, MigrationTarget)
-    assert isinstance(plugin.editor, SessionEditor)
-    assert isinstance(plugin.verifier, SessionVerifier)
-    assert isinstance(plugin.lifecycle, SessionLifecycle)
-    assert isinstance(plugin.models, ModelCatalog)
-    assert plugin.manifest.to_dict() == {
+def test_fake_adapter_satisfies_complete_static_contract():
+    adapter = _fake_adapter()
+    assert isinstance(adapter.browser, SessionBrowser)
+    assert isinstance(adapter.migration_source, MigrationSource)
+    assert isinstance(adapter.migration_target, MigrationTarget)
+    assert isinstance(adapter.editor, SessionEditor)
+    assert isinstance(adapter.verifier, SessionVerifier)
+    assert isinstance(adapter.lifecycle, SessionLifecycle)
+    assert isinstance(adapter.models, ModelCatalog)
+    assert adapter.manifest.to_dict() == {
         "id": "fake",
         "display_name": "Fake Agent",
         "icon": "fake",
@@ -176,22 +176,22 @@ def test_fake_plugin_satisfies_complete_static_contract():
         "executables": ["fake"],
         "fallback_bin_dirs": [],
     }
-    assert plugin.browser.scan(cache=None) == []
+    assert adapter.browser.scan(cache=None) == []
 
 
-def test_registry_accepts_injected_fake_plugin():
-    registry = AdapterRegistry((_fake_plugin(),))
+def test_registry_accepts_injected_fake_adapter():
+    registry = AdapterRegistry((_fake_adapter(),))
     assert registry.ids() == ("fake",)
     assert registry.get("fake").id == "fake"
 
 
 def test_registry_rejects_duplicate_adapter_ids():
     with pytest.raises(ValueError, match="重复的 adapter id"):
-        AdapterRegistry((_fake_plugin(), _fake_plugin()))
+        AdapterRegistry((_fake_adapter(), _fake_adapter()))
 
 
 def test_registry_reports_unknown_adapter():
-    registry = AdapterRegistry((_fake_plugin(),))
+    registry = AdapterRegistry((_fake_adapter(),))
     with pytest.raises(ToolUnknownError) as excinfo:
         registry.get("missing")
     assert excinfo.value.code == "tool.unknown"

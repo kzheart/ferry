@@ -13,8 +13,8 @@ class SessionDeletionService:
         self._ports = ports
 
     def delete(self, tool: str, reference: str) -> dict:
-        plugin = self._ports.adapter(tool)
-        return plugin.lifecycle.delete(plugin, reference)
+        adapter = self._ports.adapter(tool)
+        return adapter.lifecycle.delete(adapter, reference)
 
     def restore(self, snapshot: str) -> dict:
         path = Path(snapshot)

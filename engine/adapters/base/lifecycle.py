@@ -12,7 +12,7 @@ class BaseLifecycle:
     """通用生命周期默认值；各 Agent 子类覆盖差异点。"""
 
     tool: str
-    executable: str = ""        # 装配时由 plugin 从 manifest executables 注入
+    executable: str = ""        # 装配时由 adapter 从 manifest executables 注入
     delete_undoable = False
 
     def resume_args(self, session_id: str) -> list[str]:
@@ -36,7 +36,7 @@ class BaseLifecycle:
         """探针是否需要工作目录；默认需要。"""
         return cwd
 
-    def delete(self, plugin, ref: str) -> dict:
+    def delete(self, adapter, ref: str) -> dict:
         raise NotImplementedError
 
     def restore_delete(self, _snapshot, _meta: dict) -> dict:
@@ -48,10 +48,10 @@ class FileSessionLifecycle(BaseLifecycle):
 
     delete_undoable = True
 
-    def delete(self, plugin, ref: str) -> dict:
-        doc = plugin.editor.load(ref)
+    def delete(self, adapter, ref: str) -> dict:
+        doc = adapter.editor.load(ref)
         path = doc.handle if isinstance(doc.handle, Path) else \
-            Path(plugin.browser.resolve_ref(ref))
+            Path(adapter.browser.resolve_ref(ref))
         children = self._delete_children(doc, path)
         snap = snapshot_file(path, "snapshot.before_delete", self.tool,
                              {"children": children} if children else None)

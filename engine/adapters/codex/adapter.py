@@ -1,7 +1,7 @@
 """Codex 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.plugin import ToolManifest, ToolPlugin, jsonl_reference
+from ..contracts import AgentManifest, AgentAdapter, jsonl_reference
 from ..base.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from .editor import CodexBackend, resolve
@@ -12,7 +12,7 @@ from .probe import CodexVerifier
 from .reader import read
 from .scanner import agent_fingerprint, fingerprint, scan
 
-MANIFEST = ToolManifest(id="codex", **AGENTS["codex"])
+MANIFEST = AgentManifest(id="codex", **AGENTS["codex"])
 
 
 class CodexBrowser:
@@ -48,11 +48,11 @@ class CodexModels:
         return fallback()
 
 
-def build() -> ToolPlugin:
+def build() -> AgentAdapter:
     browser = CodexBrowser()
     lifecycle = CodexLifecycle()
     lifecycle.executable = MANIFEST.executables[0]
-    return ToolPlugin(
+    return AgentAdapter(
         manifest=MANIFEST,
         browser=browser,
         migration_source=TreeMigrationSource(browser),
