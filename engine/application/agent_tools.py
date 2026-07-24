@@ -526,38 +526,6 @@ def search_sessions(query: str = "", agents=None, projects=None, time_range=None
     return _finalize_dto(result)
 
 
-def resolve_session(tool: str, session_id: str) -> dict:
-    """把来源工具的稳定会话 ID 换成当前索引签发的安全引用。"""
-    if not isinstance(tool, str) or not 1 <= len(tool) <= 32:
-        raise AgentRequestError("tool 必须是有效的会话来源")
-    if not isinstance(session_id, str) or not 1 <= len(session_id) <= 512:
-        raise AgentRequestError("session_id 必须是有效字符串")
-    if any(char in session_id for char in ("\0", "\n", "\r")):
-        raise AgentRequestError("session_id 包含非法字符")
-    matches = [record for record in _INDEX.refresh()
-               if record.tool == tool and str(record.row.get("id") or "") == session_id]
-    if not matches:
-        raise AgentReferenceError(
-            "当前扫描索引中找不到这个原始会话 ID",
-            {"tool": tool, "hint": "重新扫描后再解析，或按标题/项目搜索会话"})
-    canonical = {record.canonical_ref for record in matches}
-    if len(canonical) != 1:
-        raise AgentReferenceError(
-            "原始会话 ID 匹配到多个会话",
-            {"tool": tool, "hint": "请使用标题、项目和时间缩小范围"})
-    record = max(matches, key=lambda item: int(item.row.get("updated") or 0))
-    row = record.row
-    return _finalize_dto({
-        "tool": record.tool,
-        "ref": record.opaque_ref,
-        "title": _redact(str(row.get("title") or ""), 200),
-        "project": _safe_project(row.get("dir")),
-        "updated": int(row.get("updated") or 0),
-        "message_count": int(row.get("count") or 0),
-        "revision": record.revision,
-    })
-
-
 def _take(text: str, remaining: int) -> tuple[str, int, bool]:
     encoded = text.encode("utf-8")
     if len(encoded) <= remaining:
@@ -799,23 +767,13 @@ def search_session_content(tool: str, opaque_ref: str, terms,
     })
 
 
-def session_read(tool: str, ref: str | None = None,
-                 session_id: str | None = None, terms=None, roles=None,
+def session_read(tool: str, ref: str | None = None, terms=None, roles=None,
                  from_message: int = 1, limit: int = 20,
                  include_tool_outputs: bool = False,
                  max_bytes: int = DEFAULT_CONTEXT_BYTES) -> dict:
-    """读取单个会话:内部消化 native id → ref 解析,并按有无 terms
-    在'读上下文分页'与'搜正文'之间分流,替代 resolve/context/content 三工具。"""
-    resolved_from_id = False
-    if ref is None:
-        if not session_id:
-            raise AgentRequestError(
-                "必须提供 ref 或 session_id", {"field": "ref"})
-        ref = resolve_session(tool, session_id)["ref"]
-        resolved_from_id = True
-    elif session_id:
-        raise AgentRequestError(
-            "ref 与 session_id 只能二选一", {"field": "ref"})
+    """读取 Engine 索引会话；只接受 scan/search 签发的 opaque ref。"""
+    if not isinstance(ref, str) or not ref:
+        raise AgentRequestError("必须提供 Engine 签发的 ref", {"field": "ref"})
     if terms is not None:
         result = search_session_content(tool, ref, terms, roles=roles, limit=limit)
         result["mode"] = "search"
@@ -824,8 +782,6 @@ def session_read(tool: str, ref: str | None = None,
             tool, ref, from_message=from_message, limit=limit,
             include_tool_outputs=include_tool_outputs, max_bytes=max_bytes)
         result["mode"] = "context"
-    if resolved_from_id:
-        result["resolved_from_session_id"] = True
     return result
 
 
