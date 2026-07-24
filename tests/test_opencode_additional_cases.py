@@ -1,6 +1,7 @@
 import pytest
 
 from engine.adapters.opencode import writer as opencode_writer
+from engine.adapters.opencode import payload as opencode_payload
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
@@ -64,7 +65,7 @@ def test_remap_normalizes_missing_and_non_dict_time_fields():
         ],
     }
 
-    remapped = opencode_writer._remap_payload(
+    remapped = opencode_payload.remap_payload(
         payload, "new-root", "/new", None, {"old-root": "new-root"})
 
     created = [message["info"]["time"]["created"]
@@ -77,7 +78,7 @@ def test_empty_native_payload_gets_a_valid_session_time():
     payload = {"info": {"id": "old-root", "directory": "/old", "time": None},
                "messages": []}
 
-    remapped = opencode_writer._remap_payload(
+    remapped = opencode_payload.remap_payload(
         payload, "new-root", "/new", None, {"old-root": "new-root"})
 
     assert isinstance(remapped["info"]["time"]["created"], int)

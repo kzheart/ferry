@@ -1,4 +1,5 @@
 from engine.adapters.opencode import writer as opencode_writer
+from engine.adapters.opencode import payload as opencode_payload
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
@@ -49,7 +50,7 @@ def test_raw_remap_makes_tied_messages_and_parts_stably_ordered():
         ],
     }
 
-    remapped = opencode_writer._remap_payload(
+    remapped = opencode_payload.remap_payload(
         payload, "new-session", "/new", None,
         {"old-session": "new-session", "old-child": "new-child"})
 
