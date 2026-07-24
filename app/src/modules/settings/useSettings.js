@@ -2,7 +2,7 @@
 // 落 localStorage,并以 data-* 属性作用到根节点;配色为黑白中性色,由 style.css 变量定义
 import { useEffect, useState } from "react";
 import { setWindowTheme } from "../../platform/desktop/client.js";
-import { changeLanguage } from "../../i18n/index.js";
+import { changeLanguage } from "../../shared/i18n/index.js";
 
 const KEY = "ferry-settings";
 
