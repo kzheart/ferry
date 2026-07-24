@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 
 from .migration_history import MigrationHistoryStore
-from .operation_store import OperationStore
+from ..operations.state_store import OperationStore
 from .organization_store import OrganizationStore
 from .runtime_sessions import RuntimeSessionStore
 from .session_metadata import SessionMetadataStore
