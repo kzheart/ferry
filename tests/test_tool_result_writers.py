@@ -8,7 +8,7 @@ from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.migration import CodexMigrationTarget
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import reader as opencode_reader
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
 from engine.sessions.model import (
@@ -88,9 +88,9 @@ def _roundtrip_codex(session, tmp_path):
 
 def _roundtrip_opencode(session, _tmp_path):
     target = OpenCodeMigrationTarget()
-    payload = opencode_session._canonical_payload(
+    payload = opencode_writer._canonical_payload(
         session, "fixture-session", "/tmp", None,
-        opencode_session._template(), tool_decider=target.evaluate_tool,
+        opencode_writer._template(), tool_decider=target.evaluate_tool,
     )
     return opencode_reader.parse_session(payload)[0]
 
@@ -132,9 +132,9 @@ def test_claude_writer_does_not_emit_ferry_tool_result_extension():
 
 
 def test_opencode_writer_does_not_emit_ferry_tool_result_extension():
-    payload = opencode_session._canonical_payload(
+    payload = opencode_writer._canonical_payload(
         _source_session(), "fixture-session", "/tmp", None,
-        opencode_session._template(),
+        opencode_writer._template(),
         tool_decider=OpenCodeMigrationTarget().evaluate_tool,
     )
 

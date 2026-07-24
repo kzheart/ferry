@@ -1,6 +1,6 @@
 import pytest
 
-from engine.adapters.opencode import session as opencode_session
+from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
 from engine.sessions.model import (
     AgentEdge,
@@ -64,7 +64,7 @@ def test_remap_normalizes_missing_and_non_dict_time_fields():
         ],
     }
 
-    remapped = opencode_session._remap_payload(
+    remapped = opencode_writer._remap_payload(
         payload, "new-root", "/new", None, {"old-root": "new-root"})
 
     created = [message["info"]["time"]["created"]
@@ -77,7 +77,7 @@ def test_empty_native_payload_gets_a_valid_session_time():
     payload = {"info": {"id": "old-root", "directory": "/old", "time": None},
                "messages": []}
 
-    remapped = opencode_session._remap_payload(
+    remapped = opencode_writer._remap_payload(
         payload, "new-root", "/new", None, {"old-root": "new-root"})
 
     assert isinstance(remapped["info"]["time"]["created"], int)
@@ -93,7 +93,7 @@ def test_multiple_tasks_in_one_message_link_distinct_children(
                         lambda payload, sid, cwd: imported.append((payload, sid)))
     root = _tree_with_children(tmp_path)
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     payload, root_sid = imported[0]
     spawn = payload["messages"][1]
@@ -116,7 +116,7 @@ def test_multiple_tasks_match_children_by_call_id_not_edge_order(
     root = _tree_with_children(tmp_path)
     root.messages[1].blocks.reverse()
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     tasks = [part for part in imported[0][0]["messages"][1]["parts"]
              if part.get("tool") == "task"]
@@ -133,7 +133,7 @@ def test_duplicate_edge_does_not_duplicate_task_part(tmp_path, monkeypatch):
     root = _tree_with_children(tmp_path, count=1)
     root.agent_edges.append(root.agent_edges[0])
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     tasks = [part for message in imported[0]["messages"]
              for part in message["parts"] if part.get("tool") == "task"]
@@ -152,7 +152,7 @@ def test_child_without_edge_and_empty_parent_gets_a_synthetic_user(
     child.messages = [Message("assistant", [Block("text", "result")])]
     root.children = [child]
 
-    opencode_session.write(root, cwd=str(tmp_path))
+    opencode_writer.write(root, cwd=str(tmp_path))
 
     messages = imported[0]["messages"]
     assert [message["info"]["role"] for message in messages] == [
@@ -181,7 +181,7 @@ def test_writer_uses_explicit_session_model_fields(tmp_path, monkeypatch):
         Message("assistant", [Block("text", "answer")]),
     ]
 
-    opencode_session.write(session, cwd=str(tmp_path))
+    opencode_writer.write(session, cwd=str(tmp_path))
 
     user_info = imported[0]["messages"][0]["info"]
     assistant_info = imported[0]["messages"][1]["info"]
@@ -213,7 +213,7 @@ def test_empty_native_parent_with_missing_time_can_link_a_child(
     }
     root.children = [child]
 
-    opencode_session.write(
+    opencode_writer.write(
         root,
         cwd=str(tmp_path),
         native_payloads={"root": root_payload, "child": child_payload},
@@ -254,7 +254,7 @@ def test_native_payload_keeps_multiple_tasks_without_adding_duplicates(
         ],
     }
 
-    opencode_session.write(
+    opencode_writer.write(
         root,
         cwd=str(tmp_path),
         native_payloads={"root": root_payload},
@@ -289,6 +289,6 @@ def test_second_import_failure_rolls_back_child_then_parent(tmp_path, monkeypatc
     root = _tree_with_children(tmp_path, count=1)
 
     with pytest.raises(RuntimeError, match="child import failed"):
-        opencode_session.write(root, cwd=str(tmp_path))
+        opencode_writer.write(root, cwd=str(tmp_path))
 
     assert deleted == list(reversed(attempts))

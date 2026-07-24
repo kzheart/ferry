@@ -1,4 +1,4 @@
-"""OpenCode 当前原生结构写入。"""
+"""Canonical Session 到 OpenCode 当前原生结构的写入转换。"""
 import json
 import secrets
 import time

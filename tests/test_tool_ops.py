@@ -8,8 +8,8 @@ from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.codex.writer import OP_FIDELITY as CODEX_FIDELITY
 from engine.adapters.codex.writer import OP_WRITERS as CODEX_WRITERS
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
-from engine.adapters.opencode.session import OP_FIDELITY as OPENCODE_FIDELITY
-from engine.adapters.opencode.session import OP_WRITERS as OPENCODE_WRITERS
+from engine.adapters.opencode.writer import OP_FIDELITY as OPENCODE_FIDELITY
+from engine.adapters.opencode.writer import OP_WRITERS as OPENCODE_WRITERS
 from engine.sessions.model import ToolCall, text_tool_result
 from engine.sessions.tool_ops import (
     CANONICAL_OPS, CanonicalOp, TOOL_OP_SPECS, has_valid_tool_input,
