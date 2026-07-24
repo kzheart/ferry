@@ -3,7 +3,7 @@
 //! 这里固定 Host 到 Engine 的方法名与参数形状，确保应用阶段只能携带已签发的
 //! plan id，不能重新注入业务参数或任意 Engine method。
 
-use crate::operation_input::OperationPlanInput;
+use super::input::OperationPlanInput;
 use serde_json::json;
 
 pub(crate) fn validate_plan_id(plan_id: &str) -> Result<(), String> {

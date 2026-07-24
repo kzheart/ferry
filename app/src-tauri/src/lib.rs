@@ -1,20 +1,11 @@
 //! Tauri 壳不含会话格式知识，只转发引擎 RPC 和启动受限的接续命令。
 
-mod agent;
 mod contracts;
-#[cfg(target_os = "macos")]
-mod menu;
-mod operation_commands;
-mod operation_input;
-mod operation_request;
-mod operation_validation;
-mod platform;
+mod desktop;
+mod engine;
+mod operations;
 mod process;
-mod reveal;
-mod sidecar;
-mod sidecar_policy;
-mod terminal;
-mod window;
+mod runtime;
 
 pub fn run() {
     // 必须在 spawn 任何引擎进程之前修复 PATH,子进程只在 fork 时继承一次环境。
@@ -28,8 +19,8 @@ pub fn run() {
             use tauri::Manager;
             // 引擎预热与 webview 启动并行,首个 RPC 无需再等冷启动
             if let Ok(resource_dir) = app.path().resource_dir() {
-                sidecar::warm_up(resource_dir.clone());
-                agent::warm_up(app.handle().clone(), resource_dir);
+                engine::warm_up(resource_dir.clone());
+                runtime::warm_up(app.handle().clone(), resource_dir);
             }
             #[cfg(target_os = "macos")]
             {
@@ -41,22 +32,22 @@ pub fn run() {
                         None,
                     );
                 }
-                menu::install(app.handle())?;
+                desktop::menu::install(app.handle())?;
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            sidecar::engine_rpc,
-            sidecar::trusted_engine_rpc,
-            operation_commands::operation_plan,
-            operation_commands::operation_apply,
-            operation_commands::operation_status,
-            operation_commands::operation_cancel,
-            agent::agent_command,
-            terminal::open_terminal,
-            reveal::reveal_path
+            engine::engine_rpc,
+            engine::trusted_engine_rpc,
+            operations::operation_plan,
+            operations::operation_apply,
+            operations::operation_status,
+            operations::operation_cancel,
+            runtime::agent_command,
+            desktop::terminal::open_terminal,
+            desktop::reveal::reveal_path
         ])
-        .on_window_event(window::handle_window_event)
+        .on_window_event(desktop::window::handle_window_event)
         .run(tauri::generate_context!())
         .expect("Ferry 启动失败");
 }

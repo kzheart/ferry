@@ -9,10 +9,10 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
+use crate::engine::engine_request_blocking;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
-use crate::sidecar::engine_request_blocking;
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -83,7 +83,7 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         .join(".ferry");
     std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
     command.env("FERRY_RUNTIME_DATA_DIR", data_dir);
-    crate::platform::configure_background_command(&mut command);
+    crate::desktop::platform::configure_background_command(&mut command);
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
