@@ -1,7 +1,7 @@
 """结构化 RPC envelope 与错误码测试。"""
 import json
 
-from engine.server.rpc import PROTOCOL, rpc
+from engine.server.rpc import PROTOCOL, RpcDispatcher, rpc
 
 
 def request(method: str, params: dict | None = None, request_id: str = "req-1"):
@@ -94,3 +94,29 @@ def test_invalid_reply_maps_to_edit_code():
         }})
     assert response["ok"] is False
     assert response["error"]["code"] == "edit.invalid_reply"
+
+
+def test_environment_and_pricing_use_the_engine_capability_facade():
+    class Application:
+        def environment(self):
+            return {"environment": "current"}
+
+        def pricing(self, force=False):
+            return {"forced": force}
+
+    dispatcher = RpcDispatcher(Application())
+    environment = dispatcher.handle(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "env",
+        "method": "env",
+        "params": {},
+    }))
+    pricing = dispatcher.handle(json.dumps({
+        "protocol": PROTOCOL,
+        "id": "pricing",
+        "method": "pricing",
+        "params": {"force": True},
+    }))
+
+    assert environment["result"] == {"environment": "current"}
+    assert pricing["result"] == {"forced": True}
