@@ -43,6 +43,7 @@ def test_business_capabilities_live_in_top_level_packages():
         "history.py",
         "metadata.py",
         "migrate.py",
+        "plan_store.py",
         "service.py",
         "types.py",
         "verification.py",
@@ -56,3 +57,7 @@ def test_business_capabilities_live_in_top_level_packages():
         "infrastructure",
         "interfaces",
     } & directories
+    operation_service = (operations / "service.py").read_text()
+    assert "class OperationPlan:" not in operation_service
+    assert "class OperationState:" not in operation_service
+    assert "hashlib.sha256" not in operation_service
