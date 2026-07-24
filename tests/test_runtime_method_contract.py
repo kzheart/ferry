@@ -44,6 +44,12 @@ def test_internal_runtime_commands_never_enter_webview_allowlist():
     host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
     assert "runtime_methods::is_public(method)" in host
     assert 'method,\n        "health"' not in host
+    assert {
+        "organization.start",
+        "organization.status",
+        "organization.cancel",
+    } <= public
+    assert "ORGANIZATION_TIMEOUT" not in host
 
 
 def test_runtime_parser_uses_generated_method_union():

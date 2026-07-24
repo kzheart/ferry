@@ -11,6 +11,8 @@
     {"name": "role.copy", "exposure": "public"},
     {"name": "role.delete", "exposure": "public"},
     {"name": "organization.start", "exposure": "public"},
+    {"name": "organization.status", "exposure": "public"},
+    {"name": "organization.cancel", "exposure": "public"},
     {"name": "prompt", "exposure": "public"},
     {"name": "abort", "exposure": "public"},
     {"name": "steer", "exposure": "public"},

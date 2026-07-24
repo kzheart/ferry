@@ -35,6 +35,7 @@
     {"code": "organization.proposal_not_found", "category": "not-found", "retryable": false, "sources": ["engine"]},
     {"code": "organization.proposal_stale", "category": "conflict", "retryable": true, "sources": ["engine"]},
     {"code": "organization_failed", "category": "execution", "retryable": false, "sources": ["runtime"]},
+    {"code": "organization_job_not_found", "category": "not-found", "retryable": false, "sources": ["runtime"]},
     {"code": "organizer_invalid_response", "category": "execution", "retryable": false, "sources": ["runtime"]},
     {"code": "provider_in_use", "category": "conflict", "retryable": false, "sources": ["runtime"]},
     {"code": "provider_not_found", "category": "not-found", "retryable": false, "sources": ["runtime"]},

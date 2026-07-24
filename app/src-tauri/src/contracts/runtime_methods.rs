@@ -11,6 +11,8 @@ const PUBLIC_RUNTIME_METHODS: &[&str] = &[
     "role.copy",
     "role.delete",
     "organization.start",
+    "organization.status",
+    "organization.cancel",
     "prompt",
     "abort",
     "steer",

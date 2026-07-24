@@ -23,7 +23,6 @@ use gateway::{complete_engine_request, complete_tool_request};
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
-const ORGANIZATION_TIMEOUT: Duration = Duration::from_secs(130);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -226,19 +225,8 @@ fn request_runtime(
         .ok()
         .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
         .ok_or("Runtime 命令缺少 id")?;
-    let timeout = serde_json::from_str::<Value>(request)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("method")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .filter(|method| method == "organization.start")
-        .map(|_| ORGANIZATION_TIMEOUT)
-        .unwrap_or(COMMAND_TIMEOUT);
     let client = ensure_runtime(app, resource_dir)?;
-    let result = client.transport.request(&id, request, timeout);
+    let result = client.transport.request(&id, request, COMMAND_TIMEOUT);
     if result
         .as_ref()
         .is_err_and(ProcessError::invalidates_process)

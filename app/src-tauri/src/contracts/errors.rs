@@ -147,6 +147,10 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "execution",
             retryable: false,
         }),
+        "organization_job_not_found" => Some(ErrorPolicy {
+            category: "not-found",
+            retryable: false,
+        }),
         "organizer_invalid_response" => Some(ErrorPolicy {
             category: "execution",
             retryable: false,

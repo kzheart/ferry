@@ -16,6 +16,11 @@ export interface OrganizationEnginePort {
   ): Promise<unknown>;
 }
 
+export interface OrganizationWorkflowControl {
+  checkActive(): void;
+  beforeCommit(): void;
+}
+
 interface SessionInput {
   tool: string;
   id: string;
@@ -233,8 +238,10 @@ export async function runOrganizationWorkflow(
   workflowId: string,
   engine: OrganizationEnginePort,
   generate: (input: OrganizerInput) => Promise<OrganizerResult>,
+  control?: OrganizationWorkflowControl,
 ) {
   const input = parseInput(rawInput);
+  control?.checkActive();
   const backbones = await Promise.all(
     input.sessions.map(async (session): Promise<Backbone> => {
       const result = object(
@@ -258,6 +265,7 @@ export async function runOrganizationWorkflow(
       } as unknown as Backbone;
     }),
   );
+  control?.checkActive();
   const selected = bounded(backbones);
   if (!selected.length) {
     throw new ProtocolError(
@@ -270,6 +278,7 @@ export async function runOrganizationWorkflow(
     {},
     workflowId,
   );
+  control?.checkActive();
   const existing = existingProposal(proposals, selected);
   if (existing) return existing;
 
@@ -279,9 +288,12 @@ export async function runOrganizationWorkflow(
   const selectedSessions = input.sessions.filter((item) =>
     selectedKeys.has(`${item.tool}\0${item.id}`),
   );
+  control?.checkActive();
   const generated = await generate(
     generationInput(selected, selectedSessions, input.locale),
   );
+  control?.checkActive();
+  control?.beforeCommit();
   await Promise.all(
     selected.map(async (backbone) => {
       const pending = new Set(backbone.pending ?? []);

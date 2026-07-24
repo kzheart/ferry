@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   runtime,
@@ -6,8 +6,11 @@ import {
 } from "../../platform/desktop/client.js";
 import { sessionRef } from "../browser/sessionModel.js";
 
-function generateOrganizationProposal(sessions, locale) {
-  return runtime("organization.start", {
+const wait = milliseconds => new Promise(resolve =>
+  globalThis.setTimeout(resolve, milliseconds));
+
+async function generateOrganizationProposal(sessions, locale, onStarted) {
+  let state = await runtime("organization.start", {
     locale,
     sessions: sessions.slice(0, 50).map(session => ({
       tool: session.tool,
@@ -18,6 +21,20 @@ function generateOrganizationProposal(sessions, locale) {
       ...(session.updated_at ? { updated_at: String(session.updated_at) } : {}),
     })),
   });
+  if (typeof state?.job_id !== "string") {
+    throw new Error("organization job id missing");
+  }
+  onStarted(state.job_id);
+  while (state.status === "running") {
+    await wait(200);
+    state = await runtime("organization.status", {
+      job_id: state.job_id,
+    });
+  }
+  if (state.status === "completed") return state.result;
+  throw new Error(
+    state.error?.message || `organization job ${state.status}`,
+  );
 }
 
 function editableTargets(proposal) {
@@ -36,6 +53,7 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const activeJob = useRef(null);
 
   const targets = useMemo(() => sessions.slice(0, 50), [sessions]);
   const scopeKey = JSON.stringify(
@@ -57,13 +75,38 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
       .catch(() => {});
   }, [scopeKey]);
 
+  useEffect(() => () => {
+    if (activeJob.current) {
+      void runtime("organization.cancel", {
+        job_id: activeJob.current,
+      }).catch(() => {});
+    }
+  }, []);
+
+  const closePanel = () => {
+    const jobId = activeJob.current;
+    activeJob.current = null;
+    if (jobId) {
+      void runtime("organization.cancel", { job_id: jobId })
+        .catch(() => {});
+    }
+    onClose();
+  };
+
   const generate = async () => {
     setBusy(true); setError("");
     try {
-      adopt(await generateOrganizationProposal(targets, i18n.language));
+      adopt(await generateOrganizationProposal(
+        targets,
+        i18n.language,
+        jobId => {
+          activeJob.current = jobId;
+        },
+      ));
     } catch (error2) {
       setError(error2.message || String(error2));
     } finally {
+      activeJob.current = null;
       setBusy(false);
     }
   };
@@ -107,7 +150,9 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
   };
 
   return (
-    <div onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
+    <div onMouseDown={event => {
+      if (event.target === event.currentTarget) closePanel();
+    }}
       style={{ position: "absolute", inset: 0, zIndex: 58, background: "var(--scrim)",
         display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ width: "min(760px, calc(100vw - 48px))",
@@ -122,7 +167,9 @@ export default function OrganizationPanel({ sessions, onClose, onApplied }) {
               n: proposal?.targets?.length || targets.length,
             })}</span>
           <span style={{ flex: 1 }} />
-          <button className="fbtn" onClick={onClose}>{t("organizing:close")}</button>
+          <button className="fbtn" onClick={closePanel}>
+            {t("organizing:close")}
+          </button>
         </div>
         <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: 18 }}>
           {!proposal && (

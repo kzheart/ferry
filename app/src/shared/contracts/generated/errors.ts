@@ -245,6 +245,13 @@ export const FERRY_ERROR_POLICIES = {
       "runtime"
     ]
   },
+  "organization_job_not_found": {
+    "category": "not-found",
+    "retryable": false,
+    "sources": [
+      "runtime"
+    ]
+  },
   "organizer_invalid_response": {
     "category": "execution",
     "retryable": false,

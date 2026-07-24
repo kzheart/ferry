@@ -296,8 +296,16 @@ export class AgentRuntime {
     return { session_id: sessionId, deleted: true };
   }
 
-  async startOrganization(input: unknown) {
+  startOrganization(input: unknown) {
     return this.organization.start(input);
+  }
+
+  organizationStatus(jobId: string) {
+    return this.organization.status(jobId);
+  }
+
+  cancelOrganization(jobId: string) {
+    return this.organization.cancel(jobId);
   }
 
   abort(sessionId: string) {
