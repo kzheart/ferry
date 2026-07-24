@@ -4,50 +4,14 @@ import {
   type IpcRequest,
   type IpcResponse,
 } from "./generated/ipc.js";
+import {
+  isRuntimeMethod,
+  type RuntimeMethod,
+} from "./generated/runtime-methods.js";
 
 export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 
-export type CommandMethod =
-  | "health"
-  | "session.create"
-  | "session.rename"
-  | "session.pin"
-  | "session.delete"
-  | "roles.list"
-  | "role.create"
-  | "role.update"
-  | "role.copy"
-  | "role.delete"
-  | "organization.start"
-  | "prompt"
-  | "abort"
-  | "steer"
-  | "follow_up"
-  | "state"
-  | "sessions.list"
-  | "events.replay"
-  | "providers.list"
-  | "provider.enabled.set"
-  | "provider.test"
-  | "models.list"
-  | "models.enabled"
-  | "models.catalog"
-  | "custom_model.add"
-  | "custom_model.delete"
-  | "models.visibility.set"
-  | "models.refresh"
-  | "config.get"
-  | "credential.set"
-  | "provider.logout"
-  | "model.select"
-  | "custom_provider.upsert"
-  | "custom_provider.delete"
-  | "auth.login.start"
-  | "auth.login.respond"
-  | "auth.login.cancel"
-  | "tool.result";
-
-export type CommandEnvelope = IpcRequest<CommandMethod>;
+export type CommandEnvelope = IpcRequest<RuntimeMethod>;
 
 export type ResponseEnvelope = IpcResponse;
 
@@ -101,47 +65,7 @@ export function parseCommand(input: unknown): CommandEnvelope {
   ) {
     throw new ProtocolError("invalid_request", "id must be a non-empty string");
   }
-  const methods: readonly string[] = [
-    "health",
-    "session.create",
-    "session.rename",
-    "session.pin",
-    "session.delete",
-    "roles.list",
-    "role.create",
-    "role.update",
-    "role.copy",
-    "role.delete",
-    "organization.start",
-    "prompt",
-    "abort",
-    "steer",
-    "follow_up",
-    "state",
-    "sessions.list",
-    "events.replay",
-    "providers.list",
-    "provider.enabled.set",
-    "provider.test",
-    "models.list",
-    "models.enabled",
-    "models.catalog",
-    "custom_model.add",
-    "custom_model.delete",
-    "models.visibility.set",
-    "models.refresh",
-    "config.get",
-    "credential.set",
-    "provider.logout",
-    "model.select",
-    "custom_provider.upsert",
-    "custom_provider.delete",
-    "auth.login.start",
-    "auth.login.respond",
-    "auth.login.cancel",
-    "tool.result",
-  ];
-  if (typeof input.method !== "string" || !methods.includes(input.method)) {
+  if (!isRuntimeMethod(input.method)) {
     throw new ProtocolError("unknown_method", "unsupported command method");
   }
   if (!isObject(input.params)) {
