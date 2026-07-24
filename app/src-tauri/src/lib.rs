@@ -4,6 +4,7 @@ mod agent;
 mod contracts;
 #[cfg(target_os = "macos")]
 mod menu;
+mod operation_commands;
 mod operation_input;
 mod operation_request;
 mod operation_validation;
@@ -45,10 +46,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
-            sidecar::operation_plan,
-            sidecar::operation_apply,
-            sidecar::operation_status,
-            sidecar::operation_cancel,
+            operation_commands::operation_plan,
+            operation_commands::operation_apply,
+            operation_commands::operation_status,
+            operation_commands::operation_cancel,
             agent::agent_command,
             terminal::open_terminal,
             reveal::reveal_path
