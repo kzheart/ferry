@@ -30,3 +30,24 @@ def test_feature_models_live_with_their_consuming_capability():
     app = (FRONTEND / "app/App.jsx").read_text()
     assert "browser/SessionDetail.jsx" not in app
     assert "components/ui/primitives.jsx" not in app
+
+
+def test_operation_flow_has_one_feature_controller():
+    controller = FRONTEND / "features/operations/operationController.js"
+    composition = FRONTEND / "features/operations/operations.js"
+    assert controller.is_file()
+    assert composition.is_file()
+
+    transport = (FRONTEND / "api/transport/rpc.js").read_text()
+    assert "operationApplyAndWait" not in transport
+
+    for relative_path in (
+        "app/App.jsx",
+        "features/editing/useSessionEditing.js",
+        "features/migration/MigrateSheet.jsx",
+    ):
+        source = (FRONTEND / relative_path).read_text()
+        assert "operationPlan" not in source
+        assert "operationApply" not in source
+        assert "operationStatus" not in source
+        assert "operationCancel" not in source

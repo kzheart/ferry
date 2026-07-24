@@ -1,7 +1,8 @@
 // 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { operationApplyAndWait, operationPlan, openTerminal, rpc } from "../../api/transport/rpc.js";
+import { openTerminal, rpc } from "../../api/transport/rpc.js";
+import { operations } from "../operations/operations.js";
 import { TOOL_NAME, TOOLS } from "../../api/contract/tools.js";
 import { ACCENT } from "../../components/ui/toolDisplay.js";
 import { sessionRef } from "../browser/sessionModel.js";
@@ -151,7 +152,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const ensurePlan = async input => {
     const cached = matchingMigrationPlan(plannedRef.current, input);
     if (cached) return cached;
-    const plan = await operationPlan(input);
+    const plan = await operations.plan(input);
     return rememberPlan(migrationPlanKey(input), input, plan);
   };
 
@@ -163,7 +164,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     try {
       const cached = matchingMigrationPlan(plannedRef.current, input);
       if (!cached) {
-        const plan = await operationPlan(input);
+        const plan = await operations.plan(input);
         if (request === planRequest.current)
           rememberPlan(migrationPlanKey(input), input, plan);
       }
@@ -209,7 +210,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     setTimeout(() => setWroteFirst(true), 1500);
     try {
       const plan = await ensurePlan(currentInput);
-      const applied = await operationApplyAndWait(plan.plan_id);
+      const applied = await operations.apply(plan);
       setResult(applied.result);
     } catch (e) { setError(errorMessage(e)); }
     setStep("result");
