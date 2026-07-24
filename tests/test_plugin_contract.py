@@ -290,12 +290,11 @@ def test_codex_rewrite_preserves_user_image_content():
     _validate("codex", doc.data)
 
 
-def test_resume_descriptor_executable_matches_manifest_whitelist():
+def test_resume_descriptor_executable_matches_manifest_whitelist(ports):
     from engine.application import migration
-    from engine.application.ports import current
-    for agent_id in current().adapters():
-        adapter = current().adapter(agent_id)
-        descriptor = migration.MigrationService(current()).resume_command(
+    for agent_id in ports.adapters():
+        adapter = ports.adapter(agent_id)
+        descriptor = migration.MigrationService(ports).resume_command(
             agent_id, "sid-1", "/work")
         assert descriptor["executable"] in adapter.manifest.executables
         assert descriptor["args"]

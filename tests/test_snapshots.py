@@ -8,7 +8,6 @@ import json
 import pytest
 
 from engine.application import editing
-from engine.application.ports import current
 from engine.application.session_deletion import SessionDeletionService
 from engine.infrastructure.snapshots import backup_dir
 
@@ -38,10 +37,10 @@ def _snapshots():
     return sorted(root.glob("*.jsonl")) if root.exists() else []
 
 
-def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
+def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session, ports):
     """原地编辑前必须留底，否则写坏了没有退路。"""
     before = session.read_bytes()
-    editor = current().adapter("claude").editor
+    editor = ports.adapter("claude").editor
     editing.apply(
         editor, str(session), [{"op": "delete-turn", "turn": 2}],
     )
@@ -52,10 +51,10 @@ def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session):
     assert session.read_bytes() != before          # 编辑确实生效了
 
 
-def test_delete_is_undoable(session):
+def test_delete_is_undoable(session, ports):
     """Toast 的「撤销」依赖这条链路。"""
     original = session.read_bytes()
-    service = SessionDeletionService(current())
+    service = SessionDeletionService(ports)
     result = service.delete("claude", str(session))
 
     assert result["undoable"] is True
@@ -66,21 +65,21 @@ def test_delete_is_undoable(session):
     assert session.read_bytes() == original
 
 
-def test_undelete_refuses_to_overwrite_a_live_session(session):
+def test_undelete_refuses_to_overwrite_a_live_session(session, ports):
     from engine.domain.errors import SnapshotInvalidSourceError
-    service = SessionDeletionService(current())
+    service = SessionDeletionService(ports)
     result = service.delete("claude", str(session))
     service.restore(result["snapshot"])
     with pytest.raises(SnapshotInvalidSourceError):
         service.restore(result["snapshot"])   # 源已回来，不得覆盖
 
 
-def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path):
+def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path, ports):
     from engine.domain.errors import SnapshotInvalidSourceError
     stray = tmp_path / "stray.jsonl"
     stray.write_text("{}\n")
     with pytest.raises(SnapshotInvalidSourceError):
-        SessionDeletionService(current()).restore(str(stray))
+        SessionDeletionService(ports).restore(str(stray))
 
 
 def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):

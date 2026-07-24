@@ -3,7 +3,6 @@
 import pytest
 
 from engine.application import history
-from engine.application.ports import current
 from engine.infrastructure.state_db import StateDatabase
 
 
@@ -16,38 +15,38 @@ def store(tmp_path, monkeypatch):
     return database
 
 
-def test_empty_database_lists_nothing(store):
-    assert history.list_entries(current()) == []
+def test_empty_database_lists_nothing(store, ports):
+    assert history.list_entries(ports) == []
 
 
-def test_entries_are_newest_first_with_stable_database_ids(store):
-    first = history.append({"title": "a", "time": 1}, current())
-    second = history.append({"title": "b", "time": 2}, current())
+def test_entries_are_newest_first_with_stable_database_ids(store, ports):
+    first = history.append({"title": "a", "time": 1}, ports)
+    second = history.append({"title": "b", "time": 2}, ports)
 
-    assert [row["title"] for row in history.list_entries(current())] == ["b", "a"]
-    assert [row["id"] for row in history.list_entries(current())] == [second, first]
-
-
-def test_delete_removes_only_the_named_entry(store):
-    history.append({"title": "a", "time": 1}, current())
-    target = history.append({"title": "b", "time": 2}, current())
-
-    assert history.delete(target, current()) == {"deleted": True, "id": target, "remaining": 1}
-    assert [row["title"] for row in history.list_entries(current())] == ["a"]
+    assert [row["title"] for row in history.list_entries(ports)] == ["b", "a"]
+    assert [row["id"] for row in history.list_entries(ports)] == [second, first]
 
 
-def test_duplicate_entries_keep_independent_ids(store):
-    first = history.append({"title": "dup", "time": 1}, current())
-    second = history.append({"title": "dup", "time": 1}, current())
+def test_delete_removes_only_the_named_entry(store, ports):
+    history.append({"title": "a", "time": 1}, ports)
+    target = history.append({"title": "b", "time": 2}, ports)
+
+    assert history.delete(target, ports) == {"deleted": True, "id": target, "remaining": 1}
+    assert [row["title"] for row in history.list_entries(ports)] == ["a"]
+
+
+def test_duplicate_entries_keep_independent_ids(store, ports):
+    first = history.append({"title": "dup", "time": 1}, ports)
+    second = history.append({"title": "dup", "time": 1}, ports)
 
     assert first != second
-    history.delete(second, current())
-    assert [row["id"] for row in history.list_entries(current())] == [first]
+    history.delete(second, ports)
+    assert [row["id"] for row in history.list_entries(ports)] == [first]
 
 
-def test_unknown_id_is_a_no_op(store):
-    history.append({"title": "a", "time": 1}, current())
-    assert history.delete("history_missing", current()) == {
+def test_unknown_id_is_a_no_op(store, ports):
+    history.append({"title": "a", "time": 1}, ports)
+    assert history.delete("history_missing", ports) == {
         "deleted": False,
         "id": "history_missing",
         "remaining": 1,

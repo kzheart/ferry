@@ -15,7 +15,7 @@ from engine.adapters.base.plugin import (
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
 from engine.application import scanning
-from engine.application.ports import ApplicationPorts, configure, current
+from engine.application.ports import ApplicationPorts
 from engine.domain.errors import (
     AgentReferenceError,
     AgentRequestError,
@@ -201,7 +201,6 @@ def _session():
 
 @pytest.fixture
 def agent_environment(tmp_path, monkeypatch):
-    previous = current()
     root = tmp_path / "sessions"
     root.mkdir()
     transcript = root / "session.jsonl"
@@ -238,12 +237,12 @@ def agent_environment(tmp_path, monkeypatch):
         verifier=Verifier(), lifecycle=Lifecycle(), models=Models(),
     )
     plugins = {"claude": claude, "opencode": opencode}
-    configure(ApplicationPorts(
+    ports = ApplicationPorts(
         adapter=plugins.__getitem__, adapters=lambda: list(plugins),
         cache_factory=Cache, resource_path=lambda *_: tmp_path,
         snapshot_dir=lambda: tmp_path, version="test",
-    ))
-    index = agent_tools.AgentSessionIndex(current())
+    )
+    index = agent_tools.AgentSessionIndex(ports)
     for name in (
         "search_sessions", "get_session_context", "search_session_content",
         "session_read", "get_usage", "preview_migration", "preview_edit",
@@ -253,8 +252,7 @@ def agent_environment(tmp_path, monkeypatch):
         )
     yield {"root": root, "transcript": transcript, "editor": editor,
            "claude_browser": claude.browser, "opencode_browser": opencode_browser,
-           "index": index}
-    configure(previous)
+           "index": index, "ports": ports}
 
 
 def _claude_ref():
@@ -275,7 +273,9 @@ def test_search_never_exposes_storage_locations(agent_environment):
 
 def test_library_scan_issues_operation_refs(agent_environment):
     session = next(
-        item for item in scanning.scan(current(), agent_environment["index"])["sessions"]
+        item for item in scanning.scan(
+            agent_environment["ports"], agent_environment["index"],
+        )["sessions"]
         if item["tool"] == "claude"
     )
 
