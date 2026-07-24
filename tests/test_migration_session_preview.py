@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex.migration import CodexMigrationTarget
-from engine.application import services
+from engine.application import migration
 from engine.domain.events import event
 from engine.domain.model import (
     AgentEdge, Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
@@ -19,11 +19,11 @@ def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp
                                     text_tool_result("contents"))),
     ])]
     target = CodexMigrationTarget()
-    monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
+    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
         migration_target=target))
 
-    result = services.preview_migration(
-        "claude", "codex", "ignored", cwd=str(tmp_path), _session=session,
+    result = migration.MigrationService(ports).preview(
+        "claude", "codex", "ignored", cwd=str(tmp_path), session=session,
     )
 
     blocks = result["preview"]["root"]["messages"][0]["blocks"]

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.application import agent_tools, services
+from engine.application import agent_tools, migration
 from engine.domain.model import AgentEdge, Block, Message, Session
 
 
@@ -38,7 +38,7 @@ def _tree():
 def test_truncate_rounds_keeps_only_children_spawned_in_retained_root_messages():
     session = _tree()
 
-    services._truncate_rounds(session, 1)
+    migration._truncate_rounds(session, 1)
 
     assert [message.source_id for message in session.messages] == [
         "root-user-1", "root-assistant-1",
@@ -64,14 +64,22 @@ def test_migration_counts_include_the_retained_subtree(monkeypatch, tmp_path):
             return "destination-session", tmp_path / "destination"
 
     target = Target()
-    monkeypatch.setattr(services, "adapter", lambda _name: SimpleNamespace(
+    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
         migration_target=target))
-    monkeypatch.setattr(services, "resume_command", lambda *_: {"kind": "test"})
-    monkeypatch.setattr(services, "validate_written_tree", lambda *_: (True, "ok"))
-    monkeypatch.setattr(services, "_append_history", lambda _entry: None)
+    monkeypatch.setattr(
+        migration.MigrationService, "__init__",
+        lambda instance, _ports: setattr(instance, "_ports", ports),
+    )
+    monkeypatch.setattr(
+        migration.MigrationService, "resume_command", lambda *_: {"kind": "test"})
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (True, "ok"))
+    monkeypatch.setattr(migration.history, "append", lambda *_: None)
 
-    result = services.apply_migration("claude", "opencode", "ignored", cwd=str(tmp_path),
-                              max_turn=1, _session=session)
+    result = migration.MigrationService(None).apply(
+        "claude", "opencode", "ignored", cwd=str(tmp_path),
+        max_turn=1, session=session,
+    )
 
     assert written == [session]
     assert result["msg_count"] == 5
