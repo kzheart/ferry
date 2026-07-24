@@ -53,6 +53,7 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
     assert (RUNTIME / "src/providers/commands.ts").is_file()
     assert (RUNTIME / "src/roles/role-service.ts").is_file()
+    assert (RUNTIME / "src/roles/commands.ts").is_file()
     assert "runtime.providerService" not in runtime
     assert "runtime.roleService" not in runtime
     assert "new AuthCoordinator" not in runtime

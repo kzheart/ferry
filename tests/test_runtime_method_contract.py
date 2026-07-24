@@ -16,6 +16,7 @@ def test_runtime_router_exactly_implements_contract_methods():
     routers = [
         ROOT / "ferry-runtime/src/runtime/command-router.ts",
         ROOT / "ferry-runtime/src/providers/commands.ts",
+        ROOT / "ferry-runtime/src/roles/commands.ts",
     ]
     implemented = {
         method
