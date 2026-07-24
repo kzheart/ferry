@@ -3,6 +3,8 @@ import json
 import threading
 import time
 
+import pytest
+
 from engine.interfaces.cli import serve
 
 
@@ -72,3 +74,11 @@ def test_non_parallel_request_stays_on_ordered_lane():
         "first",
         "second",
     ]
+
+
+def test_completed_request_failure_is_not_lost_when_reclaimed():
+    def handler(_request: str) -> dict:
+        raise RuntimeError("worker failed")
+
+    with pytest.raises(RuntimeError, match="worker failed"):
+        serve(io.StringIO('{"method":"health"}\n'), io.StringIO(), handler)
