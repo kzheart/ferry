@@ -1,4 +1,4 @@
-"""规范化中间格式。
+"""会话规范化中间格式。
 
 Canonical Model 只保存 Ferry 使用的明确语义；原生记录由各 Adapter
 在边界内处理，无法表达的内容通过迁移损失报告。
@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .events import event
+from ..events import event
 
 
 TOOL_RESULT_STATUSES = frozenset({

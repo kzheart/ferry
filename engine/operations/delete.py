@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..application.ports import ApplicationPorts
-from ..domain.errors import SnapshotInvalidSourceError
+from ..context import EngineContext
+from ..errors import SnapshotInvalidSourceError
 
 
 class SessionDeletionService:
-    def __init__(self, ports: ApplicationPorts):
+    def __init__(self, ports: EngineContext):
         self._ports = ports
 
     def delete(self, tool: str, reference: str) -> dict:

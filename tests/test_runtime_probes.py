@@ -6,7 +6,7 @@ import pytest
 from engine.adapters.claude import probe as claude_probe
 from engine.adapters.codex import probe as codex_probe
 from engine.adapters.opencode import probe as opencode_probe
-from engine.infrastructure import probes
+from engine.system import probes
 
 
 class _Result:

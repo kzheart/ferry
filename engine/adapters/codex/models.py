@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from ...infrastructure import executables
+from ...system import executables
 
 
 def discover():

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.application import environment
+from engine.system import environment
 
 
 class FakePorts:

@@ -1,23 +1,25 @@
-"""Engine 的应用层入口。
+"""Engine 进程能力入口。
 
-RPC/CLI 在进程边界构造此对象；每个用例通过显式 ports 访问基础设施，
-而不是在业务路径中回读全局 composition。
+RPC/CLI 在进程边界构造此对象；各能力通过显式上下文访问依赖。
 """
 from __future__ import annotations
 
-from . import agent_tools, environment, history, models, runtime_sessions
-from . import scanning, sessions
-from .ports import ApplicationPorts
-from .pricing import pricing
-from ..contracts.ipc import FERRY_CONTRACT_HASH
-from ..operations import metadata
-from ..operations.service import OperationService
-from ..organization import proposals as organizing
-from ..organization import summaries
+from .context import EngineContext
+from .contracts.ipc import FERRY_CONTRACT_HASH
+from .operations import history, metadata
+from .operations.service import OperationService
+from .organization import proposals as organizing
+from .organization import summaries
+from .runtime import sessions as runtime_sessions
+from .sessions import catalog as agent_tools
+from .sessions import read as sessions
+from .sessions import scan as scanning
+from .system import environment, models
+from .system.pricing import pricing
 
 
-class EngineApplication:
-    def __init__(self, ports: ApplicationPorts,
+class EngineService:
+    def __init__(self, ports: EngineContext,
                  index: agent_tools.AgentSessionIndex,
                  operations: OperationService):
         self._ports = ports

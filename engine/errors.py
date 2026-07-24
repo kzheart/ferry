@@ -1,4 +1,4 @@
-"""跨应用与适配器边界共享的领域错误：code + params，供 RPC 结构化下发。"""
+"""跨能力包共享的结构化错误：code + params，供 RPC 下发。"""
 from __future__ import annotations
 
 

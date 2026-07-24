@@ -1,5 +1,5 @@
 from engine.adapters.opencode import session as opencode_session
-from engine.domain.model import (
+from engine.sessions.model import (
     AgentEdge,
     Block,
     Message,
@@ -7,7 +7,7 @@ from engine.domain.model import (
     ToolCall,
     ToolResult,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def _message(mid, role, created, parts=None, completed=None):

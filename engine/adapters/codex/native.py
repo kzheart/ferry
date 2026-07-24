@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...domain.events import event
+from ...events import event
 
 
 class CodexCloneError(RuntimeError):

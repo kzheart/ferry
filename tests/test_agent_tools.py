@@ -13,19 +13,19 @@ from engine.adapters.contracts import (
     AgentManifest, AgentAdapter, id_reference, jsonl_reference,
 )
 from engine.adapters.opencode import scanner as opencode_scanner
-from engine.application import agent_tools
-from engine.application import scanning
-from engine.application.engine import EngineApplication
-from engine.application.ports import ApplicationPorts
-from engine.domain.errors import (
+from engine.sessions import catalog as agent_tools
+from engine.sessions import scan as scanning
+from engine.app import EngineService
+from engine.context import EngineContext
+from engine.errors import (
     AgentReferenceError,
     AgentRequestError,
     LocatorStaleError,
 )
-from engine.domain.model import (
+from engine.sessions.model import (
     Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
 )
-from engine.interfaces.rpc import PROTOCOL, rpc
+from engine.server.rpc import PROTOCOL, rpc
 
 
 class Cache:
@@ -238,7 +238,7 @@ def agent_environment(tmp_path, monkeypatch):
         verifier=Verifier(), lifecycle=Lifecycle(), models=Models(),
     )
     adapters = {"claude": claude, "opencode": opencode}
-    ports = ApplicationPorts(
+    ports = EngineContext(
         adapter=adapters.__getitem__, adapters=lambda: list(adapters),
         cache_factory=Cache, resource_path=lambda *_: tmp_path,
         snapshot_dir=lambda: tmp_path, version="test",
@@ -312,10 +312,10 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
         calls["backbone"] = (tool, ref)
         return {"ok": True}
 
-    monkeypatch.setattr("engine.application.sessions.show", show)
-    monkeypatch.setattr("engine.application.sessions.session_asset", asset)
+    monkeypatch.setattr("engine.sessions.read.show", show)
+    monkeypatch.setattr("engine.sessions.read.session_asset", asset)
     monkeypatch.setattr("engine.organization.summaries.build_backbone", backbone)
-    application = EngineApplication(
+    application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
     )
 

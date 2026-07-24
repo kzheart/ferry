@@ -1,10 +1,10 @@
-"""会话编辑领域模型；不承载任何原生存储标识。"""
+"""会话编辑操作类型；不承载任何原生存储标识。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from .errors import InvalidReplyError
+from ..errors import InvalidReplyError
 
 
 @dataclass(frozen=True)

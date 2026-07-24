@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.operations import migrate as migration
-from engine.domain.events import event
-from engine.domain.model import (
+from engine.events import event
+from engine.sessions.model import (
     AgentEdge, Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp_path):

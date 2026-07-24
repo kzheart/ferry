@@ -2,8 +2,8 @@
 
 import pytest
 
-from engine.application import history
-from engine.infrastructure.state_db import StateDatabase
+from engine.operations import history
+from engine.storage.database import StateDatabase
 
 
 @pytest.fixture

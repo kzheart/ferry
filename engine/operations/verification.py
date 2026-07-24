@@ -1,6 +1,6 @@
 """探针应用门面；具体 CLI 执行由 infrastructure 持有。"""
 
-from ..application.ports import ApplicationPorts
+from ..context import EngineContext
 
 
 class ProbeTimeout(RuntimeError):
@@ -15,7 +15,7 @@ def timeout_report(tool, error) -> dict:
 
 
 def run_probe(tool, session_id, dirpath=None, model=None, *,
-              ports: ApplicationPorts):
+              ports: EngineContext):
     try:
         return ports.adapter(tool).verifier.probe(
             session_id, dirpath, model)

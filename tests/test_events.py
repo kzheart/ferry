@@ -1,8 +1,8 @@
 """结构化事件与快照 reason_code 的持久化契约。"""
 import json
 
-from engine.domain.model import Session
-from engine.infrastructure import snapshots
+from engine.sessions.model import Session
+from engine.storage import snapshots
 
 
 def test_lose_records_structured_event():

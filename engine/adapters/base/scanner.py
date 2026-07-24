@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from ...domain.topology import session_roots
+from ...sessions.topology import session_roots
 
 
 def clip_text(text: str, size: int = 80) -> str:

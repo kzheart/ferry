@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...domain.edit import AssistantReply, ToolItem
-from ...domain.errors import (
+from ...operations.types import AssistantReply, ToolItem
+from ...errors import (
     OperationUnsupportedError,
     SubagentNotSupportedError,
 )

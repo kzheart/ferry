@@ -4,9 +4,9 @@ import hashlib
 import json
 import sqlite3
 
-from ...domain.topology import session_roots
-from ...domain.usage import add_tokens, dominant_model, empty_tokens, has_tokens
-from ...infrastructure.platform_paths import opencode_database_path
+from ...sessions.topology import session_roots
+from ...sessions.usage import add_tokens, dominant_model, empty_tokens, has_tokens
+from ...system.paths import opencode_database_path
 
 OPENCODE_DB = opencode_database_path()
 _FINGERPRINT_INDEX: tuple[tuple, set[str]] | None = None

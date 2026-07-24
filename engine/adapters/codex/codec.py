@@ -8,9 +8,9 @@ import json
 import secrets
 from datetime import datetime, timezone
 
-from ...domain.edit import TextItem
-from ...domain.events import event
-from ...domain.errors import LocatorStaleError, OperationUnsupportedError
+from ...operations.types import TextItem
+from ...events import event
+from ...errors import LocatorStaleError, OperationUnsupportedError
 from ..base.editing import (
     is_spawn_name,
     reject_replacement_spawn,

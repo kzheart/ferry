@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ..contracts.agents import AGENT_IDS
-from ..domain.errors import ToolUnknownError
+from ..errors import ToolUnknownError
 from .contracts import AgentAdapter
 from .claude.adapter import build as build_claude
 from .codex.adapter import build as build_codex

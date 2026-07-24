@@ -1,6 +1,6 @@
 """与工具无关的会话变更事务。"""
 
-from ..domain.errors import ConcurrentModificationError, OperationUnsupportedError
+from ..errors import ConcurrentModificationError, OperationUnsupportedError
 
 
 def preview_mutation(editor, ref: str, mutate, loader=None) -> dict:

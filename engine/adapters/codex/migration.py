@@ -4,8 +4,8 @@ from __future__ import annotations
 import shlex
 
 from ..base.migration import MigrationTargetBase, linked_agent_edge
-from ...domain.model import tool_result_text
-from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
+from ...sessions.model import tool_result_text
+from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from .writer import OP_FIDELITY, write
 
 

@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from ...infrastructure import executables
+from ...system import executables
 
 
 class OpenCodeApiError(RuntimeError):

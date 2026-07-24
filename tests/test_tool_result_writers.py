@@ -10,7 +10,7 @@ from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.opencode import session as opencode_session
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
-from engine.domain.model import (
+from engine.sessions.model import (
     Block,
     Message,
     Session,
@@ -18,7 +18,7 @@ from engine.domain.model import (
     ToolResult,
     ToolResultBlock,
 )
-from engine.domain.tool_ops import CanonicalOp
+from engine.sessions.tool_ops import CanonicalOp
 
 
 def _source_session(status="error"):

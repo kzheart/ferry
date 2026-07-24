@@ -4,12 +4,11 @@ import json
 import logging
 import os
 
-from ..application import agent_tools
-from ..application.engine import EngineApplication
-from ..composition import build_application
+from ..app import EngineService
+from ..bootstrap import build_engine
 from ..contracts.engine_methods import ENGINE_METHOD_NAMES
 from ..contracts.ipc import FERRY_IPC_PROTOCOL
-from ..domain.errors import (
+from ..errors import (
     DomainError,
     InvalidJsonError,
     InvalidRequestError,
@@ -18,6 +17,7 @@ from ..domain.errors import (
     UnsupportedProtocolError,
 )
 from ..operations.verification import ProbeTimeout
+from ..sessions import catalog as agent_tools
 
 log = logging.getLogger(__name__)
 
@@ -39,20 +39,20 @@ def _error_envelope(error: DomainError, request_id: str) -> dict:
 
 
 class RpcDispatcher:
-    """绑定一个 EngineApplication 的 RPC 调度器。"""
+    """绑定一个 EngineService 的 RPC 调度器。"""
 
-    def __init__(self, application: EngineApplication):
+    def __init__(self, application: EngineService):
         self._application = application
         self._methods = {
             "health": lambda p: application.health(),
             "version": lambda p: application.version(),
             "scan": lambda p: application.scan(),
-            "env": lambda p: application.environment(),
+            "env": lambda p: system.environment(),
             "resume": lambda p: application.resume_command(p["tool"], p["ref"]),
             "models": lambda p: application.list_models(p["tool"]),
             "history": lambda p: application.migration_history(),
             "history_delete": lambda p: application.delete_migration_history(p["id"]),
-            "pricing": lambda p: application.pricing(force=p.get("force", False)),
+            "pricing": lambda p: system.pricing(force=p.get("force", False)),
             "show": lambda p: application.show_session(p["tool"], p["ref"]),
             "session_asset": lambda p: application.session_asset(p["tool"], p["ref"], p["asset_id"]),
             "session_meta_list": lambda p: application.list_session_metadata(),
@@ -140,7 +140,7 @@ def _handle(request: str, methods: dict) -> dict:
 
 def rpc(request: str) -> dict:
     """测试用一次性入口；sidecar 必须使用 RpcDispatcher。"""
-    application = build_application()
+    application = build_engine()
     try:
         return RpcDispatcher(application).handle(request)
     finally:

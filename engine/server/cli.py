@@ -1,11 +1,11 @@
-"""引擎命令行接口。"""
+"""引擎命令行入口。"""
 
 from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
 import threading
 
-from ..composition import build_application
+from ..bootstrap import build_engine
 from ..contracts.engine_methods import PARALLEL_READ_METHOD_NAMES
 from .rpc import RpcDispatcher
 
@@ -80,7 +80,7 @@ def main(argv=None):
     if not args:
         sys.exit("缺少命令")
     cmd, rest = args[0], args[1:]
-    application = build_application()
+    application = build_engine()
     try:
         dispatcher = RpcDispatcher(application)
         if cmd == "rpc":
@@ -101,7 +101,7 @@ def main(argv=None):
         elif cmd == "history":
             result = application.migration_history()
         elif cmd == "env":
-            result = application.environment()
+            result = system.environment()
         else:
             sys.exit(f"未知命令: {cmd}")
         print(json.dumps(result, ensure_ascii=False, indent=2))

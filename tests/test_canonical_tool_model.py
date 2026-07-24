@@ -2,7 +2,7 @@
 
 import pytest
 
-from engine.domain.model import (
+from engine.sessions.model import (
     TOOL_RESULT_BLOCK_KINDS,
     TOOL_RESULT_STATUSES,
     ToolCall,
@@ -10,7 +10,7 @@ from engine.domain.model import (
     ToolResultBlock,
     tool_result_text,
 )
-from engine.domain.tool_ops import (
+from engine.sessions.tool_ops import (
     CANONICAL_OPS,
     TOOL_OP_SPECS,
     CanonicalOp,

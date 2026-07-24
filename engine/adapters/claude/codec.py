@@ -11,10 +11,10 @@ import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from ...domain.edit import TextItem
-from ...domain.events import event
-from ...domain.errors import LocatorStaleError, OperationUnsupportedError
-from ...domain.reasoning import visible_text
+from ...operations.types import TextItem
+from ...events import event
+from ...errors import LocatorStaleError, OperationUnsupportedError
+from ...sessions.reasoning import visible_text
 from ..base.editing import (
     is_spawn_name,
     reject_replacement_spawn,

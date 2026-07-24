@@ -5,8 +5,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...domain.errors import ConcurrentModificationError, OperationUnsupportedError
-from ...infrastructure.snapshots import snapshot_payload
+from ...errors import ConcurrentModificationError, OperationUnsupportedError
+from ...storage.snapshots import snapshot_payload
 from ..base.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import session as rw_opencode

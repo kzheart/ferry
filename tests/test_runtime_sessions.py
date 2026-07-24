@@ -1,7 +1,7 @@
 import pytest
 
-from engine.application import runtime_sessions
-from engine.infrastructure.state_db import StateDatabase
+from engine.runtime import sessions as runtime_sessions
+from engine.storage.database import StateDatabase
 
 
 @pytest.fixture

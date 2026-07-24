@@ -4,9 +4,9 @@
 """
 from __future__ import annotations
 
-from ...domain.events import event
-from ...domain.errors import LocatorStaleError, OperationUnsupportedError
-from ...domain.reasoning import visible_text
+from ...events import event
+from ...errors import LocatorStaleError, OperationUnsupportedError
+from ...sessions.reasoning import visible_text
 from ..base.codec import TurnSpan
 
 

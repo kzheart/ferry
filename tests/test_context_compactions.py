@@ -3,7 +3,7 @@ import json
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.opencode import session as opencode_session
-from engine.application.sessions import session_json
+from engine.sessions.read import session_json
 
 
 def _opencode_message(mid, role, parts, parent=None, **info):

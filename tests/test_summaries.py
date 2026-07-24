@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from engine.organization import summaries
-from engine.domain.errors import SummaryBackboneMissingError
-from engine.infrastructure.state_db import StateDatabase
+from engine.errors import SummaryBackboneMissingError
+from engine.storage.database import StateDatabase
 
 
 def _use_database(tmp_path, monkeypatch) -> StateDatabase:
@@ -194,7 +194,7 @@ def test_summary_cache_is_scoped_by_tool_and_native_session_id(
 def test_rpc_wiring_returns_structured_error(tmp_path, monkeypatch):
     import json
 
-    from engine.interfaces.rpc import PROTOCOL, rpc
+    from engine.server.rpc import PROTOCOL, rpc
 
     _use_database(tmp_path, monkeypatch)
     response = rpc(json.dumps({

@@ -1,4 +1,4 @@
-"""Agent 专用窄能力层；所有输出都经过限量、脱敏和引用收窄。"""
+"""会话目录与 Agent 只读查询；输出均经过限量、脱敏和引用收窄。"""
 from __future__ import annotations
 
 import hashlib
@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..domain.errors import AgentReferenceError, AgentRequestError, LocatorStaleError
-from ..domain.model import tool_result_text
-from ..domain.usage import add_tokens, empty_tokens
-from .ports import ApplicationPorts
+from ..errors import AgentReferenceError, AgentRequestError, LocatorStaleError
+from ..context import EngineContext
+from .model import tool_result_text
+from .usage import add_tokens, empty_tokens
 
 MAX_SEARCH_RESULTS = 50
 MAX_CONTENT_SEARCH_RESULTS = 50
@@ -164,7 +164,7 @@ def _agent_fingerprint(browser, ref: str):
 
 
 class AgentSessionIndex:
-    def __init__(self, ports: ApplicationPorts):
+    def __init__(self, ports: EngineContext):
         self._ports = ports
         self._by_opaque: dict[str, IndexedSession] = {}
         self._opaque_by_key: dict[tuple[str, str, str], str] = {}
@@ -173,7 +173,7 @@ class AgentSessionIndex:
         self._lock = threading.RLock()
 
     @property
-    def ports(self) -> ApplicationPorts:
+    def ports(self) -> EngineContext:
         return self._ports
 
     def refresh(self) -> list[IndexedSession]:

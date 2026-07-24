@@ -5,14 +5,14 @@ import time
 import uuid
 from pathlib import Path
 
-from ...domain.model import (
+from ...sessions.model import (
     AgentEdge,
     Session,
     ToolCall,
     ToolResult,
     ToolResultBlock,
 )
-from ...domain.tool_ops import CanonicalOp, has_valid_tool_input
+from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from ..base.narration import narrate
 from .native_schema import templates
 

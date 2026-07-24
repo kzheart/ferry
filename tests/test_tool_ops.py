@@ -10,8 +10,8 @@ from engine.adapters.codex.writer import OP_WRITERS as CODEX_WRITERS
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
 from engine.adapters.opencode.session import OP_FIDELITY as OPENCODE_FIDELITY
 from engine.adapters.opencode.session import OP_WRITERS as OPENCODE_WRITERS
-from engine.domain.model import ToolCall, text_tool_result
-from engine.domain.tool_ops import (
+from engine.sessions.model import ToolCall, text_tool_result
+from engine.sessions.tool_ops import (
     CANONICAL_OPS, CanonicalOp, TOOL_OP_SPECS, has_valid_tool_input,
 )
 
@@ -90,7 +90,7 @@ def test_invalid_input_is_a_degradation_even_for_a_supported_operation():
 
 
 def test_unknown_explicit_result_is_narrated_instead_of_fabricating_success():
-    from engine.domain.model import Session, ToolResult
+    from engine.sessions.model import Session, ToolResult
 
     call = ToolCall(
         name="Read", op=CanonicalOp.FS_READ,

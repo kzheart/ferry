@@ -1,7 +1,7 @@
 """OpenCode 会话验收探针：编辑后克隆影子副本探测并清理。"""
 from __future__ import annotations
 
-from ...infrastructure import executables, probes
+from ...system import executables, probes
 from . import session as rw_opencode
 
 

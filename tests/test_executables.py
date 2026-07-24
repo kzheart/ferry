@@ -1,7 +1,7 @@
 """executables 定位器：PATH 优先、常见目录兜底、未命中保留裸名。"""
 import pytest
 
-import engine.infrastructure.executables as executables
+import engine.system.executables as executables
 
 
 @pytest.fixture(autouse=True)

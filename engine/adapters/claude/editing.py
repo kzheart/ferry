@@ -7,8 +7,8 @@ import json
 import os
 from pathlib import Path
 
-from ...domain.errors import SessionNotFoundError
-from ...infrastructure.snapshots import snapshot_file
+from ...errors import SessionNotFoundError
+from ...storage.snapshots import snapshot_file
 
 
 def resolve(ref: str) -> Path:

@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...domain.model import (
+from ...sessions.model import (
     AgentEdge,
     Block,
     ContextCompaction,
@@ -13,8 +13,8 @@ from ...domain.model import (
     ToolResult,
     ToolResultBlock,
 )
-from ...domain.reasoning import visible_text
-from ...domain.tool_ops import CanonicalOp
+from ...sessions.reasoning import visible_text
+from ...sessions.tool_ops import CanonicalOp
 from ..base.media import image_from_base64
 
 TOOL_OPS = {
