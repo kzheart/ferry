@@ -19,14 +19,8 @@
   "apply": {
     "title": "应用 {{n}} 项更改?",
     "cancel": "取消",
-    "saveas": "另存为新会话",
-    "saveasDesc": "保留原会话不变(默认)",
-    "inplace": "原地修改",
-    "inplaceDesc": "直接改写原始会话文件",
     "confirmInplace": "确认原地修改",
-    "confirmSaveas": "另存为新会话",
-    "inplaceFootnote": "应用前自动备份;若验收未通过将自动还原,不留改动。",
-    "saveasFootnote": "原会话保持不变,结果保存为一个新会话。"
+    "inplaceFootnote": "应用前自动备份;若验收未通过将自动还原,不留改动。"
   },
   "delete": {
     "title": "删除此会话?",

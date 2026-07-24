@@ -1,13 +1,12 @@
 import { repoOf } from "../modules/browser/sessionModel.js";
 import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
+import { ApplyConfirm, DiffSheet } from "../modules/editing/EditOverlays.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
 import {
-  ApplyConfirm,
   BatchDeleteConfirm,
   ContextMenu,
-  DiffSheet,
   Guide,
   HistoryDeleteConfirm,
   HistoryFilter,
