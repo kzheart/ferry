@@ -35,7 +35,7 @@ from .validation import (
     validate_migration_input,
     validate_restore_delete_input,
 )
-from ..storage.database import StateDatabase
+from ..storage.session_metadata import metadata_key
 
 
 MUTATION_WORKERS = 1
@@ -143,7 +143,7 @@ class OperationService:
         if not isinstance(session_id, str) or not session_id:
             raise AgentRequestError("会话缺少可用的 metadata id")
         metadata_before = metadata.list_all(self._ports).get(
-            StateDatabase.metadata_key(tool, session_id), {}
+            metadata_key(tool, session_id), {}
         )
         operation_input["session_id"] = session_id
         operation_input["metadata_before"] = metadata_before

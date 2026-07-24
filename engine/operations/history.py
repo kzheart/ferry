@@ -17,13 +17,13 @@ def _database(ports: EngineContext) -> StateDatabase:
 
 def append(entry: dict, ports: EngineContext) -> str:
     history_id = "history_" + secrets.token_urlsafe(18)
-    _database(ports).append_migration_history(history_id, entry)
+    _database(ports).migration_history.append(history_id, entry)
     return history_id
 
 
 def list_entries(ports: EngineContext) -> list[dict]:
-    return _database(ports).list_migration_history()
+    return _database(ports).migration_history.list_all()
 
 
 def delete(history_id: str, ports: EngineContext) -> dict:
-    return _database(ports).delete_migration_history(history_id)
+    return _database(ports).migration_history.delete(history_id)
