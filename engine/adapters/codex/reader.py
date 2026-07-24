@@ -19,7 +19,7 @@ from ...sessions.model import (
 from ...sessions.reasoning import codex_summary_text
 from ...sessions.tool_ops import CanonicalOp
 from ...storage.scan_cache import ScanCache
-from ..base.media import image_from_data_url
+from ..shared.media import image_from_data_url
 
 _META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
 

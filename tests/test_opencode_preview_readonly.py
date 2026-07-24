@@ -6,7 +6,7 @@ import pytest
 
 from engine.adapters.opencode import reader as opencode_reader
 from engine.adapters.opencode import store as opencode_store
-from engine.adapters.base.editing import EditDocument
+from engine.adapters.shared.editing import EditDocument
 from engine.adapters.opencode.editor import OpenCodeBackend, OpenCodeDocument
 from engine.errors import (
     AgentFormatChangedError,

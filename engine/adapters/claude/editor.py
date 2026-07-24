@@ -4,8 +4,8 @@ from __future__ import annotations
 import shutil
 
 from ...errors import ConcurrentModificationError, OperationUnsupportedError
-from ..base.codec import positive_turn, select_span
-from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size
+from ..shared.codec import positive_turn, select_span
+from ..shared.editing import EditBackend, EditDocument, hash_bytes, json_size
 from . import editing as claude_edit
 from .codec import CODEC, TURN_INDEX
 

@@ -15,7 +15,7 @@ from ...sessions.model import (
 )
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
-from ..base.media import image_from_base64
+from ..shared.media import image_from_base64
 
 TOOL_OPS = {
     "Bash": CanonicalOp.SHELL_EXEC,

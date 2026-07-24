@@ -1,6 +1,6 @@
 """静态内置 Adapter 与 JSONL scanner 测试。"""
 from engine.adapters.registry import create_registry
-from engine.adapters.base.scanner import scan_jsonl
+from engine.adapters.shared.scanner import scan_jsonl
 
 
 class _Cache:

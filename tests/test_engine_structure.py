@@ -85,6 +85,15 @@ def test_session_reference_index_is_isolated_from_query_catalog():
     assert "def _validate_json_shape(" not in catalog
 
 
+def test_adapter_shared_code_is_not_a_base_layer():
+    adapters = ENGINE / "adapters"
+    assert (adapters / "shared").is_dir()
+    assert not (adapters / "base").exists()
+    assert (adapters / "shared/codec.py").is_file()
+    assert (adapters / "shared/editing.py").is_file()
+    assert (adapters / "shared/migration.py").is_file()
+
+
 def test_runtime_session_storage_is_its_own_sqlite_capability():
     database = (ENGINE / "storage/database.py").read_text()
     runtime_sessions = (ENGINE / "storage/runtime_sessions.py").read_text()

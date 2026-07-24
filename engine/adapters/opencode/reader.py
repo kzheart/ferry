@@ -18,7 +18,7 @@ from ...sessions.model import (
 )
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
-from ..base.media import image_from_data_url
+from ..shared.media import image_from_data_url
 from . import store as native_store
 
 

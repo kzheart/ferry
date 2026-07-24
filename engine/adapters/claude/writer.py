@@ -13,7 +13,7 @@ from ...sessions.model import (
     ToolResultBlock,
 )
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
-from ..base.narration import narrate
+from ..shared.narration import narrate
 from .native_schema import templates
 
 
