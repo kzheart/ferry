@@ -31,11 +31,7 @@ def resource_path(*parts):
 def snapshot_dir():
     return current().snapshot_dir()
 
-from .history import (
-    append as _append_history,
-    delete as history_delete,
-    list_entries as history,
-)
+from . import history as _history
 from .pricing import pricing  # noqa: F401  暴露给 RPC
 
 
@@ -374,6 +370,7 @@ from . import scanning as _scanning  # noqa: E402
 from . import sessions as _sessions  # noqa: E402
 from . import summaries as _summaries  # noqa: E402
 from . import organizing as _organizing  # noqa: E402
+from . import runtime_sessions as _runtime_sessions  # noqa: E402
 
 
 def env() -> dict:
@@ -386,6 +383,18 @@ def list_models(tool_name: str) -> dict:
 
 def scan() -> dict:
     return _scanning.scan(current())
+
+
+def _append_history(entry: dict) -> str:
+    return _history.append(entry, current())
+
+
+def history() -> list[dict]:
+    return _history.list_entries(current())
+
+
+def history_delete(history_id: str) -> dict:
+    return _history.delete(history_id, current())
 
 
 def _read_tree(tool_name: str, ref: str):
@@ -430,3 +439,15 @@ def organization_proposal_modify(proposal_id: str, changes: list[dict]) -> dict:
 
 def organization_proposal_decide(proposal_id: str, decision: str) -> dict:
     return _organizing.decide(proposal_id, decision, current())
+
+
+def load_runtime_sessions() -> list[dict]:
+    return _runtime_sessions.load_all(current())
+
+
+def commit_runtime_session(update: dict) -> dict:
+    return _runtime_sessions.commit(update, current())
+
+
+def delete_runtime_session(session_id: str) -> dict:
+    return _runtime_sessions.delete(session_id, current())
