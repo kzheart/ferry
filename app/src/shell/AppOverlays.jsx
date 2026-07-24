@@ -204,7 +204,6 @@ export function AppOverlays({
           settings={settings.value}
           setSettings={settings.onChange}
           updater={settings.updater}
-          ferry={settings.ferry}
           initialSection={settings.initialSection}
           scan={settings.scan}
           env={settings.env}

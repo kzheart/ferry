@@ -3,9 +3,18 @@
 // 展开会丢滚动位置和展开态。
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
 
+import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
+
+// 对话列表的打开/新建/置顶/删除直接取 Ferry Runtime 句柄。
+const ferry = {
+  activeId: null, openSession: () => {}, newChat: () => {},
+  pin: async () => {}, deleteSession: async () => {}, reportError: () => {},
+};
+
+const render = ui => rtlRender(<FerryRuntimeProvider value={ferry}>{ui}</FerryRuntimeProvider>);
 
 const noop = () => {};
 
@@ -29,10 +38,7 @@ function baseProps(overrides = {}) {
       onRowClick: noop, onRowPin: noop, onRowDelete: noop, onRowMore: noop,
     },
     history: { groups: [], filtered: [], onDelete: noop, onClear: noop },
-    agent: {
-      sessions: [], activeId: null,
-      onOpen: noop, onNew: noop, onPin: noop, onDelete: noop, onRename: noop,
-    },
+    agent: { sessions: [], onRename: noop },
     ...overrides,
   };
 }

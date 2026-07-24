@@ -42,10 +42,7 @@ export function ResourcePaneHost({
           onDelete={history.onDelete}
           onClear={history.onClear} />)}
       {view === "askferry" && (
-        <AgentSessionList sessions={agent.sessions}
-          activeId={agent.activeId} onOpen={agent.onOpen} onNew={agent.onNew}
-          onPin={agent.onPin} onDelete={agent.onDelete}
-          onRename={agent.onRename} />)}
+        <AgentSessionList sessions={agent.sessions} onRename={agent.onRename} />)}
     </Pane>
   );
 }

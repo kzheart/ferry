@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import Markdown from "../../shared/ui/Markdown.jsx";
 import { Spinner } from "../../shared/ui/icons.jsx";
 import { AgentToolRow } from "./AgentToolTrace.jsx";
 import { ApprovalCard, WorkflowCard } from "./AgentWorkflowCards.jsx";
 
-export function AgentChatItem({ item, sessionId, ferry, onNavigate }) {
+export function AgentChatItem({ item, sessionId, onNavigate }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   if (item.kind === "user") {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
