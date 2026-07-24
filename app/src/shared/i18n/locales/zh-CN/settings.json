@@ -40,6 +40,8 @@
     "delete": "删除",
     "cancel": "取消",
     "save": "保存",
+    "loading": "正在加载角色…",
+    "loadingDesc": "正在连接 Ferry 桌面运行时…",
     "unavailable": "角色配置当前不可用",
     "unavailableDesc": "角色保存在 Ferry 桌面端的本地配置中，请在桌面端打开此页面。",
     "retry": "重新加载"

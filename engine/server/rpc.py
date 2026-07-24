@@ -55,7 +55,10 @@ class RpcDispatcher:
             "pricing": lambda p: application.pricing(
                 force=p.get("force", False),
             ),
-            "show": lambda p: application.show_session(p["tool"], p["ref"]),
+            "show": lambda p: application.show_session(
+                p["tool"], p["ref"], from_message=p.get("from_message", 1),
+                limit=p.get("limit"),
+            ),
             "session_asset": lambda p: application.session_asset(p["tool"], p["ref"], p["asset_id"]),
             "session_meta_list": lambda p: application.list_session_metadata(),
             "session_backbone": lambda p: application.session_backbone(p["tool"], p["ref"]),

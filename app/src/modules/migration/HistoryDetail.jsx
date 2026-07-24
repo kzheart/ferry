@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { probeText } from "../../shared/contracts/events.js";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
-import { fmtTime } from "../browser/sessionModel.js";
+import { fmtTime } from "../browser/public.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";
 import { ToolIcon, TrashIcon } from "../../shared/ui/icons.jsx";
 import { CmdRow, LossCols, StatusPill } from "../../shared/ui/primitives.jsx";

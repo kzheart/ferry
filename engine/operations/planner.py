@@ -157,7 +157,7 @@ class OperationPlanner:
             "ref": record.opaque_ref,
             "session_id": record_session_id(record),
             "title": redact(str(record.row.get("title") or ""), 512),
-            "undoable": bool(getattr(lifecycle, "delete_undoable", False)),
+            "undoable": lifecycle.delete_undoable,
         }
         after = self._index.resolve(
             operation_input["tool"], operation_input["ref"],

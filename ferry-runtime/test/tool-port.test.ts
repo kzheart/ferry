@@ -1,6 +1,10 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  AGENT_EDIT_OPERATIONS,
+  AGENT_IDS,
+} from "../src/server/generated/agents.js";
 import { createFerryTools } from "../src/tools/catalog.js";
 
 const requireFromPiAi = createRequire(
@@ -134,6 +138,61 @@ describe("Ferry mutation tool schemas", () => {
     ).rejects.toThrow("ops require intent");
   });
 
+  it("rejects source-unsupported content operations before invoking the port", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const editTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_edit")!;
+    const execute = (params: Record<string, unknown>) =>
+      editTool.execute("call", params, undefined, undefined);
+
+    await expect(
+      execute({
+        tool: "opencode",
+        ref: "fsr_session",
+        ops: [
+          { op: "rewrite", locator: "fml_message", text: "updated" },
+          { op: "delete-turn", turn: 1 },
+        ],
+        intent: "preview",
+      }),
+    ).rejects.toThrow(
+      "opencode does not support content operations: delete-turn; supported: rewrite",
+    );
+    await expect(
+      execute({
+        tool: "unknown",
+        ref: "fsr_session",
+        ops: [{ op: "rewrite", locator: "fml_message", text: "updated" }],
+        intent: "preview",
+      }),
+    ).rejects.toThrow("content ops require a known source tool");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("passes source-supported content operations to the port", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const editTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_edit")!;
+
+    await editTool.execute(
+      "call",
+      {
+        tool: "opencode",
+        ref: "fsr_session",
+        ops: [{ op: "rewrite", locator: "fml_message", text: "updated" }],
+        intent: "preview",
+      },
+      undefined,
+      undefined,
+    );
+
+    expect(invoke).toHaveBeenCalledOnce();
+  });
+
   it("enforces migration intent during execution", async () => {
     const execute = (params: Record<string, unknown>) =>
       migrateTool.execute("call", params, undefined, undefined);
@@ -152,9 +211,17 @@ describe("Ferry mutation tool schemas", () => {
   });
 
   it("describes the explicit operation intent", () => {
+    const exposedOperations = new Set(["delete-turn", "rewrite"]);
+    const supportDescription = AGENT_IDS.map(
+      (tool) =>
+        `${tool}: ${AGENT_EDIT_OPERATIONS[tool]
+          .filter((operation) => exposedOperations.has(operation))
+          .join(", ")}`,
+    ).join("; ");
     expect(migrateTool.description).toContain("intent is required");
     expect(sessionEditTool.description).toContain(
       "Metadata patch does not accept intent",
     );
+    expect(sessionEditTool.description).toContain(supportDescription);
   });
 });

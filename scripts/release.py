@@ -174,11 +174,27 @@ def main() -> None:
     notes_parser.add_argument("--version", required=True)
     notes_parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if args.command == "check": check(args.tag)
-    elif args.command == "bump": bump(args.version)
-    elif args.command == "config": release_config(args.output, args.repository, args.pubkey, args.targets)
-    elif args.command == "latest": latest(args.assets, args.output, args.repository, args.version, args.notes)
-    elif args.command == "notes": notes(args.version, args.output)
+    if args.command == "check":
+        check(args.tag)
+    elif args.command == "bump":
+        bump(args.version)
+    elif args.command == "config":
+        release_config(
+            args.output,
+            args.repository,
+            args.pubkey,
+            args.targets,
+        )
+    elif args.command == "latest":
+        latest(
+            args.assets,
+            args.output,
+            args.repository,
+            args.version,
+            args.notes,
+        )
+    elif args.command == "notes":
+        notes(args.version, args.output)
 
 
 if __name__ == "__main__":

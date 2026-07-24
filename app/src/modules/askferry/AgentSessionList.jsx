@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MoreDots, PinIcon, PlusIcon, Spinner, TrashIcon } from "../../shared/ui/icons.jsx";
 import { writeClipboardText } from "../../platform/desktop/client.js";
-import { fmtTime } from "../browser/sessionModel.js";
+import { fmtTime } from "../browser/public.js";
 
 function MoreMenu({ item, anchor, onClose, onRename }) {
   const { t } = useTranslation();

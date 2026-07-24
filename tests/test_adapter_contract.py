@@ -4,19 +4,23 @@ import copy
 import pytest
 
 from engine.adapters.shared.codec import select_span
+from engine.adapters import registry as adapter_registry
 from engine.adapters.contracts import (
     MigrationSource, MigrationTarget, ModelCatalog, SessionBrowser,
     SessionEditor, SessionLifecycle, SessionVerifier, AgentManifest, AgentAdapter,
-    id_reference,
+    NativeSessionReference, id_reference,
 )
 from engine.adapters.registry import AdapterRegistry, create_registry
+from engine.adapters.claude.adapter import ClaudeBrowser
+from engine.adapters.codex.adapter import CodexBrowser
+from engine.adapters.opencode.adapter import OpenCodeBrowser
 from engine.adapters.claude.codec import TURN_INDEX as CLAUDE_INDEX
 from engine.adapters.codex.codec import TURN_INDEX as CODEX_INDEX
 from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.sessions.read import session_json
 from engine.operations.types import AssistantReply
-from engine.errors import ToolUnknownError
-from engine.contracts.agents import AGENT_IDS
+from engine.errors import AgentReferenceError, ToolUnknownError
+from engine.contracts.agents import AGENTS, AGENT_IDS
 
 from test_reply_editing import (
     _editor,
@@ -52,6 +56,9 @@ class _FakeBrowser:
 
     def canonicalize(self, row):
         return id_reference(row)
+
+    def validate_read_scope(self, _ref):
+        pass
 
 
 class _FakeMigrationSource:
@@ -148,6 +155,7 @@ def _fake_adapter() -> AgentAdapter:
     return AgentAdapter(
         manifest=AgentManifest(id="fake", display_name="Fake Agent", icon="fake",
                               source_path="~/.fake/sessions",
+                              edit_operations=("rewrite",),
                               executables=("fake",)),
         browser=_FakeBrowser(),
         migration_source=_FakeMigrationSource(),
@@ -173,6 +181,7 @@ def test_fake_adapter_satisfies_complete_static_contract():
         "display_name": "Fake Agent",
         "icon": "fake",
         "source_path": "~/.fake/sessions",
+        "edit_operations": ["rewrite"],
         "executables": ["fake"],
         "fallback_bin_dirs": [],
     }
@@ -198,7 +207,106 @@ def test_registry_reports_unknown_adapter():
 
 
 def test_registry_explicitly_composes_all_bundled_adapters():
-    assert create_registry().ids() == AGENT_IDS
+    registry = create_registry()
+    assert registry.ids() == AGENT_IDS
+    for agent_id in AGENT_IDS:
+        adapter = registry.get(agent_id)
+        assert (
+            adapter.manifest.edit_operations
+            == AGENTS[agent_id]["edit_operations"]
+        )
+        assert adapter.manifest.edit_operations == adapter.editor.operations
+
+
+def test_adapter_rejects_manifest_editor_operation_mismatch():
+    adapter = _fake_adapter()
+    manifest = AgentManifest(
+        id="fake",
+        display_name="Fake Agent",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        edit_operations=("delete-turn", "rewrite"),
+    )
+    with pytest.raises(ValueError, match="编辑操作契约不一致"):
+        AgentAdapter(
+            manifest=manifest,
+            browser=adapter.browser,
+            migration_source=adapter.migration_source,
+            migration_target=adapter.migration_target,
+            editor=adapter.editor,
+            verifier=adapter.verifier,
+            lifecycle=adapter.lifecycle,
+            models=adapter.models,
+        )
+
+
+@pytest.mark.parametrize(
+    ("builders", "missing", "extra"),
+    [
+        (
+            {AGENT_IDS[0]: lambda: None},
+            sorted(set(AGENT_IDS[1:])),
+            [],
+        ),
+        (
+            {
+                **{agent_id: (lambda: None) for agent_id in AGENT_IDS},
+                "extra": lambda: None,
+            },
+            [],
+            ["extra"],
+        ),
+    ],
+)
+def test_registry_reports_builder_contract_mismatch(
+        monkeypatch, builders, missing, extra):
+    monkeypatch.setattr(adapter_registry, "ADAPTER_BUILDERS", builders)
+    with pytest.raises(ValueError) as excinfo:
+        create_registry()
+    message = str(excinfo.value)
+    assert f"missing={missing}" in message
+    assert f"extra={extra}" in message
+
+
+def test_claude_browser_rejects_subagent_symlink_escape(tmp_path):
+    root = tmp_path / "claude"
+    root.mkdir()
+    session = root / "session.jsonl"
+    session.write_text("{}\n")
+    ref = NativeSessionReference(str(session), str(root), True)
+    ClaudeBrowser().validate_read_scope(ref)
+
+    child_root = root / "session" / "subagents"
+    child_root.mkdir(parents=True)
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text("{}\n")
+    (child_root / "agent-escape.jsonl").symlink_to(outside)
+    with pytest.raises(AgentReferenceError, match="超出"):
+        ClaudeBrowser().validate_read_scope(ref)
+
+
+def test_codex_browser_rejects_rollout_symlink_escape(tmp_path):
+    root = tmp_path / "codex"
+    root.mkdir()
+    session = root / "rollout-main.jsonl"
+    session.write_text("{}\n")
+    ref = NativeSessionReference(str(session), str(root), True)
+    CodexBrowser().validate_read_scope(ref)
+
+    outside = tmp_path / "rollout-outside.jsonl"
+    outside.write_text("{}\n")
+    (root / "rollout-escape.jsonl").symlink_to(outside)
+    with pytest.raises(AgentReferenceError, match="超出"):
+        CodexBrowser().validate_read_scope(ref)
+
+
+def test_opencode_browser_only_accepts_id_backed_read_scope():
+    browser = OpenCodeBrowser()
+    browser.validate_read_scope(NativeSessionReference("session-id", None, False))
+    with pytest.raises(AgentReferenceError, match="原生 id"):
+        browser.validate_read_scope(
+            NativeSessionReference("/tmp/session", "/tmp", True)
+        )
 
 
 @pytest.mark.parametrize("tool", ["claude", "codex"])

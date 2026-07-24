@@ -84,12 +84,23 @@ class EngineService:
     def delete_migration_history(self, history_id: str) -> dict:
         return history.delete(history_id, self._ports)
 
-    def show_session(self, tool: str, ref: str) -> dict:
+    def show_session(self, tool: str, ref: str, *, from_message: int = 1,
+                     limit: int | None = None) -> dict:
+        def show(record):
+            if from_message == 1 and limit is None:
+                return sessions.show(tool, record.canonical_ref, self._ports)
+            return sessions.show(
+                tool, record.canonical_ref, self._ports,
+                from_message=from_message,
+                message_limit=limit,
+                tree_count=record.row.get("tree_count"),
+                child_count=record.row.get("child_count"),
+                total_count=record.row.get("count"),
+            )
+
         return self._checked_query(
             tool, ref,
-            lambda record: sessions.show(
-                tool, record.canonical_ref, self._ports,
-            ),
+            show,
         )
 
     def session_asset(self, tool: str, ref: str, asset_id: str) -> dict:

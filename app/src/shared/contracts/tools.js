@@ -8,7 +8,7 @@ export const TOOLS = AGENT_IDS;
 export const TOOL_NAME = Object.freeze(Object.fromEntries(
   TOOLS.map(tool => [tool, AGENTS[tool].displayName]),
 ));
-export { supportsAssistantReplyEditing, supportsSessionEditing } from "./agentEditSupport.js";
+export { supportsEditOperation } from "./agentEditSupport.js";
 
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, ref) =>

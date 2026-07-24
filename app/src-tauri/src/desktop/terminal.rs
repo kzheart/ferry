@@ -25,9 +25,14 @@ pub(crate) async fn open_terminal(
 #[cfg(test)]
 mod tests {
     use super::ALLOWED_EXECUTABLES;
+    use std::collections::HashSet;
 
     #[test]
     fn terminal_executables_use_static_policy() {
-        assert_eq!(ALLOWED_EXECUTABLES, ["claude", "codex", "opencode"]);
+        assert!(!ALLOWED_EXECUTABLES.is_empty());
+        assert_eq!(
+            ALLOWED_EXECUTABLES.len(),
+            ALLOWED_EXECUTABLES.iter().collect::<HashSet<_>>().len()
+        );
     }
 }

@@ -1,4 +1,4 @@
-import { bucketOf, fmtTime } from "../browser/sessionModel.js";
+import { bucketOf, fmtTime } from "../browser/public.js";
 import { histStatus, STATUS_CODE } from "./historyStatus.js";
 
 const HISTORY_GROUPS = [

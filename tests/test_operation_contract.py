@@ -47,7 +47,10 @@ def test_operation_consumers_use_generated_status_and_identity_contract():
     assert "OPERATION_TERMINAL_STATUSES" in frontend
     assert "OPERATION_SUCCESS_STATUS" in frontend
     assert "export type OperationInput = {" not in frontend
-    assert "type OperationInput," in frontend
+    assert 'from "../../shared/contracts/operations.js"' in frontend
+    assert (
+        ROOT / "app/src/shared/contracts/operations.ts"
+    ).is_file()
     assert "OPERATION_PLAN_ID_PREFIX" in rust_request
     assert "OPERATION_PLAN_ID_PREFIX" in python_store
 

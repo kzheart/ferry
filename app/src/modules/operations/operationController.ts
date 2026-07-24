@@ -1,28 +1,20 @@
 import {
-  type OperationKind,
-  type OperationInput,
   type OperationStatus,
   OPERATION_PLAN_ID_PREFIX,
   OPERATION_SUCCESS_STATUS,
   OPERATION_TERMINAL_STATUSES,
 } from "../../shared/contracts/generated/operations.js";
+import type {
+  OperationInput,
+  OperationPlan,
+  OperationState,
+} from "../../shared/contracts/operations.js";
 
-export type { OperationInput };
-
-export interface OperationPlan {
-  plan_id: string;
-  kind?: OperationKind;
-  status?: OperationStatus;
-  [key: string]: unknown;
-}
-
-export interface OperationState {
-  plan_id: string;
-  status: OperationStatus;
-  error_type?: string;
-  result?: unknown;
-  [key: string]: unknown;
-}
+export type {
+  OperationInput,
+  OperationPlan,
+  OperationState,
+} from "../../shared/contracts/operations.js";
 
 interface OperationClient {
   plan(input: OperationInput): Promise<OperationPlan>;

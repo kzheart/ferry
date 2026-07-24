@@ -5,6 +5,11 @@
       "display_name": "Claude Code",
       "icon": "claude",
       "source_path": "~/.claude/projects",
+      "edit_operations": [
+        "delete-turn",
+        "rewrite",
+        "replace-assistant-reply"
+      ],
       "executables": ["claude"],
       "fallback_bin_dirs": []
     },
@@ -13,6 +18,11 @@
       "display_name": "Codex CLI",
       "icon": "codex",
       "source_path": "~/.codex/sessions",
+      "edit_operations": [
+        "delete-turn",
+        "rewrite",
+        "replace-assistant-reply"
+      ],
       "executables": ["codex"],
       "fallback_bin_dirs": []
     },
@@ -21,6 +31,7 @@
       "display_name": "OpenCode",
       "icon": "opencode",
       "source_path": "~/.local/share/opencode",
+      "edit_operations": ["rewrite"],
       "executables": ["opencode"],
       "fallback_bin_dirs": ["~/.opencode/bin"]
     }

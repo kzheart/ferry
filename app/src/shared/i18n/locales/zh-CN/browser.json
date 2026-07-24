@@ -12,6 +12,8 @@
     "migrate": "迁移…",
     "readFailed": "读取失败:{{error}}",
     "parsing": "解析会话中…",
+    "loadMore": "加载更多消息",
+    "loadingMore": "正在加载更多消息…",
     "noMessages": "该会话没有可展示的消息",
     "subSessions": "{{n}} 个子会话",
     "subSessionsLine": "{{tool}} 会话",

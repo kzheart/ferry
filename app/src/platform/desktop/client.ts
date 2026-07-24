@@ -16,7 +16,7 @@ import type {
   OperationInput,
   OperationPlan,
   OperationState,
-} from "../../modules/operations/operationController.js";
+} from "../../shared/contracts/operations.js";
 import type { PublicRuntimeMethod } from "../../shared/contracts/generated/runtime-methods.js";
 import { throwEngineError } from "./errors.js";
 

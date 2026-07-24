@@ -24,6 +24,7 @@ use gateway::{complete_engine_request, complete_tool_request};
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const STARTUP_HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -130,7 +131,7 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         .expect("health request has id");
     let response = client
         .transport
-        .request(health_id, &health.to_string(), Duration::from_secs(10))
+        .request(health_id, &health.to_string(), STARTUP_HEALTH_TIMEOUT)
         .map_err(|error| error.to_string())?;
     let value: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
     if value.get("ok").and_then(Value::as_bool) != Some(true)

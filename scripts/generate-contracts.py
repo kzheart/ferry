@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -65,7 +66,7 @@ ERROR_OUTPUTS = {
 }
 
 
-def load_agents() -> list[dict[str, object]]:
+def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
     document = json.loads(AGENTS_SOURCE.read_text())
     agents = document.get("agents")
     if not isinstance(agents, list) or not agents:
@@ -77,10 +78,36 @@ def load_agents() -> list[dict[str, object]]:
         raise ValueError("Agent id 必须唯一且非空")
     required = {
         "id", "display_name", "icon", "source_path", "executables",
-        "fallback_bin_dirs",
+        "fallback_bin_dirs", "edit_operations",
     }
     if any(not isinstance(agent, dict) or set(agent) != required for agent in agents):
         raise ValueError("Agent 契约字段必须精确为当前静态定义")
+    allowed_operations = set(edit_operations)
+    for agent in agents:
+        declared = agent["edit_operations"]
+        if (
+            not isinstance(declared, list)
+            or not declared
+            or not all(
+                isinstance(operation, str) and operation
+                for operation in declared
+            )
+            or len(declared) != len(set(declared))
+            or not set(declared) <= allowed_operations
+        ):
+            raise ValueError(
+                f"Agent {agent['id']} 的 edit_operations "
+                "必须来自 contracts/operations.json"
+            )
+        canonical = [
+            operation for operation in edit_operations
+            if operation in declared
+        ]
+        if declared != canonical:
+            raise ValueError(
+                f"Agent {agent['id']} 的 edit_operations "
+                "必须遵循 contracts/operations.json 的顺序"
+            )
     return agents
 
 
@@ -359,6 +386,7 @@ def frontend(agents: list[dict[str, object]]) -> str:
         agent["id"]: {
             "displayName": agent["display_name"],
             "icon": agent["icon"],
+            "editOperations": agent["edit_operations"],
         }
         for agent in agents
     }
@@ -397,6 +425,9 @@ def python(agents: list[dict[str, object]]) -> str:
         lines.append(f'    {agent["id"]!r}: {{')
         for key in ("display_name", "icon", "source_path"):
             lines.append(f"        {key!r}: {agent[key]!r},")
+        lines.append(
+            f"        'edit_operations': {tuple(agent['edit_operations'])!r},"
+        )
         lines.append(f"        'executables': {tuple(agent['executables'])!r},")
         lines.append(f"        'fallback_bin_dirs': {tuple(agent['fallback_bin_dirs'])!r},")
         lines.append("    },")
@@ -407,10 +438,28 @@ def python(agents: list[dict[str, object]]) -> str:
 def runtime(agents: list[dict[str, object]]) -> str:
     identifiers = [agent["id"] for agent in agents]
     labels = [agent["display_name"] for agent in agents]
+    edit_operations = {
+        agent["id"]: agent["edit_operations"] for agent in agents
+    }
+    edit_operation_rows = []
+    for identifier, operations in edit_operations.items():
+        key = (
+            identifier
+            if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", identifier)
+            else json.dumps(identifier)
+        )
+        edit_operation_rows.append(
+            f"  {key}: {json.dumps(operations)},"
+        )
+    edit_operation_source = (
+        "{\n" + "\n".join(edit_operation_rows) + "\n}"
+    )
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"export const AGENT_IDS = {json.dumps(identifiers)} as const;",
         f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
+        "export const AGENT_EDIT_OPERATIONS = "
+        f"{edit_operation_source} as const;",
         "export type AgentId = (typeof AGENT_IDS)[number];",
         "",
     ))
@@ -1417,13 +1466,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
+    operations = load_operations()
     contents = generated_contents(
-        load_agents(),
+        load_agents(operations["edit_operations"]),
         load_engine_methods(),
         load_runtime_methods(),
         load_ipc(),
         load_session_ref(),
-        load_operations(),
+        operations,
         load_events(),
         load_errors(),
     )

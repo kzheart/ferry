@@ -9,7 +9,7 @@ import {
   StopFillIcon,
   ToolIcon,
 } from "../../shared/ui/icons.jsx";
-import { sessionAttachmentKey } from "../browser/sessionAttachment.js";
+import { sessionAttachmentKey } from "../browser/public.js";
 import { ModeMenu, ModelMenu, RoleMenu } from "./AgentMenus.jsx";
 
 function MentionMenu({ query, sessions, onPick }) {

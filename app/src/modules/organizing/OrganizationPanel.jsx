@@ -4,7 +4,7 @@ import {
   runtime,
   trustedEngine,
 } from "../../platform/desktop/client.js";
-import { sessionRef } from "../browser/sessionModel.js";
+import { sessionRef } from "../browser/public.js";
 
 const wait = milliseconds => new Promise(resolve =>
   globalThis.setTimeout(resolve, milliseconds));

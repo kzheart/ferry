@@ -1,6 +1,10 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { AGENT_IDS } from "../server/generated/agents.js";
+import {
+  AGENT_EDIT_OPERATIONS,
+  AGENT_IDS,
+  type AgentId,
+} from "../server/generated/agents.js";
 import {
   OPAQUE_SESSION_REF_MAX_LENGTH,
   OPAQUE_SESSION_REF_MIN_LENGTH,
@@ -97,6 +101,54 @@ const sessionEditSchema = Type.Unsafe({
     },
   ],
 });
+
+const exposedSessionEditOperations = new Set(["delete-turn", "rewrite"]);
+
+function supportedSessionEditOperations(tool: AgentId): string[] {
+  return AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
+    exposedSessionEditOperations.has(operation),
+  );
+}
+
+function validateSessionEditOperations(input: Record<string, unknown>): void {
+  const tool = input.tool;
+  if (
+    typeof tool !== "string" ||
+    !(AGENT_IDS as readonly string[]).includes(tool)
+  ) {
+    throw new Error(
+      `session_edit content ops require a known source tool: ${AGENT_IDS.join(", ")}`,
+    );
+  }
+  if (!Array.isArray(input.ops)) {
+    throw new Error("session_edit ops must be an array");
+  }
+
+  const requested = input.ops.map((operation) => {
+    if (
+      operation === null ||
+      typeof operation !== "object" ||
+      !("op" in operation) ||
+      typeof operation.op !== "string"
+    ) {
+      throw new Error("session_edit ops must contain operation names");
+    }
+    return operation.op;
+  });
+  const supported = supportedSessionEditOperations(tool as AgentId);
+  const unsupported = [
+    ...new Set(requested.filter((operation) => !supported.includes(operation))),
+  ];
+  if (unsupported.length > 0) {
+    throw new Error(
+      `session_edit ${tool} does not support content operations: ${unsupported.join(", ")}; supported: ${supported.join(", ") || "none"}`,
+    );
+  }
+}
+
+const sessionEditSupportDescription = AGENT_IDS.map(
+  (tool) => `${tool}: ${supportedSessionEditOperations(tool).join(", ")}`,
+).join("; ");
 
 export const FERRY_TOOL_NAMES = [
   "session_search",
@@ -199,8 +251,7 @@ const descriptions: Record<FerryToolName, string> = {
     "Read one indexed session using an fsr_ ref returned by session_search. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage: "Get privacy-filtered aggregate usage.",
   migrate: `Migrate a session into another agent's format (targets: ${AGENT_IDS.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
-  session_edit:
-    "Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.",
+  session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
 };
 
 export function createFerryTools(
@@ -233,6 +284,7 @@ export function createFerryTools(
           throw new Error("session_edit ops require intent preview or execute");
         if (hasPatch && input.intent !== undefined)
           throw new Error("session_edit metadata patch does not accept intent");
+        if (hasOps) validateSessionEditOperations(input);
       }
       const active = getContext();
       const details = await port.invoke(

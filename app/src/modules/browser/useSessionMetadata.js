@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { engine } from "../../platform/desktop/client.js";
-import { operations } from "../operations/operations.js";
+import { operations } from "../operations/public.js";
 import { operationRef } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";
 

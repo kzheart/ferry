@@ -209,9 +209,12 @@ def discover_closure(anchor_path: Path, store: CodexStore | None = None) -> Code
 
     h = hashlib.sha256()
     for sid, node in sorted(nodes.items()):
-        h.update(sid.encode()); h.update(b"\0")
-        h.update(str(node.path).encode()); h.update(b"\0")
-        h.update(node.digest.encode()); h.update(b"\0")
+        h.update(sid.encode())
+        h.update(b"\0")
+        h.update(str(node.path).encode())
+        h.update(b"\0")
+        h.update(node.digest.encode())
+        h.update(b"\0")
     registry_revision = _registry_revision(store.state_db, set(nodes))
     return CodexClosure(anchor.thread_id, root_id, nodes, relevant_parents,
                         store, "sha256:" + h.hexdigest(), registry_revision)
@@ -255,7 +258,8 @@ def prune_referenced_subtrees(closure: CodexClosure, records: list[dict]) -> set
         current = stack.pop()
         if current in removed:
             continue
-        removed.add(current); stack.extend(children.get(current, []))
+        removed.add(current)
+        stack.extend(children.get(current, []))
     for sid in removed:
         closure.nodes.pop(sid, None)
         closure.parents.pop(sid, None)
@@ -264,9 +268,12 @@ def prune_referenced_subtrees(closure: CodexClosure, records: list[dict]) -> set
         closure.store.state_db, set(closure.nodes))
     h = hashlib.sha256()
     for sid, node in sorted(closure.nodes.items()):
-        h.update(sid.encode()); h.update(b"\0")
-        h.update(str(node.path).encode()); h.update(b"\0")
-        h.update(node.digest.encode()); h.update(b"\0")
+        h.update(sid.encode())
+        h.update(b"\0")
+        h.update(str(node.path).encode())
+        h.update(b"\0")
+        h.update(node.digest.encode())
+        h.update(b"\0")
     closure.revision = "sha256:" + h.hexdigest()
     return removed
 
@@ -383,7 +390,8 @@ def _journal_write(path: Path, payload: dict) -> None:
     tmp = path.with_suffix(".tmp")
     with tmp.open("w") as stream:
         json.dump(payload, stream, ensure_ascii=False)
-        stream.flush(); os.fsync(stream.fileno())
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(tmp, path)
 
 
@@ -505,7 +513,8 @@ def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
                         "SELECT * FROM thread_dynamic_tools WHERE thread_id=? ORDER BY position",
                         (sid,)).fetchall()
                     for values in rows:
-                        row = dict(zip(cols, values)); row["thread_id"] = id_map[sid]
+                        row = dict(zip(cols, values))
+                        row["thread_id"] = id_map[sid]
                         _insert_row(db, "thread_dynamic_tools", row)
 
         day_dir.mkdir(parents=True, exist_ok=True)
@@ -513,7 +522,8 @@ def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
             os.replace(staged[sid], finals[sid])
             published.append(finals[sid])
         if db:
-            db.commit(); committed = True
+            db.commit()
+            committed = True
         for sid, path in finals.items():
             node = _rollout(path)
             if node.thread_id != id_map[sid]:

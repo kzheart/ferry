@@ -1,9 +1,17 @@
 """Codex 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..contracts import AgentManifest, AgentAdapter, jsonl_reference
+from pathlib import Path
+
+from ..contracts import (
+    AgentManifest,
+    AgentAdapter,
+    NativeSessionReference,
+    jsonl_reference,
+)
 from ..shared.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
+from ...errors import AgentReferenceError
 from .editor import CodexBackend, resolve
 from .lifecycle import CodexLifecycle
 from .migration import CodexMigrationTarget
@@ -38,6 +46,32 @@ class CodexBrowser:
 
     def canonicalize(self, row):
         return jsonl_reference(row, MANIFEST.source_path, self.resolve_ref)
+
+    def validate_read_scope(self, ref: NativeSessionReference) -> None:
+        if not ref.path_backed or not ref.root:
+            raise AgentReferenceError("Codex 会话必须使用路径引用")
+        try:
+            root = Path(ref.root).resolve(strict=True)
+            path = Path(ref.canonical_ref).resolve(strict=True)
+        except OSError as error:
+            raise AgentReferenceError("Codex 会话读取范围包含失效文件") from error
+        if (
+            not path.is_file()
+            or path.suffix != ".jsonl"
+            or not path.is_relative_to(root)
+        ):
+            raise AgentReferenceError("Codex 会话读取范围超出会话根目录")
+        for candidate in root.rglob("rollout*.jsonl"):
+            try:
+                resolved = candidate.resolve(strict=True)
+            except OSError as error:
+                raise AgentReferenceError(
+                    "Codex 会话子树包含失效文件"
+                ) from error
+            if not resolved.is_file() or not resolved.is_relative_to(root):
+                raise AgentReferenceError(
+                    "Codex 会话子树超出 Agent 会话根目录"
+                )
 
 
 class CodexModels:

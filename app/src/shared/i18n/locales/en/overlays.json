@@ -26,16 +26,16 @@
     "title": "Delete this session?",
     "batchTitle": "Delete {{n}} selected sessions?",
     "cancel": "Cancel",
-    "confirmOpenCode": "Delete anyway",
-    "confirmOther": "Back up and delete",
+    "confirmUndoable": "Back up and delete",
+    "confirmIrreversible": "Delete permanently",
+    "confirmBatch": "Delete selected sessions",
     "desc": "Session \"{{title}}\" ({{tool}}) will be removed from this machine.",
     "bulletSub": "This session contains {{n}} sub-sessions, which will also be deleted.",
-    "bulletSnapshot": "A backup is saved before deleting, so you can undo it right after.",
-    "bulletOpenCode": "OpenCode sessions cannot be undone in one click after deletion; only an exported backup is kept.",
     "bulletUndoable": "You can undo the deletion from the toast.",
-    "bulletBatchSnapshot": "Each session is backed up before deletion, so you can undo it right after.",
-    "bulletBatchOpenCode": "{{n}} of them are OpenCode sessions that cannot be undone after deletion.",
-    "bulletBatchRest": "Undo only restores the most recent deletion; the rest must be recovered manually."
+    "bulletIrreversible": "This source does not support one-click recovery, so the deletion cannot be undone.",
+    "bulletBatchUndoable": "{{n}} sessions support recovery after deletion.",
+    "bulletBatchIrreversible": "{{n}} sessions cannot be restored after deletion.",
+    "bulletBatchPartial": "Sessions are deleted one by one; completed deletions are not rolled back if a later one fails."
   },
   "prompt": {
     "confirm": "OK",

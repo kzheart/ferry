@@ -26,7 +26,11 @@ def backup(path: Path, reason_code: str = "snapshot.before_edit",
 
 
 def load(path: Path) -> list[dict]:
-    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    return [
+        json.loads(line)
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
 
 
 def save(path: Path, records: list[dict]):

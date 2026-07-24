@@ -18,32 +18,37 @@ export function AppOverlayController({
   filters,
   guide,
 }) {
-  const searchResults = (search.view === "askferry"
-    ? search.ferrySessions.map(session => ({
-        id: session.session_id,
-        title: session.title || t("askferry:chat.untitled"),
-        tool: null,
-        meta: session.model_id,
-        onClick: () => search.ferry.openSession(session.session_id),
-      }))
-    : search.view === "history"
-      ? search.historyGroups.flatMap(group => group.rows).map(item => ({
-          id: item.id,
-          title: item.title,
-          tool: item.tool,
-          meta: `${item.from} → ${item.to}`,
-          onClick: () => search.selectHistory(item.id),
+  const searchResults = (
+    search.view === "askferry"
+      ? search.ferrySessions.map((session) => ({
+          id: session.session_id,
+          title: session.title || t("askferry:chat.untitled"),
+          tool: null,
+          meta: session.model_id,
+          onClick: () => search.ferry.openSession(session.session_id),
         }))
-      : search.libraryGroups.flatMap(group => group.rows).map(row => ({
-          id: row.key,
-          title: row.title,
-          tool: row.tool,
-          meta: row.repo,
-          onClick: () => {
-            search.setMultiSelection([]);
-            search.selectSession(row.key);
-          },
-        }))
+      : search.view === "history"
+        ? search.historyGroups
+            .flatMap((group) => group.rows)
+            .map((item) => ({
+              id: item.id,
+              title: item.title,
+              tool: item.tool,
+              meta: `${item.from} → ${item.to}`,
+              onClick: () => search.selectHistory(item.id),
+            }))
+        : search.libraryGroups
+            .flatMap((group) => group.rows)
+            .map((row) => ({
+              id: row.key,
+              title: row.title,
+              tool: row.tool,
+              meta: row.repo,
+              onClick: () => {
+                search.setMultiSelection([]);
+                search.selectSession(row.key);
+              },
+            }))
   ).slice(0, 60);
 
   return (
@@ -70,6 +75,7 @@ export function AppOverlayController({
         applying: peek.applying,
         navigationTarget: peek.navigationTarget,
         refreshing: peek.refreshing,
+        loadingMore: peek.loadingMore,
         onClose: () => peek.setId(null),
         onOpenLibrary: () => {
           peek.setId(null);
@@ -108,13 +114,9 @@ export function AppOverlayController({
         onClose: () => contextMenu.setValue(null),
       }}
       sessionDelete={{
-        session: deletion.session,
-        onCancel: () => deletion.setSession(null),
-        onConfirm: () => {
-          const session = deletion.session;
-          deletion.setSession(null);
-          deletion.deleteSession(session);
-        },
+        prepared: deletion.sessionConfirmation,
+        onCancel: deletion.cancelSessionDeletion,
+        onConfirm: deletion.confirmSessionDeletion,
       }}
       historyDelete={{
         history: deletion.history,
@@ -129,9 +131,9 @@ export function AppOverlayController({
         },
       }}
       batchDelete={{
-        sessions: deletion.batch,
-        onCancel: () => deletion.setBatch(null),
-        onConfirm: deletion.deleteBatch,
+        prepared: deletion.batchConfirmation,
+        onCancel: deletion.cancelBatchDeletion,
+        onConfirm: deletion.confirmBatchDeletion,
       }}
       rename={{
         session: rename.session,
@@ -139,7 +141,7 @@ export function AppOverlayController({
           ? rename.metaFor(rename.session).name || rename.session.title || ""
           : "",
         onCancel: () => rename.setSession(null),
-        onConfirm: value => {
+        onConfirm: (value) => {
           const session = rename.session;
           rename.setSession(null);
           rename.updateMetadata(session, { name: value });
@@ -148,30 +150,38 @@ export function AppOverlayController({
       agentRename={{
         session: agentRename.session,
         onCancel: () => agentRename.setSession(null),
-        onConfirm: title => {
+        onConfirm: (title) => {
           const session = agentRename.session;
           agentRename.setSession(null);
           if (title) {
-            agentRename.ferry.rename(session.session_id, title)
+            agentRename.ferry
+              .rename(session.session_id, title)
               .catch(agentRename.ferry.reportError);
           }
         },
       }}
       tags={{
         selection: tags.selection,
-        initial: tags.selection && !tags.selection.batch
-          ? (tags.metaFor(tags.selection.sessions[0]).tags || []).join(", ")
-          : "",
+        initial:
+          tags.selection && !tags.selection.batch
+            ? (tags.metaFor(tags.selection.sessions[0]).tags || []).join(", ")
+            : "",
         onCancel: () => tags.setSelection(null),
-        onConfirm: async value => {
+        onConfirm: async (value) => {
           const selection = tags.selection;
           tags.setSelection(null);
-          const nextTags = value.split(/[,，]/)
-            .map(tag => tag.trim())
+          const nextTags = value
+            .split(/[,，]/)
+            .map((tag) => tag.trim())
             .filter(Boolean);
           for (const session of selection.sessions) {
             const merged = selection.batch
-              ? [...new Set([...(tags.metaFor(session).tags || []), ...nextTags])]
+              ? [
+                  ...new Set([
+                    ...(tags.metaFor(session).tags || []),
+                    ...nextTags,
+                  ]),
+                ]
               : nextTags;
             await tags.updateMetadata(session, { tags: merged });
           }

@@ -2,15 +2,28 @@
 export const AGENTS = {
   "claude": {
     "displayName": "Claude Code",
-    "icon": "claude"
+    "icon": "claude",
+    "editOperations": [
+      "delete-turn",
+      "rewrite",
+      "replace-assistant-reply"
+    ]
   },
   "codex": {
     "displayName": "Codex CLI",
-    "icon": "codex"
+    "icon": "codex",
+    "editOperations": [
+      "delete-turn",
+      "rewrite",
+      "replace-assistant-reply"
+    ]
   },
   "opencode": {
     "displayName": "OpenCode",
-    "icon": "opencode"
+    "icon": "opencode",
+    "editOperations": [
+      "rewrite"
+    ]
   }
 } as const;
 export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];

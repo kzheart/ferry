@@ -10,6 +10,7 @@ from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
+from engine.contracts.agents import AGENT_IDS
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -55,14 +56,11 @@ def _tree(tmp_path):
     return root
 
 
-MIGRATION_TARGET_TESTS = {"claude", "codex", "opencode"}
-
-
 def test_every_migration_target_has_a_discovery_test():
     adapters = registry.create_registry()
     targets = {tool for tool in adapters.ids()
                if adapters.get(tool).migration_target is not None}
-    assert targets == MIGRATION_TARGET_TESTS
+    assert targets == set(AGENT_IDS)
 
 
 def test_claude_writer_publishes_discoverable_session(tmp_path, monkeypatch):

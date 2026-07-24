@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { engine, openTerminal } from "../../platform/desktop/client.js";
-import { operations } from "../operations/operations.js";
+import { operations } from "../operations/public.js";
 import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
-import { sessionRef } from "../browser/sessionModel.js";
+import { sessionRef } from "../browser/public.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../shared/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../shared/contracts/events.js";

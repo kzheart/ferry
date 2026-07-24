@@ -40,6 +40,8 @@
     "delete": "Delete",
     "cancel": "Cancel",
     "save": "Save",
+    "loading": "Loading roles…",
+    "loadingDesc": "Connecting to the Ferry desktop runtime…",
     "unavailable": "Role configuration is unavailable",
     "unavailableDesc": "Roles are stored by the Ferry desktop runtime. Open this page in the desktop app.",
     "retry": "Reload"

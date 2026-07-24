@@ -114,9 +114,9 @@ export function AppOverlays({
           onClose={contextMenu.onClose}
         />
       )}
-      {sessionDelete.session && (
+      {sessionDelete.prepared && (
         <SessionDeleteConfirm
-          sess={sessionDelete.session}
+          prepared={sessionDelete.prepared}
           onCancel={sessionDelete.onCancel}
           onConfirm={sessionDelete.onConfirm}
         />
@@ -128,9 +128,9 @@ export function AppOverlays({
           onConfirm={historyDelete.onConfirm}
         />
       )}
-      {batchDelete.sessions && (
+      {batchDelete.prepared && (
         <BatchDeleteConfirm
-          sessions={batchDelete.sessions}
+          prepared={batchDelete.prepared}
           onCancel={batchDelete.onCancel}
           onConfirm={batchDelete.onConfirm}
         />

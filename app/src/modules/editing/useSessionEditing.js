@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { operations } from "../operations/operations.js";
-import { supportsAssistantReplyEditing } from "../../shared/contracts/tools.js";
+import { operations } from "../operations/public.js";
+import { supportsEditOperation } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
-import { sessionRef } from "../browser/sessionModel.js";
+import { sessionRef } from "../browser/public.js";
 
 export function useSessionEditing({ current, runtimeProbe, doScan,
   onInplaceApplied }) {
@@ -29,6 +29,11 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     replaceOps([]);
   };
   const addOp = (type, round) => {
+    const backendOp = {
+      delete: "delete-turn",
+      rewrite: "rewrite",
+    }[type];
+    if (!supportsEditOperation(current?.tool, backendOp)) return;
     let op;
     if (type === "delete") {
       op = { type, n: round.n,
@@ -45,7 +50,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
         label: `改写 第 ${round.n} 轮`, dot: ACCENT,
         orig: round.user, text: round.user, locator: round.locator };
     }
-    const backendOp = type === "delete" ? "delete-turn" : "rewrite";
     invalidateEditPlan();
     setOps(currentOps => {
       if (currentOps.some(item => item.type === type && item.n === round.n) ||
@@ -63,7 +67,10 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     } : {}) });
   const startReplyEdit = turn => {
     if (!turn || ops.length) return;
-    if (!supportsAssistantReplyEditing(current?.tool)) return;
+    if (!supportsEditOperation(
+      current?.tool,
+      "replace-assistant-reply",
+    )) return;
     invalidateEditPlan();
     const source = turn.assistant_reply?.items || [];
     const items = source.length ? source.map(draftItem) : [draftItem({ kind: "text", text: "" })];

@@ -6,6 +6,7 @@ import os
 from functools import partial
 import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -46,6 +47,8 @@ class Browser:
         self.identity = identity
         self.source_path = source_path
         self.fingerprint_value = "fingerprint-1"
+        self.read_scope_calls = 0
+        self.after_read = None
 
     def scan(self, _cache):
         return list(self.rows)
@@ -54,6 +57,8 @@ class Browser:
         return ref
 
     def read(self, _ref):
+        if self.after_read is not None:
+            self.after_read()
         return copy.deepcopy(self.session)
 
     def read_agent(self, ref):
@@ -69,6 +74,23 @@ class Browser:
         if self.identity:
             return id_reference(row)
         return jsonl_reference(row, self.source_path, self.resolve_ref)
+
+    def validate_read_scope(self, ref):
+        self.read_scope_calls += 1
+        if not ref.path_backed:
+            return
+        root = Path(ref.root).resolve(strict=True)
+        path = Path(ref.canonical_ref).resolve(strict=True)
+        if not path.is_file() or not path.is_relative_to(root):
+            raise AgentReferenceError("会话读取范围超出 Agent 会话根目录")
+        child_root = path.with_suffix("") / "subagents"
+        candidates = child_root.rglob("*.jsonl") if child_root.exists() else ()
+        for candidate in candidates:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_file() or not resolved.is_relative_to(root):
+                raise AgentReferenceError(
+                    "会话子树超出 Agent 会话根目录"
+                )
 
 
 class MigrationSource:
@@ -222,7 +244,10 @@ def agent_environment(tmp_path, monkeypatch):
     }]
     claude_browser = Browser(rows, _session(), source_path=str(root))
     claude = AgentAdapter(
-        AgentManifest("claude", "Claude Code", "claude", str(root)),
+        AgentManifest(
+            "claude", "Claude Code", "claude", str(root),
+            ("delete-turn", "rewrite"),
+        ),
         claude_browser,
         migration_source=MigrationSource(claude_browser),
         migration_target=MigrationTarget(), editor=editor,
@@ -237,7 +262,10 @@ def agent_environment(tmp_path, monkeypatch):
     opencode_browser = Browser(
         opencode_rows, Session("opencode", "oc-1", "/tmp/project-b"), identity=True)
     opencode = AgentAdapter(
-        AgentManifest("opencode", "OpenCode", "opencode", "/unused"),
+        AgentManifest(
+            "opencode", "OpenCode", "opencode", "/unused",
+            ("delete-turn", "rewrite"),
+        ),
         opencode_browser,
         migration_source=MigrationSource(opencode_browser),
         migration_target=MigrationTarget(), editor=Editor(),
@@ -429,6 +457,26 @@ def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
     (child_dir / "agent-escape.jsonl").symlink_to(outside)
     with pytest.raises(AgentReferenceError, match="超出"):
         agent_read.get_session_context("claude", ref)
+
+
+def test_adapter_read_scope_is_checked_before_and_after_read(
+        agent_environment, tmp_path):
+    ref = _claude_ref()
+    browser = agent_environment["claude_browser"]
+    child_dir = agent_environment["root"] / "session" / "subagents"
+    outside = tmp_path / "outside-after-read.jsonl"
+    outside.write_text("{}\n")
+
+    def escape_after_read():
+        child_dir.mkdir(parents=True, exist_ok=True)
+        (child_dir / "agent-escape.jsonl").symlink_to(outside)
+        browser.after_read = None
+
+    browser.after_read = escape_after_read
+    calls_before = browser.read_scope_calls
+    with pytest.raises(AgentReferenceError, match="超出"):
+        agent_read.get_session_context("claude", ref)
+    assert browser.read_scope_calls - calls_before == 2
 
 
 def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):

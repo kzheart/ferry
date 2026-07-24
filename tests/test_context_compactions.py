@@ -3,6 +3,7 @@ import json
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.opencode import reader as opencode_reader
+from engine.sessions.model import AgentEdge, Block, Message, Session
 from engine.sessions.read import session_json
 
 
@@ -135,3 +136,40 @@ def test_codex_exposes_encrypted_compaction_once(tmp_path):
     assert compaction["after_turn"] == 1
     assert compaction["summary"]["status"] == "protected"
     assert compaction["summary"]["text"] == ""
+
+
+def test_session_json_pages_root_messages_and_serializes_agent_edges():
+    root = Session("codex", "root", "/tmp")
+    root.messages = [
+        Message("user", [Block("text", "first")], source_id="u1"),
+        Message("assistant", [Block("text", "one")], source_id="a1"),
+        Message("user", [Block("text", "second")], source_id="u2"),
+        Message("assistant", [Block("text", "two")], source_id="a2"),
+    ]
+    root.children = [Session("codex", "child", "/tmp")]
+    root.agent_edges = [AgentEdge("root", "child", status="closed")]
+
+    first = session_json(root, message_limit=2, include_tree=False)
+    second = session_json(
+        root, from_message=first["next_from_message"], message_limit=2,
+        include_tree=False,
+    )
+
+    assert first["next_from_message"] == 3
+    assert first["turns"][0]["turn"] == 1
+    assert second["next_from_message"] is None
+    assert second["turns"][0]["turn"] == 2
+    assert first["agent_edges"] == [{
+        "parent_session_id": "root",
+        "child_session_id": "child",
+        "source_call_id": None,
+        "spawn_message_id": None,
+        "result_message_id": None,
+        "agent_id": None,
+        "agent_path": None,
+        "agent_type": None,
+        "prompt": "",
+        "status": "closed",
+        "association": "explicit",
+        "confidence": 1.0,
+    }]
