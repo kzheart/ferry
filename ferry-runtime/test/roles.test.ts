@@ -60,14 +60,41 @@ describe("FileRoleStore", () => {
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
+  it("overrides a builtin role and restores it on reset", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-roles-"));
+    const path = join(directory, "roles.json");
+    const store = new FileRoleStore(path);
+
+    await store.update("default", { ...input("default"), name: "我的 Ferry" });
+    expect(await store.list()).toMatchObject([
+      { id: "default", builtin: true, name: "我的 Ferry", thinking: "high" },
+    ]);
+    // 改写单独存一列,老版本读到只会忽略它,而不是把整份配置判为非法
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      roles: [],
+      builtin_overrides: [{ id: "default", name: "我的 Ferry" }],
+    });
+
+    const restored = new FileRoleStore(path);
+    expect(await restored.list()).toMatchObject([{ name: "我的 Ferry" }]);
+    expect(await restored.reset("default")).toMatchObject({ name: "Ferry" });
+    expect(await restored.list()).toMatchObject([
+      { id: "default", builtin: true, name: "Ferry", persona: "" },
+    ]);
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      builtin_overrides: [],
+    });
+  });
+
   it("protects builtin roles and rejects invalid or unknown tools", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ferry-roles-"));
     const store = new FileRoleStore(join(directory, "roles.json"));
 
     await expect(store.delete("default")).rejects.toThrow("cannot be deleted");
-    await expect(
-      store.update("default", { ...input("default") }),
-    ).rejects.toThrow("immutable");
+    await expect(store.create(input("default"))).rejects.toThrow(
+      "already exists",
+    );
+    await expect(store.reset("nope")).rejects.toThrow("not builtin");
     await expect(
       store.create({
         ...input("unsafe"),
@@ -75,5 +102,21 @@ describe("FileRoleStore", () => {
         allow_bash: true,
       }),
     ).rejects.toThrow("unknown tool");
+  });
+
+  it("keeps icon and color as opaque display tokens", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-roles-"));
+    const store = new FileRoleStore(join(directory, "roles.json"));
+
+    expect(
+      await store.create({ ...input("themed"), icon: "code", color: "violet" }),
+    ).toMatchObject({ icon: "code", color: "violet" });
+    // 运行时不维护图标白名单:未知图标名照样存下,由前端回落展示
+    expect(
+      await store.create({ ...input("future"), icon: "not-shipped-yet" }),
+    ).toMatchObject({ icon: "not-shipped-yet" });
+    await expect(
+      store.create({ ...input("bad"), icon: "Code Icon!" }),
+    ).rejects.toThrow("role icon is invalid");
   });
 });

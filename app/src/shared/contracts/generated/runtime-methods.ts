@@ -8,6 +8,7 @@ export const PUBLIC_RUNTIME_METHODS = [
   "roles.list",
   "role.create",
   "role.update",
+  "role.reset",
   "role.copy",
   "role.delete",
   "organization.start",

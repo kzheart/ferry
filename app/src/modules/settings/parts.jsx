@@ -1,7 +1,12 @@
 // 设置面板的通用排版件:分组标题 / 卡片 / 行 / 下拉 / 开关
-export const GroupTitle = ({ children, first }) => (
+export const GroupTitle = ({ children, first, icon, right }) => (
   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
-    margin: first ? "0 0 9px 2px" : "22px 0 9px 2px" }}>{children}</div>
+    margin: first ? "0 0 9px 2px" : "22px 0 9px 2px",
+    display: "flex", alignItems: "center", gap: 7 }}>
+    {icon}{children}
+    {right && <span style={{ marginLeft: "auto", fontWeight: 600, letterSpacing: 0,
+      color: "var(--tx4)" }}>{right}</span>}
+  </div>
 );
 
 export const Card = ({ children }) => (
@@ -23,12 +28,13 @@ export function Row({ title, desc, children, first }) {
 }
 
 // 原生 select:自带键盘导航与系统弹层,选项多了也不会撑爆设置面板
-export function Select({ value, onChange, children }) {
+export function Select({ value, onChange, children, disabled, width }) {
   return (
-    <div style={{ position: "relative", flex: "none" }}>
-      <select value={value} onChange={e => onChange(e.target.value)}
+    <div style={{ position: "relative", flex: "none", width, maxWidth: "100%" }}>
+      <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
         style={{ appearance: "none", height: 30, padding: "0 28px 0 11px", borderRadius: 8,
-          border: "1px solid var(--line4)", background: "var(--surface)", color: "var(--tx1)",
+          border: "1px solid var(--line4)", color: "var(--tx1)", width: width ? "100%" : undefined,
+          background: disabled ? "var(--fill3)" : "var(--surface)",
           fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "default" }}>
         {children}
       </select>

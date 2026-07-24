@@ -8,6 +8,7 @@
     {"name": "roles.list", "exposure": "public"},
     {"name": "role.create", "exposure": "public"},
     {"name": "role.update", "exposure": "public"},
+    {"name": "role.reset", "exposure": "public"},
     {"name": "role.copy", "exposure": "public"},
     {"name": "role.delete", "exposure": "public"},
     {"name": "organization.start", "exposure": "public"},

@@ -234,6 +234,12 @@ export function useAskFerry() {
     await reloadRoles();
     return result;
   }, [reloadRoles]);
+  // 内置角色改坏了可以回到出厂设置:运行时丢掉覆盖层,自定义角色不受影响
+  const resetRole = useCallback(async roleId => {
+    const result = await runtime("role.reset", { role_id: roleId });
+    await reloadRoles();
+    return result;
+  }, [reloadRoles]);
   const copyRole = useCallback(async (sourceRoleId, roleId, name) => {
     const result = await runtime("role.copy", {
       source_role_id: sourceRoleId, role_id: roleId, name,
@@ -309,7 +315,7 @@ export function useAskFerry() {
     lastError, clearError: () => setLastError(null), reportError: setLastError,
     refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
-    reloadRoles, createRole, updateRole, copyRole, deleteRole,
+    reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     startLogin, respondLogin, cancelLogin, clearAuth,
   };
 }

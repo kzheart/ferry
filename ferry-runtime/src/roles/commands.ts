@@ -33,6 +33,11 @@ export async function dispatchRoleCommand(
           requireRole(params),
         ),
       };
+    case "role.reset":
+      return {
+        handled: true,
+        result: await service.reset(requireString(params, "role_id", 128)),
+      };
     case "role.copy":
       return {
         handled: true,

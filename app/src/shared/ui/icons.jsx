@@ -1,5 +1,6 @@
 import { AGENTS } from "../contracts/generated/agents.js";
 import { PROVIDER_ICON } from "./providerIcons.js";
+import { roleColorVar, roleIconPath } from "./roleIcons.js";
 
 // 图标库:工具品牌图标 + 导航轨/通用小图标
 //
@@ -33,6 +34,21 @@ export function ToolIcon({ tool, size = 26, dot = null }) {
       )}
       {dot && <span style={{ position: "absolute", right: -3, bottom: -3, width: 10, height: 10,
         borderRadius: "50%", background: dot, boxShadow: "0 0 0 2px var(--dot-ring)" }} />}
+    </span>
+  );
+}
+
+// 角色头像:图标库里的线条图标 + 角色配色,底色由配色现调,列表与详情共用一套尺寸比例
+export function RoleAvatar({ icon, color, size = 28, radius }) {
+  const tint = roleColorVar(color);
+  return (
+    <span style={{ width: size, height: size, borderRadius: radius ?? size * 0.32,
+      flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center",
+      background: `color-mix(in srgb, ${tint} 15%, transparent)`, color: tint }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden
+        style={{ width: Math.round(size * 0.56), height: Math.round(size * 0.56), display: "block" }}
+        dangerouslySetInnerHTML={{ __html: roleIconPath(icon) }} />
     </span>
   );
 }

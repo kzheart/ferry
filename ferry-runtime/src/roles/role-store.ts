@@ -25,6 +25,9 @@ export interface Role {
   id: string;
   name: string;
   description?: string;
+  /** 展示用图标/配色标识,取值由前端图标库决定,运行时只保证格式合法。 */
+  icon?: string;
+  color?: string;
   persona: string;
   tools: FerryToolName[];
   allow_bash: boolean;
@@ -39,21 +42,33 @@ export type RoleInput = Omit<Role, "builtin">;
 interface RoleDocument {
   schema_version: typeof ROLE_STORE_VERSION;
   roles: Role[];
+  /** 内置角色的用户改写。单独成列:旧版本读到这个键会忽略它,回落到出厂内置角色而不是解析失败。 */
+  builtin_overrides: Role[];
 }
 
 const MAX_ROLE_BYTES = 2 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+// 图标与配色是纯展示标识:运行时不认识具体图标名,只挡住畸形值,前端遇到未知名回落默认样式
+const TOKEN_PATTERN = /^[a-z0-9-]{1,32}$/;
 
 export const DEFAULT_ROLE: Role = Object.freeze({
   id: DEFAULT_ROLE_ID,
   name: "Ferry",
   description: "Ferry 默认助手",
+  icon: "sparkles",
+  color: "blue",
   persona: "",
   tools: [...FERRY_TOOL_NAMES],
   allow_bash: false,
   apply_policy: "auto",
   builtin: true,
 });
+
+/** 出厂内置角色:可以被改写,但改写只是覆盖层,原始定义永远留在这里供恢复默认。 */
+const BUILTIN_ROLES: readonly Role[] = Object.freeze([DEFAULT_ROLE]);
+
+export const builtinRole = (id: string) =>
+  BUILTIN_ROLES.find((role) => role.id === id);
 
 function text(value: unknown, field: string, maximum: number) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -67,6 +82,13 @@ function text(value: unknown, field: string, maximum: number) {
 function optionalText(value: unknown, field: string, maximum: number) {
   if (value === undefined) return undefined;
   return text(value, field, maximum);
+}
+
+function parseToken(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  const token = text(value, field, 32);
+  if (!TOKEN_PATTERN.test(token)) throw new Error(`${field} is invalid`);
+  return token;
 }
 
 function parseModel(value: unknown): ModelSelection | undefined {
@@ -119,10 +141,14 @@ export function parseRole(value: unknown, builtin = false): Role {
     "role description",
     1_000,
   );
+  const icon = parseToken(input.icon, "role icon");
+  const color = parseToken(input.color, "role color");
   return {
     id,
     name: text(input.name, "role name", 200),
     ...(description ? { description } : {}),
+    ...(icon ? { icon } : {}),
+    ...(color ? { color } : {}),
     persona: input.persona,
     tools,
     allow_bash: input.allow_bash,
@@ -144,12 +170,23 @@ function parseDocument(value: unknown): RoleDocument {
   if (!Array.isArray(document.roles)) throw new Error("role list is invalid");
   const roles = document.roles.map((role) => parseRole(role, false));
   if (
-    roles.some((role) => role.id === DEFAULT_ROLE_ID) ||
+    roles.some((role) => builtinRole(role.id)) ||
     new Set(roles.map((role) => role.id)).size !== roles.length
   ) {
     throw new Error("role ids must be unique and custom");
   }
-  return { schema_version: ROLE_STORE_VERSION, roles };
+  const source = document.builtin_overrides;
+  if (source !== undefined && !Array.isArray(source)) {
+    throw new Error("builtin role overrides are invalid");
+  }
+  const overrides = (source ?? []).map((role) => parseRole(role, true));
+  if (
+    overrides.some((role) => !builtinRole(role.id)) ||
+    new Set(overrides.map((role) => role.id)).size !== overrides.length
+  ) {
+    throw new Error("builtin role overrides must target distinct builtins");
+  }
+  return { schema_version: ROLE_STORE_VERSION, roles, builtin_overrides: overrides };
 }
 
 export interface RoleStore {
@@ -158,14 +195,19 @@ export interface RoleStore {
   create(input: RoleInput): Promise<Role>;
   update(id: string, input: RoleInput): Promise<Role>;
   delete(id: string): Promise<void>;
+  reset(id: string): Promise<Role>;
   copy(sourceId: string, input: { id: string; name?: string }): Promise<Role>;
 }
 
 abstract class BaseRoleStore implements RoleStore {
   protected roles: Role[] = [];
+  protected overrides: Role[] = [];
 
   async list() {
-    return structuredClone([DEFAULT_ROLE, ...this.roles]);
+    const builtins = BUILTIN_ROLES.map(
+      (role) => this.overrides.find((item) => item.id === role.id) ?? role,
+    );
+    return structuredClone([...builtins, ...this.roles]);
   }
 
   async get(id: string) {
@@ -183,23 +225,36 @@ abstract class BaseRoleStore implements RoleStore {
   }
 
   async update(id: string, input: RoleInput) {
-    if (id === DEFAULT_ROLE_ID) throw new Error("builtin role is immutable");
     if (input.id !== id) throw new Error("role id cannot be changed");
-    const index = this.roles.findIndex((role) => role.id === id);
-    if (index < 0) throw new Error("role not found");
-    const role = parseRole(input, false);
-    this.roles[index] = role;
+    // 内置角色可改,但改动写进覆盖层,出厂定义原样保留给 reset 用
+    const builtin = builtinRole(id) !== undefined;
+    const target = builtin ? this.overrides : this.roles;
+    const role = parseRole(input, builtin);
+    const index = target.findIndex((item) => item.id === id);
+    if (index >= 0) target[index] = role;
+    else if (builtin) target.push(role);
+    else throw new Error("role not found");
     await this.changed();
     return structuredClone(role);
   }
 
   async delete(id: string) {
-    if (id === DEFAULT_ROLE_ID)
-      throw new Error("builtin role cannot be deleted");
+    if (builtinRole(id)) throw new Error("builtin role cannot be deleted");
     const index = this.roles.findIndex((role) => role.id === id);
     if (index < 0) throw new Error("role not found");
     this.roles.splice(index, 1);
     await this.changed();
+  }
+
+  async reset(id: string) {
+    const original = builtinRole(id);
+    if (!original) throw new Error("role is not builtin");
+    const index = this.overrides.findIndex((role) => role.id === id);
+    if (index >= 0) {
+      this.overrides.splice(index, 1);
+      await this.changed();
+    }
+    return structuredClone(original);
   }
 
   async copy(sourceId: string, input: { id: string; name?: string }) {
@@ -236,7 +291,9 @@ export class FileRoleStore extends BaseRoleStore {
       if (Buffer.byteLength(source) > MAX_ROLE_BYTES) {
         throw new Error("role config is too large");
       }
-      this.roles = parseDocument(JSON.parse(source) as unknown).roles;
+      const document = parseDocument(JSON.parse(source) as unknown);
+      this.roles = document.roles;
+      this.overrides = document.builtin_overrides;
       await chmod(this.path, 0o600);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -246,7 +303,11 @@ export class FileRoleStore extends BaseRoleStore {
 
   private async writeDisk() {
     const payload = JSON.stringify(
-      { schema_version: ROLE_STORE_VERSION, roles: this.roles },
+      {
+        schema_version: ROLE_STORE_VERSION,
+        roles: this.roles,
+        builtin_overrides: this.overrides,
+      },
       null,
       2,
     );
@@ -279,6 +340,11 @@ export class FileRoleStore extends BaseRoleStore {
   override async delete(id: string) {
     await this.ready;
     return super.delete(id);
+  }
+
+  override async reset(id: string) {
+    await this.ready;
+    return super.reset(id);
   }
 
   protected async changed() {

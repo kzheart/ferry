@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-process = "2"
 tauri-plugin-clipboard-manager = "2"
+# 角色配置导入导出的系统文件对话框(路径只在 Rust 侧使用,不向 webview 开放文件系统)
+tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 # 记住用户手动调整过的窗口大小/位置,首启才用 tauri.conf.json 里的默认尺寸
 tauri-plugin-window-state = "2"

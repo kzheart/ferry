@@ -2,4 +2,4 @@
 from __future__ import annotations
 
 FERRY_IPC_PROTOCOL = 'ferry-ipc/1'
-FERRY_CONTRACT_HASH = 'sha256:72062ffa2db9982f6b52409f4db763c3acca8b5a86775c1fd0256619c6f3ada0'
+FERRY_CONTRACT_HASH = 'sha256:0cf1cf2d3489d409447f171d1a44035369e5eb0355dafebbc64ee1564af31bbe'
