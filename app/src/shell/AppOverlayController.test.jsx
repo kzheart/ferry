@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
 
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
+import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
 
 const noop = () => {};
@@ -14,8 +15,18 @@ const noop = () => {};
 // Provider。每个用例按需替换句柄上的某个方法来观察调用。
 let ferry = null;
 
+const editingSurface = {
+  scope: null, setScope: noop, ops: [], dirtyOps: [], addOp: noop, removeOp: noop,
+  updateOp: noop, startReplyEdit: noop, replyEditError: () => null,
+  onOpenDiff: noop, onApply: noop, applying: false, onDiscardAll: noop,
+};
+
 function render(ui) {
-  const wrap = node => <FerryRuntimeProvider value={ferry}>{node}</FerryRuntimeProvider>;
+  const wrap = node => (
+    <FerryRuntimeProvider value={ferry}>
+      <SessionEditingProvider value={editingSurface}>{node}</SessionEditingProvider>
+    </FerryRuntimeProvider>
+  );
   const result = rtlRender(wrap(ui));
   return { ...result, rerender: node => result.rerender(wrap(node)) };
 }
@@ -316,11 +327,9 @@ test("就地预览要同时有 id 和已加载的会话才打开", () => {
           id: "s1",
           current: { id: "s1", tool: "claude", title: "会话" },
           selectedId: "s1",
-          meta: {},
+          meta: { id: "s1", tool: "claude", title: "会话" },
           detail: null,
           actions: {},
-          ops: [],
-          dirtyOps: [],
         },
       })}
     />,

@@ -7,6 +7,7 @@ import {
   resumeDescriptor,
   TOOLS,
 } from "../../shared/contracts/tools.js";
+import { useSessionEditingSurface } from "../../shared/capabilities/sessionEditing.jsx";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
@@ -29,19 +30,6 @@ export default memo(function SessionDetail({
   meta,
   data,
   error,
-  scope,
-  setScope,
-  ops,
-  dirtyOps,
-  addOp,
-  removeOp,
-  updateOp,
-  startReplyEdit,
-  replyEditError,
-  onOpenDiff,
-  onApply,
-  applying,
-  onDiscardAll,
   onOpenMigrate,
   onRefresh,
   refreshing,
@@ -51,6 +39,10 @@ export default memo(function SessionDetail({
   loadingMore,
 }) {
   const { t: tt } = useTranslation();
+  const {
+    scope, setScope, ops, dirtyOps, addOp, removeOp, updateOp,
+    startReplyEdit, replyEditError, onOpenDiff, onApply, applying, onDiscardAll,
+  } = useSessionEditingSurface();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const timeline = useMemo(
     () => toTimeline(rounds, data?.context_compactions),

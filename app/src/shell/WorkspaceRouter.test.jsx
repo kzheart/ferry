@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
+import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 
 const noop = () => {};
@@ -101,4 +102,28 @@ test("对话工作区从 Context 取 Ferry Runtime 句柄,不再由路由层转�
   );
 
   assert.ok(screen.getByText("askferry:empty.title"));
+});
+
+test("资料库详情区的待应用编辑取自 Context,不再由路由层转交", () => {
+  const surface = {
+    scope: null, setScope: noop, ops: [], dirtyOps: [], addOp: noop, removeOp: noop,
+    updateOp: noop, startReplyEdit: noop, replyEditError: () => null,
+    onOpenDiff: noop, onApply: noop, applying: false, onDiscardAll: noop,
+  };
+  render(
+    <SessionEditingProvider value={surface}>
+      <WorkspaceRouter
+        {...baseProps({
+          view: "library",
+          currentSession: { id: "s1", tool: "claude", title: "会话" },
+          selectedSessionId: "s1",
+          detailMeta: { id: "s1", tool: "claude", title: "会话" },
+          detail: { data: { messages: [], turns: [] } },
+        })}
+      />
+    </SessionEditingProvider>,
+  );
+
+  assert.equal(screen.queryByText("没有会话"), null);
+  assert.ok(screen.getByText("会话"));
 });
