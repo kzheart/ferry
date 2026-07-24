@@ -18,9 +18,10 @@ from ..domain.errors import (
     OperationUnsupportedError,
     SnapshotInvalidSourceError,
 )
-from . import agent_tools, services, verification as probe_mod
+from . import agent_tools, verification as probe_mod
 from . import session_meta
 from .editing import apply_mutation, preview_mutation
+from .migration import MigrationService
 from .ports import ApplicationPorts, current
 from ..infrastructure.state_db import StateDatabase
 
@@ -74,6 +75,7 @@ class OperationState:
 class OperationService:
     def __init__(self, ports: ApplicationPorts):
         self._ports = ports
+        self._migration = MigrationService(ports)
         self._lock = threading.RLock()
         self._database_instance: StateDatabase | None = None
         self._database_path: Path | None = None
@@ -135,14 +137,13 @@ class OperationService:
         ref = operation_input["ref"]
         before = agent_tools._INDEX.resolve(source_tool, ref)
         session = agent_tools._read_record(before)
-        preview = services.preview_migration(
+        preview = self._migration.preview(
             source_tool,
             operation_input["target_tool"],
             before.canonical_ref,
             max_turn=operation_input.get("max_turn"),
             probe_model=operation_input.get("probe_model"),
-            _session=session,
-            ports=self._ports,
+            session=session,
         )
         try:
             after = agent_tools._INDEX.resolve(source_tool, ref)
@@ -581,15 +582,14 @@ class OperationService:
                 "会话在迁移计划生成后已变化，请重新计划"
             )
         session = agent_tools._read_record(record)
-        result = services.apply_migration(
+        result = self._migration.apply(
             params["source_tool"],
             params["target_tool"],
             record.canonical_ref,
             probe=params["probe"],
             max_turn=params.get("max_turn"),
             probe_model=params.get("probe_model"),
-            _session=session,
-            ports=self._ports,
+            session=session,
         )
         structure = result.get("validation", {}).get("structure", {})
         if result.get("rolled_back") or structure.get("ok") is not True:
