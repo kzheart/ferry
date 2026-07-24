@@ -91,10 +91,12 @@ The first multi-agent execution model is deliberately bounded fan-out/fan-in:
 planner -> parallel task nodes -> synthesizer
 ```
 
-Every workflow has concurrency, task-count, depth, time, and total persisted
-output limits. Provider cost and token accounting are not yet a scheduler input.
-Cancellation propagates to running descendants. Cycles and unbounded recursive
-delegation are rejected.
+Every `WorkflowRun` has concurrency, task-count, depth, per-task timeout, and
+total persisted-output limits. A task timeout is a workflow failure, not a user
+cancellation, so failure policy and fan-in synthesis can handle it explicitly.
+Provider cost and token accounting are not yet a scheduler input. Cancellation
+propagates to running descendants. Cycles and unbounded recursive delegation
+are rejected.
 
 Ferry does not provide long-term agent memory. Workflow input, events, and
 result artifacts live only within the workflow/conversation persistence model.
