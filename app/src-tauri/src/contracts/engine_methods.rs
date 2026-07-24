@@ -3,7 +3,6 @@
 pub(crate) enum TimeoutClass {
     Normal,
     Lookup,
-    Commit,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -158,7 +157,7 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
         }),
         "operation.apply" => Some(EngineMethodPolicy {
             is_public: false,
-            timeout: TimeoutClass::Commit,
+            timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
         }),
         "operation.status" => Some(EngineMethodPolicy {

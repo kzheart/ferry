@@ -159,7 +159,7 @@ class StateDatabase:
                     SET status = 'failed',
                         error_type = 'EngineRestarted',
                         updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
-                    WHERE status = 'applying'
+                    WHERE status IN ('queued', 'applying')
                     """
                 )
 
@@ -234,9 +234,21 @@ class StateDatabase:
             error_type=None, event="applying",
         )
 
-    def cancel(self, plan_id: str, now: int) -> bool:
+    def enqueue(self, plan_id: str, now: int) -> bool:
         return self.transition(
-            plan_id, "planned", "cancelled", now,
+            plan_id, "planned", "queued", now,
+            error_type=None, event="queued",
+        )
+
+    def claim_queued(self, plan_id: str, now: int) -> bool:
+        return self.transition(
+            plan_id, "queued", "applying", now,
+            error_type=None, event="applying",
+        )
+
+    def cancel(self, plan_id: str, expected: str, now: int) -> bool:
+        return self.transition(
+            plan_id, expected, "cancelled", now,
             error_type=None, event="cancelled",
         )
 

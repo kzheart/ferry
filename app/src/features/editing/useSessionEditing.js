@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { operationApply, operationPlan, rpc } from "../../api/transport/rpc.js";
+import { operationApplyAndWait, operationPlan, rpc } from "../../api/transport/rpc.js";
 import { ACCENT } from "../../domain/tools/toolDisplay.js";
 import { sessionRef } from "../../domain/sessions/sessionModel.js";
 
@@ -197,7 +197,7 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
       const replyEdit = dirtyOps.find(op => op.type === "assistant-reply");
       const invalid = replyEdit ? replyEditError(replyEdit) : null;
       if (invalid) throw new Error(invalid);
-      const result = (await operationApply((await ensureEditPlan()).plan_id)).result;
+      const result = (await operationApplyAndWait((await ensureEditPlan()).plan_id)).result;
       if (result.ok) {
         const verdict = runtimeProbe ? t("browser:edit.verdictProbe") : t("browser:edit.verdictStructure");
         setToast({ kind: "ok",

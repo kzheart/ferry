@@ -6,12 +6,10 @@ use std::time::Duration;
 
 pub(crate) const ENGINE_TIMEOUT: Duration = Duration::from_secs(120);
 pub(crate) const AGENT_LOOKUP_TIMEOUT: Duration = Duration::from_secs(20);
-pub(crate) const ENGINE_COMMIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub(crate) fn request_timeout(request: &str) -> Duration {
     match request_policy(request).map(|policy| policy.timeout) {
         Some(TimeoutClass::Lookup) => AGENT_LOOKUP_TIMEOUT,
-        Some(TimeoutClass::Commit) => ENGINE_COMMIT_TIMEOUT,
         Some(TimeoutClass::Normal) | None => ENGINE_TIMEOUT,
     }
 }
