@@ -2,6 +2,7 @@
 // 审批走独立可信命令(approve 与 apply 在 Rust 内一次完成,凭证不进 WebView)
 import { invoke } from "@tauri-apps/api/core";
 import { FERRY_IPC_PROTOCOL } from "../contract/generated/ipc.js";
+import { isPublicRuntimeMethod } from "../contract/generated/runtime-methods.js";
 
 let requestSeq = 1;
 
@@ -13,6 +14,9 @@ export class AgentError extends Error {
 }
 
 export async function agentCommand(method, params) {
+  if (!isPublicRuntimeMethod(method)) {
+    throw new AgentError("unknown_method", "Runtime command is not public");
+  }
   const request = JSON.stringify({
     protocol: FERRY_IPC_PROTOCOL,
     id: `ui_${Date.now().toString(36)}_${requestSeq++}`,

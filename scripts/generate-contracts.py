@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 AGENTS_SOURCE = ROOT / "contracts" / "agents.json"
 ENGINE_METHODS_SOURCE = ROOT / "contracts" / "engine-methods.json"
+RUNTIME_METHODS_SOURCE = ROOT / "contracts" / "runtime-methods.json"
 IPC_SOURCE = ROOT / "contracts" / "ipc.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
@@ -21,6 +22,11 @@ AGENT_OUTPUTS = {
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
+}
+RUNTIME_METHOD_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/runtime-methods.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/runtime_methods.rs": "rust",
+    ROOT / "ferry-runtime/src/server/generated/runtime-methods.ts": "runtime",
 }
 IPC_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/ipc.js": "frontend",
@@ -85,6 +91,28 @@ def load_engine_methods() -> list[dict[str, object]]:
         names.append(name)
     if len(names) != len(set(names)):
         raise ValueError("Engine method name 必须唯一")
+    return methods
+
+
+def load_runtime_methods() -> list[dict[str, object]]:
+    document = json.loads(RUNTIME_METHODS_SOURCE.read_text())
+    methods = document.get("methods")
+    if not isinstance(methods, list) or not methods:
+        raise ValueError("contracts/runtime-methods.json 必须包含非空 methods 数组")
+    names: list[str] = []
+    for method in methods:
+        if not isinstance(method, dict) or set(method) != {"name", "exposure"}:
+            raise ValueError("Runtime 方法契约字段必须精确为 name/exposure")
+        name = method["name"]
+        if not isinstance(name, str) or not name:
+            raise ValueError("Runtime method name 必须非空")
+        if method["exposure"] not in {"public", "internal"}:
+            raise ValueError(f"Runtime method {name} 的 exposure 无效")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise ValueError("Runtime method name 必须唯一")
+    if not any(method["exposure"] == "internal" for method in methods):
+        raise ValueError("Runtime 必须保留至少一个内部命令")
     return methods
 
 
@@ -261,13 +289,73 @@ def engine_methods_python(methods: list[dict[str, object]]) -> str:
     ))
 
 
+def runtime_methods_frontend(methods: list[dict[str, object]]) -> str:
+    public = [method["name"] for method in methods if method["exposure"] == "public"]
+    values = "[\n" + "\n".join(
+        f"  {json.dumps(method)}," for method in public
+    ) + "\n]"
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const PUBLIC_RUNTIME_METHODS = Object.freeze({values});",
+        "export const isPublicRuntimeMethod = method =>",
+        "  PUBLIC_RUNTIME_METHODS.includes(method);",
+        "",
+    ))
+
+
+def runtime_methods_rust(methods: list[dict[str, object]]) -> str:
+    public = [method["name"] for method in methods if method["exposure"] == "public"]
+    values = "\n".join(f"    {json.dumps(method)}," for method in public)
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "const PUBLIC_RUNTIME_METHODS: &[&str] = &[",
+        values,
+        "];",
+        "",
+        "pub(crate) fn is_public(method: &str) -> bool {",
+        "    PUBLIC_RUNTIME_METHODS.contains(&method)",
+        "}",
+        "",
+    ))
+
+
+def runtime_methods_runtime(methods: list[dict[str, object]]) -> str:
+    names = [method["name"] for method in methods]
+    public = [method["name"] for method in methods if method["exposure"] == "public"]
+    names_source = "[\n" + "\n".join(
+        f"  {json.dumps(method)}," for method in names
+    ) + "\n]"
+    public_source = "[\n" + "\n".join(
+        f"  {json.dumps(method)}," for method in public
+    ) + "\n]"
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const RUNTIME_METHODS = {names_source} as const;",
+        f"export const PUBLIC_RUNTIME_METHODS = {public_source} as const;",
+        "export type RuntimeMethod = (typeof RUNTIME_METHODS)[number];",
+        "export function isRuntimeMethod(method: unknown): method is RuntimeMethod {",
+        "  return (",
+        '    typeof method === "string" &&',
+        "    (RUNTIME_METHODS as readonly string[]).includes(method)",
+        "  );",
+        "}",
+        "",
+    ))
+
+
 def contract_hash(
     agents: list[dict[str, object]],
     methods: list[dict[str, object]],
+    runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
 ) -> str:
     payload = json.dumps(
-        {"agents": agents, "engine_methods": methods, "ipc": ipc},
+        {
+            "agents": agents,
+            "engine_methods": methods,
+            "runtime_methods": runtime_methods,
+            "ipc": ipc,
+        },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -356,6 +444,7 @@ def ipc_runtime(contract: dict[str, object], digest: str) -> str:
 def generated_contents(
     agents: list[dict[str, object]],
     engine_methods: list[dict[str, object]],
+    runtime_methods: list[dict[str, object]],
     ipc: dict[str, object],
 ) -> dict[Path, str]:
     agent_contents = {
@@ -366,16 +455,25 @@ def generated_contents(
         path: {"rust": engine_methods_rust, "python": engine_methods_python}[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }
+    runtime_method_contents = {
+        path: {
+            "frontend": runtime_methods_frontend,
+            "rust": runtime_methods_rust,
+            "runtime": runtime_methods_runtime,
+        }[kind](runtime_methods)
+        for path, kind in RUNTIME_METHOD_OUTPUTS.items()
+    }
+    digest = contract_hash(agents, engine_methods, runtime_methods, ipc)
     ipc_contents = {
         path: {
             "frontend": ipc_frontend,
             "rust": ipc_rust,
             "python": ipc_python,
             "runtime": ipc_runtime,
-        }[kind](ipc, contract_hash(agents, engine_methods, ipc))
+        }[kind](ipc, digest)
         for path, kind in IPC_OUTPUTS.items()
     }
-    return agent_contents | engine_contents | ipc_contents
+    return agent_contents | engine_contents | runtime_method_contents | ipc_contents
 
 
 def main() -> int:
@@ -383,7 +481,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     contents = generated_contents(
-        load_agents(), load_engine_methods(), load_ipc(),
+        load_agents(), load_engine_methods(), load_runtime_methods(), load_ipc(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:

@@ -9,6 +9,7 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
+use crate::contracts::runtime_methods;
 use crate::engine::engine_request_blocking;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::error::ProcessError;
@@ -586,46 +587,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
         return Err("Agent 协议不兼容".to_owned());
     }
     let method = value.get("method").and_then(Value::as_str).unwrap_or("");
-    if !matches!(
-        method,
-        "health"
-            | "session.create"
-            | "session.rename"
-            | "session.pin"
-            | "session.delete"
-            | "roles.list"
-            | "role.create"
-            | "role.update"
-            | "role.copy"
-            | "role.delete"
-            | "organization.start"
-            | "prompt"
-            | "abort"
-            | "steer"
-            | "follow_up"
-            | "state"
-            | "sessions.list"
-            | "events.replay"
-            | "providers.list"
-            | "provider.enabled.set"
-            | "provider.test"
-            | "models.list"
-            | "models.enabled"
-            | "models.catalog"
-            | "custom_model.add"
-            | "custom_model.delete"
-            | "models.visibility.set"
-            | "models.refresh"
-            | "config.get"
-            | "credential.set"
-            | "provider.logout"
-            | "model.select"
-            | "custom_provider.upsert"
-            | "custom_provider.delete"
-            | "auth.login.start"
-            | "auth.login.respond"
-            | "auth.login.cancel"
-    ) {
+    if !runtime_methods::is_public(method) {
         return Err("Runtime 命令不允许从前端调用".to_owned());
     }
     Ok(())
