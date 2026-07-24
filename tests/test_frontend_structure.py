@@ -36,6 +36,7 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/askferry/AgentToolTrace.jsx").is_file()
     assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
     assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
+    assert (FRONTEND / "modules/browser/SessionImagePreview.jsx").is_file()
     assert (FRONTEND / "modules/browser/BrowserOverlays.jsx").is_file()
     assert (FRONTEND / "modules/editing/EditOverlays.jsx").is_file()
     assert (FRONTEND / "modules/migration/HistoryOverlays.jsx").is_file()
