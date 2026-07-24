@@ -18,6 +18,7 @@ from ..domain.errors import (
     OperationUnsupportedError,
 )
 from . import agent_tools, services
+from . import session_meta
 from .editing import apply_mutation, preview_mutation
 from .ports import ApplicationPorts, current
 from ..infrastructure.state_db import StateDatabase
@@ -167,7 +168,7 @@ class OperationService:
         session_id = before_record.row.get("id")
         if not isinstance(session_id, str) or not session_id:
             raise AgentRequestError("会话缺少可用的 metadata id")
-        metadata_before = services.session_meta_list().get(
+        metadata_before = session_meta.list_all(self._ports).get(
             StateDatabase.metadata_key(tool, session_id), {}
         )
         operation_input["session_id"] = session_id
