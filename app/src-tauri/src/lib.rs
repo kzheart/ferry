@@ -31,6 +31,7 @@ pub fn run() {
                         None,
                         None,
                     );
+                    desktop::window::install(&win.as_ref().window());
                 }
                 desktop::menu::install(app.handle())?;
             }
