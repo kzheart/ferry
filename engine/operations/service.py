@@ -9,17 +9,14 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from ..contracts.operations import OPERATION_KINDS
 from ..sessions import catalog as agent_tools
 from ..context import EngineContext
-from ..operations.types import AssistantReply
 from ..errors import (
     AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
-    LocatorStaleError,
-    OperationUnsupportedError,
 )
 from . import metadata, verification as probe_mod
 from .delete import SessionDeletionService
-from .edit import apply_mutation, preview_mutation
+from .edit import EditOperationHandler
 from .migrate import MigrationService
 from .plan_store import (
     OperationPlan,
@@ -48,6 +45,7 @@ class OperationService:
         self._ports = ports
         self._index = index
         self._migration = MigrationService(ports)
+        self._edit = EditOperationHandler(ports, index)
         self._lock = threading.RLock()
         # 所有写操作都在同一个持久化队列中串行执行。这样 IPC 请求可立即
         # 返回，同时不放宽已有 Adapter/原生文件的写入并发假设。
@@ -86,19 +84,13 @@ class OperationService:
         ref = operation_input["ref"]
 
         before = self._index.resolve(tool, ref)
-        preview = self._preview_edit(before, operation_input["ops"])
+        preview = self._edit.preview(before, operation_input["ops"])
         after = self._index.resolve(tool, ref)
         if before.revision != after.revision:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
             )
-        adapter = self._ports.adapter(tool)
-        editor = adapter.editor
-        try:
-            native_ops = self._resolve_ops(after, operation_input["ops"])
-        except LocatorStaleError as error:
-            raise self._public_locator_error(operation_input["ops"]) from error
-        self._require_inplace_support(adapter, editor, native_ops)
+        self._edit.ensure_supported(after, operation_input["ops"])
 
         return self._store_plan(
             operation_input,
@@ -338,46 +330,7 @@ class OperationService:
             return self._database().audit(plan_id)
 
     def _apply_edit(self, operation: OperationPlan) -> dict:
-        params = operation.input()
-        try:
-            record = self._index.resolve(
-                params["tool"], params["ref"],
-            )
-        except AgentReferenceError as error:
-            raise ConcurrentModificationError(
-                "会话在操作计划生成后已变化，请重新计划"
-            ) from error
-        if record.revision != operation.base_revision:
-            raise ConcurrentModificationError(
-                "会话在操作计划生成后已变化，请重新计划"
-            )
-        adapter = self._ports.adapter(params["tool"])
-        editor = adapter.editor
-        native_ops = self._resolve_ops(record, params["ops"])
-        self._require_inplace_support(adapter, editor, native_ops)
-        try:
-            if not any(
-                op["op"] == "replace-assistant-reply" for op in native_ops
-            ):
-                from .edit import apply
-                result, doc, snapshot = apply(
-                    editor,
-                    record.canonical_ref,
-                    native_ops,
-                    expected_revision=operation.document_revision,
-                )
-            else:
-                result, doc, snapshot = apply_mutation(
-                    editor,
-                    record.canonical_ref,
-                    self._mutate(editor, native_ops),
-                    expected_revision=operation.document_revision,
-                )
-        except LocatorStaleError as error:
-            raise self._public_locator_error(params["ops"]) from error
-        return self._finish_mutation(
-            params["tool"], editor, result, doc, snapshot, params["probe"],
-        )
+        return self._edit.apply(operation, self._finish_mutation)
 
     def _finish_mutation(self, tool, editor, result, document, snapshot, probe):
         if not probe:
@@ -495,100 +448,6 @@ class OperationService:
 
     def _restore_deleted_session(self, snapshot: str) -> dict:
         return SessionDeletionService(self._ports).restore(snapshot)
-
-    def _resolve_ops(self, record, ops: list[dict]) -> list[dict]:
-        resolved = []
-        for op in ops:
-            if op["op"] == "replace-assistant-reply":
-                resolved.append(dict(op))
-            else:
-                resolved.extend(agent_tools.resolve_edit_ops(self._index, record, [op]))
-        return resolved
-
-    @staticmethod
-    def _require_inplace_support(adapter, editor, ops: list[dict]):
-        ordinary = [
-            op for op in ops if op["op"] != "replace-assistant-reply"
-        ]
-        replacements = [
-            op for op in ops if op["op"] == "replace-assistant-reply"
-        ]
-        if ordinary and not all(
-                op["op"] in editor.operations for op in ordinary):
-            operation_names = ",".join(
-                sorted({item["op"] for item in ordinary})
-            )
-            raise OperationUnsupportedError(
-                adapter.id, operation_names, "inplace",
-            )
-        if replacements and "replace-assistant-reply" not in editor.operations:
-            raise OperationUnsupportedError(
-                adapter.id, "replace-assistant-reply", "inplace",
-            )
-        return editor
-
-    @staticmethod
-    def _mutate(editor, ops: list[dict]):
-        def mutate(doc):
-            changes = []
-            for op in ops:
-                if op["op"] == "replace-assistant-reply":
-                    changes.extend(editor.replace_reply(
-                        doc,
-                        op["turn"],
-                        AssistantReply.from_dict(op["reply"]),
-                    ))
-                else:
-                    changes.extend(editor.apply_ops(doc, [op]))
-            return changes
-        return mutate
-
-    def _preview_edit(self, record, ops: list[dict]) -> dict:
-        if not any(
-                op["op"] == "replace-assistant-reply" for op in ops):
-            return agent_tools.preview_edit(
-                record.tool, record.opaque_ref, ops=ops, index=self._index,
-            )
-        adapter = self._ports.adapter(record.tool)
-        editor = adapter.editor
-        native_ops = self._resolve_ops(record, ops)
-        self._require_inplace_support(
-            adapter, editor, native_ops,
-        )
-        try:
-            result = preview_mutation(
-                editor,
-                record.canonical_ref,
-                self._mutate(editor, native_ops),
-                loader=getattr(editor, "load_preview", None),
-            )
-        except LocatorStaleError as error:
-            raise self._public_locator_error(ops) from error
-        return agent_tools._finalize_dto({
-            "tool": record.tool,
-            "ref": record.opaque_ref,
-            "mode": "edit",
-            "session_id": agent_tools._record_session_id(record),
-            "revision": agent_tools._redact(str(result["revision"]), 256),
-            "before": agent_tools._bounded_json(result["before"], 12 * 1024),
-            "after": agent_tools._bounded_json(result["after"], 12 * 1024),
-            "changes": agent_tools._bounded_json(result["changes"], 12 * 1024),
-        })
-
-    @staticmethod
-    def _public_locator_error(ops: list[dict]) -> LocatorStaleError:
-        authored = next((
-            op for op in ops
-            if op.get("op") == "replace-assistant-reply"
-            and isinstance(op.get("turn"), str)
-        ), None)
-        if authored is None:
-            return agent_tools._public_locator_error(ops)
-        return LocatorStaleError(
-            "轮次定位信息与当前会话不匹配",
-            {"field": "turn", "locator": authored["turn"],
-             "hint": "重新读取会话，并原样使用 turns[].turn_locator"},
-        )
 
     def _get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
         return self._plans.get(plan_id)
