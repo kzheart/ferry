@@ -1,4 +1,5 @@
-use crate::contracts::engine_methods::{self, RetryPolicy, TimeoutClass};
+use crate::contracts::engine_methods;
+use crate::sidecar_policy::{request_attempts, request_timeout};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -12,9 +13,6 @@ use std::sync::{
 use std::time::Duration;
 
 const ENGINE_PROTOCOL: u64 = 2;
-const ENGINE_TIMEOUT: Duration = Duration::from_secs(120);
-const AGENT_LOOKUP_TIMEOUT: Duration = Duration::from_secs(20);
-const ENGINE_COMMIT_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
 
 fn is_known_agent(agent: &str) -> bool {
     crate::contracts::agents::AGENT_IDS.contains(&agent)
@@ -252,33 +250,6 @@ pub(crate) fn engine_request_blocking(
         }
     }
     Err(format!("引擎通信失败: {last_error}"))
-}
-
-fn request_timeout(request: &str) -> Duration {
-    match request_policy(request).map(|policy| policy.timeout) {
-        Some(TimeoutClass::Lookup) => AGENT_LOOKUP_TIMEOUT,
-        Some(TimeoutClass::Commit) => ENGINE_COMMIT_TIMEOUT,
-        Some(TimeoutClass::Normal) | None => ENGINE_TIMEOUT,
-    }
-}
-
-fn request_attempts(request: &str) -> u8 {
-    match request_policy(request).map(|policy| policy.retry) {
-        Some(RetryPolicy::SafeRead) => 2,
-        Some(RetryPolicy::Never) | None => 1,
-    }
-}
-
-fn request_policy(request: &str) -> Option<engine_methods::EngineMethodPolicy> {
-    serde_json::from_str::<Value>(request)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("method")
-                .and_then(Value::as_str)
-                .map(engine_methods::policy)
-        })
-        .flatten()
 }
 
 /// 引擎仓库根目录:优先 FERRY_REPO 环境变量,
@@ -858,8 +829,9 @@ mod tests {
         validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
         MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
-        RestoreDeleteOperationPlanInput, AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT,
+        RestoreDeleteOperationPlanInput,
     };
+    use crate::sidecar_policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_COMMIT_TIMEOUT};
     use std::collections::HashMap;
     use std::io::Cursor;
     use std::sync::{mpsc, Arc, Mutex};
