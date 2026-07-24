@@ -9,6 +9,7 @@ import {
   StopFillIcon,
   ToolIcon,
 } from "../../shared/ui/icons.jsx";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { sessionAttachmentKey } from "../browser/public.js";
 import { ModeMenu, ModelMenu, RoleMenu } from "./AgentMenus.jsx";
 
@@ -38,10 +39,11 @@ function MentionMenu({ query, sessions, onPick }) {
   );
 }
 
-export function AgentComposer({ ferry, text, setTextValue, taRef, mention, scanSessions,
+export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions,
   onPickMention, onKeyDown, onPaste, onSend, onSteer, running, mode, onOpenConfig,
   health, autoFocus, attachments, onRemoveAttachment }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   const [modeOpen, setModeOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -103,7 +105,7 @@ export function AgentComposer({ ferry, text, setTextValue, taRef, mention, scanS
           </div>
           <div style={{ position: "relative" }}>
             {roleOpen && (
-              <RoleMenu ferry={ferry} onClose={() => setRoleOpen(false)}
+              <RoleMenu onClose={() => setRoleOpen(false)}
                 onManage={() => onOpenConfig("roles")} />)}
             <button className="chat-ghost-btn" disabled={!!ferry.activeId}
               title={ferry.activeId ? t("askferry:role.snapshotLocked") : undefined}
@@ -117,7 +119,7 @@ export function AgentComposer({ ferry, text, setTextValue, taRef, mention, scanS
           </div>
           <div style={{ position: "relative" }}>
             {modelOpen && !needsSetup && (
-              <ModelMenu ferry={ferry} health={health} onManage={() => onOpenConfig("models")}
+              <ModelMenu health={health} onManage={() => onOpenConfig("models")}
                 onClose={() => setModelOpen(false)} />)}
             <button className="chat-ghost-btn"
               onClick={() => needsSetup ? onOpenConfig() : setModelOpen(v => !v)}>

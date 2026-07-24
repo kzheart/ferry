@@ -52,7 +52,6 @@ export function buildOverlayProps({
   searchOpen,
   setSearchOpen,
   paneConfig,
-  ferry,
   ferrySessions,
   libraryGroups,
   historyGroups,
@@ -136,7 +135,6 @@ export function buildOverlayProps({
       ferrySessions,
       historyGroups,
       libraryGroups,
-      ferry,
       selectHistory,
       setMultiSelection: setMultiIds,
       selectSession: select,
@@ -169,7 +167,6 @@ export function buildOverlayProps({
     agentRename: {
       session: agentRename,
       setSession: setAgentRename,
-      ferry,
     },
     tags: {
       selection: tagSelection,
@@ -184,7 +181,6 @@ export function buildOverlayProps({
       value: settings,
       onChange: setSettings,
       updater,
-      ferry,
       section: settingsSection,
       scanResult: scan,
       env,

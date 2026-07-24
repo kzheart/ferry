@@ -2,6 +2,7 @@
 import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { MoreDots, PinIcon, PlusIcon, Spinner, TrashIcon } from "../../shared/ui/icons.jsx";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 import { fmtTime } from "../browser/public.js";
@@ -81,8 +82,16 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, onOpen,
   );
 });
 
-export default function AgentSessionList({ sessions, activeId, onOpen, onNew, onPin, onDelete, onRename }) {
+// 打开/新建/置顶/删除都是 Ferry Runtime 上的动作,自己取;列表内容与重命名
+// 入口由主壳决定(前者经过筛选排序,后者要弹主壳的输入框),仍走 props。
+export default function AgentSessionList({ sessions, onRename }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
+  const { activeId, openSession: onOpen, newChat: onNew } = ferry;
+  const onPin = session =>
+    ferry.pin(session.session_id, !session.pinned).catch(ferry.reportError);
+  const onDelete = session =>
+    ferry.deleteSession(session.session_id).catch(ferry.reportError);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div className="hov-item" onClick={onNew}

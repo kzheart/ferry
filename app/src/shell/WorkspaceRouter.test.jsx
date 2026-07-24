@@ -4,6 +4,7 @@ import { test } from "vitest";
 import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 
+import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 
 const noop = () => {};
@@ -85,4 +86,19 @@ test("首次运行工作区把环境与扫描结果透传给 FirstRun", () => {
     />,
   );
   assert.notEqual(container.innerHTML, "");
+});
+
+test("对话工作区从 Context 取 Ferry Runtime 句柄,不再由路由层转交", () => {
+  const ferry = {
+    available: true, activeId: null, activeLog: null, sessions: [], roles: [],
+    models: [], mode: "auto", health: null, lastError: null,
+    selectedRoleId: "default", clearError: () => {},
+  };
+  render(
+    <FerryRuntimeProvider value={ferry}>
+      <WorkspaceRouter {...baseProps({ view: "askferry" })} />
+    </FerryRuntimeProvider>,
+  );
+
+  assert.ok(screen.getByText("askferry:empty.title"));
 });

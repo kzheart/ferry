@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { runtime } from "../../platform/desktop/client.js";
 import { ProviderIcon, Spinner } from "../../shared/ui/icons.jsx";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 
 // 从 auth.event 通知里挑出可打开的授权 URL / device code
@@ -22,7 +23,8 @@ const noticeBits = notice => {
   return bits;
 };
 
-function AuthFlow({ auth, ferry }) {
+function AuthFlow({ auth }) {
+  const ferry = useFerryRuntime();
   const { t } = useTranslation();
   const [values, setValues] = useState({});
   if (!auth) return null;
@@ -174,8 +176,9 @@ function AddMenu({ candidates, onPick, onClose }) {
   );
 }
 
-export default function Providers({ ferry }) {
+export default function Providers() {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   const [providers, setProviders] = useState(null);
   const [selId, setSelId] = useState(null);
   const [key, setKey] = useState("");
@@ -375,7 +378,7 @@ export default function Providers({ ferry }) {
                   {t(sel.credential_type === "oauth"
                     ? "settings:providers.logout" : "settings:providers.clearKey")}</button>)}
             </div>
-            <AuthFlow auth={ferry?.auth} ferry={ferry} />
+            <AuthFlow auth={ferry?.auth} />
 
             {notice && (
               <div style={{ fontSize: 11.5, color: "var(--acc-text)", background: "var(--acc-soft3)",

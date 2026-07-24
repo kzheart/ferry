@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readClipboardText } from "../../platform/desktop/client.js";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { groupAgentTimeline } from "./agentTimelineModel.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
@@ -13,9 +14,10 @@ import { AgentComposer } from "./AgentComposer.jsx";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";
 
 // ----- 主视图 -----
-export default function AskFerry({ ferry, scanSessions, onOpenConfig,
+export default function AskFerry({ scanSessions, onOpenConfig,
   attachments, onAttachmentsChange, onNavigate }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   const { activeId, activeLog, mode, health } = ferry;
   const activeSession = activeId
     ? ferry.sessions.find(session => session.session_id === activeId)
@@ -142,7 +144,7 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
     if (e.key === "Escape" && mention) setMention(null);
   };
 
-  const composerProps = { ferry, text, setTextValue: updateText, taRef, mention, scanSessions,
+  const composerProps = { text, setTextValue: updateText, taRef, mention, scanSessions,
     onPickMention: pickMention, onKeyDown, onPaste, onSend: doSend, onSteer: doSteer,
     running, mode, onOpenConfig, health, attachments, onRemoveAttachment: removeAttachment };
 
@@ -188,7 +190,7 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
                 g.kind === "trace"
                   ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
                   : <AgentChatItem key={`item-${i}`} item={g} sessionId={activeId}
-                      ferry={ferry} onNavigate={onNavigate} />))}
+                      onNavigate={onNavigate} />))}
             </div>
           </div>
 

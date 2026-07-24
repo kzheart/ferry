@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
+import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
@@ -347,6 +348,7 @@ export default function App() {
   });
 
   return (
+    <FerryRuntimeProvider value={ferry}>
     <div
       data-ferry-win="1"
       style={{
@@ -434,17 +436,6 @@ export default function App() {
               }}
               agent={{
                 sessions: ferrySessions,
-                activeId: ferry.activeId,
-                onOpen: ferry.openSession,
-                onNew: ferry.newChat,
-                onPin: (session) =>
-                  ferry
-                    .pin(session.session_id, !session.pinned)
-                    .catch(ferry.reportError),
-                onDelete: (session) =>
-                  ferry
-                    .deleteSession(session.session_id)
-                    .catch(ferry.reportError),
                 onRename: setAgentRenameFor,
               }}
             />
@@ -488,7 +479,6 @@ export default function App() {
           dirtyOps={dirtyOps}
           applying={applying}
           historySelection={histSel}
-          ferry={ferry}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
           onNavigate={peekEntity}
@@ -553,7 +543,6 @@ export default function App() {
           searchOpen,
           setSearchOpen,
           paneConfig: paneCfg,
-          ferry,
           ferrySessions,
           libraryGroups: libGroups,
           historyGroups: histGroups,
@@ -591,5 +580,6 @@ export default function App() {
         })}
       />
     </div>
+    </FerryRuntimeProvider>
   );
 }

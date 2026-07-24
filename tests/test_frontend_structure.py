@@ -18,7 +18,7 @@ LINE_LIMIT = 500
 KNOWN_OVERSIZED = {
     "modules/browser/SessionRound.jsx": 760,
     "modules/overview/Overview.jsx": 632,
-    "shell/AppController.jsx": 595,
+    "shell/AppController.jsx": 585,
 }
 
 HORIZONTAL_BUCKETS = {

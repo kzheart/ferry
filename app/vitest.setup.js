@@ -22,4 +22,10 @@ if (!globalThis.ResizeObserver) {
   };
 }
 
+// jsdom 不做布局,滚动相关的 API 一律缺失。组件里"滚到某处"是纯副作用,
+// 空实现不影响任何断言,却能让调用它的组件正常渲染。
+for (const method of ["scrollTo", "scrollBy", "scrollIntoView"]) {
+  if (!Element.prototype[method]) Element.prototype[method] = () => {};
+}
+
 afterEach(cleanup);

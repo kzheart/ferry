@@ -3,11 +3,29 @@
 // 下面的用例锁的是这些推导,不是渲染骨架(骨架在 AppOverlays.test.jsx)。
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
 
+import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
 
 const noop = () => {};
+
+// 控制器直接读 Ferry Runtime 句柄(打开会话、重命名会话),所以渲染必须带上
+// Provider。每个用例按需替换句柄上的某个方法来观察调用。
+let ferry = null;
+
+function render(ui) {
+  const wrap = node => <FerryRuntimeProvider value={ferry}>{node}</FerryRuntimeProvider>;
+  const result = rtlRender(wrap(ui));
+  return { ...result, rerender: node => result.rerender(wrap(node)) };
+}
+
+function stubFerry(overrides = {}) {
+  ferry = { openSession: noop, rename: async () => {}, reportError: noop, ...overrides };
+  return ferry;
+}
+
+stubFerry();
 
 // 与 workspaceOverlayProps.buildOverlayProps 的输出同形。
 function baseProps(overrides = {}) {
@@ -20,7 +38,6 @@ function baseProps(overrides = {}) {
     search: {
       open: false, pane: null, view: "library",
       ferrySessions: [], historyGroups: [], libraryGroups: [],
-      ferry: { openSession: noop },
       selectHistory: noop, setMultiSelection: noop, selectSession: noop, setOpen: noop,
     },
     contextMenu: { value: null, items: null, setValue: noop },
@@ -32,7 +49,7 @@ function baseProps(overrides = {}) {
       selectedHistoryId: null, selectHistory: noop,
     },
     rename: { session: null, setSession: noop, metaFor: () => ({}), updateMetadata: noop },
-    agentRename: { session: null, setSession: noop, ferry: { rename: async () => {}, reportError: noop } },
+    agentRename: { session: null, setSession: noop },
     tags: { selection: null, setSelection: noop, metaFor: () => ({}), updateMetadata: noop },
     toast: { value: null, setValue: noop },
     railTip: { value: null, railOnly: false },
@@ -100,6 +117,7 @@ test("历史视图的搜索结果展平分组并拼出迁移方向", () => {
 
 test("Ask Ferry 视图的无标题会话回落到占位文案", () => {
   const opened = [];
+  stubFerry({ openSession: id => opened.push(id) });
   render(
     <AppOverlayController
       {...baseProps({
@@ -109,7 +127,6 @@ test("Ask Ferry 视图的无标题会话回落到占位文案", () => {
           pane: searchPane,
           view: "askferry",
           ferrySessions: [{ session_id: "f1", title: "", model_id: "opus" }],
-          ferry: { openSession: id => opened.push(id) },
         },
       })}
     />,

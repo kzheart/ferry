@@ -21,7 +21,6 @@ export function WorkspaceRouter({
   dirtyOps,
   applying,
   historySelection,
-  ferry,
   agentAttachments,
   onAgentAttachmentsChange,
   onNavigate,
@@ -93,7 +92,6 @@ export function WorkspaceRouter({
       )}
       {view === "askferry" && (
         <AskFerry
-          ferry={ferry}
           scanSessions={sessions}
           attachments={agentAttachments}
           onAttachmentsChange={onAgentAttachmentsChange}

@@ -1,3 +1,4 @@
+import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
 import { AppOverlays } from "./AppOverlays.jsx";
 
 export function AppOverlayController({
@@ -18,6 +19,7 @@ export function AppOverlayController({
   filters,
   guide,
 }) {
+  const ferry = useFerryRuntime();
   const searchResults = (
     search.view === "askferry"
       ? search.ferrySessions.map((session) => ({
@@ -25,7 +27,7 @@ export function AppOverlayController({
           title: session.title || t("askferry:chat.untitled"),
           tool: null,
           meta: session.model_id,
-          onClick: () => search.ferry.openSession(session.session_id),
+          onClick: () => ferry.openSession(session.session_id),
         }))
       : search.view === "history"
         ? search.historyGroups
@@ -154,9 +156,7 @@ export function AppOverlayController({
           const session = agentRename.session;
           agentRename.setSession(null);
           if (title) {
-            agentRename.ferry
-              .rename(session.session_id, title)
-              .catch(agentRename.ferry.reportError);
+            ferry.rename(session.session_id, title).catch(ferry.reportError);
           }
         },
       }}
@@ -194,7 +194,6 @@ export function AppOverlayController({
         value: settings.value,
         onChange: settings.onChange,
         updater: settings.updater,
-        ferry: settings.ferry,
         initialSection: settings.section,
         scan: settings.scanResult,
         env: settings.env,

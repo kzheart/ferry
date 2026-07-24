@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { runtime } from "../../platform/desktop/client.js";
 import { ProviderIcon, Spinner } from "../../shared/ui/icons.jsx";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { Check, inputStyle } from "./parts.jsx";
 
-export default function Models({ ferry, onOpenProviders }) {
+export default function Models({ onOpenProviders }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   const [catalog, setCatalog] = useState(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
