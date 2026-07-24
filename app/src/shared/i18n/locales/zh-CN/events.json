@@ -1,6 +1,6 @@
 {
   "migration": {
-    "reasoning_metadata_dropped": "思考过程降级为纯文本（丢弃 {{metadata_kind_label}}）",
+    "reasoning_metadata_dropped": "思考过程降级为纯文本（丢弃格式专属元数据）",
     "reasoning_dropped": "思考过程无可见正文，已丢弃",
     "unknown_block_dropped": "未知内容块类型丢弃: {{kind}}",
     "apply_patch_unparsed": "apply_patch 无法解析出文件变更，已降级",
@@ -9,8 +9,7 @@
     "content_dropped": "{{kind}} 内容无法迁移，已丢弃",
     "fork_parent_fallback": "分支父节点无法精确映射，回退到主对话末尾",
     "truncated": "按迁移范围截断: 丢弃第 {{max_turn}} 轮之后的 {{dropped}} 条消息",
-    "children_not_migrated": "截断范围外的 {{count}} 个子会话未迁移",
-    "metadata_kind_default": "元数据"
+    "children_not_migrated": "截断范围外的 {{count}} 个子会话未迁移"
   },
   "session": {
     "orphan_tool_result": "孤儿工具结果: {{call_id}}",
@@ -42,6 +41,5 @@
     "shadow_session": "影子会话",
     "shadow_copy": "影子副本",
     "temp_home": "临时环境"
-  },
-  "unknown_event_code": "{{code}}"
+  }
 }

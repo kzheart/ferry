@@ -53,3 +53,12 @@ def test_event_routing_uses_generated_policy():
     assert "EventSource::Host" in rust
     assert "isFerryEventType" in frontend
     assert "type: RuntimeEventType" in runtime_messages
+
+
+def test_frontend_domain_events_have_one_structured_render_path():
+    renderer = (
+        ROOT / "app/src/shared/contracts/events.js"
+    ).read_text()
+    assert 'typeof event === "string"' not in renderer
+    assert "switch (" not in renderer
+    assert "events:${event.code}" in renderer
