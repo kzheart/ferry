@@ -45,7 +45,7 @@ SESSION_REF_OUTPUTS = {
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
 }
 OPERATIONS_OUTPUTS = {
-    ROOT / "app/src/api/contract/generated/operations.js": "frontend",
+    ROOT / "app/src/api/contract/generated/operations.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
     ROOT / "engine/contracts/operations.py": "python",
     ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
@@ -574,14 +574,17 @@ def operations_frontend(contract: dict[str, object]) -> str:
 
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const OPERATION_PLAN_ID_PREFIX = {json.dumps(contract['plan_id_prefix'])};",
-        f"export const OPERATION_KINDS = Object.freeze({array(contract['kinds'])});",
+        f'export const OPERATION_PLAN_ID_PREFIX = "{contract["plan_id_prefix"]}" as const;',
+        f"export const OPERATION_KINDS = {array(contract['kinds'])} as const;",
         "export const EDIT_OPERATION_KINDS = "
-        f"Object.freeze({array(contract['edit_operations'])});",
-        f"export const OPERATION_STATUSES = Object.freeze({array(contract['statuses'])});",
+        f"{array(contract['edit_operations'])} as const;",
+        f"export const OPERATION_STATUSES = {array(contract['statuses'])} as const;",
         "export const OPERATION_TERMINAL_STATUSES = "
-        f"Object.freeze({array(contract['terminal_statuses'])});",
-        f"export const OPERATION_SUCCESS_STATUS = {json.dumps(contract['success_status'])};",
+        f"{array(contract['terminal_statuses'])} as const;",
+        f'export const OPERATION_SUCCESS_STATUS = "{contract["success_status"]}" as const;',
+        "export type OperationKind = (typeof OPERATION_KINDS)[number];",
+        "export type EditOperationKind = (typeof EDIT_OPERATION_KINDS)[number];",
+        "export type OperationStatus = (typeof OPERATION_STATUSES)[number];",
         "",
     ))
 

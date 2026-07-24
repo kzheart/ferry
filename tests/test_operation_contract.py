@@ -25,7 +25,7 @@ def test_operation_contract_is_generated_for_every_runtime():
     assert OPERATION_SUCCESS_STATUS in OPERATION_TERMINAL_STATUSES
 
     for path in (
-        "app/src/api/contract/generated/operations.js",
+        "app/src/api/contract/generated/operations.ts",
         "app/src-tauri/src/contracts/operations.rs",
         "engine/contracts/operations.py",
         "ferry-runtime/src/server/generated/operations.ts",
@@ -35,7 +35,7 @@ def test_operation_contract_is_generated_for_every_runtime():
 
 def test_operation_consumers_use_generated_status_and_identity_contract():
     frontend = (
-        ROOT / "app/src/features/operations/operationController.js"
+        ROOT / "app/src/features/operations/operationController.ts"
     ).read_text()
     rust_request = (
         ROOT / "app/src-tauri/src/operations/request.rs"

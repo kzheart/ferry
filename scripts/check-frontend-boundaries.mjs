@@ -18,7 +18,9 @@ async function sourceFiles(directory) {
     if (entry.isDirectory()) return sourceFiles(path);
     return [path];
   }));
-  return nested.flat().filter(path => [".js", ".jsx"].includes(extname(path)));
+  return nested
+    .flat()
+    .filter(path => [".js", ".jsx", ".ts", ".tsx"].includes(extname(path)));
 }
 
 async function checkDirectory(directory, check) {
