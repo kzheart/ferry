@@ -341,46 +341,6 @@ def session_undelete(snapshot: str) -> dict:
 
 # ---------- 迁移历史 / 快照 ----------
 
-# ---------- 会话编辑(可扩展原生后端) ----------
-
-def _finish_mutation(tool, impl, result, doc, snapshot, probe):
-    if not probe:
-        return result
-    rep = _probe_edited(tool, impl, doc, result)
-    result["probe"] = rep
-    if rep["status"] == "passed":
-        return result
-    if snapshot:
-        impl.restore_snapshot(snapshot, doc)
-        result.update(ok=False, error="隔离探针未通过,已自动还原快照")
-    return result
-
-
-def edit_capabilities(tool: str) -> dict:
-    plugin = adapter(tool)
-    editor = plugin.editor
-    capabilities = editor.capabilities()
-    operation_modes = {
-        operation: ["inplace"]
-        for operation, modes in capabilities.get("operation_modes", {}).items()
-        if "inplace" in modes
-    }
-    return {
-        "tool": tool,
-        "operations": sorted(operation_modes),
-        "inplace": bool(operation_modes),
-        "operation_modes": operation_modes,
-    }
-
-
-def _probe_edited(tool: str, impl, doc, result: dict) -> dict:
-    """各后端都只探测临时影子，不让 probe 消息污染交付会话。"""
-    try:
-        return adapter(tool).verifier.probe_edited(impl, doc, result)
-    except probe_mod.ProbeTimeout as error:
-        return probe_mod.timeout_report(tool, error)
-
-
 # ---------- 环境 / 模型列表 ----------
 
 
