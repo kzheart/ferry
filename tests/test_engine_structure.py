@@ -94,6 +94,11 @@ def test_session_reference_index_is_isolated_from_query_catalog():
     assert (sessions / "agent_read.py").is_file()
     assert "def session_read" in (sessions / "agent_read.py").read_text()
     assert "def session_read" not in catalog
+    assert "def preview_edit" not in catalog
+    assert "def resolve_edit_ops" not in catalog
+    assert "def preview(self, record" in (
+        ENGINE / "operations/edit.py"
+    ).read_text()
     safety = (sessions / "safety.py").read_text()
     assert "def redact(" in safety
     assert "def validate_json_shape(" in safety
