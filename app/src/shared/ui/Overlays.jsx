@@ -6,8 +6,13 @@ import { TOOL_NAME, TOOLS } from "../contracts/tools.js";
 import { STATUS_CODE } from "../../modules/migration/migrationModel.js";
 import { ACCENT } from "./toolDisplay.js";
 import { CloseIcon, SearchIcon, Spinner, ToolIcon } from "./icons.jsx";
-import { CheckSquare, RadioDot } from "./primitives.jsx";
 import { ConfirmBox } from "./ConfirmBox.jsx";
+import {
+  FilterCheckRow,
+  FilterPopover,
+  FilterRadioRow,
+  FilterSectionTitle,
+} from "./FilterPopover.jsx";
 
 // ---------- 会话搜索命令面板(⌘K 风格居中浮层) ----------
 export function SearchPalette({ placeholder, query, onQuery, results,
@@ -245,88 +250,26 @@ export function Toast({ toast, onDismiss }) {
   );
 }
 
-// ---------- 筛选弹层(共用外壳) ----------
-function PopShell({ anchor, onClose, onClear, children, t }) {
-  // 锚定在筛选按钮下方、右缘对齐;无锚点时退回固定位置
-  const W = 272;
-  const left = anchor
-    ? Math.max(8, Math.min(anchor.right - W, window.innerWidth - W - 8))
-    : 66;
-  const top = anchor ? anchor.bottom + 6 : 190;
-  const maxH = Math.max(200, Math.min(430, window.innerHeight - top - 70));
-  return (
-    <>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 35 }} />
-      <div style={{ position: "absolute", left, top, width: W, zIndex: 36,
-        background: "var(--bg)", borderRadius: 10,
-        boxShadow: "var(--shadow-menu)",
-        overflow: "hidden" }}>
-        <div className="fscroll" style={{ maxHeight: maxH, overflowY: "auto", padding: "12px 13px" }}>
-          {children}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", padding: "9px 13px",
-          borderTop: "1px solid var(--line5)" }}>
-          <a onClick={onClear} style={{ fontSize: 11, color: "var(--tx3b)" }}>{t("overlays:filter.clear")}</a>
-          <span style={{ flex: 1 }} />
-          <button className="fbtn-primary" style={{ height: 28, padding: "0 14px", fontSize: 12 }}
-            onClick={onClose}>{t("overlays:filter.done")}</button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-const SectionTitle = ({ children, first }) => (
-  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".03em",
-    margin: first ? "0 0 6px" : "12px 0 6px" }}>{children}</div>
-);
-
-function CheckRow({ on, onClick, icon, label, extra }) {
-  return (
-    <div className="hov-item" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 6,
-        cursor: "default" }}>
-      <CheckSquare on={on} />
-      {icon}
-      <span style={{ fontSize: 12, color: "var(--tx2)", flex: 1, whiteSpace: "nowrap",
-        overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-      {extra && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{extra}</span>}
-    </div>
-  );
-}
-
-function RadioRow({ on, onClick, label }) {
-  return (
-    <div className="hov-item" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 7px", borderRadius: 6,
-        cursor: "default" }}>
-      <RadioDot on={on} />
-      <span style={{ fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap", overflow: "hidden",
-        textOverflow: "ellipsis" }}>{label}</span>
-    </div>
-  );
-}
-
 // 会话库筛选:来源 / 时间 / 目录
 export function LibraryFilter({ f, setF, counts, dirs, tags = [], anchor, onClose, onClear }) {
   const { t } = useTranslation();
   const times = [["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
     ["last7", t("overlays:filter.last7")], ["last30", t("overlays:filter.last30")]];
   return (
-    <PopShell anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
-      <SectionTitle first>{t("overlays:filter.source")}</SectionTitle>
+    <FilterPopover anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
+      <FilterSectionTitle first>{t("overlays:filter.source")}</FilterSectionTitle>
       {TOOLS.map(t2 => (
-        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
+        <FilterCheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
           label={TOOL_NAME[t2]} extra={counts[t2] || 0}
           onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
             ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
-      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
+      <FilterSectionTitle>{t("overlays:filter.timeRange")}</FilterSectionTitle>
       {times.map(([k, l]) => (
-        <RadioRow key={k} on={f.time === k} label={l}
+        <FilterRadioRow key={k} on={f.time === k} label={l}
           onClick={() => setF(v => ({ ...v, time: k }))} />
       ))}
-      <SectionTitle>{t("overlays:filter.projectDir")}</SectionTitle>
+      <FilterSectionTitle>{t("overlays:filter.projectDir")}</FilterSectionTitle>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {dirs.map(d => {
           const on = f.dir === d;
@@ -340,7 +283,7 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], anchor, onClos
         {dirs.length === 0 && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{t("overlays:filter.noDirs")}</span>}
       </div>
       {tags.length > 0 && (<>
-        <SectionTitle>{t("overlays:filter.tags")}</SectionTitle>
+        <FilterSectionTitle>{t("overlays:filter.tags")}</FilterSectionTitle>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
           {tags.map(t2 => {
             const on = f.tag === t2;
@@ -354,12 +297,12 @@ export function LibraryFilter({ f, setF, counts, dirs, tags = [], anchor, onClos
           })}
         </div>
       </>)}
-      <SectionTitle>{t("overlays:filter.content")}</SectionTitle>
-      <CheckRow on={f.mig} label={t("overlays:filter.onlyMigrated")}
+      <FilterSectionTitle>{t("overlays:filter.content")}</FilterSectionTitle>
+      <FilterCheckRow on={f.mig} label={t("overlays:filter.onlyMigrated")}
         onClick={() => setF(v => ({ ...v, mig: !v.mig }))} />
-      <CheckRow on={f.sub} label={t("overlays:filter.onlySubSessions")}
+      <FilterCheckRow on={f.sub} label={t("overlays:filter.onlySubSessions")}
         onClick={() => setF(v => ({ ...v, sub: !v.sub }))} />
-    </PopShell>
+    </FilterPopover>
   );
 }
 
@@ -372,33 +315,33 @@ export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
     [STATUS_CODE.rolledBack, t(`common:${STATUS_CODE.rolledBack}`)],
   ];
   return (
-    <PopShell anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
-      <SectionTitle first>{t("overlays:filter.sourceTools")}</SectionTitle>
+    <FilterPopover anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
+      <FilterSectionTitle first>{t("overlays:filter.sourceTools")}</FilterSectionTitle>
       {TOOLS.map(t2 => (
-        <CheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
+        <FilterCheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
           label={TOOL_NAME[t2]}
           onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
             ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
       ))}
-      <SectionTitle>{t("overlays:filter.targetTool")}</SectionTitle>
+      <FilterSectionTitle>{t("overlays:filter.targetTool")}</FilterSectionTitle>
       {[["all", t("overlays:filter.allTargets")], ...TOOLS.map(t2 => [t2, TOOL_NAME[t2]])].map(([k, l]) => (
-        <RadioRow key={k} on={f.target === k} label={l}
+        <FilterRadioRow key={k} on={f.target === k} label={l}
           onClick={() => setF(v => ({ ...v, target: k }))} />
       ))}
-      <SectionTitle>{t("overlays:filter.status")}</SectionTitle>
-      <RadioRow key="all" on={f.status === "all"} label={t("common:status.all")}
+      <FilterSectionTitle>{t("overlays:filter.status")}</FilterSectionTitle>
+      <FilterRadioRow key="all" on={f.status === "all"} label={t("common:status.all")}
         onClick={() => setF(v => ({ ...v, status: "all" }))} />
       {statusOptions.map(([k, l]) => (
-        <RadioRow key={k} on={f.status === k} label={l}
+        <FilterRadioRow key={k} on={f.status === k} label={l}
           onClick={() => setF(v => ({ ...v, status: k }))} />
       ))}
-      <SectionTitle>{t("overlays:filter.timeRange")}</SectionTitle>
+      <FilterSectionTitle>{t("overlays:filter.timeRange")}</FilterSectionTitle>
       {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
         ["yesterday", t("overlays:filter.yesterday")], ["earlier", t("overlays:filter.earlier")]].map(([k, l]) => (
-        <RadioRow key={k} on={f.time === k} label={l}
+        <FilterRadioRow key={k} on={f.time === k} label={l}
           onClick={() => setF(v => ({ ...v, time: k }))} />
       ))}
-    </PopShell>
+    </FilterPopover>
   );
 }
 
