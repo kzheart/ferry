@@ -597,10 +597,11 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话标识在元数据计划生成后已变化，请重新计划"
             )
-        result = services.session_meta_compare_and_set(
+        result = session_meta.compare_and_set_entry(
             params["tool"], params["session_id"],
             params["metadata_before"],
             params["patch"],
+            self._ports,
         )
         return {"metadata": result}
 
@@ -618,9 +619,8 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在删除计划生成后已变化，请重新计划"
             )
-        result = services.session_delete(
-            params["tool"], record.canonical_ref,
-        )
+        plugin = self._ports.adapter(params["tool"])
+        result = plugin.lifecycle.delete(plugin, record.canonical_ref)
         snapshot = result.pop("snapshot", None)
         if result.get("undoable") is True:
             if not isinstance(snapshot, str) or not snapshot:
