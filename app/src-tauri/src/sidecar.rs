@@ -1,4 +1,4 @@
-use crate::contracts::engine_methods;
+use crate::contracts::engine_methods::{self, Exposure};
 use crate::sidecar_policy::{request_attempts, request_timeout};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -323,19 +323,32 @@ pub(crate) fn warm_up(resource_dir: PathBuf) {
 #[tauri::command]
 pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result<String, String> {
     use tauri::Manager;
-    validate_public_engine_request(&request)?;
+    validate_engine_request_exposure(&request, Exposure::Public)?;
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
 }
 
-fn validate_public_engine_request(request: &str) -> Result<(), String> {
+#[tauri::command]
+pub(crate) async fn trusted_engine_rpc(
+    app: tauri::AppHandle,
+    request: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+    validate_engine_request_exposure(&request, Exposure::TrustedUi)?;
+    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn validate_engine_request_exposure(request: &str, expected: Exposure) -> Result<(), String> {
     let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
     let method = value.get("method").and_then(Value::as_str).unwrap_or("");
-    if !engine_methods::policy(method).is_some_and(|policy| policy.is_public) {
-        return Err("该 Engine 方法不允许从通用前端 RPC 调用".to_owned());
+    if !engine_methods::policy(method).is_some_and(|policy| policy.exposure == expected) {
+        return Err("该 Engine 方法不允许从当前前端通道调用".to_owned());
     }
     Ok(())
 }
@@ -344,8 +357,9 @@ fn validate_public_engine_request(request: &str) -> Result<(), String> {
 mod tests {
     use super::{
         read_engine_output, request_attempts, request_timeout, stamp_engine_request,
-        validate_engine_response_id, validate_public_engine_request,
+        validate_engine_request_exposure, validate_engine_response_id,
     };
+    use crate::contracts::engine_methods::Exposure;
     use crate::operation_commands::validate_operation_plan_input;
     use crate::operation_input::{
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
@@ -412,16 +426,40 @@ mod tests {
 
     #[test]
     fn sensitive_agent_methods_are_not_generic_rpc_methods() {
-        assert!(validate_public_engine_request(r#"{"method":"operation.apply"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"operation.plan"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"operation.status"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"operation.cancel"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"edit_apply"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"edit_preview"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"migrate"}"#).is_err());
-        assert!(validate_public_engine_request(r#"{"method":"scan"}"#).is_ok());
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"operation.apply"}"#,
+            Exposure::Public,
+        )
+        .is_err());
+        assert!(
+            validate_engine_request_exposure(r#"{"method":"scan"}"#, Exposure::Public,).is_ok()
+        );
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"organization_proposals_list"}"#,
+            Exposure::Public,
+        )
+        .is_err());
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"organization_proposals_list"}"#,
+            Exposure::TrustedUi,
+        )
+        .is_ok());
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"session_backbone"}"#,
+            Exposure::TrustedUi,
+        )
+        .is_err());
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"agent_session_read"}"#,
+            Exposure::Public,
+        )
+        .is_err());
         // 删除迁移记录只动 Ferry 自己的历史文件,不写目标工具的会话
-        assert!(validate_public_engine_request(r#"{"method":"history_delete"}"#).is_ok());
+        assert!(validate_engine_request_exposure(
+            r#"{"method":"history_delete"}"#,
+            Exposure::Public,
+        )
+        .is_ok());
     }
 
     #[test]

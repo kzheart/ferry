@@ -19,6 +19,8 @@ async function callEngine(command, method, params) {
 }
 
 export const rpc = (method, params) => callEngine("engine_rpc", method, params);
+export const trustedRpc = (method, params) =>
+  callEngine("trusted_engine_rpc", method, params);
 
 async function nativeOperation(command, args) {
   let raw;
