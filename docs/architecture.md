@@ -80,7 +80,9 @@ second copy of the business parameters.
 
 Owns providers, authentication, model selection, roles, conversations, workflow
 runs, task graphs, Ferry agent execution, tool planning, bounded scheduling,
-result artifacts, and synthesis.
+result artifacts, and synthesis. Its Node package identity is `@ferry/runtime`;
+the current `agent-runtime/` directory remains a build-layout detail while the
+sidecar packaging path is being kept stable across macOS and Windows.
 
 Ferry Runtime cannot write an external session directly. A requested mutation
 travels through the Rust approval gateway to a Session Engine operation.
