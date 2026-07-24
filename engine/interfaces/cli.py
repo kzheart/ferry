@@ -5,7 +5,8 @@ import json
 import sys
 import threading
 
-from ..application import services
+from ..application.engine import EngineApplication
+from ..application.ports import current
 from ..contracts.engine_methods import PARALLEL_READ_METHOD_NAMES
 from .rpc import rpc
 
@@ -85,18 +86,19 @@ def main(argv=None):
         # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应
         serve()
         return
+    application = EngineApplication(current())
     if cmd == "health":
-        result = services.health()
+        result = application.health()
     elif cmd in ("version", "--version"):
-        result = services.version()
+        result = application.version()
     elif cmd == "scan":
-        result = services.scan()
+        result = application.scan()
     elif cmd == "show":
-        result = services.show(rest[0], rest[1])
+        result = application.show_session(rest[0], rest[1])
     elif cmd == "history":
-        result = services.history()
+        result = application.migration_history()
     elif cmd == "env":
-        result = services.env()
+        result = application.environment()
     else:
         sys.exit(f"未知命令: {cmd}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
