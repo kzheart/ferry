@@ -1,9 +1,9 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal, revealPath, rpc,
-  operationApplyAndWait, operationPlan,
-  writeClipboardText } from "../api/transport/rpc.js";
+import { openTerminal, revealPath, rpc, writeClipboardText }
+  from "../api/transport/rpc.js";
+import { operations } from "../features/operations/operations.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../api/contract/tools.js";
 import { fmtTime, operationRef, repoOf, sessionRef } from "../features/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
@@ -180,13 +180,13 @@ export default function App() {
   const metaFor = session => metaMap[sessionIdentity(session)] || {};
   const setMetaFor = async (session, patch) => {
     try {
-      const plan = await operationPlan({
+      const plan = await operations.plan({
         kind: "metadata",
         tool: session.tool,
         ref: operationRef(session),
         patch,
       });
-      const applied = await operationApplyAndWait(plan.plan_id);
+      const applied = await operations.apply(plan);
       const entry = applied.result.metadata;
       setMetaMap(m => {
         const next = { ...m };
@@ -244,11 +244,11 @@ export default function App() {
   const undoDelete = async recoveryId => {
     setToast({ kind: "run", title: t("app:toast.restoring"), desc: t("app:toast.restoringDesc") });
     try {
-      const plan = await operationPlan({
+      const plan = await operations.plan({
         kind: "restore-delete",
         recovery_id: recoveryId,
       });
-      await operationApplyAndWait(plan.plan_id);
+      await operations.apply(plan);
       doScan();
       setToast({ kind: "ok", title: t("app:toast.restoreDone"), desc: t("app:toast.restoreDoneDesc") });
     } catch (e) {
@@ -259,12 +259,12 @@ export default function App() {
     setDelConfirm(null);
     setToast({ kind: "run", title: t("app:toast.deleting"), desc: t("app:toast.deletingDesc") });
     try {
-      const plan = await operationPlan({
+      const plan = await operations.plan({
         kind: "delete",
         tool: s.tool,
         ref: operationRef(s),
       });
-      const r = (await operationApplyAndWait(plan.plan_id)).result;
+      const r = (await operations.apply(plan)).result;
       const key = sessionIdentity(s);
       discardCachedDetail(s);
       if (selId === key) clearSelection();
@@ -289,12 +289,12 @@ export default function App() {
       setToast({ kind: "run", title: t("app:toast.batchDeleting"),
         desc: t("app:toast.batchProgress", { done: done + fail, total: targets.length }) });
       try {
-        const plan = await operationPlan({
+        const plan = await operations.plan({
           kind: "delete",
           tool: s.tool,
           ref: operationRef(s),
         });
-        await operationApplyAndWait(plan.plan_id);
+        await operations.apply(plan);
         discardCachedDetail(s);
         done++;
       } catch { fail++; }
