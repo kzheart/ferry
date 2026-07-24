@@ -56,7 +56,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             app/package-lock.json
-            agent-runtime/package-lock.json
+            ferry-runtime/package-lock.json
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           target: aarch64-apple-darwin
@@ -68,12 +68,12 @@ jobs:
       - run: npm ci
         working-directory: app
       - run: npm ci
-        working-directory: agent-runtime
+        working-directory: ferry-runtime
       - run: npm run build:sea -- "$BUILD_TARGET"
         shell: bash
         env:
           BUILD_TARGET: aarch64-apple-darwin
-        working-directory: agent-runtime
+        working-directory: ferry-runtime
       - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
         shell: bash
         env:

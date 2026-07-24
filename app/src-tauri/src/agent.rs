@@ -23,19 +23,19 @@ static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static AUTO_SESSIONS: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
 
 #[derive(Clone)]
-struct AgentClient {
+struct RuntimeClient {
     generation: u64,
     transport: JsonlProcessClient,
 }
 
-struct AgentProcess {
+struct RuntimeProcess {
     generation: u64,
     child: Child,
-    client: AgentClient,
+    client: RuntimeClient,
 }
 
-static AGENT: OnceLock<Mutex<Option<AgentProcess>>> = OnceLock::new();
-static AGENT_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static RUNTIME_PROCESS: OnceLock<Mutex<Option<RuntimeProcess>>> = OnceLock::new();
+static RUNTIME_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 fn next_id(prefix: &str) -> String {
     format!(
@@ -45,15 +45,15 @@ fn next_id(prefix: &str) -> String {
     )
 }
 
-impl Drop for AgentProcess {
+impl Drop for RuntimeProcess {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
 
-fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProcess, String> {
-    let mut command = agent_binary_command(resource_dir)?;
+fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeProcess, String> {
+    let mut command = runtime_binary_command(resource_dir)?;
     command.env_clear();
     for name in [
         "PATH",
@@ -82,7 +82,7 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
         .map_err(|error| error.to_string())?
         .join(".ferry");
     std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
-    command.env("FERRY_AGENT_DATA_DIR", data_dir);
+    command.env("FERRY_RUNTIME_DATA_DIR", data_dir);
     crate::platform::configure_background_command(&mut command);
     command
         .stdin(Stdio::piped())
@@ -90,16 +90,16 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
         .stderr(Stdio::null());
     let mut child = command
         .spawn()
-        .map_err(|error| format!("启动 Agent 失败: {error}"))?;
-    let stdin = child.stdin.take().ok_or("Agent stdin 不可用")?;
-    let stdout = child.stdout.take().ok_or("Agent stdout 不可用")?;
+        .map_err(|error| format!("启动 Ferry Runtime 失败: {error}"))?;
+    let stdin = child.stdin.take().ok_or("Ferry Runtime stdin 不可用")?;
+    let stdout = child.stdout.take().ok_or("Ferry Runtime stdout 不可用")?;
     let transport = JsonlProcessClient::new("Ferry Runtime", stdin);
     let reader_stdin = transport.writer();
     let reader_pending = transport.pending();
     let reader_app = app.clone();
     let reader_resource = resource_dir.to_owned();
     std::thread::spawn(move || {
-        read_agent_output(
+        read_runtime_output(
             reader_app,
             reader_resource,
             BufReader::new(stdout),
@@ -107,18 +107,18 @@ fn spawn_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentProce
             reader_pending,
         )
     });
-    let generation = AGENT_GENERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    Ok(AgentProcess {
+    let generation = RUNTIME_GENERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    Ok(RuntimeProcess {
         generation,
         child,
-        client: AgentClient {
+        client: RuntimeClient {
             generation,
             transport,
         },
     })
 }
 
-fn read_agent_output(
+fn read_runtime_output(
     app: tauri::AppHandle,
     resource_dir: PathBuf,
     mut stdout: impl BufRead,
@@ -154,7 +154,7 @@ fn read_agent_output(
                     forget_auto_policy(session_id);
                 }
             }
-            let _ = app.emit("ferry-agent-event", &value);
+            let _ = app.emit("ferry-runtime-event", &value);
             if value.get("type").and_then(Value::as_str) == Some("tool.request") {
                 let worker_app = app.clone();
                 let worker_resource = resource_dir.clone();
@@ -173,7 +173,7 @@ fn read_agent_output(
         "Ferry Runtime 进程已退出".to_owned(),
     ));
     let _ = app.emit(
-        "ferry-agent-event",
+        "ferry-runtime-event",
         json!({"protocol": FERRY_IPC_PROTOCOL, "type": "runtime.disconnected"}),
     );
 }
@@ -217,7 +217,7 @@ fn complete_tool_request(
                 match apply_routed_operation(resource_dir, &operation) {
                     Ok(result) => {
                         let _ = app.emit(
-                            "ferry-agent-event",
+                            "ferry-runtime-event",
                             json!({
                                 "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
@@ -232,7 +232,7 @@ fn complete_tool_request(
                     }
                     Err(code) => {
                         let _ = app.emit(
-                            "ferry-agent-event",
+                            "ferry-runtime-event",
                             json!({
                                 "protocol": FERRY_IPC_PROTOCOL,
                                 "session_id": session_id,
@@ -247,7 +247,7 @@ fn complete_tool_request(
                 }
             } else {
                 let _ = app.emit(
-                    "ferry-agent-event",
+                    "ferry-runtime-event",
                     json!({
                         "protocol": FERRY_IPC_PROTOCOL,
                         "session_id": session_id,
@@ -492,7 +492,7 @@ fn allows_auto_apply(prompt_auto: bool, role_policy: &str) -> bool {
     prompt_auto && role_policy == "auto"
 }
 
-fn request_agent(
+fn request_runtime(
     app: &tauri::AppHandle,
     resource_dir: &Path,
     request: &str,
@@ -500,7 +500,7 @@ fn request_agent(
     let id = serde_json::from_str::<Value>(request)
         .ok()
         .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
-        .ok_or("Agent 命令缺少 id")?;
+        .ok_or("Runtime 命令缺少 id")?;
     let timeout = serde_json::from_str::<Value>(request)
         .ok()
         .and_then(|value| {
@@ -512,20 +512,20 @@ fn request_agent(
         .filter(|method| method == "organization.start")
         .map(|_| ORGANIZATION_TIMEOUT)
         .unwrap_or(COMMAND_TIMEOUT);
-    let client = ensure_agent(app, resource_dir)?;
+    let client = ensure_runtime(app, resource_dir)?;
     let result = client.transport.request(&id, request, timeout);
     if result
         .as_ref()
         .is_err_and(ProcessError::invalidates_process)
     {
-        invalidate_agent(client.generation);
+        invalidate_runtime(client.generation);
     }
     result.map_err(|error| error.to_string())
 }
 
-fn ensure_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentClient, String> {
-    let slot = AGENT.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().map_err(|_| "Agent 状态锁损坏".to_owned())?;
+fn ensure_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeClient, String> {
+    let slot = RUNTIME_PROCESS.get_or_init(|| Mutex::new(None));
+    let mut guard = slot.lock().map_err(|_| "Runtime 状态锁损坏".to_owned())?;
     let exited = guard
         .as_mut()
         .and_then(|process| process.child.try_wait().ok().flatten())
@@ -534,7 +534,7 @@ fn ensure_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentClie
         *guard = None;
     }
     if guard.is_none() {
-        let candidate = spawn_agent(app, resource_dir)?;
+        let candidate = spawn_runtime(app, resource_dir)?;
         let health = json!({
             "protocol": FERRY_IPC_PROTOCOL,
             "id": next_id("health"),
@@ -558,15 +558,15 @@ fn ensure_agent(app: &tauri::AppHandle, resource_dir: &Path) -> Result<AgentClie
                 .and_then(Value::as_str)
                 != Some(FERRY_CONTRACT_HASH)
         {
-            return Err("Agent 协议握手失败".to_owned());
+            return Err("Ferry Runtime 协议握手失败".to_owned());
         }
         *guard = Some(candidate);
     }
-    Ok(guard.as_ref().expect("agent ensured").client.clone())
+    Ok(guard.as_ref().expect("runtime ensured").client.clone())
 }
 
-fn invalidate_agent(generation: u64) {
-    let slot = AGENT.get_or_init(|| Mutex::new(None));
+fn invalidate_runtime(generation: u64) {
+    let slot = RUNTIME_PROCESS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = slot.lock() {
         if guard
             .as_ref()
@@ -579,7 +579,7 @@ fn invalidate_agent(generation: u64) {
 
 fn validate_public_command(request: &str) -> Result<(), String> {
     if request.len() > MAX_COMMAND_BYTES || request.contains('\n') || request.contains('\r') {
-        return Err("Agent 命令 framing 非法".to_owned());
+        return Err("Runtime 命令 framing 非法".to_owned());
     }
     let value: Value = serde_json::from_str(request).map_err(|error| error.to_string())?;
     if value.get("protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL) {
@@ -626,7 +626,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
             | "auth.login.respond"
             | "auth.login.cancel"
     ) {
-        return Err("Agent 命令不允许从前端调用".to_owned());
+        return Err("Runtime 命令不允许从前端调用".to_owned());
     }
     Ok(())
 }
@@ -745,7 +745,7 @@ pub(crate) async fn agent_command(
     validate_public_command(&request)?;
     remember_auto_policy(&request);
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || request_agent(&app, &resource_dir, &request))
+    tauri::async_runtime::spawn_blocking(move || request_runtime(&app, &resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -754,7 +754,7 @@ pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
     std::thread::spawn(move || {
         let request = json!({"protocol": FERRY_IPC_PROTOCOL, "id": next_id("warmup"),
                              "method": "health", "params": {}});
-        let _ = request_agent(&app, &resource_dir, &request.to_string());
+        let _ = request_runtime(&app, &resource_dir, &request.to_string());
     });
 }
 
@@ -766,11 +766,11 @@ fn repo_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn agent_binary_command(resource_dir: &Path) -> Result<Command, String> {
+fn runtime_binary_command(resource_dir: &Path) -> Result<Command, String> {
     let name = if cfg!(target_os = "windows") {
-        "ferry-agent.exe"
+        "ferry-runtime.exe"
     } else {
-        "ferry-agent"
+        "ferry-runtime"
     };
     let candidates = std::env::current_exe()
         .ok()
@@ -784,13 +784,13 @@ fn agent_binary_command(resource_dir: &Path) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
         let mut command = Command::new("node");
-        command.arg(repo_root().join("agent-runtime/dist/cli.js"));
+        command.arg(repo_root().join("ferry-runtime/dist/cli.js"));
         command.current_dir(repo_root());
         Ok(command)
     }
     #[cfg(not(debug_assertions))]
     Err(format!(
-        "正式包缺少 Agent sidecar: {}",
+        "正式包缺少 Ferry Runtime sidecar: {}",
         candidates
             .iter()
             .map(|path| path.display().to_string())

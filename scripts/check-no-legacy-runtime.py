@@ -10,7 +10,7 @@ SOURCE_ROOTS = (
     ROOT / "engine",
     ROOT / "app" / "src",
     ROOT / "app" / "src-tauri" / "src",
-    ROOT / "agent-runtime" / "src",
+    ROOT / "ferry-runtime" / "src",
 )
 SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".rs"}
 FORBIDDEN = (

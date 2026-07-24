@@ -1,4 +1,4 @@
-// Ask Ferry 状态中枢:订阅 ferry-agent-event,维护会话列表与每会话时间线,
+// Ask Ferry 状态中枢:订阅 ferry-runtime-event,维护会话列表与每会话时间线,
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentCommand, onAgentEvent,

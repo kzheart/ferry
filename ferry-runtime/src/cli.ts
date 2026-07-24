@@ -21,7 +21,7 @@ function write(value: unknown) {
 
 async function main() {
   const dataDirectory =
-    process.env.FERRY_AGENT_DATA_DIR ?? join(homedir(), ".ferry");
+    process.env.FERRY_RUNTIME_DATA_DIR ?? join(homedir(), ".ferry");
   const providerHost = await ProviderHost.create(
     new FileProviderConfigStore(join(dataDirectory, "providers.json")),
   );

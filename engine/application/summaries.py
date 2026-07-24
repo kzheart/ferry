@@ -2,7 +2,7 @@
 按内容 hash 缓存,存进本地元数据层(不碰原始会话文件)。
 
 分工:engine 负责分段 / 内容指纹 / 缓存失效 / 存储 / RPC;真正的一句蒸馏摘要
-(digest)由常驻、持有 LLM 栈的 agent-runtime 生成后经 set_summaries 写回。
+(digest)由常驻、持有 LLM 栈的 ferry-runtime 生成后经 set_summaries 写回。
 召回 / 整理 / 记忆文件三个上层功能共用这一份底座。
 """
 
@@ -165,7 +165,7 @@ def build_backbone(tool: str, ref: str, ports: ApplicationPorts) -> dict:
 
 def set_summaries(tool: str, session_id: str, digests: dict,
                   ports: ApplicationPorts) -> dict:
-    """agent-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
+    """ferry-runtime 生成蒸馏摘要后按段内容 hash 写回。以 hash 为键,对
     编辑后仍存在的段稳健。"""
     updates = digests if isinstance(digests, dict) else {}
     database = _database(ports)
