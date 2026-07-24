@@ -4,7 +4,8 @@ import json
 import logging
 import os
 
-from ..application import services
+from ..application.engine import EngineApplication
+from ..application.ports import current
 from ..application import agent_tools
 from ..application import operations
 from ..application.verification import ProbeTimeout
@@ -16,36 +17,43 @@ from ..domain.errors import (
 log = logging.getLogger(__name__)
 
 PROTOCOL = 2
+
+
+def application() -> EngineApplication:
+    """RPC 是 process-local composition 的唯一读取边界。"""
+    return EngineApplication(current())
+
+
 RPC_METHODS = {
-    "health": lambda p: services.health(),
-    "version": lambda p: services.version(),
-    "scan": lambda p: services.scan(),
-    "env": lambda p: services.env(),
-    "resume": lambda p: services.resume_command(
+    "health": lambda p: application().health(),
+    "version": lambda p: application().version(),
+    "scan": lambda p: application().scan(),
+    "env": lambda p: application().environment(),
+    "resume": lambda p: application().resume_command(
         p["tool"], p["session_id"], p.get("cwd") or "."),
-    "models": lambda p: services.list_models(p["tool"]),
-    "history": lambda p: services.history(),
-    "history_delete": lambda p: services.history_delete(p["id"]),
-    "pricing": lambda p: services.pricing(force=p.get("force", False)),
-    "show": lambda p: services.show(p["tool"], p["ref"]),
-    "session_asset": lambda p: services.session_asset(p["tool"], p["ref"], p["asset_id"]),
-    "edit_capabilities": lambda p: services.edit_capabilities(p["tool"]),
-    "session_meta_list": lambda p: services.session_meta_list(),
-    "session_backbone": lambda p: services.session_backbone(p["tool"], p["ref"]),
-    "session_summaries_set": lambda p: services.set_session_summaries(
+    "models": lambda p: application().list_models(p["tool"]),
+    "history": lambda p: application().migration_history(),
+    "history_delete": lambda p: application().delete_migration_history(p["id"]),
+    "pricing": lambda p: application().pricing(force=p.get("force", False)),
+    "show": lambda p: application().show_session(p["tool"], p["ref"]),
+    "session_asset": lambda p: application().session_asset(p["tool"], p["ref"], p["asset_id"]),
+    "edit_capabilities": lambda p: application().edit_capabilities(p["tool"]),
+    "session_meta_list": lambda p: application().list_session_metadata(),
+    "session_backbone": lambda p: application().session_backbone(p["tool"], p["ref"]),
+    "session_summaries_set": lambda p: application().set_session_summaries(
         p["tool"], p["id"], p.get("digests") or {}),
-    "organization_digest_context": lambda p: services.organization_digest_context(
+    "organization_digest_context": lambda p: application().organization_digest_context(
         p["targets"]),
-    "organization_propose": lambda p: services.organization_propose(p["targets"]),
-    "organization_proposals_list": lambda p: services.organization_proposals_list(
+    "organization_propose": lambda p: application().organization_propose(p["targets"]),
+    "organization_proposals_list": lambda p: application().organization_proposals_list(
         p.get("status")),
-    "organization_proposal_modify": lambda p: services.organization_proposal_modify(
+    "organization_proposal_modify": lambda p: application().organization_proposal_modify(
         p["proposal_id"], p["changes"]),
-    "organization_proposal_decide": lambda p: services.organization_proposal_decide(
+    "organization_proposal_decide": lambda p: application().organization_proposal_decide(
         p["proposal_id"], p["decision"]),
-    "runtime_sessions.load_all": lambda p: services.load_runtime_sessions(),
-    "runtime_sessions.commit": lambda p: services.commit_runtime_session(p["update"]),
-    "runtime_sessions.delete": lambda p: services.delete_runtime_session(p["session_id"]),
+    "runtime_sessions.load_all": lambda p: application().load_runtime_sessions(),
+    "runtime_sessions.commit": lambda p: application().commit_runtime_session(p["update"]),
+    "runtime_sessions.delete": lambda p: application().delete_runtime_session(p["session_id"]),
     "agent_search_sessions": lambda p: agent_tools.search_sessions(
         p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"),
         time_range=p.get("time_range"), limit=p.get("limit", 20)),
