@@ -1,12 +1,11 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal, revealPath, writeClipboardText }
-  from "../platform/desktop/client.js";
+import { openTerminal } from "../platform/desktop/client.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js";
 import { fmtTime, sessionRef } from "../modules/browser/sessionModel.js";
-import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
-  from "../modules/browser/sessionAttachment.js";
+import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
+import { createSessionContextMenu } from "../modules/browser/sessionContextMenu.js";
 import { SidebarIcon } from "../shared/ui/icons.jsx";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
@@ -233,57 +232,27 @@ export default function App() {
     await deleteSessions(targets);
   };
 
-  const ctxSess = ctxMenu ? byKey[ctxMenu.key] : null;
-  const ctxMeta = ctxSess ? metaFor(ctxSess) : {};
-  const multiSess = multiSel.map(key => byKey[key]).filter(Boolean);
-  const addToAgent = session => {
-    setAgentAttachments(list => addSessionAttachment(list, session));
-    setView("askferry");
-    setCtxMenu(null);
-  };
-  const copySessionReference = session => {
-    const reference = serializeSessionAttachment(session);
-    writeClipboardText(reference).then(() => {
-      setToast({ kind: "ok", title: t("app:toast.sessionReferenceCopied"),
-        desc: t("app:toast.sessionReferenceCopiedDesc") });
-    }).catch(() => {});
-  };
-  const ctxItems = ctxMenu?.multi ? [
-    { label: t("app:ctx.addTags"), onClick: () => setTagFor({ sessions: multiSess, batch: true }) },
-    { sep: true },
-    { label: t("app:ctx.deleteN", { n: multiSess.length }), danger: true,
-      onClick: () => setBatchDel(multiSess) },
-    { sep: true },
-    { label: t("app:ctx.cancelMulti"), onClick: () => setMultiSel([]) },
-  ] : ctxSess ? [
-    { label: t("app:ctx.addToAgent"), onClick: () => addToAgent(ctxSess) },
-    { label: t("app:ctx.resumeTerminal"), hint: "↩", onClick: () => resumeDescriptor(
-        ctxSess.tool, sessionRef(ctxSess))
-        .then(launch => openTerminal(launch, settings.terminalApp)).catch(() => {}) },
-    ...(TOOLS.includes(ctxSess.tool) ? [{
-      label: t("app:ctx.migrateTo"), onClick: () => {
-        if (sessionIdentity(ctxSess) !== selId) select(sessionIdentity(ctxSess));
-        setMig({ scope: null }); },
-    }] : []),
-    { sep: true },
-    { label: t("app:ctx.rename"), hint: "F2", onClick: () => setRenameFor(ctxSess) },
-    { label: ctxMeta.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),
-      onClick: () => setMetaFor(ctxSess, { pinned: !ctxMeta.pinned }) },
-    { label: t("app:ctx.tags"), onClick: () => setTagFor({ sessions: [ctxSess] }) },
-    { sep: true },
-    { label: t("app:ctx.copySessionReference"),
-      onClick: () => copySessionReference(ctxSess) },
-    { label: t("app:ctx.copyId"), onClick: () => writeClipboardText(ctxSess.id).catch(() => {}) },
-    { label: t("app:ctx.copyResume"), onClick: () => resumeDescriptor(
-        ctxSess.tool, sessionRef(ctxSess))
-        .then(d => writeClipboardText(d.display_command))
-        .catch(() => {}) },
-    { label: t("app:ctx.revealInFinder"), disabled: !ctxSess.path,
-      disabledHint: t("app:ctx.noSessionFile"),
-      onClick: () => revealPath(ctxSess.path).catch(() => {}) },
-    { sep: true },
-    { label: t("app:ctx.deleteSession"), hint: "⌫", danger: true, onClick: () => askDelete(ctxSess) },
-  ] : null;
+  const ctxItems = createSessionContextMenu({
+    menu: ctxMenu,
+    sessionsByKey: byKey,
+    selectedId: selId,
+    multiIds: multiSel,
+    metaFor,
+    updateMetadata: setMetaFor,
+    setTagSelection: setTagFor,
+    setRename: setRenameFor,
+    setBatchDelete: setBatchDel,
+    setMultiIds: setMultiSel,
+    setAgentAttachments,
+    setView,
+    setMenu: setCtxMenu,
+    setToast,
+    select,
+    setMigration: setMig,
+    settings,
+    t,
+    askDelete,
+  });
 
   // ----- 键盘 -----
   useEffect(() => {
