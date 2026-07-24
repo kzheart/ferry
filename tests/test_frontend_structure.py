@@ -1,9 +1,63 @@
+"""前端结构护栏。
+
+断言的是规则(分层、依赖方向、模型归属、规模上限),不是文件清单:
+文件清单会把任何合理重构变成红灯,却挡不住真正的架构违规。
+"""
 import json
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "app/src"
+
+# 单文件规模上限。超过这个体量的组件基本都在同时承担多个职责。
+LINE_LIMIT = 500
+
+# 已知超标文件及其当前规模:允许存在,但只许变小不许变大(棘轮)。
+# 降到 LINE_LIMIT 以下后必须从表中删除,避免这张表本身变成陈旧的豁免清单。
+KNOWN_OVERSIZED = {
+    "modules/browser/SessionRound.jsx": 760,
+    "modules/overview/Overview.jsx": 632,
+    "shell/AppController.jsx": 595,
+}
+
+HORIZONTAL_BUCKETS = {
+    "components", "hooks", "models", "utils", "helpers",
+    "services", "domain", "common", "core", "lib",
+}
+
+
+def source_files():
+    for path in FRONTEND.rglob("*"):
+        if path.suffix not in {".js", ".jsx", ".ts", ".tsx"}:
+            continue
+        if "generated" in path.parts or path.name.endswith((".test.js", ".test.ts")):
+            continue
+        yield path
+
+
+def test_no_source_file_grows_past_the_size_limit():
+    offenders = []
+    for path in source_files():
+        relative = str(path.relative_to(FRONTEND))
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        ceiling = KNOWN_OVERSIZED.get(relative, LINE_LIMIT)
+        if lines > ceiling:
+            offenders.append(f"{relative}: {lines} 行 > 上限 {ceiling}")
+    assert not offenders, "文件超出规模上限:\n" + "\n".join(offenders)
+
+
+def test_oversized_ledger_stays_current():
+    """已经瘦身达标的文件必须从棘轮表里移除。"""
+    stale = []
+    for relative, recorded in KNOWN_OVERSIZED.items():
+        path = FRONTEND / relative
+        assert path.is_file(), f"棘轮表引用了不存在的文件: {relative}"
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        assert lines <= recorded, f"{relative} 已增长到 {lines} 行,超过记录的 {recorded}"
+        if lines <= LINE_LIMIT:
+            stale.append(f"{relative} 已降到 {lines} 行,请从 KNOWN_OVERSIZED 移除")
+    assert not stale, "\n".join(stale)
 
 
 def test_frontend_uses_shell_platform_shared_and_vertical_modules():
@@ -23,56 +77,49 @@ def test_frontend_uses_shell_platform_shared_and_vertical_modules():
     assert not (FRONTEND / "modules/shell").exists()
 
 
-def test_module_models_live_with_their_consuming_capability():
-    assert (FRONTEND / "modules/browser/sessionModel.js").is_file()
-    assert (FRONTEND / "modules/browser/sessionAttachment.js").is_file()
-    assert (FRONTEND / "modules/browser/sessionContextMenu.js").is_file()
-    assert (FRONTEND / "modules/askferry/agentChatModel.js").is_file()
-    assert (FRONTEND / "modules/askferry/agentTimelineModel.js").is_file()
-    assert (FRONTEND / "modules/askferry/ferryEntities.js").is_file()
-    assert (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").is_file()
-    assert (FRONTEND / "modules/askferry/AgentMenus.jsx").is_file()
-    assert (FRONTEND / "modules/askferry/AgentComposer.jsx").is_file()
-    assert (FRONTEND / "modules/askferry/AgentChatItem.jsx").is_file()
-    assert (FRONTEND / "modules/askferry/AgentToolTrace.jsx").is_file()
-    assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
-    assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
-    assert (FRONTEND / "modules/browser/SessionImagePreview.jsx").is_file()
-    assert (FRONTEND / "modules/browser/SessionContext.jsx").is_file()
-    assert (FRONTEND / "modules/browser/PendingEditBar.jsx").is_file()
-    assert (FRONTEND / "modules/browser/SessionRound.jsx").is_file()
-    assert (FRONTEND / "modules/browser/BrowserOverlays.jsx").is_file()
-    assert (FRONTEND / "modules/editing/EditOverlays.jsx").is_file()
-    assert (FRONTEND / "modules/migration/HistoryOverlays.jsx").is_file()
-    assert (FRONTEND / "modules/onboarding/Guide.jsx").is_file()
-    assert (FRONTEND / "modules/onboarding/useOnboarding.js").is_file()
-    assert (FRONTEND / "shell/AppOverlays.jsx").is_file()
-    assert (FRONTEND / "shell/AppOverlayController.jsx").is_file()
-    assert (FRONTEND / "shell/SearchPalette.jsx").is_file()
-    assert (FRONTEND / "shell/useAppKeyboardShortcuts.js").is_file()
-    assert (FRONTEND / "shell/useResourcePaneLayout.js").is_file()
-    assert not (FRONTEND / "shared/ui/Overlays.jsx").exists()
+def test_modules_are_capabilities_not_horizontal_buckets():
+    """modules/ 下只能是产品能力,不能退回按类型分层。"""
+    modules = [path for path in (FRONTEND / "modules").iterdir() if path.is_dir()]
+    assert modules
+    for module in modules:
+        assert module.name not in HORIZONTAL_BUCKETS, module.name
+        nested = {path.name for path in module.iterdir() if path.is_dir()}
+        assert not (nested & HORIZONTAL_BUCKETS), f"{module.name} 内出现横向分层: {nested}"
+        assert any(module.glob("*.js")) or any(module.glob("*.jsx")) or any(
+            module.glob("*.ts")
+        ), f"{module.name} 是空能力目录"
+
+
+def test_view_models_live_with_their_consuming_capability():
+    """视图模型必须落在能力包内,不得上浮到 shared 或 shell。"""
+    for area in ("shared", "shell"):
+        for path in (FRONTEND / area).rglob("*"):
+            if path.suffix not in {".js", ".ts"} or path.name.endswith(
+                (".test.js", ".test.ts")
+            ):
+                continue
+            assert not path.stem.endswith("Model"), (
+                f"{path.relative_to(FRONTEND)} 应属于某个能力包"
+            )
+
+
+def test_shell_composes_capabilities_without_reaching_into_their_internals():
+    """主壳负责编排:渲染工作区路由与弹层控制器,不直接拼装某个能力的内部视图。"""
     app = (FRONTEND / "shell/AppController.jsx").read_text()
+    assert "AppOverlayController" in app
+    assert "WorkspaceRouter" in app
+    # 详情区视图由 WorkspaceRouter 决定,主壳不直接引入
     assert "browser/SessionDetail.jsx" not in app
     assert "shared/ui/primitives.jsx" not in app
-    assert "shared/ui/Overlays.jsx" not in app
-    assert "AppOverlayController" in app
-    assert "document.addEventListener(\"keydown\"" not in app
-    assert app.index("metadata: metaMap") < app.index("useLibraryResourcePane({")
+    # 键盘监听归 useAppKeyboardShortcuts,主壳不自己挂全局监听
+    assert 'document.addEventListener("keydown"' not in app
 
-    session_detail = (
-        FRONTEND / "modules/browser/SessionDetail.jsx"
-    ).read_text()
+
+def test_deleted_ui_concepts_do_not_return():
+    assert not (FRONTEND / "shared/ui/Overlays.jsx").exists()
+    session_detail = (FRONTEND / "modules/browser/SessionDetail.jsx").read_text()
     assert "function Round(" not in session_detail
     assert "function ToolCard(" not in session_detail
-    assert "SessionRound" in session_detail
-
-    tool_trace = (FRONTEND / "modules/askferry/AgentToolTrace.jsx").read_text()
-    workflow_cards = (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").read_text()
-    assert "EntityCards" in tool_trace
-    assert "onNavigate={onNavigate}" in tool_trace
-    assert "entitiesFromToolResult" in workflow_cards
-    assert "EntityCards" in workflow_cards
 
 
 def test_operation_flow_has_one_module_controller():
