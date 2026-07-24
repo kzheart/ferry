@@ -10,8 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "agent:build": "npm --prefix ../agent-runtime run build",
-    "desktop": "npm run agent:build && tauri dev"
+    "runtime:build": "npm --prefix ../ferry-runtime run build",
+    "desktop": "npm run runtime:build && tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

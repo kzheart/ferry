@@ -14,13 +14,14 @@ def test_all_runtimes_use_the_generated_ferry_ipc_protocol():
     generated = (
         ROOT / "app/src/api/contract/generated/ipc.js",
         ROOT / "app/src-tauri/src/contracts/ipc.rs",
-        ROOT / "agent-runtime/src/contracts/ipc.ts",
+        ROOT / "ferry-runtime/src/contracts/ipc.ts",
     )
     for path in generated:
         text = path.read_text()
         assert FERRY_IPC_PROTOCOL in text
         assert FERRY_CONTRACT_HASH in text
         assert "ferry-agent/v1" not in text
+        assert "ferry-runtime/v1" not in text
     assert FERRY_CONTRACT_HASH.startswith("sha256:")
     assert len(FERRY_CONTRACT_HASH) == len("sha256:") + 64
 

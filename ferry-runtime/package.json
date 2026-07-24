@@ -7,7 +7,7 @@
     "node": ">=22.19.0"
   },
   "bin": {
-    "ferry-agent": "dist/cli.js"
+    "ferry-runtime": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -16,7 +16,7 @@ AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
     ROOT / "engine/contracts/agents.py": "python",
-    ROOT / "agent-runtime/src/contracts/agents.ts": "runtime",
+    ROOT / "ferry-runtime/src/contracts/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
@@ -26,7 +26,7 @@ IPC_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/ipc.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ROOT / "engine/contracts/ipc.py": "python",
-    ROOT / "agent-runtime/src/contracts/ipc.ts": "runtime",
+    ROOT / "ferry-runtime/src/contracts/ipc.ts": "runtime",
 }
 
 
@@ -288,7 +288,8 @@ def ipc_rust(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f'pub(crate) const FERRY_IPC_PROTOCOL: &str = "{contract["protocol"]}";',
-        f'pub(crate) const FERRY_CONTRACT_HASH: &str = "{digest}";',
+        "pub(crate) const FERRY_CONTRACT_HASH: &str =",
+        f'    "{digest}";',
         "",
     ))
 

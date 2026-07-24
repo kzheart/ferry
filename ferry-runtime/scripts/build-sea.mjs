@@ -38,7 +38,7 @@ const output = join(
   "app",
   "src-tauri",
   "binaries",
-  `ferry-agent-${target}${extension}`,
+  `ferry-runtime-${target}${extension}`,
 );
 
 rmSync(work, { recursive: true, force: true });
@@ -113,7 +113,7 @@ process.stdout.write(`${output}\n`);
 async function smokeSea(executable, dataDirectory) {
   const child = spawn(executable, [], {
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, FERRY_AGENT_DATA_DIR: dataDirectory },
+    env: { ...process.env, FERRY_RUNTIME_DATA_DIR: dataDirectory },
   });
   const messages = [];
   let stderr = "";

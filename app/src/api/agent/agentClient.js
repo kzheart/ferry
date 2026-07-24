@@ -38,7 +38,7 @@ export async function agentCommand(method, params) {
 // 事件流:runtime 事件与 Rust 补发的 operation.proposed / runtime.disconnected 共用同一通道
 export async function onAgentEvent(handler) {
   const { listen } = await import("@tauri-apps/api/event");
-  return listen("ferry-agent-event", e => handler(e.payload));
+  return listen("ferry-runtime-event", e => handler(e.payload));
 }
 
 export const operationPlanApply = planId =>
