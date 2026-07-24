@@ -1,19 +1,21 @@
 import { repoOf } from "../modules/browser/sessionModel.js";
+import {
+  BatchDeleteConfirm,
+  LibraryFilter,
+  SessionDeleteConfirm,
+} from "../modules/browser/BrowserOverlays.jsx";
 import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
 import { ApplyConfirm, DiffSheet } from "../modules/editing/EditOverlays.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
 import {
-  BatchDeleteConfirm,
   ContextMenu,
   Guide,
   HistoryDeleteConfirm,
   HistoryFilter,
-  LibraryFilter,
   PromptBox,
   SearchPalette,
-  SessionDeleteConfirm,
   Toast,
 } from "../shared/ui/Overlays.jsx";
 

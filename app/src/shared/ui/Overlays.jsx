@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../contracts/tools.js";
 import { STATUS_CODE } from "../../modules/migration/migrationModel.js";
-import { ACCENT } from "./toolDisplay.js";
 import { CloseIcon, SearchIcon, Spinner, ToolIcon } from "./icons.jsx";
 import { ConfirmBox } from "./ConfirmBox.jsx";
 import {
-  FilterCheckRow,
   FilterPopover,
   FilterRadioRow,
   FilterSectionTitle,
@@ -133,40 +131,6 @@ export function ContextMenu({ x, y, items, onClose }) {
   );
 }
 
-// ---------- 删除会话确认 ----------
-export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
-  const { t } = useTranslation();
-  const subCount = (sess.tree_count || 1) - 1;
-  const oc = sess.tool === "opencode";
-  const bullets = [
-    subCount > 0 && ["var(--warn)", t("overlays:delete.bulletSub", { n: subCount })],
-    ["var(--ok)", t("overlays:delete.bulletSnapshot")],
-    oc
-      ? ["var(--err)", t("overlays:delete.bulletOpenCode")]
-      : ["var(--accent)", t("overlays:delete.bulletUndoable")],
-  ].filter(Boolean);
-  return (
-    <ConfirmBox width={430} title={t("overlays:delete.title")} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
-      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
-        onClick={onConfirm}>{oc ? t("overlays:delete.confirmOpenCode") : t("overlays:delete.confirmOther")}</button>
-    </>}>
-      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        {t("overlays:delete.desc", { title: sess.title || sess.id, tool: TOOL_NAME[sess.tool] })}</div>
-      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10, padding: "12px 14px",
-        display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, txt], i) => (
-          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)", lineHeight: 1.45 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{txt}
-          </div>
-        ))}
-      </div>
-    </ConfirmBox>
-  );
-}
-
 // ---------- 输入弹框(重命名 / 标签) ----------
 export function PromptBox({ title, desc, placeholder, initial, confirmLabel,
   onCancel, onConfirm }) {
@@ -187,36 +151,6 @@ export function PromptBox({ title, desc, placeholder, initial, confirmLabel,
         style={{ width: "100%", boxSizing: "border-box", height: 34, marginTop: 12,
           padding: "0 11px", background: "var(--surface)", border: "1px solid var(--line)",
           borderRadius: 8, fontSize: 13, color: "var(--tx1)" }} />
-    </ConfirmBox>
-  );
-}
-
-// ---------- 批量删除确认 ----------
-export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
-  const { t } = useTranslation();
-  const ocCount = sessions.filter(s => s.tool === "opencode").length;
-  const bullets = [
-    ["var(--ok)", t("overlays:delete.bulletBatchSnapshot")],
-    ocCount > 0 && ["var(--err)", t("overlays:delete.bulletBatchOpenCode", { n: ocCount })],
-    ["var(--accent)", t("overlays:delete.bulletBatchRest")],
-  ].filter(Boolean);
-  return (
-    <ConfirmBox width={430} title={t("overlays:delete.batchTitle", { n: sessions.length })} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>{t("overlays:delete.cancel")}</button>
-      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
-        onClick={onConfirm}>{t("overlays:delete.confirmOther")}</button>
-    </>}>
-      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
-        padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
-        {bullets.map(([c, txt], i) => (
-          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)",
-            lineHeight: 1.45 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{txt}
-          </div>
-        ))}
-      </div>
     </ConfirmBox>
   );
 }
@@ -247,62 +181,6 @@ export function Toast({ toast, onDismiss }) {
           onClick={toast.action.onClick}>{toast.action.label}</button>)}
       <a onClick={onDismiss} style={{ color: "var(--tx5)", fontSize: 16, marginLeft: 6 }}>×</a>
     </div>
-  );
-}
-
-// 会话库筛选:来源 / 时间 / 目录
-export function LibraryFilter({ f, setF, counts, dirs, tags = [], anchor, onClose, onClear }) {
-  const { t } = useTranslation();
-  const times = [["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
-    ["last7", t("overlays:filter.last7")], ["last30", t("overlays:filter.last30")]];
-  return (
-    <FilterPopover anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
-      <FilterSectionTitle first>{t("overlays:filter.source")}</FilterSectionTitle>
-      {TOOLS.map(t2 => (
-        <FilterCheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
-          label={TOOL_NAME[t2]} extra={counts[t2] || 0}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
-            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
-      ))}
-      <FilterSectionTitle>{t("overlays:filter.timeRange")}</FilterSectionTitle>
-      {times.map(([k, l]) => (
-        <FilterRadioRow key={k} on={f.time === k} label={l}
-          onClick={() => setF(v => ({ ...v, time: k }))} />
-      ))}
-      <FilterSectionTitle>{t("overlays:filter.projectDir")}</FilterSectionTitle>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {dirs.map(d => {
-          const on = f.dir === d;
-          return (
-            <button key={d} className="mono" onClick={() => setF(v => ({ ...v, dir: on ? null : d }))}
-              style={{ height: 24, padding: "0 9px", borderRadius: 20,
-                border: `1px solid ${on ? ACCENT : "var(--line)"}`, background: on ? "var(--acc-soft)" : "var(--surface)",
-                color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "default" }}>{d}</button>
-          );
-        })}
-        {dirs.length === 0 && <span style={{ fontSize: 11, color: "var(--tx5)" }}>{t("overlays:filter.noDirs")}</span>}
-      </div>
-      {tags.length > 0 && (<>
-        <FilterSectionTitle>{t("overlays:filter.tags")}</FilterSectionTitle>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-          {tags.map(t2 => {
-            const on = f.tag === t2;
-            return (
-              <button key={t2} onClick={() => setF(v => ({ ...v, tag: on ? null : t2 }))}
-                style={{ height: 24, padding: "0 9px", borderRadius: 20,
-                  border: `1px solid ${on ? ACCENT : "var(--line)"}`,
-                  background: on ? "var(--acc-soft)" : "var(--surface)",
-                  color: on ? ACCENT : "var(--tx3)", fontSize: 11, cursor: "default" }}>{t2}</button>
-            );
-          })}
-        </div>
-      </>)}
-      <FilterSectionTitle>{t("overlays:filter.content")}</FilterSectionTitle>
-      <FilterCheckRow on={f.mig} label={t("overlays:filter.onlyMigrated")}
-        onClick={() => setF(v => ({ ...v, mig: !v.mig }))} />
-      <FilterCheckRow on={f.sub} label={t("overlays:filter.onlySubSessions")}
-        onClick={() => setF(v => ({ ...v, sub: !v.sub }))} />
-    </FilterPopover>
   );
 }
 
