@@ -134,6 +134,11 @@ jobs:
         env:
           BUILD_TARGET: ${{ matrix.target }}
         working-directory: app/src-tauri
+      - run: cargo test --locked --target "$BUILD_TARGET"
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        working-directory: app/src-tauri
       - name: Frozen sidecar smoke
         shell: python
         env:
