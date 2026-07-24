@@ -1,17 +1,12 @@
 import {
   createModels,
-  createProvider,
-  type Api,
   type AuthEvent,
   type AuthInteraction,
   type AuthPrompt,
   type AuthType,
-  type CredentialInfo,
-  type Model,
   type MutableModels,
   type Provider,
 } from "@earendil-works/pi-ai";
-import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { dirname, join } from "node:path";
@@ -27,123 +22,14 @@ import type {
   ModelSelection,
 } from "./provider-config.js";
 import { FileProviderConfigStore } from "./provider-config-store.js";
-
-export const UNSUPPORTED_PROVIDER_IDS = new Set([
-  "amazon-bedrock",
-  "google-vertex",
-]);
-
-export interface ProviderSummary {
-  id: string;
-  name: string;
-  configured: boolean;
-  credential_type: CredentialInfo["type"] | null;
-  auth_types: AuthType[];
-  custom: boolean;
-  enabled: boolean;
-  model_count: number;
-  visible_model_count: number;
-}
-
-export interface ModelSummary {
-  id: string;
-  name: string;
-  provider: string;
-  api: string;
-  reasoning: boolean;
-  input: Array<"text" | "image">;
-  context_window: number;
-  max_tokens: number;
-}
-
-function customProvider(config: CustomProviderConfig): Provider {
-  const models: Model<"openai-completions">[] = config.models.map((item) => ({
-    id: item.id,
-    name: item.name ?? item.id,
-    api: "openai-completions",
-    provider: config.id,
-    baseUrl: config.base_url,
-    reasoning: item.reasoning,
-    input: item.input,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: item.context_window,
-    maxTokens: item.max_tokens,
-  }));
-  return createProvider({
-    id: config.id,
-    name: config.name,
-    baseUrl: config.base_url,
-    auth: {
-      apiKey: {
-        name: `${config.name} API key`,
-        async resolve() {
-          return {
-            auth: {
-              ...(config.api_key ? { apiKey: config.api_key } : {}),
-              baseUrl: config.base_url,
-            },
-            source: "Ferry provider config",
-          };
-        },
-      },
-    },
-    models,
-    api: openAICompletionsApi(),
-  });
-}
-
-// 手填模型沿用同 Provider 某个已知模型的形状(api / baseUrl / headers),只换 id 与能力字段
-function overlayModel(
-  template: Model<Api>,
-  config: CustomModelConfig,
-): Model<Api> {
-  return {
-    ...template,
-    id: config.id,
-    name: config.name ?? config.id,
-    reasoning: config.reasoning,
-    input: config.input,
-    contextWindow: config.context_window,
-    maxTokens: config.max_tokens,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  };
-}
-
-// createProvider 返回的是纯对象 + 闭包方法,展开覆写 getModels 不会破坏 stream 行为
-function withCustomModels(
-  provider: Provider,
-  configs: CustomModelConfig[],
-): Provider {
-  const base = provider.getModels.bind(provider);
-  return {
-    ...provider,
-    getModels: () => {
-      const merged = [...base()];
-      const template = merged[0];
-      if (!template) return merged;
-      for (const config of configs) {
-        const model = overlayModel(template, config);
-        const index = merged.findIndex((item) => item.id === model.id);
-        if (index >= 0) merged[index] = model;
-        else merged.push(model);
-      }
-      return merged;
-    },
-  };
-}
-
-function summary(model: Model<string>): ModelSummary {
-  return {
-    id: model.id,
-    name: model.name,
-    provider: model.provider,
-    api: model.api,
-    reasoning: model.reasoning,
-    input: [...model.input],
-    context_window: model.contextWindow,
-    max_tokens: model.maxTokens,
-  };
-}
+import {
+  UNSUPPORTED_PROVIDER_IDS,
+  customProvider,
+  modelSummary,
+  withCustomModels,
+  type ModelSummary,
+  type ProviderSummary,
+} from "./provider-models.js";
 
 export class ProviderHost {
   // 未叠加手填模型的原始 Provider,重新叠加时要从它出发,否则会套娃
@@ -402,7 +288,7 @@ export class ProviderHost {
       const visible = config.visible_models[providerId];
       for (const model of this.models.getModels(providerId)) {
         if (visible && !visible.includes(model.id)) continue;
-        output.push({ ...summary(model), provider_name: provider.name });
+        output.push({ ...modelSummary(model), provider_name: provider.name });
       }
     }
     return output;
@@ -427,7 +313,7 @@ export class ProviderHost {
       );
       for (const model of this.models.getModels(providerId)) {
         output.push({
-          ...summary(model),
+          ...modelSummary(model),
           provider_name: provider.name,
           shown: !visible || visible.includes(model.id),
           custom: custom.has(model.id),
@@ -456,7 +342,7 @@ export class ProviderHost {
           model.name.toLocaleLowerCase().includes(normalized),
       )
       .slice(0, Math.max(1, Math.min(limit, 200)))
-      .map(summary);
+      .map(modelSummary);
   }
 
   async defaultModel() {

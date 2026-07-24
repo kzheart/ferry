@@ -46,6 +46,10 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (
         RUNTIME / "src/providers/provider-config-validation.ts"
     ).is_file()
+    assert (RUNTIME / "src/providers/provider-models.ts").is_file()
+    provider_host = (RUNTIME / "src/providers/provider-host.ts").read_text()
+    assert "function customProvider(" not in provider_host
+    assert "function withCustomModels(" not in provider_host
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
     assert "new AuthCoordinator" not in runtime
     assert "this.providerHost.saveApiKey" not in runtime
