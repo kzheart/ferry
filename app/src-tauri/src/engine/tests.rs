@@ -4,7 +4,7 @@ use super::{
     validate_engine_request_exposure, validate_engine_response_id, FERRY_IPC_PROTOCOL,
 };
 use crate::contracts::engine_methods::Exposure;
-use crate::operations::input::{
+use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
     MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
 };
