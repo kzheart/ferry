@@ -75,9 +75,7 @@ class _FakeMigrationTarget:
 
 class _FakeEditor:
     name = "fake"
-
-    def capabilities(self):
-        return {"inplace": True, "operation_modes": {}}
+    operations = ("rewrite",)
 
     def load(self, _ref):
         return object()
@@ -170,13 +168,14 @@ def test_fake_plugin_satisfies_complete_static_contract():
     assert isinstance(plugin.verifier, SessionVerifier)
     assert isinstance(plugin.lifecycle, SessionLifecycle)
     assert isinstance(plugin.models, ModelCatalog)
-    assert plugin.capabilities() == [
-        "browse", "migrate-source", "migrate-target", "edit", "inplace", "verified",
-    ]
-    described = plugin.describe()
-    assert described["id"] == "fake"
-    assert described["capabilities"] == plugin.capabilities()
-    assert described["executables"] == ["fake"]
+    assert plugin.manifest.to_dict() == {
+        "id": "fake",
+        "display_name": "Fake Agent",
+        "icon": "fake",
+        "source_path": "~/.fake/sessions",
+        "executables": ["fake"],
+        "fallback_bin_dirs": [],
+    }
     assert plugin.browser.scan(cache=None) == []
 
 

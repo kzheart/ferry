@@ -874,6 +874,4 @@ def preview_edit(tool: str, opaque_ref: str, *, ops) -> dict:
             "revision": _redact(str(result["revision"]), 256),
             "before": _bounded_json(result["before"], 12 * 1024),
             "after": _bounded_json(result["after"], 12 * 1024),
-            "changes": _bounded_json(result["changes"], 12 * 1024),
-            "capabilities": _bounded_json(
-                result.get("capabilities", {}), 12 * 1024)})
+            "changes": _bounded_json(result["changes"], 12 * 1024)})

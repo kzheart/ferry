@@ -36,19 +36,7 @@ class EditBackend(ABC):
     """Agent 原生编辑契约；API 与 UI 不得依赖具体存储格式。"""
 
     name: str
-    inplace = True
-    probe = True
     operations = ("delete-turn", "rewrite")
-
-    def capabilities(self) -> dict:
-        operations = list(self.operations)
-        return {"tool": self.name, "operations": operations,
-            "inplace": self.inplace,
-            "probe": self.probe,
-            "operation_roles": {"rewrite": ["user", "assistant"],
-                                "delete-turn": ["turn"]},
-            "operation_modes": {op: (["inplace"] if self.inplace else [])
-                                for op in operations}}
 
     @abstractmethod
     def load(self, ref: str) -> EditDocument: ...

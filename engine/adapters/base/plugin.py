@@ -10,16 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-# 静态能力标识（manifest.capabilities 使用）。它们是内置产品定义，不是
-# 可选插件协商协议。
-CAP_BROWSE = "browse"
-CAP_MIGRATE_SOURCE = "migrate-source"
-CAP_MIGRATE_TARGET = "migrate-target"
-CAP_EDIT = "edit"
-CAP_INPLACE = "inplace"
-CAP_VERIFIED = "verified"
-
-
 @dataclass(frozen=True)
 class ToolManifest:
     """Agent 行为的单一事实源，可序列化下发给前端与 Rust。"""
@@ -31,11 +21,11 @@ class ToolManifest:
     executables: tuple[str, ...] = ()   # launch descriptor 可执行文件白名单
     fallback_bin_dirs: tuple[str, ...] = ()
 
-    def to_dict(self, capabilities: list[str] | None = None) -> dict:
+    def to_dict(self) -> dict:
         return {"id": self.id, "display_name": self.display_name,
                 "icon": self.icon, "source_path": self.source_path,
                 "executables": list(self.executables),
-                "capabilities": capabilities or []}
+                "fallback_bin_dirs": list(self.fallback_bin_dirs)}
 
 
 @dataclass(frozen=True)
@@ -114,8 +104,7 @@ class MigrationTarget(Protocol):
 @runtime_checkable
 class SessionEditor(Protocol):
     name: str
-
-    def capabilities(self) -> dict: ...
+    operations: tuple[str, ...]
 
     def load(self, ref: str): ...
 
@@ -189,16 +178,3 @@ class ToolPlugin:
     @property
     def id(self) -> str:
         return self.manifest.id
-
-    def capabilities(self) -> list[str]:
-        return [
-            CAP_BROWSE,
-            CAP_MIGRATE_SOURCE,
-            CAP_MIGRATE_TARGET,
-            CAP_EDIT,
-            CAP_INPLACE,
-            CAP_VERIFIED,
-        ]
-
-    def describe(self) -> dict:
-        return self.manifest.to_dict(self.capabilities())

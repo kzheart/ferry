@@ -93,6 +93,7 @@ class Document:
 
 class Editor:
     name = "claude"
+    operations = ("delete-turn", "rewrite")
 
     def __init__(self):
         self.commits = 0
@@ -117,16 +118,6 @@ class Editor:
 
     def validate(self, _doc):
         pass
-
-    def capabilities(self):
-        return {
-            "inplace": True,
-            "operations": ["delete-turn", "rewrite"],
-            "operation_modes": {
-                "delete-turn": ["inplace"],
-                "rewrite": ["inplace"],
-            },
-        }
 
     def commit(self, _doc):
         self.commits += 1

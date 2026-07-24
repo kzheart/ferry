@@ -104,19 +104,12 @@ class OpenCodeApi:
     def _path(self, path: str) -> str:
         return path + "?" + urllib.parse.urlencode({"directory": self.cwd})
 
-    def capabilities(self) -> dict:
+    def supports_part_patch(self) -> bool:
         doc = self.request("GET", "/doc")
         paths = doc.get("paths", {}) if isinstance(doc, dict) else {}
         part_route = paths.get(
             "/session/{sessionID}/message/{messageID}/part/{partID}", {})
-        message_route = paths.get(
-            "/session/{sessionID}/message/{messageID}", {})
-        batch_route = paths.get("/session/{sessionID}/edit", {})
-        return {
-            "patch_part": "patch" in part_route,
-            "delete_message": "delete" in message_route,
-            "batch_edit": "post" in batch_route,
-        }
+        return "patch" in part_route
 
     def patch_part(self, session_id: str, message_id: str, part: dict):
         part_id = part["id"]
