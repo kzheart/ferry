@@ -1,23 +1,14 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openTerminal } from "../platform/desktop/client.js";
-import {
-  TOOLS,
-  TOOL_NAME,
-  resumeDescriptor,
-} from "../shared/contracts/tools.js";
-import { fmtTime, sessionRef } from "../modules/browser/sessionModel.js";
+import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
-import { createSessionContextMenu } from "../modules/browser/sessionContextMenu.js";
-import { SidebarIcon } from "../shared/ui/icons.jsx";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
 import { useAppUpdater } from "../modules/settings/useAppUpdater.js";
 import { useBrowserData } from "../modules/browser/useBrowserData.js";
 import { useSessionEditing } from "../modules/editing/useSessionEditing.js";
 import { useLibraryResourcePane } from "../modules/browser/useLibraryResourcePane.js";
-import { useLibraryResourcePaneActions } from "../modules/browser/useLibraryResourcePaneActions.js";
 import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
 import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
@@ -28,6 +19,7 @@ import {
 } from "../modules/onboarding/useOnboarding.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
+import { WorkspaceToolbar } from "./WorkspaceToolbar.jsx";
 import { AppShell } from "./AppShell.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
@@ -35,6 +27,9 @@ import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
 import { useRailNavigation } from "./useRailNavigation.js";
 import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
+import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
+import { useWorkspaceInteractions } from "./useWorkspaceInteractions.js";
+import { buildOverlayProps } from "./workspaceOverlayProps.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -118,10 +113,10 @@ export default function App() {
     doScan,
     onInplaceApplied: () => select(selId),
   });
+  // 仅解构主壳渲染直接需要的部分;逐个动作回调由 useWorkspaceInteractions 消费
   const {
     ops,
     dirtyOps,
-    setOps,
     diff,
     setDiff,
     confirmApply,
@@ -130,15 +125,7 @@ export default function App() {
     setToast,
     applying,
     scope,
-    setScope,
     resetSelection,
-    addOp,
-    startReplyEdit,
-    removeOp,
-    updateOp,
-    replyEditError,
-    openDiff,
-    prepareApply,
     applyEdit,
   } = editing;
   selectionReset.current = resetSelection;
@@ -234,44 +221,6 @@ export default function App() {
     onRescan: doScan,
   });
 
-  // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
-  // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
-  const peekEntity = (action, entity) => {
-    if (action?.view !== "library") return;
-    setSettingsOpen(false);
-    setPopover(null);
-    setNavigationTarget({ ...action, nonce: Date.now() });
-    const id = loadEntitySession(action, entity);
-    if (id) setPeekId(id);
-  };
-
-  // 显式动作(预览浮层里的「在会话库中打开」)才切换主视图。
-  const navigateEntity = (action, entity) => {
-    if (!action?.view) return;
-    setSettingsOpen(false);
-    setPopover(null);
-    setNavigationTarget({ ...action, nonce: Date.now() });
-    if (action.view === "library") {
-      setView("library");
-      loadEntitySession(action, entity);
-      return;
-    }
-    if (action.view === "history") {
-      setView("history");
-      const candidate = histItems.find(
-        (item) =>
-          (action.migrationId &&
-            (item.id === action.migrationId ||
-              item._id === action.migrationId)) ||
-          (action.ref &&
-            (item.source_ref === action.ref || item.ref === action.ref)),
-      );
-      if (candidate) selectHistory(candidate._id);
-      return;
-    }
-    setView(action.view);
-  };
-
   useEffect(() => {
     if (!ferry.mutationVersion) return;
     doScan();
@@ -279,175 +228,69 @@ export default function App() {
     if (view === "library" && selId) refreshDetail();
   }, [ferry.mutationVersion]);
 
-  const askDelete = deletion.requestSessionDeletion;
-
-  const ctxItems = createSessionContextMenu({
-    menu: ctxMenu,
-    sessionsByKey: byKey,
+  const {
+    askDelete,
+    peekEntity,
+    contextMenuItems: ctxItems,
+    detailActions: detailActs,
+    detailMeta,
+    onRowClick,
+    onRowMore,
+    onRowPin,
+    onRowDelete,
+  } = useWorkspaceInteractions({
+    t,
+    settings,
+    current: cur,
     selectedId: selId,
-    multiIds: multiSel,
+    sessionsByKey: byKey,
+    metadata: metaMap,
     metaFor,
     updateMetadata: setMetaFor,
-    setTagSelection: setTagFor,
-    setRename: setRenameFor,
-    setBatchDelete: deletion.requestBatchDeletion,
+    multiIds: multiSel,
     setMultiIds: setMultiSel,
-    setAgentAttachments,
-    setView,
+    libraryVisibleIds,
+    menu: ctxMenu,
     setMenu: setCtxMenu,
-    setToast,
     select,
+    loadEntitySession,
+    deletion,
+    editing,
+    scope,
+    refreshDetail,
+    loadMore,
+    setToast,
+    setView,
+    setSettingsOpen,
+    setPopover,
+    setNavigationTarget,
+    setPeekId,
     setMigration: setMig,
-    settings,
-    t,
-    askDelete,
+    setRename: setRenameFor,
+    setTagSelection: setTagFor,
+    setAgentAttachments,
   });
 
-  const { onRowClick, onRowMore, onRowPin, onRowDelete } =
-    useLibraryResourcePaneActions({
-      sessionsByKey: byKey,
-      selectedId: selId,
-      visibleIds: libraryVisibleIds,
-      multiIds: multiSel,
-      setMultiIds: setMultiSel,
-      onSelect: select,
-      onTogglePin: (session) =>
-        setMetaFor(session, { pinned: !metaFor(session).pinned }),
-      onDelete: askDelete,
-      onOpenMenu: setCtxMenu,
-    });
-
-  // 详情区回调:同样经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会
-  // 因侧边栏交互(展开分组/多选/悬停)产生的新闭包全量重渲染整条时间线
-  const detailFns = useRef({});
-  detailFns.current = {
-    discardAll: () => setOps([]),
-    setScope,
-    addOp,
-    removeOp,
-    updateOp,
-    startReplyEdit,
-    replyEditError,
-    openDiff,
-    apply: prepareApply,
-    openMigrate: (sc) => setMig({ scope: sc ?? scope }),
-    refresh: refreshDetail,
-    loadMore,
-    resume: async (meta) => {
-      setToast({
-        kind: "run",
-        title: t("app:toast.openingTerminal"),
-        desc: t("app:toast.openingTerminalDesc", {
-          title: meta.title || meta.id,
-        }),
-      });
-      try {
-        const launch = await resumeDescriptor(meta.tool, sessionRef(meta));
-        await openTerminal(launch, settings.terminalApp);
-        setToast({
-          kind: "ok",
-          title: t("app:toast.terminalOpened"),
-          desc: t("app:toast.terminalOpenedDesc"),
-        });
-      } catch (error) {
-        setToast({
-          kind: "fail",
-          title: t("app:toast.openTerminalFail"),
-          desc: error.message,
-        });
-      }
-    },
-  };
-  const detailActs = useMemo(
-    () => ({
-      onDiscardAll: () => detailFns.current.discardAll(),
-      setScope: (v) => detailFns.current.setScope(v),
-      addOp: (...a) => detailFns.current.addOp(...a),
-      removeOp: (...a) => detailFns.current.removeOp(...a),
-      updateOp: (...a) => detailFns.current.updateOp(...a),
-      startReplyEdit: (...a) => detailFns.current.startReplyEdit(...a),
-      replyEditError: (...a) => detailFns.current.replyEditError(...a),
-      onOpenDiff: () => detailFns.current.openDiff(),
-      onApply: () => detailFns.current.apply(),
-      onOpenMigrate: (sc) => detailFns.current.openMigrate(sc),
-      onRefresh: () => detailFns.current.refresh(),
-      onLoadMore: () => detailFns.current.loadMore(),
-      onResume: (meta) => detailFns.current.resume(meta),
-    }),
-    [],
-  );
-  const detailMeta = useMemo(
-    () =>
-      cur && metaFor(cur).name ? { ...cur, title: metaFor(cur).name } : cur,
-    [cur, metaMap],
-  );
-
-  // ----- 资源栏数据:Ask Ferry 对话 -----
-  const aql = aq.trim().toLowerCase();
-  const ferrySessions = useMemo(
-    () =>
-      (aql
-        ? ferry.sessions.filter((s) =>
-            (s.title || "").toLowerCase().includes(aql),
-          )
-        : ferry.sessions
-      )
-        .slice()
-        .sort(
-          (left, right) =>
-            Number(!!right.pinned) - Number(!!left.pinned) ||
-            String(right.updated_at || "").localeCompare(
-              String(left.updated_at || ""),
-            ),
-        ),
-    [ferry.sessions, aql],
-  );
-
-  // ----- 资源栏骨架配置 -----
-  const paneCfg =
-    {
-      askferry: {
-        title: t("askferry:pane.title"),
-        count: String(ferry.sessions.length),
-        placeholder: t("askferry:pane.placeholder"),
-        query: aq,
-        onQuery: (e) => setAq(e.target.value),
-        filterCount: 0,
-        tokens: [],
-        footer: t("askferry:pane.footer", { n: ferry.sessions.length }),
-      },
-      library: {
-        title: t("app:pane.libraryTitle"),
-        count: String(sessions.length),
-        placeholder: t("app:pane.libraryPlaceholder"),
-        query: q,
-        onQuery: (e) => setQ(e.target.value),
-        filterCount: libFilterCount,
-        tokens: libTokens,
-        footer: scan?.error
-          ? t("app:pane.libraryFooterError", { error: scan.error })
-          : multiSel.length > 1
-            ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
-            : t("app:pane.libraryFooterBrowsing", {
-                n: sessions.length,
-                lastScan: lastScan
-                  ? t("app:pane.libraryFooterLastScan", {
-                      time: fmtTime(lastScan, t),
-                    })
-                  : "",
-              }),
-      },
-      history: {
-        title: t("app:pane.historyTitle"),
-        count: String(histItems.length),
-        placeholder: t("app:pane.historyPlaceholder"),
-        query: hq,
-        onQuery: (e) => setHq(e.target.value),
-        filterCount: histFilterCount,
-        tokens: histTokens,
-        footer: t("app:pane.historyFooter", { n: histItems.length }),
-      },
-    }[view] || null;
+  const { paneConfig: paneCfg, ferrySessions } = useResourcePaneConfig({
+    t,
+    view,
+    ferry,
+    agentQuery: aq,
+    setAgentQuery: setAq,
+    sessions,
+    scan,
+    lastScan,
+    libraryQuery: q,
+    setLibraryQuery: setQ,
+    libraryFilterCount: libFilterCount,
+    libraryTokens: libTokens,
+    multiIds: multiSel,
+    historyItems: histItems,
+    historyQuery: hq,
+    setHistoryQuery: setHq,
+    historyFilterCount: histFilterCount,
+    historyTokens: histTokens,
+  });
 
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
   const railOnly = !paneCfg || paneLayout.collapsed;
@@ -613,48 +456,14 @@ export default function App() {
         onResizeReset={paneLayout.resetWidth}
         dividerTitle={t("app:drag.hint")}
         toolbar={
-          <>
-            {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
-            <button
-              className={paneCfg ? "hov" : undefined}
-              disabled={!paneCfg}
-              onClick={paneLayout.toggleCollapsed}
-              title={
-                paneLayout.collapsed
-                  ? t("app:titlebar.expand")
-                  : t("app:titlebar.collapse")
-              }
-              style={{
-                width: 28,
-                height: 26,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "transparent",
-                border: "none",
-                borderRadius: 6,
-                cursor: "default",
-                color: "var(--tx3b)",
-                opacity: paneCfg ? 1 : 0.35,
-              }}
-            >
-              <SidebarIcon />
-            </button>
-            {view === "library" && (
-              <button
-                className="fbtn"
-                onClick={() => setOrganizerOpen(true)}
-                disabled={!sessions.length}
-                style={{ height: 27, fontSize: 11 }}
-              >
-                {t("organizing:open")}
-              </button>
-            )}
-            <div
-              data-tauri-drag-region
-              style={{ flex: 1, alignSelf: "stretch" }}
-            />
-          </>
+          <WorkspaceToolbar
+            view={view}
+            paneAvailable={Boolean(paneCfg)}
+            collapsed={paneLayout.collapsed}
+            onToggleCollapsed={paneLayout.toggleCollapsed}
+            organizeEnabled={Boolean(sessions.length)}
+            onOrganize={() => setOrganizerOpen(true)}
+          />
         }
       >
         <WorkspaceRouter
@@ -697,135 +506,89 @@ export default function App() {
 
       <AppOverlayController
         t={t}
-        organization={{
-          open: organizerOpen,
+        {...buildOverlayProps({
+          view,
+          setView,
+          environment: env,
+          settings,
+          setSettings,
+          settingsOpen,
+          setSettingsOpen,
+          settingsSection,
+          updater,
+          onboarding,
+          rail,
+          railOnly,
           sessions,
-          setOpen: setOrganizerOpen,
-          reloadMetadata,
-          scan: doScan,
-        }}
-        peek={{
-          id: peekId,
           current: cur,
           selectedId: selId,
-          meta: detailMeta,
           detail,
-          actions: detailActs,
+          detailMeta,
+          detailActions: detailActs,
+          refreshing,
+          loadingMore,
+          navigationTarget,
+          scan,
+          scanning,
+          doScan,
           scope,
           ops,
           dirtyOps,
           applying,
-          navigationTarget,
-          refreshing,
-          loadingMore,
-          setId: setPeekId,
-          setView,
-        }}
-        migration={{
-          state: mig,
-          current: cur,
-          env,
-          settings,
-          setState: setMig,
-          loadHistory,
-        }}
-        editing={{
           diff,
-          dirtyOps,
-          confirmApply,
           setDiff,
+          confirmApply,
           setConfirmApply,
-          apply: applyEdit,
-        }}
-        search={{
-          open: searchOpen,
-          pane: paneCfg,
-          view,
-          ferrySessions,
-          historyGroups: histGroups,
-          libraryGroups: libGroups,
+          applyEdit,
+          metaFor,
+          updateMetadata: setMetaFor,
+          reloadMetadata,
+          organizerOpen,
+          setOrganizerOpen,
+          peekId,
+          setPeekId,
+          migration: mig,
+          setMigration: setMig,
+          loadHistory,
+          searchOpen,
+          setSearchOpen,
+          paneConfig: paneCfg,
           ferry,
+          ferrySessions,
+          libraryGroups: libGroups,
+          historyGroups: histGroups,
           selectHistory,
-          setMultiSelection: setMultiSel,
-          selectSession: select,
-          setOpen: setSearchOpen,
-        }}
-        contextMenu={{
-          value: ctxMenu,
-          items: ctxItems,
-          setValue: setCtxMenu,
-        }}
-        deletion={{
-          sessionConfirmation: deletion.sessionConfirmation,
-          batchConfirmation: deletion.batchConfirmation,
-          cancelSessionDeletion: deletion.cancelSessionDeletion,
-          confirmSessionDeletion: deletion.confirmSessionDeletion,
-          cancelBatchDeletion: deletion.cancelBatchDeletion,
-          confirmBatchDeletion: deletion.confirmBatchDeletion,
-          history: histDel,
-          setHistory: setHistDel,
+          select,
+          setMultiIds: setMultiSel,
+          menu: ctxMenu,
+          menuItems: ctxItems,
+          setMenu: setCtxMenu,
+          deletion,
+          historyDeletion: histDel,
+          setHistoryDeletion: setHistDel,
           deleteHistory,
           selectedHistoryId: histSelectedId,
-          selectHistory,
-        }}
-        rename={{
-          session: renameFor,
-          setSession: setRenameFor,
-          metaFor,
-          updateMetadata: setMetaFor,
-        }}
-        agentRename={{
-          session: agentRenameFor,
-          setSession: setAgentRenameFor,
-          ferry,
-        }}
-        tags={{
-          selection: tagFor,
-          setSelection: setTagFor,
-          metaFor,
-          updateMetadata: setMetaFor,
-        }}
-        toast={{ value: toast, setValue: setToast }}
-        railTip={{ value: rail.railTip, railOnly }}
-        settings={{
-          open: settingsOpen,
-          value: settings,
-          onChange: setSettings,
-          updater,
-          ferry,
-          section: settingsSection,
-          scanResult: scan,
-          env,
-          scanning,
-          scan: doScan,
-          guideSeen: onboarding.seen,
-          setOpen: setSettingsOpen,
-          openGuide: onboarding.openGuide,
-          setView,
-        }}
-        filters={{
+          rename: renameFor,
+          setRename: setRenameFor,
+          agentRename: agentRenameFor,
+          setAgentRename: setAgentRenameFor,
+          tagSelection: tagFor,
+          setTagSelection: setTagFor,
+          toast,
+          setToast,
           popover,
-          anchor: popAnchor.current,
-          onClose: () => setPopover(null),
-          library: {
-            value: libF,
-            onChange: setLibF,
-            counts,
-            dirs,
-            tags: allTags,
-            onClear: clearLibF,
-          },
-          history: {
-            value: histF,
-            onChange: setHistF,
-            onClear: clearHistF,
-          },
-        }}
-        guide={{
-          step: onboarding.step,
-          onGo: onboarding.setStep,
-          onFinish: onboarding.finishGuide,
-        }}
+          popoverAnchor: popAnchor.current,
+          setPopover,
+          libraryFilter: libF,
+          setLibraryFilter: setLibF,
+          libraryCounts: counts,
+          libraryDirs: dirs,
+          libraryTags: allTags,
+          clearLibraryFilter: clearLibF,
+          historyFilter: histF,
+          setHistoryFilter: setHistF,
+          clearHistoryFilter: clearHistF,
+        })}
       />
     </div>
   );
