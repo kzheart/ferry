@@ -46,22 +46,26 @@ def load_engine_methods() -> list[dict[str, object]]:
     methods = document.get("methods")
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
-    required = {"name", "kind", "public", "timeout", "retry", "dispatch"}
+    required = {"name", "kind", "exposure", "timeout", "retry", "dispatch"}
     allowed_kinds = {"read", "index-refresh", "mutation"}
+    allowed_exposures = {"public", "trusted-ui", "internal"}
     allowed_timeouts = {"normal", "lookup"}
     allowed_retries = {"safe-read", "never"}
     allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
         if not isinstance(method, dict) or set(method) != required:
-            raise ValueError("Engine 方法契约字段必须精确为 name/kind/public/timeout/retry/dispatch")
+            raise ValueError(
+                "Engine 方法契约字段必须精确为 "
+                "name/kind/exposure/timeout/retry/dispatch"
+            )
         name = method["name"]
         if not isinstance(name, str) or not name:
             raise ValueError("Engine method name 必须非空")
         if method["kind"] not in allowed_kinds:
             raise ValueError(f"Engine method {name} 的 kind 无效")
-        if not isinstance(method["public"], bool):
-            raise ValueError(f"Engine method {name} 的 public 必须为 bool")
+        if method["exposure"] not in allowed_exposures:
+            raise ValueError(f"Engine method {name} 的 exposure 无效")
         if method["timeout"] not in allowed_timeouts:
             raise ValueError(f"Engine method {name} 的 timeout 无效")
         if method["retry"] not in allowed_retries:
@@ -148,17 +152,29 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
     ]
     rows = []
     for method in methods:
+        exposure = {
+            "public": "Public",
+            "trusted-ui": "TrustedUi",
+            "internal": "Internal",
+        }[method["exposure"]]
         timeout = timeout_variants[method["timeout"]]
         retry = {"safe-read": "SafeRead", "never": "Never"}[method["retry"]]
         rows.extend((
             f'        {json.dumps(method["name"])} => Some(EngineMethodPolicy {{',
-            f'            is_public: {str(method["public"]).lower()},',
+            f"            exposure: Exposure::{exposure},",
             f"            timeout: TimeoutClass::{timeout},",
             f"            retry: RetryPolicy::{retry},",
             "        }),",
         ))
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) enum Exposure {",
+        "    Public,",
+        "    TrustedUi,",
+        "    Internal,",
+        "}",
+        "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub(crate) enum TimeoutClass {",
         *(f"    {variant}," for variant in used_timeout_variants),
@@ -172,7 +188,7 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub(crate) struct EngineMethodPolicy {",
-        "    pub(crate) is_public: bool,",
+        "    pub(crate) exposure: Exposure,",
         "    pub(crate) timeout: TimeoutClass,",
         "    pub(crate) retry: RetryPolicy,",
         "}",
@@ -191,7 +207,7 @@ def engine_methods_python(methods: list[dict[str, object]]) -> str:
     policies = {
         method["name"]: {
             key: method[key]
-            for key in ("kind", "public", "timeout", "retry", "dispatch")
+            for key in ("kind", "exposure", "timeout", "retry", "dispatch")
         }
         for method in methods
     }

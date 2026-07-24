@@ -46,6 +46,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             sidecar::engine_rpc,
+            sidecar::trusted_engine_rpc,
             operation_commands::operation_plan,
             operation_commands::operation_apply,
             operation_commands::operation_status,
