@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FileProviderConfigStore } from "../src/providers/provider-config.js";
+import { FileProviderConfigStore } from "../src/providers/provider-config-store.js";
 import { FileModelsStore } from "../src/providers/model-store.js";
 import { EphemeralSessionStore } from "../src/sessions/session-repository.js";
 import {

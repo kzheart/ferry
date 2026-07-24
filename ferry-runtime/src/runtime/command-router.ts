@@ -1,7 +1,5 @@
-import {
-  parseThinkingLevel,
-  type ThinkingLevel,
-} from "../providers/provider-config.js";
+import type { ThinkingLevel } from "../providers/provider-config.js";
+import { parseThinkingLevel } from "../providers/provider-config-validation.js";
 import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { RoleInput } from "../roles/role-repository.js";

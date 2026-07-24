@@ -3,11 +3,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_ENABLED_PROVIDERS,
-  FileProviderConfigStore,
-  parseProviderConfig,
-} from "../src/providers/provider-config.js";
+import { DEFAULT_ENABLED_PROVIDERS } from "../src/providers/provider-config.js";
+import { FileProviderConfigStore } from "../src/providers/provider-config-store.js";
+import { parseProviderConfig } from "../src/providers/provider-config-validation.js";
 
 async function store() {
   const directory = await mkdtemp(join(tmpdir(), "ferry-provider-config-"));

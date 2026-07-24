@@ -4,6 +4,8 @@ export * from "./organizing/organizer.js";
 export * from "./providers/auth-coordinator.js";
 export * from "./providers/model-store.js";
 export * from "./providers/provider-config.js";
+export * from "./providers/provider-config-store.js";
+export * from "./providers/provider-config-validation.js";
 export * from "./providers/provider-host.js";
 export * from "./roles/role-repository.js";
 export * from "./runtime/command-router.js";

@@ -21,12 +21,12 @@ import {
   validateOrganizerResult,
   type OrganizerInput,
 } from "../organizing/organizer.js";
-import {
-  FileProviderConfigStore,
-  type CustomModelConfig,
-  type CustomProviderConfig,
-  type ModelSelection,
+import type {
+  CustomModelConfig,
+  CustomProviderConfig,
+  ModelSelection,
 } from "./provider-config.js";
+import { FileProviderConfigStore } from "./provider-config-store.js";
 
 export const UNSUPPORTED_PROVIDER_IDS = new Set([
   "amazon-bedrock",
