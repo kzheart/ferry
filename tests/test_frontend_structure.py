@@ -33,8 +33,8 @@ def test_feature_models_live_with_their_consuming_capability():
 
 
 def test_operation_flow_has_one_feature_controller():
-    controller = FRONTEND / "features/operations/operationController.js"
-    composition = FRONTEND / "features/operations/operations.js"
+    controller = FRONTEND / "features/operations/operationController.ts"
+    composition = FRONTEND / "features/operations/operations.ts"
     assert controller.is_file()
     assert composition.is_file()
 
@@ -51,3 +51,15 @@ def test_operation_flow_has_one_feature_controller():
         assert "operationApply" not in source
         assert "operationStatus" not in source
         assert "operationCancel" not in source
+
+
+def test_frontend_core_uses_strict_typescript():
+    tsconfig = (ROOT / "app/tsconfig.json").read_text()
+    package = (ROOT / "app/package.json").read_text()
+
+    assert '"strict": true' in tsconfig
+    assert '"noUncheckedIndexedAccess": true' in tsconfig
+    assert '"exactOptionalPropertyTypes": true' in tsconfig
+    assert '"typecheck": "tsc --noEmit"' in package
+    assert (FRONTEND / "api/contract/generated/operations.ts").is_file()
+    assert not (FRONTEND / "api/contract/generated/operations.js").exists()

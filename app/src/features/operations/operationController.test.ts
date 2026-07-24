@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { OperationStatus }
+  from "../../api/contract/generated/operations.js";
 import { OperationController } from "./operationController.js";
 
 test("controller owns plan, apply and status polling", async () => {
-  const calls = [];
-  const statuses = [];
+  const calls: Array<[string, unknown]> = [];
+  const statuses: OperationStatus[] = [];
   const controller = new OperationController({
     plan: async input => {
       calls.push(["plan", input]);
