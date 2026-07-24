@@ -1,0 +1,21 @@
+{
+  "protocol": "ferry-ipc/1",
+  "request": {
+    "required": ["protocol", "id", "method", "params"],
+    "additional_properties": false
+  },
+  "response": {
+    "success_required": ["protocol", "id", "ok", "result"],
+    "failure_required": ["protocol", "id", "ok", "error"],
+    "additional_properties": false
+  },
+  "error": {
+    "required": ["code", "category", "retryable", "params"],
+    "additional_properties": false
+  },
+  "event": {
+    "required": ["protocol", "type", "payload"],
+    "optional": ["correlation_id", "context"],
+    "additional_properties": false
+  }
+}

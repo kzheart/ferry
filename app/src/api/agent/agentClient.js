@@ -1,8 +1,8 @@
-// Ask Ferry 传输层:经 Tauri `agent_command` 走 ferry-agent/v1 协议,
+// Ask Ferry 传输层:经 Tauri `agent_command` 走统一 ferry-ipc/1 协议,
 // 审批走独立可信命令(approve 与 apply 在 Rust 内一次完成,凭证不进 WebView)
 import { invoke } from "@tauri-apps/api/core";
+import { FERRY_IPC_PROTOCOL } from "../contract/generated/ipc.js";
 
-const PROTOCOL = "ferry-agent/v1";
 let requestSeq = 1;
 
 export class AgentError extends Error {
@@ -14,7 +14,7 @@ export class AgentError extends Error {
 
 export async function agentCommand(method, params) {
   const request = JSON.stringify({
-    protocol: PROTOCOL,
+    protocol: FERRY_IPC_PROTOCOL,
     id: `ui_${Date.now().toString(36)}_${requestSeq++}`,
     method,
     params: params || {},
@@ -27,7 +27,10 @@ export async function agentCommand(method, params) {
   }
   const response = JSON.parse(raw);
   if (!response.ok) {
-    throw new AgentError(response.error?.code || "agent_error", response.error?.message);
+    throw new AgentError(
+      response.error?.code || "agent_error",
+      response.error?.params?.message,
+    );
   }
   return response.result;
 }

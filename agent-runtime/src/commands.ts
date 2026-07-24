@@ -18,14 +18,14 @@ export async function dispatch(
   command: CommandEnvelope,
 ): Promise<ResponseEnvelope> {
   try {
-    const params = command.params ?? {};
+    const params = command.params;
     let result: unknown;
     switch (command.method) {
       case "health":
         result = {
           status: "ok",
           protocol: PROTOCOL_VERSION,
-          runtime: "ferry-agent",
+          runtime: "ferry-runtime",
           pi_version: "0.81.1",
           ...(await runtime.providerStatus()),
         };
@@ -317,12 +317,16 @@ export async function dispatch(
     const protocolError =
       error instanceof ProtocolError
         ? error
-        : new ProtocolError("internal_error", "internal runtime error");
+        : new ProtocolError(
+            "internal_error",
+            "internal runtime error",
+            "internal",
+          );
     return {
       protocol: PROTOCOL_VERSION,
       id: command.id,
       ok: false,
-      error: { code: protocolError.code, message: protocolError.message },
+      error: protocolError.toEnvelope(),
     };
   }
 }

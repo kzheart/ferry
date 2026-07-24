@@ -1,4 +1,11 @@
-export const PROTOCOL_VERSION = "ferry-agent/v1" as const;
+import {
+  FERRY_IPC_PROTOCOL,
+  type IpcError,
+  type IpcRequest,
+  type IpcResponse,
+} from "./contracts/ipc.js";
+
+export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 
 export type CommandMethod =
   | "health"
@@ -40,20 +47,9 @@ export type CommandMethod =
   | "auth.login.cancel"
   | "tool.result";
 
-export interface CommandEnvelope {
-  protocol: typeof PROTOCOL_VERSION;
-  id: string;
-  method: CommandMethod;
-  params?: Record<string, unknown>;
-}
+export type CommandEnvelope = IpcRequest<CommandMethod>;
 
-export interface ResponseEnvelope {
-  protocol: typeof PROTOCOL_VERSION;
-  id: string;
-  ok: boolean;
-  result?: unknown;
-  error?: { code: string; message: string };
-}
+export type ResponseEnvelope = IpcResponse;
 
 export interface EventEnvelope {
   protocol: typeof PROTOCOL_VERSION;
@@ -69,8 +65,19 @@ export class ProtocolError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly category = "validation",
+    readonly retryable = false,
   ) {
     super(message);
+  }
+
+  toEnvelope(): IpcError {
+    return {
+      code: this.code,
+      category: this.category,
+      retryable: this.retryable,
+      params: { message: this.message },
+    };
   }
 }
 
@@ -137,8 +144,20 @@ export function parseCommand(input: unknown): CommandEnvelope {
   if (typeof input.method !== "string" || !methods.includes(input.method)) {
     throw new ProtocolError("unknown_method", "unsupported command method");
   }
-  if (input.params !== undefined && !isObject(input.params)) {
+  if (!isObject(input.params)) {
     throw new ProtocolError("invalid_request", "params must be an object");
+  }
+  const fields = Object.keys(input);
+  if (
+    fields.length !== 4 ||
+    !fields.every((field) =>
+      ["protocol", "id", "method", "params"].includes(field),
+    )
+  ) {
+    throw new ProtocolError(
+      "invalid_request",
+      "command envelope fields do not match ferry-ipc/1",
+    );
   }
   return input as unknown as CommandEnvelope;
 }

@@ -11,10 +11,31 @@ import { createProtocolTestBackend } from "./test-backend.js";
 describe("JSONL protocol", () => {
   it("rejects unknown protocol versions and methods", () => {
     expect(() =>
-      parseCommand({ protocol: "v0", id: "1", method: "health" }),
+      parseCommand({ protocol: "v0", id: "1", method: "health", params: {} }),
     ).toThrow(ProtocolError);
     expect(() =>
-      parseCommand({ protocol: PROTOCOL_VERSION, id: "1", method: "shell" }),
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "1",
+        method: "shell",
+        params: {},
+      }),
+    ).toThrow(ProtocolError);
+    expect(() =>
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "1",
+        method: "health",
+      }),
+    ).toThrow(ProtocolError);
+    expect(() =>
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "1",
+        method: "health",
+        params: {},
+        legacy: true,
+      }),
     ).toThrow(ProtocolError);
   });
 
@@ -24,7 +45,12 @@ describe("JSONL protocol", () => {
     });
     const health = await dispatch(
       runtime,
-      parseCommand({ protocol: PROTOCOL_VERSION, id: "1", method: "health" }),
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "1",
+        method: "health",
+        params: {},
+      }),
     );
     expect(health).toMatchObject({
       ok: true,

@@ -165,8 +165,9 @@ jobs:
           SIDECAR: ${{ matrix.agent-binary }}
         run: |
           import json, os, subprocess, tempfile
+          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           request = {
-              "protocol": "ferry-agent/v1", "id": "ci-health",
+              "protocol": protocol, "id": "ci-health",
               "method": "health", "params": {},
           }
           with tempfile.TemporaryDirectory() as data_dir:
@@ -176,7 +177,7 @@ jobs:
                   text=True, capture_output=True, check=True, timeout=30, env=env)
           response = json.loads(process.stdout.splitlines()[-1])
           assert response["ok"] is True, (response, process.stderr)
-          assert response["result"]["protocol"] == "ferry-agent/v1", response
+          assert response["result"]["protocol"] == protocol, response
           assert response["result"]["provider"] == "deepseek", response
           assert response["result"]["model"] == "deepseek-v4-flash", response
 
@@ -245,8 +246,9 @@ jobs:
           SIDECAR: ${{ matrix.agent-binary }}
         run: |
           import json, os, subprocess, tempfile
+          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           request = {
-              "protocol": "ferry-agent/v1", "id": "ci-health",
+              "protocol": protocol, "id": "ci-health",
               "method": "health", "params": {},
           }
           with tempfile.TemporaryDirectory() as data_dir:
@@ -256,6 +258,6 @@ jobs:
                   text=True, capture_output=True, check=True, timeout=30, env=env)
           response = json.loads(process.stdout.splitlines()[-1])
           assert response["ok"] is True, (response, process.stderr)
-          assert response["result"]["protocol"] == "ferry-agent/v1", response
+          assert response["result"]["protocol"] == protocol, response
           assert response["result"]["provider"] == "deepseek", response
           assert response["result"]["model"] == "deepseek-v4-flash", response
