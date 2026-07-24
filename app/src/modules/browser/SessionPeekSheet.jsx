@@ -7,10 +7,6 @@ export function SessionPeekSheet({
   meta,
   detail,
   actions,
-  scope,
-  ops,
-  dirtyOps,
-  applying,
   navigationTarget,
   refreshing,
   loadingMore,
@@ -85,19 +81,6 @@ export function SessionPeekSheet({
           meta={meta}
           data={detail?.data}
           error={detail?.error}
-          onDiscardAll={actions.onDiscardAll}
-          scope={scope}
-          setScope={actions.setScope}
-          ops={ops}
-          dirtyOps={dirtyOps}
-          addOp={actions.addOp}
-          removeOp={actions.removeOp}
-          updateOp={actions.updateOp}
-          startReplyEdit={actions.startReplyEdit}
-          replyEditError={actions.replyEditError}
-          onOpenDiff={actions.onOpenDiff}
-          onApply={actions.onApply}
-          applying={applying}
           onOpenMigrate={actions.onOpenMigrate}
           navigationTarget={navigationTarget}
           onRefresh={actions.onRefresh}

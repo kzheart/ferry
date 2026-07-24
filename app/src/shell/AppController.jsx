@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
+import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
@@ -272,6 +273,11 @@ export default function App() {
     setAgentAttachments,
   });
 
+  const editingSurface = useMemo(
+    () => ({ scope, ops, dirtyOps, applying, ...detailActs }),
+    [scope, ops, dirtyOps, applying, detailActs],
+  );
+
   const { paneConfig: paneCfg, ferrySessions } = useResourcePaneConfig({
     t,
     view,
@@ -349,6 +355,7 @@ export default function App() {
 
   return (
     <FerryRuntimeProvider value={ferry}>
+    <SessionEditingProvider value={editingSurface}>
     <div
       data-ferry-win="1"
       style={{
@@ -474,10 +481,6 @@ export default function App() {
             loadingMore,
             onDeleteHistory: () => setHistDel(histSel),
           }}
-          scope={scope}
-          ops={ops}
-          dirtyOps={dirtyOps}
-          applying={applying}
           historySelection={histSel}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
@@ -521,10 +524,6 @@ export default function App() {
           scan,
           scanning,
           doScan,
-          scope,
-          ops,
-          dirtyOps,
-          applying,
           diff,
           setDiff,
           confirmApply,
@@ -580,6 +579,7 @@ export default function App() {
         })}
       />
     </div>
+    </SessionEditingProvider>
     </FerryRuntimeProvider>
   );
 }

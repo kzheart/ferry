@@ -58,10 +58,6 @@ export function AppOverlays({
           meta={peek.meta}
           detail={peek.detail}
           actions={peek.actions}
-          scope={peek.scope}
-          ops={peek.ops}
-          dirtyOps={peek.dirtyOps}
-          applying={peek.applying}
           navigationTarget={peek.navigationTarget}
           refreshing={peek.refreshing}
           onClose={peek.onClose}

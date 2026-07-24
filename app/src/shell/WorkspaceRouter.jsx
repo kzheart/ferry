@@ -16,10 +16,6 @@ export function WorkspaceRouter({
   detailMeta,
   detail,
   detailActions,
-  scope,
-  ops,
-  dirtyOps,
-  applying,
   historySelection,
   agentAttachments,
   onAgentAttachmentsChange,
@@ -49,19 +45,6 @@ export function WorkspaceRouter({
             meta={detailMeta}
             data={detail?.data}
             error={detail?.error}
-            onDiscardAll={detailActions.onDiscardAll}
-            scope={scope}
-            setScope={detailActions.setScope}
-            ops={ops}
-            dirtyOps={dirtyOps}
-            addOp={detailActions.addOp}
-            removeOp={detailActions.removeOp}
-            updateOp={detailActions.updateOp}
-            startReplyEdit={detailActions.startReplyEdit}
-            replyEditError={detailActions.replyEditError}
-            onOpenDiff={detailActions.onOpenDiff}
-            onApply={detailActions.onApply}
-            applying={applying}
             onOpenMigrate={detailActions.onOpenMigrate}
             navigationTarget={navigationTarget}
             onRefresh={detailActions.onRefresh}
