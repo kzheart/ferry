@@ -8,6 +8,14 @@ models.dev 单价分档估算成本。
 
 from datetime import datetime, timezone
 
+from .index import AgentSessionIndex
+from .safety import (
+    finalize_dto,
+    safe_project,
+    string_set,
+    validated_interval,
+)
+
 
 def empty_tokens() -> dict:
     return {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
@@ -42,3 +50,46 @@ def iso_ms(value) -> int | None:
         return int(parsed.timestamp() * 1000)
     except (ValueError, TypeError):
         return None
+
+
+def get_usage(agents=None, projects=None, time_range=None, *,
+              index: AgentSessionIndex) -> dict:
+    allowed_agents = string_set(agents, "agents", 8, 32)
+    allowed_projects = {
+        item.casefold()
+        for item in string_set(projects, "projects", 20, 256)
+    }
+    start, end = validated_interval(time_range)
+    total = empty_tokens()
+    by_agent: dict[str, dict] = {}
+    sessions = 0
+    for record in index.refresh():
+        row = record.row
+        updated = int(row.get("updated") or 0)
+        project = safe_project(row.get("dir"))
+        if allowed_agents and record.tool not in allowed_agents:
+            continue
+        if allowed_projects and project.casefold() not in allowed_projects:
+            continue
+        if start is not None and updated < start:
+            continue
+        if end is not None and updated > end:
+            continue
+        tokens = row.get("tokens")
+        if not isinstance(tokens, dict):
+            continue
+        sessions += 1
+        add_tokens(total, tokens)
+        add_tokens(by_agent.setdefault(record.tool, empty_tokens()), tokens)
+    return finalize_dto({
+        "sessions": sessions,
+        "tokens": total,
+        "by_agent": by_agent,
+        "cost": None,
+        "currency": "USD",
+        "filters": {
+            "agents": sorted(allowed_agents) if allowed_agents else None,
+            "projects": sorted(allowed_projects) if allowed_projects else None,
+            "time_range": {"from": start, "to": end},
+        },
+    })

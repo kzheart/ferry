@@ -14,6 +14,8 @@ from engine.adapters.contracts import (
 )
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.sessions import catalog as agent_tools
+from engine.sessions import search as session_search
+from engine.sessions import usage as session_usage
 from engine.sessions.index import AgentSessionIndex
 from engine.sessions.safety import redact
 from engine.sessions import scan as scanning
@@ -247,31 +249,43 @@ def agent_environment(tmp_path, monkeypatch):
     )
     index = AgentSessionIndex(ports)
     for name in (
-        "search_sessions", "get_session_context", "search_session_content",
-        "session_read", "get_usage", "preview_migration", "preview_edit",
+        "get_session_context", "search_session_content", "session_read",
+        "preview_migration", "preview_edit",
     ):
         monkeypatch.setattr(
             agent_tools, name, partial(getattr(agent_tools, name), index=index),
         )
+    monkeypatch.setattr(
+        session_search,
+        "search_sessions",
+        partial(session_search.search_sessions, index=index),
+    )
+    monkeypatch.setattr(
+        session_usage,
+        "get_usage",
+        partial(session_usage.get_usage, index=index),
+    )
     yield {"root": root, "transcript": transcript, "editor": editor,
            "claude_browser": claude.browser, "opencode_browser": opencode_browser,
            "index": index, "ports": ports}
 
 
 def _claude_ref():
-    result = agent_tools.search_sessions("支付", limit=20)
+    result = session_search.search_sessions("支付", limit=20)
     return result["sessions"][0]["ref"]
 
 
 def test_search_never_exposes_storage_locations(agent_environment):
-    result = agent_tools.search_sessions("支付", agents=["claude"], limit=1)
+    result = session_search.search_sessions(
+        "支付", agents=["claude"], limit=1,
+    )
     assert result["returned"] == 1
     item = result["sessions"][0]
     assert item["ref"].startswith("fsr_")
     assert "path" not in item and "dir" not in item and "id" not in item
     assert "/Users/" not in json.dumps(result, ensure_ascii=False)
     with pytest.raises(AgentRequestError):
-        agent_tools.search_sessions(limit=51)
+        session_search.search_sessions(limit=51)
 
 
 def test_library_scan_issues_operation_refs(agent_environment):
@@ -377,7 +391,7 @@ def test_only_current_index_refs_are_accepted(agent_environment):
 
 
 def test_id_backed_ref_rejects_changed_or_recreated_session(agent_environment):
-    ref = agent_tools.search_sessions("Other")["sessions"][0]["ref"]
+    ref = session_search.search_sessions("Other")["sessions"][0]["ref"]
     agent_environment["opencode_browser"].fingerprint_value = "fingerprint-2"
     with pytest.raises(AgentReferenceError, match="扫描后已变化"):
         agent_tools.get_session_context("opencode", ref)
@@ -533,7 +547,7 @@ def test_redaction_covers_cross_platform_paths_and_common_credentials():
 
 
 def test_usage_is_aggregated_without_raw_session_data(agent_environment):
-    result = agent_tools.get_usage(agents=["claude"])
+    result = session_usage.get_usage(agents=["claude"])
     assert result == {
         "sessions": 1,
         "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
@@ -570,9 +584,11 @@ def test_agent_rpc_returns_stable_structured_errors(agent_environment):
 
 def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment):
     with pytest.raises(AgentRequestError):
-        agent_tools.search_sessions(agents=[f"tool-{index}" for index in range(9)])
+        session_search.search_sessions(
+            agents=[f"tool-{index}" for index in range(9)],
+        )
     with pytest.raises(AgentRequestError):
-        agent_tools.search_sessions(time_range={"from": float("nan")})
+        session_search.search_sessions(time_range={"from": float("nan")})
     ref = _claude_ref()
     with pytest.raises(AgentRequestError):
         agent_tools.preview_edit(
@@ -633,7 +649,7 @@ def test_search_dto_is_byte_bounded(agent_environment):
             "count": 4, "size": transcript.stat().st_size,
             "model": "模型" * 120,
         })
-    result = agent_tools.search_sessions(limit=50)
+    result = session_search.search_sessions(limit=50)
     assert len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 64 * 1024
     assert result["returned"] < 50
     assert result["has_more"] is True

@@ -6,12 +6,15 @@ from __future__ import annotations
 
 from .context import EngineContext
 from .contracts.ipc import FERRY_CONTRACT_HASH
+from .errors import AgentReferenceError
 from .operations import history, metadata
 from .operations.service import OperationService
 from .organization import proposals as organizing
 from .organization import summaries
 from .runtime import sessions as runtime_sessions
 from .sessions import catalog as agent_tools
+from .sessions import search as session_search
+from .sessions import usage as session_usage
 from .sessions.index import AgentSessionIndex, IndexedSession
 from .sessions import read as sessions
 from .sessions import scan as scanning
@@ -59,7 +62,7 @@ class EngineService:
         def build(record: IndexedSession) -> dict:
             session_id = record.row.get("id")
             if not isinstance(session_id, str) or not session_id:
-                raise agent_tools.AgentReferenceError("会话缺少原生 ID")
+                raise AgentReferenceError("会话缺少原生 ID")
             cwd = record.row.get("dir")
             if not isinstance(cwd, str) or not cwd:
                 cwd = "."
@@ -136,13 +139,15 @@ class EngineService:
         return runtime_sessions.delete(session_id, self._ports)
 
     def agent_search_sessions(self, query: str = "", **params) -> dict:
-        return agent_tools.search_sessions(query, index=self._index, **params)
+        return session_search.search_sessions(
+            query, index=self._index, **params,
+        )
 
     def agent_session_read(self, tool: str, **params) -> dict:
         return agent_tools.session_read(tool, index=self._index, **params)
 
     def agent_get_usage(self, **params) -> dict:
-        return agent_tools.get_usage(index=self._index, **params)
+        return session_usage.get_usage(index=self._index, **params)
 
     def operation_plan(self, value: dict) -> dict:
         return self._operations.plan(value)

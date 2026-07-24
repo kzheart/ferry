@@ -20,9 +20,6 @@ from .safety import (
     validate_agent_edit_ops,
     validated_interval,
 )
-from .usage import add_tokens, empty_tokens
-
-MAX_SEARCH_RESULTS = 50
 MAX_CONTENT_SEARCH_RESULTS = 50
 MAX_CONTEXT_MESSAGES = 50
 MAX_CONTEXT_BYTES = 64 * 1024
@@ -54,78 +51,6 @@ def public_locator_error(ops: list[dict]) -> LocatorStaleError:
         "消息定位信息与当前会话不匹配",
         {"field": "locator", "locator": locator,
          "hint": "重新调用 ferry_get_session_context，并原样使用 messages[].locator"})
-
-
-def search_sessions(query: str = "", agents=None, projects=None, time_range=None,
-                    limit: int = 20, *, index: AgentSessionIndex) -> dict:
-    limit = bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
-    if not isinstance(query, str) or len(query) > 500:
-        raise AgentRequestError("query 必须是不超过 500 字符的字符串")
-    allowed_agents = string_set(agents, "agents", 8, 32)
-    allowed_projects = {
-        item.casefold() for item in string_set(projects, "projects", 20, 256)}
-    start, end = validated_interval(time_range)
-    needle = query.strip().casefold()
-    matches = []
-    for record in index.refresh():
-        row = record.row
-        project = safe_project(row.get("dir"))
-        updated = int(row.get("updated") or 0)
-        haystack = " ".join((
-            str(row.get("title") or ""), project, record.tool,
-            str(row.get("model") or ""),
-        )).casefold()
-        if allowed_agents and record.tool not in allowed_agents:
-            continue
-        if allowed_projects and project.casefold() not in allowed_projects:
-            continue
-        if needle and needle not in haystack:
-            continue
-        if start is not None and updated < start:
-            continue
-        if end is not None and updated > end:
-            continue
-        matches.append({
-            "tool": record.tool,
-            "ref": record.opaque_ref,
-            "session_id": record_session_id(record),
-            "title": redact(str(row.get("title") or ""), 200),
-            "project": project,
-            "updated": updated,
-            "message_count": int(row.get("count") or 0),
-            "model": redact(str(row.get("model") or ""), 120),
-            "revision": record.revision,
-        })
-    matches.sort(key=lambda item: item["updated"], reverse=True)
-    selected = []
-    byte_limited = False
-    for item in matches[:limit]:
-        candidate = {
-            "sessions": [*selected, item],
-            "returned": len(selected) + 1,
-            "has_more": len(matches) > len(selected) + 1,
-            "truncation": {
-                "truncated": True,
-                "reason": "byte_budget",
-                "budget_bytes": MAX_AGENT_DTO_BYTES,
-            },
-        }
-        if len(json.dumps(candidate, ensure_ascii=False).encode("utf-8")) \
-                > MAX_AGENT_DTO_BYTES:
-            byte_limited = True
-            break
-        selected.append(item)
-    result = {
-        "sessions": selected,
-        "returned": len(selected),
-        "has_more": len(matches) > len(selected),
-        "truncation": {
-            "truncated": byte_limited,
-            "reason": "byte_budget" if byte_limited else None,
-            "budget_bytes": MAX_AGENT_DTO_BYTES,
-        },
-    }
-    return finalize_dto(result)
 
 
 def _take(text: str, remaining: int) -> tuple[str, int, bool]:
@@ -390,46 +315,6 @@ def session_read(tool: str, ref: str | None = None, terms=None, roles=None,
             index=index)
         result["mode"] = "context"
     return result
-
-
-def get_usage(agents=None, projects=None, time_range=None, *,
-              index: AgentSessionIndex) -> dict:
-    allowed_agents = string_set(agents, "agents", 8, 32)
-    allowed_projects = {
-        item.casefold() for item in string_set(projects, "projects", 20, 256)}
-    start, end = validated_interval(time_range)
-    total = empty_tokens()
-    by_agent: dict[str, dict] = {}
-    sessions = 0
-    for record in index.refresh():
-        row, updated = record.row, int(record.row.get("updated") or 0)
-        project = safe_project(row.get("dir"))
-        if allowed_agents and record.tool not in allowed_agents:
-            continue
-        if allowed_projects and project.casefold() not in allowed_projects:
-            continue
-        if start is not None and updated < start:
-            continue
-        if end is not None and updated > end:
-            continue
-        tokens = row.get("tokens")
-        if not isinstance(tokens, dict):
-            continue
-        sessions += 1
-        add_tokens(total, tokens)
-        add_tokens(by_agent.setdefault(record.tool, empty_tokens()), tokens)
-    return finalize_dto({
-        "sessions": sessions,
-        "tokens": total,
-        "by_agent": by_agent,
-        "cost": None,
-        "currency": "USD",
-        "filters": {
-            "agents": sorted(allowed_agents) if allowed_agents else None,
-            "projects": sorted(allowed_projects) if allowed_projects else None,
-            "time_range": {"from": start, "to": end},
-        },
-    })
 
 
 def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,

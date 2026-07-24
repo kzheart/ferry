@@ -86,6 +86,11 @@ def test_session_reference_index_is_isolated_from_query_catalog():
     assert "class IndexedSession" in index
     assert "class AgentSessionIndex" not in catalog
     assert "class IndexedSession" not in catalog
+    assert (sessions / "search.py").is_file()
+    assert "def search_sessions" in (sessions / "search.py").read_text()
+    assert "def search_sessions" not in catalog
+    assert "def get_usage" in (sessions / "usage.py").read_text()
+    assert "def get_usage" not in catalog
     safety = (sessions / "safety.py").read_text()
     assert "def redact(" in safety
     assert "def validate_json_shape(" in safety
