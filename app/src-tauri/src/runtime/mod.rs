@@ -2,7 +2,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -20,6 +20,7 @@ use crate::engine::engine_request_blocking;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
+use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -35,13 +36,9 @@ struct RuntimeClient {
     transport: JsonlProcessClient,
 }
 
-struct RuntimeProcess {
-    generation: u64,
-    child: Child,
-    client: RuntimeClient,
-}
+type RuntimeProcess = ManagedProcess<RuntimeClient>;
 
-static RUNTIME_PROCESS: OnceLock<Mutex<Option<RuntimeProcess>>> = OnceLock::new();
+static RUNTIME_PROCESS: OnceLock<ProcessSupervisor<RuntimeClient>> = OnceLock::new();
 static RUNTIME_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 fn emit_host_event(app: &tauri::AppHandle, event: Value) {
@@ -62,13 +59,6 @@ fn next_id(prefix: &str) -> String {
         std::process::id(),
         REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
     )
-}
-
-impl Drop for RuntimeProcess {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
 }
 
 fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeProcess, String> {
@@ -127,14 +117,36 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         )
     });
     let generation = RUNTIME_GENERATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    Ok(RuntimeProcess {
+    let client = RuntimeClient {
         generation,
-        child,
-        client: RuntimeClient {
-            generation,
-            transport,
-        },
-    })
+        transport,
+    };
+    let process = ManagedProcess::new(generation, child, client.clone());
+    let health = json!({
+        "protocol": FERRY_IPC_PROTOCOL,
+        "id": next_id("health"),
+        "method": "health",
+        "params": {},
+    });
+    let health_id = health
+        .get("id")
+        .and_then(Value::as_str)
+        .expect("health request has id");
+    let response = client
+        .transport
+        .request(health_id, &health.to_string(), Duration::from_secs(10))
+        .map_err(|error| error.to_string())?;
+    let value: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+    if value.get("ok").and_then(Value::as_bool) != Some(true)
+        || value.pointer("/result/service").and_then(Value::as_str) != Some("ferry-runtime")
+        || value
+            .pointer("/result/contract_hash")
+            .and_then(Value::as_str)
+            != Some(FERRY_CONTRACT_HASH)
+    {
+        return Err("Ferry Runtime 协议握手失败".to_owned());
+    }
+    Ok(process)
 }
 
 fn read_runtime_output(
@@ -558,57 +570,15 @@ fn request_runtime(
 }
 
 fn ensure_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeClient, String> {
-    let slot = RUNTIME_PROCESS.get_or_init(|| Mutex::new(None));
-    let mut guard = slot.lock().map_err(|_| "Runtime 状态锁损坏".to_owned())?;
-    let exited = guard
-        .as_mut()
-        .and_then(|process| process.child.try_wait().ok().flatten())
-        .is_some();
-    if exited {
-        *guard = None;
-    }
-    if guard.is_none() {
-        let candidate = spawn_runtime(app, resource_dir)?;
-        let health = json!({
-            "protocol": FERRY_IPC_PROTOCOL,
-            "id": next_id("health"),
-            "method": "health",
-            "params": {},
-        });
-        let health_id = health
-            .get("id")
-            .and_then(Value::as_str)
-            .expect("health request has id");
-        let response = candidate
-            .client
-            .transport
-            .request(health_id, &health.to_string(), Duration::from_secs(10))
-            .map_err(|error| error.to_string())?;
-        let value: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
-        if value.get("ok").and_then(Value::as_bool) != Some(true)
-            || value.pointer("/result/service").and_then(Value::as_str) != Some("ferry-runtime")
-            || value
-                .pointer("/result/contract_hash")
-                .and_then(Value::as_str)
-                != Some(FERRY_CONTRACT_HASH)
-        {
-            return Err("Ferry Runtime 协议握手失败".to_owned());
-        }
-        *guard = Some(candidate);
-    }
-    Ok(guard.as_ref().expect("runtime ensured").client.clone())
+    RUNTIME_PROCESS
+        .get_or_init(|| ProcessSupervisor::new("Runtime"))
+        .ensure(|| spawn_runtime(app, resource_dir))
 }
 
 fn invalidate_runtime(generation: u64) {
-    let slot = RUNTIME_PROCESS.get_or_init(|| Mutex::new(None));
-    if let Ok(mut guard) = slot.lock() {
-        if guard
-            .as_ref()
-            .is_some_and(|process| process.generation == generation)
-        {
-            *guard = None;
-        }
-    }
+    RUNTIME_PROCESS
+        .get_or_init(|| ProcessSupervisor::new("Runtime"))
+        .invalidate(generation);
 }
 
 fn validate_public_command(request: &str) -> Result<(), String> {
