@@ -2,7 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.application import agent_tools, migration
+from engine.application import agent_tools
+from engine.operations import migrate as migration
 from engine.domain.model import AgentEdge, Block, Message, Session
 
 

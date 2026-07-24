@@ -13,7 +13,7 @@ from engine.adapters.codex.reader import read as read_codex
 from engine.adapters.opencode.editor import OpenCodeBackend
 from engine.adapters.opencode.probe import OpenCodeVerifier
 from engine.adapters.opencode.session import _parse_session
-from engine.application.editing import apply_mutation
+from engine.operations.edit import apply_mutation
 from engine.application.sessions import session_json
 from engine.domain.edit import AssistantReply
 from engine.domain.errors import ConcurrentModificationError

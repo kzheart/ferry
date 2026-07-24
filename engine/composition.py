@@ -4,11 +4,11 @@ from . import __version__
 from .adapters.registry import create_registry
 from .application.agent_tools import AgentSessionIndex
 from .application.engine import EngineApplication
-from .application.operations import OperationService
 from .application.ports import ApplicationPorts
 from .infrastructure.resources import resource_path
 from .infrastructure.scan_cache import ScanCache
 from .infrastructure.snapshots import backup_dir
+from .operations.service import OperationService
 
 
 def create_ports() -> ApplicationPorts:

@@ -1,6 +1,6 @@
 """探针应用门面；具体 CLI 执行由 infrastructure 持有。"""
 
-from .ports import ApplicationPorts
+from ..application.ports import ApplicationPorts
 
 
 class ProbeTimeout(RuntimeError):

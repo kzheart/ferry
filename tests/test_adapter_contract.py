@@ -291,7 +291,7 @@ def test_codex_rewrite_preserves_user_image_content():
 
 
 def test_resume_descriptor_executable_matches_manifest_whitelist(ports):
-    from engine.application import migration
+    from engine.operations import migrate as migration
     for agent_id in ports.adapters():
         adapter = ports.adapter(agent_id)
         descriptor = migration.MigrationService(ports).resume_command(

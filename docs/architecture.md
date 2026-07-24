@@ -1,8 +1,35 @@
 # Ferry Architecture
 
-This document is the architectural source of truth for the ongoing clean
-architecture refactor. It describes the intended ownership boundaries rather
-than preserving the shape of the current implementation.
+This document is the architectural source of truth for the ongoing refactor.
+It describes the intended ownership boundaries rather than preserving the
+shape of the current implementation.
+
+## Package convention
+
+Ferry does not use `domain/application/infrastructure` as repository-wide
+horizontal layers. The repository is split by process boundary first; each
+process is then split by product capability. A capability package owns its
+rules, types, coordination, and private persistence adapter together.
+
+This follows the practical shape used by comparable open-source agent
+projects: OpenHands groups its SDK by capabilities such as agent,
+conversation, event, LLM, security, subagent, tool, and workspace; Cherry
+Studio separates Electron process boundaries and then groups renderer/main
+code by features, services, stores, providers, tools, and IPC.
+
+The intended top-level layout is:
+
+```text
+app/             React UI and Tauri host
+engine/          external session engine
+ferry-runtime/   Ferry multi-agent runtime
+contracts/       generated cross-process contracts
+scripts/         build and architecture checks
+```
+
+Package names describe what the code does, not which abstract layer it belongs
+to. Shared code must stay small and concrete; a generic `core` or `utils`
+package must not become a second application.
 
 ## Vocabulary
 
@@ -80,17 +107,30 @@ already-applying native write is allowed to finish so snapshot/CAS/rollback
 semantics are never interrupted halfway through. A plan is immutable and
 applying it does not accept a second copy of the business parameters.
 
-The process composition root creates one `EngineApplication` for each sidecar
-lifetime. That application owns its `AgentSessionIndex` and single-worker
-`OperationService`; RPC dispatchers and CLI commands receive that same object
-explicitly. `ApplicationPorts` is passed into use cases as a dependency and has
-no implicit process-global `current()` or reconfiguration API.
+The process entry point creates one Engine service for each sidecar lifetime.
+It owns its session index and single-worker operation queue; RPC dispatchers
+and CLI commands receive that same service explicitly. Dependencies are passed
+to capability services and have no implicit process-global reconfiguration API.
 
 Deterministic organization state is owned by
-`engine/application/organization/`: `summaries.py` manages content-addressed
+`engine/organization/`: `summaries.py` manages content-addressed
 digest inputs/results and `proposals.py` manages proposal validation and
 decisions. Model execution remains in Ferry Runtime and reaches these use cases
 only through the Rust/Engine gateway.
+
+The target Engine packages are capability-oriented:
+
+```text
+engine/
+  server/          RPC server and generated protocol
+  sessions/        scan, index, read, search, assets, usage
+  operations/      plan, apply, edit, migrate, metadata, delete, verify
+  organization/    summaries and organization proposals
+  adapters/        current Claude, Codex, and OpenCode structures
+  storage/         SQLite state, snapshots, and scan cache
+  system/          paths, executables, resources, and probes
+  app.py           process composition
+```
 
 ### Ferry Runtime
 
@@ -105,15 +145,15 @@ Its source packages follow the same responsibility boundaries:
 
 ```text
 ferry-runtime/src/
-  application/     command routing and runtime orchestration
-  core/            bounded workflow execution
-  protocol/        JSONL server, envelopes, generated contracts
+  server/          JSONL server, envelopes, generated contracts
+  runtime/         command routing and runtime orchestration
+  agents/          bounded scheduling, delegation, task graph
   providers/       provider configuration, authentication, model host
-  sessions/        conversation persistence ports
+  sessions/        conversations and their persistence
   roles/           role definitions and repositories
   tools/           Ferry tool catalog and delegation
-  workflows/       organization and other model workflows
-  infrastructure/  filesystem and Engine-backed repositories
+  organizing/      summary and organization workflows
+  security/        redaction and runtime limits
 ```
 
 Ferry Runtime cannot write an external session directly. A requested mutation

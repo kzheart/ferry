@@ -7,8 +7,8 @@ import json
 
 import pytest
 
-from engine.application import editing
-from engine.application.session_deletion import SessionDeletionService
+from engine.operations import edit as editing
+from engine.operations.delete import SessionDeletionService
 from engine.infrastructure.snapshots import backup_dir
 
 

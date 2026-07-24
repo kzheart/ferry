@@ -1,6 +1,7 @@
 import pytest
 
-from engine.application import editing, migration
+from engine.operations import edit as editing
+from engine.operations import migrate as migration
 from engine.domain.model import Session
 
 

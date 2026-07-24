@@ -7,9 +7,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from ..application.ports import ApplicationPorts
 from ..domain.errors import ConcurrentModificationError
 from ..infrastructure.state_db import StateDatabase
-from .ports import ApplicationPorts
 
 
 def _database(ports: ApplicationPorts) -> StateDatabase:

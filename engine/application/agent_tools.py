@@ -835,11 +835,11 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
     session = _read_record(index, record)
     if max_turn is not None:
         max_turn = _bounded_int(max_turn, 1, 1, 1_000_000, "max_turn")
-        from .migration import _truncate_rounds
+        from ..operations.migrate import _truncate_rounds
         _truncate_rounds(session, max_turn)
     target = index.ports.adapter(target_tool).migration_target
     loss = target.plan(session)
-    from .migration import _migration_counts
+    from ..operations.migrate import _migration_counts
     tree_count, message_count = _migration_counts(session)
     edge_count = sum(len(node.agent_edges) for node in session.walk())
     topology = {"nodes": tree_count, "edges": max(0, tree_count - 1),
@@ -860,7 +860,7 @@ def preview_edit(tool: str, opaque_ref: str, *, ops,
     _validate_ops(ops)
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
-    from .editing import preview
+    from ..operations.edit import preview
     editor = adapter.editor
     native_ops = resolve_edit_ops(index, record, ops)
     try:

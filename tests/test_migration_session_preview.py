@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex.migration import CodexMigrationTarget
-from engine.application import migration
+from engine.operations import migrate as migration
 from engine.domain.events import event
 from engine.domain.model import (
     AgentEdge, Block, ImageAsset, Message, Session, ToolCall, text_tool_result,

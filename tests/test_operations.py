@@ -7,7 +7,8 @@ from threading import Barrier, Event
 
 import pytest
 
-from engine.application import operations, session_meta
+from engine.operations import metadata
+from engine.operations import service as operations
 from engine.domain.edit import AssistantReply
 from engine.domain.errors import (
     AgentRequestError,
@@ -261,7 +262,7 @@ def test_metadata_query_does_not_fail_an_applying_operation(agent_environment):
     database = StateDatabase(agent_environment["root"].parent / "ferry-state.sqlite3")
     assert database.claim(plan["plan_id"], 2_000)
 
-    assert session_meta.list_all(agent_environment["ports"]) == {}
+    assert metadata.list_all(agent_environment["ports"]) == {}
     assert operations.status(plan["plan_id"])["status"] == "applying"
 
 
@@ -276,12 +277,12 @@ def test_metadata_plan_applies_with_independent_cas(agent_environment):
     applied = _apply(plan["plan_id"])
 
     assert applied["result"]["metadata"] == {"name": "新名称"}
-    assert session_meta.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "新名称"}
+    assert metadata.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "新名称"}
 
 
 def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
     plan = _metadata_plan()
-    session_meta.set_entry(
+    metadata.set_entry(
         "claude", "private-id", {"name": "并发名称"}, agent_environment["ports"])
 
     with pytest.raises(
@@ -289,7 +290,7 @@ def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
         _apply(plan["plan_id"])
 
     assert operations.status(plan["plan_id"])["status"] == "failed"
-    assert session_meta.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "并发名称"}
+    assert metadata.list_all(agent_environment["ports"])["claude\0private-id"] == {"name": "并发名称"}
 
 
 @pytest.mark.parametrize("patch", [

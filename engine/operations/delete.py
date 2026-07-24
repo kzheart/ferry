@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..application.ports import ApplicationPorts
 from ..domain.errors import SnapshotInvalidSourceError
-from .ports import ApplicationPorts
 
 
 class SessionDeletionService:
