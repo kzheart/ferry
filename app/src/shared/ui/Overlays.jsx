@@ -2,15 +2,8 @@
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME, TOOLS } from "../contracts/tools.js";
-import { STATUS_CODE } from "../../modules/migration/migrationModel.js";
 import { CloseIcon, SearchIcon, Spinner, ToolIcon } from "./icons.jsx";
 import { ConfirmBox } from "./ConfirmBox.jsx";
-import {
-  FilterPopover,
-  FilterRadioRow,
-  FilterSectionTitle,
-} from "./FilterPopover.jsx";
 
 // ---------- 会话搜索命令面板(⌘K 风格居中浮层) ----------
 export function SearchPalette({ placeholder, query, onQuery, results,
@@ -67,34 +60,6 @@ export function SearchPalette({ placeholder, query, onQuery, results,
         </div>
       </div>
     </div>
-  );
-}
-
-// ---------- 删除迁移记录确认 ----------
-export function HistoryDeleteConfirm({ h, onCancel, onConfirm }) {
-  const { t } = useTranslation();
-  return (
-    <ConfirmBox width={420} title={t("overlays:historyDelete.title")} actions={<>
-      <button className="fbtn" style={{ height: 34, fontSize: 13 }}
-        onClick={onCancel}>{t("overlays:delete.cancel")}</button>
-      <button style={{ height: 34, padding: "0 16px", background: "var(--err2)", border: "none",
-        borderRadius: 8, fontSize: 13, color: "#fff", cursor: "default", fontWeight: 600 }}
-        onClick={onConfirm}>{t("overlays:historyDelete.confirm")}</button>
-    </>}>
-      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        {t("overlays:historyDelete.desc", { title: h.title || h.source_id })}</div>
-      <div style={{ marginTop: 14, border: "1px solid var(--line3)", borderRadius: 10,
-        padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
-        {[["var(--ok)", t("overlays:historyDelete.bulletTarget", { tool: TOOL_NAME[h.dst] })],
-          ["var(--err)", t("overlays:historyDelete.bulletIrreversible")]].map(([c, txt], i) => (
-          <div key={i} style={{ display: "flex", gap: 9, fontSize: 12, color: "var(--tx2b)",
-            lineHeight: 1.45 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: c, flex: "none",
-              marginTop: 6 }} />{txt}
-          </div>
-        ))}
-      </div>
-    </ConfirmBox>
   );
 }
 
@@ -181,45 +146,6 @@ export function Toast({ toast, onDismiss }) {
           onClick={toast.action.onClick}>{toast.action.label}</button>)}
       <a onClick={onDismiss} style={{ color: "var(--tx5)", fontSize: 16, marginLeft: 6 }}>×</a>
     </div>
-  );
-}
-
-// 迁移历史筛选:来源 / 目标 / 状态 / 时间
-export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
-  const { t } = useTranslation();
-  const statusOptions = [
-    [STATUS_CODE.success, t(`common:${STATUS_CODE.success}`)],
-    [STATUS_CODE.failed, t(`common:${STATUS_CODE.failed}`)],
-    [STATUS_CODE.rolledBack, t(`common:${STATUS_CODE.rolledBack}`)],
-  ];
-  return (
-    <FilterPopover anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
-      <FilterSectionTitle first>{t("overlays:filter.sourceTools")}</FilterSectionTitle>
-      {TOOLS.map(t2 => (
-        <FilterCheckRow key={t2} on={f.src.includes(t2)} icon={<ToolIcon tool={t2} size={24} />}
-          label={TOOL_NAME[t2]}
-          onClick={() => setF(v => ({ ...v, src: v.src.includes(t2)
-            ? v.src.filter(x => x !== t2) : [...v.src, t2] }))} />
-      ))}
-      <FilterSectionTitle>{t("overlays:filter.targetTool")}</FilterSectionTitle>
-      {[["all", t("overlays:filter.allTargets")], ...TOOLS.map(t2 => [t2, TOOL_NAME[t2]])].map(([k, l]) => (
-        <FilterRadioRow key={k} on={f.target === k} label={l}
-          onClick={() => setF(v => ({ ...v, target: k }))} />
-      ))}
-      <FilterSectionTitle>{t("overlays:filter.status")}</FilterSectionTitle>
-      <FilterRadioRow key="all" on={f.status === "all"} label={t("common:status.all")}
-        onClick={() => setF(v => ({ ...v, status: "all" }))} />
-      {statusOptions.map(([k, l]) => (
-        <FilterRadioRow key={k} on={f.status === k} label={l}
-          onClick={() => setF(v => ({ ...v, status: k }))} />
-      ))}
-      <FilterSectionTitle>{t("overlays:filter.timeRange")}</FilterSectionTitle>
-      {[["all", t("overlays:filter.allTime")], ["today", t("overlays:filter.today")],
-        ["yesterday", t("overlays:filter.yesterday")], ["earlier", t("overlays:filter.earlier")]].map(([k, l]) => (
-        <FilterRadioRow key={k} on={f.time === k} label={l}
-          onClick={() => setF(v => ({ ...v, time: k }))} />
-      ))}
-    </FilterPopover>
   );
 }
 
