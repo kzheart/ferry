@@ -19,7 +19,7 @@ def _database(ports: EngineContext) -> StateDatabase:
 
 
 def load_all(ports: EngineContext) -> list[dict]:
-    return _database(ports).load_runtime_sessions()
+    return _database(ports).runtime_sessions.load_all()
 
 
 def commit(update: dict, ports: EngineContext) -> dict:
@@ -33,10 +33,10 @@ def commit(update: dict, ports: EngineContext) -> dict:
     for key in ("messages", "events"):
         if key in update and not isinstance(update[key], list):
             raise AgentRequestError(f"runtime commit 的 {key} 必须是数组")
-    _database(ports).commit_runtime_session(update)
+    _database(ports).runtime_sessions.commit(update)
     return {"session_id": metadata["session_id"], "committed": True}
 
 
 def delete(session_id: str, ports: EngineContext) -> dict:
     return {"session_id": session_id,
-            "deleted": _database(ports).delete_runtime_session(session_id)}
+            "deleted": _database(ports).runtime_sessions.delete(session_id)}
