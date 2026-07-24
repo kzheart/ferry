@@ -27,6 +27,10 @@ export class RoleService {
     return { role_id: id, deleted: true };
   }
 
+  reset(id: string) {
+    return this.mutate(() => this.store.reset(id));
+  }
+
   copy(sourceId: string, id: string, name?: string) {
     return this.mutate(() =>
       this.store.copy(sourceId, { id, ...(name ? { name } : {}) }),

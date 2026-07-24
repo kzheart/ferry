@@ -326,7 +326,7 @@ function Updates({ s, set, updater }) {
 
 // ---------- 弹窗外壳 ----------
 export default function SettingsPage({ settings, setSettings, scan, env, scanning, onRescan,
-  updater, guideSeen, onOpenGuide, onFirstRun, onClose, ferry, initialSection }) {
+  updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
   const { t } = useTranslation();
   const [section, setSection] = useState(initialSection || "prefs");
   const title = Object.fromEntries(SECTIONS)[section];
@@ -335,7 +335,8 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "absolute", inset: 0, zIndex: 60, display: "flex", alignItems: "center",
         justifyContent: "center", background: "var(--scrim)" }}>
-      <div className="settings-sheet" style={{ width: "min(860px, calc(100vw - 40px))", height: "min(600px, calc(100vh - 48px))",
+      {/* 980 是角色页详情区("身份/人设/能力/模型/安全"分组 + 双列工具卡)不挤的下限 */}
+      <div className="settings-sheet" style={{ width: "min(980px, calc(100vw - 40px))", height: "min(648px, calc(100vh - 48px))",
         display: "flex", borderRadius: 14, overflow: "hidden", background: "var(--settings-bg)",
         border: "1px solid var(--line)", boxShadow: "var(--shadow-sheet)",
          }}>
@@ -378,11 +379,11 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             </button>
           </div>
           {section === "providers" ? (
-            <Providers ferry={ferry} />
+            <Providers />
           ) : section === "models" ? (
-            <Models ferry={ferry} onOpenProviders={() => setSection("providers")} />
+            <Models onOpenProviders={() => setSection("providers")} />
           ) : section === "roles" ? (
-            <Roles ferry={ferry} />
+            <Roles />
           ) : (
             <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
               <div style={{ maxWidth: 620 }}>

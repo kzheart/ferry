@@ -153,6 +153,14 @@ export const openTerminal = (
 
 export const revealPath = (path: string) => invoke("reveal_path", { path });
 
+/** 角色配置导出:系统保存对话框在 Rust 侧落盘,返回路径;取消返回 null。 */
+export const exportRolesFile = (fileName: string, contents: string) =>
+  invoke<string | null>("export_roles_file", { fileName, contents });
+
+/** 角色配置导入:系统选择对话框在 Rust 侧读回文本;取消返回 null。 */
+export const importRolesFile = () =>
+  invoke<string | null>("import_roles_file");
+
 export const writeClipboardText = async (text: unknown) => {
   const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
   return writeText(String(text));

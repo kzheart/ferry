@@ -7,7 +7,9 @@ import {
   CheckIcon,
   ManualModeIcon,
   ProviderIcon,
+  RoleAvatar,
 } from "../../shared/ui/icons.jsx";
+import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 
 const MENU_SHELL = {
   position: "absolute",
@@ -101,8 +103,9 @@ export function ModeMenu({ mode, onPick, onClose }) {
   );
 }
 
-export function RoleMenu({ ferry, onClose, onManage }) {
+export function RoleMenu({ onClose, onManage }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   return (
     <>
       <div
@@ -131,6 +134,7 @@ export function RoleMenu({ ferry, onClose, onManage }) {
               textAlign: "left",
             }}
           >
+            <RoleAvatar icon={role.icon} color={role.color} size={24} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{
                 display: "block",
@@ -182,8 +186,9 @@ export function RoleMenu({ ferry, onClose, onManage }) {
 
 const EFFORT_LEVELS = ["off", "low", "medium", "high"];
 
-export function ModelMenu({ ferry, health, onClose, onManage }) {
+export function ModelMenu({ health, onClose, onManage }) {
   const { t } = useTranslation();
+  const ferry = useFerryRuntime();
   const [panel, setPanel] = useState("models");
   const models = ferry.models || [];
   const current = models.find(model =>

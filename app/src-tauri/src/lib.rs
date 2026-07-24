@@ -12,6 +12,7 @@ pub fn run() {
     let _ = fix_path_env::fix();
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -46,7 +47,9 @@ pub fn run() {
             operations::operation_cancel,
             runtime::agent_command,
             desktop::terminal::open_terminal,
-            desktop::reveal::reveal_path
+            desktop::reveal::reveal_path,
+            desktop::role_file::export_roles_file,
+            desktop::role_file::import_roles_file
         ])
         .on_window_event(desktop::window::handle_window_event)
         .run(tauri::generate_context!())

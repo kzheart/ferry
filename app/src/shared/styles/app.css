@@ -114,6 +114,15 @@ html, body, #root { height: 100%; }
   --c2: #3FA972;
   --c3: #E0913D;
   --c4: #9268C9;
+  /* 角色头像配色:名字即角色配置里的 color token,底色由 color-mix 现调 */
+  --role-blue: #4C7EDB;
+  --role-teal: #2AA198;
+  --role-green: #3FA972;
+  --role-amber: #D99E2B;
+  --role-orange: #E07B3D;
+  --role-rose: #D65C6E;
+  --role-violet: #9268C9;
+  --role-slate: #6B7682;
   --t-claude: #D97757;
   --t-codex: #10A37F;
   --t-opencode: #4C7EDB;
@@ -232,6 +241,14 @@ html, body, #root { height: 100%; }
   --c2: #4FBF87;
   --c3: #E8A65D;
   --c4: #A98BD9;
+  --role-blue: #6B96E8;
+  --role-teal: #45BDB2;
+  --role-green: #4FBF87;
+  --role-amber: #E3B457;
+  --role-orange: #E89463;
+  --role-rose: #E27888;
+  --role-violet: #A98BD9;
+  --role-slate: #9BA3AD;
   --t-claude: #E08B6D;
   --t-codex: #34C29A;
   --t-opencode: #6B96E8;
