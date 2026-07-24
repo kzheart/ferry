@@ -66,3 +66,11 @@ def test_runtime_gateway_and_approval_are_separate_capabilities():
     assert "fn resolve_tool_request" not in root
     assert "fn apply_operation_plan" not in root
     assert "static AUTO_SESSIONS" not in root
+
+
+def test_engine_tests_do_not_hide_the_production_entrypoint():
+    engine = HOST / "engine"
+    assert (engine / "tests.rs").is_file()
+    root = (engine / "mod.rs").read_text()
+    assert "mod tests;" in root
+    assert "fn operation_inputs_are_strictly_validated" not in root
