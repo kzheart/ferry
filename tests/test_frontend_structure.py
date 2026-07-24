@@ -49,6 +49,7 @@ def test_module_models_live_with_their_consuming_capability():
     assert "shared/ui/primitives.jsx" not in app
     assert "shared/ui/Overlays.jsx" not in app
     assert "AppOverlayController" in app
+    assert app.index("metadata: metaMap") < app.index("useLibraryResourcePane({")
 
     tool_trace = (FRONTEND / "modules/askferry/AgentToolTrace.jsx").read_text()
     workflow_cards = (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").read_text()
