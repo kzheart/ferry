@@ -16,13 +16,13 @@ from ..domain.errors import (
     ConcurrentModificationError,
     LocatorStaleError,
     OperationUnsupportedError,
-    SnapshotInvalidSourceError,
 )
 from . import agent_tools, verification as probe_mod
 from . import session_meta
 from .editing import apply_mutation, preview_mutation
 from .migration import MigrationService
 from .ports import ApplicationPorts, current
+from .session_deletion import SessionDeletionService
 from ..infrastructure.state_db import StateDatabase
 
 
@@ -666,20 +666,7 @@ class OperationService:
         return {**result, "recovery_id": recovery_id}
 
     def _restore_deleted_session(self, snapshot: str) -> dict:
-        path = Path(snapshot)
-        if path.parent != Path(self._ports.snapshot_dir()):
-            raise SnapshotInvalidSourceError(
-                "只允许从快照目录恢复", {"snapshot": snapshot})
-        try:
-            metadata = json.loads(path.with_suffix(".meta.json").read_text())
-        except (OSError, json.JSONDecodeError) as error:
-            raise SnapshotInvalidSourceError(
-                "快照缺少元数据,无法撤销", {"snapshot": snapshot}) from error
-        tool = metadata.get("tool")
-        if not isinstance(tool, str) or not tool:
-            raise SnapshotInvalidSourceError(
-                "快照缺少来源 Agent", {"snapshot": snapshot})
-        return self._ports.adapter(tool).lifecycle.restore_delete(path, metadata)
+        return SessionDeletionService(self._ports).restore(snapshot)
 
     @staticmethod
     def _validate_ops(ops) -> list[dict]:
