@@ -16,6 +16,7 @@ IPC_SOURCE = ROOT / "contracts" / "ipc.json"
 SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
 OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 EVENTS_SOURCE = ROOT / "contracts" / "events.json"
+ERRORS_SOURCE = ROOT / "contracts" / "errors.json"
 AGENT_OUTPUTS = {
     ROOT / "app/src/api/contract/generated/agents.js": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
@@ -54,6 +55,12 @@ EVENT_OUTPUTS = {
     ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
     ROOT / "engine/contracts/events.py": "python",
     ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
+}
+ERROR_OUTPUTS = {
+    ROOT / "app/src/api/contract/generated/errors.js": "frontend",
+    ROOT / "app/src-tauri/src/contracts/errors.rs": "rust",
+    ROOT / "engine/contracts/errors.py": "python",
+    ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
 }
 
 
@@ -235,6 +242,46 @@ def load_events() -> list[dict[str, object]]:
     if names != sorted(names):
         raise ValueError("Event type 必须按字典序排列")
     return events
+
+
+def load_errors() -> list[dict[str, object]]:
+    document = json.loads(ERRORS_SOURCE.read_text())
+    errors = document.get("errors")
+    if not isinstance(errors, list) or not errors:
+        raise ValueError("contracts/errors.json 必须包含非空 errors 数组")
+    allowed_categories = {
+        "conflict",
+        "execution",
+        "internal",
+        "not-found",
+        "permission",
+        "unavailable",
+        "unsupported",
+        "validation",
+    }
+    codes: list[str] = []
+    for error in errors:
+        if (
+            not isinstance(error, dict)
+            or set(error) != {"code", "category", "retryable", "sources"}
+            or not isinstance(error["code"], str)
+            or not error["code"]
+            or error["category"] not in allowed_categories
+            or not isinstance(error["retryable"], bool)
+            or not isinstance(error["sources"], list)
+            or not error["sources"]
+            or not set(error["sources"]) <= {"engine", "runtime", "host"}
+            or len(error["sources"]) != len(set(error["sources"]))
+        ):
+            raise ValueError(
+                "Error 契约字段必须精确为 code/category/retryable/sources"
+            )
+        codes.append(error["code"])
+    if len(codes) != len(set(codes)):
+        raise ValueError("Error code 必须唯一")
+    if codes != sorted(codes):
+        raise ValueError("Error code 必须按字典序排列")
+    return errors
 
 
 def frontend(agents: list[dict[str, object]]) -> str:
@@ -701,6 +748,97 @@ def events_runtime(events: list[dict[str, object]]) -> str:
     ))
 
 
+def error_policies(errors: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    return {
+        error["code"]: {
+            "category": error["category"],
+            "retryable": error["retryable"],
+            "sources": error["sources"],
+        }
+        for error in errors
+    }
+
+
+def errors_frontend(errors: list[dict[str, object]]) -> str:
+    source = json.dumps(
+        error_policies(errors), ensure_ascii=False, indent=2,
+    )
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const FERRY_ERROR_POLICIES = Object.freeze({source});",
+        "export const isFerryErrorCode = value =>",
+        '  typeof value === "string" &&',
+        "  Object.prototype.hasOwnProperty.call(FERRY_ERROR_POLICIES, value);",
+        "",
+    ))
+
+
+def errors_rust(errors: list[dict[str, object]]) -> str:
+    rows = []
+    for error in errors:
+        rows.extend((
+            f'        {json.dumps(error["code"])} => Some(ErrorPolicy {{',
+            f'            category: {json.dumps(error["category"])},',
+            f'            retryable: {str(error["retryable"]).lower()},',
+            "        }),",
+        ))
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) struct ErrorPolicy {",
+        "    pub(crate) category: &'static str,",
+        "    pub(crate) retryable: bool,",
+        "}",
+        "",
+        "pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {",
+        "    match code {",
+        *rows,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+    ))
+
+
+def errors_python(errors: list[dict[str, object]]) -> str:
+    return "\n".join((
+        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
+        "from __future__ import annotations",
+        "",
+        f"FERRY_ERROR_POLICIES = {error_policies(errors)!r}",
+        "FERRY_ERROR_CODES = frozenset(FERRY_ERROR_POLICIES)",
+        "",
+        "def error_policy(code: str) -> dict:",
+        "    return FERRY_ERROR_POLICIES[code]",
+        "",
+    ))
+
+
+def errors_runtime(errors: list[dict[str, object]]) -> str:
+    runtime = [
+        error for error in errors if "runtime" in error["sources"]
+    ]
+    rows = []
+    for error in runtime:
+        rows.extend((
+            f"  {error['code']}: {{",
+            f'    category: "{error["category"]}",',
+            f'    retryable: {str(error["retryable"]).lower()},',
+            "  },",
+        ))
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "export const RUNTIME_ERROR_POLICIES = {",
+        *rows,
+        "} as const;",
+        "export type RuntimeErrorCode = keyof typeof RUNTIME_ERROR_POLICIES;",
+        "export function runtimeErrorPolicy(code: RuntimeErrorCode) {",
+        "  return RUNTIME_ERROR_POLICIES[code];",
+        "}",
+        "",
+    ))
+
+
 def contract_hash(
     agents: list[dict[str, object]],
     methods: list[dict[str, object]],
@@ -709,6 +847,7 @@ def contract_hash(
     session_ref: dict[str, object],
     operations: dict[str, object],
     events: list[dict[str, object]],
+    errors: list[dict[str, object]],
 ) -> str:
     payload = json.dumps(
         {
@@ -719,6 +858,7 @@ def contract_hash(
             "session_ref": session_ref,
             "operations": operations,
             "events": events,
+            "errors": errors,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -813,6 +953,7 @@ def generated_contents(
     session_ref: dict[str, object],
     operations: dict[str, object],
     events: list[dict[str, object]],
+    errors: list[dict[str, object]],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
@@ -857,9 +998,18 @@ def generated_contents(
         }[kind](events)
         for path, kind in EVENT_OUTPUTS.items()
     }
+    error_contents = {
+        path: {
+            "frontend": errors_frontend,
+            "rust": errors_rust,
+            "python": errors_python,
+            "runtime": errors_runtime,
+        }[kind](errors)
+        for path, kind in ERROR_OUTPUTS.items()
+    }
     digest = contract_hash(
         agents, engine_methods, runtime_methods, ipc, session_ref, operations,
-        events,
+        events, errors,
     )
     ipc_contents = {
         path: {
@@ -877,6 +1027,7 @@ def generated_contents(
         | session_ref_contents
         | operation_contents
         | event_contents
+        | error_contents
         | ipc_contents
     )
 
@@ -893,6 +1044,7 @@ def main() -> int:
         load_session_ref(),
         load_operations(),
         load_events(),
+        load_errors(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:

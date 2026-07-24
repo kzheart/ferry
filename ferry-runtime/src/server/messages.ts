@@ -9,6 +9,10 @@ import {
   type RuntimeMethod,
 } from "./generated/runtime-methods.js";
 import type { RuntimeEventType } from "./generated/events.js";
+import {
+  runtimeErrorPolicy,
+  type RuntimeErrorCode,
+} from "./generated/errors.js";
 
 export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 
@@ -27,13 +31,17 @@ export interface EventEnvelope {
 }
 
 export class ProtocolError extends Error {
+  readonly category: string;
+  readonly retryable: boolean;
+
   constructor(
-    readonly code: string,
+    readonly code: RuntimeErrorCode,
     message: string,
-    readonly category = "validation",
-    readonly retryable = false,
   ) {
     super(message);
+    const policy = runtimeErrorPolicy(code);
+    this.category = policy.category;
+    this.retryable = policy.retryable;
   }
 
   toEnvelope(): IpcError {
