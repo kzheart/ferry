@@ -12,10 +12,27 @@ process is then split by product capability. A capability package owns its
 rules, types, coordination, and private persistence adapter together.
 
 This follows the practical shape used by comparable open-source agent
-projects: OpenHands groups its SDK by capabilities such as agent,
-conversation, event, LLM, security, subagent, tool, and workspace; Cherry
-Studio separates Electron process boundaries and then groups renderer/main
-code by features, services, stores, providers, tools, and IPC.
+projects:
+
+- [Goose](https://github.com/block/goose/tree/main/crates/goose/src) keeps
+  runtime capabilities such as `agents`, `execution`, `providers`, `session`,
+  `permission`, and `security` together inside the Rust product crate.
+- [AutoGen AgentChat](https://github.com/microsoft/autogen/tree/main/python/packages/autogen-agentchat/src/autogen_agentchat)
+  exposes product concepts directly as `agents`, `teams`, `tools`,
+  `conditions`, `messages`, and `state`.
+- [Continue Core](https://github.com/continuedev/continue/tree/main/core)
+  groups shared behavior by capabilities such as `commands`, `context`,
+  `edit`, `indexing`, `llm`, `protocol`, and `tools`.
+- [LobeHub Agent Runtime](https://github.com/lobehub/lobehub/tree/main/packages/agent-runtime/src)
+  separates `agents`, `executors`, `groupOrchestration`, `transport`, and
+  runtime types.
+- [OpenHands App Server](https://github.com/All-Hands-AI/OpenHands/tree/main/openhands/app_server)
+  uses capability packages such as `event`, `git`, `mcp`, `sandbox`,
+  `settings`, and `user` around a thin server composition root.
+
+These projects do not share one universal architecture, but their durable
+package names describe runtime capabilities. Ferry adopts that useful common
+part without copying their framework-specific layers.
 
 The intended top-level layout is:
 
@@ -30,6 +47,20 @@ scripts/         build and architecture checks
 Package names describe what the code does, not which abstract layer it belongs
 to. Shared code must stay small and concrete; a generic `core` or `utils`
 package must not become a second application.
+
+The package rules are:
+
+1. Split by process boundary at repository root.
+2. Inside a process, split by user-visible or runtime capability.
+3. Keep a capability's types, orchestration, validation, and private store in
+   the same package unless the store participates in a cross-capability
+   transaction.
+4. Use horizontal packages only for real boundaries: generated contracts,
+   IPC transport, desktop platform code, and process composition.
+5. A package named `shared` may contain only concrete primitives used by at
+   least two sibling capabilities. It may not import those capabilities.
+6. Do not create repository-wide `domain`, `application`, `infrastructure`,
+   `core`, `common`, `services`, or `repositories` buckets.
 
 ## Vocabulary
 
@@ -313,4 +344,5 @@ Session Engine capability API -> adapter contracts
 adapter -> current native store
 ```
 
-No layer imports or reproduces another layer's implementation details.
+No capability reaches into another capability's private store or reproduces
+another process's implementation details.
