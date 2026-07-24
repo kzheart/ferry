@@ -2,8 +2,8 @@
 // 三个筛选弹层 / 快速上手引导(设置与数据来源已合并进 Settings.jsx 全屏页)
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { renderEvents } from "../../shared/contracts/events.js";
-import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
+import { renderEvents } from "../contracts/events.js";
+import { TOOL_NAME, TOOLS } from "../contracts/tools.js";
 import { STATUS_CODE } from "../../modules/migration/migrationModel.js";
 import { fmtTime } from "../../modules/browser/sessionModel.js";
 import { ACCENT, fmtSize } from "./toolDisplay.js";

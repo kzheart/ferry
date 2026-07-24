@@ -3,12 +3,12 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { supportsAssistantReplyEditing, supportsSessionEditing,
   TOOL_NAME, resumeDescriptor, TOOLS } from "../../shared/contracts/tools.js";
-import { ACCENT, fmtSize } from "../../components/ui/toolDisplay.js";
+import { ACCENT, fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
 import { engine, writeClipboardText } from "../../platform/desktop/client.js";
 import { BookmarkIcon, Caret, CheckIcon, CloseIcon, CopyIcon, ImageGlyph, MigrateIcon,
-  PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../components/ui/icons.jsx";
-import Markdown from "../../components/ui/Markdown.jsx";
+  PencilIcon, RefreshIcon, Spinner, TerminalIcon, ToolIcon, TrashIcon, UndoIcon } from "../../shared/ui/icons.jsx";
+import Markdown from "../../shared/ui/Markdown.jsx";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
 
 const BIG_OUT = 4096;   // 超过此长度的工具输出标记为「大输出」

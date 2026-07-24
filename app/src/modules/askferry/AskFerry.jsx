@@ -3,9 +3,9 @@
 // 未配置凭据时聊天框照常显示,模型按钮变成「配置模型」直达设置;空对话时输入框垂直居中。
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Markdown from "../../components/ui/Markdown.jsx";
+import Markdown from "../../shared/ui/Markdown.jsx";
 import { AutoModeIcon, Caret, CheckIcon, ManualModeIcon, ProviderIcon, SendArrowIcon,
-  Spinner, StopFillIcon, ToolIcon } from "../../components/ui/icons.jsx";
+  Spinner, StopFillIcon, ToolIcon } from "../../shared/ui/icons.jsx";
 import { readClipboardText } from "../../platform/desktop/client.js";
 import { TOOL_LEVEL } from "./agentChatModel.js";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";

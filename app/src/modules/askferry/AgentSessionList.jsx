@@ -2,7 +2,7 @@
 import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { MoreDots, PinIcon, PlusIcon, Spinner, TrashIcon } from "../../components/ui/icons.jsx";
+import { MoreDots, PinIcon, PlusIcon, Spinner, TrashIcon } from "../../shared/ui/icons.jsx";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 import { fmtTime } from "../browser/sessionModel.js";
 

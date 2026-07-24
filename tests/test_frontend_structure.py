@@ -7,8 +7,6 @@ FRONTEND = ROOT / "app/src"
 
 def test_frontend_uses_shell_platform_shared_and_vertical_modules():
     assert {
-        "app",
-        "components",
         "modules",
         "platform",
         "shared",
@@ -17,9 +15,10 @@ def test_frontend_uses_shell_platform_shared_and_vertical_modules():
         path.name for path in FRONTEND.iterdir() if path.is_dir()
     }
     assert not (FRONTEND / "api").exists()
+    assert not (FRONTEND / "app").exists()
+    assert not (FRONTEND / "components").exists()
     assert not (FRONTEND / "domain").exists()
     assert not (FRONTEND / "modules/shell").exists()
-    assert not (FRONTEND / "components/layout").exists()
 
 
 def test_module_models_live_with_their_consuming_capability():
@@ -29,9 +28,9 @@ def test_module_models_live_with_their_consuming_capability():
     assert (FRONTEND / "modules/askferry/ferryEntities.js").is_file()
     assert (FRONTEND / "modules/overview/overviewModel.js").is_file()
     assert (FRONTEND / "modules/browser/SessionPeekSheet.jsx").is_file()
-    app = (FRONTEND / "app/App.jsx").read_text()
+    app = (FRONTEND / "shell/AppController.jsx").read_text()
     assert "browser/SessionDetail.jsx" not in app
-    assert "components/ui/primitives.jsx" not in app
+    assert "shared/ui/primitives.jsx" not in app
 
 
 def test_operation_flow_has_one_module_controller():
@@ -44,7 +43,7 @@ def test_operation_flow_has_one_module_controller():
     assert "operationApplyAndWait" not in transport
 
     for relative_path in (
-        "app/App.jsx",
+        "shell/AppController.jsx",
         "modules/editing/useSessionEditing.js",
         "modules/migration/MigrateSheet.jsx",
     ):
@@ -56,7 +55,7 @@ def test_operation_flow_has_one_module_controller():
 
 
 def test_session_mutations_live_in_browser_capability():
-    app = (FRONTEND / "app/App.jsx").read_text()
+    app = (FRONTEND / "shell/AppController.jsx").read_text()
     metadata = FRONTEND / "modules/browser/useSessionMetadata.js"
     deletion = FRONTEND / "modules/browser/useSessionDeletion.js"
 

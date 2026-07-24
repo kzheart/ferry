@@ -1,4 +1,4 @@
-import { Spinner } from "../components/ui/icons.jsx";
+import { Spinner } from "../shared/ui/icons.jsx";
 import AgentSessionList from "../modules/askferry/AgentSessionList.jsx";
 import { HistoryList, LibraryList, Pane } from "./ResourcePane.jsx";
 

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { renderEvents } from "../../shared/contracts/events.js";
+import { renderEvents } from "../contracts/events.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 
 // 居中模态(带遮罩)

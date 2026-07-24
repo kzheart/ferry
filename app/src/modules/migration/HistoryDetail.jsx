@@ -2,11 +2,11 @@
 import { useTranslation } from "react-i18next";
 import { probeText } from "../../shared/contracts/events.js";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
-import { fmtSize } from "../../components/ui/toolDisplay.js";
+import { fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime } from "../browser/sessionModel.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";
-import { ToolIcon, TrashIcon } from "../../components/ui/icons.jsx";
-import { CmdRow, LossCols, StatusPill } from "../../components/ui/primitives.jsx";
+import { ToolIcon, TrashIcon } from "../../shared/ui/icons.jsx";
+import { CmdRow, LossCols, StatusPill } from "../../shared/ui/primitives.jsx";
 
 const ST_STYLE = {
   [STATUS_CODE.success]: ["var(--ok-bg)", "var(--ok)"],
