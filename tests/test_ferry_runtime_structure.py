@@ -49,6 +49,10 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
     assert "new AuthCoordinator" not in runtime
     assert "this.providerHost.saveApiKey" not in runtime
+    runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
+    assert runtime_session.is_file()
+    assert "class RuntimeSession" not in runtime
+    assert "export class RuntimeSession" in runtime_session.read_text()
 
 
 def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():

@@ -5,7 +5,7 @@ import {
   type SessionCommit,
 } from "../src/sessions/session-repository.js";
 import { AgentRuntime } from "../src/runtime/runtime.js";
-import { FERRY_SAFETY_PROMPT } from "../src/runtime/runtime.js";
+import { FERRY_SAFETY_PROMPT } from "../src/sessions/runtime-session.js";
 import { EphemeralRoleStore } from "../src/roles/role-repository.js";
 import {
   PROTOCOL_VERSION,
