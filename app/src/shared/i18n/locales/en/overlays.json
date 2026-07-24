@@ -19,14 +19,8 @@
   "apply": {
     "title": "Apply {{n}} changes?",
     "cancel": "Cancel",
-    "saveas": "Save as new session",
-    "saveasDesc": "Keep original session unchanged (default)",
-    "inplace": "Edit in place",
-    "inplaceDesc": "Directly overwrite the original session file",
     "confirmInplace": "Confirm in-place edit",
-    "confirmSaveas": "Save as new session",
-    "inplaceFootnote": "A backup is made before applying; if verification fails it is rolled back automatically, leaving no changes.",
-    "saveasFootnote": "The original session stays unchanged; the result is saved as a new session."
+    "inplaceFootnote": "A backup is made before applying; if verification fails it is rolled back automatically, leaving no changes."
   },
   "delete": {
     "title": "Delete this session?",
