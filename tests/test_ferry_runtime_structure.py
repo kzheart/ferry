@@ -69,6 +69,7 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/organizing/coordinator.ts").is_file()
     runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
     assert runtime_session.is_file()
+    assert (RUNTIME / "src/sessions/commands.ts").is_file()
     assert "class RuntimeSession" not in runtime
     assert "export class RuntimeSession" in runtime_session.read_text()
 
