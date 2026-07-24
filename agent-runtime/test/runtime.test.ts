@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  MemorySessionStore,
+  EphemeralSessionStore,
   type PersistedSession,
   type SessionCommit,
 } from "../src/event-store.js";
 import { AgentRuntime } from "../src/runtime.js";
 import { FERRY_SAFETY_PROMPT } from "../src/runtime.js";
-import { MemoryRoleStore } from "../src/roles.js";
+import { EphemeralRoleStore } from "../src/roles.js";
 import { PROTOCOL_VERSION, type EventEnvelope } from "../src/protocol.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
@@ -22,7 +22,7 @@ async function createRuntime(
 }
 
 async function commitSnapshot(
-  store: MemorySessionStore,
+  store: EphemeralSessionStore,
   state: PersistedSession,
   events: EventEnvelope[],
 ) {
@@ -35,7 +35,7 @@ async function commitSnapshot(
   });
 }
 
-class RecordingSessionStore extends MemorySessionStore {
+class RecordingSessionStore extends EphemeralSessionStore {
   readonly commits: SessionCommit[] = [];
 
   override async commit(update: SessionCommit) {
@@ -66,8 +66,8 @@ describe("AgentRuntime", () => {
   });
 
   it("snapshots role persona, tools, policy and defaults without drifting", async () => {
-    const store = new MemorySessionStore();
-    const roleStore = new MemoryRoleStore();
+    const store = new EphemeralSessionStore();
+    const roleStore = new EphemeralRoleStore();
     await roleStore.create({
       id: "reader",
       name: "Reader",
@@ -144,7 +144,7 @@ describe("AgentRuntime", () => {
   });
 
   it("registers only the role tool whitelist and forwards its apply policy", async () => {
-    const roleStore = new MemoryRoleStore();
+    const roleStore = new EphemeralRoleStore();
     await roleStore.create({
       id: "usage-only",
       name: "Usage only",
@@ -355,7 +355,7 @@ describe("AgentRuntime", () => {
   });
 
   it("persists renamed and pinned sessions, then deletes them", async () => {
-    const store = new MemorySessionStore();
+    const store = new EphemeralSessionStore();
     const runtime = await createRuntime({ store });
     await runtime.createSession("s1");
     await runtime.renameSession("s1", "项目检索");
@@ -469,7 +469,7 @@ describe("AgentRuntime", () => {
   });
 
   it("marks a persisted in-flight run interrupted without replaying it", async () => {
-    const store = new MemorySessionStore();
+    const store = new EphemeralSessionStore();
     const state: PersistedSession = {
       session_id: "s1",
       provider_id: "test",

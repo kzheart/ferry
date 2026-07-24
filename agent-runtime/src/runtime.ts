@@ -11,7 +11,7 @@ import type { AuthType } from "@earendil-works/pi-ai";
 import { AuthCoordinator } from "./auth-coordinator.js";
 import { createDelegationTool } from "./delegation-tool.js";
 import type { PersistedSession, SessionStore } from "./event-store.js";
-import { MemorySessionStore } from "./event-store.js";
+import { EphemeralSessionStore } from "./event-store.js";
 import type {
   CustomProviderConfig,
   ModelSelection,
@@ -25,7 +25,7 @@ import {
 } from "./organization-workflow.js";
 import {
   DEFAULT_ROLE_ID,
-  MemoryRoleStore,
+  EphemeralRoleStore,
   type ApplyPolicy,
   type RoleInput,
   type RoleStore,
@@ -739,8 +739,8 @@ export class AgentRuntime {
     backendFactory: BackendFactory,
     defaultSelection?: ModelSelection,
   ) {
-    this.store = options.store ?? new MemorySessionStore();
-    this.roleStore = options.roleStore ?? new MemoryRoleStore();
+    this.store = options.store ?? new EphemeralSessionStore();
+    this.roleStore = options.roleStore ?? new EphemeralRoleStore();
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? randomUUID;
     this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
