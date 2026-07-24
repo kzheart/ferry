@@ -8,6 +8,7 @@ from threading import Barrier, Event
 import pytest
 
 from engine.operations import metadata
+from engine.operations import plan_store
 from engine.operations import service as operations
 from engine.operations.types import AssistantReply
 from engine.errors import (
@@ -807,9 +808,10 @@ def test_commit_failure_restores_snapshot_and_marks_plan_failed(
 def test_expired_plan_cannot_be_applied(
         agent_environment, monkeypatch):
     clock = [1_000]
-    monkeypatch.setattr(operations, "_now_ms", lambda: clock[0])
+    monkeypatch.setattr(plan_store, "now_ms", lambda: clock[0])
+    monkeypatch.setattr(operations, "now_ms", lambda: clock[0])
     plan = _plan()
-    clock[0] += operations.PLAN_TTL_MS + 1
+    clock[0] += plan_store.PLAN_TTL_MS + 1
 
     assert operations.status(plan["plan_id"])["status"] == "expired"
     with pytest.raises(AgentRequestError, match="不可执行"):

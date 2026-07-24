@@ -1,14 +1,10 @@
 """统一写操作计划。"""
 from __future__ import annotations
 
-import hashlib
 import json
 import secrets
 import threading
-import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass
-from pathlib import Path
 
 from ..sessions import catalog as agent_tools
 from ..context import EngineContext
@@ -24,54 +20,18 @@ from . import metadata, verification as probe_mod
 from .delete import SessionDeletionService
 from .edit import apply_mutation, preview_mutation
 from .migrate import MigrationService
+from .plan_store import (
+    OperationPlan,
+    OperationPlanStore,
+    OperationState,
+    canonical_json,
+    digest_json,
+    now_ms,
+)
 from ..storage.database import StateDatabase
 
 
-PLAN_TTL_MS = 10 * 60 * 1000
 MUTATION_WORKERS = 1
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _canonical(value) -> str:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-        allow_nan=False,
-    )
-
-
-def _digest_json(value_json: str) -> str:
-    return hashlib.sha256(value_json.encode()).hexdigest()
-
-
-@dataclass(frozen=True)
-class OperationPlan:
-    plan_id: str
-    kind: str
-    input_json: str
-    preview_json: str
-    input_digest: str
-    preview_digest: str
-    base_revision: str
-    document_revision: str | None
-    created_at: int
-    expires_at: int
-
-    def input(self) -> dict:
-        return json.loads(self.input_json)
-
-    def preview(self) -> dict:
-        return json.loads(self.preview_json)
-
-
-@dataclass
-class OperationState:
-    status: str = "planned"
-    result_json: str | None = None
-    error_type: str | None = None
-    updated_at: int = 0
 
 
 class OperationService:
@@ -88,15 +48,10 @@ class OperationService:
             thread_name_prefix="engine-operation",
         )
         self._jobs: dict[str, Future[None]] = {}
-        self._database_instance: StateDatabase | None = None
-        self._database_path: Path | None = None
+        self._plans = OperationPlanStore(ports.snapshot_dir)
 
-    def _database(self) -> StateDatabase:
-        path = Path(self._ports.snapshot_dir()) / "ferry-state.sqlite3"
-        if self._database_instance is None or self._database_path != path:
-            self._database_instance = StateDatabase(path)
-            self._database_path = path
-        return self._database_instance
+    def _database(self):
+        return self._plans.database()
 
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
@@ -256,24 +211,13 @@ class OperationService:
     def _store_plan(self, operation_input: dict, preview: dict, *,
                     base_revision: str,
                     document_revision: str | None) -> dict:
-        input_json = _canonical(operation_input)
-        preview_json = _canonical(preview)
-        now = _now_ms()
-        operation = OperationPlan(
-            plan_id="op_" + secrets.token_urlsafe(18),
-            kind=operation_input["kind"],
-            input_json=input_json,
-            preview_json=preview_json,
-            input_digest=_digest_json(input_json),
-            preview_digest=_digest_json(preview_json),
-            base_revision=base_revision,
-            document_revision=document_revision,
-            created_at=now,
-            expires_at=now + PLAN_TTL_MS,
-        )
         with self._lock:
-            self._database().store_plan(operation, now)
-        return self._public_plan(operation)
+            return self._plans.create(
+                operation_input,
+                preview,
+                base_revision=base_revision,
+                document_revision=document_revision,
+            )
 
     def apply(self, plan_id: str) -> dict:
         with self._lock:
@@ -284,7 +228,7 @@ class OperationService:
                     "operation plan 当前状态不可执行",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().enqueue(plan_id, _now_ms()):
+            if not self._database().enqueue(plan_id, now_ms()):
                 _operation, current_state = self._get(plan_id)
                 raise AgentRequestError(
                     "operation plan 当前状态不可执行",
@@ -298,7 +242,7 @@ class OperationService:
             operation, state = self._get(plan_id)
             if state.status != "queued":
                 return
-            if not self._database().claim_queued(plan_id, _now_ms()):
+            if not self._database().claim_queued(plan_id, now_ms()):
                 return
         try:
             if operation.kind == "edit":
@@ -318,14 +262,14 @@ class OperationService:
         except Exception as error:
             with self._lock:
                 self._database().fail(
-                    plan_id, type(error).__name__, _now_ms(),
+                    plan_id, type(error).__name__, now_ms(),
                 )
             raise
 
-        result_json = _canonical(result)
+        result_json = canonical_json(result)
         with self._lock:
             self._database().finish(
-                plan_id, result_json, _digest_json(result_json), _now_ms(),
+                plan_id, result_json, digest_json(result_json), now_ms(),
             )
 
     def status(self, plan_id: str) -> dict:
@@ -355,7 +299,7 @@ class OperationService:
                     "仅 planned 或 queued operation 可以取消",
                     {"plan_id": plan_id, "status": state.status},
                 )
-            if not self._database().cancel(plan_id, state.status, _now_ms()):
+            if not self._database().cancel(plan_id, state.status, now_ms()):
                 raise AgentRequestError(
                     "operation plan 当前状态不可取消",
                     {"plan_id": plan_id},
@@ -396,9 +340,9 @@ class OperationService:
         if not isinstance(probe, bool):
             raise AgentRequestError("operation probe 必须是布尔值")
         ops = OperationService._validate_ops(ops)
-        if len(_canonical(ops).encode()) > 64 * 1024:
+        if len(canonical_json(ops).encode()) > 64 * 1024:
             raise AgentRequestError("ops 超过 64 KiB")
-        return json.loads(_canonical({
+        return json.loads(canonical_json({
             "kind": "edit", "tool": tool, "ref": ref, "ops": ops,
             "probe": probe,
         }))
@@ -454,7 +398,7 @@ class OperationService:
             result["max_turn"] = max_turn
         if probe_model is not None:
             result["probe_model"] = probe_model
-        return json.loads(_canonical(result))
+        return json.loads(canonical_json(result))
 
     @staticmethod
     def _validate_metadata_input(value: dict) -> dict:
@@ -492,9 +436,9 @@ class OperationService:
                         for tag in tags
                     )):
                 raise AgentRequestError("metadata tags 非法")
-        if len(_canonical(patch).encode()) > 4096:
+        if len(canonical_json(patch).encode()) > 4096:
             raise AgentRequestError("metadata patch 超过 4 KiB")
-        return json.loads(_canonical({
+        return json.loads(canonical_json({
             "kind": "metadata",
             "tool": tool,
             "ref": ref,
@@ -671,7 +615,7 @@ class OperationService:
                 raise RuntimeError("可恢复删除未返回快照")
             recovery_id = "recovery_" + secrets.token_urlsafe(18)
             self._database().store_recovery(
-                recovery_id, params["tool"], snapshot, _now_ms(),
+                recovery_id, params["tool"], snapshot, now_ms(),
             )
             result["recovery_id"] = recovery_id
         return result
@@ -681,14 +625,14 @@ class OperationService:
         recovery = self._database().get_recovery(recovery_id)
         if recovery is None or recovery["status"] != "available":
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
-        if not self._database().claim_recovery(recovery_id, _now_ms()):
+        if not self._database().claim_recovery(recovery_id, now_ms()):
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
         try:
             result = self._restore_deleted_session(recovery["snapshot"])
         except Exception:
-            self._database().release_recovery(recovery_id, _now_ms())
+            self._database().release_recovery(recovery_id, now_ms())
             raise
-        if not self._database().complete_recovery(recovery_id, _now_ms()):
+        if not self._database().complete_recovery(recovery_id, now_ms()):
             raise RuntimeError("删除恢复状态提交失败")
         return {**result, "recovery_id": recovery_id}
 
@@ -834,65 +778,7 @@ class OperationService:
         )
 
     def _get(self, plan_id: str) -> tuple[OperationPlan, OperationState]:
-        if not isinstance(plan_id, str) or not plan_id.startswith("op_"):
-            raise AgentRequestError("plan_id 非法")
-        row = self._database().get(plan_id)
-        if row is None:
-            raise AgentRequestError("operation plan 不存在或已因重启失效")
-        operation = OperationPlan(
-            plan_id=row["plan_id"],
-            kind=row["kind"],
-            input_json=row["input_json"],
-            preview_json=row["preview_json"],
-            input_digest=row["input_digest"],
-            preview_digest=row["preview_digest"],
-            base_revision=row["base_revision"],
-            document_revision=row["document_revision"],
-            created_at=row["created_at"],
-            expires_at=row["expires_at"],
-        )
-        state = OperationState(
-            status=row["status"],
-            result_json=row["result_json"],
-            error_type=row["error_type"],
-            updated_at=row["updated_at"],
-        )
-        return operation, state
+        return self._plans.get(plan_id)
 
     def _expire(self, operation: OperationPlan, state: OperationState) -> None:
-        if state.status == "planned" and operation.expires_at < _now_ms():
-            self._database().expire(operation.plan_id, _now_ms())
-            state.status = "expired"
-            state.updated_at = _now_ms()
-
-    @staticmethod
-    def _public_plan(operation: OperationPlan) -> dict:
-        params = operation.input()
-        if operation.kind == "migration":
-            summary = (
-                f"将 {params['source_tool']} 会话迁移到 "
-                f"{params['target_tool']}"
-            )
-        elif operation.kind == "metadata":
-            summary = "修改会话元数据"
-        elif operation.kind == "delete":
-            summary = "删除原始会话（执行前创建恢复快照）"
-        elif operation.kind == "restore-delete":
-            summary = "恢复已删除的会话"
-        else:
-            summary = "修改原始会话（执行前自动创建可恢复快照）"
-        return {
-            "plan_id": operation.plan_id,
-            "kind": operation.kind,
-            "status": "planned",
-            "preview": operation.preview(),
-            "summary": summary,
-            "risk": "low" if operation.kind == "metadata" else "high",
-            "affected_refs": [params["ref"]] if "ref" in params else [],
-            "base_revision": operation.base_revision,
-            "document_revision": operation.document_revision,
-            "input_digest": operation.input_digest,
-            "preview_digest": operation.preview_digest,
-            "created_at": operation.created_at,
-            "expires_at": operation.expires_at,
-        }
+        self._plans.expire(operation, state)
