@@ -258,9 +258,7 @@ def _cleanup_artifact(dst: str, sid: str, dest):
 
 # ---------- 会话元数据(重命名/置顶/归档/标签) ----------
 
-from .session_meta import list_all as session_meta_list  # noqa: E402
-from .session_meta import compare_and_set_entry as _meta_compare_and_set
-from .session_meta import compare_and_set_entries as _meta_compare_and_set_entries
+from . import session_meta as _session_meta  # noqa: E402
 
 META_FIELDS = {
     "name", "pinned", "archived", "tags",
@@ -271,13 +269,13 @@ META_FIELDS = {
 def session_meta_compare_and_set(
         tool: str, session_id: str, expected: dict, patch: dict,
 ) -> dict:
-    return _meta_compare_and_set(
+    return _session_meta.compare_and_set_entry(
         tool, session_id,
-        expected, {k: v for k, v in patch.items() if k in META_FIELDS})
+        expected, {k: v for k, v in patch.items() if k in META_FIELDS}, current())
 
 
 def session_meta_compare_and_set_many(changes: list[dict]) -> dict:
-    return _meta_compare_and_set_entries([
+    return _session_meta.compare_and_set_entries([
         {
             "tool": change["tool"],
             "id": change["id"],
@@ -286,7 +284,7 @@ def session_meta_compare_and_set_many(changes: list[dict]) -> dict:
                       if k in META_FIELDS},
         }
         for change in changes
-    ])
+    ], current())
 
 
 # ---------- 会话生命周期 ----------
@@ -375,6 +373,7 @@ from . import models as _models  # noqa: E402
 from . import scanning as _scanning  # noqa: E402
 from . import sessions as _sessions  # noqa: E402
 from . import summaries as _summaries  # noqa: E402
+from . import organizing as _organizing  # noqa: E402
 
 
 def env() -> dict:
@@ -401,9 +400,33 @@ def session_asset(tool_name: str, ref: str, asset_id: str) -> dict:
     return _sessions.session_asset(tool_name, ref, asset_id, current())
 
 
+def session_meta_list() -> dict:
+    return _session_meta.list_all(current())
+
+
 def session_backbone(tool_name: str, ref: str) -> dict:
     return _summaries.build_backbone(tool_name, ref, current())
 
 
 def set_session_summaries(tool_name: str, session_id: str, digests: dict) -> dict:
     return _summaries.set_summaries(tool_name, session_id, digests, current())
+
+
+def organization_digest_context(targets: list[dict]) -> dict:
+    return _organizing.digest_context(targets, current())
+
+
+def organization_propose(targets: list[dict]) -> dict:
+    return _organizing.propose(targets, current())
+
+
+def organization_proposals_list(status: str | None = None) -> list[dict]:
+    return _organizing.list_proposals(status, current())
+
+
+def organization_proposal_modify(proposal_id: str, changes: list[dict]) -> dict:
+    return _organizing.modify(proposal_id, changes, current())
+
+
+def organization_proposal_decide(proposal_id: str, decision: str) -> dict:
+    return _organizing.decide(proposal_id, decision, current())

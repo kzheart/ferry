@@ -272,7 +272,8 @@ def test_metadata_plan_applies_with_independent_cas(agent_environment):
 
 def test_metadata_plan_rejects_concurrent_metadata_change(agent_environment):
     plan = _metadata_plan()
-    session_meta.set_entry("claude", "private-id", {"name": "并发名称"})
+    session_meta.set_entry(
+        "claude", "private-id", {"name": "并发名称"}, current())
 
     with pytest.raises(
             ConcurrentModificationError, match="元数据在审批后已变化"):
