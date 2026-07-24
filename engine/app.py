@@ -12,6 +12,7 @@ from .organization import proposals as organizing
 from .organization import summaries
 from .runtime import sessions as runtime_sessions
 from .sessions import catalog as agent_tools
+from .sessions.index import AgentSessionIndex, IndexedSession
 from .sessions import read as sessions
 from .sessions import scan as scanning
 from .system import environment, models
@@ -20,7 +21,7 @@ from .system.pricing import pricing
 
 class EngineService:
     def __init__(self, ports: EngineContext,
-                 index: agent_tools.AgentSessionIndex,
+                 index: AgentSessionIndex,
                  operations: OperationService):
         self._ports = ports
         self._index = index
@@ -45,7 +46,7 @@ class EngineService:
     def environment(self) -> dict:
         return environment.inspect(self._ports)
 
-    def _resolve_session(self, tool: str, ref: str) -> agent_tools.IndexedSession:
+    def _resolve_session(self, tool: str, ref: str) -> IndexedSession:
         return self._index.resolve(tool, ref)
 
     def _checked_query(self, tool: str, ref: str, query):
@@ -55,7 +56,7 @@ class EngineService:
         return result
 
     def resume_command(self, tool: str, ref: str) -> dict:
-        def build(record: agent_tools.IndexedSession) -> dict:
+        def build(record: IndexedSession) -> dict:
             session_id = record.row.get("id")
             if not isinstance(session_id, str) or not session_id:
                 raise agent_tools.AgentReferenceError("会话缺少原生 ID")

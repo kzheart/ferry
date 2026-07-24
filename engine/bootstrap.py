@@ -2,7 +2,7 @@
 
 from . import __version__
 from .adapters.registry import create_registry
-from .sessions.catalog import AgentSessionIndex
+from .sessions.index import AgentSessionIndex
 from .app import EngineService
 from .context import EngineContext
 from .system.resources import resource_path

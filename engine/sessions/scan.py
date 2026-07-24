@@ -1,10 +1,10 @@
 """跨工具会话扫描。"""
 
 from ..context import EngineContext
-from . import catalog
+from .index import AgentSessionIndex
 
 
-def scan(ports: EngineContext, index: catalog.AgentSessionIndex) -> dict:
+def scan(ports: EngineContext, index: AgentSessionIndex) -> dict:
     tools, scanned = {}, []
     cache = ports.cache_factory()
     for name in ports.adapters():

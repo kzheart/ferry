@@ -14,6 +14,7 @@ from engine.adapters.contracts import (
 )
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.sessions import catalog as agent_tools
+from engine.sessions.index import AgentSessionIndex
 from engine.sessions import scan as scanning
 from engine.app import EngineService
 from engine.context import EngineContext
@@ -243,7 +244,7 @@ def agent_environment(tmp_path, monkeypatch):
         cache_factory=Cache, resource_path=lambda *_: tmp_path,
         snapshot_dir=lambda: tmp_path, version="test",
     )
-    index = agent_tools.AgentSessionIndex(ports)
+    index = AgentSessionIndex(ports)
     for name in (
         "search_sessions", "get_session_context", "search_session_content",
         "session_read", "get_usage", "preview_migration", "preview_edit",

@@ -68,3 +68,13 @@ def test_business_capabilities_live_in_top_level_packages():
     assert "def _resolve_ops" not in operation_service
     assert "def _preview_edit" not in operation_service
     assert "class EditOperationHandler" in (operations / "edit.py").read_text()
+
+
+def test_session_reference_index_is_isolated_from_query_catalog():
+    sessions = ENGINE / "sessions"
+    index = (sessions / "index.py").read_text()
+    catalog = (sessions / "catalog.py").read_text()
+    assert "class AgentSessionIndex" in index
+    assert "class IndexedSession" in index
+    assert "class AgentSessionIndex" not in catalog
+    assert "class IndexedSession" not in catalog

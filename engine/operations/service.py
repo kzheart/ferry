@@ -8,6 +8,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 
 from ..contracts.operations import OPERATION_KINDS
 from ..sessions import catalog as agent_tools
+from ..sessions.index import AgentSessionIndex
 from ..context import EngineContext
 from ..errors import (
     AgentReferenceError,
@@ -41,7 +42,7 @@ MUTATION_WORKERS = 1
 
 class OperationService:
     def __init__(self, ports: EngineContext,
-                 index: agent_tools.AgentSessionIndex):
+                 index: AgentSessionIndex):
         self._ports = ports
         self._index = index
         self._migration = MigrationService(ports)
