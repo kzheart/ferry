@@ -4,6 +4,7 @@ mod agent;
 mod contracts;
 #[cfg(target_os = "macos")]
 mod menu;
+mod operation_input;
 mod platform;
 mod reveal;
 mod sidecar;

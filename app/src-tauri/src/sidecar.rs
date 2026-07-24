@@ -1,6 +1,9 @@
 use crate::contracts::engine_methods;
+use crate::operation_input::{
+    DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
+    MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
+};
 use crate::sidecar_policy::{request_attempts, request_timeout};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
@@ -342,83 +345,6 @@ pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result
     tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind")]
-pub(crate) enum OperationPlanInput {
-    #[serde(rename = "edit")]
-    Edit(EditOperationPlanInput),
-    #[serde(rename = "migration")]
-    Migration(MigrationOperationPlanInput),
-    #[serde(rename = "metadata")]
-    Metadata(MetadataOperationPlanInput),
-    #[serde(rename = "delete")]
-    Delete(DeleteOperationPlanInput),
-    #[serde(rename = "restore-delete")]
-    RestoreDelete(RestoreDeleteOperationPlanInput),
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct EditOperationPlanInput {
-    tool: String,
-    #[serde(rename = "ref")]
-    reference: String,
-    ops: Vec<Value>,
-    #[serde(default)]
-    probe: bool,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct MigrationOperationPlanInput {
-    source_tool: String,
-    #[serde(rename = "ref")]
-    reference: String,
-    target_tool: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_turn: Option<u32>,
-    #[serde(default)]
-    probe: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    probe_model: Option<String>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct MetadataOperationPlanInput {
-    tool: String,
-    #[serde(rename = "ref")]
-    reference: String,
-    patch: MetadataPatch,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct DeleteOperationPlanInput {
-    tool: String,
-    #[serde(rename = "ref")]
-    reference: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct RestoreDeleteOperationPlanInput {
-    recovery_id: String,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct MetadataPatch {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pinned: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    archived: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tags: Option<Vec<String>>,
 }
 
 fn validate_bounded_json(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
@@ -827,6 +753,8 @@ mod tests {
         operation_plan_id_request, operation_plan_request, read_engine_output, request_attempts,
         request_timeout, stamp_engine_request, validate_engine_response_id,
         validate_operation_plan_input, validate_plan_id, validate_public_engine_request,
+    };
+    use crate::operation_input::{
         DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
         MetadataPatch, MigrationOperationPlanInput, OperationPlanInput,
         RestoreDeleteOperationPlanInput,
