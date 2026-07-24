@@ -18,6 +18,7 @@ def test_opencode_adapter_has_explicit_reader_writer_and_store():
     assert (opencode / "store.py").is_file()
     assert (opencode / "reader.py").is_file()
     assert (opencode / "writer.py").is_file()
+    assert (opencode / "payload.py").is_file()
     assert not (opencode / "session.py").exists()
     writer = (opencode / "writer.py").read_text()
     assert "sqlite3.connect" not in writer
@@ -26,6 +27,14 @@ def test_opencode_adapter_has_explicit_reader_writer_and_store():
     assert "def import_payload" not in writer
     assert "def parse_session" not in writer
     assert "def read(" not in writer
+    assert "def canonical_payload(" not in writer
+    assert "def remap_payload(" not in writer
+    assert "def ensure_task_links(" not in writer
+    payload = (opencode / "payload.py").read_text()
+    assert "def canonical_payload(" in payload
+    assert "def remap_payload(" in payload
+    assert "def ensure_task_links(" in payload
+    assert "import_payload(" not in payload
     tool_calls = (opencode / "tool_calls.py").read_text()
     assert "OP_WRITERS" in tool_calls
     assert "def _write_shell_exec" in tool_calls
