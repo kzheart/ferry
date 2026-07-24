@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ...system import executables, probes
+from . import payload as payload_builder
 from . import reader as opencode_reader
 from . import writer as opencode_writer
 from . import store as opencode_store
@@ -37,7 +38,7 @@ class OpenCodeVerifier:
             tree,
             cwd=cwd,
             native_payloads={
-                tree.source_id: opencode_writer._clone(authored.data),
+                tree.source_id: payload_builder.clone(authored.data),
             },
         )
         try:
