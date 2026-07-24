@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileProviderConfigStore } from "../src/providers/provider-config.js";
 import { ProviderHost } from "../src/providers/provider-host.js";
-import { AgentRuntime } from "../src/application/runtime.js";
+import { AgentRuntime } from "../src/runtime/runtime.js";
 
 const DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";
 const DEEPSEEK_PROVIDER_ID = "deepseek";

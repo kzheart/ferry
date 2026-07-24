@@ -1,6 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { AGENT_IDS } from "../protocol/generated/agents.js";
+import { AGENT_IDS } from "../server/generated/agents.js";
 
 const timeRange = Type.Object(
   {

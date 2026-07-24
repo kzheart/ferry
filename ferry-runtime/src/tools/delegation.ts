@@ -1,6 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import type { TaskGraph, WorkflowRunResult } from "../core/workflow.js";
+import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
 
 const task = Type.Object(
   {

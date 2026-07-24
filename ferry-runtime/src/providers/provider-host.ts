@@ -15,12 +15,12 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { dirname, join } from "node:path";
-import { FileModelsStore } from "../infrastructure/model-catalog-store.js";
+import { FileModelsStore } from "./model-store.js";
 import {
   organizerPrompt,
   validateOrganizerResult,
   type OrganizerInput,
-} from "../workflows/organizer.js";
+} from "../organizing/organizer.js";
 import {
   FileProviderConfigStore,
   type CustomModelConfig,

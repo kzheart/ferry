@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileProviderConfigStore } from "../src/providers/provider-config.js";
-import { FileModelsStore } from "../src/infrastructure/model-catalog-store.js";
+import { FileModelsStore } from "../src/providers/model-store.js";
 import { EphemeralSessionStore } from "../src/sessions/session-repository.js";
 import {
   ProviderHost,
   UNSUPPORTED_PROVIDER_IDS,
 } from "../src/providers/provider-host.js";
-import { AgentRuntime } from "../src/application/runtime.js";
+import { AgentRuntime } from "../src/runtime/runtime.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
 const previousOpenAIKey = process.env.OPENAI_API_KEY;

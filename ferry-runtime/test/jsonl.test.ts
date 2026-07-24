@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { readJsonLines } from "../src/protocol/jsonl.js";
+import { readJsonLines } from "../src/server/jsonl.js";
 
 async function collect(chunks: string[], maxBytes?: number) {
   const result: string[] = [];

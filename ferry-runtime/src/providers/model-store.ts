@@ -10,7 +10,7 @@ import {
 import { join } from "node:path";
 import type { ModelsStore, ModelsStoreEntry } from "@earendil-works/pi-ai";
 
-function providerName(providerId: string) {
+function providerFileName(providerId: string) {
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(providerId)) {
     throw new Error("provider id is invalid");
   }
@@ -23,7 +23,7 @@ export class FileModelsStore implements ModelsStore {
   constructor(private readonly directory: string) {}
 
   async read(providerId: string) {
-    const name = providerName(providerId);
+    const name = providerFileName(providerId);
     await this.writeQueue;
     try {
       return JSON.parse(
@@ -36,7 +36,7 @@ export class FileModelsStore implements ModelsStore {
   }
 
   async write(providerId: string, entry: ModelsStoreEntry) {
-    const target = join(this.directory, providerName(providerId));
+    const target = join(this.directory, providerFileName(providerId));
     const payload = JSON.stringify(entry);
     await this.enqueue(async () => {
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -53,7 +53,7 @@ export class FileModelsStore implements ModelsStore {
   }
 
   async delete(providerId: string) {
-    const target = join(this.directory, providerName(providerId));
+    const target = join(this.directory, providerFileName(providerId));
     await this.enqueue(async () => {
       await unlink(target).catch((error) => {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;

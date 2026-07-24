@@ -7,7 +7,7 @@
     "node": ">=22.19.0"
   },
   "bin": {
-    "ferry-runtime": "dist/protocol/server.js"
+    "ferry-runtime": "dist/server/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

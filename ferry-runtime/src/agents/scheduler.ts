@@ -1,4 +1,4 @@
-import { ProtocolError } from "../protocol/messages.js";
+import { ProtocolError } from "../server/messages.js";
 
 export type WorkflowFailurePolicy = "fail_fast" | "continue";
 export type TaskStatus =

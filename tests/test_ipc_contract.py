@@ -14,7 +14,7 @@ def test_all_runtimes_use_the_generated_ferry_ipc_protocol():
     generated = (
         ROOT / "app/src/api/contract/generated/ipc.js",
         ROOT / "app/src-tauri/src/contracts/ipc.rs",
-        ROOT / "ferry-runtime/src/protocol/generated/ipc.ts",
+        ROOT / "ferry-runtime/src/server/generated/ipc.ts",
     )
     for path in generated:
         text = path.read_text()

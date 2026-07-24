@@ -4,13 +4,13 @@ import {
   type PersistedSession,
   type SessionCommit,
 } from "../src/sessions/session-repository.js";
-import { AgentRuntime } from "../src/application/runtime.js";
-import { FERRY_SAFETY_PROMPT } from "../src/application/runtime.js";
+import { AgentRuntime } from "../src/runtime/runtime.js";
+import { FERRY_SAFETY_PROMPT } from "../src/runtime/runtime.js";
 import { EphemeralRoleStore } from "../src/roles/role-repository.js";
 import {
   PROTOCOL_VERSION,
   type EventEnvelope,
-} from "../src/protocol/messages.js";
+} from "../src/server/messages.js";
 import { createProtocolTestBackend } from "./test-backend.js";
 
 async function createRuntime(
