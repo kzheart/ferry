@@ -2,7 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openTerminal } from "../platform/desktop/client.js";
-import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js";
+import {
+  TOOLS,
+  TOOL_NAME,
+  resumeDescriptor,
+} from "../shared/contracts/tools.js";
 import { fmtTime, sessionRef } from "../modules/browser/sessionModel.js";
 import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
 import { createSessionContextMenu } from "../modules/browser/sessionContextMenu.js";
@@ -18,7 +22,10 @@ import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
 import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
-import { initialWorkspace, useOnboarding } from "../modules/onboarding/useOnboarding.js";
+import {
+  initialWorkspace,
+  useOnboarding,
+} from "../modules/onboarding/useOnboarding.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
 import { AppShell } from "./AppShell.jsx";
@@ -32,18 +39,28 @@ import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
 export default function App() {
   const { t, i18n } = useTranslation();
   // ----- 数据 -----
-  const { env, scan, scanning, lastScan, historyRows, pricing,
-    doScan, loadHistory, deleteHistory } = useBrowserData();
+  const {
+    env,
+    scan,
+    scanning,
+    lastScan,
+    historyRows,
+    pricing,
+    scanReady,
+    doScan,
+    loadHistory,
+    deleteHistory,
+  } = useBrowserData();
 
   // ----- 导航与选中 -----
   const [view, setView] = useState(initialWorkspace);
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [organizerOpen, setOrganizerOpen] = useState(false);
-  const [peekId, setPeekId] = useState(null);  // Ask Ferry 卡片就地预览的会话 id
+  const [peekId, setPeekId] = useState(null); // Ask Ferry 卡片就地预览的会话 id
 
   // ----- 编辑 -----
   // ----- 迁移 -----
-  const [mig, setMig] = useState(null);         // {scope}
+  const [mig, setMig] = useState(null); // {scope}
 
   const paneLayout = useResourcePaneLayout();
 
@@ -59,11 +76,9 @@ export default function App() {
   const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
-  const [delConfirm, setDelConfirm] = useState(null);
   const [histDel, setHistDel] = useState(null);
-  const [batchDel, setBatchDel] = useState(null);   // 待批量删除的会话数组
   const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
-  const [tagFor, setTagFor] = useState(null);       // {sessions} 待编辑标签的会话
+  const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
@@ -78,28 +93,54 @@ export default function App() {
   const selectionReset = useRef(() => {});
   const selection = useSessionSelection({
     sessions,
+    ready: scanReady,
     onSelect: () => selectionReset.current(),
     onFallbackLoad: doScan,
+    onStaleReference: doScan,
   });
   const {
     selectedId: selId,
     detail,
     refreshing,
+    loadingMore,
     sessionsByKey: byKey,
     select,
     loadEntitySession,
     refreshDetail,
+    loadMore,
     clearSelection,
     discardCachedDetail,
   } = selection;
   const cur = selId ? byKey[selId] : null;
-  const editing = useSessionEditing({ current: cur,
-    runtimeProbe: !!settings.runtimeProbe, doScan,
-    onInplaceApplied: () => select(selId) });
-  const { ops, dirtyOps, setOps, diff, setDiff,
-    confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    resetSelection, addOp, startReplyEdit,
-    removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
+  const editing = useSessionEditing({
+    current: cur,
+    runtimeProbe: !!settings.runtimeProbe,
+    doScan,
+    onInplaceApplied: () => select(selId),
+  });
+  const {
+    ops,
+    dirtyOps,
+    setOps,
+    diff,
+    setDiff,
+    confirmApply,
+    setConfirmApply,
+    toast,
+    setToast,
+    applying,
+    scope,
+    setScope,
+    resetSelection,
+    addOp,
+    startReplyEdit,
+    removeOp,
+    updateOp,
+    replyEditError,
+    openDiff,
+    prepareApply,
+    applyEdit,
+  } = editing;
   selectionReset.current = resetSelection;
   const {
     metadata: metaMap,
@@ -108,10 +149,17 @@ export default function App() {
     updateMetadata: setMetaFor,
   } = useSessionMetadata({ setToast, t });
   const migratedSessionKeys = useMemo(
-    () => new Set(historyRows.map(history => sessionIdentity({
-      tool: history.src,
-      id: history.source_id,
-    })).filter(Boolean)),
+    () =>
+      new Set(
+        historyRows
+          .map((history) =>
+            sessionIdentity({
+              tool: history.src,
+              id: history.source_id,
+            }),
+          )
+          .filter(Boolean),
+      ),
     [historyRows],
   );
   const library = useLibraryResourcePane({
@@ -162,7 +210,7 @@ export default function App() {
     tokens: histTokens,
     clear: clearHistF,
   } = history;
-  const { deleteSession, deleteSessions } = useSessionDeletion({
+  const deletion = useSessionDeletion({
     clearSelection,
     discardCachedDetail,
     doScan,
@@ -178,7 +226,10 @@ export default function App() {
   }, [sessions]);
 
   useDesktopChrome({
-    onOpenSettings: () => { setSettingsSection("prefs"); setSettingsOpen(true); },
+    onOpenSettings: () => {
+      setSettingsSection("prefs");
+      setSettingsOpen(true);
+    },
     onToggleSidebar: paneLayout.toggleCollapsed,
     onRescan: doScan,
   });
@@ -207,10 +258,14 @@ export default function App() {
     }
     if (action.view === "history") {
       setView("history");
-      const candidate = histItems.find(item =>
-        (action.migrationId && (item.id === action.migrationId ||
-          item._id === action.migrationId)) ||
-        (action.ref && (item.source_ref === action.ref || item.ref === action.ref)));
+      const candidate = histItems.find(
+        (item) =>
+          (action.migrationId &&
+            (item.id === action.migrationId ||
+              item._id === action.migrationId)) ||
+          (action.ref &&
+            (item.source_ref === action.ref || item.ref === action.ref)),
+      );
       if (candidate) selectHistory(candidate._id);
       return;
     }
@@ -224,15 +279,7 @@ export default function App() {
     if (view === "library" && selId) refreshDetail();
   }, [ferry.mutationVersion]);
 
-  const askDelete = s => {
-    if (s.tool === "opencode" || (s.tree_count || 1) > 1) setDelConfirm(s);
-    else deleteSession(s);
-  };
-  const doBatchDelete = async () => {
-    const targets = batchDel;
-    setBatchDel(null);
-    await deleteSessions(targets);
-  };
+  const askDelete = deletion.requestSessionDeletion;
 
   const ctxItems = createSessionContextMenu({
     menu: ctxMenu,
@@ -243,7 +290,7 @@ export default function App() {
     updateMetadata: setMetaFor,
     setTagSelection: setTagFor,
     setRename: setRenameFor,
-    setBatchDelete: setBatchDel,
+    setBatchDelete: deletion.requestBatchDeletion,
     setMultiIds: setMultiSel,
     setAgentAttachments,
     setView,
@@ -256,87 +303,151 @@ export default function App() {
     askDelete,
   });
 
-  const { onRowClick, onRowMore, onRowPin, onRowDelete } = useLibraryResourcePaneActions({
-    sessionsByKey: byKey,
-    selectedId: selId,
-    visibleIds: libraryVisibleIds,
-    multiIds: multiSel,
-    setMultiIds: setMultiSel,
-    onSelect: select,
-    onTogglePin: session => setMetaFor(
-      session, { pinned: !metaFor(session).pinned },
-    ),
-    onDelete: askDelete,
-    onOpenMenu: setCtxMenu,
-  });
+  const { onRowClick, onRowMore, onRowPin, onRowDelete } =
+    useLibraryResourcePaneActions({
+      sessionsByKey: byKey,
+      selectedId: selId,
+      visibleIds: libraryVisibleIds,
+      multiIds: multiSel,
+      setMultiIds: setMultiSel,
+      onSelect: select,
+      onTogglePin: (session) =>
+        setMetaFor(session, { pinned: !metaFor(session).pinned }),
+      onDelete: askDelete,
+      onOpenMenu: setCtxMenu,
+    });
 
   // 详情区回调:同样经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会
   // 因侧边栏交互(展开分组/多选/悬停)产生的新闭包全量重渲染整条时间线
   const detailFns = useRef({});
   detailFns.current = {
     discardAll: () => setOps([]),
-    setScope, addOp, removeOp, updateOp, startReplyEdit, replyEditError,
-    openDiff, apply: prepareApply,
-    openMigrate: sc => setMig({ scope: sc ?? scope }),
+    setScope,
+    addOp,
+    removeOp,
+    updateOp,
+    startReplyEdit,
+    replyEditError,
+    openDiff,
+    apply: prepareApply,
+    openMigrate: (sc) => setMig({ scope: sc ?? scope }),
     refresh: refreshDetail,
-    resume: async meta => {
-      setToast({ kind: "run", title: t("app:toast.openingTerminal"),
-        desc: t("app:toast.openingTerminalDesc", { title: meta.title || meta.id }) });
+    loadMore,
+    resume: async (meta) => {
+      setToast({
+        kind: "run",
+        title: t("app:toast.openingTerminal"),
+        desc: t("app:toast.openingTerminalDesc", {
+          title: meta.title || meta.id,
+        }),
+      });
       try {
         const launch = await resumeDescriptor(meta.tool, sessionRef(meta));
         await openTerminal(launch, settings.terminalApp);
-        setToast({ kind: "ok", title: t("app:toast.terminalOpened"),
-          desc: t("app:toast.terminalOpenedDesc") });
+        setToast({
+          kind: "ok",
+          title: t("app:toast.terminalOpened"),
+          desc: t("app:toast.terminalOpenedDesc"),
+        });
       } catch (error) {
-        setToast({ kind: "fail", title: t("app:toast.openTerminalFail"), desc: error.message });
+        setToast({
+          kind: "fail",
+          title: t("app:toast.openTerminalFail"),
+          desc: error.message,
+        });
       }
     },
   };
-  const detailActs = useMemo(() => ({
-    onDiscardAll: () => detailFns.current.discardAll(),
-    setScope: v => detailFns.current.setScope(v),
-    addOp: (...a) => detailFns.current.addOp(...a),
-    removeOp: (...a) => detailFns.current.removeOp(...a),
-    updateOp: (...a) => detailFns.current.updateOp(...a),
-    startReplyEdit: (...a) => detailFns.current.startReplyEdit(...a),
-    replyEditError: (...a) => detailFns.current.replyEditError(...a),
-    onOpenDiff: () => detailFns.current.openDiff(),
-    onApply: () => detailFns.current.apply(),
-    onOpenMigrate: sc => detailFns.current.openMigrate(sc),
-    onRefresh: () => detailFns.current.refresh(),
-    onResume: meta => detailFns.current.resume(meta),
-  }), []);
-  const detailMeta = useMemo(() => cur && metaFor(cur).name
-    ? { ...cur, title: metaFor(cur).name } : cur, [cur, metaMap]);
+  const detailActs = useMemo(
+    () => ({
+      onDiscardAll: () => detailFns.current.discardAll(),
+      setScope: (v) => detailFns.current.setScope(v),
+      addOp: (...a) => detailFns.current.addOp(...a),
+      removeOp: (...a) => detailFns.current.removeOp(...a),
+      updateOp: (...a) => detailFns.current.updateOp(...a),
+      startReplyEdit: (...a) => detailFns.current.startReplyEdit(...a),
+      replyEditError: (...a) => detailFns.current.replyEditError(...a),
+      onOpenDiff: () => detailFns.current.openDiff(),
+      onApply: () => detailFns.current.apply(),
+      onOpenMigrate: (sc) => detailFns.current.openMigrate(sc),
+      onRefresh: () => detailFns.current.refresh(),
+      onLoadMore: () => detailFns.current.loadMore(),
+      onResume: (meta) => detailFns.current.resume(meta),
+    }),
+    [],
+  );
+  const detailMeta = useMemo(
+    () =>
+      cur && metaFor(cur).name ? { ...cur, title: metaFor(cur).name } : cur,
+    [cur, metaMap],
+  );
 
   // ----- 资源栏数据:Ask Ferry 对话 -----
   const aql = aq.trim().toLowerCase();
-  const ferrySessions = useMemo(() => (aql
-    ? ferry.sessions.filter(s => (s.title || "").toLowerCase().includes(aql))
-    : ferry.sessions).slice().sort((left, right) =>
-      Number(!!right.pinned) - Number(!!left.pinned)
-      || String(right.updated_at || "").localeCompare(String(left.updated_at || ""))),
-  [ferry.sessions, aql]);
+  const ferrySessions = useMemo(
+    () =>
+      (aql
+        ? ferry.sessions.filter((s) =>
+            (s.title || "").toLowerCase().includes(aql),
+          )
+        : ferry.sessions
+      )
+        .slice()
+        .sort(
+          (left, right) =>
+            Number(!!right.pinned) - Number(!!left.pinned) ||
+            String(right.updated_at || "").localeCompare(
+              String(left.updated_at || ""),
+            ),
+        ),
+    [ferry.sessions, aql],
+  );
 
   // ----- 资源栏骨架配置 -----
-  const paneCfg = {
-    askferry: { title: t("askferry:pane.title"), count: String(ferry.sessions.length),
-      placeholder: t("askferry:pane.placeholder"),
-      query: aq, onQuery: e => setAq(e.target.value),
-      filterCount: 0, tokens: [],
-      footer: t("askferry:pane.footer", { n: ferry.sessions.length }) },
-    library: { title: t("app:pane.libraryTitle"), count: String(sessions.length), placeholder: t("app:pane.libraryPlaceholder"),
-      query: q, onQuery: e => setQ(e.target.value),
-      filterCount: libFilterCount,
-      tokens: libTokens,
-      footer: scan?.error ? t("app:pane.libraryFooterError", { error: scan.error })
-        : multiSel.length > 1 ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
-        : t("app:pane.libraryFooterBrowsing", { n: sessions.length, lastScan: lastScan ? t("app:pane.libraryFooterLastScan", { time: fmtTime(lastScan, t) }) : "" }) },
-    history: { title: t("app:pane.historyTitle"), count: String(histItems.length), placeholder: t("app:pane.historyPlaceholder"),
-      query: hq, onQuery: e => setHq(e.target.value),
-      filterCount: histFilterCount,
-      tokens: histTokens, footer: t("app:pane.historyFooter", { n: histItems.length }) },
-  }[view] || null;
+  const paneCfg =
+    {
+      askferry: {
+        title: t("askferry:pane.title"),
+        count: String(ferry.sessions.length),
+        placeholder: t("askferry:pane.placeholder"),
+        query: aq,
+        onQuery: (e) => setAq(e.target.value),
+        filterCount: 0,
+        tokens: [],
+        footer: t("askferry:pane.footer", { n: ferry.sessions.length }),
+      },
+      library: {
+        title: t("app:pane.libraryTitle"),
+        count: String(sessions.length),
+        placeholder: t("app:pane.libraryPlaceholder"),
+        query: q,
+        onQuery: (e) => setQ(e.target.value),
+        filterCount: libFilterCount,
+        tokens: libTokens,
+        footer: scan?.error
+          ? t("app:pane.libraryFooterError", { error: scan.error })
+          : multiSel.length > 1
+            ? t("app:pane.libraryFooterMulti", { n: multiSel.length })
+            : t("app:pane.libraryFooterBrowsing", {
+                n: sessions.length,
+                lastScan: lastScan
+                  ? t("app:pane.libraryFooterLastScan", {
+                      time: fmtTime(lastScan, t),
+                    })
+                  : "",
+              }),
+      },
+      history: {
+        title: t("app:pane.historyTitle"),
+        count: String(histItems.length),
+        placeholder: t("app:pane.historyPlaceholder"),
+        query: hq,
+        onQuery: (e) => setHq(e.target.value),
+        filterCount: histFilterCount,
+        tokens: histTokens,
+        footer: t("app:pane.historyFooter", { n: histItems.length }),
+      },
+    }[view] || null;
 
   // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
   const railOnly = !paneCfg || paneLayout.collapsed;
@@ -357,8 +468,14 @@ export default function App() {
       { open: Boolean(ctxMenu), dismiss: () => setCtxMenu(null) },
       { open: Boolean(renameFor), dismiss: () => setRenameFor(null) },
       { open: Boolean(tagFor), dismiss: () => setTagFor(null) },
-      { open: Boolean(batchDel), dismiss: () => setBatchDel(null) },
-      { open: Boolean(delConfirm), dismiss: () => setDelConfirm(null) },
+      {
+        open: Boolean(deletion.batchConfirmation),
+        dismiss: deletion.cancelBatchDeletion,
+      },
+      {
+        open: Boolean(deletion.sessionConfirmation),
+        dismiss: deletion.cancelSessionDeletion,
+      },
       { open: Boolean(histDel), dismiss: () => setHistDel(null) },
       { open: settingsOpen, dismiss: () => setSettingsOpen(false) },
       { open: Boolean(popover), dismiss: () => setPopover(null) },
@@ -375,7 +492,7 @@ export default function App() {
     multiIds: multiSel,
     sessionsByKey: byKey,
     onRename: setRenameFor,
-    onBatchDelete: setBatchDel,
+    onBatchDelete: deletion.requestBatchDeletion,
     onDelete: askDelete,
     onResume: detailActs.onResume,
     libraryVisibleIds,
@@ -387,94 +504,158 @@ export default function App() {
   });
 
   return (
-    <div data-ferry-win="1" style={{ height: "100vh", display: "flex",
-      background: "var(--win-bg)", position: "relative", overflow: "hidden", fontSize: 13 }}>
+    <div
+      data-ferry-win="1"
+      style={{
+        height: "100vh",
+        display: "flex",
+        background: "var(--win-bg)",
+        position: "relative",
+        overflow: "hidden",
+        fontSize: 13,
+      }}
+    >
       <AppShell
-        rail={<AppRail
-          railOnly={railOnly}
-          resizing={paneLayout.resizing}
-          items={rail.items}
-          activeView={view}
-          draggingKey={rail.draggingKey}
-          dropTarget={rail.dropTarget}
-          scanning={scanning}
-          settingsOpen={settingsOpen}
-          scanningLabel={t("app:titlebar.scanning")}
-          rescanLabel={t("app:titlebar.rescan")}
-          settingsLabel={t("app:rail.settings")}
-          onSelect={key => {
-            if (rail.shouldSuppressClick()) return;
-            setView(key); setSettingsOpen(false); setPopover(null); rail.leave();
-          }}
-          onRescan={() => { doScan(); rail.leave(); }}
-          onToggleSettings={() => {
-            setSettingsSection("prefs"); setSettingsOpen(value => !value); rail.leave();
-          }}
-          onEnter={rail.enter}
-          onLeave={rail.leave}
-          pointerHandlers={rail.pointerHandlers}
-        />}
-        resourcePane={paneCfg && (
-          <ResourcePaneHost
-            view={view}
-            pane={paneCfg}
-            collapsed={paneLayout.collapsed}
-            width={paneLayout.width}
+        rail={
+          <AppRail
+            railOnly={railOnly}
             resizing={paneLayout.resizing}
-            filterOpen={popover === { library: "lib", history: "hist" }[view]}
-            onOpenSearch={() => setSearchOpen(true)}
-            onFilter={e => {
-              popAnchor.current = e.currentTarget.getBoundingClientRect();
-              setPopover(value => {
-                const key = { library: "lib", history: "hist" }[view];
-                return value === key ? null : key;
-              });
+            items={rail.items}
+            activeView={view}
+            draggingKey={rail.draggingKey}
+            dropTarget={rail.dropTarget}
+            scanning={scanning}
+            settingsOpen={settingsOpen}
+            scanningLabel={t("app:titlebar.scanning")}
+            rescanLabel={t("app:titlebar.rescan")}
+            settingsLabel={t("app:rail.settings")}
+            onSelect={(key) => {
+              if (rail.shouldSuppressClick()) return;
+              setView(key);
+              setSettingsOpen(false);
+              setPopover(null);
+              rail.leave();
             }}
-            library={{
-              scanning, sessions, scanningLabel: t("app:detail.scanningSessions"),
-              groups: libGroups, collapsedGroups, onToggleGroup, onClear: clearLibF,
-              selectedId: selId, multiSel, onRowClick, onRowPin, onRowDelete, onRowMore,
+            onRescan={() => {
+              doScan();
+              rail.leave();
             }}
-            history={{
-              groups: histGroups, filtered: histFiltered,
-              onDelete: id => setHistDel(histItems.find(item => item._id === id)),
-              onClear: clearHistF,
+            onToggleSettings={() => {
+              setSettingsSection("prefs");
+              setSettingsOpen((value) => !value);
+              rail.leave();
             }}
-            agent={{
-              sessions: ferrySessions, activeId: ferry.activeId,
-              onOpen: ferry.openSession, onNew: ferry.newChat,
-              onPin: session => ferry.pin(session.session_id, !session.pinned).catch(ferry.reportError),
-              onDelete: session => ferry.deleteSession(session.session_id).catch(ferry.reportError),
-              onRename: setAgentRenameFor,
-            }}
+            onEnter={rail.enter}
+            onLeave={rail.leave}
+            pointerHandlers={rail.pointerHandlers}
           />
-        )}
+        }
+        resourcePane={
+          paneCfg && (
+            <ResourcePaneHost
+              view={view}
+              pane={paneCfg}
+              collapsed={paneLayout.collapsed}
+              width={paneLayout.width}
+              resizing={paneLayout.resizing}
+              filterOpen={popover === { library: "lib", history: "hist" }[view]}
+              onOpenSearch={() => setSearchOpen(true)}
+              onFilter={(e) => {
+                popAnchor.current = e.currentTarget.getBoundingClientRect();
+                setPopover((value) => {
+                  const key = { library: "lib", history: "hist" }[view];
+                  return value === key ? null : key;
+                });
+              }}
+              library={{
+                scanning,
+                sessions,
+                scanningLabel: t("app:detail.scanningSessions"),
+                groups: libGroups,
+                collapsedGroups,
+                onToggleGroup,
+                onClear: clearLibF,
+                selectedId: selId,
+                multiSel,
+                onRowClick,
+                onRowPin,
+                onRowDelete,
+                onRowMore,
+              }}
+              history={{
+                groups: histGroups,
+                filtered: histFiltered,
+                onDelete: (id) =>
+                  setHistDel(histItems.find((item) => item._id === id)),
+                onClear: clearHistF,
+              }}
+              agent={{
+                sessions: ferrySessions,
+                activeId: ferry.activeId,
+                onOpen: ferry.openSession,
+                onNew: ferry.newChat,
+                onPin: (session) =>
+                  ferry
+                    .pin(session.session_id, !session.pinned)
+                    .catch(ferry.reportError),
+                onDelete: (session) =>
+                  ferry
+                    .deleteSession(session.session_id)
+                    .catch(ferry.reportError),
+                onRename: setAgentRenameFor,
+              }}
+            />
+          )
+        }
         showDivider={Boolean(paneCfg && !paneLayout.collapsed)}
         resizing={paneLayout.resizing}
         onResizeStart={paneLayout.startResize}
         onResizeReset={paneLayout.resetWidth}
         dividerTitle={t("app:drag.hint")}
-        toolbar={<>
-          {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
-          <button className={paneCfg ? "hov" : undefined} disabled={!paneCfg}
-            onClick={paneLayout.toggleCollapsed}
-            title={paneLayout.collapsed
-              ? t("app:titlebar.expand")
-              : t("app:titlebar.collapse")}
-            style={{ width: 28, height: 26, display: "inline-flex", alignItems: "center",
-              justifyContent: "center", background: "transparent", border: "none", borderRadius: 6,
-              cursor: "default", color: "var(--tx3b)", opacity: paneCfg ? 1 : .35 }}>
-            <SidebarIcon />
-          </button>
-          {view === "library" && (
-            <button className="fbtn" onClick={() => setOrganizerOpen(true)}
-              disabled={!sessions.length}
-              style={{ height: 27, fontSize: 11 }}>
-              {t("organizing:open")}
+        toolbar={
+          <>
+            {/* 侧栏开关常驻工具栏(macOS 惯例):无资源栏的视图置灰禁用,避免切视图时按钮突然消失 */}
+            <button
+              className={paneCfg ? "hov" : undefined}
+              disabled={!paneCfg}
+              onClick={paneLayout.toggleCollapsed}
+              title={
+                paneLayout.collapsed
+                  ? t("app:titlebar.expand")
+                  : t("app:titlebar.collapse")
+              }
+              style={{
+                width: 28,
+                height: 26,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: "none",
+                borderRadius: 6,
+                cursor: "default",
+                color: "var(--tx3b)",
+                opacity: paneCfg ? 1 : 0.35,
+              }}
+            >
+              <SidebarIcon />
             </button>
-          )}
-          <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
-        </>}
+            {view === "library" && (
+              <button
+                className="fbtn"
+                onClick={() => setOrganizerOpen(true)}
+                disabled={!sessions.length}
+                style={{ height: 27, fontSize: 11 }}
+              >
+                {t("organizing:open")}
+              </button>
+            )}
+            <div
+              data-tauri-drag-region
+              style={{ flex: 1, alignSelf: "stretch" }}
+            />
+          </>
+        }
       >
         <WorkspaceRouter
           view={view}
@@ -487,7 +668,12 @@ export default function App() {
           selectedSessionId={selId}
           detailMeta={detailMeta}
           detail={detail}
-          detailActions={{ ...detailActs, refreshing, onDeleteHistory: () => setHistDel(histSel) }}
+          detailActions={{
+            ...detailActs,
+            refreshing,
+            loadingMore,
+            onDeleteHistory: () => setHistDel(histSel),
+          }}
           scope={scope}
           ops={ops}
           dirtyOps={dirtyOps}
@@ -498,7 +684,9 @@ export default function App() {
           onAgentAttachmentsChange={setAgentAttachments}
           onNavigate={peekEntity}
           onOpenConfig={(section = "providers") => {
-            setSettingsSection(section); setSettingsOpen(true); }}
+            setSettingsSection(section);
+            setSettingsOpen(true);
+          }}
           environment={env}
           scan={scan}
           onFirstDone={onboarding.completeFirstRun}
@@ -529,6 +717,7 @@ export default function App() {
           applying,
           navigationTarget,
           refreshing,
+          loadingMore,
           setId: setPeekId,
           setView,
         }}
@@ -567,17 +756,17 @@ export default function App() {
           setValue: setCtxMenu,
         }}
         deletion={{
-          session: delConfirm,
+          sessionConfirmation: deletion.sessionConfirmation,
+          batchConfirmation: deletion.batchConfirmation,
+          cancelSessionDeletion: deletion.cancelSessionDeletion,
+          confirmSessionDeletion: deletion.confirmSessionDeletion,
+          cancelBatchDeletion: deletion.cancelBatchDeletion,
+          confirmBatchDeletion: deletion.confirmBatchDeletion,
           history: histDel,
-          batch: batchDel,
-          setSession: setDelConfirm,
           setHistory: setHistDel,
-          setBatch: setBatchDel,
-          deleteSession,
           deleteHistory,
           selectedHistoryId: histSelectedId,
           selectHistory,
-          deleteBatch: doBatchDelete,
         }}
         rename={{
           session: renameFor,

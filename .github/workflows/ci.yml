@@ -46,7 +46,7 @@ jobs:
         working-directory: ferry-runtime
       - run: npm ci
         working-directory: app
-      - run: npm run check:boundaries && npm test && npm run build
+      - run: npm run check:boundaries && npm run typecheck && npm test && npm run build
         working-directory: app
       - run: python -m pip install -r requirements-test.txt
       - run: python scripts/check-no-agent-versioning.py
@@ -54,6 +54,7 @@ jobs:
       - run: python scripts/generate-contracts.py --check
       - run: python scripts/check-canonical-tool-result.py
       - run: python scripts/check-canonical-session.py
+      - run: python -m ruff check engine tests scripts
       - run: python -m pytest
 
   rust-quality:
@@ -147,6 +148,12 @@ jobs:
         run: |
           import json, os, subprocess
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
+          expected_agents = {
+              agent["id"]
+              for agent in json.load(
+                  open("contracts/agents.json", encoding="utf-8")
+              )["agents"]
+          }
           for method in ("health", "version", "env"):
               process = subprocess.run(
                   [os.environ["SIDECAR"], "rpc"],
@@ -166,13 +173,13 @@ jobs:
               elif method == "version":
                   assert response["result"], response
               else:
-                  assert set(response["result"]) == {"claude", "codex", "opencode"}, response
+                  assert set(response["result"]) == expected_agents, response
       - name: Ferry Runtime sidecar smoke
         shell: python
         env:
           SIDECAR: ${{ matrix.runtime-binary }}
         run: |
-          import json, os, subprocess, tempfile
+          import json, os, queue, subprocess, tempfile, threading
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           request = {
               "protocol": protocol, "id": "ci-health",
@@ -180,11 +187,41 @@ jobs:
           }
           with tempfile.TemporaryDirectory() as data_dir:
               env = {**os.environ, "FERRY_RUNTIME_DATA_DIR": data_dir}
-              process = subprocess.run(
-                  [os.environ["SIDECAR"]], input=json.dumps(request) + "\n",
-                  text=True, capture_output=True, check=True, timeout=30, env=env)
-          response = json.loads(process.stdout.splitlines()[-1])
-          assert response["ok"] is True, (response, process.stderr)
+              process = subprocess.Popen(
+                  [os.environ["SIDECAR"]], stdin=subprocess.PIPE,
+                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                  text=True, env=env)
+              lines = queue.Queue()
+              threading.Thread(
+                  target=lambda: [lines.put(line) for line in process.stdout],
+                  daemon=True).start()
+              process.stdin.write(json.dumps(request) + "\n")
+              process.stdin.flush()
+              response = None
+              try:
+                  while response is None:
+                      message = json.loads(lines.get(timeout=30))
+                      if message.get("type") == "engine.request":
+                          process.stdin.write(json.dumps({
+                              "protocol": protocol,
+                              "id": "ci-engine-result",
+                              "method": "tool.result",
+                              "params": {
+                                  "request_id": message["payload"]["request_id"],
+                                  "session_id": message["session_id"],
+                                  "ok": True,
+                                  "result": [],
+                              },
+                          }) + "\n")
+                          process.stdin.flush()
+                      elif message.get("id") == "ci-health":
+                          response = message
+              finally:
+                  process.stdin.close()
+                  process.terminate()
+                  process.wait(timeout=10)
+                  stderr = process.stderr.read()
+          assert response["ok"] is True, (response, stderr)
           assert response["protocol"] == protocol, response
           assert response["result"]["service"] == "ferry-runtime", response
           assert response["result"]["provider"] == "deepseek", response
@@ -237,6 +274,12 @@ jobs:
         run: |
           import json, os, subprocess
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
+          expected_agents = {
+              agent["id"]
+              for agent in json.load(
+                  open("contracts/agents.json", encoding="utf-8")
+              )["agents"]
+          }
           for method in ("health", "version", "env"):
               process = subprocess.run(
                   [os.environ["SIDECAR"], "rpc"],
@@ -256,13 +299,13 @@ jobs:
               elif method == "version":
                   assert response["result"], response
               else:
-                  assert set(response["result"]) == {"claude", "codex", "opencode"}, response
+                  assert set(response["result"]) == expected_agents, response
       - name: Ferry Runtime sidecar smoke
         shell: python
         env:
           SIDECAR: ${{ matrix.runtime-binary }}
         run: |
-          import json, os, subprocess, tempfile
+          import json, os, queue, subprocess, tempfile, threading
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           request = {
               "protocol": protocol, "id": "ci-health",
@@ -270,11 +313,41 @@ jobs:
           }
           with tempfile.TemporaryDirectory() as data_dir:
               env = {**os.environ, "FERRY_RUNTIME_DATA_DIR": data_dir}
-              process = subprocess.run(
-                  [os.environ["SIDECAR"]], input=json.dumps(request) + "\n",
-                  text=True, capture_output=True, check=True, timeout=30, env=env)
-          response = json.loads(process.stdout.splitlines()[-1])
-          assert response["ok"] is True, (response, process.stderr)
+              process = subprocess.Popen(
+                  [os.environ["SIDECAR"]], stdin=subprocess.PIPE,
+                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                  text=True, env=env)
+              lines = queue.Queue()
+              threading.Thread(
+                  target=lambda: [lines.put(line) for line in process.stdout],
+                  daemon=True).start()
+              process.stdin.write(json.dumps(request) + "\n")
+              process.stdin.flush()
+              response = None
+              try:
+                  while response is None:
+                      message = json.loads(lines.get(timeout=30))
+                      if message.get("type") == "engine.request":
+                          process.stdin.write(json.dumps({
+                              "protocol": protocol,
+                              "id": "ci-engine-result",
+                              "method": "tool.result",
+                              "params": {
+                                  "request_id": message["payload"]["request_id"],
+                                  "session_id": message["session_id"],
+                                  "ok": True,
+                                  "result": [],
+                              },
+                          }) + "\n")
+                          process.stdin.flush()
+                      elif message.get("id") == "ci-health":
+                          response = message
+              finally:
+                  process.stdin.close()
+                  process.terminate()
+                  process.wait(timeout=10)
+                  stderr = process.stderr.read()
+          assert response["ok"] is True, (response, stderr)
           assert response["protocol"] == protocol, response
           assert response["result"]["service"] == "ferry-runtime", response
           assert response["result"]["provider"] == "deepseek", response

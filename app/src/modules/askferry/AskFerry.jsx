@@ -7,7 +7,7 @@ import { readClipboardText } from "../../platform/desktop/client.js";
 import { groupAgentTimeline } from "./agentTimelineModel.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
-  from "../browser/sessionAttachment.js";
+  from "../browser/public.js";
 import { AgentChatItem } from "./AgentChatItem.jsx";
 import { AgentComposer } from "./AgentComposer.jsx";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";

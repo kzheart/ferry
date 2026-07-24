@@ -173,7 +173,9 @@ def _write_fs_write(tpl, t, _cwd) -> list | None:
     if i.get("file_path"):
         body = str(i.get("content", ""))
         patch = "*** Begin Patch\n*** Add File: {}\n{}\n*** End Patch".format(
-            i["file_path"], "\n".join("+" + l for l in body.splitlines()))
+            i["file_path"],
+            "\n".join("+" + line for line in body.splitlines()),
+        )
         output = tool_result_text(t.result) or "{}"
         return _apply_patch_pair(tpl, patch, output,
                                  _result_payload(t, output))
@@ -184,8 +186,8 @@ def _write_fs_edit(tpl, t, _cwd) -> list | None:
     i = t.input if isinstance(t.input, dict) else {}
     if i.get("file_path"):
         hunk = "\n".join(["@@"]
-                          + ["-" + l for l in str(i.get("old", "")).splitlines()]
-                          + ["+" + l for l in str(i.get("new", "")).splitlines()])
+                          + ["-" + line for line in str(i.get("old", "")).splitlines()]
+                          + ["+" + line for line in str(i.get("new", "")).splitlines()])
         patch = "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch".format(
             i["file_path"], hunk)
         output = tool_result_text(t.result) or "{}"

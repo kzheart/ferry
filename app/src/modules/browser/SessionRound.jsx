@@ -211,7 +211,8 @@ function ToolCard({ tool, tt, open, onToggle }) {
 
 export default function SessionRound({
   r,
-  editable,
+  canDelete,
+  canRewrite,
   delOp,
   rewOp,
   onDelete,
@@ -250,6 +251,7 @@ export default function SessionRound({
   const fullAiText = r.final || "";
   const aiText = fullAiText.slice(0, 8000);
   const deleted = !!delOp;
+  const editable = canDelete || canRewrite;
 
   const copyAi = async () => {
     try {
@@ -325,7 +327,7 @@ export default function SessionRound({
               >
                 <UndoIcon />
               </IconBtn>
-            ) : (
+            ) : canDelete ? (
               <IconBtn
                 title={tt("browser:round.deleteTurn", {
                   n: r.n,
@@ -335,8 +337,8 @@ export default function SessionRound({
               >
                 <TrashIcon />
               </IconBtn>
-            )}
-            {r.locator && !deleted && (
+            ) : null}
+            {canRewrite && r.locator && !deleted && (
               <IconBtn
                 title={tt("browser:round.rewriteUser")}
                 onClick={startRewrite}

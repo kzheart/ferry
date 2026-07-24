@@ -9,6 +9,10 @@ import { computeOverview } from "./overviewModel.js";
 const TOOL_COLOR = { claude: "var(--t-claude)", codex: "var(--t-codex)", opencode: "var(--t-opencode)" };
 const COMP_OPACITY = { cache_read: 0.92, input: 0.6, cache_write: 0.38, output: 0.2 };
 const CHART = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];
+const toolColor = tool => {
+  const index = TOOLS.indexOf(tool);
+  return TOOL_COLOR[tool] || CHART[(index < 0 ? 0 : index) % CHART.length];
+};
 
 // ---------- 格式化 ----------
 const fmtInt = n => Math.round(n || 0).toLocaleString("en-US");
@@ -519,7 +523,7 @@ export default function Overview({ sessions = [], historyRows = [],
                   extra={<div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)" }}>
                     {TOOLS.map(tl => (
                       <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[tl] || "var(--tx4)" }} />{TOOL_NAME[tl] || tl}
+                        <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(tl) }} />{TOOL_NAME[tl] || tl}
                       </span>
                     ))}
                   </div>}>
@@ -533,7 +537,7 @@ export default function Overview({ sessions = [], historyRows = [],
                           <div style={{ height: 7, background: "var(--track)", borderRadius: 4, overflow: "hidden", display: "flex" }}>
                             {TOOLS.map(tl => {
                               const w = (r.byTool[tl] || 0) / maxTotal * 100;
-                              return w ? <i key={tl} style={{ display: "block", height: "100%", width: `${w}%`, background: TOOL_COLOR[tl] || "var(--tx4)" }} /> : null;
+                              return w ? <i key={tl} style={{ display: "block", height: "100%", width: `${w}%`, background: toolColor(tl) }} /> : null;
                             })}
                           </div>
                           <span style={{ fontSize: 11, color: "var(--tx3)", minWidth: 44, textAlign: "right", ...num }}>{fmtInt(r.total)}</span>
@@ -555,9 +559,9 @@ export default function Overview({ sessions = [], historyRows = [],
                           <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center",
                             padding: "7px 10px", borderRadius: 6, background: "var(--inset)", border: "1px solid var(--line6)" }}>
                             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap" }}>
-                              <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[f.src] || "var(--tx4)" }} />{TOOL_NAME[f.src] || f.src}
+                              <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(f.src) }} />{TOOL_NAME[f.src] || f.src}
                               <span style={{ color: "var(--tx5)" }}>→</span>
-                              <i style={{ width: 8, height: 8, borderRadius: 2, background: TOOL_COLOR[f.dst] || "var(--tx4)" }} />{TOOL_NAME[f.dst] || f.dst}
+                              <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(f.dst) }} />{TOOL_NAME[f.dst] || f.dst}
                             </span>
                             <div style={{ height: 5, background: "var(--track)", borderRadius: 3, overflow: "hidden" }}>
                               <i style={{ display: "block", height: "100%", width: `${f.count / maxCount * 100}%`, background: "var(--accent)", opacity: 0.6 }} />

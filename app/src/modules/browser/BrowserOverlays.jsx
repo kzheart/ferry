@@ -10,20 +10,29 @@ import {
 } from "../../shared/ui/FilterPopover.jsx";
 import { ToolIcon } from "../../shared/ui/icons.jsx";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
+import {
+  deleteIsUndoable,
+  summarizePreparedDeletions,
+} from "./sessionDeletionModel.js";
 
-export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
+export function SessionDeleteConfirm({ prepared, onCancel, onConfirm }) {
   const { t } = useTranslation();
+  const sess = prepared.session;
   const subCount = (sess.tree_count || 1) - 1;
-  const isOpenCode = sess.tool === "opencode";
+  const undoable = deleteIsUndoable(prepared);
   const bullets = [
     subCount > 0 && [
       "var(--warn)",
       t("overlays:delete.bulletSub", { n: subCount }),
     ],
-    ["var(--ok)", t("overlays:delete.bulletSnapshot")],
-    isOpenCode
-      ? ["var(--err)", t("overlays:delete.bulletOpenCode")]
-      : ["var(--accent)", t("overlays:delete.bulletUndoable")],
+    undoable && [
+      "var(--accent)",
+      t("overlays:delete.bulletUndoable"),
+    ],
+    !undoable && [
+      "var(--err)",
+      t("overlays:delete.bulletIrreversible"),
+    ],
   ].filter(Boolean);
   return (
     <ConfirmBox
@@ -48,9 +57,9 @@ export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
             }}
             onClick={onConfirm}
           >
-            {isOpenCode
-              ? t("overlays:delete.confirmOpenCode")
-              : t("overlays:delete.confirmOther")}
+            {undoable
+              ? t("overlays:delete.confirmUndoable")
+              : t("overlays:delete.confirmIrreversible")}
           </button>
         </>
       )}
@@ -97,22 +106,28 @@ export function SessionDeleteConfirm({ sess, onCancel, onConfirm }) {
   );
 }
 
-export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
+export function BatchDeleteConfirm({ prepared, onCancel, onConfirm }) {
   const { t } = useTranslation();
-  const openCodeCount = sessions
-    .filter(session => session.tool === "opencode").length;
+  const summary = summarizePreparedDeletions(prepared);
   const bullets = [
-    ["var(--ok)", t("overlays:delete.bulletBatchSnapshot")],
-    openCodeCount > 0 && [
-      "var(--err)",
-      t("overlays:delete.bulletBatchOpenCode", { n: openCodeCount }),
+    summary.undoable > 0 && [
+      "var(--accent)",
+      t("overlays:delete.bulletBatchUndoable", {
+        n: summary.undoable,
+      }),
     ],
-    ["var(--accent)", t("overlays:delete.bulletBatchRest")],
+    summary.irreversible > 0 && [
+      "var(--err)",
+      t("overlays:delete.bulletBatchIrreversible", {
+        n: summary.irreversible,
+      }),
+    ],
+    ["var(--warn)", t("overlays:delete.bulletBatchPartial")],
   ].filter(Boolean);
   return (
     <ConfirmBox
       width={430}
-      title={t("overlays:delete.batchTitle", { n: sessions.length })}
+      title={t("overlays:delete.batchTitle", { n: summary.total })}
       actions={(
         <>
           <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>
@@ -132,7 +147,7 @@ export function BatchDeleteConfirm({ sessions, onCancel, onConfirm }) {
             }}
             onClick={onConfirm}
           >
-            {t("overlays:delete.confirmOther")}
+            {t("overlays:delete.confirmBatch")}
           </button>
         </>
       )}

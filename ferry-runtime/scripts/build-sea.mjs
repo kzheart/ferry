@@ -123,7 +123,15 @@ async function smokeSea(executable, dataDirectory) {
   });
   const lines = createInterface({ input: child.stdout });
   lines.on("line", (line) => {
-    messages.push(JSON.parse(line));
+    const message = JSON.parse(line);
+    messages.push(message);
+    if (message.type !== "engine.request") return;
+    send(`sea-engine-${messages.length}`, "tool.result", {
+      request_id: message.payload?.request_id,
+      session_id: message.session_id,
+      ok: true,
+      result: [],
+    });
   });
   const send = (id, method, params = {}) => {
     child.stdin.write(

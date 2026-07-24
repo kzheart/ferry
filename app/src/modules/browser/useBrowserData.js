@@ -15,6 +15,7 @@ export function useBrowserData() {
   const [env, setEnv] = useState(() => preloaded?.env || null);
   const [scan, setScan] = useState(() => preloaded?.scan || null);
   const [scanning, setScanning] = useState(false);
+  const [scanReady, setScanReady] = useState(false);
   const [lastScan, setLastScan] = useState(() => preloaded?.lastScan || null);
   const [historyRows, setHistoryRows] = useState(() => preloaded?.history || []);
   const [pricing, setPricing] = useState(() => preloaded?.pricing || null);
@@ -35,9 +36,18 @@ export function useBrowserData() {
       const result = await engine("scan");
       const now = Date.now();
       setScan(result); setLastScan(now);
+      setScanReady(true);
       persist({ scan: result, lastScan: now });
     }
-    catch (error) { setScan(current => ({ tools: {}, sessions: [], error: error.message, ...(current || {}) })); }
+    catch (error) {
+      setScanReady(false);
+      setScan(current => ({
+        tools: {},
+        sessions: [],
+        error: error.message,
+        ...(current || {}),
+      }));
+    }
     setScanning(false);
   };
   const loadHistory = () => engine("history")
@@ -58,6 +68,6 @@ export function useBrowserData() {
     loadPricing();
   }, []);
 
-  return { env, scan, scanning, lastScan, historyRows, pricing,
+  return { env, scan, scanning, scanReady, lastScan, historyRows, pricing,
     doScan, loadHistory, deleteHistory };
 }

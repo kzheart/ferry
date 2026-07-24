@@ -4,22 +4,26 @@
 import argparse
 import sys
 
+from engine.bootstrap import create_context
+from engine.contracts.agents import AGENT_IDS
 from engine.operations.verification import ProbeTimeout, run_probe
-
-PROBES = ("claude", "codex", "opencode")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("tool", choices=PROBES)
+    parser.add_argument("tool", choices=AGENT_IDS)
     parser.add_argument("session_id")
     parser.add_argument("--dir", default=None)
     parser.add_argument("--model", default=None)
     args = parser.parse_args(argv)
-    if args.tool == "claude" and not args.dir:
-        parser.error("claude 探针必须提供 --dir(项目目录)")
     try:
-        ok, detail = run_probe(args.tool, args.session_id, args.dir, args.model)
+        ok, detail = run_probe(
+            args.tool,
+            args.session_id,
+            args.dir,
+            args.model,
+            ports=create_context(),
+        )
     except ProbeTimeout as error:
         print(str(error), file=sys.stderr)
         return 3

@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..errors import AgentReferenceError, AgentRequestError
+from ..adapters.contracts import NativeSessionReference
+from ..errors import AgentRequestError
 from .index import AgentSessionIndex, IndexedSession
 from .model import tool_result_text
 from .safety import (
@@ -31,35 +32,19 @@ def _take(text: str, remaining: int) -> tuple[str, int, bool]:
     return clipped, 0, True
 
 
-def _validate_read_scope(record: IndexedSession) -> None:
-    if not record.path_backed:
-        return
-    path = Path(record.canonical_ref)
-    root = Path(record.root or "").resolve(strict=True)
-    if record.tool == "claude":
-        child_root = path.with_suffix("") / "subagents"
-        candidates = child_root.rglob("*.jsonl") if child_root.exists() else ()
-    elif record.tool == "codex":
-        candidates = root.rglob("rollout*.jsonl")
-    else:
-        candidates = ()
-    for candidate in candidates:
-        try:
-            resolved = candidate.resolve(strict=True)
-        except OSError as error:
-            raise AgentReferenceError("会话子树包含失效文件") from error
-        if not resolved.is_file() or not resolved.is_relative_to(root):
-            raise AgentReferenceError("会话子树超出 Agent 会话根目录")
-
-
 def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
-    _validate_read_scope(record)
     browser = index.ports.adapter(record.tool).browser
+    native_ref = NativeSessionReference(
+        canonical_ref=record.canonical_ref,
+        root=record.root,
+        path_backed=record.path_backed,
+    )
+    browser.validate_read_scope(native_ref)
     session = getattr(browser, "read_agent", browser.read)(
         record.canonical_ref,
     )
     index.resolve(record.tool, record.opaque_ref)
-    _validate_read_scope(record)
+    browser.validate_read_scope(native_ref)
     return session
 
 

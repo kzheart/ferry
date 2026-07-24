@@ -1,9 +1,15 @@
 """OpenCode 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..contracts import AgentManifest, AgentAdapter, id_reference
+from ..contracts import (
+    AgentManifest,
+    AgentAdapter,
+    NativeSessionReference,
+    id_reference,
+)
 from ..shared.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
+from ...errors import AgentReferenceError
 from .editor import OpenCodeBackend
 from .lifecycle import OpenCodeLifecycle
 from .migration import OpenCodeMigrationTarget
@@ -38,6 +44,10 @@ class OpenCodeBrowser:
 
     def canonicalize(self, row):
         return id_reference(row)
+
+    def validate_read_scope(self, ref: NativeSessionReference) -> None:
+        if ref.path_backed or ref.root is not None:
+            raise AgentReferenceError("OpenCode 会话引用必须由原生 id 支持")
 
 
 class OpenCodeModels:

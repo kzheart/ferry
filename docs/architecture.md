@@ -78,6 +78,14 @@ supports exactly the current structure implemented in the repository. Readers
 ignore unrelated additional fields, reject changes to required structure, and
 never select parsers by CLI version.
 
+`contracts/agents.json` is the compile-time source of truth for built-in Agent
+identity and content-edit support. Each Agent declares an exact
+`edit_operations` subset of `contracts/operations.json`; generation publishes
+that policy to the UI, Python Engine, and Ferry Runtime, while Rust continues
+to receive only Agent IDs and executable allowlists. Adapter construction
+rejects any manifest/editor operation mismatch, so declarations cannot drift
+from the native implementation.
+
 Current structure may legitimately contain more than one record subtype when
 the upstream runtime itself emits them. Codex is the important example:
 `response_item.function_call` / `function_call_output` and
@@ -172,6 +180,12 @@ It owns its session index and single-worker operation queue; RPC dispatchers
 and CLI commands receive that same service explicitly. Dependencies are passed
 to capability services and have no implicit process-global reconfiguration API.
 
+Session read-scope rules belong to each Adapter browser because reachable
+children differ by native format. The shared Agent read flow invokes that
+static browser contract both immediately before and immediately after a read;
+it does not branch on Agent names, and a path-backed Adapter must reject any
+file that resolves outside its indexed storage root.
+
 Deterministic organization state is owned by
 `engine/organization/`: `summaries.py` manages content-addressed
 digest inputs/results and `proposals.py` manages proposal validation and
@@ -209,6 +223,11 @@ result artifacts, and synthesis. Its Node package identity is `@ferry/runtime`;
 its source and packaged sidecar are both named `ferry-runtime` on macOS and
 Windows. Platform-specific executable suffixes remain isolated in build and
 process-launch code.
+
+Ferry Runtime consumes the generated per-Agent edit-operation map. Its
+`session_edit` tool rejects an operation unsupported by the selected source
+before invoking the host port and describes the exact static support matrix;
+the Engine still performs authoritative validation at its write boundary.
 
 Its source packages follow the same responsibility boundaries:
 

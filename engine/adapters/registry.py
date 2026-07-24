@@ -10,6 +10,12 @@ from .claude.adapter import build as build_claude
 from .codex.adapter import build as build_codex
 from .opencode.adapter import build as build_opencode
 
+ADAPTER_BUILDERS = {
+    "claude": build_claude,
+    "codex": build_codex,
+    "opencode": build_opencode,
+}
+
 
 class AdapterRegistry:
     """Immutable adapter lookup owned by the Engine composition root."""
@@ -33,9 +39,15 @@ class AdapterRegistry:
 
 
 def create_registry() -> AdapterRegistry:
-    builders = {
-        "claude": build_claude,
-        "codex": build_codex,
-        "opencode": build_opencode,
-    }
-    return AdapterRegistry(builders[agent_id]() for agent_id in AGENT_IDS)
+    expected = set(AGENT_IDS)
+    actual = set(ADAPTER_BUILDERS)
+    if expected != actual:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ValueError(
+            "Adapter builders 与 AGENT_IDS 不一致: "
+            f"missing={missing}, extra={extra}"
+        )
+    return AdapterRegistry(
+        ADAPTER_BUILDERS[agent_id]() for agent_id in AGENT_IDS
+    )

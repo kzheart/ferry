@@ -21,7 +21,10 @@ def read_tree(tool_name: str, ref: str, ports: EngineContext):
     return assemble_tree(tool.browser, ref, ports.cache_factory())
 
 
-def _messages(messages):
+DEFAULT_BROWSER_MESSAGE_LIMIT = 30
+
+
+def _messages(messages, offset: int = 0):
     result = []
     for index, message in enumerate(messages):
         blocks = []
@@ -38,7 +41,7 @@ def _messages(messages):
                 blocks.append({"kind": "image", "image": {
                     "id": block.image.id, "mime_type": block.image.mime_type,
                     "filename": block.image.filename}})
-        entry = {"index": index, "role": message.role, "blocks": blocks}
+        entry = {"index": offset + index, "role": message.role, "blocks": blocks}
         if message.source_id:
             entry["locator"] = message.source_id
         else:
@@ -99,12 +102,30 @@ def _context_status(compactions):
     }
 
 
-def session_json(session):
-    children = [session_json(child) for child in session.children]
+def _page_messages(messages, start: int, limit: int | None):
+    first = max(0, start - 1)
+    if limit is None:
+        return first, len(messages), messages[first:]
+    last = min(len(messages), first + max(1, limit))
+    # 分页只在下一条用户消息前截断，避免把同一轮的 AI 回复拆开。
+    while last < len(messages) and messages[last].role != "user":
+        last += 1
+    return first, last, messages[first:last]
+
+
+def session_json(session, *, from_message: int = 1,
+                 message_limit: int | None = None,
+                 include_messages: bool = True,
+                 include_tree: bool = True,
+                 tree_count: int | None = None,
+                 child_count: int | None = None,
+                 total_count: int | None = None):
+    children = [session_json(child) for child in session.children] \
+        if include_tree else []
     edges = [{name: getattr(edge, name) for name in (
         "parent_session_id", "child_session_id", "source_call_id",
         "spawn_message_id", "result_message_id", "agent_id", "agent_path",
-        "agent_type", "prompt", "status", "association", "confidence", "meta",
+        "agent_type", "prompt", "status", "association", "confidence",
     )} for edge in session.agent_edges]
     internal_summary_ids = {
         compaction.summary_message_id
@@ -115,13 +136,19 @@ def session_json(session):
         message for message in session.messages
         if message.source_id not in internal_summary_ids
     ]
-    messages = _messages(display_messages)
+    first, last, page = _page_messages(
+        display_messages, from_message, message_limit,
+    )
+    messages = _messages(page, first)
     context_compactions = _context_compactions(session, display_messages)
     turns = []
+    turn_offset = sum(
+        message.role == "user" for message in display_messages[:first]
+    )
     current = None
     for message in messages:
         if message["role"] == "user":
-            current = {"turn": len(turns) + 1, "user": message,
+            current = {"turn": turn_offset + len(turns) + 1, "user": message,
                        "turn_locator": message["locator"],
                        "assistant_reply": {"items": []}}
             turns.append(current)
@@ -138,17 +165,43 @@ def session_json(session):
         "title": session.title, "dir": session.cwd,
         "root_id": session.root_id or session.source_id, "parent_id": session.parent_id,
         "agent_id": session.agent_id, "agent_path": session.agent_path,
-        "agent_type": session.agent_type, "count": len(messages),
+        "agent_type": session.agent_type,
+        "count": total_count if total_count is not None else len(display_messages),
+        "root_message_count": len(display_messages),
+        "returned_message_count": len(messages),
+        "message_range": {
+            "from": first + 1 if messages else None,
+            "to": last if messages else None,
+        },
+        "next_from_message": last + 1 if last < len(display_messages) else None,
         "context": _context_status(context_compactions),
         "context_compactions": context_compactions,
-        "child_count": len(children), "tree_count": 1 + sum(child["tree_count"] for child in children),
-        "loss": list(session.loss), "messages": messages, "turns": turns,
+        "child_count": child_count if child_count is not None else len(children),
+        "tree_count": tree_count if tree_count is not None
+        else 1 + sum(child["tree_count"] for child in children),
+        "loss": list(session.loss),
+        "messages": messages if include_messages else [], "turns": turns,
         "children": children,
         "agent_edges": edges}
 
 
-def show(tool: str, ref: str, ports: EngineContext) -> dict:
-    return session_json(read_tree(tool, ref, ports))
+def show(tool: str, ref: str, ports: EngineContext, *,
+         from_message: int = 1,
+         message_limit: int | None = DEFAULT_BROWSER_MESSAGE_LIMIT,
+         include_messages: bool = False,
+         tree_count: int | None = None,
+         child_count: int | None = None,
+         total_count: int | None = None) -> dict:
+    return session_json(
+        read_tree(tool, ref, ports),
+        from_message=from_message,
+        message_limit=message_limit,
+        include_messages=include_messages,
+        include_tree=False,
+        tree_count=tree_count,
+        child_count=child_count,
+        total_count=total_count,
+    )
 
 
 def session_asset(tool: str, ref: str, asset_id: str, ports: EngineContext) -> dict:

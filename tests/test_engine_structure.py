@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from engine.contracts.agents import AGENT_IDS
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "engine"
@@ -7,7 +9,7 @@ ENGINE = ROOT / "engine"
 
 def test_adapter_contract_has_no_plugin_layer():
     assert (ENGINE / "adapters/contracts.py").is_file()
-    for agent in ("claude", "codex", "opencode"):
+    for agent in AGENT_IDS:
         assert (ENGINE / f"adapters/{agent}/adapter.py").is_file()
         assert not (ENGINE / f"adapters/{agent}/plugin.py").exists()
     assert not (ENGINE / "adapters/base/plugin.py").exists()

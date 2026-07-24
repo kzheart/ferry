@@ -90,7 +90,7 @@ def test_invalid_input_is_a_degradation_even_for_a_supported_operation():
 
 
 def test_unknown_explicit_result_is_narrated_instead_of_fabricating_success():
-    from engine.sessions.model import Session, ToolResult
+    from engine.sessions.model import Session
 
     call = ToolCall(
         name="Read", op=CanonicalOp.FS_READ,

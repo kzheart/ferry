@@ -13,6 +13,7 @@ export function SessionPeekSheet({
   applying,
   navigationTarget,
   refreshing,
+  loadingMore,
   onClose,
   onOpenLibrary,
 }) {
@@ -101,6 +102,8 @@ export function SessionPeekSheet({
           navigationTarget={navigationTarget}
           onRefresh={actions.onRefresh}
           refreshing={refreshing}
+          onLoadMore={actions.onLoadMore}
+          loadingMore={loadingMore}
           onResume={actions.onResume}
         />
       </div>

@@ -1,8 +1,8 @@
 """内置 Adapter 的静态契约。
 
 Ferry 只装配 Claude、Codex 与 OpenCode 三个完整 Adapter。所有已注册
-Adapter 都必须具备相同的查询、迁移、编辑、校验、生命周期和模型能力；
-不能在运行时根据 capability 走另一条业务路径。
+Adapter 都必须具备相同的能力接口；各原生格式支持的内容编辑操作由静态
+manifest 精确声明，并在装配时与 editor 实现校验一致。
 """
 from __future__ import annotations
 
@@ -18,12 +18,14 @@ class AgentManifest:
     display_name: str
     icon: str
     source_path: str
+    edit_operations: tuple[str, ...]
     executables: tuple[str, ...] = ()   # launch descriptor 可执行文件白名单
     fallback_bin_dirs: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         return {"id": self.id, "display_name": self.display_name,
                 "icon": self.icon, "source_path": self.source_path,
+                "edit_operations": list(self.edit_operations),
                 "executables": list(self.executables),
                 "fallback_bin_dirs": list(self.fallback_bin_dirs)}
 
@@ -84,6 +86,8 @@ class SessionBrowser(Protocol):
 
     def canonicalize(self, row: dict) -> NativeSessionReference | None: ...
 
+    def validate_read_scope(self, ref: NativeSessionReference) -> None: ...
+
 
 @runtime_checkable
 class MigrationSource(Protocol):
@@ -143,6 +147,8 @@ class ModelCatalog(Protocol):
 class SessionLifecycle(Protocol):
     """会话生命周期策略：resume/清理/校验引用/删除与恢复。"""
 
+    delete_undoable: bool
+
     def resume_descriptor(self, session_id: str, cwd: str) -> dict: ...
 
     def cleanup(self, session_id: str, dest) -> None: ...
@@ -174,6 +180,12 @@ class AgentAdapter:
         ):
             if getattr(self, name) is None:
                 raise ValueError(f"内置 Adapter 缺少必填能力: {self.manifest.id}.{name}")
+        if tuple(self.editor.operations) != self.manifest.edit_operations:
+            raise ValueError(
+                f"Adapter 编辑操作契约不一致: {self.manifest.id} "
+                f"manifest={self.manifest.edit_operations!r}, "
+                f"editor={tuple(self.editor.operations)!r}"
+            )
 
     @property
     def id(self) -> str:

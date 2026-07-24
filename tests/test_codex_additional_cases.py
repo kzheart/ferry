@@ -1,4 +1,3 @@
-import json
 import sqlite3
 from pathlib import Path
 
@@ -6,7 +5,6 @@ import pytest
 
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import topology as codex_topology
-from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.writer import write
 from engine.sessions.model import (
     AgentEdge, Block, Message, Session, ToolCall, text_tool_result,

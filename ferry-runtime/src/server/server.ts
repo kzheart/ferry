@@ -6,14 +6,8 @@ import { EngineSessionStore } from "../sessions/engine-store.js";
 import { FileProviderConfigStore } from "../providers/provider-config-store.js";
 import { FileRoleStore } from "../roles/role-store.js";
 import { ProviderHost } from "../providers/provider-host.js";
-import { dispatch } from "../runtime/command-router.js";
-import {
-  PROTOCOL_VERSION,
-  ProtocolError,
-  parseCommand,
-  type ResponseEnvelope,
-} from "./messages.js";
-import { readJsonLines } from "./jsonl.js";
+import { PROTOCOL_VERSION, type ResponseEnvelope } from "./messages.js";
+import { serveRuntime } from "./server-loop.js";
 
 function write(value: unknown) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -31,56 +25,7 @@ async function main() {
     providerHost,
     deferRestore: true,
   });
-  runtime.subscribe(write);
-  await runtime.restore();
-
-  try {
-    for await (const line of readJsonLines(process.stdin)) {
-      void (async () => {
-        let id = "unknown";
-        try {
-          const raw = JSON.parse(line) as unknown;
-          if (
-            typeof raw === "object" &&
-            raw !== null &&
-            "id" in raw &&
-            typeof raw.id === "string"
-          )
-            id = raw.id;
-          write(await dispatch(runtime, parseCommand(raw)));
-        } catch (error) {
-          const failure =
-            error instanceof ProtocolError
-              ? error
-              : new ProtocolError("invalid_json", "input is not valid JSON");
-          const response: ResponseEnvelope = {
-            protocol: PROTOCOL_VERSION,
-            id,
-            ok: false,
-            error: failure.toEnvelope(),
-          };
-          write(response);
-        }
-      })();
-    }
-  } catch (error) {
-    const response: ResponseEnvelope = {
-      protocol: PROTOCOL_VERSION,
-      id: "unknown",
-      ok: false,
-      error: {
-        code: "invalid_framing",
-        category: "validation",
-        retryable: false,
-        params: {
-          message:
-            error instanceof Error ? error.message : "invalid JSONL input",
-        },
-      },
-    };
-    write(response);
-    process.exitCode = 1;
-  }
+  await serveRuntime(runtime, process.stdin, write);
 }
 
 void main().catch(() => {
