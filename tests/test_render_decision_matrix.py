@@ -4,8 +4,9 @@ from engine.adapters.claude import writer as claude_writer
 from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.codex import writer as codex_writer
 from engine.adapters.codex.migration import CodexMigrationTarget
-from engine.adapters.opencode import writer as opencode_writer
+from engine.adapters.opencode import payload as opencode_payload
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
+from engine.adapters.opencode.native_schema import templates as opencode_templates
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -89,9 +90,9 @@ def _codex_has_native_tool(session, target):
 
 
 def _opencode_has_native_tool(session, target):
-    payload = opencode_writer._canonical_payload(
+    payload = opencode_payload.canonical_payload(
         session, "fixture-session", "/tmp", None,
-        opencode_writer._template(), tool_decider=target.evaluate_tool,
+        opencode_templates(), tool_decider=target.evaluate_tool,
     )
     return any(
         part.get("type") == "tool"
