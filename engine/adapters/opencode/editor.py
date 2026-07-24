@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...errors import ConcurrentModificationError, OperationUnsupportedError
 from ...storage.snapshots import snapshot_payload
-from ..base.editing import EditBackend, hash_bytes, json_size
+from ..shared.editing import EditBackend, hash_bytes, json_size
 from . import api as opencode_api
 from . import reader as opencode_reader
 from . import store as opencode_store

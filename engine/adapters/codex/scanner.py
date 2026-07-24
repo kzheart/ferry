@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from ...sessions.usage import has_tokens, iso_ms
-from ..base.scanner import clip_text, scan_jsonl
+from ..shared.scanner import clip_text, scan_jsonl
 from .reader import session_id
 
 

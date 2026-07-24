@@ -15,13 +15,13 @@ from ...operations.types import TextItem
 from ...events import event
 from ...errors import LocatorStaleError, OperationUnsupportedError
 from ...sessions.reasoning import visible_text
-from ..base.editing import (
+from ..shared.editing import (
     is_spawn_name,
     reject_replacement_spawn,
     reject_target_spawn,
     replace_at_first,
 )
-from ..base.codec import TurnSpan
+from ..shared.codec import TurnSpan
 from .editing import relink
 
 

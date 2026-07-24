@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from ..base.lifecycle import FileSessionLifecycle
+from ..shared.lifecycle import FileSessionLifecycle
 
 
 class ClaudeLifecycle(FileSessionLifecycle):

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ...sessions.model import Session, tool_result_text
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
-from ..base.narration import narrate
+from ..shared.narration import narrate
 from .native_schema import templates
 from .registry import register_tree
 

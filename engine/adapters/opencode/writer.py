@@ -12,7 +12,7 @@ from ...sessions.model import (
 )
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from ...sessions.usage import iso_ms
-from ..base.narration import narrate
+from ..shared.narration import narrate
 from .native_schema import templates
 from . import store as native_store
 

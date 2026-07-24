@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from ...storage.snapshots import snapshot_file
-from ..base.lifecycle import FileSessionLifecycle
+from ..shared.lifecycle import FileSessionLifecycle
 from .native import CodexCloneError, CodexStore, discover_closure
 from .registry import unregister_tree
 

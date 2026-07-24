@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from engine.adapters.base.codec import select_span
+from engine.adapters.shared.codec import select_span
 from engine.adapters.contracts import (
     MigrationSource, MigrationTarget, ModelCatalog, SessionBrowser,
     SessionEditor, SessionLifecycle, SessionVerifier, AgentManifest, AgentAdapter,

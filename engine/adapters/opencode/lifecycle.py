@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 
 from ...system import executables
-from ..base.lifecycle import BaseLifecycle
+from ..shared.lifecycle import BaseLifecycle
 from . import reader as opencode_reader
 
 

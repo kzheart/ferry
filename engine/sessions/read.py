@@ -1,6 +1,6 @@
 """规范会话读取、树装配与 RPC DTO。"""
 
-from ..adapters.base.migration import assemble_tree
+from ..adapters.shared.migration import assemble_tree
 from ..errors import SessionAssetNotFoundError
 from ..context import EngineContext
 from .model import tool_result_text

@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from ..adapters.base import narration
+from ..adapters.shared import narration
 from ..context import EngineContext
 from ..sessions import read as sessions
 from . import history

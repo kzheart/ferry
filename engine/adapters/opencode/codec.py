@@ -7,7 +7,7 @@ from __future__ import annotations
 from ...events import event
 from ...errors import LocatorStaleError, OperationUnsupportedError
 from ...sessions.reasoning import visible_text
-from ..base.codec import TurnSpan
+from ..shared.codec import TurnSpan
 
 
 def _visible(message) -> bool:

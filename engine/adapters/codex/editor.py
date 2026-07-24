@@ -9,8 +9,8 @@ from pathlib import Path
 
 from ...errors import ConcurrentModificationError, OperationUnsupportedError, SessionNotFoundError
 from ...storage.snapshots import snapshot_file
-from ..base.codec import positive_turn, select_span
-from ..base.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
+from ..shared.codec import positive_turn, select_span
+from ..shared.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
 from . import native as codex_native
 from .codec import CODEC, TURN_INDEX
 

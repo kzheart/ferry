@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.adapters.base.editing import EditDocument
+from engine.adapters.shared.editing import EditDocument
 from engine.adapters.claude.editor import ClaudeBackend
 from engine.adapters.claude.editing import check_invariants
 from engine.adapters.claude.reader import read as read_claude

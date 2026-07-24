@@ -11,13 +11,13 @@ from datetime import datetime, timezone
 from ...operations.types import TextItem
 from ...events import event
 from ...errors import LocatorStaleError, OperationUnsupportedError
-from ..base.editing import (
+from ..shared.editing import (
     is_spawn_name,
     reject_replacement_spawn,
     reject_target_spawn,
     replace_at_first,
 )
-from ..base.codec import TurnSpan
+from ..shared.codec import TurnSpan
 from . import native as codex_native
 
 _SKIP_USER_PREFIX = ("<environment_context>", "<user_instructions>",

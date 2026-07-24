@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..contracts import AgentManifest, AgentAdapter, id_reference
-from ..base.migration import TreeMigrationSource
+from ..shared.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from .editor import OpenCodeBackend
 from .lifecycle import OpenCodeLifecycle
