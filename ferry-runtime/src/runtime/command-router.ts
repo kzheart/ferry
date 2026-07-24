@@ -83,26 +83,26 @@ export async function dispatch(
         );
         break;
       case "roles.list":
-        result = await runtime.roles();
+        result = await runtime.roleService.list();
         break;
       case "role.create":
-        result = await runtime.createRole(requireRole(params));
+        result = await runtime.roleService.create(requireRole(params));
         break;
       case "role.update":
-        result = await runtime.updateRole(
+        result = await runtime.roleService.update(
           requireString(params, "role_id", 128),
           requireRole(params),
         );
         break;
       case "role.copy":
-        result = await runtime.copyRole(
+        result = await runtime.roleService.copy(
           requireString(params, "source_role_id", 128),
           requireString(params, "role_id", 128),
           optionalString(params, "name", 200),
         );
         break;
       case "role.delete":
-        result = await runtime.deleteRole(
+        result = await runtime.roleService.delete(
           requireString(params, "role_id", 128),
         );
         break;
