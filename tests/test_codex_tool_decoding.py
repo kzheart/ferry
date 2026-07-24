@@ -3,6 +3,7 @@ import json
 import pytest
 
 from engine.adapters.codex import reader as codex_reader
+from engine.adapters.codex import tool_results as codex_tool_results
 from engine.adapters.codex import topology as codex_topology
 from engine.adapters.codex import writer as codex_writer
 from engine.errors import AgentFormatChangedError
@@ -215,7 +216,7 @@ def test_result_statuses_are_mapped_at_the_codex_boundary():
     }
 
     for native_status, canonical_status in expected.items():
-        result = codex_reader._parse_result([{
+        result = codex_tool_results.parse_result([{
             "type": "input_text",
             "text": json.dumps({
                 "status": native_status,

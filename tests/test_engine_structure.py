@@ -37,6 +37,9 @@ def test_codex_reader_keeps_rollout_topology_in_its_own_capability():
     assert "thread_spawn_edges" in topology
     assert "sqlite3.connect" not in reader
     assert "AgentEdge(" not in reader
+    assert (codex / "tool_results.py").is_file()
+    assert "def parse_result" in (codex / "tool_results.py").read_text()
+    assert "def _parse_result" not in reader
 
 
 def test_business_capabilities_live_in_top_level_packages():
