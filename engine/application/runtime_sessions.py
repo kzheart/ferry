@@ -8,21 +8,21 @@ from pathlib import Path
 
 from ..domain.errors import AgentRequestError
 from ..infrastructure.state_db import StateDatabase
-from .ports import current
+from .ports import ApplicationPorts
 
 
-def _database() -> StateDatabase:
+def _database(ports: ApplicationPorts) -> StateDatabase:
     return StateDatabase(
-        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
     )
 
 
-def load_all() -> list[dict]:
-    return _database().load_runtime_sessions()
+def load_all(ports: ApplicationPorts) -> list[dict]:
+    return _database(ports).load_runtime_sessions()
 
 
-def commit(update: dict) -> dict:
+def commit(update: dict, ports: ApplicationPorts) -> dict:
     if not isinstance(update, dict):
         raise AgentRequestError("runtime commit 必须是 object")
     metadata = update.get("metadata")
@@ -33,9 +33,10 @@ def commit(update: dict) -> dict:
     for key in ("messages", "events"):
         if key in update and not isinstance(update[key], list):
             raise AgentRequestError(f"runtime commit 的 {key} 必须是数组")
-    _database().commit_runtime_session(update)
+    _database(ports).commit_runtime_session(update)
     return {"session_id": metadata["session_id"], "committed": True}
 
 
-def delete(session_id: str) -> dict:
-    return {"session_id": session_id, "deleted": _database().delete_runtime_session(session_id)}
+def delete(session_id: str, ports: ApplicationPorts) -> dict:
+    return {"session_id": session_id,
+            "deleted": _database(ports).delete_runtime_session(session_id)}

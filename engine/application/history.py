@@ -5,25 +5,25 @@ import secrets
 from pathlib import Path
 
 from ..infrastructure.state_db import StateDatabase
-from .ports import current
+from .ports import ApplicationPorts
 
 
-def _database() -> StateDatabase:
+def _database(ports: ApplicationPorts) -> StateDatabase:
     return StateDatabase(
-        Path(current().snapshot_dir()) / "ferry-state.sqlite3",
+        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
         recover_interrupted=False,
     )
 
 
-def append(entry: dict) -> str:
+def append(entry: dict, ports: ApplicationPorts) -> str:
     history_id = "history_" + secrets.token_urlsafe(18)
-    _database().append_migration_history(history_id, entry)
+    _database(ports).append_migration_history(history_id, entry)
     return history_id
 
 
-def list_entries() -> list[dict]:
-    return _database().list_migration_history()
+def list_entries(ports: ApplicationPorts) -> list[dict]:
+    return _database(ports).list_migration_history()
 
 
-def delete(history_id: str) -> dict:
-    return _database().delete_migration_history(history_id)
+def delete(history_id: str, ports: ApplicationPorts) -> dict:
+    return _database(ports).delete_migration_history(history_id)
