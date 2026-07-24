@@ -4,16 +4,10 @@ import { useTranslation } from "react-i18next";
 import { openTerminal, revealPath, writeClipboardText }
   from "../platform/desktop/client.js";
 import { TOOLS, TOOL_NAME, resumeDescriptor } from "../shared/contracts/tools.js";
-import { fmtTime, repoOf, sessionRef } from "../modules/browser/sessionModel.js";
+import { fmtTime, sessionRef } from "../modules/browser/sessionModel.js";
 import { addSessionAttachment, serializeSessionAttachment, sessionIdentity }
   from "../modules/browser/sessionAttachment.js";
 import { SidebarIcon } from "../shared/ui/icons.jsx";
-import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
-import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
-import SettingsPage from "../modules/settings/Settings.jsx";
-import { BatchDeleteConfirm, ContextMenu, DiffSheet, Guide, HistoryDeleteConfirm,
-  HistoryFilter, ApplyConfirm, LibraryFilter, PromptBox, SearchPalette,
-  SessionDeleteConfirm, Toast } from "../shared/ui/Overlays.jsx";
 import { useAskFerry } from "../modules/askferry/useAskFerry.js";
 import { useSettings } from "../modules/settings/useSettings.js";
 import { useAppUpdater } from "../modules/settings/useAppUpdater.js";
@@ -25,10 +19,10 @@ import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
 import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
 import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
 import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
-import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
 import { AppShell } from "./AppShell.jsx";
+import { AppOverlays } from "./AppOverlays.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useRailNavigation } from "./useRailNavigation.js";
@@ -595,146 +589,198 @@ export default function App() {
         />
       </AppShell>
 
-      {/* 弹层 */}
-      {organizerOpen && (
-        <OrganizationPanel
-          sessions={sessions.map(session => ({
-            ...session, project: repoOf(session.dir),
-          }))}
-          onClose={() => setOrganizerOpen(false)}
-          onApplied={() => {
+      <AppOverlays
+        t={t}
+        organization={{
+          open: organizerOpen,
+          sessions,
+          onClose: () => setOrganizerOpen(false),
+          onApplied: () => {
             reloadMetadata();
             doScan();
-          }} />
-      )}
-      {peekId && cur && (
-        <SessionPeekSheet
-          selectedId={selId}
-          meta={detailMeta}
-          detail={detail}
-          actions={detailActs}
-          scope={scope}
-          ops={ops}
-          dirtyOps={dirtyOps}
-          applying={applying}
-          navigationTarget={navigationTarget}
-          refreshing={refreshing}
-          onClose={() => setPeekId(null)}
-          onOpenLibrary={() => {
+          },
+        }}
+        peek={{
+          open: Boolean(peekId && cur),
+          selectedId: selId,
+          meta: detailMeta,
+          detail,
+          actions: detailActs,
+          scope,
+          ops,
+          dirtyOps,
+          applying,
+          navigationTarget,
+          refreshing,
+          onClose: () => setPeekId(null),
+          onOpenLibrary: () => {
             setPeekId(null);
             setView("library");
-          }}
-        />
-      )}
-      {mig && cur && (
-        <MigrateSheet meta={cur} scope={mig.scope} env={env}
-          defaultProbe={!!settings.runtimeProbe} terminalApp={settings.terminalApp}
-          onClose={() => setMig(null)}
-          onDone={() => loadHistory()} />)}
-      {diff && <DiffSheet ops={dirtyOps} preview={diff.preview} loading={diff.loading} error={diff.error}
-        onClose={() => setDiff(null)} />}
-      {confirmApply && <ApplyConfirm ops={dirtyOps}
-        onCancel={() => setConfirmApply(false)} onConfirm={applyEdit} />}
-      {searchOpen && paneCfg && (
-        <SearchPalette
-          placeholder={paneCfg.placeholder}
-          query={paneCfg.query} onQuery={paneCfg.onQuery}
-          recentLabel={paneCfg.query ? null : t("app:search.recent")}
-          emptyLabel={t("app:search.empty")}
-          results={(view === "askferry"
-            ? ferrySessions.map(s => ({
-                id: s.session_id, title: s.title || t("askferry:chat.untitled"),
-                tool: null, meta: s.model_id,
-                onClick: () => ferry.openSession(s.session_id) }))
+          },
+        }}
+        migration={{
+          open: Boolean(mig && cur),
+          meta: cur,
+          scope: mig?.scope,
+          env,
+          defaultProbe: Boolean(settings.runtimeProbe),
+          terminalApp: settings.terminalApp,
+          onClose: () => setMig(null),
+          onDone: loadHistory,
+        }}
+        editing={{
+          diff,
+          dirtyOps,
+          confirmApply,
+          onCloseDiff: () => setDiff(null),
+          onCancelApply: () => setConfirmApply(false),
+          onConfirmApply: applyEdit,
+        }}
+        search={{
+          open: searchOpen,
+          pane: paneCfg,
+          results: (view === "askferry"
+            ? ferrySessions.map(session => ({
+                id: session.session_id,
+                title: session.title || t("askferry:chat.untitled"),
+                tool: null,
+                meta: session.model_id,
+                onClick: () => ferry.openSession(session.session_id),
+              }))
             : view === "history"
-            ? histGroups.flatMap(g => g.rows).map(h => ({
-                id: h.id, title: h.title, tool: h.tool, meta: `${h.from} → ${h.to}`,
-                onClick: () => selectHistory(h.id) }))
-            : libGroups.flatMap(g => g.rows).map(r => ({
-                id: r.key, title: r.title, tool: r.tool, meta: r.repo,
-                onClick: () => { setMultiSel([]); select(r.key); } }))
-          ).slice(0, 60)}
-          onClose={() => setSearchOpen(false)} />)}
-      {ctxMenu && ctxItems && (
-        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxItems}
-          onClose={() => setCtxMenu(null)} />)}
-      {delConfirm && (
-        <SessionDeleteConfirm sess={delConfirm}
-          onCancel={() => setDelConfirm(null)}
-          onConfirm={() => {
+              ? histGroups.flatMap(group => group.rows).map(item => ({
+                  id: item.id,
+                  title: item.title,
+                  tool: item.tool,
+                  meta: `${item.from} → ${item.to}`,
+                  onClick: () => selectHistory(item.id),
+                }))
+              : libGroups.flatMap(group => group.rows).map(row => ({
+                  id: row.key,
+                  title: row.title,
+                  tool: row.tool,
+                  meta: row.repo,
+                  onClick: () => {
+                    setMultiSel([]);
+                    select(row.key);
+                  },
+                }))
+          ).slice(0, 60),
+          onClose: () => setSearchOpen(false),
+        }}
+        contextMenu={{
+          open: Boolean(ctxMenu),
+          x: ctxMenu?.x,
+          y: ctxMenu?.y,
+          items: ctxItems,
+          onClose: () => setCtxMenu(null),
+        }}
+        sessionDelete={{
+          session: delConfirm,
+          onCancel: () => setDelConfirm(null),
+          onConfirm: () => {
             const session = delConfirm;
             setDelConfirm(null);
             deleteSession(session);
-          }} />)}
-      {histDel && (
-        <HistoryDeleteConfirm h={histDel}
-          onCancel={() => setHistDel(null)}
-          onConfirm={() => {
-            // 删的正好是选中项才清选中,列表回落到第一条;删别的不该打断当前查看
+          },
+        }}
+        historyDelete={{
+          history: histDel,
+          onCancel: () => setHistDel(null),
+          onConfirm: () => {
             if (histDel._id === histSelectedId) selectHistory(null);
             setHistDel(null);
             deleteHistory(histDel.id).catch(() => {});
-          }} />)}
-      {batchDel && (
-        <BatchDeleteConfirm sessions={batchDel}
-          onCancel={() => setBatchDel(null)} onConfirm={doBatchDelete} />)}
-      {renameFor && (
-        <PromptBox title={t("app:prompt.renameTitle")}
-          desc={t("app:prompt.renameDesc", { title: renameFor.title || renameFor.id })}
-          placeholder={t("app:prompt.renamePlaceholder")} confirmLabel={t("app:prompt.save")}
-          initial={metaFor(renameFor).name || renameFor.title || ""}
-          onCancel={() => setRenameFor(null)}
-          onConfirm={v => { setRenameFor(null); setMetaFor(renameFor, { name: v }); }} />)}
-      {agentRenameFor && (
-        <PromptBox title={t("askferry:pane.renameTitle")}
-          desc={t("askferry:pane.renameDesc", { title: agentRenameFor.title || t("askferry:chat.untitled") })}
-          placeholder={t("askferry:pane.renamePlaceholder")} confirmLabel={t("askferry:pane.save")}
-          initial={agentRenameFor.title || ""} onCancel={() => setAgentRenameFor(null)}
-          onConfirm={title => {
+          },
+        }}
+        batchDelete={{
+          sessions: batchDel,
+          onCancel: () => setBatchDel(null),
+          onConfirm: doBatchDelete,
+        }}
+        rename={{
+          session: renameFor,
+          initial: renameFor
+            ? metaFor(renameFor).name || renameFor.title || ""
+            : "",
+          onCancel: () => setRenameFor(null),
+          onConfirm: value => {
+            setRenameFor(null);
+            setMetaFor(renameFor, { name: value });
+          },
+        }}
+        agentRename={{
+          session: agentRenameFor,
+          onCancel: () => setAgentRenameFor(null),
+          onConfirm: title => {
             setAgentRenameFor(null);
-            if (title) ferry.rename(agentRenameFor.session_id, title).catch(ferry.reportError);
-          }} />)}
-      {tagFor && (
-        <PromptBox
-          title={tagFor.batch ? t("app:prompt.tagsBatchTitle", { n: tagFor.sessions.length }) : t("app:prompt.tagsTitle")}
-          desc={tagFor.batch ? t("app:prompt.tagsBatchDesc")
-            : t("app:prompt.tagsDesc")}
-          placeholder={t("app:prompt.tagsPlaceholder")} confirmLabel={t("app:prompt.save")}
-          initial={tagFor.batch ? "" : (metaFor(tagFor.sessions[0]).tags || []).join(", ")}
-          onCancel={() => setTagFor(null)}
-          onConfirm={async v => {
+            if (title) {
+              ferry.rename(agentRenameFor.session_id, title).catch(ferry.reportError);
+            }
+          },
+        }}
+        tags={{
+          selection: tagFor,
+          initial: tagFor && !tagFor.batch
+            ? (metaFor(tagFor.sessions[0]).tags || []).join(", ")
+            : "",
+          onCancel: () => setTagFor(null),
+          onConfirm: async value => {
             setTagFor(null);
-            const tags = v.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+            const nextTags = value.split(/[,，]/).map(tag => tag.trim()).filter(Boolean);
             for (const session of tagFor.sessions) {
               const merged = tagFor.batch
-                ? [...new Set([...(metaFor(session).tags || []), ...tags])] : tags;
+                ? [...new Set([...(metaFor(session).tags || []), ...nextTags])]
+                : nextTags;
               await setMetaFor(session, { tags: merged });
             }
-          }} />)}
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-      {rail.railTip && (
-        <div style={{ position: "absolute", left: railOnly ? 86 : 62, top: rail.railTip.top,
-          transform: "translateY(-50%)", zIndex: 60, background: "var(--tooltip)", color: "#fff",
-          fontSize: 11, padding: "5px 9px", borderRadius: 6,
-          boxShadow: "var(--shadow-menu)", pointerEvents: "none",
-          whiteSpace: "nowrap", animation: "ffade .1s ease" }}>{rail.railTip.label}</div>)}
-      {settingsOpen && (
-        <SettingsPage settings={settings} setSettings={setSettings}
-          updater={updater} ferry={ferry} initialSection={settingsSection}
-          scan={scan} env={env} scanning={scanning} onRescan={doScan}
-          guideSeen={guideSeen}
-          onOpenGuide={() => { setSettingsOpen(false); openGuide(); }}
-          onFirstRun={() => { setSettingsOpen(false); setView("firstrun"); }}
-          onClose={() => setSettingsOpen(false)} />)}
-      {popover === "lib" && (
-        <LibraryFilter f={libF} setF={setLibF} counts={counts} dirs={dirs} tags={allTags}
-          anchor={popAnchor.current}
-          onClose={() => setPopover(null)} onClear={clearLibF} />)}
-      {popover === "hist" && (
-        <HistoryFilter f={histF} setF={setHistF} anchor={popAnchor.current}
-          onClose={() => setPopover(null)} onClear={clearHistF} />)}
-      {guideStep > 0 && (
-        <Guide step={guideStep} onGo={setGuideStep} onFinish={finishGuide} />)}
+          },
+        }}
+        toast={{ value: toast, onDismiss: () => setToast(null) }}
+        railTip={{ value: rail.railTip, railOnly }}
+        settings={{
+          open: settingsOpen,
+          value: settings,
+          onChange: setSettings,
+          updater,
+          ferry,
+          initialSection: settingsSection,
+          scan,
+          env,
+          scanning,
+          onRescan: doScan,
+          guideSeen,
+          onOpenGuide: () => {
+            setSettingsOpen(false);
+            openGuide();
+          },
+          onFirstRun: () => {
+            setSettingsOpen(false);
+            setView("firstrun");
+          },
+          onClose: () => setSettingsOpen(false),
+        }}
+        libraryFilter={{
+          open: popover === "lib",
+          value: libF,
+          onChange: setLibF,
+          counts,
+          dirs,
+          tags: allTags,
+          anchor: popAnchor.current,
+          onClose: () => setPopover(null),
+          onClear: clearLibF,
+        }}
+        historyFilter={{
+          open: popover === "hist",
+          value: histF,
+          onChange: setHistF,
+          anchor: popAnchor.current,
+          onClose: () => setPopover(null),
+          onClear: clearHistF,
+        }}
+        guide={{ step: guideStep, onGo: setGuideStep, onFinish: finishGuide }}
+      />
     </div>
   );
 }
