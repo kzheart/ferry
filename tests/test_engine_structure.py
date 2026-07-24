@@ -26,6 +26,10 @@ def test_opencode_adapter_has_explicit_reader_writer_and_store():
     assert "def import_payload" not in writer
     assert "def parse_session" not in writer
     assert "def read(" not in writer
+    tool_calls = (opencode / "tool_calls.py").read_text()
+    assert "OP_WRITERS" in tool_calls
+    assert "def _write_shell_exec" in tool_calls
+    assert "def _write_shell_exec" not in writer
 
 
 def test_codex_reader_keeps_rollout_topology_in_its_own_capability():
