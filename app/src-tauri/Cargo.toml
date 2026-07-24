@@ -29,3 +29,7 @@ window-vibrancy = "0.6"
 objc2-app-kit = { version = "0.3", features = [
   "std", "NSWindow", "NSView", "NSButton", "NSControl", "NSResponder",
 ] }
+# 监听 NSViewFrameDidChangeNotification,在 AppKit 重排标题栏的同一轮 runloop 里摆回红绿灯
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["std", "NSNotification", "NSOperation"] }
+block2 = "0.6"

@@ -66,20 +66,26 @@ def scan(cache):
                       lambda path, stat: _meta(path, stat, base))
 
 
-def fingerprint(ref: str) -> str:
-    """计算 Claude 根会话及其 subagents/journals 的只读树指纹。"""
+def _tree(ref: str):
+    """按顺序产出根会话及其 subagents 的 (相对路径, 绝对路径)，并校验读作用域。"""
     path = Path(ref).resolve(strict=True)
     root = Path(os.path.expanduser("~/.claude/projects")).resolve(strict=True)
     candidates = [path]
     child_root = path.with_suffix("") / "subagents"
     if child_root.exists():
         candidates.extend(sorted(child_root.rglob("*.jsonl")))
-    digest = hashlib.sha256()
     for candidate in candidates:
         resolved = candidate.resolve(strict=True)
         if not resolved.is_file() or not resolved.is_relative_to(root):
             raise ValueError("Claude 会话树超出存储根目录")
-        digest.update(str(resolved.relative_to(root)).encode())
+        yield resolved.relative_to(root), resolved
+
+
+def fingerprint(ref: str) -> str:
+    """计算 Claude 根会话及其 subagents/journals 的只读树指纹。"""
+    digest = hashlib.sha256()
+    for relative, resolved in _tree(ref):
+        digest.update(str(relative).encode())
         digest.update(b"\0")
         digest.update(resolved.read_bytes())
         digest.update(b"\0")
@@ -88,18 +94,9 @@ def fingerprint(ref: str) -> str:
 
 def agent_fingerprint(ref: str) -> str:
     """用主会话与直属 subagent 的元数据标记 Agent 读取引用。"""
-    path = Path(ref).resolve(strict=True)
-    root = Path(os.path.expanduser("~/.claude/projects")).resolve(strict=True)
-    candidates = [path]
-    child_root = path.with_suffix("") / "subagents"
-    if child_root.exists():
-        candidates.extend(sorted(child_root.rglob("*.jsonl")))
     digest = hashlib.sha256()
-    for candidate in candidates:
-        resolved = candidate.resolve(strict=True)
-        if not resolved.is_file() or not resolved.is_relative_to(root):
-            raise ValueError("Claude 会话树超出存储根目录")
+    for relative, resolved in _tree(ref):
         stat = resolved.stat()
-        digest.update(str(resolved.relative_to(root)).encode())
+        digest.update(str(relative).encode())
         digest.update(f"\0{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}\0".encode())
     return "stat:" + digest.hexdigest()
