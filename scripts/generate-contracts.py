@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -260,36 +261,55 @@ def engine_methods_python(methods: list[dict[str, object]]) -> str:
     ))
 
 
-def ipc_frontend(contract: dict[str, object]) -> str:
+def contract_hash(
+    agents: list[dict[str, object]],
+    methods: list[dict[str, object]],
+    ipc: dict[str, object],
+) -> str:
+    payload = json.dumps(
+        {"agents": agents, "engine_methods": methods, "ipc": ipc},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def ipc_frontend(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"export const FERRY_IPC_PROTOCOL = {json.dumps(contract['protocol'])};",
+        f"export const FERRY_CONTRACT_HASH = {json.dumps(digest)};",
         "",
     ))
 
 
-def ipc_rust(contract: dict[str, object]) -> str:
+def ipc_rust(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f'pub(crate) const FERRY_IPC_PROTOCOL: &str = "{contract["protocol"]}";',
+        f'pub(crate) const FERRY_CONTRACT_HASH: &str = "{digest}";',
         "",
     ))
 
 
-def ipc_python(contract: dict[str, object]) -> str:
+def ipc_python(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
         "from __future__ import annotations",
         "",
         f"FERRY_IPC_PROTOCOL = {contract['protocol']!r}",
+        f"FERRY_CONTRACT_HASH = {digest!r}",
         "",
     ))
 
 
-def ipc_runtime(contract: dict[str, object]) -> str:
+def ipc_runtime(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f'export const FERRY_IPC_PROTOCOL = "{contract["protocol"]}" as const;',
+        "export const FERRY_CONTRACT_HASH =",
+        f'  "{digest}" as const;',
         "",
         "export interface IpcRequest<Method extends string = string> {",
         "  protocol: typeof FERRY_IPC_PROTOCOL;",
@@ -351,7 +371,7 @@ def generated_contents(
             "rust": ipc_rust,
             "python": ipc_python,
             "runtime": ipc_runtime,
-        }[kind](ipc)
+        }[kind](ipc, contract_hash(agents, engine_methods, ipc))
         for path, kind in IPC_OUTPUTS.items()
     }
     return agent_contents | engine_contents | ipc_contents

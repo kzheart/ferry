@@ -146,15 +146,23 @@ jobs:
           SIDECAR: ${{ matrix.binary }}
         run: |
           import json, os, subprocess
+          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           for method in ("health", "version", "env"):
               process = subprocess.run(
                   [os.environ["SIDECAR"], "rpc"],
-                  input=json.dumps({"method": method}) + "\n",
+                  input=json.dumps({
+                      "protocol": protocol,
+                      "id": f"ci-{method}",
+                      "method": method,
+                      "params": {},
+                  }) + "\n",
                   text=True, capture_output=True, check=True, timeout=30)
               response = json.loads(process.stdout.splitlines()[0])
               assert response["ok"], (method, response, process.stderr)
               if method == "health":
-                  assert response["result"]["status"] == "ok", response
+                  assert response["protocol"] == protocol, response
+                  assert response["result"]["status"] == "ready", response
+                  assert response["result"]["service"] == "engine", response
               elif method == "version":
                   assert response["result"], response
               else:
@@ -177,7 +185,8 @@ jobs:
                   text=True, capture_output=True, check=True, timeout=30, env=env)
           response = json.loads(process.stdout.splitlines()[-1])
           assert response["ok"] is True, (response, process.stderr)
-          assert response["result"]["protocol"] == protocol, response
+          assert response["protocol"] == protocol, response
+          assert response["result"]["service"] == "ferry-runtime", response
           assert response["result"]["provider"] == "deepseek", response
           assert response["result"]["model"] == "deepseek-v4-flash", response
 
@@ -227,15 +236,23 @@ jobs:
           SIDECAR: ${{ matrix.binary }}
         run: |
           import json, os, subprocess
+          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
           for method in ("health", "version", "env"):
               process = subprocess.run(
                   [os.environ["SIDECAR"], "rpc"],
-                  input=json.dumps({"method": method}) + "\n",
+                  input=json.dumps({
+                      "protocol": protocol,
+                      "id": f"ci-{method}",
+                      "method": method,
+                      "params": {},
+                  }) + "\n",
                   text=True, capture_output=True, check=True, timeout=30)
               response = json.loads(process.stdout.splitlines()[0])
               assert response["ok"], (method, response, process.stderr)
               if method == "health":
-                  assert response["result"]["status"] == "ok", response
+                  assert response["protocol"] == protocol, response
+                  assert response["result"]["status"] == "ready", response
+                  assert response["result"]["service"] == "engine", response
               elif method == "version":
                   assert response["result"], response
               else:
@@ -258,6 +275,7 @@ jobs:
                   text=True, capture_output=True, check=True, timeout=30, env=env)
           response = json.loads(process.stdout.splitlines()[-1])
           assert response["ok"] is True, (response, process.stderr)
-          assert response["result"]["protocol"] == protocol, response
+          assert response["protocol"] == protocol, response
+          assert response["result"]["service"] == "ferry-runtime", response
           assert response["result"]["provider"] == "deepseek", response
           assert response["result"]["model"] == "deepseek-v4-flash", response

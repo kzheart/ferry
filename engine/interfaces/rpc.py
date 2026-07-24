@@ -1,4 +1,4 @@
-"""版本 2 RPC 契约与调度：结构化错误 envelope。"""
+"""`ferry-ipc/1` RPC 契约与调度：结构化错误 envelope。"""
 
 import json
 import logging
@@ -9,25 +9,33 @@ from ..application.engine import EngineApplication
 from ..composition import build_application
 from ..application.verification import ProbeTimeout
 from ..contracts.engine_methods import ENGINE_METHOD_NAMES
+from ..contracts.ipc import FERRY_IPC_PROTOCOL
 from ..domain.errors import (
-    DomainError, InvalidJsonError, MissingParamError, UnknownMethodError,
+    DomainError,
+    InvalidJsonError,
+    InvalidRequestError,
+    MissingParamError,
+    UnknownMethodError,
+    UnsupportedProtocolError,
 )
 
 log = logging.getLogger(__name__)
 
-PROTOCOL = 2
+PROTOCOL = FERRY_IPC_PROTOCOL
 
 
 RPC_METHODS = ENGINE_METHOD_NAMES
 
 
-def _error_envelope(error: DomainError, request_id) -> dict:
+def _error_envelope(error: DomainError, request_id: str) -> dict:
     payload = {"code": error.code, "params": error.params,
-               "category": error.category, "retryable": error.retryable,
-               "request_id": request_id}
-    if os.environ.get("FERRY_DEBUG"):
-        payload["debug"] = str(error)
-    return {"protocol": PROTOCOL, "ok": False, "error": payload}
+               "category": error.category, "retryable": error.retryable}
+    return {
+        "protocol": PROTOCOL,
+        "id": request_id,
+        "ok": False,
+        "error": payload,
+    }
 
 
 class RpcDispatcher:
@@ -78,7 +86,7 @@ class RpcDispatcher:
 
 
 def _handle(request: str, methods: dict) -> dict:
-    request_id = None
+    request_id = "unknown"
     try:
         try:
             req = json.loads(request)
@@ -86,17 +94,32 @@ def _handle(request: str, methods: dict) -> dict:
             raise InvalidJsonError(str(error)) from error
         if not isinstance(req, dict):
             raise InvalidJsonError("请求必须是 JSON object")
-        request_id = req.get("request_id")
+        if isinstance(req.get("id"), str) and req["id"]:
+            request_id = req["id"]
+        if req.get("protocol") != PROTOCOL:
+            raise UnsupportedProtocolError(PROTOCOL, req.get("protocol"))
+        if set(req) != {"protocol", "id", "method", "params"}:
+            raise InvalidRequestError("请求 envelope 字段不匹配")
+        if len(request_id) > 128:
+            raise InvalidRequestError("请求 id 超出长度限制")
+        if not isinstance(req.get("params"), dict):
+            raise InvalidRequestError("params 必须是 JSON object")
         method = req.get("method")
+        if not isinstance(method, str) or not method:
+            raise InvalidRequestError("method 必须是非空字符串")
         fn = methods.get(method)
         if fn is None:
             raise UnknownMethodError(method)
         try:
-            result = fn(req.get("params") or {})
+            result = fn(req["params"])
         except KeyError as error:
             raise MissingParamError(str(error.args[0])) from error
-        return {"protocol": PROTOCOL, "ok": True, "result": result,
-                "request_id": request_id}
+        return {
+            "protocol": PROTOCOL,
+            "id": request_id,
+            "ok": True,
+            "result": result,
+        }
     except ProbeTimeout as error:
         log.exception("RPC probe timeout")
         timeout = DomainError(str(error))

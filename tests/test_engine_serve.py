@@ -6,6 +6,7 @@ import time
 import pytest
 
 from engine.interfaces.cli import serve
+from engine.interfaces.rpc import PROTOCOL
 
 
 def test_parallel_read_requests_can_finish_out_of_input_order():
@@ -20,8 +21,13 @@ def test_parallel_read_requests_can_finish_out_of_input_order():
             active += 1
             peak = max(peak, active)
         try:
-            time.sleep(0.04 if value["request_id"] == "slow" else 0.01)
-            return {"ok": True, "request_id": value["request_id"]}
+            time.sleep(0.04 if value["id"] == "slow" else 0.01)
+            return {
+                "protocol": PROTOCOL,
+                "id": value["id"],
+                "ok": True,
+                "result": None,
+            }
         finally:
             with lock:
                 active -= 1
@@ -29,8 +35,8 @@ def test_parallel_read_requests_can_finish_out_of_input_order():
     output = io.StringIO()
     serve(
         io.StringIO(
-            '{"method":"health","request_id":"slow"}\n'
-            '{"method":"version","request_id":"fast"}\n'
+            f'{{"protocol":"{PROTOCOL}","id":"slow","method":"health","params":{{}}}}\n'
+            f'{{"protocol":"{PROTOCOL}","id":"fast","method":"version","params":{{}}}}\n'
         ),
         output,
         handler,
@@ -38,7 +44,7 @@ def test_parallel_read_requests_can_finish_out_of_input_order():
 
     responses = [json.loads(line) for line in output.getvalue().splitlines()]
     assert peak == 2
-    assert [response["request_id"] for response in responses] == ["fast", "slow"]
+    assert [response["id"] for response in responses] == ["fast", "slow"]
 
 
 def test_non_parallel_request_stays_on_ordered_lane():
@@ -54,7 +60,12 @@ def test_non_parallel_request_stays_on_ordered_lane():
             peak = max(peak, active)
         try:
             time.sleep(0.01)
-            return {"ok": True, "request_id": value["request_id"]}
+            return {
+                "protocol": PROTOCOL,
+                "id": value["id"],
+                "ok": True,
+                "result": None,
+            }
         finally:
             with lock:
                 active -= 1
@@ -62,15 +73,15 @@ def test_non_parallel_request_stays_on_ordered_lane():
     output = io.StringIO()
     serve(
         io.StringIO(
-            '{"method":"scan","request_id":"first"}\n'
-            '{"method":"scan","request_id":"second"}\n'
+            f'{{"protocol":"{PROTOCOL}","id":"first","method":"scan","params":{{}}}}\n'
+            f'{{"protocol":"{PROTOCOL}","id":"second","method":"scan","params":{{}}}}\n'
         ),
         output,
         handler,
     )
 
     assert peak == 1
-    assert [json.loads(line)["request_id"] for line in output.getvalue().splitlines()] == [
+    assert [json.loads(line)["id"] for line in output.getvalue().splitlines()] == [
         "first",
         "second",
     ]
@@ -81,4 +92,11 @@ def test_completed_request_failure_is_not_lost_when_reclaimed():
         raise RuntimeError("worker failed")
 
     with pytest.raises(RuntimeError, match="worker failed"):
-        serve(io.StringIO('{"method":"health"}\n'), io.StringIO(), handler)
+        serve(
+            io.StringIO(
+                f'{{"protocol":"{PROTOCOL}","id":"failure",'
+                '"method":"health","params":{}}\n'
+            ),
+            io.StringIO(),
+            handler,
+        )

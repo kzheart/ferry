@@ -31,6 +31,22 @@ class InvalidJsonError(DomainError, ValueError):
     category = "validation"
 
 
+class InvalidRequestError(DomainError, ValueError):
+    code = "rpc.invalid_request"
+    category = "validation"
+
+
+class UnsupportedProtocolError(DomainError, ValueError):
+    code = "rpc.unsupported_protocol"
+    category = "unsupported"
+
+    def __init__(self, expected: str, actual):
+        super().__init__(
+            "IPC protocol 不匹配",
+            {"expected": expected, "actual": actual},
+        )
+
+
 class UnknownMethodError(DomainError, ValueError):
     code = "rpc.unknown_method"
     category = "validation"

@@ -25,7 +25,7 @@ from engine.domain.errors import (
 from engine.domain.model import (
     Block, ImageAsset, Message, Session, ToolCall, text_tool_result,
 )
-from engine.interfaces.rpc import rpc
+from engine.interfaces.rpc import PROTOCOL, rpc
 
 
 class Cache:
@@ -551,7 +551,9 @@ def test_usage_is_aggregated_without_raw_session_data(agent_environment):
 
 def test_agent_rpc_returns_stable_structured_errors(agent_environment):
     response = rpc(json.dumps({
-        "method": "agent_session_read", "request_id": "agent-1",
+        "protocol": PROTOCOL,
+        "id": "agent-1",
+        "method": "agent_session_read",
         "params": {"tool": "claude", "ref": "/tmp/not-issued.jsonl"},
     }))
     assert response["ok"] is False
@@ -560,8 +562,8 @@ def test_agent_rpc_returns_stable_structured_errors(agent_environment):
         "params": {},
         "category": "validation",
         "retryable": False,
-        "request_id": "agent-1",
     }
+    assert response["id"] == "agent-1"
 
 
 def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment):

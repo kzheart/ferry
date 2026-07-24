@@ -8,7 +8,7 @@ use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
-use crate::contracts::ipc::FERRY_IPC_PROTOCOL;
+use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::sidecar::engine_request_blocking;
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
@@ -371,7 +371,6 @@ fn route_tool(
     }
     let request = json!({
         "method": route.method,
-        "request_id": next_id("engine_tool"),
         "params": route.params,
     });
     let response =
@@ -545,7 +544,11 @@ fn request_agent(
         let response = candidate.request(&health.to_string(), Duration::from_secs(10))?;
         let value: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
         if value.get("ok").and_then(Value::as_bool) != Some(true)
-            || value.pointer("/result/protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL)
+            || value.pointer("/result/service").and_then(Value::as_str) != Some("ferry-runtime")
+            || value
+                .pointer("/result/contract_hash")
+                .and_then(Value::as_str)
+                != Some(FERRY_CONTRACT_HASH)
         {
             return Err("Agent 协议握手失败".to_owned());
         }
@@ -627,8 +630,7 @@ fn validate_public_command(request: &str) -> Result<(), String> {
 }
 
 fn engine_value(resource_dir: &Path, method: &str, params: Value) -> Result<Value, String> {
-    let request = json!({"method": method, "params": params,
-                         "request_id": next_id("trusted")});
+    let request = json!({"method": method, "params": params});
     let response = engine_request_blocking(resource_dir, &request.to_string())?;
     let envelope: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     if envelope.get("ok").and_then(Value::as_bool) == Some(true) {

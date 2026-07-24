@@ -1,4 +1,5 @@
 import { parseThinkingLevel, type ThinkingLevel } from "./provider-config.js";
+import { FERRY_CONTRACT_HASH } from "./contracts/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
 import type { RoleInput } from "./roles.js";
 import {
@@ -23,9 +24,9 @@ export async function dispatch(
     switch (command.method) {
       case "health":
         result = {
-          status: "ok",
-          protocol: PROTOCOL_VERSION,
-          runtime: "ferry-runtime",
+          status: "ready",
+          service: "ferry-runtime",
+          contract_hash: FERRY_CONTRACT_HASH,
           pi_version: "0.81.1",
           ...(await runtime.providerStatus()),
         };
