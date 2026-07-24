@@ -24,11 +24,7 @@ import {
   type RoleInput,
   type RoleStore,
 } from "../roles/role-repository.js";
-import {
-  PROTOCOL_VERSION,
-  ProtocolError,
-  type EventEnvelope,
-} from "../server/messages.js";
+import { ProtocolError, type EventEnvelope } from "../server/messages.js";
 import {
   FERRY_TOOL_NAMES,
   type FerryToolName,
@@ -39,6 +35,7 @@ import {
   type TaskGraph,
   type WorkflowRunEvent,
 } from "../agents/scheduler.js";
+import { RuntimeEventBus } from "./event-bus.js";
 
 export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
 export type ToolHandler = (
@@ -89,7 +86,7 @@ export class AgentRuntime {
   readonly roleStore: RoleStore;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
-  private readonly listeners = new Set<(event: EventEnvelope) => void>();
+  private readonly events: RuntimeEventBus;
   private readonly pendingTools = new Map<string, DeferredTool>();
   private readonly organizationRuns = new Map<string, Promise<unknown>>();
   private readonly backendFactory: BackendFactory;
@@ -100,7 +97,6 @@ export class AgentRuntime {
   private readonly backendInfo: AgentBackend;
   private readonly providersService: ProviderService;
   private readonly toolDeadlinesMs: Record<FerryToolName, number>;
-  private runtimeSequence = 1;
 
   private constructor(
     options: RuntimeOptions,
@@ -110,6 +106,7 @@ export class AgentRuntime {
     this.store = options.store ?? new EphemeralSessionStore();
     this.roleStore = options.roleStore ?? new EphemeralRoleStore();
     this.now = options.now ?? (() => new Date());
+    this.events = new RuntimeEventBus(this.now);
     this.idFactory = options.idFactory ?? randomUUID;
     this.toolDeadlinesMs = { ...TOOL_DEADLINES_MS, ...options.toolDeadlinesMs };
     this.toolHandler = options.toolHandler;
@@ -120,16 +117,7 @@ export class AgentRuntime {
     this.providersService = new ProviderService({
       ...(this.providerHost ? { host: this.providerHost } : {}),
       fallbackBackend: this.backendInfo,
-      emitAuth: (event) =>
-        this.publish({
-          protocol: PROTOCOL_VERSION,
-          session_id: "runtime",
-          run_id: null,
-          seq: this.runtimeSequence++,
-          timestamp: this.now().toISOString(),
-          type: event.type,
-          payload: event.payload,
-        }),
+      emitAuth: (event) => this.events.emit(event.type, event.payload),
       idFactory: this.idFactory,
       isProviderInUse: (providerId) =>
         [...this.sessions.values()].some(
@@ -214,12 +202,11 @@ export class AgentRuntime {
   }
 
   subscribe(listener: (event: EventEnvelope) => void) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.events.subscribe(listener);
   }
 
   publish(event: EventEnvelope) {
-    for (const listener of this.listeners) listener(event);
+    this.events.publish(event);
   }
 
   async createSession(
@@ -714,15 +701,12 @@ export class AgentRuntime {
         reject(new Error("organization engine gateway timed out"));
       }, 125_000);
     });
-    this.publish({
-      protocol: PROTOCOL_VERSION,
-      session_id: sessionId,
-      run_id: sessionId,
-      seq: this.runtimeSequence++,
-      timestamp: this.now().toISOString(),
-      type: "engine.request",
-      payload: { request_id: requestId, method, params },
-    });
+    this.events.emit(
+      "engine.request",
+      { request_id: requestId, method, params },
+      sessionId,
+      sessionId,
+    );
     return result;
   }
 
