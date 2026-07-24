@@ -108,8 +108,13 @@ class CodexEditCodec:
         pruned = set()
         if isinstance(doc.context, codex_native.CodexClosure):
             pruned = codex_native.prune_referenced_subtrees(doc.context, removed)
-        return [event("edit.turn_deleted", turn=span.ordinal,
-                      pruned_children=len(pruned))]
+        if pruned:
+            return [event(
+                "edit.turn_deleted_with_children",
+                turn=span.ordinal,
+                pruned_children=len(pruned),
+            )]
+        return [event("edit.turn_deleted", turn=span.ordinal)]
 
     def rewrite_message(self, doc, locator: str, text: str) -> list[str]:
         record = None

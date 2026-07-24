@@ -1,6 +1,6 @@
 {
   "migration": {
-    "reasoning_metadata_dropped": "Reasoning downgraded to plain text (dropped {{metadata_kind_label}})",
+    "reasoning_metadata_dropped": "Reasoning downgraded to plain text (format-specific metadata dropped)",
     "reasoning_dropped": "Reasoning had no visible content, dropped",
     "unknown_block_dropped": "Unknown content block type dropped: {{kind}}",
     "apply_patch_unparsed": "apply_patch could not be parsed into file changes, degraded",
@@ -9,8 +9,7 @@
     "content_dropped": "{{kind}} content cannot be migrated and will be dropped",
     "fork_parent_fallback": "Fork parent node could not be mapped precisely, fell back to end of main conversation",
     "truncated": "Truncated by migration range: dropped {{dropped}} messages after turn {{max_turn}}",
-    "children_not_migrated": "{{count}} sub-sessions outside the truncation range were not migrated",
-    "metadata_kind_default": "metadata"
+    "children_not_migrated": "{{count}} sub-sessions outside the truncation range were not migrated"
   },
   "session": {
     "orphan_tool_result": "Orphan tool result: {{call_id}}",
@@ -42,6 +41,5 @@
     "shadow_session": "Shadow session",
     "shadow_copy": "Shadow copy",
     "temp_home": "Temporary home"
-  },
-  "unknown_event_code": "{{code}}"
+  }
 }
