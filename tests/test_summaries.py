@@ -97,7 +97,7 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch, port
         {"hash": first["segments"][0]["hash"], "text": "改支付"},
         {"hash": first["segments"][1]["hash"], "text": "改标题"},
     ]
-    assert "_source_text" not in database.get_session_summary(
+    assert "_source_text" not in database.summaries.get(
         "claude", "sess-1",
     )["segments"][0]
 
@@ -178,11 +178,11 @@ def test_set_summaries_requires_backbone(tmp_path, monkeypatch, ports):
 def test_summary_cache_is_scoped_by_tool_and_native_session_id(
         tmp_path, monkeypatch, ports):
     database = _use_database(tmp_path, monkeypatch)
-    database.store_session_summary({
+    database.summaries.store({
         "tool": "claude", "id": "shared", "fingerprint": "claude-fp",
         "segments": [],
     }, 1)
-    database.store_session_summary({
+    database.summaries.store({
         "tool": "codex", "id": "shared", "fingerprint": "codex-fp",
         "segments": [],
     }, 2)

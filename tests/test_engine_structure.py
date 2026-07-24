@@ -100,3 +100,5 @@ def test_metadata_and_history_are_separate_sqlite_capabilities():
     assert (ENGINE / "storage/migration_history.py").is_file()
     assert "def list_session_metadata(" not in database
     assert "def append_migration_history(" not in database
+    assert (ENGINE / "storage/session_summaries.py").is_file()
+    assert "def get_session_summary(" not in database
