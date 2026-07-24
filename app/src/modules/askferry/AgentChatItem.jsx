@@ -4,7 +4,7 @@ import { Spinner } from "../../shared/ui/icons.jsx";
 import { AgentToolRow } from "./AgentToolTrace.jsx";
 import { ApprovalCard, WorkflowCard } from "./AgentWorkflowCards.jsx";
 
-export function AgentChatItem({ item, sessionId, ferry }) {
+export function AgentChatItem({ item, sessionId, ferry, onNavigate }) {
   const { t } = useTranslation();
   if (item.kind === "user") {
     return (
@@ -28,13 +28,16 @@ export function AgentChatItem({ item, sessionId, ferry }) {
       </div>
     );
   }
-  if (item.kind === "tool") return <AgentToolRow item={item} />;
+  if (item.kind === "tool") {
+    return <AgentToolRow item={item} onNavigate={onNavigate} />;
+  }
   if (item.kind === "workflow") return <WorkflowCard item={item} />;
   if (item.kind === "approval") {
     return (
       <ApprovalCard item={item}
         onApprove={() => ferry.approve(sessionId, item)}
-        onDismiss={() => ferry.dismiss(sessionId, item)} />
+        onDismiss={() => ferry.dismiss(sessionId, item)}
+        onNavigate={onNavigate} />
     );
   }
   if (item.kind === "status") {

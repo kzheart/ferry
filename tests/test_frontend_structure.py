@@ -50,6 +50,13 @@ def test_module_models_live_with_their_consuming_capability():
     assert "shared/ui/Overlays.jsx" not in app
     assert "AppOverlayController" in app
 
+    tool_trace = (FRONTEND / "modules/askferry/AgentToolTrace.jsx").read_text()
+    workflow_cards = (FRONTEND / "modules/askferry/AgentWorkflowCards.jsx").read_text()
+    assert "EntityCards" in tool_trace
+    assert "onNavigate={onNavigate}" in tool_trace
+    assert "entitiesFromToolResult" in workflow_cards
+    assert "EntityCards" in workflow_cards
+
 
 def test_operation_flow_has_one_module_controller():
     controller = FRONTEND / "modules/operations/operationController.ts"

@@ -186,9 +186,9 @@ export default function AskFerry({ ferry, scanSessions, onOpenConfig,
               flexDirection: "column", gap: 14 }}>
               {groupAgentTimeline(items).map((g, i) => (
                 g.kind === "trace"
-                  ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} />
+                  ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
                   : <AgentChatItem key={`item-${i}`} item={g} sessionId={activeId}
-                      ferry={ferry} />))}
+                      ferry={ferry} onNavigate={onNavigate} />))}
             </div>
           </div>
 

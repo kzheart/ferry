@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { entitiesFromToolResult } from "./ferryEntities.js";
+import EntityCards from "./EntityCards.jsx";
 
 function Countdown({ until }) {
   const [now, setNow] = useState(Date.now());
@@ -28,6 +30,7 @@ export function ApprovalCard({
   item,
   onApprove,
   onDismiss,
+  onNavigate,
 }) {
   const { t } = useTranslation();
   const operation = item.operation || {};
@@ -52,6 +55,12 @@ export function ApprovalCard({
         : item.status === "dismissed"
           ? t("askferry:approval.dismissed")
           : t(`askferry:approval.${KIND_KEYS[operation.kind] || "kindGeneric"}`);
+  const entities = operation.kind === "migration" || operation.kind === "edit"
+    ? entitiesFromToolResult(
+      operation.kind === "migration" ? "migrate" : "session_edit",
+      { details: { ...operation, result: item.result } },
+    )
+    : [];
   return (
     <div className="fcard" style={{
       padding: "12px 14px",
@@ -88,6 +97,7 @@ export function ApprovalCard({
           {operation.summary}
         </div>
       )}
+      <EntityCards entities={entities} onNavigate={onNavigate} />
       <div style={{
         display: "flex",
         gap: 12,

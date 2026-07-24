@@ -2,6 +2,8 @@ import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { Caret, Spinner } from "../../shared/ui/icons.jsx";
+import { TOOL_LEVEL } from "./agentChatModel.js";
+import EntityCards from "./EntityCards.jsx";
 
 const formatDuration = (startedAt, endedAt) => {
   if (!startedAt || !endedAt) return "";
@@ -120,9 +122,10 @@ function toolSummary(item, t) {
   }
 }
 
-export const AgentToolRow = memo(function AgentToolRow({ item }) {
+export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const level = TOOL_LEVEL[item.name] || "read";
   const running = item.status === "running";
   const error = item.status === "error";
   const merged = item.merged;
@@ -130,6 +133,8 @@ export const AgentToolRow = memo(function AgentToolRow({ item }) {
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
   const summary = toolSummary(item, t);
+  const showCards = !error && !merged && item.entities?.length > 0
+    && (level === "mutate" || open);
 
   return (
     <div style={{ position: "relative", paddingLeft: 24 }}>
@@ -199,17 +204,22 @@ export const AgentToolRow = memo(function AgentToolRow({ item }) {
           )}
         </div>
       )}
+      {showCards && (
+        <div style={{ marginTop: 6 }}>
+          <EntityCards entities={item.entities} onNavigate={onNavigate} />
+        </div>
+      )}
     </div>
   );
 });
 
-export function AgentToolTrace({ rows }) {
+export function AgentToolTrace({ rows, onNavigate }) {
   return (
     <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 2 }}>
       <span style={{ position: "absolute", left: 7.5, top: 14, bottom: 14, width: 1.5,
         background: "var(--line3)", borderRadius: 1 }} />
       {rows.map((row, index) => (
-        <AgentToolRow key={row.callId || index} item={row} />))}
+        <AgentToolRow key={row.callId || index} item={row} onNavigate={onNavigate} />))}
     </div>
   );
 }
