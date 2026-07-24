@@ -13,8 +13,16 @@ def _methods():
 
 def test_runtime_router_exactly_implements_contract_methods():
     expected = {method["name"] for method in _methods()}
-    router = (ROOT / "ferry-runtime/src/runtime/command-router.ts").read_text()
-    assert set(re.findall(r'case "([^"]+)":', router)) == expected
+    routers = [
+        ROOT / "ferry-runtime/src/runtime/command-router.ts",
+        ROOT / "ferry-runtime/src/providers/commands.ts",
+    ]
+    implemented = {
+        method
+        for router in routers
+        for method in re.findall(r'case "([^"]+)":', router.read_text())
+    }
+    assert implemented == expected
 
 
 def test_internal_runtime_commands_never_enter_webview_allowlist():
