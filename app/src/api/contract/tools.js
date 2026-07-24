@@ -11,5 +11,5 @@ export const TOOL_NAME = Object.freeze(Object.fromEntries(
 export { supportsAssistantReplyEditing, supportsSessionEditing } from "./agentEditSupport.js";
 
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
-export const resumeDescriptor = (tool, sessionId, cwd) =>
-  rpc("resume", { tool, session_id: sessionId, cwd: cwd || "." });
+export const resumeDescriptor = (tool, ref) =>
+  rpc("resume", { tool, ref });

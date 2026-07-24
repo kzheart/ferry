@@ -51,12 +51,12 @@ export function useSessionSelection({ sessions, onSelect, onFallbackLoad }) {
       select(key);
       return key;
     }
-    if (action.tool && (action.ref || action.sessionId)) {
-      const key = sessionIdentity({ tool: action.tool, id: action.sessionId || action.ref });
+    if (action.tool && action.ref?.startsWith("fsr_")) {
+      const key = `${action.tool}\u0000${action.ref}`;
       setSelectedId(key);
       onSelect();
       setDetail({ id: key, data: null });
-      rpc("show", { tool: action.tool, ref: action.ref || action.sessionId })
+      rpc("show", { tool: action.tool, ref: action.ref })
         .then(data => setDetail(current => current?.id === key ? { ...current, data } : current))
         .catch(error => setDetail(current => current?.id === key
           ? { ...current, error: error.message }
