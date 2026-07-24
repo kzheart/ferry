@@ -15,6 +15,7 @@ from engine.adapters.base.plugin import (
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
 from engine.application import scanning
+from engine.application.engine import EngineApplication
 from engine.application.ports import ApplicationPorts
 from engine.domain.errors import (
     AgentReferenceError,
@@ -284,6 +285,65 @@ def test_library_scan_issues_operation_refs(agent_environment):
     assert agent_environment["index"].resolve(
         session["tool"], session["ref"],
     ).canonical_ref == str(agent_environment["transcript"])
+
+
+class _Operations:
+    def shutdown(self):
+        pass
+
+
+def test_engine_queries_resolve_opaque_refs_before_adapter(
+        agent_environment, monkeypatch):
+    scanned = scanning.scan(
+        agent_environment["ports"], agent_environment["index"],
+    )["sessions"]
+    session = next(item for item in scanned if item["tool"] == "claude")
+    calls = {}
+
+    def show(tool, ref, _ports):
+        calls["show"] = (tool, ref)
+        return {"ok": True}
+
+    def asset(tool, ref, asset_id, _ports):
+        calls["asset"] = (tool, ref, asset_id)
+        return {"ok": True}
+
+    def backbone(tool, ref, _ports):
+        calls["backbone"] = (tool, ref)
+        return {"ok": True}
+
+    monkeypatch.setattr("engine.application.sessions.show", show)
+    monkeypatch.setattr("engine.application.sessions.session_asset", asset)
+    monkeypatch.setattr("engine.application.summaries.build_backbone", backbone)
+    application = EngineApplication(
+        agent_environment["ports"], agent_environment["index"], _Operations(),
+    )
+
+    assert application.show_session("claude", session["ref"]) == {"ok": True}
+    assert application.session_asset(
+        "claude", session["ref"], "image-1",
+    ) == {"ok": True}
+    assert application.session_backbone(
+        "claude", session["ref"],
+    ) == {"ok": True}
+    assert application.resume_command("claude", session["ref"]) == {
+        "session_id": "private-id",
+        "cwd": "/Users/private/secret-project",
+        "executable": "fake",
+        "args": ["private-id"],
+        "display_command": "fake private-id",
+    }
+    canonical_ref = str(agent_environment["transcript"])
+    assert calls == {
+        "show": ("claude", canonical_ref),
+        "asset": ("claude", canonical_ref, "image-1"),
+        "backbone": ("claude", canonical_ref),
+    }
+
+    with pytest.raises(AgentReferenceError):
+        application.show_session("claude", canonical_ref)
+    with pytest.raises(AgentReferenceError):
+        application.resume_command("opencode", session["ref"])
 
 
 def test_session_read_requires_engine_issued_reference(agent_environment):

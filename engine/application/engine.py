@@ -35,8 +35,28 @@ class EngineApplication:
     def environment(self) -> dict:
         return environment.inspect(self._ports)
 
-    def resume_command(self, tool: str, session_id: str, cwd: str) -> dict:
-        return self._ports.adapter(tool).lifecycle.resume_descriptor(session_id, cwd)
+    def _resolve_session(self, tool: str, ref: str) -> agent_tools.IndexedSession:
+        return self._index.resolve(tool, ref)
+
+    def _checked_query(self, tool: str, ref: str, query):
+        record = self._resolve_session(tool, ref)
+        result = query(record)
+        self._resolve_session(tool, ref)
+        return result
+
+    def resume_command(self, tool: str, ref: str) -> dict:
+        def build(record: agent_tools.IndexedSession) -> dict:
+            session_id = record.row.get("id")
+            if not isinstance(session_id, str) or not session_id:
+                raise agent_tools.AgentReferenceError("会话缺少原生 ID")
+            cwd = record.row.get("dir")
+            if not isinstance(cwd, str) or not cwd:
+                cwd = "."
+            return self._ports.adapter(tool).lifecycle.resume_descriptor(
+                session_id, cwd,
+            )
+
+        return self._checked_query(tool, ref, build)
 
     def list_models(self, tool: str) -> dict:
         return models.list_models(tool, self._ports)
@@ -51,16 +71,31 @@ class EngineApplication:
         return history.delete(history_id, self._ports)
 
     def show_session(self, tool: str, ref: str) -> dict:
-        return sessions.show(tool, ref, self._ports)
+        return self._checked_query(
+            tool, ref,
+            lambda record: sessions.show(
+                tool, record.canonical_ref, self._ports,
+            ),
+        )
 
     def session_asset(self, tool: str, ref: str, asset_id: str) -> dict:
-        return sessions.session_asset(tool, ref, asset_id, self._ports)
+        return self._checked_query(
+            tool, ref,
+            lambda record: sessions.session_asset(
+                tool, record.canonical_ref, asset_id, self._ports,
+            ),
+        )
 
     def list_session_metadata(self) -> dict:
         return session_meta.list_all(self._ports)
 
     def session_backbone(self, tool: str, ref: str) -> dict:
-        return summaries.build_backbone(tool, ref, self._ports)
+        return self._checked_query(
+            tool, ref,
+            lambda record: summaries.build_backbone(
+                tool, record.canonical_ref, self._ports,
+            ),
+        )
 
     def set_session_summaries(self, tool: str, session_id: str, digests: dict) -> dict:
         return summaries.set_summaries(tool, session_id, digests, self._ports)
