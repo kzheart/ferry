@@ -40,7 +40,10 @@ def test_event_routing_uses_generated_policy():
         if policy["source"] == "host"
     )
 
-    rust = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
+    rust = "\n".join(
+        path.read_text()
+        for path in (ROOT / "app/src-tauri/src/runtime").glob("*.rs")
+    )
     frontend = (ROOT / "app/src/api/transport/desktopClient.ts").read_text()
     runtime_messages = (
         ROOT / "ferry-runtime/src/server/messages.ts"

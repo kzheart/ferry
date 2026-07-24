@@ -75,7 +75,10 @@ def test_host_error_reclassification_uses_generated_policy():
         for code, policy in FERRY_ERROR_POLICIES.items()
         if "host" in policy["sources"]
     }
-    rust = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
+    rust = "\n".join(
+        path.read_text()
+        for path in (ROOT / "app/src-tauri/src/runtime").glob("*.rs")
+    )
     for code in host_codes:
         assert f'"{code}"' in rust
     assert "error_policy(code)" in rust

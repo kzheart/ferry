@@ -51,3 +51,18 @@ def test_engine_and_runtime_share_one_process_supervisor():
         assert "ManagedProcess" in source
         assert "impl Drop for" not in source
         assert "Mutex<Option<" not in source
+
+
+def test_runtime_gateway_and_approval_are_separate_capabilities():
+    runtime = HOST / "runtime"
+    assert {
+        "approval.rs",
+        "gateway.rs",
+        "mod.rs",
+        "tool_routes.rs",
+    } <= {path.name for path in runtime.glob("*.rs")}
+
+    root = (runtime / "mod.rs").read_text()
+    assert "fn resolve_tool_request" not in root
+    assert "fn apply_operation_plan" not in root
+    assert "static AUTO_SESSIONS" not in root
