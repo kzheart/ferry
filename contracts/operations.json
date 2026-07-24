@@ -27,5 +27,62 @@
     "cancelled",
     "expired"
   ],
-  "success_status": "applied"
+  "success_status": "applied",
+  "input_fields": {
+    "edit": {
+      "tool": "agent-id",
+      "ref": "session-ref",
+      "ops": "edit-operation[]",
+      "probe": "boolean?"
+    },
+    "migration": {
+      "source_tool": "agent-id",
+      "ref": "session-ref",
+      "target_tool": "agent-id",
+      "max_turn": "positive-integer?",
+      "probe": "boolean?",
+      "probe_model": "string?"
+    },
+    "metadata": {
+      "tool": "agent-id",
+      "ref": "session-ref",
+      "patch": "metadata-patch"
+    },
+    "delete": {
+      "tool": "agent-id",
+      "ref": "session-ref"
+    },
+    "restore-delete": {
+      "recovery_id": "string"
+    }
+  },
+  "edit_operation_fields": {
+    "delete-turn": {
+      "turn": "positive-integer"
+    },
+    "rewrite": {
+      "locator": "string",
+      "text": "string"
+    },
+    "replace-assistant-reply": {
+      "turn": "positive-integer|string",
+      "reply": "assistant-reply"
+    }
+  },
+  "assistant_reply_item_fields": {
+    "text": {
+      "text": "string"
+    },
+    "tool": {
+      "name": "string",
+      "input": "json-object|string",
+      "output": "string"
+    }
+  },
+  "metadata_patch_fields": {
+    "name": "string?",
+    "pinned": "boolean?",
+    "archived": "boolean?",
+    "tags": "string[]?"
+  }
 }

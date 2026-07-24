@@ -195,6 +195,10 @@ def load_operations() -> dict[str, object]:
         "statuses",
         "terminal_statuses",
         "success_status",
+        "input_fields",
+        "edit_operation_fields",
+        "assistant_reply_item_fields",
+        "metadata_patch_fields",
     }
     if not isinstance(document, dict) or set(document) != expected_keys:
         raise ValueError("Operation 契约字段不完整")
@@ -216,6 +220,71 @@ def load_operations() -> dict[str, object]:
         raise ValueError("Operation terminal_statuses 必须是 statuses 的真子集")
     if document["success_status"] not in terminal:
         raise ValueError("Operation success_status 必须是终态")
+    nested_field_groups = (
+        "input_fields",
+        "edit_operation_fields",
+        "assistant_reply_item_fields",
+    )
+    allowed_types = {
+        "agent-id",
+        "assistant-reply",
+        "boolean?",
+        "edit-operation[]",
+        "json-object|string",
+        "metadata-patch",
+        "positive-integer",
+        "positive-integer?",
+        "positive-integer|string",
+        "session-ref",
+        "string",
+        "string?",
+        "string[]?",
+    }
+    for group in nested_field_groups:
+        definitions = document[group]
+        if not isinstance(definitions, dict) or not definitions:
+            raise ValueError(f"Operation {group} 必须是非空 object")
+        for name, fields in definitions.items():
+            if (
+                not isinstance(name, str)
+                or not name
+                or not isinstance(fields, dict)
+                or not fields
+                or not all(
+                    isinstance(field, str)
+                    and field
+                    and field != "kind"
+                    and field != "op"
+                    and field != "type"
+                    and value in allowed_types
+                    for field, value in fields.items()
+                )
+            ):
+                raise ValueError(f"Operation {group}.{name} 字段定义非法")
+    metadata_patch_fields = document["metadata_patch_fields"]
+    if (
+        not isinstance(metadata_patch_fields, dict)
+        or not metadata_patch_fields
+        or not all(
+            isinstance(field, str)
+            and field
+            and descriptor in allowed_types
+            for field, descriptor in metadata_patch_fields.items()
+        )
+    ):
+        raise ValueError("Operation metadata_patch_fields 字段定义非法")
+    if list(document["input_fields"]) != document["kinds"]:
+        raise ValueError("Operation input_fields 必须按 kinds 精确声明")
+    if list(document["edit_operation_fields"]) != document["edit_operations"]:
+        raise ValueError(
+            "Operation edit_operation_fields 必须按 edit_operations 精确声明"
+        )
+    if set(document["assistant_reply_item_fields"]) != {"text", "tool"}:
+        raise ValueError("Operation assistant reply item 只支持 text/tool")
+    if set(document["metadata_patch_fields"]) != {
+        "name", "pinned", "archived", "tags",
+    }:
+        raise ValueError("Operation metadata patch 字段不完整")
     return document
 
 
@@ -601,6 +670,93 @@ def session_ref_runtime(contract: dict[str, object]) -> str:
     ))
 
 
+def _pascal_case(value: str) -> str:
+    return "".join(part.capitalize() for part in value.replace("_", "-").split("-"))
+
+
+def _typescript_field(field: str, descriptor: str) -> str:
+    optional = descriptor.endswith("?")
+    base = descriptor[:-1] if optional else descriptor
+    value_type = {
+        "agent-id": "AgentId",
+        "assistant-reply": "AssistantReply",
+        "boolean": "boolean",
+        "edit-operation[]": "EditOperation[]",
+        "json-object|string": "Record<string, unknown> | string",
+        "metadata-patch": "MetadataPatch",
+        "positive-integer": "number",
+        "positive-integer|string": "number | string",
+        "session-ref": "string",
+        "string": "string",
+        "string[]": "string[]",
+    }[base]
+    return f"  {field}{'?' if optional else ''}: {value_type};"
+
+
+def _typescript_operation_types(contract: dict[str, object]) -> list[str]:
+    lines = ['import type { AgentId } from "./agents.js";', ""]
+    reply_names = []
+    for item, fields in contract["assistant_reply_item_fields"].items():
+        name = f"{_pascal_case(item)}ReplyItem"
+        reply_names.append(name)
+        lines.extend((
+            f"export interface {name} {{",
+            f'  kind: "{item}";',
+            *(_typescript_field(field, descriptor)
+              for field, descriptor in fields.items()),
+            "}",
+            "",
+        ))
+    lines.extend((
+        f"export type AssistantReplyItem = {' | '.join(reply_names)};",
+        "export interface AssistantReply {",
+        "  items: AssistantReplyItem[];",
+        "}",
+        "",
+        "export interface MetadataPatch {",
+        *(_typescript_field(field, descriptor)
+          for field, descriptor in contract["metadata_patch_fields"].items()),
+        "}",
+        "",
+    ))
+    edit_names = []
+    for operation, fields in contract["edit_operation_fields"].items():
+        name = f"{_pascal_case(operation)}Operation"
+        edit_names.append(name)
+        lines.extend((
+            f"export interface {name} {{",
+            f'  op: "{operation}";',
+            *(_typescript_field(field, descriptor)
+              for field, descriptor in fields.items()),
+            "}",
+            "",
+        ))
+    lines.extend((
+        "export type EditOperation =",
+        *(f"  | {name}{';' if index == len(edit_names) - 1 else ''}"
+          for index, name in enumerate(edit_names)),
+        "",
+    ))
+    input_names = []
+    for kind, fields in contract["input_fields"].items():
+        name = f"{_pascal_case(kind)}OperationInput"
+        input_names.append(name)
+        lines.extend((
+            f"export interface {name} {{",
+            f'  kind: "{kind}";',
+            *(_typescript_field(field, descriptor)
+              for field, descriptor in fields.items()),
+            "}",
+            "",
+        ))
+    lines.extend((
+        "export type OperationInput =",
+        *(f"  | {name}{';' if index == len(input_names) - 1 else ''}"
+          for index, name in enumerate(input_names)),
+    ))
+    return lines
+
+
 def operations_frontend(contract: dict[str, object]) -> str:
     def array(values: list[str]) -> str:
         return "[\n" + "\n".join(
@@ -609,6 +765,7 @@ def operations_frontend(contract: dict[str, object]) -> str:
 
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        *_typescript_operation_types(contract),
         f'export const OPERATION_PLAN_ID_PREFIX = "{contract["plan_id_prefix"]}" as const;',
         f"export const OPERATION_KINDS = {array(contract['kinds'])} as const;",
         "export const EDIT_OPERATION_KINDS = "
@@ -633,8 +790,70 @@ def operations_rust(contract: dict[str, object]) -> str:
         body = "\n".join(f"    {json.dumps(value)}," for value in values)
         return f"pub(crate) const {name}: &[&str] = &[\n{body}\n];"
 
+    input_structs = []
+    variants = []
+    kind_arms = []
+    for kind, fields in contract["input_fields"].items():
+        type_name = f"{_pascal_case(kind)}OperationPlanInput"
+        variant = _pascal_case(kind)
+        variants.extend((
+            f'    #[serde(rename = "{kind}")]',
+            f"    {variant}({type_name}),",
+        ))
+        kind_arms.append(f'            Self::{variant}(_) => "{kind}",')
+        struct_fields = []
+        for field, descriptor in fields.items():
+            optional = descriptor.endswith("?")
+            base = descriptor[:-1] if optional else descriptor
+            rust_type = {
+                "agent-id": "String",
+                "boolean": "bool",
+                "edit-operation[]": "Vec<Value>",
+                "metadata-patch": "MetadataPatch",
+                "positive-integer": "u32",
+                "session-ref": "String",
+                "string": "String",
+                "string[]": "Vec<String>",
+            }[base]
+            if optional and base == "boolean":
+                struct_fields.append("    #[serde(default)]")
+            elif optional:
+                rust_type = f"Option<{rust_type}>"
+                struct_fields.append(
+                    '    #[serde(skip_serializing_if = "Option::is_none")]'
+                )
+            if field == "ref":
+                struct_fields.append('    #[serde(rename = "ref")]')
+                rust_field = "reference"
+            else:
+                rust_field = field
+            struct_fields.append(f"    pub(crate) {rust_field}: {rust_type},")
+        input_structs.extend((
+            "#[derive(Deserialize, Serialize)]",
+            "#[serde(deny_unknown_fields)]",
+            f"pub(crate) struct {type_name} {{",
+            *struct_fields,
+            "}",
+            "",
+        ))
+    metadata_fields = []
+    for field, descriptor in contract["metadata_patch_fields"].items():
+        base = descriptor[:-1]
+        rust_type = {
+            "boolean": "bool",
+            "string": "String",
+            "string[]": "Vec<String>",
+        }[base]
+        metadata_fields.extend((
+            '    #[serde(skip_serializing_if = "Option::is_none")]',
+            f"    pub(crate) {field}: Option<{rust_type}>,",
+        ))
+
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "use serde::{Deserialize, Serialize};",
+        "use serde_json::Value;",
+        "",
         f'pub(crate) const OPERATION_PLAN_ID_PREFIX: &str = "{contract["plan_id_prefix"]}";',
         compact_declaration("OPERATION_KINDS", contract["kinds"]),
         compact_declaration("EDIT_OPERATION_KINDS", contract["edit_operations"]),
@@ -644,13 +863,109 @@ def operations_rust(contract: dict[str, object]) -> str:
         ),
         f'pub(crate) const OPERATION_SUCCESS_STATUS: &str = "{contract["success_status"]}";',
         "",
+        "#[derive(Deserialize, Serialize)]",
+        '#[serde(tag = "kind")]',
+        "pub(crate) enum OperationPlanInput {",
+        *variants,
+        "}",
+        "",
+        "impl OperationPlanInput {",
+        "    pub(crate) fn kind(&self) -> &'static str {",
+        "        match self {",
+        *kind_arms,
+        "        }",
+        "    }",
+        "}",
+        "",
+        *input_structs,
+        "#[derive(Deserialize, Serialize)]",
+        "#[serde(deny_unknown_fields)]",
+        "pub(crate) struct MetadataPatch {",
+        *metadata_fields,
+        "}",
+        "",
     ))
 
 
 def operations_python(contract: dict[str, object]) -> str:
+    def python_field(descriptor: str) -> tuple[str, bool]:
+        optional = descriptor.endswith("?")
+        base = descriptor[:-1] if optional else descriptor
+        value_type = {
+            "agent-id": "str",
+            "assistant-reply": "AssistantReply",
+            "boolean": "bool",
+            "edit-operation[]": "list[EditOperation]",
+            "json-object|string": "dict[str, object] | str",
+            "metadata-patch": "MetadataPatch",
+            "positive-integer": "int",
+            "positive-integer|string": "int | str",
+            "session-ref": "str",
+            "string": "str",
+            "string[]": "list[str]",
+        }[base]
+        return value_type, optional
+
+    definitions = []
+    reply_names = []
+    for item, fields in contract["assistant_reply_item_fields"].items():
+        name = f"{_pascal_case(item)}ReplyItem"
+        reply_names.append(name)
+        definitions.extend((
+            f"class {name}(TypedDict):",
+            f"    kind: Literal[{item!r}]",
+            *(f"    {field}: {python_field(descriptor)[0]}"
+              for field, descriptor in fields.items()),
+            "",
+        ))
+    definitions.extend((
+        f"AssistantReplyItem = {' | '.join(reply_names)}",
+        "",
+        "class AssistantReply(TypedDict):",
+        "    items: list[AssistantReplyItem]",
+        "",
+        "class MetadataPatch(TypedDict):",
+        *(f"    {field}: NotRequired[{python_field(descriptor)[0]}]"
+          for field, descriptor in contract["metadata_patch_fields"].items()),
+        "",
+    ))
+    edit_names = []
+    for operation, fields in contract["edit_operation_fields"].items():
+        name = f"{_pascal_case(operation)}Operation"
+        edit_names.append(name)
+        definitions.extend((
+            f"class {name}(TypedDict):",
+            f"    op: Literal[{operation!r}]",
+            *(f"    {field}: {python_field(descriptor)[0]}"
+              for field, descriptor in fields.items()),
+            "",
+        ))
+    definitions.extend((f"EditOperation = {' | '.join(edit_names)}", ""))
+    input_names = []
+    for kind, fields in contract["input_fields"].items():
+        name = f"{_pascal_case(kind)}OperationInput"
+        input_names.append(name)
+        field_lines = []
+        for field, descriptor in fields.items():
+            value_type, optional = python_field(descriptor)
+            if optional:
+                value_type = f"NotRequired[{value_type}]"
+            field_lines.append(f"    {field}: {value_type}")
+        definitions.extend((
+            f"class {name}(TypedDict):",
+            f"    kind: Literal[{kind!r}]",
+            *field_lines,
+            "",
+        ))
+    definitions.append(f"OperationInput = {' | '.join(input_names)}")
+
     return "\n".join((
         '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
         "from __future__ import annotations",
+        "",
+        "from typing import Literal, NotRequired, TypedDict",
+        "",
+        *definitions,
         "",
         f"OPERATION_PLAN_ID_PREFIX = {contract['plan_id_prefix']!r}",
         f"OPERATION_KINDS = frozenset({tuple(contract['kinds'])!r})",
@@ -671,6 +986,7 @@ def operations_runtime(contract: dict[str, object]) -> str:
 
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        *_typescript_operation_types(contract),
         f'export const OPERATION_PLAN_ID_PREFIX = "{contract["plan_id_prefix"]}" as const;',
         f"export const OPERATION_KINDS = {array(contract['kinds'])} as const;",
         "export const EDIT_OPERATION_KINDS = "

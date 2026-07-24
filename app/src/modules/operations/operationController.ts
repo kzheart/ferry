@@ -1,14 +1,13 @@
 import {
   type OperationKind,
+  type OperationInput,
   type OperationStatus,
   OPERATION_PLAN_ID_PREFIX,
   OPERATION_SUCCESS_STATUS,
   OPERATION_TERMINAL_STATUSES,
 } from "../../shared/contracts/generated/operations.js";
 
-export type OperationInput = {
-  kind: OperationKind;
-} & Record<string, unknown>;
+export type { OperationInput };
 
 export interface OperationPlan {
   plan_id: string;
