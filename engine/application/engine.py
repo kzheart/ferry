@@ -48,21 +48,6 @@ class EngineApplication:
     def session_asset(self, tool: str, ref: str, asset_id: str) -> dict:
         return sessions.session_asset(tool, ref, asset_id, self._ports)
 
-    def edit_capabilities(self, tool: str) -> dict:
-        editor = self._ports.adapter(tool).editor
-        capabilities = editor.capabilities()
-        operation_modes = {
-            operation: ["inplace"]
-            for operation, modes in capabilities.get("operation_modes", {}).items()
-            if "inplace" in modes
-        }
-        return {
-            "tool": tool,
-            "operations": sorted(operation_modes),
-            "inplace": bool(operation_modes),
-            "operation_modes": operation_modes,
-        }
-
     def list_session_metadata(self) -> dict:
         return session_meta.list_all(self._ports)
 

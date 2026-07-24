@@ -170,7 +170,7 @@ export default function App() {
 
   const { ops, dirtyOps, setOps, diff, setDiff,
     confirmApply, setConfirmApply, toast, setToast, applying, scope, setScope,
-    editCaps, resetSelection, loadCapabilities, addOp, startReplyEdit,
+    resetSelection, addOp, startReplyEdit,
     removeOp, updateOp, replyEditError, openDiff, prepareApply, applyEdit } = editing;
 
   // 首次扫描完成后默认选中第一个会话
@@ -227,7 +227,6 @@ export default function App() {
       .then(data => { cacheDetail(key, data);
         setDetail(d => d?.id === key ? { ...d, data } : d); })
       .catch(e => setDetail(d => d?.id === key ? { ...d, error: e.message } : d));
-    loadCapabilities(s.tool);
   };
 
   // 把实体对应的会话装入选中态与详情缓存,不切换主视图。返回装入的会话 id。
@@ -252,7 +251,6 @@ export default function App() {
           current?.id === key ? { ...current, data } : current))
         .catch(error => setDetail(current =>
           current?.id === key ? { ...current, error: error.message } : current));
-      loadCapabilities(action.tool);
       doScan();
       return key;
     }
@@ -792,7 +790,6 @@ export default function App() {
           scope={scope}
           ops={ops}
           dirtyOps={dirtyOps}
-          editCaps={editCaps}
           applying={applying}
           historySelection={histSel}
           ferry={ferry}
@@ -853,7 +850,6 @@ export default function App() {
               scope={scope} setScope={detailActs.setScope}
               ops={ops} dirtyOps={dirtyOps} addOp={detailActs.addOp} removeOp={detailActs.removeOp}
               updateOp={detailActs.updateOp}
-              editCaps={editCaps}
               startReplyEdit={detailActs.startReplyEdit} replyEditError={detailActs.replyEditError}
               onOpenDiff={detailActs.onOpenDiff} onApply={detailActs.onApply} applying={applying}
               onOpenMigrate={detailActs.onOpenMigrate}

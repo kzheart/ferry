@@ -19,7 +19,6 @@ export function WorkspaceRouter({
   scope,
   ops,
   dirtyOps,
-  editCaps,
   applying,
   historySelection,
   ferry,
@@ -47,7 +46,6 @@ export function WorkspaceRouter({
           scope={scope} setScope={detailActions.setScope}
           ops={ops} dirtyOps={dirtyOps} addOp={detailActions.addOp} removeOp={detailActions.removeOp}
           updateOp={detailActions.updateOp}
-          editCaps={editCaps}
           startReplyEdit={detailActions.startReplyEdit} replyEditError={detailActions.replyEditError}
           onOpenDiff={detailActions.onOpenDiff} onApply={detailActions.onApply} applying={applying}
           onOpenMigrate={detailActions.onOpenMigrate}
