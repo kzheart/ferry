@@ -24,15 +24,26 @@ FORBIDDEN = (
     "migration_" + "handoff",
     "dry_" + "run",
     "pkgutil." + "iter_modules",
+    "Tool" + "Plugin",
     "ToolPlugin." + "require",
     "in" + "Tauri",
     "/api/" + "rpc",
     "engine" + "Bridge",
 )
+FORBIDDEN_PATHS = (
+    ROOT / "engine/adapters/base/plugin.py",
+    ROOT / "engine/adapters/claude/plugin.py",
+    ROOT / "engine/adapters/codex/plugin.py",
+    ROOT / "engine/adapters/opencode/plugin.py",
+)
 
 
 def violations() -> list[str]:
-    found = []
+    found = [
+        f"{path.relative_to(ROOT)}: deleted adapter plugin path"
+        for path in FORBIDDEN_PATHS
+        if path.exists()
+    ]
     for source_root in SOURCE_ROOTS:
         for path in source_root.rglob("*"):
             if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:

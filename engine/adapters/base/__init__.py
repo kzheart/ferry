@@ -5,10 +5,10 @@
 
 from .codec import NativeEditCodec, TurnIndex, TurnSpan
 from .editing import EditBackend, EditDocument
-from .plugin import (
+from ..contracts import (
     ModelCatalog, MigrationSource, MigrationTarget,
     SessionBrowser, SessionEditor, SessionLifecycle, SessionVerifier,
-    NativeSessionReference, ToolManifest, ToolPlugin,
+    NativeSessionReference, AgentManifest, AgentAdapter,
 )
 
 __all__ = [
@@ -16,5 +16,5 @@ __all__ = [
     "NativeEditCodec", "TurnIndex", "TurnSpan",
     "ModelCatalog", "MigrationSource", "MigrationTarget",
     "SessionBrowser", "SessionEditor", "SessionLifecycle", "SessionVerifier",
-    "NativeSessionReference", "ToolManifest", "ToolPlugin",
+    "NativeSessionReference", "AgentManifest", "AgentAdapter",
 ]

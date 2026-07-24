@@ -113,7 +113,7 @@ def _attach_lifecycle(monkeypatch, transcript, ports):
         def __init__(self):
             self.calls = []
 
-        def delete(self, _plugin, ref):
+        def delete(self, _adapter, ref):
             self.calls.append(ref)
             transcript.unlink()
             return {
@@ -124,11 +124,11 @@ def _attach_lifecycle(monkeypatch, transcript, ports):
 
     original_adapter = ports.adapter
     lifecycle = Lifecycle()
-    plugin = replace(original_adapter("claude"), lifecycle=lifecycle)
+    adapter = replace(original_adapter("claude"), lifecycle=lifecycle)
     monkeypatch.setattr(
         ports,
         "adapter",
-        lambda tool: plugin if tool == "claude" else original_adapter(tool),
+        lambda tool: adapter if tool == "claude" else original_adapter(tool),
     )
     return lifecycle
 

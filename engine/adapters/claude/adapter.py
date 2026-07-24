@@ -1,7 +1,7 @@
 """Claude 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.plugin import ToolManifest, ToolPlugin, jsonl_reference
+from ..contracts import AgentManifest, AgentAdapter, jsonl_reference
 from ..base.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from . import editing as claude_edit
@@ -13,7 +13,7 @@ from .probe import ClaudeVerifier
 from .reader import read
 from .scanner import agent_fingerprint, fingerprint, scan
 
-MANIFEST = ToolManifest(id="claude", **AGENTS["claude"])
+MANIFEST = AgentManifest(id="claude", **AGENTS["claude"])
 
 
 class ClaudeBrowser:
@@ -49,11 +49,11 @@ class ClaudeModels:
         return fallback()
 
 
-def build() -> ToolPlugin:
+def build() -> AgentAdapter:
     browser = ClaudeBrowser()
     lifecycle = ClaudeLifecycle()
     lifecycle.executable = MANIFEST.executables[0]
-    return ToolPlugin(
+    return AgentAdapter(
         manifest=MANIFEST,
         browser=browser,
         migration_source=TreeMigrationSource(browser),

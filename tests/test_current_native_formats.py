@@ -61,8 +61,8 @@ def test_template_results_are_independent_copies(template_factory):
 
 @pytest.mark.parametrize("agent_id", ["claude", "codex", "opencode"])
 def test_adapter_does_not_expose_a_format_version_registry(agent_id):
-    plugin = create_registry().get(agent_id)
-    assert not hasattr(plugin, "formats")
+    adapter = create_registry().get(agent_id)
+    assert not hasattr(adapter, "formats")
 
 
 def test_fixtures_have_no_version_directory_layer():

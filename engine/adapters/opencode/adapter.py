@@ -1,7 +1,7 @@
 """OpenCode 当前原生结构的静态 Adapter 装配。"""
 from __future__ import annotations
 
-from ..base.plugin import ToolManifest, ToolPlugin, id_reference
+from ..contracts import AgentManifest, AgentAdapter, id_reference
 from ..base.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
 from .editor import OpenCodeBackend
@@ -12,7 +12,7 @@ from .probe import OpenCodeVerifier
 from .scanner import fingerprint, scan
 from .session import read, read_preview
 
-MANIFEST = ToolManifest(id="opencode", **AGENTS["opencode"])
+MANIFEST = AgentManifest(id="opencode", **AGENTS["opencode"])
 
 
 class OpenCodeBrowser:
@@ -48,11 +48,11 @@ class OpenCodeModels:
         return fallback()
 
 
-def build() -> ToolPlugin:
+def build() -> AgentAdapter:
     browser = OpenCodeBrowser()
     lifecycle = OpenCodeLifecycle()
     lifecycle.executable = MANIFEST.executables[0]
-    return ToolPlugin(
+    return AgentAdapter(
         manifest=MANIFEST,
         browser=browser,
         migration_source=TreeMigrationSource(browser),

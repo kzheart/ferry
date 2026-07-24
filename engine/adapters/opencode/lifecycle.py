@@ -28,8 +28,8 @@ class OpenCodeLifecycle(BaseLifecycle):
     def validation_ref(self, session_id, _dest) -> str:
         return session_id
 
-    def delete(self, plugin, ref: str) -> dict:
-        editor = plugin.editor
+    def delete(self, adapter, ref: str) -> dict:
+        editor = adapter.editor
         doc = editor.load(ref)
         snap = editor.snapshot(doc, reason_code="snapshot.before_delete")
         self.cleanup(ref, None)

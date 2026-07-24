@@ -10,8 +10,8 @@ def inspect(ports: ApplicationPorts) -> dict:
     out = {}
     for tool in ports.adapters():
         info = {"installed": False, "path": None, "broken": False}
-        plugin = ports.adapter(tool)
-        executable = plugin.manifest.executables[0]
+        adapter = ports.adapter(tool)
+        executable = adapter.manifest.executables[0]
         resolved = executables.resolve(executable)
         if resolved:
             info["path"] = resolved

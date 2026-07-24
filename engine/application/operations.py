@@ -127,13 +127,13 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在生成操作计划时已变化，请重新计划"
             )
-        plugin = self._ports.adapter(tool)
-        editor = plugin.editor
+        adapter = self._ports.adapter(tool)
+        editor = adapter.editor
         try:
             native_ops = self._resolve_ops(after, operation_input["ops"])
         except LocatorStaleError as error:
             raise self._public_locator_error(operation_input["ops"]) from error
-        self._require_inplace_support(plugin, editor, native_ops)
+        self._require_inplace_support(adapter, editor, native_ops)
 
         return self._store_plan(
             operation_input,
@@ -209,8 +209,8 @@ class OperationService:
         record = self._index.resolve(
             operation_input["tool"], operation_input["ref"],
         )
-        plugin = self._ports.adapter(operation_input["tool"])
-        lifecycle = plugin.lifecycle
+        adapter = self._ports.adapter(operation_input["tool"])
+        lifecycle = adapter.lifecycle
         preview = {
             "tool": record.tool,
             "ref": record.opaque_ref,
@@ -550,10 +550,10 @@ class OperationService:
             raise ConcurrentModificationError(
                 "会话在操作计划生成后已变化，请重新计划"
             )
-        plugin = self._ports.adapter(params["tool"])
-        editor = plugin.editor
+        adapter = self._ports.adapter(params["tool"])
+        editor = adapter.editor
         native_ops = self._resolve_ops(record, params["ops"])
-        self._require_inplace_support(plugin, editor, native_ops)
+        self._require_inplace_support(adapter, editor, native_ops)
         try:
             if not any(
                 op["op"] == "replace-assistant-reply" for op in native_ops
@@ -749,7 +749,7 @@ class OperationService:
         return resolved
 
     @staticmethod
-    def _require_inplace_support(plugin, editor, ops: list[dict]):
+    def _require_inplace_support(adapter, editor, ops: list[dict]):
         ordinary = [
             op for op in ops if op["op"] != "replace-assistant-reply"
         ]
@@ -762,11 +762,11 @@ class OperationService:
                 sorted({item["op"] for item in ordinary})
             )
             raise OperationUnsupportedError(
-                plugin.id, operation_names, "inplace",
+                adapter.id, operation_names, "inplace",
             )
         if replacements and "replace-assistant-reply" not in editor.operations:
             raise OperationUnsupportedError(
-                plugin.id, "replace-assistant-reply", "inplace",
+                adapter.id, "replace-assistant-reply", "inplace",
             )
         return editor
 
@@ -792,11 +792,11 @@ class OperationService:
             return agent_tools.preview_edit(
                 record.tool, record.opaque_ref, ops=ops, index=self._index,
             )
-        plugin = self._ports.adapter(record.tool)
-        editor = plugin.editor
+        adapter = self._ports.adapter(record.tool)
+        editor = adapter.editor
         native_ops = self._resolve_ops(record, ops)
         self._require_inplace_support(
-            plugin, editor, native_ops,
+            adapter, editor, native_ops,
         )
         try:
             result = preview_mutation(

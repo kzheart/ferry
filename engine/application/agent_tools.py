@@ -180,10 +180,10 @@ class AgentSessionIndex:
         cache = self._ports.cache_factory()
         scanned = []
         for tool_name in self._ports.adapters():
-            plugin = self._ports.adapter(tool_name)
+            adapter = self._ports.adapter(tool_name)
             scanned.extend(
-                (tool_name, plugin, row)
-                for row in plugin.browser.scan(cache)
+                (tool_name, adapter, row)
+                for row in adapter.browser.scan(cache)
             )
         cache.flush()
         return self.index_rows(scanned)
@@ -192,8 +192,8 @@ class AgentSessionIndex:
         records: list[IndexedSession] = []
         active: set[str] = set()
         with self._lock:
-            for tool_name, plugin, row in scanned:
-                canonical, root, path_backed, identity = self._canonicalize(plugin, row)
+            for tool_name, adapter, row in scanned:
+                canonical, root, path_backed, identity = self._canonicalize(adapter, row)
                 if canonical is None:
                     continue
                 revision = _revision(tool_name, canonical, row, identity)
@@ -242,8 +242,8 @@ class AgentSessionIndex:
             identity = (_path_identity(resolved), fingerprint)
             if fingerprint is None or record.source_identity != identity:
                 raise AgentReferenceError("ref 在扫描后已变化，请重新搜索")
-            plugin_ref = browser.resolve_ref(str(resolved))
-            if Path(plugin_ref).resolve(strict=True) != resolved:
+            adapter_ref = browser.resolve_ref(str(resolved))
+            if Path(adapter_ref).resolve(strict=True) != resolved:
                 raise AgentReferenceError("adapter 未能规范解析 ref")
         else:
             browser = self._ports.adapter(tool).browser
@@ -285,10 +285,10 @@ class AgentSessionIndex:
         return message
 
     @staticmethod
-    def _canonicalize(plugin, row: dict) -> tuple[
+    def _canonicalize(adapter, row: dict) -> tuple[
         str | None, str | None, bool, tuple | str | None
     ]:
-        native = plugin.browser.canonicalize(row)
+        native = adapter.browser.canonicalize(row)
         if native is None:
             return None, None, False, None
         if native.path_backed:
@@ -300,16 +300,16 @@ class AgentSessionIndex:
             if not path.is_relative_to(root):
                 return None, None, True, None
             try:
-                fingerprint = _agent_fingerprint(plugin.browser, str(path))
+                fingerprint = _agent_fingerprint(adapter.browser, str(path))
                 if fingerprint is None:
                     return None, None, True, None
                 identity = (_path_identity(path), fingerprint)
             except (OSError, ValueError, AgentReferenceError):
                 return None, None, True, None
             return str(path), str(root), True, identity
-        if plugin.browser.resolve_ref(native.canonical_ref) != native.canonical_ref:
+        if adapter.browser.resolve_ref(native.canonical_ref) != native.canonical_ref:
             return None, None, False, None
-        fingerprint = _agent_fingerprint(plugin.browser, native.canonical_ref)
+        fingerprint = _agent_fingerprint(adapter.browser, native.canonical_ref)
         if fingerprint is None:
             return None, None, False, None
         return native.canonical_ref, None, False, fingerprint
@@ -856,12 +856,12 @@ def preview_migration(source_tool: str, opaque_ref: str, target_tool: str,
 def preview_edit(tool: str, opaque_ref: str, *, ops,
                  index: AgentSessionIndex) -> dict:
     record = index.resolve(tool, opaque_ref)
-    plugin = index.ports.adapter(tool)
+    adapter = index.ports.adapter(tool)
     _validate_ops(ops)
     if len(json.dumps(ops, ensure_ascii=False, default=str).encode()) > 64 * 1024:
         raise AgentRequestError("ops 超过 64 KiB")
     from .editing import preview
-    editor = plugin.editor
+    editor = adapter.editor
     native_ops = resolve_edit_ops(index, record, ops)
     try:
         result = preview(editor, record.canonical_ref, native_ops,

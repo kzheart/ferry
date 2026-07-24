@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 @dataclass(frozen=True)
-class ToolManifest:
+class AgentManifest:
     """Agent 行为的单一事实源，可序列化下发给前端与 Rust。"""
 
     id: str
@@ -151,14 +151,14 @@ class SessionLifecycle(Protocol):
 
     def probe_cwd(self, cwd): ...
 
-    def delete(self, plugin: "ToolPlugin", ref: str) -> dict: ...
+    def delete(self, adapter: "AgentAdapter", ref: str) -> dict: ...
 
     def restore_delete(self, snapshot, meta: dict) -> dict: ...
 
 
 @dataclass(frozen=True)
-class ToolPlugin:
-    manifest: ToolManifest
+class AgentAdapter:
+    manifest: AgentManifest
     browser: SessionBrowser
     migration_source: MigrationSource
     migration_target: MigrationTarget

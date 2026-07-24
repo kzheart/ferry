@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from engine.adapters.base.plugin import (
-    ToolManifest, ToolPlugin, id_reference, jsonl_reference,
+from engine.adapters.contracts import (
+    AgentManifest, AgentAdapter, id_reference, jsonl_reference,
 )
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.application import agent_tools
@@ -161,7 +161,7 @@ class Lifecycle:
     def probe_cwd(self, cwd):
         return cwd
 
-    def delete(self, _plugin, _ref):
+    def delete(self, _adapter, _ref):
         return {"ok": True, "undoable": False}
 
     def restore_delete(self, _snapshot, _meta):
@@ -215,8 +215,8 @@ def agent_environment(tmp_path, monkeypatch):
         "model": "claude-safe",
     }]
     claude_browser = Browser(rows, _session(), source_path=str(root))
-    claude = ToolPlugin(
-        ToolManifest("claude", "Claude Code", "claude", str(root)),
+    claude = AgentAdapter(
+        AgentManifest("claude", "Claude Code", "claude", str(root)),
         claude_browser,
         migration_source=MigrationSource(claude_browser),
         migration_target=MigrationTarget(), editor=editor,
@@ -230,16 +230,16 @@ def agent_environment(tmp_path, monkeypatch):
     }]
     opencode_browser = Browser(
         opencode_rows, Session("opencode", "oc-1", "/tmp/project-b"), identity=True)
-    opencode = ToolPlugin(
-        ToolManifest("opencode", "OpenCode", "opencode", "/unused"),
+    opencode = AgentAdapter(
+        AgentManifest("opencode", "OpenCode", "opencode", "/unused"),
         opencode_browser,
         migration_source=MigrationSource(opencode_browser),
         migration_target=MigrationTarget(), editor=Editor(),
         verifier=Verifier(), lifecycle=Lifecycle(), models=Models(),
     )
-    plugins = {"claude": claude, "opencode": opencode}
+    adapters = {"claude": claude, "opencode": opencode}
     ports = ApplicationPorts(
-        adapter=plugins.__getitem__, adapters=lambda: list(plugins),
+        adapter=adapters.__getitem__, adapters=lambda: list(adapters),
         cache_factory=Cache, resource_path=lambda *_: tmp_path,
         snapshot_dir=lambda: tmp_path, version="test",
     )
