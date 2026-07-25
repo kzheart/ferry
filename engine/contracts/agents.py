@@ -40,5 +40,14 @@ AGENTS = {
         'executables': ('pi',),
         'fallback_bin_dirs': (),
     },
+    'grok': {
+        'display_name': 'Grok Build',
+        'icon': 'grok',
+        'source_path': '~/.grok/sessions',
+        'capabilities': ('browse', 'resume', 'migration-source', 'models'),
+        'edit_operations': (),
+        'executables': ('grok',),
+        'fallback_bin_dirs': ('~/.local/bin',),
+    },
 }
 AGENT_IDS = tuple(AGENTS)
