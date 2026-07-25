@@ -12,6 +12,7 @@ use crate::engine::engine_request_blocking;
 use crate::process::framing::JsonlWriter;
 
 use super::approval::{allows_auto_apply, auto_policy};
+use super::bash;
 use super::emit_host_event;
 use super::next_id;
 use super::tool_routes::{is_mutating_tool, resolve_tool_request};
@@ -48,13 +49,20 @@ pub(super) fn complete_tool_request(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let mutation = is_mutating_tool(name, &args);
-    let mut outcome = route_tool(resource_dir, name, args, run_id);
+    // bash 不走 engine:engine 是会话历史服务,在那里执行 shell 是范畴错误。
+    // 拦在 route_tool 之前,但审批分叉逻辑与迁移/编辑完全共用,不为它新开放行口子。
+    let is_bash = name == "bash";
+    let mutation = is_bash || is_mutating_tool(name, &args);
+    let mut outcome = if is_bash {
+        bash::propose(&args)
+    } else {
+        route_tool(resource_dir, name, args, run_id)
+    };
     if mutation {
         if let Ok(operation) = outcome.clone() {
             let auto = allows_auto_apply(auto_policy(session_id), role_apply_policy);
             if auto {
-                match apply_routed_operation(resource_dir, &operation) {
+                match apply_any_operation(resource_dir, &operation) {
                     Ok(result) => {
                         emit_host_event(
                             app,
@@ -294,7 +302,13 @@ pub(super) fn operation_plan_id(operation: &Value) -> Result<&str, String> {
         .ok_or_else(|| "Engine 未返回可审批的 operation plan_id".to_owned())
 }
 
-fn apply_routed_operation(resource_dir: &Path, operation: &Value) -> Result<Value, String> {
+/// 按 plan_id 前缀分流:`shl_` 在本地执行,`op_` 交给 Engine 的 operation 状态机。
+fn apply_any_operation(resource_dir: &Path, operation: &Value) -> Result<Value, String> {
+    if let Some(plan_id) = operation.get("plan_id").and_then(Value::as_str) {
+        if bash::is_bash_plan(plan_id) {
+            return bash::apply(plan_id);
+        }
+    }
     let plan_id = operation_plan_id(operation)?;
     apply_operation_plan(resource_dir, plan_id)
 }

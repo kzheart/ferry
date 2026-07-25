@@ -1,4 +1,5 @@
 mod approval;
+pub(crate) mod bash;
 mod gateway;
 mod tool_routes;
 
