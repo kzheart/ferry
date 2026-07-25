@@ -270,9 +270,17 @@ Skills are import-only. The chain is discover -> import -> configure -> inject,
 and each arrow is a boundary that must not be short-circuited.
 
 *Discover* scans the skill directories declared per Agent in
-`contracts/agents.json`, plus any directory the user adds. `skill-discovery.ts`
+`contracts/agents.json`, the vendor-neutral `shared_skill_paths` warehouses
+declared alongside them, and any directory the user adds. `skill-discovery.ts`
 is read-only: it produces candidates and never writes. A candidate is not a
 Ferry skill, and the runtime never reads one.
+
+Agent skill directories are commonly symlink farms pointing back at a shared
+warehouse such as `~/.agents/skills`, so directory detection uses `stat`, not
+the lstat semantics of a `readdir` Dirent, and candidates are deduplicated by
+resolved real path with the warehouses scanned first. Discovery over the
+built-in sources can be switched off, which tests must do — otherwise their
+result depends on what the developer happens to have installed.
 
 *Import* copies the whole candidate directory into Ferry's own library at
 `~/.ferry/skills/<id>/`. Only what lands there counts, which is what keeps
