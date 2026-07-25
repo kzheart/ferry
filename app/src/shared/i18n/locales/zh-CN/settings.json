@@ -247,6 +247,8 @@
     "broken": "缺少 SKILL.md",
     "sourceMissing": "目录不存在",
     "removeSource": "移除这个扫描目录",
+    "expandSource": "展开",
+    "collapseSource": "收起",
     "addSource": "添加扫描目录…",
     "importFolder": "从文件夹导入…",
     "import": "导入",
