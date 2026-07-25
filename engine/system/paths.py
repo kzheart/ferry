@@ -60,3 +60,13 @@ def pi_session_roots(
     if isinstance(configured, str) and configured.strip():
         return (Path(configured).expanduser(),)
     return (agent_dir / "sessions",)
+
+
+def grok_home(
+    *,
+    environ: Mapping[str, str] | None = None,
+    home: Path | None = None,
+) -> Path:
+    env = os.environ if environ is None else environ
+    user_home = Path.home() if home is None else home
+    return Path(env.get("GROK_HOME", user_home / ".grok")).expanduser()

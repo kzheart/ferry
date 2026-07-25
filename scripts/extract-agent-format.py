@@ -15,6 +15,7 @@ from engine.adapters.claude.native_schema import extract_templates as extract_cl
 from engine.adapters.codex.native_schema import extract_templates as extract_codex  # noqa: E402
 from engine.adapters.opencode.native_schema import extract_templates as extract_opencode  # noqa: E402
 from engine.adapters.pi.native_schema import extract_templates as extract_pi  # noqa: E402
+from engine.adapters.grok.native_schema import extract_templates as extract_grok  # noqa: E402
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -29,11 +30,20 @@ def _json(path: Path):
     return json.loads(path.read_text())
 
 
+def _grok(path: Path):
+    return {
+        "summary": _json(path / "summary.json"),
+        "updates": _jsonl(path / "updates.jsonl"),
+        "chat": _jsonl(path / "chat_history.jsonl"),
+    }
+
+
 EXTRACTORS = {
     "claude": (extract_claude, _jsonl),
     "codex": (extract_codex, _jsonl),
     "opencode": (extract_opencode, _json),
     "pi": (extract_pi, _jsonl),
+    "grok": (extract_grok, _grok),
 }
 
 
@@ -50,7 +60,7 @@ def main() -> int:
     parser.add_argument("agent", choices=tuple(EXTRACTORS))
     parser.add_argument("capture", type=Path)
     args = parser.parse_args()
-    if not args.capture.is_file():
+    if not args.capture.exists():
         parser.error(f"capture does not exist: {args.capture}")
     print(json.dumps(extract(args.agent, args.capture), ensure_ascii=False, indent=2))
     return 0

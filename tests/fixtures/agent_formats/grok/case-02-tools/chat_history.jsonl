@@ -1,0 +1,3 @@
+{"type":"user","id":"u1","content":[{"type":"text","text":"Read /fixture/grok/tools/input.txt."}]}
+{"type":"assistant","id":"a1","content":"Inspecting now.","tool_calls":[{"id":"tool-1","name":"read","arguments":{"path":"/fixture/grok/tools/input.txt"}}]}
+{"type":"tool_result","id":"r1","tool_call_id":"tool-1","content":"sk-test-fixture"}
