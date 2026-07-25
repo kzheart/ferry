@@ -106,16 +106,15 @@ export default function RoleList({
       </div>
       <div style={{ position: "relative", flex: "none", display: "flex", gap: 4,
         padding: "7px 10px", borderTop: "1px solid var(--line4)" }}>
-        <button className="hov-item" onClick={onCreate} disabled={busy}
-          style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, height: 28,
-            padding: "0 8px", border: "none", borderRadius: 7, background: "transparent",
-            color: "var(--tx3b)", fontFamily: "inherit", fontSize: 12, fontWeight: 600,
-            cursor: "default" }}>
+        <button className="hov" title={t("settings:roles.create")}
+          aria-label={t("settings:roles.create")} onClick={onCreate} disabled={busy}
+          style={{ width: 26, height: 28, border: "none", borderRadius: 7, flex: "none",
+            background: "transparent", color: "var(--tx3b)", cursor: "default",
+            display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
           <svg viewBox="0 0 16 16" aria-hidden style={{ width: 13, height: 13 }}>
             <path d="M8 2.8v10.4M2.8 8h10.4" fill="none" stroke="currentColor"
               strokeWidth="1.6" strokeLinecap="round" />
           </svg>
-          {t("settings:roles.create")}
         </button>
         {/* 内置角色与新建草稿都不能删,按钮置灰而不是消失,免得工具条一会儿两个键一会儿三个 */}
         <button className="hov" title={t("settings:roles.delete")}
@@ -133,6 +132,8 @@ export default function RoleList({
         {confirming && (
           <DeleteConfirm name={deleteName} onConfirm={onDelete}
             onClose={() => setConfirming(false)} />)}
+        {/* 新建/删除是常用动作贴左，导入导出是次要出口，推到右边 */}
+        <span style={{ flex: 1 }} />
         {transferOpen && (
           <TransferMenu {...transfer} onClose={() => onToggleTransfer(false)} />)}
         <button className="hov" title={t("settings:roles.transfer")} disabled={busy}
