@@ -40,6 +40,15 @@ export default function Roles() {
   const builtinSelected = !creating && Boolean(selected?.builtin);
   const baseline = useMemo(
     () => (creating ? blankRole() : selected ? editable(selected) : null), [creating, selected]);
+  // 切角色时在渲染期就把草稿换掉,不能等 effect:effect 跑在提交之后,
+  // 中间那一帧 draft 还是上一个角色的,dirty 会为真,标题栏闪出「放弃更改 / 保存更改」。
+  // 用 baseline 的内容做键,恢复出厂设置那种"选中项没变但内容变了"的情况也能跟上。
+  const [syncedKey, setSyncedKey] = useState(null);
+  const baselineKey = creating ? "@new" : JSON.stringify(baseline);
+  if (baselineKey !== syncedKey) {
+    setSyncedKey(baselineKey);
+    setDraft(baseline);
+  }
   const dirty = Boolean(draft && baseline && JSON.stringify(draft) !== JSON.stringify(baseline));
 
   const reload = async () => {
@@ -56,9 +65,6 @@ export default function Roles() {
     }
   };
   useEffect(() => { void reload(); }, []);
-  useEffect(() => {
-    if (!creating && selected) setDraft(editable(selected));
-  }, [creating, selected]);
   // 换角色时收起所有临时态,否则删除确认会跟着停在下一个角色上
   useEffect(() => {
     setConfirming(false);
@@ -90,7 +96,6 @@ export default function Roles() {
   });
 
   const startCreate = () => {
-    setDraft(blankRole());
     setCreating(true);
     setError("");
     setNotice("");
