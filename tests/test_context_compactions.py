@@ -3,6 +3,7 @@ import json
 from engine.adapters.claude import reader as claude_reader
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.opencode import reader as opencode_reader
+from engine.adapters.pi import reader as pi_reader
 from engine.sessions.model import AgentEdge, Block, Message, Session
 from engine.sessions.read import session_json
 
@@ -136,6 +137,31 @@ def test_codex_exposes_encrypted_compaction_once(tmp_path):
     assert compaction["after_turn"] == 1
     assert compaction["summary"]["status"] == "protected"
     assert compaction["summary"]["text"] == ""
+
+
+def test_pi_exposes_active_branch_compaction(tmp_path):
+    path = tmp_path / "pi.jsonl"
+    records = [
+        {"type": "session", "version": 3, "id": "session",
+         "timestamp": "2026-01-01T00:00:00Z", "cwd": "/tmp"},
+        {"type": "message", "id": "u1", "parentId": None,
+         "timestamp": "2026-01-01T00:00:01Z",
+         "message": {"role": "user", "content": "before", "timestamp": 1}},
+        {"type": "compaction", "id": "c1", "parentId": "u1",
+         "timestamp": "2026-01-01T00:00:02Z", "summary": "Pi summary",
+         "firstKeptEntryId": "u1", "tokensBefore": 123},
+        {"type": "message", "id": "u2", "parentId": "c1",
+         "timestamp": "2026-01-01T00:00:03Z",
+         "message": {"role": "user", "content": "after", "timestamp": 2}},
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records))
+
+    dto = session_json(pi_reader.read(str(path)))
+    assert dto["context"]["compaction_count"] == 1
+    compaction = dto["context_compactions"][0]
+    assert compaction["summary"]["text"] == "Pi summary"
+    assert compaction["metrics"]["tokens_before"] == 123
+    assert compaction["tail"]["start_locator"] == "u1"
 
 
 def test_session_json_pages_root_messages_and_serializes_agent_edges():
