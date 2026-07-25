@@ -46,6 +46,8 @@ export default function HistoryDetail({ h, onDelete }) {
   // 容器保持中性,状态只由圆点承载
   const probeDot = ok ? "var(--ok)" : fail ? "var(--err)" : "var(--tx5)";
   const probeModel = h.probe?.model || h.probe_model;
+  const sourceName = TOOL_NAME[h.src] || h.src;
+  const targetName = TOOL_NAME[h.dst] || h.dst;
 
   return (
     <div className="fscroll" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
@@ -58,7 +60,7 @@ export default function HistoryDetail({ h, onDelete }) {
               fontSize: 12, color: "var(--tx3b)" }}>
               <span className="mono" style={{ color: "var(--tx4)" }}>{h.session_id || h.source_id}</span>
               <span>{fmtTime(h.time, t)}</span>
-              <span>{TOOL_NAME[h.src]} → {TOOL_NAME[h.dst]}</span>
+              <span>{sourceName} → {targetName}</span>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
@@ -77,7 +79,7 @@ export default function HistoryDetail({ h, onDelete }) {
           {[
             [t("migration:history.fieldRange"),
               h.msg_count ? t("migration:history.rangeWithCount", { range, n: h.msg_count }) : range],
-            [t("migration:history.fieldSrcToDst"), `${TOOL_NAME[h.src]} → ${TOOL_NAME[h.dst]}`],
+            [t("migration:history.fieldSrcToDst"), `${sourceName} → ${targetName}`],
             ...(h.tree_count != null
               ? [[t("migration:history.fieldTree"),
                   t("migration:history.treeMeta", { n: h.tree_count, detail: h.topology?.detail ? ` · ${h.topology.detail}` : "" })]]
@@ -116,14 +118,14 @@ export default function HistoryDetail({ h, onDelete }) {
               fontSize: 12, color: "var(--tx2b)", lineHeight: 1.5 }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--err)",
                 flex: "none", marginTop: 6 }} />
-              <span>{t("migration:history.rollbackDesc", { tool: TOOL_NAME[h.dst] })}</span>
+              <span>{t("migration:history.rollbackDesc", { tool: targetName })}</span>
             </div>
           </>
         )}
 
         {ok && h.resume && (
           <div style={{ marginTop: 14 }}>
-            <CmdRow cmd={h.resume} head={t("migration:history.continueIn", { tool: TOOL_NAME[h.dst] })} />
+            <CmdRow cmd={h.resume} head={t("migration:history.continueIn", { tool: targetName })} />
           </div>
         )}
       </div>

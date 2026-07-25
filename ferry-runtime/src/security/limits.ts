@@ -31,11 +31,7 @@ function boundedStructure(
     const result: unknown[] = [];
     let truncated = value.length > 200;
     for (const item of value.slice(0, 200)) {
-      const [child, childTruncated] = boundedStructure(
-        item,
-        budget,
-        depth + 1,
-      );
+      const [child, childTruncated] = boundedStructure(item, budget, depth + 1);
       result.push(child);
       truncated ||= childTruncated;
     }
@@ -46,11 +42,7 @@ function boundedStructure(
     const output: Record<string, unknown> = {};
     let truncated = entries.length > 200;
     for (const [key, item] of entries.slice(0, 200)) {
-      const [child, childTruncated] = boundedStructure(
-        item,
-        budget,
-        depth + 1,
-      );
+      const [child, childTruncated] = boundedStructure(item, budget, depth + 1);
       output[key] = child;
       truncated ||= childTruncated;
     }
@@ -59,11 +51,13 @@ function boundedStructure(
   return [String(value), false];
 }
 
-function boundedJson(value: unknown, maxBytes = MAX_TOOL_DETAILS_CHARS): unknown {
-  const [structured, structurallyTruncated] = boundedStructure(
-    value,
-    { nodes: 2_000 },
-  );
+function boundedJson(
+  value: unknown,
+  maxBytes = MAX_TOOL_DETAILS_CHARS,
+): unknown {
+  const [structured, structurallyTruncated] = boundedStructure(value, {
+    nodes: 2_000,
+  });
   const bounded = structurallyTruncated
     ? { truncated: true, value: structured }
     : structured;

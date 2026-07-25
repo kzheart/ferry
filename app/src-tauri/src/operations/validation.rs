@@ -6,6 +6,13 @@ pub(crate) fn is_known_agent(agent: &str) -> bool {
     crate::contracts::agents::AGENT_IDS.contains(&agent)
 }
 
+pub(crate) fn agent_has_capability(agent: &str, capability: &str) -> bool {
+    crate::contracts::agents::AGENT_CAPABILITIES
+        .iter()
+        .find(|(identifier, _)| *identifier == agent)
+        .is_some_and(|(_, capabilities)| capabilities.contains(&capability))
+}
+
 pub(crate) fn validate_opaque_ref(reference: &str, label: &str) -> Result<(), String> {
     if !crate::contracts::session_ref::is_opaque_session_ref(reference) {
         return Err(format!("{label} ref 不是有效 opaque ref"));

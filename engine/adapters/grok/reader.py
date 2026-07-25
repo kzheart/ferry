@@ -1,7 +1,6 @@
 """Grok current ACP/update bundle to canonical session."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ...sessions.model import (

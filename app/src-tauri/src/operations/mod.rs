@@ -7,7 +7,7 @@ pub(crate) mod request;
 mod validation;
 
 use self::request::{operation_plan_id_request, operation_plan_request};
-use self::validation::{is_known_agent, validate_opaque_ref, validate_reply};
+use self::validation::{agent_has_capability, is_known_agent, validate_opaque_ref, validate_reply};
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
     MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
@@ -20,6 +20,9 @@ use std::collections::HashSet;
 fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), String> {
     if !is_known_agent(&input.tool) {
         return Err("Operation 工具标识无效".to_owned());
+    }
+    if !agent_has_capability(&input.tool, "edit") {
+        return Err("Operation 工具不支持编辑".to_owned());
     }
     if input.reference.is_empty()
         || input.reference.len() > 512
@@ -129,6 +132,11 @@ fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Re
     if input.source_tool == input.target_tool {
         return Err("Migration Operation 源和目标 Agent 不能相同".to_owned());
     }
+    if !agent_has_capability(&input.source_tool, "migration-source")
+        || !agent_has_capability(&input.target_tool, "migration-target")
+    {
+        return Err("Migration Operation Agent 不支持对应迁移方向".to_owned());
+    }
     validate_opaque_ref(&input.reference, "Migration Operation")?;
     if input.max_turn == Some(0) || input.max_turn.is_some_and(|turn| turn > 100_000) {
         return Err("Migration Operation max_turn 无效".to_owned());
@@ -140,6 +148,9 @@ fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Re
     }
     if !input.probe && input.probe_model.is_some() {
         return Err("Migration Operation 未启用 probe 时不能指定模型".to_owned());
+    }
+    if input.probe && !agent_has_capability(&input.target_tool, "probe") {
+        return Err("Migration Operation 目标 Agent 不支持 probe".to_owned());
     }
     Ok(())
 }
@@ -178,6 +189,9 @@ fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Resu
 fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(), String> {
     if !is_known_agent(&input.tool) {
         return Err("Delete Operation Agent 标识无效".to_owned());
+    }
+    if !agent_has_capability(&input.tool, "delete") {
+        return Err("Delete Operation Agent 不支持删除".to_owned());
     }
     validate_opaque_ref(&input.reference, "Delete Operation")?;
     Ok(())

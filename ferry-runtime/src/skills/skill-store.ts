@@ -61,7 +61,10 @@ export interface SkillImportInput {
 
 export interface SkillStore {
   list(): Promise<SkillListing>;
-  candidates(): Promise<{ candidates: SkillCandidate[]; sources: SkillSource[] }>;
+  candidates(): Promise<{
+    candidates: SkillCandidate[];
+    sources: SkillSource[];
+  }>;
   import(input: SkillImportInput): Promise<SkillEntry>;
   delete(id: string): Promise<void>;
   setGlobal(ids: string[]): Promise<string[]>;
@@ -237,7 +240,8 @@ abstract class BaseSkillStore implements SkillStore {
     const { sources } = await this.scan();
     const target = sources.find((source) => source.id === sourceId);
     if (!target) throw new Error("scan source not found");
-    if (target.builtin) throw new Error("builtin scan source cannot be removed");
+    if (target.builtin)
+      throw new Error("builtin scan source cannot be removed");
     this.config.scan_sources = this.config.scan_sources.filter(
       (path) => normalizeScanSource(path) !== target.path,
     );
@@ -275,7 +279,10 @@ export class FileSkillStore extends BaseSkillStore {
   private writes = Promise.resolve();
 
   constructor(dataDirectory: string, includeBuiltinSources = true) {
-    super(new SkillLibrary(join(dataDirectory, "skills")), includeBuiltinSources);
+    super(
+      new SkillLibrary(join(dataDirectory, "skills")),
+      includeBuiltinSources,
+    );
     this.path = join(dataDirectory, "skills.json");
     this.ready = this.load();
   }

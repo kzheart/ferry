@@ -1,4 +1,12 @@
-import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -100,7 +108,9 @@ describe("技能导入", () => {
     const { external, store, service } = await fixture();
     await candidateDirectory(external, "code-review");
     const { candidates } = await store.candidates();
-    const candidate = candidates.find((item) => item.source.startsWith("custom"));
+    const candidate = candidates.find((item) =>
+      item.source.startsWith("custom"),
+    );
 
     const entry = await store.import({ candidateId: candidate!.candidateId });
     expect(entry.id).toBe("code-review");
@@ -134,9 +144,9 @@ describe("技能导入", () => {
 
     expect((await store.import({ candidateId: id })).id).toBe("code-review");
     expect((await store.import({ candidateId: id })).id).toBe("code-review-2");
-    expect(
-      (await store.import({ candidateId: id, overwrite: true })).id,
-    ).toBe("code-review");
+    expect((await store.import({ candidateId: id, overwrite: true })).id).toBe(
+      "code-review",
+    );
     expect((await store.list()).skills.map((skill) => skill.id)).toEqual([
       "code-review",
       "code-review-2",
@@ -161,8 +171,7 @@ describe("技能导入", () => {
     const deep = join(external, "deep");
     await mkdir(join(deep, ...Array(14).fill("x")), { recursive: true });
     await writeFile(join(deep, "SKILL.md"), "---\nname: 深\n---\n正文\n");
-    await writeFile(
-      join(deep, ...Array(14).fill("x"), "f.txt"), "太深了\n");
+    await writeFile(join(deep, ...Array(14).fill("x"), "f.txt"), "太深了\n");
     await expect(store.import({ path: deep })).rejects.toThrow(/too deeply/);
     expect((await store.list()).skills).toEqual([]);
   });

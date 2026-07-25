@@ -235,13 +235,26 @@ def test_agent_icons_are_resources_not_inline_code():
     assert declared <= available, (
         f"契约声明的图标缺少资源: {sorted(declared - available)}"
     )
+    assert "AGENT_FALLBACK_COLOR" in icons
+    assert 'markup?.includes("<rect")' in icons
 
 
 def test_agent_icon_assets_are_self_contained():
-    """svg 自带底色与留白，渲染端零参数；不得引用外部资源。"""
+    """彩色资源可烘焙底色，单色资源由渲染端着色；两者都不得引用外部资源。"""
     for path in (FRONTEND / "assets/icons").glob("*.svg"):
         markup = path.read_text(encoding="utf-8")
         assert 'viewBox="0 0 24 24"' in markup, path.name
-        assert "<rect" in markup, f"{path.name} 缺少烘焙底色"
+        assert "<rect" in markup or "currentColor" in markup, (
+            f"{path.name} 既没有烘焙底色，也不是可着色的单色资源"
+        )
         assert "http://www.w3.org/2000/svg" in markup, path.name
         assert "xlink:href" not in markup and "<image" not in markup, path.name
+
+
+def test_current_session_filters_follow_capabilities_but_history_keeps_all_tools():
+    browser = (FRONTEND / "modules/browser/BrowserOverlays.jsx").read_text()
+    history = (FRONTEND / "modules/migration/HistoryOverlays.jsx").read_text()
+
+    assert 'agentsWithCapability("browse")' in browser
+    assert "tools.map" in history
+    assert "agentsWithCapability" not in history

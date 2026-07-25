@@ -10,9 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 const MAX_ROLE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
 fn json_dialog(app: &AppHandle) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
-    app.dialog()
-        .file()
-        .add_filter("Ferry 角色配置", &["json"])
+    app.dialog().file().add_filter("Ferry 角色配置", &["json"])
 }
 
 /// 弹出保存对话框并写入角色配置;返回落盘路径,用户取消时返回 None。
@@ -46,5 +44,7 @@ pub(crate) async fn import_roles_file(app: AppHandle) -> Result<Option<String>, 
     if size > MAX_ROLE_FILE_BYTES {
         return Err("角色配置文件过大".to_string());
     }
-    std::fs::read_to_string(&path).map(Some).map_err(|error| error.to_string())
+    std::fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }

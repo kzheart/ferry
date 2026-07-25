@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildHistoryGroups,
@@ -19,10 +19,29 @@ export function useHistoryResourcePane({
   toolIds,
   toolNames,
 }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState(() => defaultFilter(toolIds));
-  const [selectedId, setSelectedId] = useState(null);
   const items = useMemo(() => buildHistoryItems(historyRows), [historyRows]);
+  const historicalToolIds = useMemo(
+    () => [...new Set([
+      ...toolIds,
+      ...items.flatMap(item => [item.src, item.dst]).filter(Boolean),
+    ])],
+    [items, toolIds],
+  );
+  const previousToolIds = useRef(new Set(historicalToolIds));
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState(() => defaultFilter(historicalToolIds));
+  const [selectedId, setSelectedId] = useState(null);
+  useEffect(() => {
+    const additions = historicalToolIds.filter(
+      tool => !previousToolIds.current.has(tool),
+    );
+    previousToolIds.current = new Set(historicalToolIds);
+    if (!additions.length) return;
+    setFilter(value => ({
+      ...value,
+      src: [...new Set([...value.src, ...additions])],
+    }));
+  }, [historicalToolIds]);
   const filtered = useMemo(
     () => filterHistoryItems({ items, filter, query }),
     [items, filter, query],
@@ -36,9 +55,9 @@ export function useHistoryResourcePane({
   const selected = items.find(item => item._id === selectedId) || filtered[0] || null;
   const visibleIds = useMemo(() => filtered.map(item => item._id), [filtered]);
   const clear = useCallback(() => {
-    setFilter(defaultFilter(toolIds));
+    setFilter(defaultFilter(historicalToolIds));
     setQuery("");
-  }, [toolIds]);
+  }, [historicalToolIds]);
   const tokens = useMemo(() => historyTokenDescriptors(filter, toolNames, t).map(token => ({
     label: token.label,
     onRemove: () => setFilter(value => ({ ...value, [token.kind]: "all" })),
@@ -56,7 +75,8 @@ export function useHistoryResourcePane({
     selectedId,
     select: setSelectedId,
     visibleIds,
-    filterCount: historyFilterCount(filter, toolIds),
+    toolIds: historicalToolIds,
+    filterCount: historyFilterCount(filter, historicalToolIds),
     tokens,
     clear,
   };

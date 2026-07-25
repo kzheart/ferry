@@ -472,12 +472,17 @@ def rust(agents: list[dict[str, object]]) -> str:
     allowed = ", ".join(f'\"{executable}\"' for executable in executables)
     capability_rows = []
     for agent in agents:
-        capabilities = ", ".join(
-            f'\"{capability}\"' for capability in agent["capabilities"]
+        capabilities = "\n".join(
+            f'            "{capability}",' for capability in agent["capabilities"]
         )
-        capability_rows.append(
-            f'    ("{agent["id"]}", &[{capabilities}]),'
-        )
+        capability_rows.extend((
+            "    (",
+            f'        "{agent["id"]}",',
+            "        &[",
+            capabilities,
+            "        ],",
+            "    ),",
+        ))
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"pub(crate) const AGENT_IDS: &[&str] = &[{ids}];",
@@ -525,6 +530,30 @@ def runtime(agents: list[dict[str, object]]) -> str:
     capabilities = {
         agent["id"]: agent["capabilities"] for agent in agents
     }
+
+    def const_array(name: str, values: list[str]) -> str:
+        compact = f"export const {name} = {json.dumps(values)} as const;"
+        if len(compact) <= 80:
+            return compact
+        rows = "\n".join(f"  {json.dumps(value)}," for value in values)
+        return f"export const {name} = [\n{rows}\n] as const;"
+
+    def object_of_arrays(name: str, values: dict[str, list[str]]) -> str:
+        rows = []
+        for identifier, items in values.items():
+            key = (
+                identifier
+                if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", identifier)
+                else json.dumps(identifier)
+            )
+            compact = f"  {key}: {json.dumps(items)},"
+            if len(compact) <= 80:
+                rows.append(compact)
+                continue
+            entries = "\n".join(f"    {json.dumps(item)}," for item in items)
+            rows.append(f"  {key}: [\n{entries}\n  ],")
+        return f"export const {name} = {{\n" + "\n".join(rows) + "\n} as const;"
+
     edit_operation_rows = []
     for identifier, operations in edit_operations.items():
         key = (
@@ -540,14 +569,15 @@ def runtime(agents: list[dict[str, object]]) -> str:
     )
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const AGENT_IDS = {json.dumps(identifiers)} as const;",
-        f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
-        f"export const AGENT_CAPABILITIES = {json.dumps(capabilities, indent=2)} as const;",
+        const_array("AGENT_IDS", identifiers),
+        const_array("AGENT_LABELS", labels),
+        object_of_arrays("AGENT_CAPABILITIES", capabilities),
         "export const AGENT_EDIT_OPERATIONS = "
         f"{edit_operation_source} as const;",
-        "export const AGENT_SKILL_PATHS = "
-        f"{json.dumps({agent['id']: agent['skill_paths'] for agent in agents}, indent=2)}"
-        " as const;",
+        object_of_arrays(
+            "AGENT_SKILL_PATHS",
+            {agent["id"]: agent["skill_paths"] for agent in agents},
+        ),
         "export const SHARED_SKILL_PATHS = "
         f"{json.dumps(load_shared_skill_paths())} as const;",
         "export type AgentId = (typeof AGENT_IDS)[number];",

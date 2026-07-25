@@ -10,7 +10,7 @@ from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
-from engine.contracts.agents import AGENT_IDS
+from engine.contracts.agents import AGENTS
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -56,11 +56,22 @@ def _tree(tmp_path):
     return root
 
 
-def test_every_migration_target_has_a_discovery_test():
+def test_declared_migration_targets_have_runtime_components():
     adapters = registry.create_registry()
     targets = {tool for tool in adapters.ids()
                if adapters.get(tool).migration_target is not None}
-    assert targets == set(AGENT_IDS)
+    declared = {
+        agent_id for agent_id, manifest in AGENTS.items()
+        if "migration-target" in manifest["capabilities"]
+    }
+    assert targets == declared
+    for agent_id in declared:
+        adapter = adapters.get(agent_id)
+        capabilities = set(AGENTS[agent_id]["capabilities"])
+        if "probe" in capabilities:
+            assert adapter.verifier is not None
+        if "resume" in capabilities or "delete" in capabilities:
+            assert adapter.lifecycle is not None
 
 
 def test_claude_writer_publishes_discoverable_session(tmp_path, monkeypatch):

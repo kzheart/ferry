@@ -4,6 +4,27 @@ from engine.operations import migrate as migration
 from engine.sessions.model import AgentEdge, Block, Message, Session
 
 
+def _adapter(target):
+    class Adapter:
+        id = "fake"
+        browser = object()
+        lifecycle = object()
+        migration_source = object()
+        migration_target = target
+
+        def supports(self, capability):
+            return capability in {
+                "browse", "resume", "migration-source", "migration-target",
+            }
+
+        def require(self, capability, component):
+            if not self.supports(capability):
+                raise ValueError(capability)
+            return getattr(self, component)
+
+    return Adapter()
+
+
 def _tree():
     root = Session("claude", "root", "/tmp/project")
     root.messages = [
@@ -64,8 +85,7 @@ def test_migration_counts_include_the_retained_subtree(monkeypatch, tmp_path):
             return "destination-session", tmp_path / "destination"
 
     target = Target()
-    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
-        migration_target=target))
+    ports = SimpleNamespace(adapter=lambda _name: _adapter(target))
     monkeypatch.setattr(
         migration.MigrationService, "__init__",
         lambda instance, _ports: setattr(instance, "_ports", ports),
@@ -99,7 +119,7 @@ def test_preview_migration_counts_the_actual_tree_after_scope_pruning():
 
     target = Target()
     ports = SimpleNamespace(
-        adapter=lambda _name: SimpleNamespace(migration_target=target),
+        adapter=lambda _name: _adapter(target),
     )
     preview = migration.MigrationService(ports).preview(
         "claude",

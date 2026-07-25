@@ -208,7 +208,11 @@ function parseDocument(value: unknown): RoleDocument {
   ) {
     throw new Error("builtin role overrides must target distinct builtins");
   }
-  return { schema_version: ROLE_STORE_VERSION, roles, builtin_overrides: overrides };
+  return {
+    schema_version: ROLE_STORE_VERSION,
+    roles,
+    builtin_overrides: overrides,
+  };
 }
 
 export interface RoleStore {

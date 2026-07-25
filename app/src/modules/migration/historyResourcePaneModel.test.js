@@ -38,3 +38,18 @@ test("迁移历史 token 与数量使用同一筛选状态", () => {
   assert.equal(historyFilterCount(filter, tools), 4);
   assert.deepEqual(tokens.map(token => token.kind), ["target", "status", "time"]);
 });
+
+test("迁移历史保留已移除 Agent 的原始标识", () => {
+  const items = buildHistoryItems([
+    { id: 3, src: "legacy-agent", dst: "codex", source_id: "c", time: now },
+  ]);
+  const groups = buildHistoryGroups({ items, selectedId: null, t, toolNames });
+  const tokens = historyTokenDescriptors(
+    { src: ["legacy-agent"], target: "legacy-agent", status: "all", time: "all" },
+    toolNames,
+    t,
+  );
+
+  assert.equal(groups[0].rows[0].from, "legacy-agent");
+  assert.match(tokens[0].label, /legacy-agent/);
+});

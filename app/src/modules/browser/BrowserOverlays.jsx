@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
+import {
+  TOOL_NAME,
+  agentsWithCapability,
+} from "../../shared/contracts/tools.js";
 import { ConfirmBox } from "../../shared/ui/ConfirmBox.jsx";
 import {
   FilterCheckRow,
@@ -14,6 +17,8 @@ import {
   deleteIsUndoable,
   summarizePreparedDeletions,
 } from "./sessionDeletionModel.js";
+
+const BROWSABLE_TOOLS = agentsWithCapability("browse");
 
 export function SessionDeleteConfirm({ prepared, onCancel, onConfirm }) {
   const { t } = useTranslation();
@@ -208,7 +213,7 @@ export function LibraryFilter({
   return (
     <FilterPopover anchor={anchor} onClose={onClose} onClear={onClear} t={t}>
       <FilterSectionTitle first>{t("overlays:filter.source")}</FilterSectionTitle>
-      {TOOLS.map(tool => (
+      {BROWSABLE_TOOLS.map(tool => (
         <FilterCheckRow
           key={tool}
           on={f.src.includes(tool)}
