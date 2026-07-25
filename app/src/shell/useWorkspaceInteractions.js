@@ -2,7 +2,10 @@
 // 与渲染分离,新增交互不必改动主壳的 JSX。
 import { useMemo, useRef } from "react";
 import { openTerminal } from "../platform/desktop/client.js";
-import { resumeDescriptor } from "../shared/contracts/tools.js";
+import {
+  resumeDescriptor,
+  supportsAgentCapability,
+} from "../shared/contracts/tools.js";
 import { sessionRef } from "../modules/browser/sessionModel.js";
 import { createSessionContextMenu } from "../modules/browser/sessionContextMenu.js";
 import { useLibraryResourcePaneActions } from "../modules/browser/useLibraryResourcePaneActions.js";
@@ -39,7 +42,15 @@ export function useWorkspaceInteractions({
   setTagSelection,
   setAgentAttachments,
 }) {
-  const askDelete = deletion.requestSessionDeletion;
+  const askDelete = session => {
+    if (!supportsAgentCapability(session?.tool, "delete")) return;
+    deletion.requestSessionDeletion(session);
+  };
+  const askBatchDelete = sessions => {
+    if (!sessions.every(session =>
+      supportsAgentCapability(session?.tool, "delete"))) return;
+    deletion.requestBatchDeletion(sessions);
+  };
 
   // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
   // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
@@ -61,7 +72,7 @@ export function useWorkspaceInteractions({
     updateMetadata,
     setTagSelection,
     setRename,
-    setBatchDelete: deletion.requestBatchDeletion,
+    setBatchDelete: askBatchDelete,
     setMultiIds,
     setAgentAttachments,
     setView,
@@ -99,11 +110,20 @@ export function useWorkspaceInteractions({
     startReplyEdit: editing.startReplyEdit,
     replyEditError: editing.replyEditError,
     openDiff: editing.openDiff,
-    apply: editing.prepareApply,
-    openMigrate: (value) => setMigration({ scope: value ?? scope }),
+    apply: () => {
+      if (supportsAgentCapability(current?.tool, "edit")) {
+        editing.prepareApply();
+      }
+    },
+    openMigrate: (value) => {
+      if (supportsAgentCapability(current?.tool, "migration-source")) {
+        setMigration({ scope: value ?? scope });
+      }
+    },
     refresh: refreshDetail,
     loadMore,
     resume: async (meta) => {
+      if (!supportsAgentCapability(meta?.tool, "resume")) return;
       setToast({
         kind: "run",
         title: t("app:toast.openingTerminal"),

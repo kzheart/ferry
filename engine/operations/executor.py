@@ -9,6 +9,7 @@ from ..errors import (
     AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
+    require_agent_capability,
 )
 from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
@@ -50,13 +51,21 @@ class OperationExecutor:
         return handler(operation)
 
     def _apply_edit(self, operation: OperationPlan) -> dict:
+        params = operation.input()
+        if params["probe"]:
+            require_agent_capability(
+                self._ports.adapter(params["tool"]), "probe", "verifier",
+            )
         return self._edit.apply(operation, self._finish_mutation)
 
     def _finish_mutation(self, tool, editor, result, document, snapshot, probe):
         if not probe:
             return result
         try:
-            report = self._ports.adapter(tool).verifier.probe_edited(
+            verifier = require_agent_capability(
+                self._ports.adapter(tool), "probe", "verifier",
+            )
+            report = verifier.probe_edited(
                 editor, document, result,
             )
         except probe_mod.ProbeTimeout as error:
@@ -154,6 +163,9 @@ class OperationExecutor:
         recovery = self._database().operations.get_recovery(recovery_id)
         if recovery is None or recovery["status"] != "available":
             raise ConcurrentModificationError("删除恢复记录已使用或不可用")
+        require_agent_capability(
+            self._ports.adapter(recovery["tool"]), "delete", "lifecycle",
+        )
         if not self._database().operations.claim_recovery(
             recovery_id, now_ms(),
         ):

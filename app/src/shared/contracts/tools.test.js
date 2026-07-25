@@ -4,6 +4,10 @@ import { test } from "vitest";
 import {
   supportsEditOperation,
 } from "./agentEditSupport.js";
+import {
+  agentsWithCapability,
+  supportsAgentCapability,
+} from "./tools.js";
 import { AGENTS, AGENT_IDS } from "./generated/agents.js";
 
 test("当前静态 Agent 契约定义逐操作编辑范围", () => {
@@ -31,4 +35,25 @@ test("当前静态 Agent 契约定义逐操作编辑范围", () => {
     ["delete-turn", "rewrite", "replace-assistant-reply"]
       .every(operation => agent.editOperations.includes(operation)));
   assert.ok(fullEditor);
+});
+
+test("能力 helper 按静态矩阵筛选 Agent", () => {
+  for (const capability of [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models",
+  ]) {
+    assert.deepEqual(
+      agentsWithCapability(capability),
+      AGENT_IDS.filter(tool =>
+        AGENTS[tool].capabilities.includes(capability)),
+    );
+  }
+  assert.equal(supportsAgentCapability("unknown", "browse"), false);
+  assert.equal(supportsAgentCapability("__proto__", "browse"), false);
 });

@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   supportsEditOperation,
+  supportsAgentCapability,
   TOOL_NAME,
   resumeDescriptor,
   TOOLS,
@@ -48,13 +49,16 @@ export default memo(function SessionDetail({
     () => toTimeline(rounds, data?.context_compactions),
     [rounds, data?.context_compactions],
   );
-  const canDelete = supportsEditOperation(meta.tool, "delete-turn");
+  const canDelete = supportsAgentCapability(meta.tool, "edit")
+    && supportsEditOperation(meta.tool, "delete-turn");
   const canRewrite = supportsEditOperation(meta.tool, "rewrite");
   const canEditReply = supportsEditOperation(
     meta.tool,
     "replace-assistant-reply",
   );
-  const canMigrate = TOOLS.includes(meta.tool);
+  const canMigrate = TOOLS.includes(meta.tool)
+    && supportsAgentCapability(meta.tool, "migration-source");
+  const canResume = supportsAgentCapability(meta.tool, "resume");
   const [copied, setCopied] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
@@ -199,7 +203,7 @@ export default memo(function SessionDetail({
               >
                 {refreshing ? <Spinner size={14} /> : <RefreshIcon />}
               </button>
-              <button
+              {canResume && <button
                 className="ftool-btn"
                 onClick={resumeInTerminal}
                 disabled={resuming}
@@ -210,8 +214,8 @@ export default memo(function SessionDetail({
                 }
               >
                 {resuming ? <Spinner size={14} /> : <TerminalIcon />}
-              </button>
-              <button
+              </button>}
+              {canResume && <button
                 className="ftool-btn"
                 onClick={copyResume}
                 title={
@@ -222,7 +226,7 @@ export default memo(function SessionDetail({
                 style={copied ? { color: "var(--ok)" } : undefined}
               >
                 {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
-              </button>
+              </button>}
               {canMigrate && (
                 <button
                   data-guide="migrate"

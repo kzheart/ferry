@@ -9,6 +9,7 @@ from ..errors import (
     AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
+    require_agent_capability,
 )
 from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
@@ -65,6 +66,13 @@ class OperationPlanner:
         operation_input = validate_edit_input(value)
         tool = operation_input["tool"]
         ref = operation_input["ref"]
+        require_agent_capability(
+            self._ports.adapter(tool), "edit", "editor",
+        )
+        if operation_input["probe"]:
+            require_agent_capability(
+                self._ports.adapter(tool), "probe", "verifier",
+            )
         before = self._index.resolve(tool, ref)
         preview = self._edit.preview(before, operation_input["ops"])
         after = self._index.resolve(tool, ref)
@@ -85,6 +93,27 @@ class OperationPlanner:
             value, self._ports.adapters(),
         )
         source_tool = operation_input["source_tool"]
+        target_tool = operation_input["target_tool"]
+        require_agent_capability(
+            self._ports.adapter(source_tool),
+            "migration-source",
+            "migration_source",
+        )
+        require_agent_capability(
+            self._ports.adapter(target_tool),
+            "migration-target",
+            "migration_target",
+        )
+        require_agent_capability(
+            self._ports.adapter(target_tool), "browse", "browser",
+        )
+        require_agent_capability(
+            self._ports.adapter(target_tool), "resume", "lifecycle",
+        )
+        if operation_input.get("probe"):
+            require_agent_capability(
+                self._ports.adapter(target_tool), "probe", "verifier",
+            )
         ref = operation_input["ref"]
         before = self._index.resolve(source_tool, ref)
         session = agent_read.read_indexed_session(self._index, before)
@@ -148,10 +177,13 @@ class OperationPlanner:
         operation_input = validate_delete_input(
             value, self._ports.adapters(),
         )
+        adapter = self._ports.adapter(operation_input["tool"])
+        lifecycle = require_agent_capability(
+            adapter, "delete", "lifecycle",
+        )
         record = self._index.resolve(
             operation_input["tool"], operation_input["ref"],
         )
-        lifecycle = self._ports.adapter(operation_input["tool"]).lifecycle
         preview = {
             "tool": record.tool,
             "ref": record.opaque_ref,
@@ -185,6 +217,9 @@ class OperationPlanner:
                 "删除恢复记录不可用",
                 {"recovery_id": operation_input["recovery_id"]},
             )
+        require_agent_capability(
+            self._ports.adapter(recovery["tool"]), "delete", "lifecycle",
+        )
         return self._store_plan(
             operation_input,
             {

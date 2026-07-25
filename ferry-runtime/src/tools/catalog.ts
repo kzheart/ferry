@@ -1,6 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 import {
+  AGENT_CAPABILITIES,
   AGENT_EDIT_OPERATIONS,
   AGENT_IDS,
   type AgentId,
@@ -102,6 +103,14 @@ const sessionEditSchema = Type.Unsafe({
 });
 
 const exposedSessionEditOperations = new Set(["delete-turn", "rewrite"]);
+const migrationTargets = AGENT_IDS.filter((tool) =>
+  AGENT_CAPABILITIES[tool].includes("migration-target"),
+);
+const migrationSources = AGENT_IDS.filter((tool) =>
+  AGENT_CAPABILITIES[tool].includes("migration-source"),
+);
+const agentEnum = (values: readonly string[]) =>
+  Type.Unsafe({ type: "string", enum: [...values] });
 
 function supportedSessionEditOperations(tool: AgentId): string[] {
   return AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
@@ -145,7 +154,9 @@ function validateSessionEditOperations(input: Record<string, unknown>): void {
   }
 }
 
-const sessionEditSupportDescription = AGENT_IDS.map(
+const sessionEditSupportDescription = AGENT_IDS.filter((tool) =>
+  AGENT_CAPABILITIES[tool].includes("edit"),
+).map(
   (tool) => `${tool}: ${supportedSessionEditOperations(tool).join(", ")}`,
 ).join("; ");
 
@@ -239,9 +250,9 @@ const schemas = {
   ),
   migrate: Type.Object(
     {
-      source_tool: Type.String({ minLength: 1, maxLength: 32 }),
+      source_tool: agentEnum(migrationSources),
       ref: opaqueSessionRef,
-      target_tool: Type.String({ minLength: 1, maxLength: 32 }),
+      target_tool: agentEnum(migrationTargets),
       max_turn: Type.Optional(Type.Integer({ minimum: 1 })),
       intent: operationIntent,
     },
@@ -269,7 +280,7 @@ const descriptions: Record<FerryToolName, string> = {
     "Read one indexed session using an fsr_ ref returned by session_search. By default returns a size-bounded page of original messages; paginate with next_from_message, never turn numbers. Pass terms to search that session's content and get matching snippets; searched_scope tells you what was covered — by default only visible message text, and coding sessions keep most of their substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ, and both differ from search's record_count. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage:
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
-  migrate: `Migrate a session into another agent's format (targets: ${AGENT_IDS.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
+  migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
   bash: "Run a shell command on the user's machine. The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.",
 };

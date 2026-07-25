@@ -5,7 +5,11 @@ import {
 } from "@earendil-works/pi-agent-core";
 import type { ImageContent } from "@earendil-works/pi-ai";
 
-import { AGENT_IDS, AGENT_LABELS } from "../server/generated/agents.js";
+import {
+  AGENT_CAPABILITIES,
+  AGENT_IDS,
+  AGENT_LABELS,
+} from "../server/generated/agents.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -31,7 +35,11 @@ import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
 import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 
-export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated between ${AGENT_IDS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
+const MIGRATION_TARGETS = AGENT_IDS.filter((tool) =>
+  AGENT_CAPABILITIES[tool].includes("migration-target"),
+);
+
+export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated into ${MIGRATION_TARGETS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
 
 export interface RuntimeSessionHost {
   readonly store: SessionStore;

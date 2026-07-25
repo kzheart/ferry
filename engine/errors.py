@@ -160,6 +160,23 @@ class AgentRequestError(DomainError, ValueError):
     code = "agent.request_invalid"
 
 
+class AgentCapabilityError(AgentRequestError):
+    def __init__(self, tool: str, capability: str):
+        super().__init__(
+            f"{tool} 不支持能力 {capability}",
+            {"tool": tool, "capability": capability},
+        )
+
+
+def require_agent_capability(adapter, capability: str, component: str):
+    if not adapter.supports(capability):
+        raise AgentCapabilityError(adapter.id, capability)
+    try:
+        return adapter.require(capability, component)
+    except ValueError as error:
+        raise AgentCapabilityError(adapter.id, capability) from error
+
+
 class AgentApprovalError(DomainError, ValueError):
     code = "agent.approval_invalid"
 

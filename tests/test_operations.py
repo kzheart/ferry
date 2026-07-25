@@ -13,6 +13,7 @@ from engine.operations import plan_store
 from engine.operations import service as operations
 from engine.operations.types import AssistantReply
 from engine.errors import (
+    AgentCapabilityError,
     AgentRequestError,
     ConcurrentModificationError,
     InvalidReplyError,
@@ -134,6 +135,50 @@ def _attach_lifecycle(monkeypatch, transcript, ports):
         lambda tool: adapter if tool == "claude" else original_adapter(tool),
     )
     return lifecycle
+
+
+def _install_browse_only_adapter(monkeypatch, ports):
+    original_adapter = ports.adapter
+    original = original_adapter("claude")
+    manifest = replace(
+        original.manifest,
+        capabilities=("browse",),
+        edit_operations=(),
+    )
+    adapter = replace(
+        original,
+        manifest=manifest,
+        migration_source=None,
+        migration_target=None,
+        editor=None,
+        verifier=None,
+        lifecycle=None,
+        models=None,
+    )
+    monkeypatch.setattr(
+        ports,
+        "adapter",
+        lambda tool: adapter if tool == "claude" else original_adapter(tool),
+    )
+    return original
+
+
+def test_browse_only_adapter_blocks_mutations_before_side_effects(
+        agent_environment, monkeypatch):
+    original = _install_browse_only_adapter(
+        monkeypatch, agent_environment["ports"],
+    )
+
+    with pytest.raises(AgentCapabilityError) as edit_error:
+        _plan()
+    assert edit_error.value.params == {"tool": "claude", "capability": "edit"}
+    with pytest.raises(AgentCapabilityError, match="migration-source"):
+        _migration_plan()
+    with pytest.raises(AgentCapabilityError, match="delete"):
+        _delete_plan()
+
+    assert original.editor.load_calls == 0
+    assert agent_environment["transcript"].exists()
 
 
 def test_plan_freezes_input_and_apply_only_uses_plan_id(agent_environment):

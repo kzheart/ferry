@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { engine, openTerminal } from "../../platform/desktop/client.js";
 import { operations } from "../operations/public.js";
-import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
+import {
+  TOOL_NAME,
+  agentsWithCapability,
+  supportsAgentCapability,
+} from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
 import { sessionRef } from "../browser/public.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
@@ -98,10 +102,13 @@ function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, o
 
 export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalApp, onClose, onDone }) {
   const { t } = useTranslation();
-  const targets = TOOLS.filter(t2 => t2 !== meta.tool);
+  const targets = agentsWithCapability("migration-target")
+    .filter(t2 => t2 !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0] || "");
-  const [probeOn, setProbeOn] = useState(!!defaultProbe);
+  const [probeOn, setProbeOn] = useState(
+    !!defaultProbe && supportsAgentCapability(targets[0], "probe"),
+  );
   const [planned, setPlanned] = useState(null);
   const [dryErr, setDryErr] = useState(null);
   const [dryBusy, setDryBusy] = useState(false);
@@ -113,6 +120,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const [modelErr, setModelErr] = useState({});
   const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
   const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
+  const canProbeTarget = supportsAgentCapability(target, "probe");
   const doneRef = useRef(false);
   const plannedRef = useRef(null);
   const planRequest = useRef(0);
@@ -176,6 +184,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   };
 
   const loadModels = async tgt => {
+    if (!supportsAgentCapability(tgt, "models")) return;
     if (modelCatalog[tgt] || modelLoad[tgt]) return;
     setModelLoad(prev => ({ ...prev, [tgt]: true }));
     setModelErr(prev => ({ ...prev, [tgt]: null }));
@@ -238,7 +247,11 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
           const on = target === t2;
           const inst = installed(t2);
           return (
-            <div key={t2} onClick={() => inst && setTarget(t2)}
+            <div key={t2} onClick={() => {
+              if (!inst) return;
+              setTarget(t2);
+              if (!supportsAgentCapability(t2, "probe")) setProbeOn(false);
+            }}
               style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
                 border: `1.5px solid ${on ? ACCENT : "var(--line3)"}`, background: on ? "var(--acc-soft4)" : "var(--surface)",
                 borderRadius: 10, marginBottom: 9, cursor: inst ? "pointer" : "not-allowed",
@@ -312,7 +325,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
             ))}
           </div>
         </div>
-        <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
+        {canProbeTarget && <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
           marginTop: 12, display: "flex", alignItems: "flex-start", gap: 11 }}>
           <label onClick={() => setProbeOn(v => !v)}
             style={{ display: "flex", alignItems: "center", gap: 8, cursor: "default", flex: "none",
@@ -322,8 +335,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
           </label>
           <div style={{ fontSize: 11, color: "var(--tx3b)", lineHeight: 1.5 }}>
             {t("migration:confirm.probeDesc")}</div>
-        </div>
-        {probeOn && (
+        </div>}
+        {canProbeTarget && probeOn && (
           <ProbeModelPicker
             catalog={modelCatalog[target]}
             loading={!!modelLoad[target]}
@@ -375,11 +388,13 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
           <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 5 }}>
             {t("migration:result.doneDesc", { n: result.msg_count, tool: TOOL_NAME[target] })}</div>
         </div>
-        <div style={{ marginTop: 18 }}>
-          <CmdRow cmd={result.resume} head={t("migration:result.continueIn", { tool: TOOL_NAME[target] })} />
-        </div>
-        <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12 }}
-          onClick={() => openTerminal(result.resume, terminalApp)}>{t("migration:result.openTerminal")}</button>
+        {supportsAgentCapability(target, "resume") && result.resume && (<>
+          <div style={{ marginTop: 18 }}>
+            <CmdRow cmd={result.resume} head={t("migration:result.continueIn", { tool: TOOL_NAME[target] })} />
+          </div>
+          <button className="fbtn" style={{ width: "100%", height: 34, marginTop: 10, fontSize: 12 }}
+            onClick={() => openTerminal(result.resume, terminalApp)}>{t("migration:result.openTerminal")}</button>
+        </>)}
       </>
     );
   } else if (fail) {

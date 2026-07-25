@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from ..context import EngineContext
-from ..errors import SnapshotInvalidSourceError
+from ..errors import SnapshotInvalidSourceError, require_agent_capability
 
 
 class SessionDeletionService:
@@ -14,7 +14,8 @@ class SessionDeletionService:
 
     def delete(self, tool: str, reference: str) -> dict:
         adapter = self._ports.adapter(tool)
-        return adapter.lifecycle.delete(adapter, reference)
+        lifecycle = require_agent_capability(adapter, "delete", "lifecycle")
+        return lifecycle.delete(adapter, reference)
 
     def restore(self, snapshot: str) -> dict:
         path = Path(snapshot)
@@ -30,4 +31,6 @@ class SessionDeletionService:
         if not isinstance(tool, str) or not tool:
             raise SnapshotInvalidSourceError(
                 "快照缺少来源 Agent", {"snapshot": snapshot})
-        return self._ports.adapter(tool).lifecycle.restore_delete(path, metadata)
+        adapter = self._ports.adapter(tool)
+        lifecycle = require_agent_capability(adapter, "delete", "lifecycle")
+        return lifecycle.restore_delete(path, metadata)

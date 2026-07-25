@@ -8,7 +8,7 @@ import logging
 
 from .context import EngineContext
 from .contracts.ipc import FERRY_CONTRACT_HASH
-from .errors import AgentReferenceError
+from .errors import AgentReferenceError, require_agent_capability
 from .operations import history, metadata
 from .operations.service import OperationService
 from .organization import proposals as organizing
@@ -78,6 +78,10 @@ class EngineService:
         return result
 
     def resume_command(self, tool: str, ref: str) -> dict:
+        lifecycle = require_agent_capability(
+            self._ports.adapter(tool), "resume", "lifecycle",
+        )
+
         def build(record: IndexedSession) -> dict:
             session_id = record.row.get("id")
             if not isinstance(session_id, str) or not session_id:
@@ -85,7 +89,7 @@ class EngineService:
             cwd = record.row.get("dir")
             if not isinstance(cwd, str) or not cwd:
                 cwd = "."
-            return self._ports.adapter(tool).lifecycle.resume_descriptor(
+            return lifecycle.resume_descriptor(
                 session_id, cwd,
             )
 
@@ -105,6 +109,9 @@ class EngineService:
 
     def show_session(self, tool: str, ref: str, *, from_message: int = 1,
                      limit: int | None = None) -> dict:
+        require_agent_capability(
+            self._ports.adapter(tool), "browse", "browser",
+        )
         def show(record):
             if from_message == 1 and limit is None:
                 return sessions.show(tool, record.canonical_ref, self._ports)
@@ -123,6 +130,9 @@ class EngineService:
         )
 
     def session_asset(self, tool: str, ref: str, asset_id: str) -> dict:
+        require_agent_capability(
+            self._ports.adapter(tool), "browse", "browser",
+        )
         return self._checked_query(
             tool, ref,
             lambda record: sessions.session_asset(
@@ -134,6 +144,9 @@ class EngineService:
         return metadata.list_all(self._ports)
 
     def session_backbone(self, tool: str, ref: str) -> dict:
+        require_agent_capability(
+            self._ports.adapter(tool), "browse", "browser",
+        )
         return self._checked_query(
             tool, ref,
             lambda record: summaries.build_backbone(
@@ -175,6 +188,9 @@ class EngineService:
         )
 
     def agent_session_read(self, tool: str, **params) -> dict:
+        require_agent_capability(
+            self._ports.adapter(tool), "browse", "browser",
+        )
         return agent_read.session_read(tool, index=self._index, **params)
 
     def agent_get_usage(self, **params) -> dict:

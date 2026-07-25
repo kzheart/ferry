@@ -10,6 +10,12 @@ export const TOOL_NAME = Object.freeze(Object.fromEntries(
 ));
 export { supportsEditOperation } from "./agentEditSupport.js";
 
+export const supportsAgentCapability = (tool, capability) =>
+  Boolean(AGENTS[tool]?.capabilities?.includes(capability));
+
+export const agentsWithCapability = capability =>
+  TOOLS.filter(tool => supportsAgentCapability(tool, capability));
+
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, ref) =>
   engine("resume", { tool, ref });
