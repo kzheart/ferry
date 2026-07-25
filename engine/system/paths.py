@@ -51,7 +51,6 @@ def pi_session_roots(
     agent_dir = Path(
         env.get("PI_CODING_AGENT_DIR", user_home / ".pi" / "agent")
     ).expanduser()
-    roots: list[Path] = []
     settings_path = agent_dir / "settings.json"
     try:
         settings = json.loads(settings_path.read_text())
@@ -59,9 +58,5 @@ def pi_session_roots(
         settings = {}
     configured = settings.get("sessionDir") if isinstance(settings, dict) else None
     if isinstance(configured, str) and configured.strip():
-        configured_path = Path(configured).expanduser()
-        if not configured_path.is_absolute():
-            configured_path = agent_dir / configured_path
-        roots.append(configured_path)
-    roots.append(agent_dir / "sessions")
-    return tuple(dict.fromkeys(roots))
+        return (Path(configured).expanduser(),)
+    return (agent_dir / "sessions",)

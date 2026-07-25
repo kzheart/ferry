@@ -9,8 +9,8 @@ directory.
 
 1. Capture a plain conversation and a conversation containing shell, write, and
    read tool calls under `<agent>/case-*/`.
-2. Keep the native records unchanged apart from replacing private paths,
-   identifiers, and message content with deterministic fixture values.
+2. Capture only deterministic non-sensitive prompts in an isolated home/cwd;
+   keep the resulting native records byte-for-byte unchanged.
 3. Extract the candidate production templates:
 
    ```bash

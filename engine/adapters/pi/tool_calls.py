@@ -14,8 +14,6 @@ TOOL_OPS = {
     "edit": CanonicalOp.FS_EDIT,
     "grep": CanonicalOp.FS_SEARCH,
     "find": CanonicalOp.FS_GLOB,
-    "web_fetch": CanonicalOp.WEB_FETCH,
-    "web_search": CanonicalOp.WEB_SEARCH,
 }
 
 
@@ -31,23 +29,53 @@ def normalize_input(name: str, value):
             "namespace": "pi", "name": name, "input": source,
         }
     if name == "bash":
-        return op, {key: source[native] for key, native in (
-            ("command", "command"), ("workdir", "cwd"), ("timeout_ms", "timeout"),
-        ) if native in source}
-    if name in {"read", "write", "edit"}:
+        if set(source) - {"command", "timeout"}:
+            return CanonicalOp.TOOL_INVOKE, {
+                "namespace": "pi", "name": name, "input": source,
+            }
+        return op, {
+            "command": source.get("command", ""),
+            **({"timeout_ms": int(source["timeout"] * 1000)}
+               if isinstance(source.get("timeout"), (int, float))
+               and not isinstance(source.get("timeout"), bool) else {}),
+        }
+    if name in {"read", "write"}:
         path = source.get("path", source.get("file_path", ""))
         mapped = {"file_path": path}
         aliases = {
-            "content": "content", "old": "oldText", "new": "newText",
+            "content": "content",
             "offset": "offset", "limit": "limit",
         }
         mapped.update({key: source[native] for key, native in aliases.items()
                        if native in source})
         return op, mapped
+    if name == "edit":
+        edits = source.get("edits")
+        if set(source) <= {"path", "edits"} and isinstance(edits, list) and len(edits) == 1:
+            edit = edits[0]
+            if isinstance(edit, dict) and set(edit) <= {"oldText", "newText"}:
+                return op, {
+                    "file_path": source.get("path", ""),
+                    "old": edit.get("oldText", ""),
+                    "new": edit.get("newText", ""),
+                }
+        return CanonicalOp.TOOL_INVOKE, {
+            "namespace": "pi", "name": name, "input": source,
+        }
     if name == "grep":
+        if set(source) - {"pattern", "path", "glob", "limit"}:
+            return CanonicalOp.TOOL_INVOKE, {
+                "namespace": "pi", "name": name, "input": source,
+            }
         return op, {"query": source.get("pattern", ""),
-                    **({"path": source["path"]} if "path" in source else {})}
+                    **({"path": source["path"]} if "path" in source else {}),
+                    **({"glob": source["glob"]} if "glob" in source else {}),
+                    **({"max_results": source["limit"]} if "limit" in source else {})}
     if name == "find":
+        if set(source) - {"pattern", "path"}:
+            return CanonicalOp.TOOL_INVOKE, {
+                "namespace": "pi", "name": name, "input": source,
+            }
         return op, {"pattern": source.get("pattern", ""),
                     **({"path": source["path"]} if "path" in source else {})}
     return op, source

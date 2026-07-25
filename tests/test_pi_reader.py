@@ -49,7 +49,7 @@ def test_pairs_parallel_tools_images_thinking_and_missing_result(tmp_path):
         _message("a", "u", "assistant", [
             {"type": "thinking", "thinking": "parallel"},
             {"type": "toolCall", "id": "c1", "name": "bash",
-             "arguments": {"command": "pwd", "cwd": "/Users/raw"}},
+             "arguments": {"command": "pwd", "timeout": 3}},
             {"type": "toolCall", "id": "c2", "name": "read",
              "arguments": {"path": "/Users/raw/a.txt"}},
         ]),
@@ -68,11 +68,27 @@ def test_pairs_parallel_tools_images_thinking_and_missing_result(tmp_path):
     tools = [block.tool for message in session.messages
              for block in message.blocks if block.kind == "tool"]
     assert [tool.source_call_id for tool in tools] == ["c1", "c2"]
-    assert tools[0].input == {"command": "pwd", "workdir": "/Users/raw"}
+    assert tools[0].input == {"command": "pwd", "timeout_ms": 3000}
     assert tool_result_text(tools[0].result) == "/Users/raw\n"
     assert tools[1].result is None
     assert any(block.kind == "image" for block in session.messages[0].blocks)
     assert any(loss["code"] == "session.unpaired_tool_use" for loss in session.loss)
+
+
+def test_preserves_assistant_content_order(tmp_path):
+    path = tmp_path / "order.jsonl"
+    _write(path, [
+        _header(),
+        _message("u", None, "user", "go"),
+        _message("a", "u", "assistant", [
+            {"type": "text", "text": "before"},
+            {"type": "toolCall", "id": "c", "name": "read",
+             "arguments": {"path": "/raw"}},
+            {"type": "text", "text": "after"},
+        ]),
+    ])
+    blocks = read(str(path)).messages[-1].blocks
+    assert [block.kind for block in blocks] == ["text", "tool", "text"]
 
 
 def test_selects_last_leaf_branch_and_reports_inactive_entries(tmp_path):

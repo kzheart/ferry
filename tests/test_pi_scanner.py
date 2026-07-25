@@ -31,7 +31,7 @@ def test_pi_session_roots_priority_and_settings(tmp_path):
     (agent / "settings.json").write_text(json.dumps({"sessionDir": "custom"}))
     assert pi_session_roots(
         environ={"PI_CODING_AGENT_DIR": str(agent)}, home=tmp_path,
-    ) == (agent / "custom", agent / "sessions")
+    ) == (Path("custom"),)
 
 
 def test_scanner_accepts_only_v3_and_aggregates_usage(tmp_path, monkeypatch):

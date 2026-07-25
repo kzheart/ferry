@@ -38,6 +38,17 @@ def _meta(path: Path, stat) -> dict:
             or not all(isinstance(header.get(key), str) and header[key]
                        for key in ("id", "timestamp", "cwd"))):
         return {}
+    entries = records[1:]
+    valid = [entry for entry in entries
+             if isinstance(entry.get("id"), str) and "parentId" in entry]
+    by_id = {entry["id"]: entry for entry in valid}
+    branch, seen = [], set()
+    current = valid[-1] if valid else None
+    while current is not None and current["id"] not in seen:
+        branch.append(current)
+        seen.add(current["id"])
+        current = by_id.get(current.get("parentId"))
+    records = [header, *reversed(branch)]
     title, count, model = "", 0, ""
     tokens = empty_tokens()
     for record in records[1:]:
