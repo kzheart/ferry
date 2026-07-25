@@ -1,5 +1,3 @@
-// 角色配置的导出/导入格式。
-//
 // 导出的是一个自描述的 bundle:kind 用来挡掉"随便挑了个 json 文件"的误操作,
 // schema_version 跟随运行时的角色存储版本。builtin 是运行时算出来的,不进文件。
 
@@ -63,7 +61,6 @@ export function uniqueRoleId(candidate, taken) {
   }
 }
 
-/** 把 bundle 里的角色排成可直接提交给运行时的创建列表。 */
 export function planRoleImport(roles, existingIds) {
   const taken = new Set(existingIds);
   return roles.map(role => {

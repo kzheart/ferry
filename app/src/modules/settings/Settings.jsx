@@ -121,7 +121,6 @@ function TerminalPicker({ value, onChange, t }) {
   );
 }
 
-// ---------- 偏好设置 ----------
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   const { t } = useTranslation();
   const localeValue = s.locale ?? "";
@@ -189,7 +188,6 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   );
 }
 
-// ---------- 数据来源 ----------
 function Sources({ scan, env, scanning, onRescan }) {
   const { t } = useTranslation();
   const tools = scan?.tools || {};
@@ -326,7 +324,6 @@ function Updates({ s, set, updater }) {
   );
 }
 
-// ---------- 弹窗外壳 ----------
 export default function SettingsPage({ settings, setSettings, scan, env, scanning, onRescan,
   updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
   const { t } = useTranslation();
@@ -342,7 +339,6 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
         display: "flex", borderRadius: 14, overflow: "hidden", background: "var(--settings-bg)",
         border: "1px solid var(--line)", boxShadow: "var(--shadow-sheet)",
          }}>
-        {/* 分类栏 */}
         <div style={{ width: 196, flex: "none", background: "var(--settings-rail)",
           borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column",
           padding: "16px 12px" }}>
@@ -364,7 +360,6 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           </div>
         </div>
 
-        {/* 内容 */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ height: 54, flex: "none", display: "flex", alignItems: "center", gap: 12,
             padding: "0 20px", borderBottom: "1px solid var(--line4)" }}>

@@ -125,7 +125,6 @@ export const WarnTriangle = () => svg("0 0 16 16", 16, 16,
 // 齿轮(GitHub Octicons gear-16)
 const GEAR_PATH = "M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.009.645 6.556.095 7.299.03 7.53.01 7.764 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.105c-.147.561-.549.967-.998 1.189-.173.086-.34.183-.5.29-.417.278-.97.423-1.529.27l-1.103-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.411.406.562.957.53 1.456a4.709 4.709 0 0 0 0 .582c.032.499-.119 1.05-.53 1.456l-.815.806c-.081.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.56-.153 1.113-.008 1.53.27.161.107.328.204.501.29.447.222.85.629.997 1.189l.289 1.105c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.105c.147-.561.549-.967.998-1.189.173-.086.34-.183.5-.29.417-.278.97-.423 1.529-.27l1.103.303c.109.029.175-.016.195-.045.22-.313.411-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.411-.406-.562-.957-.53-1.456a4.709 4.709 0 0 0 0-.582c-.032-.499.119-1.05.53-1.456l.815-.806c.081-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.56.153-1.113.008-1.53-.27a4.44 4.44 0 0 0-.501-.29c-.447-.222-.85-.629-.997-1.189l-.289-1.105c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0Z M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M9.5 8a1.5 1.5 0 1 0-3.001.001A1.5 1.5 0 0 0 9.5 8Z";
 
-// 导航轨图标
 const RAIL = {
   overview: '<rect x="2.2" y="2.2" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="8.6" y="2.2" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="2.2" y="8.6" width="5.2" height="5.2" rx="1.2" fill="currentColor"/><rect x="8.6" y="8.6" width="5.2" height="5.2" rx="1.2" fill="currentColor"/>',
   library: '<rect x="2" y="3.4" width="12" height="1.9" rx=".9" fill="currentColor"/><rect x="2" y="7.05" width="12" height="1.9" rx=".9" fill="currentColor"/><rect x="2" y="10.7" width="8" height="1.9" rx=".9" fill="currentColor"/>',
@@ -137,7 +136,6 @@ const RAIL = {
 export const RailGlyph = ({ name, color = "var(--tx4b)", size = 19 }) =>
   svg("0 0 16 16", size, size, RAIL[name], { color });
 
-// 设置页分类图标
 const SETTINGS_GLYPH = {
   prefs: `<g transform="scale(1.125)"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/></g>`,
   sources: '<ellipse cx="9" cy="4.6" rx="5.2" ry="2.1" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M3.8 4.6v8.8c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1V4.6M3.8 9c0 1.16 2.33 2.1 5.2 2.1s5.2-.94 5.2-2.1" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>',
@@ -151,7 +149,6 @@ const SETTINGS_GLYPH = {
 export const SetGlyph = ({ name, color = "var(--tx3b)" }) =>
   svg("0 0 18 18", 17, 17, SETTINGS_GLYPH[name], { color, flex: "none" });
 
-// 会话时间线操作图标(线条风,随 currentColor 着色)
 export const CopyIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.2 10.5h-.4a1.3 1.3 0 0 1-1.3-1.3V3.3A1.3 1.3 0 0 1 2.8 2h5.9a1.3 1.3 0 0 1 1.3 1.3v.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   { flex: "none" });
@@ -198,7 +195,6 @@ export const GearMini = ({ size = 11 }) => svg("0 0 16 16", size, size,
   `<path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="${GEAR_PATH}"/>`,
   { flex: "none" });
 
-// 详情页工具栏图标(16px 线条风,随 currentColor 着色)
 export const RefreshIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<path d="M13.2 8a5.2 5.2 0 1 1-1.55-3.7M13.2 2.6v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
@@ -211,7 +207,6 @@ export const MigrateIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<path d="M9.6 3.2h3a1.2 1.2 0 0 1 1.2 1.2v7.2a1.2 1.2 0 0 1-1.2 1.2h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M1.8 8h8M7 4.8 10.2 8 7 11.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
-// 侧栏行悬浮操作图标(11-12px)
 export const MoreDots = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<circle cx="3.4" cy="8" r="1.35" fill="currentColor"/><circle cx="8" cy="8" r="1.35" fill="currentColor"/><circle cx="12.6" cy="8" r="1.35" fill="currentColor"/>',
   { flex: "none" });
@@ -224,7 +219,6 @@ export const PinIcon = ({ size = 12, filled = false }) => svg("0 0 24 24", size,
   `<path d="M12 17v5M9 4h6l1 7 2 2H6l2-2 1-7z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
   { flex: "none" });
 
-// Ask Ferry 对话视图图标
 export const SendArrowIcon = ({ size = 14 }) => svg("0 0 16 16", size, size,
   '<path d="M8 13V3.4M3.8 7.2 8 3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });

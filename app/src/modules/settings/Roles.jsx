@@ -122,7 +122,6 @@ export default function Roles() {
     setNotice(t("settings:roles.resetDone"));
   });
 
-  // ----- 导入 / 导出 -----
   const exportRoles = roles => mutate(async () => {
     setNotice("");
     const path = await exportRolesFile(roleBundleFileName(roles),
@@ -280,7 +279,6 @@ export default function Roles() {
                 borderRadius: 8, padding: "8px 11px", overflowWrap: "anywhere" }}>
                 {error}</div>)}
 
-            {/* 身份 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.identity)}>
               {t("settings:roles.groupIdentity")}</GroupTitle>
             <Card>
@@ -314,7 +312,6 @@ export default function Roles() {
               </Row>
             </Card>
 
-            {/* 人设 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.persona)}>
               {t("settings:roles.groupPersona")}</GroupTitle>
             <Card>
@@ -335,13 +332,11 @@ export default function Roles() {
               </div>
             </Card>
 
-            {/* 能力 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.capability)}
               right={t("settings:roles.capabilityCount", { n: enabled, total: TOOLS.length })}>
               {t("settings:roles.groupCapability")}</GroupTitle>
             <RoleToolGrid tools={draft.tools} onChange={tools => patch({ tools })} />
 
-            {/* 技能 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.skill)}>
               {t("settings:skills.roleTitle")}</GroupTitle>
             <div style={{ fontSize: 10.5, color: "var(--tx5)", margin: "-4px 0 8px 2px",
@@ -351,7 +346,6 @@ export default function Roles() {
               global={ferry.skills?.global || []} value={draft.skills}
               onChange={skills => patch({ skills })} />
 
-            {/* 模型 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.model)}>
               {t("settings:roles.groupModel")}</GroupTitle>
             <Card>
@@ -396,7 +390,6 @@ export default function Roles() {
               </Row>
             </Card>
 
-            {/* 安全与权限 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.security)}>
               {t("settings:roles.groupSecurity")}</GroupTitle>
             <Card>

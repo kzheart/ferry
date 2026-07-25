@@ -171,7 +171,6 @@ export function applyEvent(log, ev) {
   return log;
 }
 
-// 本地推进审批卡状态(applying/applied/failed/dismissed)
 export function patchApproval(log, operationId, patch) {
   const i = log.items.findLastIndex(
     it => it.kind === "approval" && operationKey(it.operation) === operationId);
@@ -181,7 +180,6 @@ export function patchApproval(log, operationId, patch) {
   return { ...log, items };
 }
 
-// 对话标题:第一条用户消息的首行
 export function titleOf(log) {
   const first = log?.items.find(it => it.kind === "user" && it.text);
   return first ? first.text.split("\n")[0].slice(0, 60) : null;

@@ -292,7 +292,6 @@ export default function Providers() {
 
   return (
     <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-      {/* Provider 列表 */}
       <div style={{ width: 204, flex: "none", borderRight: "1px solid var(--line4)",
         display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "12px 8px" }}>
@@ -333,7 +332,6 @@ export default function Providers() {
         </div>
       </div>
 
-      {/* 详情 */}
       <div className="fscroll" style={{ flex: 1, minWidth: 0, overflowY: "auto",
         padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
         {!sel && (

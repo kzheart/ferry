@@ -35,7 +35,6 @@ import { buildOverlayProps } from "./workspaceOverlayProps.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  // ----- 数据 -----
   const {
     env,
     scan,
@@ -49,26 +48,21 @@ export default function App() {
     deleteHistory,
   } = useBrowserData();
 
-  // ----- 导航与选中 -----
   const [view, setView] = useState(initialWorkspace);
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [organizerOpen, setOrganizerOpen] = useState(false);
   const [peekId, setPeekId] = useState(null); // Ask Ferry 卡片就地预览的会话 id
 
-  // ----- 编辑 -----
-  // ----- 迁移 -----
   const [mig, setMig] = useState(null); // {scope}
 
   const paneLayout = useResourcePaneLayout();
 
-  // ----- Ask Ferry -----
   const ferry = useAskFerry();
   const [agentAttachments, setAgentAttachments] = useState([]);
   const [settingsSection, setSettingsSection] = useState("prefs");
   const [agentRenameFor, setAgentRenameFor] = useState(null);
   const [aq, setAq] = useState("");
 
-  // ----- 搜索与筛选 -----
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
   const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
