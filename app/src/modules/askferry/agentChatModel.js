@@ -36,6 +36,20 @@ const endRun = (log, items) => {
   log.runId = null;
 };
 
+const upsertApproval = (items, next, pushIfMissing = true) => {
+  const key = operationKey(next.operation);
+  const i = key
+    ? items.findLastIndex(item => item.kind === "approval"
+        && operationKey(item.operation) === key)
+    : -1;
+  if (i >= 0) {
+    // 保留先到那张卡上更完整的 operation 信息,只推进状态字段
+    items[i] = { ...items[i], ...next, operation: items[i].operation };
+  } else if (pushIfMissing) {
+    items.push(next);
+  }
+};
+
 const patchWorkflow = (items, runId, patch) => {
   const index = items.findLastIndex(
     item => item.kind === "workflow" && item.runId === runId,
@@ -91,30 +105,33 @@ export function applyEvent(log, ev) {
         const envelope = p.result?.details;
         const operation = envelope?.operation;
         const key = operationKey(operation);
-        if (!p.is_error && key &&
+        // 自动执行(信封已是 applied)不出卡:工具行本身就是执行痕迹,只有待审批才值得打断
+        if (!p.is_error && key && envelope.status !== "applied" &&
             !items.some(item => item.kind === "approval" &&
               operationKey(item.operation) === key)) {
           items.push({
             kind: "approval", tool: current.name, operation,
-            runId: ev.run_id, status: envelope.status === "applied" ? "applied" : "pending",
-            result: envelope.result, auto: envelope.status === "applied",
+            runId: ev.run_id, status: "pending",
           });
         }
       }
       break;
     }
-    // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进
+    // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进。
+    // 按 key 去重原地更新;自动执行不出卡(无既有卡时不新增),失败始终可见
     case "operation.proposed":
-      items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
-        runId: ev.run_id, status: "pending" });
+      upsertApproval(items, { kind: "approval", tool: p.tool,
+        operation: p.operation || {}, runId: ev.run_id, status: "pending" });
       break;
     case "operation.applied":
-      items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
-        runId: ev.run_id, status: "applied", result: p.result, auto: !!p.auto });
+      upsertApproval(items, { kind: "approval", tool: p.tool,
+        operation: p.operation || {}, runId: ev.run_id, status: "applied",
+        result: p.result, auto: !!p.auto }, !p.auto);
       break;
     case "operation.failed":
-      items.push({ kind: "approval", tool: p.tool, operation: p.operation || {},
-        runId: ev.run_id, status: "failed", error: p.error, auto: !!p.auto });
+      upsertApproval(items, { kind: "approval", tool: p.tool,
+        operation: p.operation || {}, runId: ev.run_id, status: "failed",
+        error: p.error, auto: !!p.auto });
       break;
     case "workflow.started":
       items.push({
