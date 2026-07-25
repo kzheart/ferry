@@ -107,6 +107,10 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "validation",
             retryable: false,
         }),
+        "invalid_skill" => Some(ErrorPolicy {
+            category: "validation",
+            retryable: false,
+        }),
         "invalid_workflow" => Some(ErrorPolicy {
             category: "validation",
             retryable: false,
@@ -224,6 +228,10 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             retryable: false,
         }),
         "session_not_found" => Some(ErrorPolicy {
+            category: "not-found",
+            retryable: false,
+        }),
+        "skill_not_found" => Some(ErrorPolicy {
             category: "not-found",
             retryable: false,
         }),

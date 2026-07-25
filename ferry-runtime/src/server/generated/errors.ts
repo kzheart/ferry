@@ -44,6 +44,10 @@ export const RUNTIME_ERROR_POLICIES = {
     category: "validation",
     retryable: false,
   },
+  invalid_skill: {
+    category: "validation",
+    retryable: false,
+  },
   invalid_workflow: {
     category: "validation",
     retryable: false,
@@ -101,6 +105,10 @@ export const RUNTIME_ERROR_POLICIES = {
     retryable: false,
   },
   session_not_found: {
+    category: "not-found",
+    retryable: false,
+  },
+  skill_not_found: {
     category: "not-found",
     retryable: false,
   },

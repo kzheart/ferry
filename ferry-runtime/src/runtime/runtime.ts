@@ -19,6 +19,8 @@ import {
   type RoleStore,
 } from "../roles/role-store.js";
 import { RoleService } from "../roles/role-service.js";
+import { EphemeralSkillStore, type SkillStore } from "../skills/skill-store.js";
+import { SkillService } from "../skills/skill-service.js";
 import { ProtocolError, type EventEnvelope } from "../server/messages.js";
 import {
   FERRY_TOOL_NAMES,
@@ -45,6 +47,7 @@ export interface RuntimeOptions {
   backendFactory?: BackendFactory;
   providerHost?: ProviderHost;
   roleStore?: RoleStore;
+  skillStore?: SkillStore;
   toolHandler?: ToolHandler;
   engineHandler?: EngineHandler;
   now?: () => Date;
@@ -55,6 +58,7 @@ export interface RuntimeOptions {
 export class AgentRuntime {
   store: SessionStore;
   readonly roleService: RoleService;
+  readonly skillService: SkillService;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
   private readonly events: RuntimeEventBus;
@@ -74,6 +78,9 @@ export class AgentRuntime {
     this.store = options.store ?? new EphemeralSessionStore();
     this.roleService = new RoleService(
       options.roleStore ?? new EphemeralRoleStore(),
+    );
+    this.skillService = new SkillService(
+      options.skillStore ?? new EphemeralSkillStore(),
     );
     this.now = options.now ?? (() => new Date());
     this.events = new RuntimeEventBus(this.now);

@@ -175,6 +175,13 @@ export const FERRY_ERROR_POLICIES = {
       "runtime"
     ]
   },
+  "invalid_skill": {
+    "category": "validation",
+    "retryable": false,
+    "sources": [
+      "runtime"
+    ]
+  },
   "invalid_workflow": {
     "category": "validation",
     "retryable": false,
@@ -379,6 +386,13 @@ export const FERRY_ERROR_POLICIES = {
     ]
   },
   "session_not_found": {
+    "category": "not-found",
+    "retryable": false,
+    "sources": [
+      "runtime"
+    ]
+  },
+  "skill_not_found": {
     "category": "not-found",
     "retryable": false,
     "sources": [

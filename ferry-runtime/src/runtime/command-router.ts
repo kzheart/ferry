@@ -3,6 +3,7 @@ import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
 import { dispatchRoleCommand } from "../roles/commands.js";
 import { dispatchSessionCommand } from "../sessions/commands.js";
+import { dispatchSkillCommand } from "../skills/commands.js";
 import {
   PROTOCOL_VERSION,
   ProtocolError,
@@ -23,11 +24,17 @@ export async function dispatch(
       command,
     );
     const roleCommand = await dispatchRoleCommand(runtime.roleService, command);
+    const skillCommand = await dispatchSkillCommand(
+      runtime.skillService,
+      command,
+    );
     const sessionCommand = await dispatchSessionCommand(runtime, command);
     if (providerCommand.handled) {
       result = providerCommand.result;
     } else if (roleCommand.handled) {
       result = roleCommand.result;
+    } else if (skillCommand.handled) {
+      result = skillCommand.result;
     } else if (sessionCommand.handled) {
       result = sessionCommand.result;
     } else
