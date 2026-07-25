@@ -19,6 +19,10 @@ from engine.adapters.pi.native_schema import (
     extract_templates as extract_pi,
     templates as pi_templates,
 )
+from engine.adapters.grok.native_schema import (
+    extract_templates as extract_grok,
+    templates as grok_templates,
+)
 from engine.adapters.registry import create_registry
 
 
@@ -40,13 +44,21 @@ def _jsonl(path):
         ("codex", codex_templates, extract_codex, "session.jsonl"),
         ("opencode", opencode_templates, extract_opencode, "session.json"),
         ("pi", pi_templates, extract_pi, "session.jsonl"),
+        ("grok", grok_templates, extract_grok, "."),
     ],
 )
 def test_native_fixture_matches_current_structure(
     agent, template_factory, extractor, filename
 ):
     path = FIXTURES / agent / "case-02-tools" / filename
-    capture = json.loads(path.read_text()) if filename.endswith(".json") else _jsonl(path)
+    if agent == "grok":
+        capture = {
+            "summary": json.loads((path / "summary.json").read_text()),
+            "updates": _jsonl(path / "updates.jsonl"),
+            "chat": _jsonl(path / "chat_history.jsonl"),
+        }
+    else:
+        capture = json.loads(path.read_text()) if filename.endswith(".json") else _jsonl(path)
     assert extractor(capture) == template_factory()
 
 
@@ -57,6 +69,7 @@ def test_native_fixture_matches_current_structure(
         codex_templates,
         opencode_templates,
         pi_templates,
+        grok_templates,
     ],
 )
 def test_template_results_are_independent_copies(template_factory):
@@ -72,8 +85,10 @@ def test_adapter_does_not_expose_a_format_version_registry(agent_id):
 
 
 def test_fixtures_have_no_version_directory_layer():
-    for agent_id in ("claude", "codex", "opencode", "pi"):
+    for agent_id in ("claude", "codex", "opencode", "pi", "grok"):
         expected = {"case-01-plain", "case-02-tools"}
         if agent_id == "pi":
             expected.add("case-03-branch-compaction")
+        if agent_id == "grok":
+            expected |= {"case-03-rewind", "case-04-chat-fallback"}
         assert {path.name for path in (FIXTURES / agent_id).iterdir()} == expected

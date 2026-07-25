@@ -1,0 +1,2 @@
+{"type":"user","id":"u1","content":[{"type":"text","text":"Keep /fixture/grok/plain and sk-test-fixture."}]}
+{"type":"assistant","id":"a1","content":"Kept unchanged.","model_id":"grok-code-fast-1"}

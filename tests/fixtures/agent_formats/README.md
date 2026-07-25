@@ -21,6 +21,8 @@ directory.
    OpenCode captures use `session.json` instead of `session.jsonl`.
    Pi captures are current v3 append-only trees; their last valid entry is the
    active leaf and inactive branches remain byte-for-byte in the capture.
+   Grok captures pass the bundle directory and include only summary, updates,
+   and current v1 chat history—not terminals, snapshots, signals, or prompts.
 4. Compare the output with `engine/adapters/<agent>/native_schema.py`. If the
    required structure changed, replace the current templates, reader, writer,
    and fixtures together. Do not add a version branch.
