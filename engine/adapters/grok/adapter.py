@@ -1,4 +1,5 @@
-"""Grok Build read-side adapter composition."""
+"""Grok Build current-format adapter composition."""
+import json
 from pathlib import Path
 
 from ...contracts.agents import AGENTS
@@ -9,8 +10,10 @@ from ..contracts import (
 )
 from ..shared.migration import TreeMigrationSource
 from .lifecycle import GrokLifecycle
+from .migration import GrokMigrationTarget
 from .models import discover, fallback
-from .reader import read
+from .probe import GrokVerifier
+from .reader import read as read_bundle
 from .scanner import agent_fingerprint, fingerprint, scan
 
 MANIFEST = AgentManifest(id="grok", **AGENTS["grok"])
@@ -27,7 +30,6 @@ def resolve(ref):
     hits = []
     for summary in root.rglob("summary.json") if root.exists() else ():
         try:
-            import json
             data = json.loads(summary.read_text())
         except (OSError, ValueError):
             continue
@@ -40,7 +42,46 @@ def resolve(ref):
 
 class GrokBrowser:
     def scan(self, cache): return scan(cache)
-    def read(self, ref): return read(str(resolve(ref)))
+
+    def read(self, ref):
+        path = resolve(ref)
+        session = read_bundle(str(path))
+        summary = json.loads((path / "summary.json").read_text())
+        root_session_id = str(
+            summary.get("root_session_id") or session.source_id
+        )
+        root = (grok_home() / "sessions").resolve()
+        children = {}
+        if root.exists():
+            for summary_path in root.rglob("summary.json"):
+                try:
+                    summary = json.loads(summary_path.read_text())
+                except (OSError, ValueError):
+                    continue
+                parent_id = summary.get("parent_session_id")
+                if not parent_id:
+                    continue
+                child_path = summary_path.parent.resolve()
+                if not child_path.is_relative_to(root):
+                    continue
+                children.setdefault(str(parent_id), []).append(child_path)
+
+        seen = {session.source_id}
+
+        def attach(node):
+            node.root_id = root_session_id
+            node.children = []
+            for child_path in children.get(node.source_id, ()):
+                child = read_bundle(str(child_path))
+                if child.source_id in seen:
+                    continue
+                seen.add(child.source_id)
+                attach(child)
+                node.children.append(child)
+
+        attach(session)
+        return session
+
     def read_agent(self, ref): return self.read(ref)
     def resolve_ref(self, ref): return str(resolve(ref))
     def fingerprint(self, ref): return fingerprint(str(resolve(ref)))
@@ -73,5 +114,7 @@ def build():
     return AgentAdapter(
         manifest=MANIFEST, browser=browser,
         migration_source=TreeMigrationSource(browser),
+        migration_target=GrokMigrationTarget(),
+        verifier=GrokVerifier(),
         lifecycle=lifecycle, models=GrokModels(),
     )

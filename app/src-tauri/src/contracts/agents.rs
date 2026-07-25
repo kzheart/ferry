@@ -5,6 +5,6 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
     ("codex", &["browse", "resume", "migration-source", "migration-target", "edit", "delete", "probe", "models"]),
     ("opencode", &["browse", "resume", "migration-source", "migration-target", "edit", "delete", "probe", "models"]),
     ("pi", &["browse", "resume", "migration-source", "migration-target", "edit", "delete", "probe", "models"]),
-    ("grok", &["browse", "resume", "migration-source", "models"]),
+    ("grok", &["browse", "resume", "migration-source", "migration-target", "delete", "probe", "models"]),
 ];
 pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];

@@ -130,6 +130,9 @@
         "browse",
         "resume",
         "migration-source",
+        "migration-target",
+        "delete",
+        "probe",
         "models"
       ],
       "edit_operations": [],

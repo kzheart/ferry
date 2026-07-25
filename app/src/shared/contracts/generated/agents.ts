@@ -83,6 +83,9 @@ export const AGENTS = {
       "browse",
       "resume",
       "migration-source",
+      "migration-target",
+      "delete",
+      "probe",
       "models"
     ],
     "editOperations": []
