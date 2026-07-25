@@ -239,6 +239,7 @@ ferry-runtime/src/
   providers/       provider configuration, authentication, model host
   sessions/        conversations and their persistence
   roles/           role definitions and repositories
+  skills/          skill library, candidate discovery, skill configuration
   tools/           Ferry tool catalog and delegation
   organizing/      summary and organization workflows
   security/        redaction and runtime limits
@@ -262,6 +263,54 @@ are rejected.
 
 Ferry does not provide long-term agent memory. Workflow input, events, and
 result artifacts live only within the workflow/conversation persistence model.
+
+#### Skills
+
+Skills are import-only. The chain is discover -> import -> configure -> inject,
+and each arrow is a boundary that must not be short-circuited.
+
+*Discover* scans the skill directories declared per Agent in
+`contracts/agents.json`, plus any directory the user adds. `skill-discovery.ts`
+is read-only: it produces candidates and never writes. A candidate is not a
+Ferry skill, and the runtime never reads one.
+
+*Import* copies the whole candidate directory into Ferry's own library at
+`~/.ferry/skills/<id>/`. Only what lands there counts, which is what keeps
+uninstalling Claude Code or editing an upstream prompt from silently changing
+Ferry's behaviour. The cost is that upstream updates do not propagate; the
+candidate list keeps offering "re-import" instead of hiding what is installed.
+
+*Configure* happens entirely within the library. `~/.ferry/skills.json` records
+which installed skills are global and which directories to scan; a role's
+`skills` field names installed ids. Directory existence is the truth — a folder
+dropped into the library by hand works, and the `installed` table in
+`skills.json` only annotates where a skill came from.
+
+*Inject* resolves role skills together with global skills at session creation.
+Only the name-and-description catalog enters the system prompt; the model pulls
+a body on demand through the `skill` tool. Persisted sessions store ids only and
+re-resolve on restore, because a skill may have been deleted meanwhile.
+
+`SkillLibrary` is the single reader, its root is fixed, and `read` accepts an id
+rather than a path — the id is checked against a pattern and the resolved path
+is asserted to stay under the root.
+
+#### bash
+
+The `bash` tool is an ordinary entry in the role capability list, not a separate
+permission switch. It does not route to the Session Engine, which is a session
+history service; `complete_tool_request` intercepts it before `route_tool` and
+runs it in the Rust host. Running it there is what makes "nothing executes
+without approval" enforceable: the approval state machine and the per-session
+auto policy both live in Rust, so the runtime cannot bypass them.
+
+A proposal is registered, not executed. Its plan id carries an `shl_` prefix so
+the frontend can tell it apart from an Engine `op_` plan, and the id is consumed
+on use. Whether approval is skipped follows the same
+`allows_auto_apply(auto_policy(session), role.apply_policy)` rule as migration
+and editing — bash gets no additional bypass. Execution clears the environment
+down to `PATH`/`HOME`/`LANG`/`TERM`, runs in its own process group so a timeout
+can kill grandchildren too, and truncates each stream at 64KB.
 
 ## Data ownership
 
@@ -371,6 +420,8 @@ external module so the policy does not require inline script execution.
 - Allowlist all WebView and Ferry Runtime methods.
 - Apply timeouts, cancellation, and bounded concurrency.
 - Never let Node write external session stores directly.
+- Read skills only from Ferry's own library, by id, never by caller-supplied path.
+- Execute shell commands only in the Rust host, only from a registered proposal.
 
 ## Dependency direction
 
