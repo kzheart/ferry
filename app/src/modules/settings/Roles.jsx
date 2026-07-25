@@ -109,7 +109,6 @@ export default function Roles() {
   const remove = () => mutate(async () => {
     await ferry.deleteRole(selected.id);
     setSelectedId("default");
-    setConfirming(false);
   });
 
   const restore = () => mutate(async () => {
@@ -195,16 +194,12 @@ export default function Roles() {
         display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
       {icon}</button>
   );
-  // 恢复出厂设置只是丢弃改写,不该按删除那样报红
-  const danger = builtinSelected
-    ? { line: "var(--line4)", bg: "var(--fill3)", title: "var(--tx2)", action: "var(--tx2)" }
-    : { line: "var(--err-line)", bg: "var(--err-bg)", title: "var(--err-text)",
-        action: "var(--err-deep)" };
-
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
       <RoleList roles={ferry.roles} selectedId={selected?.id} creating={creating}
         draft={draft} busy={busy} transferOpen={transferOpen}
+        deletable={!creating && !!selected && !selected.builtin}
+        deleteName={selected?.name} onDelete={remove}
         onSelect={id => { setSelectedId(id); setCreating(false); }}
         onCreate={startCreate} onToggleTransfer={setTransferOpen}
         transfer={{
@@ -424,27 +419,23 @@ export default function Roles() {
               </div>
             </Card>
 
-            {/* 危险区:内置角色不能删,给的是恢复出厂设置 */}
-            {!creating && selected && (
+            {/* 删除走左栏工具条的减号;这里只剩内置角色的恢复出厂设置 */}
+            {!creating && builtinSelected && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22,
                 padding: "13px 15px", borderRadius: 12,
-                border: `1px solid ${danger.line}`, background: danger.bg }}>
+                border: "1px solid var(--line4)", background: "var(--fill3)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 650, color: danger.title }}>
-                    {t(`settings:roles.${builtinSelected ? "resetTitle" : "dangerTitle"}`)}</div>
-                  <div style={{ fontSize: 11, marginTop: 2, color: danger.title,
+                  <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx2)" }}>
+                    {t("settings:roles.resetTitle")}</div>
+                  <div style={{ fontSize: 11, marginTop: 2, color: "var(--tx2)",
                     opacity: .82, lineHeight: 1.55 }}>
-                    {t(`settings:roles.${builtinSelected ? "resetDesc" : "dangerDesc"}`)}</div>
+                    {t("settings:roles.resetDesc")}</div>
                 </div>
                 <button className="fbtn" disabled={busy}
-                  onClick={confirming
-                    ? (builtinSelected ? restore : remove)
-                    : () => setConfirming(true)}
-                  style={{ flex: "none", height: 30, color: danger.action,
-                    borderColor: danger.line, fontWeight: 650 }}>
-                  {t(`settings:roles.${builtinSelected
-                    ? (confirming ? "resetConfirm" : "reset")
-                    : (confirming ? "deleteConfirm" : "delete")}`)}
+                  onClick={confirming ? restore : () => setConfirming(true)}
+                  style={{ flex: "none", height: 30, color: "var(--tx2)",
+                    borderColor: "var(--line4)", fontWeight: 650 }}>
+                  {t(`settings:roles.${confirming ? "resetConfirm" : "reset"}`)}
                 </button>
               </div>
             )}

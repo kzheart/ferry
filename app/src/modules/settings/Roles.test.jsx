@@ -1,6 +1,6 @@
-// 角色页:内置角色和自定义角色走的是同一套表单,区别只在危险区给的是
-// "恢复默认"还是"删除"。详情区被拆成了 RoleList / RoleToolGrid / RoleIconPicker,
-// 这里守的就是拆分后 props 还接得上——类型检查看不见 JSX 的传递链路。
+// 角色页:内置角色和自定义角色走的是同一套表单。删除在左栏工具条的减号里,
+// 详情区只给内置角色留了"恢复默认"。详情区被拆成了 RoleList / RoleToolGrid /
+// RoleIconPicker,这里守的就是拆分后 props 还接得上——类型检查看不见 JSX 的传递链路。
 import { test } from "vitest";
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -36,13 +36,15 @@ function mount(overrides = {}) {
   return calls;
 }
 
-test("内置角色可以编辑,危险区给的是恢复默认而不是删除", async () => {
+const minusButton = () => screen.getByLabelText("settings:roles.delete");
+
+test("内置角色可以编辑,给的是恢复默认,减号禁用", async () => {
   const calls = mount();
 
   const name = screen.getByDisplayValue("Ferry");
   assert.equal(name.disabled, false);
   assert.ok(screen.getByText("settings:roles.resetTitle"));
-  assert.equal(screen.queryByText("settings:roles.dangerTitle"), null);
+  assert.equal(minusButton().disabled, true);
 
   // 两步确认:第一下只换文案,第二下才真的落到运行时
   fireEvent.click(screen.getByText("settings:roles.reset"));
@@ -52,12 +54,27 @@ test("内置角色可以编辑,危险区给的是恢复默认而不是删除", a
   assert.deepEqual(calls, [["reset", "default"]]);
 });
 
-test("自定义角色仍然是删除,工具卡的勾选会写回草稿", () => {
-  mount();
+test("自定义角色从左栏减号删除,二次确认后才落到运行时", async () => {
+  const calls = mount();
   fireEvent.click(screen.getByText("reader"));
 
-  assert.ok(screen.getByText("settings:roles.dangerTitle"));
+  // 详情区不再有删除入口,危险区只留给内置角色的恢复默认
+  assert.equal(screen.queryByText("settings:roles.delete"), null);
   assert.equal(screen.queryByText("settings:roles.resetTitle"), null);
+
+  assert.equal(minusButton().disabled, false);
+  fireEvent.click(minusButton());
+  assert.ok(screen.getByText("settings:roles.deleteAsk"));
+  assert.deepEqual(calls, []);
+
+  fireEvent.mouseDown(screen.getByText("settings:roles.delete"));
+  await Promise.resolve();
+  assert.deepEqual(calls, [["delete", "reader"]]);
+});
+
+test("工具卡的勾选会写回草稿", () => {
+  mount();
+  fireEvent.click(screen.getByText("reader"));
 
   // 没有改动就没有保存按钮,点一下工具卡才出现——按钮在不在就是脏标记
   assert.equal(screen.queryByText("settings:roles.save"), null);
