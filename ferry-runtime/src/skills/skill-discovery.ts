@@ -2,13 +2,14 @@
  * 候选发现:扫描外部 coding agent 的技能目录。
  * 只读——这里产出的东西不是 Ferry 的技能,必须经 SkillLibrary.install 复制进库才算数。
  */
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   AGENT_IDS,
   AGENT_LABELS,
   AGENT_SKILL_PATHS,
+  SHARED_SKILL_PATHS,
 } from "../server/generated/agents.js";
 import { SKILL_MANIFEST, parseSkillDocument } from "./skill-document.js";
 
@@ -39,7 +40,16 @@ export function expandHome(input: string): string {
 }
 
 function builtinSources(): SkillSource[] {
-  const sources: SkillSource[] = [];
+  // 共享仓库排在最前:各 CLI 目录多半是软链农场,去重时把归属留给真身
+  const sources: SkillSource[] = (SHARED_SKILL_PATHS as readonly string[]).map(
+    (path, index) => ({
+      id: SHARED_SKILL_PATHS.length > 1 ? `shared-${index + 1}` : "shared",
+      label: path,
+      path: expandHome(path),
+      builtin: true,
+      available: false,
+    }),
+  );
   AGENT_IDS.forEach((id, index) => {
     const paths = AGENT_SKILL_PATHS[id] as readonly string[];
     paths.forEach((path, position) => {
@@ -68,9 +78,8 @@ function customSources(scanSources: readonly string[]): SkillSource[] {
 async function scan(source: SkillSource): Promise<SkillCandidate[]> {
   let items: string[];
   try {
-    items = (await readdir(source.path, { withFileTypes: true }))
-      .filter((item) => item.isDirectory() && !item.name.startsWith("."))
-      .map((item) => item.name)
+    items = (await readdir(source.path))
+      .filter((name) => !name.startsWith("."))
       .sort()
       .slice(0, MAX_CANDIDATES_PER_SOURCE);
   } catch {
@@ -82,7 +91,10 @@ async function scan(source: SkillSource): Promise<SkillCandidate[]> {
     const directory = join(source.path, name);
     const manifest = join(directory, SKILL_MANIFEST);
     try {
-      const info = await lstat(manifest);
+      // 用 stat 而不是 lstat/Dirent:~/.claude/skills 这类目录常常整个是软链农场,
+      // 按 lstat 语义判目录会把它们全部漏掉
+      if (!(await stat(directory)).isDirectory()) continue;
+      const info = await stat(manifest);
       if (!info.isFile() || info.size > MAX_MANIFEST_BYTES) continue;
       const document = parseSkillDocument(await readFile(manifest, "utf8"), name);
       candidates.push({
@@ -99,16 +111,41 @@ async function scan(source: SkillSource): Promise<SkillCandidate[]> {
   return candidates;
 }
 
-/** 目录不存在(比如没装 Claude Code)只是 available:false,不是错误。 */
+/** 同一份技能被多个 CLI 软链时只留一条:否则 go-plan 会在列表里出现三次。 */
+async function dedupe(candidates: SkillCandidate[]): Promise<SkillCandidate[]> {
+  const seen = new Set<string>();
+  const unique: SkillCandidate[] = [];
+  for (const candidate of candidates) {
+    let key = candidate.path;
+    try {
+      key = await realpath(candidate.path);
+    } catch {
+      // 断链之类的读不到真身,退回按路径去重
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+  return unique;
+}
+
+/**
+ * 目录不存在(比如没装 Claude Code)只是 available:false,不是错误。
+ * includeBuiltin=false 用于测试:否则结果会取决于开发者主目录里装了什么。
+ */
 export async function discover(
   scanSources: readonly string[] = [],
+  includeBuiltin = true,
 ): Promise<{ sources: SkillSource[]; candidates: SkillCandidate[] }> {
-  const sources = [...builtinSources(), ...customSources(scanSources)];
+  const sources = [
+    ...(includeBuiltin ? builtinSources() : []),
+    ...customSources(scanSources),
+  ];
   const candidates: SkillCandidate[] = [];
   for (const source of sources) {
     candidates.push(...(await scan(source)));
   }
-  return { sources, candidates };
+  return { sources, candidates: await dedupe(candidates) };
 }
 
 /** candidate_id 反解成候选目录;找不到就是找不到,绝不接受调用方直接给路径。 */

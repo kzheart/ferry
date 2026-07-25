@@ -66,8 +66,23 @@ ERROR_OUTPUTS = {
 }
 
 
+def load_shared_skill_paths() -> list[str]:
+    """跨工具共享的技能仓库(如 ~/.agents/skills):不属于任何一个 agent。"""
+    document = json.loads(AGENTS_SOURCE.read_text())
+    paths = document.get("shared_skill_paths", [])
+    if (
+        not isinstance(paths, list)
+        or not all(isinstance(path, str) and path for path in paths)
+        or len(paths) != len(set(paths))
+    ):
+        raise ValueError("shared_skill_paths 必须是唯一非空字符串数组")
+    return paths
+
+
 def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
     document = json.loads(AGENTS_SOURCE.read_text())
+    if set(document) - {"agents", "shared_skill_paths"}:
+        raise ValueError("contracts/agents.json 顶层键必须是 agents/shared_skill_paths")
     agents = document.get("agents")
     if not isinstance(agents, list) or not agents:
         raise ValueError("contracts/agents.json 必须包含非空 agents 数组")
@@ -409,6 +424,8 @@ def frontend(agents: list[dict[str, object]]) -> str:
         f"export const ALLOWED_EXECUTABLES = {json.dumps(executables)} as const;",
         "export const AGENT_SKILL_PATHS = "
         f"{json.dumps(skill_paths, indent=2)} as const;",
+        "export const SHARED_SKILL_PATHS = "
+        f"{json.dumps(load_shared_skill_paths())} as const;",
         "export type AgentId = keyof typeof AGENTS;",
         "",
     ))
@@ -476,6 +493,8 @@ def runtime(agents: list[dict[str, object]]) -> str:
         "export const AGENT_SKILL_PATHS = "
         f"{json.dumps({agent['id']: agent['skill_paths'] for agent in agents}, indent=2)}"
         " as const;",
+        "export const SHARED_SKILL_PATHS = "
+        f"{json.dumps(load_shared_skill_paths())} as const;",
         "export type AgentId = (typeof AGENT_IDS)[number];",
         "",
     ))

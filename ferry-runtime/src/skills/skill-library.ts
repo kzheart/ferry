@@ -18,10 +18,14 @@ import { SKILL_MANIFEST, parseSkillDocument } from "./skill-document.js";
 
 export const SKILL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-/** 导入边界:任一超限整体失败,不留半个技能在库里。 */
-const MAX_IMPORT_FILES = 200;
-const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
-const MAX_IMPORT_DEPTH = 4;
+/**
+ * 导入边界:任一超限整体失败,不留半个技能在库里。
+ * 数值按真实技能仓库量过——文档型技能上百个文件、媒体型技能几十 MB 都属常态,
+ * 卡太紧会让一部分技能根本导不进来;这里只挡明显病态的目录树。
+ */
+const MAX_IMPORT_FILES = 2_000;
+const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
+const MAX_IMPORT_DEPTH = 12;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_SKILLS = 200;
 
