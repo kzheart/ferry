@@ -1,4 +1,5 @@
-{"method":"session/update","params":{"sessionId":"fixture-grok-rewind","update":{"kind":"user_message","content":{"type":"text","text":"first"}},"_meta":{"promptId":"p1","promptIndex":0,"updateType":"UserMessage"}}}
+{"method":"session/update","params":{"sessionId":"fixture-grok-rewind","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"first"},"_meta":{"promptIndex":0,"modelId":"grok-code-fast-1"}},"_meta":{"eventId":"e1"}}}
+{"method":"session/update","params":{"sessionId":"fixture-grok-rewind","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"dead prompt"},"_meta":{"promptIndex":1,"modelId":"grok-code-fast-1"}},"_meta":{"eventId":"e2"}}}
 {"method":"session/update","params":{"sessionId":"fixture-grok-rewind","update":{"content":{"type":"text","text":"dead"}},"_meta":{"promptId":"p2","promptIndex":1,"updateType":"AgentMessageChunk"}}}
-{"method":"session/rewind","params":{"sessionId":"fixture-grok-rewind","promptIndex":1,"update":{"kind":"rewind_marker","targetPromptIndex":1}}}
+{"method":"_x.ai/session/update","params":{"sessionId":"fixture-grok-rewind","update":{"sessionUpdate":"rewind_marker","target_prompt_index":1},"_meta":{"eventId":"e3"}}}
 {"method":"session/update","params":{"sessionId":"fixture-grok-rewind","update":{"content":{"type":"text","text":"live"}},"_meta":{"promptId":"p1","promptIndex":0,"updateType":"AgentMessageChunk"}}}

@@ -95,12 +95,14 @@ def read(path: str) -> Session:
                 "user", [Block("text", "".join(prompt["user"]))],
                 source_id=f"{prompt['id']}:user",
             ))
-        blocks = [
-            Block(item["kind"], item["text"]) for item in prompt["assistant"]
-            if item["text"]
-        ]
-        blocks.extend(Block("tool", tool=_tool(tool))
-                      for tool in prompt["tools"].values())
+        blocks = []
+        for item in prompt["blocks"]:
+            if item["kind"] == "tool":
+                blocks.append(Block(
+                    "tool", tool=_tool(prompt["tools"][item["id"]]),
+                ))
+            elif item["text"]:
+                blocks.append(Block(item["kind"], item["text"]))
         if blocks:
             session.messages.append(Message(
                 "assistant", blocks, source_id=f"{prompt['id']}:assistant",
