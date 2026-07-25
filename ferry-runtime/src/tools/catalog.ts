@@ -156,6 +156,7 @@ export const FERRY_TOOL_NAMES = [
   "usage",
   "migrate",
   "session_edit",
+  "bash",
 ] as const;
 
 export type FerryToolName = (typeof FERRY_TOOL_NAMES)[number];
@@ -242,6 +243,16 @@ const schemas = {
   // Function-tool providers require an object root. Conditional constraints
   // live inside oneOf while the execution boundary validates them again.
   session_edit: sessionEditSchema,
+  bash: Type.Object(
+    {
+      command: Type.String({ minLength: 1, maxLength: 4_000 }),
+      cwd: Type.Optional(Type.String({ maxLength: 1_024 })),
+      timeout_ms: Type.Optional(
+        Type.Integer({ minimum: 1_000, maximum: 120_000 }),
+      ),
+    },
+    { additionalProperties: false },
+  ),
 } as const;
 
 const descriptions: Record<FerryToolName, string> = {
@@ -252,6 +263,7 @@ const descriptions: Record<FerryToolName, string> = {
   usage: "Get privacy-filtered aggregate usage.",
   migrate: `Migrate a session into another agent's format (targets: ${AGENT_IDS.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
+  bash: "Run a shell command on the user's machine. The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.",
 };
 
 export function createFerryTools(
@@ -285,6 +297,9 @@ export function createFerryTools(
         if (hasPatch && input.intent !== undefined)
           throw new Error("session_edit metadata patch does not accept intent");
         if (hasOps) validateSessionEditOperations(input);
+      }
+      if (name === "bash" && String(input.command ?? "").trim().length === 0) {
+        throw new Error("bash requires a non-empty command");
       }
       const active = getContext();
       const details = await port.invoke(

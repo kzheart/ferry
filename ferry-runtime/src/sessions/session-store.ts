@@ -18,6 +18,8 @@ export interface PersistedSession {
   resolved_persona?: string;
   resolved_tools?: string[];
   resolved_apply_policy?: "manual" | "auto";
+  /** 只记 id;重启时重新 resolveFor,磁盘上的技能可能已经被删了。 */
+  resolved_skills?: string[];
 }
 
 export type PersistedSessionMetadata = Omit<PersistedSession, "messages">;

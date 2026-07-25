@@ -89,7 +89,6 @@ describe("JSONL protocol", () => {
       name: "Reader",
       persona: "Read only.",
       tools: ["session_search", "session_read"],
-      allow_bash: false,
       apply_policy: "manual",
     };
     const created = await dispatch(

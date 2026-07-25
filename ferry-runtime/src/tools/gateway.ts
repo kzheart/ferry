@@ -29,6 +29,8 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   usage: 25_000,
   migrate: 125_000,
   session_edit: 125_000,
+  // 略大于 Rust 侧 120s 的执行超时,让那边先触发、把进程组杀干净
+  bash: 125_000,
 };
 
 export interface RuntimeGatewayOptions {
