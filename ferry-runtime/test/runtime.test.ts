@@ -286,7 +286,7 @@ describe("AgentRuntime", () => {
     expect(runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
   });
 
-  it("reports a redacted provider error instead of hiding its cause", async () => {
+  it("reports the original bounded provider error", async () => {
     const runtime = await createRuntime();
     await runtime.createSession("s1");
     const { run_id } = await runtime.prompt("s1", "error: schema");
@@ -296,9 +296,8 @@ describe("AgentRuntime", () => {
       .replay("s1", 0)
       .find((event) => event.run_id === run_id && event.type === "run.failed");
     expect(failure?.payload.message).toContain("400: invalid tool schema");
-    expect(failure?.payload.message).toContain("[ABSOLUTE_PATH]");
-    expect(failure?.payload.message).toContain("[REDACTED]");
-    expect(failure?.payload.message).not.toContain("sk-1234567890abcdef");
+    expect(failure?.payload.message).toContain("/Users/private/config");
+    expect(failure?.payload.message).toContain("sk-1234567890abcdef");
   });
 
   it("keeps structured prompt context out of the visible chat history", async () => {
@@ -373,7 +372,7 @@ describe("AgentRuntime", () => {
     });
   });
 
-  it("preserves redacted structured tool details across replay", async () => {
+  it("preserves original bounded structured tool details across replay", async () => {
     const runtime = await createRuntime({
       toolHandler: async () => ({
         sessions: [
@@ -399,8 +398,8 @@ describe("AgentRuntime", () => {
           {
             tool: "codex",
             ref: "fsr_1",
-            title: "Fix CI [REDACTED]",
-            path: "[ABSOLUTE_PATH]",
+            title: "Fix CI sk-secret-value-123456",
+            path: "/Users/example/private/session.jsonl",
           },
         ],
       },

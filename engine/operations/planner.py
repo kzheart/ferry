@@ -12,7 +12,7 @@ from ..errors import (
 )
 from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
-from ..sessions.safety import record_session_id, redact
+from ..sessions.safety import record_session_id, truncate_text
 from .metadata_store import metadata_key
 from . import metadata
 from .edit import EditOperationHandler
@@ -156,7 +156,9 @@ class OperationPlanner:
             "tool": record.tool,
             "ref": record.opaque_ref,
             "session_id": record_session_id(record),
-            "title": redact(str(record.row.get("title") or ""), 512),
+            "title": truncate_text(
+                str(record.row.get("title") or ""), 512,
+            )[0],
             "undoable": lifecycle.delete_undoable,
         }
         after = self._index.resolve(

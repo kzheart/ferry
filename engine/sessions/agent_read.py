@@ -1,8 +1,7 @@
-"""供 Ferry Agent 使用的限量、脱敏会话读取。"""
+"""供 Ferry Agent 使用的限量会话读取。"""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from ..adapters.contracts import NativeSessionReference
 from ..errors import AgentRequestError
@@ -11,11 +10,11 @@ from .model import tool_result_text
 from .safety import (
     MAX_AGENT_DTO_BYTES,
     bounded_int,
+    bounded_json,
     finalize_dto,
     record_session_id,
-    redact,
-    safe_project,
     string_set,
+    truncate_text,
 )
 
 MAX_CONTENT_SEARCH_RESULTS = 50
@@ -30,6 +29,20 @@ def _take(text: str, remaining: int) -> tuple[str, int, bool]:
         return text, remaining - len(encoded), False
     clipped = encoded[:max(0, remaining)].decode("utf-8", errors="ignore")
     return clipped, 0, True
+
+
+def _take_json(value, remaining: int) -> tuple[object, int, bool]:
+    if remaining < 32:
+        return {}, max(0, remaining - 2), True
+    bounded = bounded_json(value, max(128, min(remaining, 12 * 1024)))
+    encoded = json.dumps(bounded, ensure_ascii=False).encode("utf-8")
+    if len(encoded) <= remaining:
+        return bounded, remaining - len(encoded), bounded != value
+    marker = {"truncated": True}
+    marker_size = len(json.dumps(marker).encode("utf-8"))
+    if marker_size <= remaining:
+        return marker, remaining - marker_size, True
+    return {}, max(0, remaining - 2), True
 
 
 def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
@@ -107,7 +120,7 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
         for block in message.blocks:
             item = None
             if block.kind == "text":
-                original = redact(block.text)
+                original = block.text
                 value, remaining, clipped = _take(original, remaining)
                 item = {"kind": "text", "text": value}
                 if clipped:
@@ -118,20 +131,22 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                     )
             elif block.kind == "tool" and block.tool:
                 result = block.tool.result
+                tool_input, remaining, input_clipped = _take_json(
+                    block.tool.input, remaining,
+                )
                 item = {
                     "kind": "tool",
-                    "name": redact(block.tool.name, 120),
-                    "op": (
-                        redact(str(block.tool.op), 120)
-                        if block.tool.op else None
-                    ),
-                    "status": redact(result.status, 80) if result else None,
-                    "input": "[omitted]",
+                    "name": truncate_text(block.tool.name, 120)[0],
+                    "op": truncate_text(str(block.tool.op), 120)[0]
+                    if block.tool.op else None,
+                    "status": truncate_text(result.status, 80)[0]
+                    if result else None,
+                    "input": tool_input,
                     "output": "[omitted]",
                 }
-                clipped = False
+                clipped = input_clipped
                 if include_tool_outputs and remaining:
-                    output = redact(tool_result_text(result))
+                    output = tool_result_text(result)
                     value, remaining, output_clipped = _take(
                         output, remaining,
                     )
@@ -143,12 +158,11 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
             elif block.kind == "image" and block.image:
                 item = {
                     "kind": "image",
-                    "id": redact(block.image.id, 200),
-                    "mime_type": redact(block.image.mime_type, 120),
-                    "filename": (
-                        redact(Path(block.image.filename).name, 255)
-                        if block.image.filename else None
-                    ),
+                    "id": truncate_text(block.image.id, 200)[0],
+                    "mime_type": truncate_text(block.image.mime_type, 120)[0],
+                    "filename": truncate_text(
+                        block.image.filename, 1024,
+                    )[0] if block.image.filename else None,
                     "data": "[omitted]",
                 }
             else:
@@ -178,12 +192,16 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
             break
     last_returned = messages[-1]["message"] if messages else first - 1
     has_more = last_returned < len(session.messages)
+    title, title_truncated = truncate_text(session.title, 200)
+    project, project_truncated = truncate_text(session.cwd, 1024)
     result = {
         "tool": tool,
         "ref": opaque_ref,
         "session_id": record_session_id(record, session),
-        "title": redact(session.title, 200),
-        "project": safe_project(session.cwd),
+        "title": title,
+        "project": project,
+        "title_truncated": title_truncated,
+        "project_truncated": project_truncated,
         "revision": record.revision,
         "message_count": len(session.messages),
         "turn_count": total_turns,
@@ -286,7 +304,7 @@ def search_session_content(tool: str, opaque_ref: str, terms,
                 editable,
             ),
             "matched_terms": hit_terms,
-            "snippet": redact(snippet, 900),
+            "snippet": truncate_text(snippet, 900)[0],
             "complete": start == 0 and end == len(text),
         }
         candidate = {

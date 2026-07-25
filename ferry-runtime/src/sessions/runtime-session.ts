@@ -17,10 +17,10 @@ import type { ModelSelection } from "../providers/provider-config.js";
 import type { ApplyPolicy } from "../roles/role-store.js";
 import {
   providerFailure,
-  safeEvents,
-  safeMessages,
+  boundedEvents,
+  boundedMessages,
   summarizeToolResult,
-} from "../security/redaction.js";
+} from "../security/limits.js";
 import {
   createFerryTools,
   type FerryToolName,
@@ -440,7 +440,7 @@ export class RuntimeSession {
     const committableEventSeq = this.activeRunId
       ? this.lastCommittableEventSeq()
       : (this.events.at(-1)?.seq ?? 0);
-    const messages = safeMessages(
+    const messages = boundedMessages(
       this.agent.state.messages.slice(
         this.persistedMessageCount,
         committableMessageCount,
@@ -449,7 +449,7 @@ export class RuntimeSession {
       ordinal: this.persistedMessageCount + offset,
       message,
     }));
-    const events = safeEvents(
+    const events = boundedEvents(
       this.events.filter(
         (event) =>
           event.seq > this.persistedEventSeq &&

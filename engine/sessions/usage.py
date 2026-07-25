@@ -12,8 +12,6 @@ from ..system.pricing import pricing
 from .index import AgentSessionIndex
 from .safety import (
     finalize_dto,
-    redact,
-    safe_project,
     string_set,
     validated_interval,
 )
@@ -131,7 +129,7 @@ def get_usage(agents=None, projects=None, time_range=None, *,
     for record in index.refresh():
         row = record.row
         updated = int(row.get("updated") or 0)
-        project = safe_project(row.get("dir"))
+        project = str(row.get("dir") or "")
         if allowed_agents and record.tool not in allowed_agents:
             continue
         if allowed_projects and project.casefold() not in allowed_projects:
@@ -146,7 +144,7 @@ def get_usage(agents=None, projects=None, time_range=None, *,
         sessions += 1
         add_tokens(total, tokens)
         add_tokens(by_agent.setdefault(record.tool, empty_tokens()), tokens)
-        model = redact(str(row.get("model") or ""), 120)
+        model = str(row.get("model") or "")
         price = _match_price(model, prices, price_index)
         cost = _cost_of(tokens, price)
         cost_total += cost
