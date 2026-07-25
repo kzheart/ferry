@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from engine.adapters.contracts import (
-    AgentManifest, AgentAdapter, id_reference, jsonl_reference,
+    AgentManifest, AgentAdapter, filesystem_reference, id_reference,
 )
 from engine.contracts.agents import AGENT_CAPABILITIES
 from engine.adapters.opencode import scanner as opencode_scanner
@@ -76,11 +76,13 @@ class Browser:
     def canonicalize(self, row):
         if self.identity:
             return id_reference(row)
-        return jsonl_reference(row, self.source_path, self.resolve_ref)
+        return filesystem_reference(
+            row, self.source_path, self.resolve_ref, kind="file",
+        )
 
     def validate_read_scope(self, ref):
         self.read_scope_calls += 1
-        if not ref.path_backed:
+        if ref.storage_kind == "id":
             return
         root = Path(ref.root).resolve(strict=True)
         path = Path(ref.canonical_ref).resolve(strict=True)

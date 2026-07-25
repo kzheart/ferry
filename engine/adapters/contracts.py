@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 from ..contracts.agents import AGENT_CAPABILITIES
 
@@ -48,7 +48,15 @@ class NativeSessionReference:
 
     canonical_ref: str
     root: str | None
-    path_backed: bool
+    storage_kind: Literal["file", "directory", "id"]
+
+    def __post_init__(self):
+        if (
+            not self.canonical_ref
+            or self.storage_kind not in {"file", "directory", "id"}
+            or (self.storage_kind == "id") != (self.root is None)
+        ):
+            raise ValueError("非法原生会话引用")
 
 
 @lru_cache(maxsize=32)
@@ -67,8 +75,15 @@ def _is_within(path: str, root: str) -> bool:
     return path.startswith(prefix)
 
 
-def jsonl_reference(row: dict, source_path: str, resolve_ref) -> NativeSessionReference | None:
-    """校验 JSONL 会话路径并收窄为 Adapter 可接受的内部引用。"""
+def filesystem_reference(
+    row: dict,
+    source_path: str,
+    resolve_ref,
+    *,
+    kind: Literal["file", "directory"],
+    required_name: str | None = None,
+) -> NativeSessionReference | None:
+    """校验受 Agent root 约束的文件或目录引用。"""
     raw = row.get("path")
     if not isinstance(raw, str) or not raw:
         return None
@@ -80,18 +95,29 @@ def jsonl_reference(row: dict, source_path: str, resolve_ref) -> NativeSessionRe
     except OSError:
         return None
     if (
-        not path.endswith(".jsonl")
-        or not os.path.isfile(path)
+        (kind == "file" and not os.path.isfile(path))
+        or (kind == "directory" and not os.path.isdir(path))
         or not _is_within(path, root)
     ):
         return None
+    if required_name is not None:
+        if not required_name or os.path.basename(required_name) != required_name:
+            return None
+        try:
+            required = os.path.realpath(
+                os.path.join(path, required_name), strict=True,
+            )
+        except OSError:
+            return None
+        if not os.path.isfile(required) or not _is_within(required, path):
+            return None
     try:
         resolved = os.path.realpath(resolve_ref(path), strict=True)
     except (OSError, ValueError):
         return None
     if resolved != path:
         return None
-    return NativeSessionReference(path, root, True)
+    return NativeSessionReference(path, root, kind)
 
 
 def id_reference(row: dict) -> NativeSessionReference | None:
@@ -99,7 +125,7 @@ def id_reference(row: dict) -> NativeSessionReference | None:
     raw = row.get("id")
     if not isinstance(raw, str) or not raw or len(raw) > 512 or "\x00" in raw:
         return None
-    return NativeSessionReference(raw, None, False)
+    return NativeSessionReference(raw, None, "id")
 
 
 @runtime_checkable

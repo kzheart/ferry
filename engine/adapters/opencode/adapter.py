@@ -46,7 +46,7 @@ class OpenCodeBrowser:
         return id_reference(row)
 
     def validate_read_scope(self, ref: NativeSessionReference) -> None:
-        if ref.path_backed or ref.root is not None:
+        if ref.storage_kind != "id" or ref.root is not None:
             raise AgentReferenceError("OpenCode 会话引用必须由原生 id 支持")
 
 

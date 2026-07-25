@@ -41,7 +41,7 @@ class IndexedSession:
     tool: str
     canonical_ref: str
     root: str | None
-    path_backed: bool
+    storage_kind: str
     row: dict
     revision: str
     source_identity: tuple | str | None
@@ -121,6 +121,32 @@ def _agent_fingerprint(browser, ref: str):
     return (marker or browser.fingerprint)(ref)
 
 
+def _directory_identity(
+    path: Path,
+    browser,
+    digest_cache: dict | None = None,
+) -> tuple:
+    member_provider = getattr(browser, "authoritative_members", None)
+    if member_provider is None:
+        raise AgentReferenceError("目录会话未声明权威成员")
+    members = member_provider(str(path))
+    if not isinstance(members, (list, tuple)) or not members:
+        raise AgentReferenceError("目录会话缺少权威成员")
+    identities = []
+    for raw_member in members:
+        member = Path(raw_member)
+        if not member.is_absolute():
+            member = path / member
+        resolved = member.resolve(strict=True)
+        if not resolved.is_file() or not resolved.is_relative_to(path):
+            raise AgentReferenceError("目录会话权威成员超出 bundle")
+        identities.append((
+            str(resolved.relative_to(path)),
+            _path_identity(resolved, digest_cache),
+        ))
+    return tuple(sorted(identities))
+
+
 class AgentSessionIndex:
     def __init__(self, ports: EngineContext):
         self._ports = ports
@@ -158,7 +184,7 @@ class AgentSessionIndex:
             for (tool_name, _adapter, row), resolved in zip(
                 scanned, canonical_rows,
             ):
-                canonical, root, path_backed, identity = resolved
+                canonical, root, storage_kind, identity = resolved
                 if canonical is None:
                     continue
                 revision = _revision(tool_name, canonical, row, identity)
@@ -172,7 +198,7 @@ class AgentSessionIndex:
                     tool_name,
                     canonical,
                     root,
-                    path_backed,
+                    storage_kind,
                     dict(row),
                     revision,
                     identity,
@@ -215,22 +241,44 @@ class AgentSessionIndex:
                 {"tool": tool, "reason": "unknown_ref",
                  "recovery": _REF_RECOVERY_HINT},
             )
-        if record.path_backed:
+        if record.storage_kind in {"file", "directory"}:
             try:
                 resolved = Path(record.canonical_ref).resolve(strict=True)
                 root = Path(record.root or "").resolve(strict=True)
             except OSError as error:
                 raise AgentReferenceError("ref 指向的会话已失效") from error
-            if not resolved.is_relative_to(root) or not resolved.is_file():
+            expected_type = (
+                resolved.is_file()
+                if record.storage_kind == "file"
+                else resolved.is_dir()
+            )
+            if not resolved.is_relative_to(root) or not expected_type:
                 raise AgentReferenceError("ref 超出 Agent 会话根目录")
             browser = self._ports.adapter(tool).browser
-            fingerprint = _agent_fingerprint(browser, str(resolved))
-            identity = (_path_identity(resolved), fingerprint)
-            if fingerprint is None or record.source_identity != identity:
+            try:
+                identity = (
+                    (
+                        _path_identity(resolved),
+                        _agent_fingerprint(browser, str(resolved)),
+                    )
+                    if record.storage_kind == "file"
+                    else _directory_identity(resolved, browser)
+                )
+            except (OSError, ValueError) as error:
+                raise AgentReferenceError(
+                    "ref 指向的会话已失效",
+                ) from error
+            if (
+                record.storage_kind == "file"
+                and identity[1] is None
+            ) or record.source_identity != identity:
                 # 摘要缓存可能命中了「stat 没变但内容变了」的旧值:踢掉它,
                 # 下一次扫描才会重新哈希并换发新的 ref。
                 with self._lock:
-                    self._digest_cache.pop(identity[0][:4], None)
+                    if record.storage_kind == "file":
+                        self._digest_cache.pop(identity[0][:4], None)
+                    else:
+                        self._digest_cache.clear()
                 raise AgentReferenceError(
                     "ref 在扫描后已变化，请重新搜索",
                     {"tool": tool, "reason": "session_changed",
@@ -321,39 +369,52 @@ class AgentSessionIndex:
     def _canonicalize(self, adapter, row: dict) -> tuple[
         str | None,
         str | None,
-        bool,
+        str | None,
         tuple | str | None,
     ]:
         native = adapter.browser.canonicalize(row)
         if native is None:
-            return None, None, False, None
-        if native.path_backed:
+            return None, None, None, None
+        if native.storage_kind in {"file", "directory"}:
             # 走 os.path 而不是 pathlib:语义(realpath + 前缀归属)完全一致,
             # 但少掉数万次 Path 对象构造,全量扫描省下的时间是可观的。
             try:
                 root = os.path.realpath(native.root or "", strict=True)
                 path = os.path.realpath(native.canonical_ref, strict=True)
             except OSError:
-                return None, None, True, None
+                return None, None, native.storage_kind, None
             if not _is_within(path, root):
-                return None, None, True, None
+                return None, None, native.storage_kind, None
+            if (
+                native.storage_kind == "file"
+                and not os.path.isfile(path)
+            ) or (
+                native.storage_kind == "directory"
+                and not os.path.isdir(path)
+            ):
+                return None, None, native.storage_kind, None
             try:
-                fingerprint = _agent_fingerprint(adapter.browser, path)
-                if fingerprint is None:
-                    return None, None, True, None
                 identity = (
-                    _path_identity(Path(path), self._digest_cache),
-                    fingerprint,
+                    (
+                        _path_identity(Path(path), self._digest_cache),
+                        _agent_fingerprint(adapter.browser, path),
+                    )
+                    if native.storage_kind == "file"
+                    else _directory_identity(
+                        Path(path), adapter.browser, self._digest_cache,
+                    )
                 )
+                if native.storage_kind == "file" and identity[1] is None:
+                    return None, None, native.storage_kind, None
             except (OSError, ValueError, AgentReferenceError):
-                return None, None, True, None
-            return path, root, True, identity
+                return None, None, native.storage_kind, None
+            return path, root, native.storage_kind, identity
         if adapter.browser.resolve_ref(native.canonical_ref) != native.canonical_ref:
-            return None, None, False, None
+            return None, None, "id", None
         fingerprint = _agent_fingerprint(
             adapter.browser,
             native.canonical_ref,
         )
         if fingerprint is None:
-            return None, None, False, None
-        return native.canonical_ref, None, False, fingerprint
+            return None, None, "id", None
+        return native.canonical_ref, None, "id", fingerprint
