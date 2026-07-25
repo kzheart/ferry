@@ -44,7 +44,7 @@ AGENTS = {
         'display_name': 'Grok Build',
         'icon': 'grok',
         'source_path': '~/.grok/sessions',
-        'capabilities': ('browse', 'resume', 'migration-source', 'models'),
+        'capabilities': ('browse', 'resume', 'migration-source', 'migration-target', 'delete', 'probe', 'models'),
         'edit_operations': (),
         'executables': ('grok',),
         'fallback_bin_dirs': ('~/.local/bin',),

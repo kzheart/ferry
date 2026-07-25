@@ -46,6 +46,9 @@ export const AGENT_CAPABILITIES = {
     "browse",
     "resume",
     "migration-source",
+    "migration-target",
+    "delete",
+    "probe",
     "models"
   ]
 } as const;
