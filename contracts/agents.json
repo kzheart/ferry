@@ -119,6 +119,26 @@
         "pi"
       ],
       "fallback_bin_dirs": []
+    },
+    {
+      "id": "grok",
+      "display_name": "Grok Build",
+      "icon": "grok",
+      "source_path": "~/.grok/sessions",
+      "skill_paths": [],
+      "capabilities": [
+        "browse",
+        "resume",
+        "migration-source",
+        "models"
+      ],
+      "edit_operations": [],
+      "executables": [
+        "grok"
+      ],
+      "fallback_bin_dirs": [
+        "~/.local/bin"
+      ]
     }
   ],
   "shared_skill_paths": [

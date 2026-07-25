@@ -212,12 +212,12 @@ describe("Ferry mutation tool schemas", () => {
 
   it("describes the explicit operation intent", () => {
     const exposedOperations = new Set(["delete-turn", "rewrite"]);
-    const supportDescription = AGENT_IDS.map(
-      (tool) =>
-        `${tool}: ${AGENT_EDIT_OPERATIONS[tool]
-          .filter((operation) => exposedOperations.has(operation))
-          .join(", ")}`,
-    ).join("; ");
+    const supportDescription = AGENT_IDS.flatMap((tool) => {
+      const operations = AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
+        exposedOperations.has(operation),
+      );
+      return operations.length ? [`${tool}: ${operations.join(", ")}`] : [];
+    }).join("; ");
     expect(migrateTool.description).toContain("intent is required");
     expect(sessionEditTool.description).toContain(
       "Metadata patch does not accept intent",

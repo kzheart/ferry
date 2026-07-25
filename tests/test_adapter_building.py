@@ -40,10 +40,17 @@ def test_bundled_adapters_wire_components_declared_by_capabilities():
         assert adapter.supports("browse")
         assert adapter.supports("resume")
         assert adapter.require("migration-source", "migration_source") is not None
-        assert adapter.require("migration-target", "migration_target") is not None
-        assert adapter.require("edit", "editor") is not None
-        assert adapter.require("probe", "verifier") is not None
+        for capability, component in (
+            ("migration-target", "migration_target"),
+            ("edit", "editor"),
+            ("probe", "verifier"),
+        ):
+            if adapter.supports(capability):
+                assert adapter.require(capability, component) is not None
+            else:
+                assert getattr(adapter, component) is None
         assert adapter.require("models", "models") is not None
         assert adapter.require("resume", "lifecycle") is not None
-        assert adapter.require("delete", "lifecycle") is not None
+        if adapter.supports("delete"):
+            assert adapter.require("delete", "lifecycle") is not None
         assert adapter.lifecycle.executable == adapter.manifest.executables[0]

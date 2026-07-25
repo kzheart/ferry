@@ -5,6 +5,7 @@ import hashlib
 import json
 
 from ...sessions.usage import iso_ms
+from ...sessions.topology import session_roots
 from ...system.paths import grok_home
 
 
@@ -54,7 +55,7 @@ def scan(cache):
                 cache.put(summary, stat, cached)
         if cached:
             rows.append(cached)
-    return rows
+    return session_roots(rows)
 
 
 def agent_fingerprint(ref):
@@ -62,3 +63,9 @@ def agent_fingerprint(ref):
     stat = (path / "summary.json").stat()
     marker = f"{path}:{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}"
     return "stat:" + hashlib.sha256(marker.encode()).hexdigest()
+
+
+def fingerprint(ref):
+    from .store import fingerprint as bundle_fingerprint
+
+    return bundle_fingerprint(__import__("pathlib").Path(ref))

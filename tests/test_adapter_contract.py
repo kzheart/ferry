@@ -217,7 +217,10 @@ def test_registry_explicitly_composes_all_bundled_adapters():
             adapter.manifest.edit_operations
             == AGENTS[agent_id]["edit_operations"]
         )
-        assert adapter.manifest.edit_operations == adapter.editor.operations
+        if adapter.supports("edit"):
+            assert adapter.manifest.edit_operations == adapter.editor.operations
+        else:
+            assert adapter.editor is None
 
 
 def test_adapter_rejects_manifest_editor_operation_mismatch():
