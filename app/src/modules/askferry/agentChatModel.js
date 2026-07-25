@@ -18,6 +18,7 @@ export const TOOL_LEVEL = {
   usage: "read",
   migrate: "mutate",
   session_edit: "mutate",
+  bash: "mutate",
 };
 
 const sealAssistant = items => {

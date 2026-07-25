@@ -48,7 +48,10 @@
     "result": "Result",
     "errorResult": "Error",
     "noResult": "(no content returned)",
-    "truncated": "truncated"
+    "truncated": "truncated",
+    "exitCode": "exit code {{n}}",
+    "timedOut": "timed out",
+    "noOutput": "(no output)"
   },
   "approval": {
     "kindMigration": "Migration proposal",
@@ -116,7 +119,8 @@
       "session_read": "Read session",
       "usage": "Usage",
       "migrate": "Migrate",
-      "session_edit": "Edit session"
+      "session_edit": "Edit session",
+      "bash": "Run command"
     },
     "hits": "{{n}} sessions found",
     "usage": "{{n}} tokens · {{s}} sessions"

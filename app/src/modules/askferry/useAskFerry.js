@@ -5,6 +5,7 @@ import {
   onRuntimeEvent,
   operationApply,
   runtime,
+  shellApply,
 } from "../../platform/desktop/client.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
@@ -50,7 +51,10 @@ export function useAskFerry() {
     if (!opId) return;
     mutateLog(sessionId, log => patchApproval(log, opId, { status: "applying", auto }));
     try {
-      const result = await operationApply(opId);
+      // shl_ 是 bash 提案:命令在 Rust 侧执行,不走 Engine 的 operation 状态机
+      const result = await (opId.startsWith("shl_")
+        ? shellApply(opId)
+        : operationApply(opId));
       mutateLog(sessionId, log => patchApproval(log, opId, { status: "applied", result, auto }));
       setMutationVersion(value => value + 1);
       return result;

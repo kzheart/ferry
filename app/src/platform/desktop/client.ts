@@ -161,6 +161,14 @@ export const exportRolesFile = (fileName: string, contents: string) =>
 export const importRolesFile = () =>
   invoke<string | null>("import_roles_file");
 
+/** bash 提案的批准:plan_id 带 shl_ 前缀,命令在 Rust 侧执行,不经 Engine。 */
+export const shellApply = (planId: string) =>
+  invoke<Record<string, unknown>>("bash_apply", { planId });
+
+/** 技能目录选择:路径由系统对话框产生,webview 不能指定任意路径;取消返回 null。 */
+export const pickSkillDirectory = () =>
+  invoke<string | null>("pick_skill_directory");
+
 export const writeClipboardText = async (text: unknown) => {
   const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
   return writeText(String(text));

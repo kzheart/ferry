@@ -48,7 +48,10 @@
     "result": "结果",
     "errorResult": "错误",
     "noResult": "（无返回内容）",
-    "truncated": "已截断"
+    "truncated": "已截断",
+    "exitCode": "退出码 {{n}}",
+    "timedOut": "已超时",
+    "noOutput": "（无输出）"
   },
   "approval": {
     "kindMigration": "迁移提议",
@@ -114,7 +117,8 @@
       "session_read": "读取会话",
       "usage": "统计用量",
       "migrate": "迁移会话",
-      "session_edit": "编辑会话"
+      "session_edit": "编辑会话",
+      "bash": "执行命令"
     },
     "hits": "命中 {{n}} 个会话",
     "usage": "{{n}} tokens · {{s}} 会话"

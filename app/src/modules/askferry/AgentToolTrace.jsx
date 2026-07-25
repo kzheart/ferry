@@ -52,6 +52,9 @@ const TRACE_ICON = {
     <><path d="M8 3 4 7l4 4M4 7h16" /><path d="M16 21l4-4-4-4M20 17H4" /></>),
   session_edit: (
     <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></>),
+  bash: (
+    <><rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 9l3 3-3 3M13 15h4" /></>),
 };
 
 function TraceIcon({ name, size = 14 }) {
@@ -108,6 +111,8 @@ function toolSummary(item, t) {
           + `${TOOL_NAME[migration.targetTool] || migration.targetTool || "?"}`
         : "";
     }
+    case "bash":
+      return item.args?.command || "";
     case "session_edit": {
       const edit = entities.find(entity => entity.type === "Edit");
       return edit
@@ -122,6 +127,55 @@ function toolSummary(item, t) {
   }
 }
 
+/** bash 的结果藏在一层 JSON 里,拆出来分块展示;拆不动就回落原样。 */
+function shellResult(text) {
+  if (typeof text !== "string") return null;
+  try {
+    const value = JSON.parse(text);
+    const inner = value?.result ?? value;
+    return typeof inner?.exit_code !== "undefined"
+      || typeof inner?.stdout === "string" ? inner : null;
+  } catch {
+    return null;
+  }
+}
+
+function ShellResult({ result, t }) {
+  const blocks = [
+    ["stdout", result.stdout],
+    ["stderr", result.stderr],
+  ].filter(([, value]) => typeof value === "string" && value.length > 0);
+  const failed = result.exit_code !== 0 && result.exit_code !== null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+        <span style={{ color: failed ? "var(--err-text)" : "var(--tx4)" }}>
+          {t("askferry:tool.exitCode", { n: result.exit_code ?? "—" })}
+        </span>
+        {result.timed_out && (
+          <span style={{ color: "var(--err-text)" }}>{t("askferry:tool.timedOut")}</span>)}
+      </div>
+      {blocks.length === 0 && (
+        <pre className="mono selectable" style={preStyle}>
+          {t("askferry:tool.noOutput")}
+        </pre>)}
+      {blocks.map(([label, value]) => (
+        <div key={label}>
+          <div style={sectionLabel}>{label}</div>
+          <pre className="mono selectable" style={{
+            ...preStyle,
+            color: label === "stderr" ? "var(--err-text)" : preStyle.color,
+          }}>{value}</pre>
+        </div>
+      ))}
+      {result.truncated && (
+        <div style={{ fontSize: 10.5, color: "var(--tx5)" }}>
+          {t("askferry:tool.truncated")}
+        </div>)}
+    </div>
+  );
+}
+
 export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -131,6 +185,7 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
   const merged = item.merged;
   const count = merged ? merged.length : 1;
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
+  const shell = item.name === "bash" ? shellResult(item.result?.text) : null;
   const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
   const summary = toolSummary(item, t);
   const showCards = !error && !merged && item.entities?.length > 0
@@ -188,7 +243,9 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
               {JSON.stringify(item.args ?? {}, null, 2)}
             </pre>
           </div>
-          {!running && (
+          {!running && shell && !error ? (
+            <ShellResult result={shell} t={t} />
+          ) : !running && (
             <div>
               <div style={sectionLabel}>
                 {error ? t("askferry:tool.errorResult") : t("askferry:tool.result")}
