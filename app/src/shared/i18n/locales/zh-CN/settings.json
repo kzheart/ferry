@@ -8,7 +8,8 @@
     "followSystemDesc": "按系统语言自动选择",
     "providers": "提供商",
     "models": "模型",
-    "roles": "角色"
+    "roles": "角色",
+    "skills": "技能"
   },
   "roles": {
     "create": "新建角色",
@@ -233,5 +234,30 @@
     "namePlaceholder": "昵称(可选)",
     "contextWindow": "上下文",
     "customTag": "手动添加"
+  },
+  "skills": {
+    "mine": "我的技能",
+    "available": "可导入",
+    "emptyLibrary": "还没有技能。从下面的候选里导入一个，或用「从文件夹导入」。",
+    "pickOne": "从左侧选一个技能查看详情。",
+    "globalBadge": "通用",
+    "importedBadge": "已导入",
+    "broken": "缺少 SKILL.md",
+    "sourceMissing": "目录不存在",
+    "removeSource": "移除这个扫描目录",
+    "addSource": "添加扫描目录…",
+    "importFolder": "从文件夹导入…",
+    "import": "导入",
+    "reimport": "覆盖导入",
+    "delete": "删除",
+    "loading": "读取中…",
+    "fileCount": "{{n}} 个文件",
+    "originManual": "手工放入",
+    "globalTitle": "设为通用技能",
+    "globalHint": "对所有角色生效，不必在每个角色里单独勾选。",
+    "roleTitle": "技能",
+    "roleHint": "只能选已导入的技能；通用技能对所有角色生效，这里不可取消。",
+    "roleEmpty": "技能库还是空的，去「技能」页导入一个。",
+    "roleMissing": "已删除"
   }
 }

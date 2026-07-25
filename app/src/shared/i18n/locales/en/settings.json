@@ -8,7 +8,8 @@
     "followSystemDesc": "Auto-select based on system language",
     "providers": "Providers",
     "models": "Models",
-    "roles": "Roles"
+    "roles": "Roles",
+    "skills": "Skills"
   },
   "roles": {
     "create": "New role",
@@ -233,5 +234,30 @@
     "namePlaceholder": "Nickname (optional)",
     "contextWindow": "Context",
     "customTag": "Custom"
+  },
+  "skills": {
+    "mine": "My skills",
+    "available": "Available to import",
+    "emptyLibrary": "No skills yet. Import one from the candidates below, or use \"Import from folder\".",
+    "pickOne": "Pick a skill on the left to see its details.",
+    "globalBadge": "Global",
+    "importedBadge": "Imported",
+    "broken": "SKILL.md missing",
+    "sourceMissing": "directory not found",
+    "removeSource": "Remove this scan directory",
+    "addSource": "Add scan directory…",
+    "importFolder": "Import from folder…",
+    "import": "Import",
+    "reimport": "Re-import",
+    "delete": "Delete",
+    "loading": "Loading…",
+    "fileCount": "{{n}} files",
+    "originManual": "added manually",
+    "globalTitle": "Make this a global skill",
+    "globalHint": "Applies to every role, so you don't have to enable it per role.",
+    "roleTitle": "Skills",
+    "roleHint": "Only imported skills can be selected. Global skills apply to every role and can't be turned off here.",
+    "roleEmpty": "The skill library is empty. Import one from the Skills page.",
+    "roleMissing": "deleted"
   }
 }
