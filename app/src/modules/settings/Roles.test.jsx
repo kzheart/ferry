@@ -89,6 +89,32 @@ test("bash 是能力里的一张卡,安全区不再有占位开关", () => {
   assert.equal(screen.queryByText("settings:roles.bashLater"), null);
 });
 
+// 草稿是在渲染期跟着 baseline 换的,不是等 effect——否则切角色会闪一帧上一个角色的
+// 脏状态。这里守的是同一条路径的另一头:选中项没变、内容被外部改写(恢复出厂设置)也要跟上。
+test("角色内容被外部改写后,详情区跟着更新", () => {
+  const ferry = {
+    roles: [role("default", { builtin: true, name: "Ferry" }), role("reader")],
+    models: [],
+    reloadRoles: async () => {},
+    reloadSkills: async () => {},
+    skills: { skills: [], global: [], scan_sources: [] },
+    updateRole: async () => {}, resetRole: async () => {}, deleteRole: async () => {},
+    createRole: async () => {}, copyRole: async () => ({ id: "copy" }),
+  };
+  const tree = value => (
+    <FerryRuntimeProvider value={value}><Roles /></FerryRuntimeProvider>);
+  const { rerender } = render(tree(ferry));
+  fireEvent.click(screen.getByText("reader"));
+  assert.ok(screen.getByDisplayValue("reader"));
+
+  rerender(tree({
+    ...ferry,
+    roles: [ferry.roles[0], role("reader", { name: "reader 已重置" })],
+  }));
+  assert.ok(screen.getByDisplayValue("reader 已重置"));
+  assert.equal(screen.queryByText("settings:roles.save"), null);
+});
+
 test("技能库为空时角色页给空态而不是一片空白", () => {
   mount();
   fireEvent.click(screen.getByText("reader"));
