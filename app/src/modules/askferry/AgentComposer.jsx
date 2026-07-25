@@ -11,7 +11,7 @@ import {
 } from "../../shared/ui/icons.jsx";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { sessionAttachmentKey } from "../browser/public.js";
-import { ModeMenu, ModelMenu, RoleMenu } from "./AgentMenus.jsx";
+import { ModeMenu, ModelMenu } from "./AgentMenus.jsx";
 
 function MentionMenu({ query, sessions, onPick }) {
   const q = query.toLowerCase();
@@ -45,7 +45,6 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const [modeOpen, setModeOpen] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const hasContent = !!text.trim() || attachments.length > 0;
   const canSend = hasContent && ferry.available;
@@ -100,20 +99,6 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
                 {mode === "auto" ? <AutoModeIcon size={13} /> : <ManualModeIcon size={13} />}
               </span>
               {t(mode === "auto" ? "askferry:mode.auto" : "askferry:mode.manual")}
-              <Caret size={8} open={false} />
-            </button>
-          </div>
-          <div style={{ position: "relative" }}>
-            {roleOpen && (
-              <RoleMenu onClose={() => setRoleOpen(false)}
-                onManage={() => onOpenConfig("roles")} />)}
-            <button className="chat-ghost-btn" disabled={!!ferry.activeId}
-              title={ferry.activeId ? t("askferry:role.snapshotLocked") : undefined}
-              onClick={() => setRoleOpen(value => !value)}>
-              {(ferry.roles || []).find(role => role.id ===
-                (ferry.activeId
-                  ? ferry.sessions.find(session => session.session_id === ferry.activeId)?.role_id
-                  : ferry.selectedRoleId))?.name || t("askferry:role.default")}
               <Caret size={8} open={false} />
             </button>
           </div>

@@ -9,7 +9,9 @@ import { groupAgentTimeline } from "./agentTimelineModel.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../browser/public.js";
+import { Caret, RoleAvatar } from "../../shared/ui/icons.jsx";
 import { AgentChatItem } from "./AgentChatItem.jsx";
+import { RoleMenu } from "./AgentMenus.jsx";
 import { AgentComposer } from "./AgentComposer.jsx";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";
 
@@ -24,6 +26,9 @@ export default function AskFerry({ scanSessions, onOpenConfig,
     : null;
   const [text, setText] = useState("");
   const [mention, setMention] = useState(null); // {query, start}
+  const [roleOpen, setRoleOpen] = useState(false);
+  const selectedRole = (ferry.roles || [])
+    .find(role => role.id === ferry.selectedRoleId);
   const taRef = useRef(null);
   const scrollRef = useRef(null);
   const running = activeLog?.status === "running";
@@ -151,8 +156,33 @@ export default function AskFerry({ scanSessions, onOpenConfig,
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
       position: "relative" }}>
-      {/* 头部:只有标题 */}
-      <div style={{ flex: "none", padding: "0 16px 8px", textAlign: "center" }}>
+      {/* 头部:居中标题;新会话时左上角放角色胶囊(角色在会话创建时快照,只在新会话可选) */}
+      <div style={{ flex: "none", padding: "0 16px 8px", textAlign: "center",
+        position: "relative" }}>
+        {!activeId && selectedRole && (
+          <div style={{ position: "absolute", left: 20, top: -4, zIndex: 10 }}>
+            {roleOpen && (
+              <RoleMenu onClose={() => setRoleOpen(false)}
+                onManage={() => onOpenConfig("roles")}
+                menuStyle={{ top: "100%", bottom: "auto",
+                  marginTop: 8, marginBottom: 0 }} />)}
+            <button className="chat-chip" title={selectedRole.description || undefined}
+              onClick={() => setRoleOpen(value => !value)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "6px 13px 6px 8px", borderRadius: 11 }}>
+              <RoleAvatar icon={selectedRole.icon} color={selectedRole.color} size={26} />
+              <span style={{ textAlign: "left" }}>
+                <span style={{ display: "block", fontSize: 10, lineHeight: 1.2,
+                  color: "var(--tx5)" }}>
+                  {t("askferry:role.label")}</span>
+                <span style={{ display: "block", fontSize: 13, lineHeight: 1.25,
+                  fontWeight: 600, color: "var(--tx1)" }}>
+                  {selectedRole.name}</span>
+              </span>
+              <Caret size={9} open={roleOpen} />
+            </button>
+          </div>
+        )}
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)",
           display: "inline-block", maxWidth: "70%", overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>
@@ -161,7 +191,8 @@ export default function AskFerry({ scanSessions, onOpenConfig,
       </div>
 
       {empty ? (
-        /* 空态:问候语 + 居中输入框 + 建议 chips;未配置模型也照常显示 */
+        /* 空态:问候语 + 居中输入框 + 角色 chips(角色在会话创建时快照,只在新会话可选);
+           未配置模型也照常显示 */
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
           justifyContent: "center", padding: "0 24px 60px" }}>
           <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>
@@ -169,14 +200,6 @@ export default function AskFerry({ scanSessions, onOpenConfig,
               textAlign: "center", letterSpacing: "-.01em", marginBottom: 22 }}>
               {t("askferry:empty.title")}</div>
             <AgentComposer {...composerProps} autoFocus />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8,
-              justifyContent: "center", marginTop: 18 }}>
-              {[t("askferry:empty.ex1"), t("askferry:empty.ex2"),
-                t("askferry:empty.ex3"), t("askferry:empty.ex4")].map((ex, i) => (
-                <button key={i} className="chat-chip"
-                  onClick={() => { updateText(ex); taRef.current?.focus(); }}>{ex}</button>
-              ))}
-            </div>
           </div>
         </div>
       ) : (

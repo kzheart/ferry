@@ -59,7 +59,6 @@
     "kindMetadata": "元数据修改提议",
     "kindGeneric": "写操作提议",
     "applied": "已批准并执行",
-    "autoApplied": "已自动执行",
     "applying": "执行中…",
     "failed": "执行失败",
     "dismissed": "已拒绝",
@@ -81,11 +80,7 @@
     "removeAttachment": "移除会话引用"
   },
   "empty": {
-    "title": "有什么可以帮你?",
-    "ex1": "找出上周与支付重构有关的会话",
-    "ex2": "比较这两个会话的实现路线",
-    "ex3": "评估把这个会话迁移到 Codex 会损失什么",
-    "ex4": "统计本月各项目的 token 用量"
+    "title": "有什么可以帮你?"
   },
   "auth": {
     "inProgress": "登录进行中…",
@@ -136,8 +131,7 @@
     "manage": "管理模型"
   },
   "role": {
-    "default": "默认角色",
-    "manage": "管理角色…",
-    "snapshotLocked": "角色已快照到当前会话；新会话才可切换"
+    "label": "角色",
+    "manage": "管理角色…"
   }
 }
