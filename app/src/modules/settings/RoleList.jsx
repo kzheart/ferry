@@ -1,4 +1,5 @@
 // 角色页左栏:角色清单 + 新建入口 + 导入导出菜单。
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RoleAvatar } from "../../shared/ui/icons.jsx";
 
@@ -26,11 +27,45 @@ function TransferMenu({ onExportAll, onImport, onClose }) {
   );
 }
 
+// 删除是不可撤销的,不能一次点击就走。用气泡二次确认:背板同时挡住列表,
+// 确认过程中选中的角色不会被点走。
+function DeleteConfirm({ name, onConfirm, onClose }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div onMouseDown={onClose} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: "100%",
+        marginBottom: 6, background: "var(--surface)", borderRadius: 11,
+        boxShadow: "var(--shadow-menu)", padding: "10px 11px 8px", zIndex: 70,
+        animation: "fpop .14s ease" }}>
+        <div style={{ fontSize: 11.5, lineHeight: 1.5, color: "var(--tx1)",
+          fontWeight: 600 }}>
+          {t("settings:roles.deleteAsk", { name })}</div>
+        <div style={{ fontSize: 10.5, lineHeight: 1.5, marginTop: 3,
+          color: "var(--tx5)" }}>
+          {t("settings:roles.dangerDesc")}</div>
+        <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
+          <button className="fbtn" onMouseDown={event => { event.preventDefault(); onClose(); }}
+            style={{ flex: 1, height: 26, fontSize: 11.5 }}>
+            {t("settings:roles.cancel")}</button>
+          <button className="fbtn"
+            onMouseDown={event => { event.preventDefault(); onClose(); onConfirm(); }}
+            style={{ flex: 1, height: 26, fontSize: 11.5, fontWeight: 650,
+              color: "var(--err-deep)", borderColor: "var(--err-line)" }}>
+            {t("settings:roles.delete")}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function RoleList({
   roles, selectedId, creating, draft, busy, transferOpen,
+  deletable, deleteName, onDelete,
   onSelect, onCreate, onToggleTransfer, transfer,
 }) {
   const { t } = useTranslation();
+  const [confirming, setConfirming] = useState(false);
   return (
     <div style={{ width: 188, flex: "none", borderRight: "1px solid var(--line4)",
       display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -82,6 +117,22 @@ export default function RoleList({
           </svg>
           {t("settings:roles.create")}
         </button>
+        {/* 内置角色与新建草稿都不能删,按钮置灰而不是消失,免得工具条一会儿两个键一会儿三个 */}
+        <button className="hov" title={t("settings:roles.delete")}
+          aria-label={t("settings:roles.delete")} disabled={busy || !deletable}
+          onClick={() => setConfirming(true)}
+          style={{ width: 26, height: 28, border: "none", borderRadius: 7, flex: "none",
+            background: "transparent", cursor: "default", display: "inline-flex",
+            alignItems: "center", justifyContent: "center",
+            color: "var(--tx3b)", opacity: deletable ? 1 : .35 }}>
+          <svg viewBox="0 0 16 16" aria-hidden style={{ width: 13, height: 13 }}>
+            <path d="M2.8 8h10.4" fill="none" stroke="currentColor"
+              strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        {confirming && (
+          <DeleteConfirm name={deleteName} onConfirm={onDelete}
+            onClose={() => setConfirming(false)} />)}
         {transferOpen && (
           <TransferMenu {...transfer} onClose={() => onToggleTransfer(false)} />)}
         <button className="hov" title={t("settings:roles.transfer")} disabled={busy}
