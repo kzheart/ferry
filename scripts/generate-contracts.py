@@ -77,13 +77,22 @@ def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
     ):
         raise ValueError("Agent id 必须唯一且非空")
     required = {
-        "id", "display_name", "icon", "source_path", "executables",
-        "fallback_bin_dirs", "edit_operations",
+        "id", "display_name", "icon", "source_path", "skill_paths",
+        "executables", "fallback_bin_dirs", "edit_operations",
     }
     if any(not isinstance(agent, dict) or set(agent) != required for agent in agents):
         raise ValueError("Agent 契约字段必须精确为当前静态定义")
     allowed_operations = set(edit_operations)
     for agent in agents:
+        paths = agent["skill_paths"]
+        if (
+            not isinstance(paths, list)
+            or not all(isinstance(path, str) and path for path in paths)
+            or len(paths) != len(set(paths))
+        ):
+            raise ValueError(
+                f"Agent {agent['id']} 的 skill_paths 必须是唯一非空字符串数组"
+            )
         declared = agent["edit_operations"]
         if (
             not isinstance(declared, list)
@@ -392,11 +401,14 @@ def frontend(agents: list[dict[str, object]]) -> str:
     }
     source = json.dumps(payload, ensure_ascii=False, indent=2)
     executables = [executable for agent in agents for executable in agent["executables"]]
+    skill_paths = {agent["id"]: agent["skill_paths"] for agent in agents}
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"export const AGENTS = {source} as const;",
         "export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];",
         f"export const ALLOWED_EXECUTABLES = {json.dumps(executables)} as const;",
+        "export const AGENT_SKILL_PATHS = "
+        f"{json.dumps(skill_paths, indent=2)} as const;",
         "export type AgentId = keyof typeof AGENTS;",
         "",
     ))
@@ -428,6 +440,7 @@ def python(agents: list[dict[str, object]]) -> str:
         lines.append(
             f"        'edit_operations': {tuple(agent['edit_operations'])!r},"
         )
+        # skill_paths 只服务 ferry-runtime 的技能发现，Python engine 不消费，故不下发
         lines.append(f"        'executables': {tuple(agent['executables'])!r},")
         lines.append(f"        'fallback_bin_dirs': {tuple(agent['fallback_bin_dirs'])!r},")
         lines.append("    },")
@@ -460,6 +473,9 @@ def runtime(agents: list[dict[str, object]]) -> str:
         f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
         "export const AGENT_EDIT_OPERATIONS = "
         f"{edit_operation_source} as const;",
+        "export const AGENT_SKILL_PATHS = "
+        f"{json.dumps({agent['id']: agent['skill_paths'] for agent in agents}, indent=2)}"
+        " as const;",
         "export type AgentId = (typeof AGENT_IDS)[number];",
         "",
     ))

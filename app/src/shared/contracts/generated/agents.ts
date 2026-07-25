@@ -28,4 +28,11 @@ export const AGENTS = {
 } as const;
 export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
 export const ALLOWED_EXECUTABLES = ["claude", "codex", "opencode"] as const;
+export const AGENT_SKILL_PATHS = {
+  "claude": [
+    "~/.claude/skills"
+  ],
+  "codex": [],
+  "opencode": []
+} as const;
 export type AgentId = keyof typeof AGENTS;

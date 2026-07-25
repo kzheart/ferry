@@ -5,6 +5,7 @@
       "display_name": "Claude Code",
       "icon": "claude",
       "source_path": "~/.claude/projects",
+      "skill_paths": ["~/.claude/skills"],
       "edit_operations": [
         "delete-turn",
         "rewrite",
@@ -18,6 +19,7 @@
       "display_name": "Codex CLI",
       "icon": "codex",
       "source_path": "~/.codex/sessions",
+      "skill_paths": [],
       "edit_operations": [
         "delete-turn",
         "rewrite",
@@ -31,6 +33,7 @@
       "display_name": "OpenCode",
       "icon": "opencode",
       "source_path": "~/.local/share/opencode",
+      "skill_paths": [],
       "edit_operations": ["rewrite"],
       "executables": ["opencode"],
       "fallback_bin_dirs": ["~/.opencode/bin"]

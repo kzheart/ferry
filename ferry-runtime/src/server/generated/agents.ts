@@ -6,4 +6,11 @@ export const AGENT_EDIT_OPERATIONS = {
   codex: ["delete-turn", "rewrite", "replace-assistant-reply"],
   opencode: ["rewrite"],
 } as const;
+export const AGENT_SKILL_PATHS = {
+  "claude": [
+    "~/.claude/skills"
+  ],
+  "codex": [],
+  "opencode": []
+} as const;
 export type AgentId = (typeof AGENT_IDS)[number];

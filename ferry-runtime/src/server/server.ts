@@ -5,6 +5,7 @@ import { AgentRuntime } from "../runtime/runtime.js";
 import { EngineSessionStore } from "../sessions/engine-store.js";
 import { FileProviderConfigStore } from "../providers/provider-config-store.js";
 import { FileRoleStore } from "../roles/role-store.js";
+import { FileSkillStore } from "../skills/skill-store.js";
 import { ProviderHost } from "../providers/provider-host.js";
 import { PROTOCOL_VERSION, type ResponseEnvelope } from "./messages.js";
 import { serveRuntime } from "./server-loop.js";
@@ -22,6 +23,7 @@ async function main() {
   const runtime = await AgentRuntime.create({
     storeFactory: (invoke) => new EngineSessionStore(invoke),
     roleStore: new FileRoleStore(join(dataDirectory, "roles.json")),
+    skillStore: new FileSkillStore(dataDirectory),
     providerHost,
     deferRestore: true,
   });
