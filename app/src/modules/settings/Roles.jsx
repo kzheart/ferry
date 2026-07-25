@@ -258,8 +258,12 @@ export default function Roles() {
                   t(creating ? "settings:roles.cancel" : "settings:roles.discard"),
                   () => { setCreating(false); setDraft(editable(selected)); },
                   glyph(UNDO_GLYPH, 14))}
+                {/* 尺寸对齐左边那排图标按钮:不给高度会落到浏览器默认内边距,
+                    在 30px 的图标中间缩成一枚黑色小片,看着像贴上去的 */}
                 {(creating || dirty) && (
-                  <button className="fbtn-primary" onClick={save} style={{ marginLeft: 3 }}
+                  <button className="fbtn-primary" onClick={save}
+                    style={{ marginLeft: 4, height: 30, padding: "0 13px",
+                      borderRadius: 8 }}
                     disabled={busy || !draft.name.trim() || !draft.id.trim()}>
                     {t(creating ? "settings:roles.createSave" : "settings:roles.save")}</button>)}
               </div>
