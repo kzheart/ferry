@@ -376,7 +376,7 @@ def test_claude_browser_rejects_subagent_symlink_escape(tmp_path):
     root.mkdir()
     session = root / "session.jsonl"
     session.write_text("{}\n")
-    ref = NativeSessionReference(str(session), str(root), True)
+    ref = NativeSessionReference(str(session), str(root), "file")
     ClaudeBrowser().validate_read_scope(ref)
 
     child_root = root / "session" / "subagents"
@@ -393,7 +393,7 @@ def test_codex_browser_rejects_rollout_symlink_escape(tmp_path):
     root.mkdir()
     session = root / "rollout-main.jsonl"
     session.write_text("{}\n")
-    ref = NativeSessionReference(str(session), str(root), True)
+    ref = NativeSessionReference(str(session), str(root), "file")
     CodexBrowser().validate_read_scope(ref)
 
     outside = tmp_path / "rollout-outside.jsonl"
@@ -405,10 +405,12 @@ def test_codex_browser_rejects_rollout_symlink_escape(tmp_path):
 
 def test_opencode_browser_only_accepts_id_backed_read_scope():
     browser = OpenCodeBrowser()
-    browser.validate_read_scope(NativeSessionReference("session-id", None, False))
+    browser.validate_read_scope(
+        NativeSessionReference("session-id", None, "id"),
+    )
     with pytest.raises(AgentReferenceError, match="原生 id"):
         browser.validate_read_scope(
-            NativeSessionReference("/tmp/session", "/tmp", True)
+            NativeSessionReference("/tmp/session", "/tmp", "file")
         )
 
 

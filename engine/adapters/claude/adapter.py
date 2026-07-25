@@ -7,7 +7,7 @@ from ..contracts import (
     AgentManifest,
     AgentAdapter,
     NativeSessionReference,
-    jsonl_reference,
+    filesystem_reference,
 )
 from ..shared.migration import TreeMigrationSource
 from ...contracts.agents import AGENTS
@@ -46,10 +46,16 @@ class ClaudeBrowser:
         return agent_fingerprint(ref)
 
     def canonicalize(self, row):
-        return jsonl_reference(row, MANIFEST.source_path, self.resolve_ref)
+        ref = filesystem_reference(
+            row,
+            MANIFEST.source_path,
+            self.resolve_ref,
+            kind="file",
+        )
+        return ref if ref and Path(ref.canonical_ref).suffix == ".jsonl" else None
 
     def validate_read_scope(self, ref: NativeSessionReference) -> None:
-        if not ref.path_backed or not ref.root:
+        if ref.storage_kind != "file" or not ref.root:
             raise AgentReferenceError("Claude 会话必须使用路径引用")
         try:
             root = Path(ref.root).resolve(strict=True)

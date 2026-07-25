@@ -50,7 +50,7 @@ def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
     native_ref = NativeSessionReference(
         canonical_ref=record.canonical_ref,
         root=record.root,
-        path_backed=record.path_backed,
+        storage_kind=record.storage_kind,
     )
     browser.validate_read_scope(native_ref)
     session = getattr(browser, "read_agent", browser.read)(
