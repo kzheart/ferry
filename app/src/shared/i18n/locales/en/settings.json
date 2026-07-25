@@ -247,6 +247,8 @@
     "broken": "SKILL.md missing",
     "sourceMissing": "directory not found",
     "removeSource": "Remove this scan directory",
+    "expandSource": "Expand",
+    "collapseSource": "Collapse",
     "addSource": "Add scan directory…",
     "importFolder": "Import from folder…",
     "import": "Import",

@@ -51,16 +51,34 @@ const clickContaining = async (text) => {
   await act(async () => { node.click(); });
 };
 
+/** 来源默认折叠,候选要先展开来源才看得到。 */
+const expandSources = async () => {
+  for (const node of document.querySelectorAll("button[aria-expanded=false]")) {
+    await act(async () => { node.click(); });
+  }
+};
+
 test("已导入区与可导入区分别渲染", async () => {
   harness();
   expect(screen.getByText("settings:skills.mine")).toBeTruthy();
   expect(screen.getByText("settings:skills.available")).toBeTruthy();
   expect(screen.getByText("代码评审")).toBeTruthy();
+  await expandSources();
+  expect(screen.getByText("PDF 工具")).toBeTruthy();
+});
+
+test("来源默认折叠,只露出目录名与候选数", async () => {
+  harness();
+  expect(screen.getByText("Claude Code")).toBeTruthy();
+  expect(screen.getByText("1")).toBeTruthy();
+  expect(screen.queryByText("PDF 工具")).toBeNull();
+  await expandSources();
   expect(screen.getByText("PDF 工具")).toBeTruthy();
 });
 
 test("点候选的导入,入参带 candidate_id", async () => {
   const { calls } = harness();
+  await expandSources();
   await clickContaining("PDF 工具");
   await clickText("settings:skills.import");
   expect(calls.import).toEqual([
@@ -70,6 +88,7 @@ test("点候选的导入,入参带 candidate_id", async () => {
 
 test("候选详情不出现「设为通用」开关——没导入就不能配置", async () => {
   harness();
+  await expandSources();
   await clickContaining("PDF 工具");
   expect(screen.queryByText("settings:skills.globalTitle")).toBeNull();
   expect(screen.getByText("settings:skills.import")).toBeTruthy();
