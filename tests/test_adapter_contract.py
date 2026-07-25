@@ -20,7 +20,7 @@ from engine.adapters.opencode.codec import TURN_INDEX as OPENCODE_INDEX
 from engine.sessions.read import session_json
 from engine.operations.types import AssistantReply
 from engine.errors import AgentReferenceError, ToolUnknownError
-from engine.contracts.agents import AGENTS, AGENT_IDS
+from engine.contracts.agents import AGENTS, AGENT_CAPABILITIES, AGENT_IDS
 
 from test_reply_editing import (
     _editor,
@@ -155,6 +155,7 @@ def _fake_adapter() -> AgentAdapter:
     return AgentAdapter(
         manifest=AgentManifest(id="fake", display_name="Fake Agent", icon="fake",
                               source_path="~/.fake/sessions",
+                              capabilities=AGENT_CAPABILITIES,
                               edit_operations=("rewrite",),
                               executables=("fake",)),
         browser=_FakeBrowser(),
@@ -181,6 +182,7 @@ def test_fake_adapter_satisfies_complete_static_contract():
         "display_name": "Fake Agent",
         "icon": "fake",
         "source_path": "~/.fake/sessions",
+        "capabilities": list(AGENT_CAPABILITIES),
         "edit_operations": ["rewrite"],
         "executables": ["fake"],
         "fallback_bin_dirs": [],
@@ -225,6 +227,7 @@ def test_adapter_rejects_manifest_editor_operation_mismatch():
         display_name="Fake Agent",
         icon="fake",
         source_path="~/.fake/sessions",
+        capabilities=AGENT_CAPABILITIES,
         edit_operations=("delete-turn", "rewrite"),
     )
     with pytest.raises(ValueError, match="编辑操作契约不一致"):
@@ -238,6 +241,106 @@ def test_adapter_rejects_manifest_editor_operation_mismatch():
             lifecycle=adapter.lifecycle,
             models=adapter.models,
         )
+
+
+def test_adapter_supports_partial_capabilities_with_matching_components():
+    manifest = AgentManifest(
+        id="browse-only",
+        display_name="Browse Only",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=("browse", "resume"),
+        edit_operations=(),
+    )
+    adapter = AgentAdapter(
+        manifest=manifest,
+        browser=_FakeBrowser(),
+        lifecycle=_FakeLifecycle(),
+    )
+
+    assert adapter.supports("browse") is True
+    assert adapter.supports("edit") is False
+    assert adapter.require("browse", "browser") is adapter.browser
+    with pytest.raises(ValueError, match="映射无效"):
+        adapter.require("resume", "browser")
+    with pytest.raises(ValueError, match="不支持能力"):
+        adapter.require("edit", "editor")
+
+
+def test_adapter_rejects_capability_component_mismatch():
+    manifest = AgentManifest(
+        id="invalid",
+        display_name="Invalid",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=("browse",),
+        edit_operations=(),
+    )
+    with pytest.raises(ValueError, match="capability/component"):
+        AgentAdapter(
+            manifest=manifest,
+            browser=_FakeBrowser(),
+            migration_source=_FakeMigrationSource(),
+        )
+
+
+@pytest.mark.parametrize(
+    "capabilities",
+    [
+        ("browse", "browse"),
+        ("resume", "browse"),
+        ("unknown",),
+    ],
+)
+def test_adapter_rejects_invalid_capability_sequences(capabilities):
+    manifest = AgentManifest(
+        id="invalid-capabilities",
+        display_name="Invalid",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=capabilities,
+        edit_operations=(),
+    )
+    with pytest.raises(ValueError, match="capability 契约无效"):
+        AgentAdapter(manifest=manifest)
+
+
+def test_adapter_requires_edit_capability_operations_and_editor_together():
+    without_edit = AgentManifest(
+        id="invalid-edit-ops",
+        display_name="Invalid",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=(),
+        edit_operations=("rewrite",),
+    )
+    with pytest.raises(ValueError, match="未声明 edit"):
+        AgentAdapter(manifest=without_edit)
+
+    without_operations = AgentManifest(
+        id="invalid-empty-edit",
+        display_name="Invalid",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=("edit",),
+        edit_operations=(),
+    )
+    with pytest.raises(ValueError, match="声明 edit 但未包含"):
+        AgentAdapter(manifest=without_operations, editor=_FakeEditor())
+
+
+def test_lifecycle_can_support_resume_without_delete():
+    manifest = AgentManifest(
+        id="resume-only",
+        display_name="Resume Only",
+        icon="fake",
+        source_path="~/.fake/sessions",
+        capabilities=("resume",),
+        edit_operations=(),
+    )
+    adapter = AgentAdapter(manifest=manifest, lifecycle=_FakeLifecycle())
+    assert adapter.require("resume", "lifecycle") is adapter.lifecycle
+    assert adapter.supports("delete") is False
 
 
 @pytest.mark.parametrize(

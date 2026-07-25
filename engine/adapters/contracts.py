@@ -1,15 +1,24 @@
-"""内置 Adapter 的静态契约。
-
-Ferry 只装配 Claude、Codex 与 OpenCode 三个完整 Adapter。所有已注册
-Adapter 都必须具备相同的能力接口；各原生格式支持的内容编辑操作由静态
-manifest 精确声明，并在装配时与 editor 实现校验一致。
-"""
+"""内置 Adapter 的静态能力契约。"""
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
+
+from ..contracts.agents import AGENT_CAPABILITIES
+
+
+_COMPONENT_CAPABILITIES = {
+    "browser": ("browse",),
+    "migration_source": ("migration-source",),
+    "migration_target": ("migration-target",),
+    "editor": ("edit",),
+    "verifier": ("probe",),
+    "lifecycle": ("resume", "delete"),
+    "models": ("models",),
+}
+
 
 @dataclass(frozen=True)
 class AgentManifest:
@@ -19,6 +28,7 @@ class AgentManifest:
     display_name: str
     icon: str
     source_path: str
+    capabilities: tuple[str, ...]
     edit_operations: tuple[str, ...]
     executables: tuple[str, ...] = ()   # launch descriptor 可执行文件白名单
     fallback_bin_dirs: tuple[str, ...] = ()
@@ -26,6 +36,7 @@ class AgentManifest:
     def to_dict(self) -> dict:
         return {"id": self.id, "display_name": self.display_name,
                 "icon": self.icon, "source_path": self.source_path,
+                "capabilities": list(self.capabilities),
                 "edit_operations": list(self.edit_operations),
                 "executables": list(self.executables),
                 "fallback_bin_dirs": list(self.fallback_bin_dirs)}
@@ -188,22 +199,49 @@ class SessionLifecycle(Protocol):
 @dataclass(frozen=True)
 class AgentAdapter:
     manifest: AgentManifest
-    browser: SessionBrowser
-    migration_source: MigrationSource
-    migration_target: MigrationTarget
-    editor: SessionEditor
-    verifier: SessionVerifier
-    lifecycle: SessionLifecycle
-    models: ModelCatalog
+    browser: SessionBrowser | None = None
+    migration_source: MigrationSource | None = None
+    migration_target: MigrationTarget | None = None
+    editor: SessionEditor | None = None
+    verifier: SessionVerifier | None = None
+    lifecycle: SessionLifecycle | None = None
+    models: ModelCatalog | None = None
 
     def __post_init__(self):
-        for name in (
-            "browser", "migration_source", "migration_target", "editor",
-            "verifier", "lifecycle", "models",
+        capabilities = self.manifest.capabilities
+        if (
+            len(capabilities) != len(set(capabilities))
+            or any(capability not in AGENT_CAPABILITIES for capability in capabilities)
+            or capabilities != tuple(
+                capability
+                for capability in AGENT_CAPABILITIES
+                if capability in capabilities
+            )
         ):
-            if getattr(self, name) is None:
-                raise ValueError(f"内置 Adapter 缺少必填能力: {self.manifest.id}.{name}")
-        if tuple(self.editor.operations) != self.manifest.edit_operations:
+            raise ValueError(
+                f"Adapter capability 契约无效: {self.manifest.id}"
+            )
+        for component, required_capabilities in _COMPONENT_CAPABILITIES.items():
+            expected = any(
+                capability in capabilities
+                for capability in required_capabilities
+            )
+            if (getattr(self, component) is not None) != expected:
+                raise ValueError(
+                    f"Adapter capability/component 不一致: "
+                    f"{self.manifest.id}.{component}"
+                )
+        if "edit" not in capabilities and self.manifest.edit_operations:
+            raise ValueError(
+                f"Adapter 未声明 edit 但包含编辑操作: {self.manifest.id}"
+            )
+        if "edit" in capabilities and not self.manifest.edit_operations:
+            raise ValueError(
+                f"Adapter 声明 edit 但未包含编辑操作: {self.manifest.id}"
+            )
+        if self.editor is not None and (
+            tuple(self.editor.operations) != self.manifest.edit_operations
+        ):
             raise ValueError(
                 f"Adapter 编辑操作契约不一致: {self.manifest.id} "
                 f"manifest={self.manifest.edit_operations!r}, "
@@ -213,3 +251,23 @@ class AgentAdapter:
     @property
     def id(self) -> str:
         return self.manifest.id
+
+    def supports(self, capability: str) -> bool:
+        return capability in self.manifest.capabilities
+
+    def require(self, capability: str, component: str):
+        if capability not in AGENT_CAPABILITIES:
+            raise ValueError(f"未知 Agent capability: {capability}")
+        if component not in _COMPONENT_CAPABILITIES:
+            raise ValueError(f"未知 Agent component: {component}")
+        if capability not in _COMPONENT_CAPABILITIES[component]:
+            raise ValueError(
+                f"Agent capability/component 映射无效: "
+                f"{capability}.{component}"
+            )
+        value = getattr(self, component)
+        if not self.supports(capability) or value is None:
+            raise ValueError(
+                f"Agent 不支持能力: {self.manifest.id}.{capability}"
+            )
+        return value

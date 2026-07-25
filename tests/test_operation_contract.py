@@ -9,9 +9,26 @@ from engine.contracts.operations import (
     OPERATION_SUCCESS_STATUS,
     OPERATION_TERMINAL_STATUSES,
 )
+from engine.contracts.agents import AGENTS, AGENT_CAPABILITIES
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_agent_capabilities_are_generated_for_every_runtime():
+    source = json.loads((ROOT / "contracts/agents.json").read_text())
+    assert tuple(source["capabilities"]) == AGENT_CAPABILITIES
+    assert all(
+        tuple(agent["capabilities"]) == AGENTS[agent["id"]]["capabilities"]
+        for agent in source["agents"]
+    )
+    for path in (
+        "app/src/shared/contracts/generated/agents.ts",
+        "app/src-tauri/src/contracts/agents.rs",
+        "engine/contracts/agents.py",
+        "ferry-runtime/src/server/generated/agents.ts",
+    ):
+        assert "CAPABILIT" in (ROOT / path).read_text()
 
 
 def test_operation_contract_is_generated_for_every_runtime():

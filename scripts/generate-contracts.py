@@ -64,6 +64,16 @@ ERROR_OUTPUTS = {
     ROOT / "engine/contracts/errors.py": "python",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
 }
+AGENT_CAPABILITIES = (
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models",
+)
 
 
 def load_shared_skill_paths() -> list[str]:
@@ -81,8 +91,13 @@ def load_shared_skill_paths() -> list[str]:
 
 def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
     document = json.loads(AGENTS_SOURCE.read_text())
-    if set(document) - {"agents", "shared_skill_paths"}:
-        raise ValueError("contracts/agents.json 顶层键必须是 agents/shared_skill_paths")
+    if set(document) != {"agents", "capabilities", "shared_skill_paths"}:
+        raise ValueError(
+            "contracts/agents.json 顶层键必须是 "
+            "agents/capabilities/shared_skill_paths"
+        )
+    if document["capabilities"] != list(AGENT_CAPABILITIES):
+        raise ValueError("Agent capabilities 必须使用固定集合与顺序")
     agents = document.get("agents")
     if not isinstance(agents, list) or not agents:
         raise ValueError("contracts/agents.json 必须包含非空 agents 数组")
@@ -93,7 +108,7 @@ def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
         raise ValueError("Agent id 必须唯一且非空")
     required = {
         "id", "display_name", "icon", "source_path", "skill_paths",
-        "executables", "fallback_bin_dirs", "edit_operations",
+        "executables", "fallback_bin_dirs", "capabilities", "edit_operations",
     }
     if any(not isinstance(agent, dict) or set(agent) != required for agent in agents):
         raise ValueError("Agent 契约字段必须精确为当前静态定义")
@@ -108,10 +123,23 @@ def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
             raise ValueError(
                 f"Agent {agent['id']} 的 skill_paths 必须是唯一非空字符串数组"
             )
+        capabilities = agent["capabilities"]
+        if (
+            not isinstance(capabilities, list)
+            or len(capabilities) != len(set(capabilities))
+            or any(capability not in AGENT_CAPABILITIES for capability in capabilities)
+            or capabilities != [
+                capability
+                for capability in AGENT_CAPABILITIES
+                if capability in capabilities
+            ]
+        ):
+            raise ValueError(
+                f"Agent {agent['id']} 的 capabilities 必须使用固定集合与顺序"
+            )
         declared = agent["edit_operations"]
         if (
             not isinstance(declared, list)
-            or not declared
             or not all(
                 isinstance(operation, str) and operation
                 for operation in declared
@@ -122,6 +150,10 @@ def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
             raise ValueError(
                 f"Agent {agent['id']} 的 edit_operations "
                 "必须来自 contracts/operations.json"
+            )
+        if ("edit" in capabilities) != bool(declared):
+            raise ValueError(
+                f"Agent {agent['id']} 的 edit capability 与 edit_operations 不一致"
             )
         canonical = [
             operation for operation in edit_operations
@@ -410,6 +442,7 @@ def frontend(agents: list[dict[str, object]]) -> str:
         agent["id"]: {
             "displayName": agent["display_name"],
             "icon": agent["icon"],
+            "capabilities": agent["capabilities"],
             "editOperations": agent["edit_operations"],
         }
         for agent in agents
@@ -419,6 +452,8 @@ def frontend(agents: list[dict[str, object]]) -> str:
     skill_paths = {agent["id"]: agent["skill_paths"] for agent in agents}
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const AGENT_CAPABILITIES = {json.dumps(AGENT_CAPABILITIES)} as const;",
+        "export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];",
         f"export const AGENTS = {source} as const;",
         "export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];",
         f"export const ALLOWED_EXECUTABLES = {json.dumps(executables)} as const;",
@@ -435,9 +470,20 @@ def rust(agents: list[dict[str, object]]) -> str:
     ids = ", ".join(f'\"{agent["id"]}\"' for agent in agents)
     executables = [executable for agent in agents for executable in agent["executables"]]
     allowed = ", ".join(f'\"{executable}\"' for executable in executables)
+    capability_rows = []
+    for agent in agents:
+        capabilities = ", ".join(
+            f'\"{capability}\"' for capability in agent["capabilities"]
+        )
+        capability_rows.append(
+            f'    ("{agent["id"]}", &[{capabilities}]),'
+        )
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"pub(crate) const AGENT_IDS: &[&str] = &[{ids}];",
+        "pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[",
+        *capability_rows,
+        "];",
         f"pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &[{allowed}];",
         "",
     ))
@@ -448,12 +494,17 @@ def python(agents: list[dict[str, object]]) -> str:
         '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
         "from __future__ import annotations",
         "",
+        f"AGENT_CAPABILITIES = {AGENT_CAPABILITIES!r}",
+        "",
         "AGENTS = {",
     ]
     for agent in agents:
         lines.append(f'    {agent["id"]!r}: {{')
         for key in ("display_name", "icon", "source_path"):
             lines.append(f"        {key!r}: {agent[key]!r},")
+        lines.append(
+            f"        'capabilities': {tuple(agent['capabilities'])!r},"
+        )
         lines.append(
             f"        'edit_operations': {tuple(agent['edit_operations'])!r},"
         )
@@ -470,6 +521,9 @@ def runtime(agents: list[dict[str, object]]) -> str:
     labels = [agent["display_name"] for agent in agents]
     edit_operations = {
         agent["id"]: agent["edit_operations"] for agent in agents
+    }
+    capabilities = {
+        agent["id"]: agent["capabilities"] for agent in agents
     }
     edit_operation_rows = []
     for identifier, operations in edit_operations.items():
@@ -488,6 +542,7 @@ def runtime(agents: list[dict[str, object]]) -> str:
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         f"export const AGENT_IDS = {json.dumps(identifiers)} as const;",
         f"export const AGENT_LABELS = {json.dumps(labels)} as const;",
+        f"export const AGENT_CAPABILITIES = {json.dumps(capabilities, indent=2)} as const;",
         "export const AGENT_EDIT_OPERATIONS = "
         f"{edit_operation_source} as const;",
         "export const AGENT_SKILL_PATHS = "
