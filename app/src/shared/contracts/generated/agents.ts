@@ -1,8 +1,20 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
+export const AGENT_CAPABILITIES = ["browse", "resume", "migration-source", "migration-target", "edit", "delete", "probe", "models"] as const;
+export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 export const AGENTS = {
   "claude": {
     "displayName": "Claude Code",
     "icon": "claude",
+    "capabilities": [
+      "browse",
+      "resume",
+      "migration-source",
+      "migration-target",
+      "edit",
+      "delete",
+      "probe",
+      "models"
+    ],
     "editOperations": [
       "delete-turn",
       "rewrite",
@@ -12,6 +24,16 @@ export const AGENTS = {
   "codex": {
     "displayName": "Codex CLI",
     "icon": "codex",
+    "capabilities": [
+      "browse",
+      "resume",
+      "migration-source",
+      "migration-target",
+      "edit",
+      "delete",
+      "probe",
+      "models"
+    ],
     "editOperations": [
       "delete-turn",
       "rewrite",
@@ -21,6 +43,16 @@ export const AGENTS = {
   "opencode": {
     "displayName": "OpenCode",
     "icon": "opencode",
+    "capabilities": [
+      "browse",
+      "resume",
+      "migration-source",
+      "migration-target",
+      "edit",
+      "delete",
+      "probe",
+      "models"
+    ],
     "editOperations": [
       "rewrite"
     ]

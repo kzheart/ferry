@@ -32,15 +32,18 @@ def test_scan_jsonl_reuses_cached_adapter_metadata(tmp_path):
     assert calls == [source]
 
 
-def test_bundled_adapters_explicitly_wire_complete_static_contract():
+def test_bundled_adapters_wire_components_declared_by_capabilities():
     registry = create_registry()
 
     for tool in registry.ids():
         adapter = registry.get(tool)
-        assert adapter.migration_source is not None
-        assert adapter.migration_target is not None
-        assert adapter.editor is not None
-        assert adapter.verifier is not None
-        assert adapter.lifecycle is not None
-        assert adapter.models is not None
+        assert adapter.supports("browse")
+        assert adapter.supports("resume")
+        assert adapter.require("migration-source", "migration_source") is not None
+        assert adapter.require("migration-target", "migration_target") is not None
+        assert adapter.require("edit", "editor") is not None
+        assert adapter.require("probe", "verifier") is not None
+        assert adapter.require("models", "models") is not None
+        assert adapter.require("resume", "lifecycle") is not None
+        assert adapter.require("delete", "lifecycle") is not None
         assert adapter.lifecycle.executable == adapter.manifest.executables[0]

@@ -1,6 +1,38 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
 export const AGENT_IDS = ["claude", "codex", "opencode"] as const;
 export const AGENT_LABELS = ["Claude Code", "Codex CLI", "OpenCode"] as const;
+export const AGENT_CAPABILITIES = {
+  "claude": [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models"
+  ],
+  "codex": [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models"
+  ],
+  "opencode": [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models"
+  ]
+} as const;
 export const AGENT_EDIT_OPERATIONS = {
   claude: ["delete-turn", "rewrite", "replace-assistant-reply"],
   codex: ["delete-turn", "rewrite", "replace-assistant-reply"],

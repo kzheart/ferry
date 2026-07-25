@@ -1,4 +1,14 @@
 {
+  "capabilities": [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models"
+  ],
   "agents": [
     {
       "id": "claude",
@@ -7,6 +17,16 @@
       "source_path": "~/.claude/projects",
       "skill_paths": [
         "~/.claude/skills"
+      ],
+      "capabilities": [
+        "browse",
+        "resume",
+        "migration-source",
+        "migration-target",
+        "edit",
+        "delete",
+        "probe",
+        "models"
       ],
       "edit_operations": [
         "delete-turn",
@@ -26,6 +46,16 @@
       "skill_paths": [
         "~/.codex/skills"
       ],
+      "capabilities": [
+        "browse",
+        "resume",
+        "migration-source",
+        "migration-target",
+        "edit",
+        "delete",
+        "probe",
+        "models"
+      ],
       "edit_operations": [
         "delete-turn",
         "rewrite",
@@ -43,6 +73,16 @@
       "source_path": "~/.local/share/opencode",
       "skill_paths": [
         "~/.config/opencode/skills"
+      ],
+      "capabilities": [
+        "browse",
+        "resume",
+        "migration-source",
+        "migration-target",
+        "edit",
+        "delete",
+        "probe",
+        "models"
       ],
       "edit_operations": [
         "rewrite"
