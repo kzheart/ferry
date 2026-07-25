@@ -76,6 +76,20 @@ test("来源默认折叠,只露出目录名与候选数", async () => {
   expect(screen.getByText("PDF 工具")).toBeTruthy();
 });
 
+test("选中候选之后仍然能把来源折叠回去", async () => {
+  harness();
+  await expandSources();
+  await clickContaining("PDF 工具");
+  // 列表一处、详情标题一处
+  expect(screen.getAllByText("PDF 工具")).toHaveLength(2);
+
+  await act(async () => {
+    document.querySelector("button[aria-expanded=true]").click();
+  });
+  // 折叠只收起列表,详情不受影响
+  expect(screen.getAllByText("PDF 工具")).toHaveLength(1);
+});
+
 test("点候选的导入,入参带 candidate_id", async () => {
   const { calls } = harness();
   await expandSources();
