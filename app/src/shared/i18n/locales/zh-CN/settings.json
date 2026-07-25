@@ -46,7 +46,6 @@
     "personaHint": "追加在 Ferry 安全前缀之后",
     "personaCount": "{{n}} / 建议 500 字",
     "capabilityCount": "{{n}} / {{total}} 已开启",
-    "writeTag": "写操作",
     "tool": {
       "session_search": {
         "label": "会话检索",

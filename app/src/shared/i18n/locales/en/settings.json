@@ -46,7 +46,6 @@
     "personaHint": "Appended after Ferry's safety prefix",
     "personaCount": "{{n}} / 500 suggested",
     "capabilityCount": "{{n}} / {{total}} enabled",
-    "writeTag": "Write",
     "tool": {
       "session_search": {
         "label": "Session search",

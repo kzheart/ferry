@@ -1,14 +1,15 @@
 // 角色详情表单的取值规则:草稿字段、默认值与提交前的清理。
 import { DEFAULT_ROLE_COLOR, DEFAULT_ROLE_ICON } from "../../shared/ui/roleIcons.js";
 
-// 与 ferry-runtime 的 FERRY_TOOL_NAMES 对齐;write 决定是否按"写操作"提示
+// 与 ferry-runtime 的 FERRY_TOOL_NAMES 对齐。
+// 读/写不在这里区分:审批由运行时按工具语义强制,UI 上再标一遍只会让人以为是可选项。
 export const TOOLS = [
-  { name: "session_search", write: false },
-  { name: "session_read", write: false },
-  { name: "usage", write: false },
-  { name: "migrate", write: true },
-  { name: "session_edit", write: true },
-  { name: "bash", write: true },
+  "session_search",
+  "session_read",
+  "usage",
+  "migrate",
+  "session_edit",
+  "bash",
 ];
 
 export function blankRole() {
