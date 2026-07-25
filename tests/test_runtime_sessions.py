@@ -15,7 +15,7 @@ def _update(*, message="hello", event_type="run.started"):
     return {
         "metadata": {"session_id": "runtime-1", "provider_id": "test", "next_seq": 2},
         "messages": [{"ordinal": 0, "message": {"role": "user", "content": message}}],
-        "events": [{"seq": 1, "event": {"type": event_type, "seq": 1}}],
+        "events": [{"seq": 1, "type": event_type}],
         "timestamp": "2026-07-24T00:00:00.000Z",
     }
 
@@ -25,15 +25,15 @@ def test_runtime_records_are_opaque_and_replay_in_order(store, ports):
     runtime_sessions.commit({
         "metadata": {"session_id": "runtime-1", "provider_id": "test", "next_seq": 3},
         "messages": [],
-        "events": [{"seq": 2, "event": {"type": "run.completed", "seq": 2}}],
+        "events": [{"seq": 2, "type": "run.completed"}],
         "timestamp": "2026-07-24T00:00:01.000Z",
     }, ports)
 
     assert runtime_sessions.load_all(ports) == [{
         "state": {"session_id": "runtime-1", "provider_id": "test", "next_seq": 3,
                   "messages": [{"role": "user", "content": "hello"}]},
-        "events": [{"type": "run.started", "seq": 1},
-                   {"type": "run.completed", "seq": 2}],
+        "events": [{"seq": 1, "type": "run.started"},
+                   {"seq": 2, "type": "run.completed"}],
     }]
 
 

@@ -75,6 +75,10 @@ export async function dispatch(
       }
     return { protocol: PROTOCOL_VERSION, id: command.id, ok: true, result };
   } catch (error) {
+    if (!(error instanceof ProtocolError)) {
+      // 回给前端的文案是脱敏的;真实异常不留痕就只能靠猜。
+      console.error(`command ${command.method} failed`, error);
+    }
     const protocolError =
       error instanceof ProtocolError
         ? error

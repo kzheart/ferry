@@ -95,16 +95,17 @@ class RuntimeSessionStore:
                 session_id,
                 "ordinal",
                 update.get("messages", []),
-                "message",
+                lambda record: record["message"],
                 "message_json",
             )
+            # 事件按事件信封原样落盘：Runtime 提交的就是信封本身，seq 在信封里。
             self._insert_records(
                 connection,
                 "runtime_events",
                 session_id,
                 "seq",
                 update.get("events", []),
-                "event",
+                lambda record: record,
                 "event_json",
             )
             connection.commit()
@@ -116,13 +117,13 @@ class RuntimeSessionStore:
         session_id: str,
         key: str,
         records: list,
-        value: str,
+        payload_of: Callable[[dict], object],
         column: str,
     ) -> None:
         for record in records:
             identifier = record[key]
             payload = json.dumps(
-                record[value],
+                payload_of(record),
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),

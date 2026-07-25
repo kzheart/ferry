@@ -90,6 +90,12 @@ class RpcDispatcher:
         return _handle(request, self._methods)
 
 
+def _raised_in_dispatch(error: KeyError) -> bool:
+    """异常是否就发生在分发 lambda 这一帧(_handle -> lambda,再无更深帧)。"""
+    frame = error.__traceback__.tb_next if error.__traceback__ else None
+    return frame is not None and frame.tb_next is None
+
+
 def _handle(request: str, methods: dict) -> dict:
     request_id = "unknown"
     try:
@@ -118,7 +124,11 @@ def _handle(request: str, methods: dict) -> dict:
         try:
             result = fn(req["params"])
         except KeyError as error:
-            raise MissingParamError(str(error.args[0])) from error
+            # 只有分发 lambda 自己取 params 缺键才是参数错误；更深处的 KeyError
+            # 是内部缺陷,报成 missing_param 会把真实故障伪装成调用方的问题。
+            if _raised_in_dispatch(error):
+                raise MissingParamError(str(error.args[0])) from error
+            raise
         return {
             "protocol": PROTOCOL,
             "id": request_id,
