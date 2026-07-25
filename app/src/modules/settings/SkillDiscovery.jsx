@@ -87,10 +87,7 @@ export default function SkillDiscovery({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {groups.map(({ source, items }) => {
-        // 选中的候选所在的组强制展开,否则点完详情后左栏找不到它了
-        const holdsSelection = items.some(
-          item => selectedId === `candidate:${item.candidateId}`);
-        const open = opened.has(source.id) || holdsSelection;
+        const open = opened.has(source.id);
         return (
           <div key={source.id}>
             <SourceHeader source={source} count={items.length} open={open}
