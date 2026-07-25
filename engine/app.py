@@ -4,6 +4,8 @@ RPC/CLI 在进程边界构造此对象；各能力通过显式上下文访问依
 """
 from __future__ import annotations
 
+import logging
+
 from .context import EngineContext
 from .contracts.ipc import FERRY_CONTRACT_HASH
 from .errors import AgentReferenceError
@@ -15,6 +17,7 @@ from .runtime import sessions as runtime_sessions
 from .sessions import agent_read
 from .sessions import search as session_search
 from .sessions import usage as session_usage
+from .sessions.content_index import ContentIndex
 from .sessions.index import AgentSessionIndex, IndexedSession
 from .sessions import read as sessions
 from .sessions import scan as scanning
@@ -25,13 +28,29 @@ from .system.pricing import pricing
 class EngineService:
     def __init__(self, ports: EngineContext,
                  index: AgentSessionIndex,
-                 operations: OperationService):
+                 operations: OperationService,
+                 content_index: ContentIndex | None = None):
         self._ports = ports
         self._index = index
         self._operations = operations
+        self._content_index = content_index
 
     def close(self) -> None:
         self._operations.shutdown()
+        if self._content_index is not None:
+            self._content_index.close()
+
+    def warm_agent_search(self) -> None:
+        """serve 启动预热:先扫库,再把内容索引的缺口交给后台线程。"""
+        if self._content_index is None:
+            return
+        try:
+            records = self._index.refresh()
+            self._content_index.sync(
+                self._index, records, prefer_background=True,
+            )
+        except Exception:  # noqa: BLE001 - 预热失败不能影响 RPC 服务
+            logging.getLogger(__name__).exception("内容索引预热失败")
 
     def health(self) -> dict:
         return {
@@ -151,7 +170,8 @@ class EngineService:
 
     def agent_search_sessions(self, query: str = "", **params) -> dict:
         return session_search.search_sessions(
-            query, index=self._index, **params,
+            query, index=self._index,
+            content_index=self._content_index, **params,
         )
 
     def agent_session_read(self, tool: str, **params) -> dict:

@@ -32,11 +32,16 @@ _SECRET_PATTERNS = (
         re.DOTALL,
     ),
 )
-_FILE_URI = re.compile(r"(?i)\bfile://(?:/|\\)[^\s\]\[\)\(\}\{\"']+")
-_HOME_PATH = re.compile(r"(?<!\w)~[/\\][^\s\]\[\)\(\}\{\"']+")
-_POSIX_PATH = re.compile(r"(?<![:\w])/(?:[^/\s]+/)*[^\s\]\[\)\(\}\{\"']+")
-_WINDOWS_PATH = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\]\[\)\(\}\{\"']+")
-_UNC_PATH = re.compile(r"\\\\[^\\\s]+\\[^\s\]\[\)\(\}\{\"']+")
+# 路径不会跨越尖括号:不排掉的话 `<command-name>/clear</command-name>` 会被
+# 整段吞成一个 [ABSOLUTE_PATH],把结构标记也一起抹掉。
+_PATH_STOP = r"\s\]\[\)\(\}\{\"'<>"
+_FILE_URI = re.compile(rf"(?i)\bfile://(?:/|\\)[^{_PATH_STOP}]+")
+_HOME_PATH = re.compile(rf"(?<!\w)~[/\\][^{_PATH_STOP}]+")
+# 至少要有一层目录:否则 `/clear`、`/command-name` 这类斜杠命令和标记
+# 也会被当成绝对路径抹掉,读到的会话正文变得没法看。
+_POSIX_PATH = re.compile(rf"(?<![:\w])/(?:[^/{_PATH_STOP}]+/)+[^{_PATH_STOP}]*")
+_WINDOWS_PATH = re.compile(rf"(?i)\b[A-Z]:[\\/][^{_PATH_STOP}]+")
+_UNC_PATH = re.compile(rf"\\\\[^\\\s]+\\[^{_PATH_STOP}]+")
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
@@ -64,22 +69,58 @@ def record_session_id(record, session=None) -> str:
     return redact(str(value or ""), 512)
 
 
+_TIME_FORMAT_HINT = (
+    "epoch milliseconds, ISO8601, now, or a relative offset like now-7d / -7d "
+    "(units s/m/h/d/w)"
+)
+_RELATIVE_TIME = re.compile(
+    r"(?i)^\s*(?:now\s*)?(?:(?P<sign>[-+])\s*(?P<amount>\d{1,6})"
+    r"\s*(?P<unit>[smhdw]))?\s*$"
+)
+_UNIT_MS = {"s": 1_000, "m": 60_000, "h": 3_600_000,
+            "d": 86_400_000, "w": 604_800_000}
+
+
+def _relative_timestamp(text: str) -> int | None:
+    """支持 now / now-7d / -7d 这类写法。
+
+    模型手里没有时钟,第一反应就是写相对时间;不认的话它只能去 shell 里跑 date
+    (在 macOS 上还会失败),或者干脆猜一个时间戳,把整段统计答错。
+    """
+    match = _RELATIVE_TIME.match(text)
+    if not match or (not text.strip().lower().startswith("now")
+                     and not match.group("amount")):
+        return None
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
+    if not match.group("amount"):
+        return now
+    delta = int(match.group("amount")) * _UNIT_MS[match.group("unit").lower()]
+    return now - delta if match.group("sign") == "-" else now + delta
+
+
 def timestamp(value) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
-        raise AgentRequestError("时间必须为毫秒时间戳或 ISO8601")
+        raise AgentRequestError("时间格式无效", {"accepts": _TIME_FORMAT_HINT})
     if isinstance(value, (int, float)):
         if not math.isfinite(value):
-            raise AgentRequestError("时间必须是有限数值")
+            raise AgentRequestError("时间必须是有限数值",
+                                    {"accepts": _TIME_FORMAT_HINT})
         return int(value)
+    text = str(value)
+    relative = _relative_timestamp(text)
+    if relative is not None:
+        return relative
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return int(parsed.timestamp() * 1000)
     except (TypeError, ValueError):
-        raise AgentRequestError("时间必须为毫秒时间戳或 ISO8601")
+        raise AgentRequestError(
+            "时间格式无效", {"accepts": _TIME_FORMAT_HINT, "received": text[:64]},
+        )
 
 
 def bounded_int(value, default: int, minimum: int, maximum: int, name: str) -> int:

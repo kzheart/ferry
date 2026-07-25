@@ -16,20 +16,19 @@ const opaqueSessionRef = Type.String({
   pattern: "^[A-Za-z0-9_-]+$",
 });
 
+// 相对写法必须写进 schema:模型没有时钟,不知道能这么写就会去 shell 里问 date。
+const timePoint = Type.Union(
+  [Type.Integer({ minimum: 0 }), Type.String({ maxLength: 64 })],
+  {
+    description:
+      'Epoch milliseconds, ISO8601, "now", or a relative offset such as "now-7d" or "-12h" (units s/m/h/d/w). Results also carry a now field you can compute from.',
+  },
+);
+
 const timeRange = Type.Object(
   {
-    from: Type.Optional(
-      Type.Union([
-        Type.Integer({ minimum: 0 }),
-        Type.String({ maxLength: 64 }),
-      ]),
-    ),
-    to: Type.Optional(
-      Type.Union([
-        Type.Integer({ minimum: 0 }),
-        Type.String({ maxLength: 64 }),
-      ]),
-    ),
+    from: Type.Optional(timePoint),
+    to: Type.Optional(timePoint),
   },
   { additionalProperties: false },
 );
@@ -190,6 +189,14 @@ const schemas = {
       ),
       time_range: Type.Optional(timeRange),
       limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+      scope: Type.Optional(
+        Type.Union([
+          Type.Literal("any"),
+          Type.Literal("metadata"),
+          Type.Literal("content"),
+        ]),
+      ),
+      include_tool_outputs: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
   ),
@@ -257,10 +264,11 @@ const schemas = {
 
 const descriptions: Record<FerryToolName, string> = {
   session_search:
-    "Search session metadata (title, project, source tool, and model). Returns fsr_ refs; it does not search message bodies or native session IDs.",
+    "Search the whole session library: metadata (title, project, source tool, model) and, by default, full-text message content across every session — use this instead of reading sessions one by one or shelling out to grep. scope narrows matching to metadata or content only; default any matches either. Query words are ANDed within one message (or one metadata row): every word must appear there, substring-matched, so prefer one or two distinctive words. Quote \"a phrase\" for exact adjacency. There is no OR — run separate searches for alternative wordings before concluding something is absent. Content hits carry matched_in, content_match_count and content_matches (message/turn/role plus a redacted snippet) — jump to a hit with session_read from_message. Coding sessions keep most substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent from content. Check content_index in the result: when ready is false, pending_sessions are still being indexed and content results are partial — say so rather than presenting them as complete. Only the first 16KB per message is content-indexed; session_read with terms scans one session exhaustively. total_matches is how many sessions matched and returned is how many came back — when total_matches exceeds returned you have seen a sample, not the library, so never describe the result as the user's complete history. record_count counts raw transcript records and is larger than the message_count session_read reports for the same session. An fsr_ ref stops resolving once that session is written to again; if a read fails with reason session_changed, search again and use the fresh ref.",
   session_read:
-    "Read one indexed session using an fsr_ ref returned by session_search. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search visible text instead and get matching snippets. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ. If a search match has complete=false, re-read that message without terms before editing its full text.",
-  usage: "Get privacy-filtered aggregate usage.",
+    "Read one indexed session using an fsr_ ref returned by session_search. By default returns a bounded, redacted page of messages; paginate with next_from_message, never turn numbers. Pass terms to search that session's content and get matching snippets; searched_scope tells you what was covered — by default only visible message text, and coding sessions keep most of their substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ, and both differ from search's record_count. If a search match has complete=false, re-read that message without terms before editing its full text.",
+  usage:
+    "Get privacy-filtered aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${AGENT_IDS.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
   bash: "Run a shell command on the user's machine. The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.",

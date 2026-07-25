@@ -48,15 +48,37 @@ export function createDelegationTool(
     onUpdate: (payload: unknown) => void,
     signal?: AbortSignal,
   ) => Promise<WorkflowRunResult>,
+  // 角色 id 必须列出来。不列的话模型会照任务内容编一个("searcher"、
+  // "reviewer"),整次委派在创建子会话时就失败。
+  roleIds: readonly string[] = [],
 ): AgentTool {
+  const known = [...new Set(roleIds)];
   return {
     name: "delegate_agents",
     label: "delegate_agents",
     description:
-      "Delegate independent or dependent read-only tasks to Ferry roles. Tasks without dependencies run in bounded parallel; depends_on creates fan-in. Use this for work that benefits from multiple perspectives, then synthesize the returned results.",
+      "Delegate independent or dependent read-only tasks to Ferry roles. Tasks without dependencies run in bounded parallel; depends_on creates fan-in. Use this for work that benefits from multiple perspectives, then synthesize the returned results." +
+      (known.length > 0
+        ? ` role_id must be one of the roles that exist here: ${known.join(", ")} — never invent a role name.`
+        : ""),
     parameters,
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, onUpdate) {
+      if (known.length > 0) {
+        const requested = (params as TaskGraph)?.tasks ?? [];
+        const unknown = [
+          ...new Set(
+            requested
+              .map((task) => task?.role_id)
+              .filter((id): id is string => !!id && !known.includes(id)),
+          ),
+        ];
+        if (unknown.length > 0) {
+          throw new Error(
+            `unknown role_id: ${unknown.join(", ")}; available roles: ${known.join(", ")}`,
+          );
+        }
+      }
       const result = await execute(
         params as TaskGraph,
         (payload) =>

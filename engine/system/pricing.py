@@ -57,14 +57,23 @@ def _fetch() -> dict:
         return json.loads(response.read().decode())
 
 
-def pricing(force: bool = False) -> dict:
-    """返回 {"prices": {...}, "fetched_at": ms, "source": "..."}。"""
+def pricing(force: bool = False, cached_only: bool = False) -> dict:
+    """返回 {"prices": {...}, "fetched_at": ms, "source": "..."}。
+
+    `cached_only` 给在线请求路径用:那里不能为了刷新单价去等一次网络往返。
+    """
     cached = _read_cache()
     fresh = (cached and not force
              and time.time() - (cached.get("fetched_at", 0) / 1000) < TTL_SECONDS)
     if fresh:
         return {"prices": cached["prices"], "fetched_at": cached["fetched_at"],
                 "source": "cache"}
+    if cached_only:
+        if cached and cached.get("prices"):
+            return {"prices": cached["prices"],
+                    "fetched_at": cached.get("fetched_at", 0),
+                    "source": "stale"}
+        return {"prices": _FALLBACK, "fetched_at": 0, "source": "fallback"}
     try:
         prices = _flatten(_fetch())
         if prices:

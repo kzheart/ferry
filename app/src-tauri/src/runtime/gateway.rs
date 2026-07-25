@@ -53,6 +53,12 @@ pub(super) fn complete_tool_request(
     // 拦在 route_tool 之前,但审批分叉逻辑与迁移/编辑完全共用,不为它新开放行口子。
     let is_bash = name == "bash";
     let mutation = is_bash || is_mutating_tool(name, &args);
+    // 不可逆的 shell 命令不吃 Auto 这条捷径:编辑和迁移落地前有快照,shell 没有。
+    let forced_approval = is_bash
+        && args
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(bash::needs_explicit_approval);
     let mut outcome = if is_bash {
         bash::propose(&args)
     } else {
@@ -60,7 +66,8 @@ pub(super) fn complete_tool_request(
     };
     if mutation {
         if let Ok(operation) = outcome.clone() {
-            let auto = allows_auto_apply(auto_policy(session_id), role_apply_policy);
+            let auto =
+                !forced_approval && allows_auto_apply(auto_policy(session_id), role_apply_policy);
             if auto {
                 match apply_any_operation(resource_dir, &operation) {
                     Ok(result) => {
@@ -112,9 +119,30 @@ pub(super) fn complete_tool_request(
                         "session_id": session_id,
                         "run_id": run_id,
                         "type": "operation.proposed",
-                        "payload": { "tool": name, "operation": operation },
+                        "payload": {
+                            "tool": name,
+                            "operation": operation.clone(),
+                            "forced_approval": forced_approval,
+                        },
                     }),
                 );
+                // 光把提案原样回给模型,它会以为命令已经跑完但没输出,
+                // 于是重试或者干脆编一个结果。状态要说清楚。
+                outcome = Ok(json!({
+                    "operation": operation,
+                    "status": "pending_approval",
+                    "forced_approval": forced_approval,
+                    "detail": if forced_approval {
+                        "this command is irreversible, so it needs the user's \
+                         explicit approval even in Auto mode; nothing has run \
+                         yet. Explain what it would destroy and let the user \
+                         decide — do not retry or look for a way around it."
+                    } else {
+                        "waiting for the user's approval; nothing has run or \
+                         been written yet. Do not retry the same call or assume \
+                         a result — tell the user it needs approval."
+                    },
+                }));
             }
         }
     }

@@ -179,6 +179,7 @@ export class AgentRuntime {
         // 重新解析:持久化的只是 id,技能可能在上次运行之后被删掉了
         await this.skillService.resolveFor(record.state.resolved_skills ?? []),
         (id) => this.skillService.read(id),
+        await this.delegatableRoleIds(),
       );
       this.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -193,6 +194,16 @@ export class AgentRuntime {
 
   newId() {
     return this.idFactory();
+  }
+
+  /** 委派工具要把可用角色 id 列进描述,否则模型会自己编一个不存在的角色。 */
+  private async delegatableRoleIds() {
+    try {
+      const roles = await this.roleService.list();
+      return roles.map((role: { id: string }) => role.id);
+    } catch {
+      return [];
+    }
   }
 
   subscribe(listener: (event: EventEnvelope) => void) {
@@ -248,6 +259,7 @@ export class AgentRuntime {
       canDelegate,
       await this.skillService.resolveFor(role.skills),
       (id) => this.skillService.read(id),
+      canDelegate ? await this.delegatableRoleIds() : [],
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {

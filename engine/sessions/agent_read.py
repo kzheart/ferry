@@ -90,8 +90,6 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
     budget = bounded_int(
         max_bytes, DEFAULT_CONTEXT_BYTES, 1024, MAX_CONTEXT_BYTES, "max_bytes",
     )
-    if not isinstance(include_tool_outputs, bool):
-        raise AgentRequestError("include_tool_outputs 必须是 boolean")
     session = read_indexed_session(index, record)
     total_turns = sum(message.role == "user" for message in session.messages)
     messages, current_turn, remaining = [], 0, budget
@@ -206,8 +204,28 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
     return _fit_context_result(result, budget)
 
 
+def _searchable_text(message, include_tool_outputs: bool) -> str:
+    """检索用文本。
+
+    编码类会话里大量内容(改过的代码、读到的文件、命令输出)只存在于工具调用
+    里,只搜可见正文会让"这个会话提到过 X 吗"得出错误的否定结论,所以调用方
+    要求带上工具输出时,一并纳入检索范围。
+    """
+    parts = []
+    for block in message.blocks:
+        if block.kind == "text" and block.text:
+            parts.append(block.text)
+        elif include_tool_outputs and block.kind == "tool" and block.tool:
+            parts.append(f"[tool {block.tool.name}]")
+            output = tool_result_text(block.tool.result)
+            if output:
+                parts.append(output)
+    return "\n".join(parts)
+
+
 def search_session_content(tool: str, opaque_ref: str, terms,
-                           roles=None, limit: int = 20, *,
+                           roles=None, limit: int = 20,
+                           include_tool_outputs: bool = False, *,
                            index: AgentSessionIndex) -> dict:
     record = index.resolve(tool, opaque_ref)
     wanted = string_set(terms, "terms", 20, 100)
@@ -235,11 +253,7 @@ def search_session_content(tool: str, opaque_ref: str, terms,
             current_turn += 1
         if allowed_roles and message.role not in allowed_roles:
             continue
-        text = "\n".join(
-            block.text
-            for block in message.blocks
-            if block.kind == "text" and block.text
-        )
+        text = _searchable_text(message, include_tool_outputs)
         folded = text.casefold()
         hit_terms = [
             term
@@ -298,6 +312,10 @@ def search_session_content(tool: str, opaque_ref: str, terms,
         "returned": len(matches),
         "total_matches": total_matches,
         "has_more": has_more,
+        "searched_scope": (
+            "visible_text_and_tool_outputs"
+            if include_tool_outputs else "visible_text_only"
+        ),
         "truncation": {
             "truncated": has_more,
             "reason": (
@@ -319,9 +337,12 @@ def session_read(tool: str, ref: str | None = None, terms=None, roles=None,
         raise AgentRequestError(
             "必须提供 Engine 签发的 ref", {"field": "ref"},
         )
+    if not isinstance(include_tool_outputs, bool):
+        raise AgentRequestError("include_tool_outputs 必须是 boolean")
     if terms is not None:
         result = search_session_content(
-            tool, ref, terms, roles=roles, limit=limit, index=index,
+            tool, ref, terms, roles=roles, limit=limit,
+            include_tool_outputs=include_tool_outputs, index=index,
         )
         result["mode"] = "search"
     else:

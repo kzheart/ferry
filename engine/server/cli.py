@@ -87,7 +87,12 @@ def main(argv=None):
             print(json.dumps(dispatcher.handle(rest[0] if rest else sys.stdin.read()), ensure_ascii=False))
             return
         if cmd == "serve":
-            # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应
+            # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应。
+            # 内容索引在后台预热,首个内容搜索到来时通常已就绪。
+            threading.Thread(
+                target=application.warm_agent_search,
+                daemon=True, name="content-index-warmup",
+            ).start()
             serve(handler=dispatcher.handle)
             return
         if cmd == "health":

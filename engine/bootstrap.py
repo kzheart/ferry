@@ -2,6 +2,7 @@
 
 from . import __version__
 from .adapters.registry import create_registry
+from .sessions.content_index import ContentIndex
 from .sessions.index import AgentSessionIndex
 from .app import EngineService
 from .context import EngineContext
@@ -27,4 +28,4 @@ def build_engine(ports: EngineContext | None = None) -> EngineService:
     ports = ports or create_context()
     index = AgentSessionIndex(ports)
     operations = OperationService(ports, index)
-    return EngineService(ports, index, operations)
+    return EngineService(ports, index, operations, ContentIndex())
