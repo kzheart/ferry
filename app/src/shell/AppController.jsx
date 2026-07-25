@@ -189,6 +189,7 @@ export default function App() {
     selectedId: histSelectedId,
     select: selectHistory,
     visibleIds: historyVisibleIds,
+    toolIds: historyToolIds,
     filterCount: histFilterCount,
     tokens: histTokens,
     clear: clearHistF,
@@ -568,6 +569,7 @@ export default function App() {
           libraryTags: allTags,
           clearLibraryFilter: clearLibF,
           historyFilter: histF,
+          historyToolIds,
           setHistoryFilter: setHistF,
           clearHistoryFilter: clearHistF,
         })}

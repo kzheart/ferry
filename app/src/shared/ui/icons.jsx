@@ -14,14 +14,26 @@ const AGENT_ICON = Object.fromEntries(
     }),
   ).map(([path, markup]) => [path.split("/").pop().replace(/\.svg$/, ""), markup]),
 );
+const AGENT_FALLBACK_COLOR = {
+  claude: "#D97757",
+  codex: "#10A37F",
+  opencode: "#4C7EDB",
+  pi: "#9268C9",
+  grok: "#6B7682",
+};
 // 工具图标:圆角方底 + 品牌形 + 可选状态点。
-// 未提供图标资源的 Agent 用首字母占位,因此新增 Agent 不放 svg 也能显示。
+// 单色资源由渲染端补底色；未提供资源的 Agent 用首字母占位。
 export function ToolIcon({ tool, size = 26, dot = null }) {
   const markup = AGENT_ICON[AGENTS[tool]?.icon || tool];
+  const hasBakedBackground = markup?.includes("<rect");
+  const fallbackColor = AGENT_FALLBACK_COLOR[tool] || "var(--tx3b)";
   return (
     <span className="noinvert" style={{ position: "relative", display: "inline-flex",
       alignItems: "center", justifyContent: "center", width: size, height: size, borderRadius: 8,
-      background: markup ? undefined : "var(--fill3)",
+      background: hasBakedBackground
+        ? undefined
+        : `color-mix(in srgb, ${fallbackColor} 16%, var(--surface))`,
+      color: hasBakedBackground ? undefined : fallbackColor,
       border: "1px solid var(--line)", overflow: "hidden", flex: "none" }}>
       {markup ? (
         <span style={{ width: size, height: size, display: "block" }}

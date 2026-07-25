@@ -10,6 +10,23 @@ from engine.sessions.model import (
 from engine.sessions.tool_ops import CanonicalOp
 
 
+def _adapter(target):
+    class Adapter:
+        id = "fake"
+        migration_source = object()
+        migration_target = target
+
+        def supports(self, capability):
+            return capability in {"migration-source", "migration-target"}
+
+        def require(self, capability, component):
+            if not self.supports(capability):
+                raise ValueError(capability)
+            return getattr(self, component)
+
+    return Adapter()
+
+
 def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp_path):
     session = Session("claude", "source", str(tmp_path), title="Preview me")
     session.messages = [Message("assistant", [
@@ -19,8 +36,7 @@ def test_preview_returns_target_session_without_mutating_source(monkeypatch, tmp
                                     text_tool_result("contents"))),
     ])]
     target = CodexMigrationTarget()
-    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
-        migration_target=target))
+    ports = SimpleNamespace(adapter=lambda _name: _adapter(target))
 
     result = migration.MigrationService(ports).preview(
         "claude", "codex", "ignored", cwd=str(tmp_path), session=session,

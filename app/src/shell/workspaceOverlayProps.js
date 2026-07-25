@@ -76,6 +76,7 @@ export function buildOverlayProps({
   libraryTags,
   clearLibraryFilter,
   historyFilter,
+  historyToolIds,
   setHistoryFilter,
   clearHistoryFilter,
 }) {
@@ -193,6 +194,7 @@ export function buildOverlayProps({
       },
       history: {
         value: historyFilter,
+        tools: historyToolIds,
         onChange: setHistoryFilter,
         onClear: clearHistoryFilter,
       },

@@ -78,10 +78,37 @@ def test_template_results_are_independent_copies(template_factory):
     assert template_factory()
 
 
-@pytest.mark.parametrize("agent_id", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize(
+    "agent_id", ["claude", "codex", "opencode", "pi", "grok"],
+)
 def test_adapter_does_not_expose_a_format_version_registry(agent_id):
     adapter = create_registry().get(agent_id)
     assert not hasattr(adapter, "formats")
+
+
+def test_pi_current_structure_is_session_v3():
+    current = pi_templates()
+    assert current["session"]["version"] == 3
+    assert {
+        "message.user",
+        "message.assistant",
+        "message.toolResult",
+        "message.bashExecution",
+        "compaction",
+    } <= current.keys()
+
+
+def test_grok_current_structure_is_bundle_with_chat_v1():
+    current = grok_templates()
+    assert current["summary"]["chat_format_version"] == 1
+    assert {
+        "update.UserMessage",
+        "update.AgentMessageChunk",
+        "update.ToolCall",
+        "update.ToolCallUpdate",
+        "chat.user",
+        "chat.assistant",
+    } <= current.keys()
 
 
 def test_fixtures_have_no_version_directory_layer():

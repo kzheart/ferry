@@ -68,7 +68,12 @@ function baseProps(overrides = {}) {
     filters: {
       popover: null, anchor: null, onClose: noop,
       library: { value: null, onChange: noop, counts: {}, dirs: [], tags: [], onClear: noop },
-      history: { value: null, onChange: noop, onClear: noop },
+      history: {
+        value: null,
+        tools: ["claude", "codex", "opencode", "pi", "grok"],
+        onChange: noop,
+        onClear: noop,
+      },
     },
     guide: { step: 0, onGo: noop, onFinish: noop },
     ...overrides,

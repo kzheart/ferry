@@ -127,7 +127,6 @@ class PiEditCodec:
             row.get("id"): row.get("parentId") for row in removed_rows
             if isinstance(row, dict)
         }
-        parent = doc.data[span.start].get("parentId")
         doc.data = [row for index, row in enumerate(doc.data)
                     if index not in target_indexes]
         def surviving(value):

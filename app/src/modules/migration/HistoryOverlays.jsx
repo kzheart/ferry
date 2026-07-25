@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
+import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { ConfirmBox } from "../../shared/ui/ConfirmBox.jsx";
 import {
   FilterCheckRow,
@@ -17,7 +17,7 @@ export function HistoryDeleteConfirm({ history, onCancel, onConfirm }) {
     [
       "var(--ok)",
       t("overlays:historyDelete.bulletTarget", {
-        tool: TOOL_NAME[history.dst],
+        tool: TOOL_NAME[history.dst] || history.dst,
       }),
     ],
     ["var(--err)", t("overlays:historyDelete.bulletIrreversible")],
@@ -91,7 +91,7 @@ export function HistoryDeleteConfirm({ history, onCancel, onConfirm }) {
   );
 }
 
-export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
+export function HistoryFilter({ f, setF, tools, anchor, onClose, onClear }) {
   const { t } = useTranslation();
   const statusOptions = [
     [STATUS_CODE.success, t(`common:${STATUS_CODE.success}`)],
@@ -109,12 +109,12 @@ export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
       <FilterSectionTitle first>
         {t("overlays:filter.sourceTools")}
       </FilterSectionTitle>
-      {TOOLS.map(tool => (
+      {tools.map(tool => (
         <FilterCheckRow
           key={tool}
           on={f.src.includes(tool)}
           icon={<ToolIcon tool={tool} size={24} />}
-          label={TOOL_NAME[tool]}
+          label={TOOL_NAME[tool] || tool}
           onClick={() => setF(value => ({
             ...value,
             src: value.src.includes(tool)
@@ -128,7 +128,7 @@ export function HistoryFilter({ f, setF, anchor, onClose, onClear }) {
       </FilterSectionTitle>
       {[
         ["all", t("overlays:filter.allTargets")],
-        ...TOOLS.map(tool => [tool, TOOL_NAME[tool]]),
+        ...tools.map(tool => [tool, TOOL_NAME[tool] || tool]),
       ].map(([key, label]) => (
         <FilterRadioRow
           key={key}

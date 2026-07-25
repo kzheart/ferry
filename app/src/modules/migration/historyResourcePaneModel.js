@@ -38,8 +38,8 @@ export function buildHistoryGroups({ items, selectedId, t, toolNames }) {
         id: history._id,
         title: history.title || history.source_id,
         short: fmtTime(history.time, t),
-        from: toolNames[history.src],
-        to: toolNames[history.dst],
+        from: toolNames[history.src] || history.src,
+        to: toolNames[history.dst] || history.dst,
         status: history.status,
         statusLabel: t(`common:${history.status}`),
         stColor: {
@@ -64,7 +64,12 @@ export function historyFilterCount(filter, toolIds) {
 export function historyTokenDescriptors(filter, toolNames, t) {
   const tokens = [];
   if (filter.target !== "all") {
-    tokens.push({ kind: "target", label: t("app:historyToken.target", { tool: toolNames[filter.target] }) });
+    tokens.push({
+      kind: "target",
+      label: t("app:historyToken.target", {
+        tool: toolNames[filter.target] || filter.target,
+      }),
+    });
   }
   if (filter.status !== "all") {
     tokens.push({ kind: "status", label: t(`common:${filter.status}`) });

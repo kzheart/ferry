@@ -19,7 +19,9 @@ function clip(value: string, maximum: number) {
 function frontmatter(markdown: string): Record<string, string> {
   const lines = markdown.split(/\r?\n/);
   if (lines[0]?.trim() !== "---") return {};
-  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  const end = lines.findIndex(
+    (line, index) => index > 0 && line.trim() === "---",
+  );
   if (end < 0) return {};
   const fields: Record<string, string> = {};
   for (const line of lines.slice(1, end)) {

@@ -96,7 +96,10 @@ async function scan(source: SkillSource): Promise<SkillCandidate[]> {
       if (!(await stat(directory)).isDirectory()) continue;
       const info = await stat(manifest);
       if (!info.isFile() || info.size > MAX_MANIFEST_BYTES) continue;
-      const document = parseSkillDocument(await readFile(manifest, "utf8"), name);
+      const document = parseSkillDocument(
+        await readFile(manifest, "utf8"),
+        name,
+      );
       candidates.push({
         candidateId: `${source.id}:${name}`,
         name: document.name,

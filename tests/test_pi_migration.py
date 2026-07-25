@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from engine.adapters.pi.reader import read
 from engine.adapters.pi.writer import write
 from engine.sessions.model import (

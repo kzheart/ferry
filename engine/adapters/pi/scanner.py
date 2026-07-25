@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ...sessions.usage import add_tokens, dominant_model, empty_tokens, has_tokens, iso_ms
+from ...sessions.usage import add_tokens, empty_tokens, has_tokens, iso_ms
 from ...system.paths import pi_session_roots
 from ..shared.scanner import clip_text
 

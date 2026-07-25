@@ -191,6 +191,9 @@ fn operation_inputs_are_strictly_validated() {
     let mut unknown_tool = edit_operation_input();
     unknown_tool.tool = "unknown".to_owned();
     assert!(validate_operation_plan_input(&OperationPlanInput::Edit(unknown_tool)).is_err());
+    let mut unsupported_tool = edit_operation_input();
+    unsupported_tool.tool = "grok".to_owned();
+    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(unsupported_tool)).is_err());
     let mut extra_field = edit_operation_input();
     extra_field.ops = vec![serde_json::json!({
         "op": "delete-turn", "turn": 1, "method": "operation.apply",

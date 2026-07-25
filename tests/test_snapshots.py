@@ -98,7 +98,16 @@ def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
             return {"ok": True, "target": meta["source"]}
 
     class Plugin:
+        id = "fake"
         lifecycle = Lifecycle()
+
+        def supports(self, capability):
+            return capability == "delete"
+
+        def require(self, capability, component):
+            if not self.supports(capability):
+                raise ValueError(capability)
+            return getattr(self, component)
 
     ports = type("Ports", (), {
         "snapshot_dir": lambda _self: root,

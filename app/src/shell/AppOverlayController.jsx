@@ -220,6 +220,7 @@ export function AppOverlayController({
       historyFilter={{
         open: filters.popover === "hist",
         value: filters.history.value,
+        tools: filters.history.tools,
         onChange: filters.history.onChange,
         anchor: filters.anchor,
         onClose: filters.onClose,

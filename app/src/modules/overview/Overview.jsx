@@ -6,7 +6,13 @@ import { TOOLS, TOOL_NAME } from "../../shared/contracts/tools.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../shared/ui/icons.jsx";
 import { computeOverview } from "./overviewModel.js";
 
-const TOOL_COLOR = { claude: "var(--t-claude)", codex: "var(--t-codex)", opencode: "var(--t-opencode)" };
+const TOOL_COLOR = {
+  claude: "var(--t-claude)",
+  codex: "var(--t-codex)",
+  opencode: "var(--t-opencode)",
+  pi: "var(--c4)",
+  grok: "var(--tx2)",
+};
 const COMP_OPACITY = { cache_read: 0.92, input: 0.6, cache_write: 0.38, output: 0.2 };
 const CHART = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];
 const toolColor = tool => {

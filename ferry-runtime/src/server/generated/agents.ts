@@ -1,8 +1,14 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
 export const AGENT_IDS = ["claude", "codex", "opencode", "pi", "grok"] as const;
-export const AGENT_LABELS = ["Claude Code", "Codex CLI", "OpenCode", "Pi Agent", "Grok Build"] as const;
+export const AGENT_LABELS = [
+  "Claude Code",
+  "Codex CLI",
+  "OpenCode",
+  "Pi Agent",
+  "Grok Build",
+] as const;
 export const AGENT_CAPABILITIES = {
-  "claude": [
+  claude: [
     "browse",
     "resume",
     "migration-source",
@@ -10,9 +16,9 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
-    "models"
+    "models",
   ],
-  "codex": [
+  codex: [
     "browse",
     "resume",
     "migration-source",
@@ -20,9 +26,9 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
-    "models"
+    "models",
   ],
-  "opencode": [
+  opencode: [
     "browse",
     "resume",
     "migration-source",
@@ -30,9 +36,9 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
-    "models"
+    "models",
   ],
-  "pi": [
+  pi: [
     "browse",
     "resume",
     "migration-source",
@@ -40,17 +46,17 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
-    "models"
+    "models",
   ],
-  "grok": [
+  grok: [
     "browse",
     "resume",
     "migration-source",
     "migration-target",
     "delete",
     "probe",
-    "models"
-  ]
+    "models",
+  ],
 } as const;
 export const AGENT_EDIT_OPERATIONS = {
   claude: ["delete-turn", "rewrite", "replace-assistant-reply"],
@@ -60,17 +66,11 @@ export const AGENT_EDIT_OPERATIONS = {
   grok: [],
 } as const;
 export const AGENT_SKILL_PATHS = {
-  "claude": [
-    "~/.claude/skills"
-  ],
-  "codex": [
-    "~/.codex/skills"
-  ],
-  "opencode": [
-    "~/.config/opencode/skills"
-  ],
-  "pi": [],
-  "grok": []
+  claude: ["~/.claude/skills"],
+  codex: ["~/.codex/skills"],
+  opencode: ["~/.config/opencode/skills"],
+  pi: [],
+  grok: [],
 } as const;
 export const SHARED_SKILL_PATHS = ["~/.agents/skills"] as const;
 export type AgentId = (typeof AGENT_IDS)[number];

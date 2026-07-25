@@ -68,7 +68,7 @@ Ferry uses two concepts that must not share the same name:
 
 - **Session source**: an external coding tool whose current native session
   structure Ferry can read or write. The built-in session sources are Claude
-  Code, Codex CLI, and OpenCode.
+  Code, Codex CLI, OpenCode, Pi Agent, and Grok Build.
 - **Ferry agent**: an LLM-backed worker that participates in a Ferry workflow.
   A role such as planner, researcher, coder, or reviewer configures a Ferry
   agent; it is not an external session format.
@@ -79,12 +79,13 @@ ignore unrelated additional fields, reject changes to required structure, and
 never select parsers by CLI version.
 
 `contracts/agents.json` is the compile-time source of truth for built-in Agent
-identity and content-edit support. Each Agent declares an exact
-`edit_operations` subset of `contracts/operations.json`; generation publishes
-that policy to the UI, Python Engine, and Ferry Runtime, while Rust continues
-to receive only Agent IDs and executable allowlists. Adapter construction
-rejects any manifest/editor operation mismatch, so declarations cannot drift
-from the native implementation.
+identity and capabilities. Each Agent declares its browse, resume, migration,
+edit, delete, probe, and model support, plus an exact `edit_operations` subset
+of `contracts/operations.json`. Generation publishes that policy to the UI,
+Python Engine, Ferry Runtime, and Rust Host; Rust consumes capabilities at its
+operation boundary alongside Agent IDs and executable allowlists. Adapter construction rejects any
+manifest/component or manifest/editor-operation mismatch, so declarations
+cannot drift from the native implementation.
 
 Current structure may legitimately contain more than one record subtype when
 the upstream runtime itself emits them. Codex is the important example:
@@ -93,6 +94,15 @@ the upstream runtime itself emits them. Codex is the important example:
 current rollouts, with the former also representing `spawn_agent`. This is one
 current native union, not a version fallback; the reader must reject unknown
 subtypes instead of selecting a parser by CLI version.
+
+Pi's current structure is session JSONL with a version-3 header, parent-linked
+message records, tool results, bash execution records, compaction records, and
+content parts. Grok's current structure is a directory bundle containing
+`summary.json`, `updates.jsonl`, and chat-format-v1 `chat_history.jsonl`.
+Grok updates are interpreted through rewind before canonicalization, and one
+streamed assistant response or tool lifecycle remains one canonical item.
+These numbers identify the one upstream structure Ferry implements; they do
+not select compatibility readers.
 
 Ferry's own IPC protocol and durable-store schema remain exact, independently
 versioned contracts. They protect against mixed binaries and corrupt data; they
@@ -138,7 +148,7 @@ timeouts, cancellation, WebView exposure, approval policy, and event bridging.
 It is the only trust boundary between the UI, Ferry Runtime, and mutating
 Session Engine operations.
 
-Rust does not parse Claude, Codex, or OpenCode native data.
+Rust does not parse Claude, Codex, OpenCode, Pi, or Grok native data.
 
 ```text
 app/src-tauri/src/
@@ -206,7 +216,7 @@ engine/
   sessions/        scan, index, read, search, assets, usage
   operations/      plan, apply, edit, migrate, metadata, delete, verify
   organization/    summaries and organization proposals
-  adapters/        current Claude, Codex, and OpenCode structures
+  adapters/        current Claude, Codex, OpenCode, Pi, and Grok structures
     shared/        codec, editing, migration, scan primitives reused by adapters
   storage/         SQLite connection and exact schema composition root
   system/          paths, executables, resources, and probes
@@ -322,8 +332,18 @@ can kill grandchildren too, and truncates each stream at 64KB.
 
 ## Data ownership
 
-External Claude, Codex, and OpenCode stores remain external sources of truth.
-Ferry never migrates or rewrites them merely to upgrade Ferry-owned state.
+External Claude, Codex, OpenCode, Pi, and Grok stores remain external sources
+of truth. Ferry never migrates or rewrites them merely to upgrade Ferry-owned
+state.
+
+An approved Grok migration is the narrow indexing exception: after generating
+new bundles and validating them with Ferry's reader and an isolated official
+CLI probe, the Python Adapter maintains Grok's current schema-v4
+`session_search.sqlite` so official list/search can discover those new
+sessions. It validates the exact schema, rejects database symlinks, creates a
+backup, and updates bundle rows and FTS triggers in one transaction. Delete
+uses the same checked boundary. Existing bundles are not rewritten, and a
+schema mismatch fails instead of being upgraded.
 
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
 currently version 8 and owns immutable operation plans, operation audit,
@@ -371,8 +391,9 @@ The SQLite boundary follows these rules:
 The static external-session contract starts at `contracts/agents.json` and is
 generated into the UI, Rust Host, Python Engine, and Ferry Runtime by
 `scripts/generate-contracts.py`. CI rejects generated-file drift. It contains
-only current built-in Agent identities and launch policy, never external Agent
-version ranges or compatibility status.
+only current built-in Agent identities, capability declarations, edit
+operations, and launch policy, never external Agent version ranges or
+compatibility status.
 
 `contracts/engine-methods.json` is the equivalent policy source for every
 Session Engine endpoint: public/trusted UI/internal exposure,
@@ -426,7 +447,9 @@ external module so the policy does not require inline script execution.
 - Re-read and validate migration output.
 - Roll back failed writes.
 - Keep mutation audit records.
-- Redact credentials and bound persisted model/tool output.
+- Preserve explicitly read session content, including paths and
+  credential-shaped text, while enforcing deterministic byte/shape limits and
+  visible truncation markers.
 - Allowlist all WebView and Ferry Runtime methods.
 - Apply timeouts, cancellation, and bounded concurrency.
 - Never let Node write external session stores directly.

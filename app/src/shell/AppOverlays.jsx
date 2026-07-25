@@ -227,6 +227,7 @@ export function AppOverlays({
         <HistoryFilter
           f={historyFilter.value}
           setF={historyFilter.onChange}
+          tools={historyFilter.tools}
           anchor={historyFilter.anchor}
           onClose={historyFilter.onClose}
           onClear={historyFilter.onClear}

@@ -42,9 +42,31 @@ def _migrate_target(write):
     return Target()
 
 
+def _adapter(target):
+    class Adapter:
+        id = "fake"
+        browser = object()
+        lifecycle = object()
+        migration_source = object()
+        migration_target = target
+        verifier = object()
+
+        def supports(self, capability):
+            return capability in {
+                "browse", "resume", "migration-source",
+                "migration-target", "probe",
+            }
+
+        def require(self, capability, component):
+            if not self.supports(capability):
+                raise ValueError(capability)
+            return getattr(self, component)
+
+    return Adapter()
+
+
 def _install_target(monkeypatch, target):
-    ports = SimpleNamespace(adapter=lambda _name: SimpleNamespace(
-        migration_target=target))
+    ports = SimpleNamespace(adapter=lambda _name: _adapter(target))
     monkeypatch.setattr(
         migration.MigrationService, "__init__",
         lambda instance, _ports: setattr(instance, "_ports", ports),
@@ -134,7 +156,7 @@ def test_probe_shadow_write_failure_restores_the_original_loss_state(monkeypatch
         (_ for _ in ()).throw(RuntimeError("shadow write failed")),
     )[1])
     instance = migration.MigrationService(SimpleNamespace(
-        adapter=lambda _name: SimpleNamespace(migration_target=target)))
+        adapter=lambda _name: _adapter(target)))
 
     with pytest.raises(RuntimeError, match="shadow write failed"):
         instance._isolated_probe("opencode", session, "/tmp/project")
@@ -171,7 +193,7 @@ def test_preview_reports_same_scope_counts_as_migration():
     session = _scoped_tree()
     target = _migrate_target(lambda *_: (_ for _ in ()).throw(AssertionError()))
     ports = SimpleNamespace(
-        adapter=lambda _name: SimpleNamespace(migration_target=target),
+        adapter=lambda _name: _adapter(target),
     )
     preview = migration.MigrationService(ports).preview(
         "claude",

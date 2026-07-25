@@ -42,7 +42,6 @@ class PiBackend(EditBackend):
         return CODEC.replace_reply(doc, select_span(TURN_INDEX.turns(doc.data), turn), reply)
 
     def validate(self, doc):
-        path = Path(doc.handle)
         if not doc.data or doc.data[0].get("type") != "session" \
                 or doc.data[0].get("version") != 3:
             raise ValueError("Pi 会话缺少 v3 header")
