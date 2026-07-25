@@ -1,6 +1,7 @@
 """Ferry Runtime 会话事件的 Engine SQLite 存储。
 
-这里仅持久化 Runtime 已脱敏的 JSON 记录，不解释 Provider、Role 或 AgentMessage。
+这里仅持久化 Runtime 已完成体积约束的 JSON 记录，不解释 Provider、Role 或
+AgentMessage。
 """
 from __future__ import annotations
 

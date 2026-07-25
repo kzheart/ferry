@@ -11,10 +11,14 @@
 </p>
 
 <p align="center">
-  Ferry brings together the conversation history of Claude Code, Codex CLI, and OpenCode
-  into a single library. Browse thousands of sessions, migrate context between agents
-  with an impact preview, and understand your token usage — privacy-first, no account required.
+Ferry brings together the conversation history of Claude Code, Codex CLI, and OpenCode
+into a single library. Browse thousands of sessions, migrate context between agents
+with an impact preview, and understand your token usage — privacy-first, no account required.
 </p>
+
+Ferry keeps requested local session content byte-for-byte within explicit response
+limits; it does not rewrite credential-shaped text, paths, tool arguments, or output.
+Tool output remains opt-in, and oversized values are deterministically truncated.
 
 <p align="center">
   <a href="https://github.com/kzheart/ferry/releases"><img src="https://img.shields.io/github/v/release/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&logo=github&label=Release" alt="Release" /></a>

@@ -11,7 +11,7 @@ export * from "./providers/provider-host.js";
 export * from "./roles/role-store.js";
 export * from "./runtime/command-router.js";
 export * from "./runtime/runtime.js";
-export * from "./security/redaction.js";
+export * from "./security/limits.js";
 export * from "./server/jsonl.js";
 export * from "./server/messages.js";
 export * from "./sessions/engine-store.js";

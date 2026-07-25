@@ -22,7 +22,7 @@ from engine.sessions import search as session_search
 from engine.sessions import usage as session_usage
 from engine.sessions.content_index import ContentIndex
 from engine.sessions.index import AgentSessionIndex
-from engine.sessions.safety import redact
+from engine.sessions.safety import bounded_json, truncate_text
 from engine.sessions import scan as scanning
 from engine.app import EngineService
 from engine.context import EngineContext
@@ -319,7 +319,8 @@ def _preview_edit(environment, tool, ref, ops):
     )
 
 
-def test_search_never_exposes_storage_locations(agent_environment):
+def test_search_returns_original_project_without_native_storage_ref(
+        agent_environment):
     result = session_search.search_sessions(
         "支付", agents=["claude"], limit=1,
     )
@@ -327,7 +328,7 @@ def test_search_never_exposes_storage_locations(agent_environment):
     item = result["sessions"][0]
     assert item["ref"].startswith("fsr_")
     assert "path" not in item and "dir" not in item and "id" not in item
-    assert "/Users/" not in json.dumps(result, ensure_ascii=False)
+    assert item["project"] == "/Users/private/secret-project"
     with pytest.raises(AgentRequestError):
         session_search.search_sessions(limit=51)
 
@@ -342,7 +343,7 @@ def test_content_search_matches_message_bodies(agent_environment):
     match = item["content_matches"][0]
     assert (match["message"], match["turn"], match["role"]) == (1, 1, "user")
     assert "第一轮" in match["snippet"]
-    assert "/Users/" not in json.dumps(result, ensure_ascii=False)
+    assert item["project"] == "/Users/private/secret-project"
 
 
 def test_content_search_short_query_falls_back_to_substring_scan(
@@ -354,7 +355,7 @@ def test_content_search_short_query_falls_back_to_substring_scan(
     assert [match["message"] for match in item["content_matches"]] == [2, 4]
 
 
-def test_content_search_tool_outputs_are_opt_in_and_redacted(
+def test_content_search_tool_outputs_are_opt_in_and_original(
         agent_environment):
     hidden = session_search.search_sessions("very-secret-token-value")
     assert hidden["total_matches"] == 0
@@ -363,7 +364,7 @@ def test_content_search_tool_outputs_are_opt_in_and_redacted(
     )
     assert found["total_matches"] == 1
     snippet = found["sessions"][0]["content_matches"][0]["snippet"]
-    assert "very-secret-token-value" not in snippet
+    assert "very-secret-token-value" in snippet
 
 
 def test_content_search_ands_query_words_within_one_message(
@@ -588,21 +589,20 @@ def test_adapter_read_scope_is_checked_before_and_after_read(
     assert browser.read_scope_calls - calls_before == 2
 
 
-def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):
+def test_context_is_turn_bounded_original_and_byte_bounded(agent_environment):
     ref = _claude_ref()
     result = agent_read.get_session_context(
         "claude", ref, from_message=1, limit=4, max_bytes=2048)
     encoded = json.dumps(result, ensure_ascii=False).encode()
     assert len(encoded) <= 2048
     text = encoded.decode()
-    assert "topsecret" not in text
-    assert "/tmp/" not in text and "/Users/" not in text
+    assert "topsecret" in text
+    assert "/tmp/private.txt" in text
+    assert "/Users/private/secret-project" in text
     assert "private chain of thought" not in text
-    assert "cat /etc/passwd" not in text
-    assert "very-secret-token-value" not in text
+    assert "cat /etc/passwd" in text
     assert "BASE64_PRIVATE" not in text
-    assert "ghp_" not in text
-    assert '"input": "[omitted]"' in text
+    assert '"command": "cat /etc/passwd"' in text
     assert result["truncation"]["truncated"] is True
     assert result["turn_count"] == 2
     assert result["message_count"] == 4
@@ -616,8 +616,8 @@ def test_context_is_turn_bounded_redacted_and_byte_bounded(agent_environment):
         "claude", ref, from_message=1, limit=2,
         include_tool_outputs=True, max_bytes=4096)
     output_text = json.dumps(with_output, ensure_ascii=False)
-    assert "very-secret-token-value" not in output_text
-    assert "[REDACTED]" in output_text
+    assert "very-secret-token-value" in output_text
+    assert "/tmp/ghp_abcdefghijklmnopqrstuvwxyz.png" in output_text
 
 
 def test_context_locator_is_required_for_agent_rewrite(agent_environment):
@@ -691,7 +691,7 @@ def test_context_paginates_long_single_turn_by_message(agent_environment):
     assert all(item["turn"] == 1 for item in second["messages"])
 
 
-def test_redaction_covers_cross_platform_paths_and_common_credentials():
+def test_limits_preserve_paths_and_credentials_with_deterministic_truncation():
     private_key = (
         "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----")
     value = (
@@ -706,12 +706,14 @@ def test_redaction_covers_cross_platform_paths_and_common_credentials():
         "-----END ENCRYPTED PRIVATE KEY----- "
         "-----BEGIN DSA PRIVATE KEY-----\ndsa\n-----END DSA PRIVATE KEY----- "
         + private_key)
-    redacted = redact(value)
-    for secret in ("/root", "/Volumes", "/mnt", "C:/", "D:\\", "server", "ghp_",
-                   "github_pat_", "gho_", "ghu_", "ghs_", "ghr_", "AKIA",
-                   "abc123", "enc", "dsa"):
-        assert secret not in redacted
-    assert "supersecretvalue" not in redacted and "xoxb-" not in redacted
+    unchanged, truncated = truncate_text(value, len(value))
+    assert unchanged == value
+    assert truncated is False
+    clipped, truncated = truncate_text(value, 16)
+    assert clipped == value[:16]
+    assert truncated is True
+    structured = {"path": "/root/a", "token": "Bearer original-token"}
+    assert bounded_json(structured) == structured
 
 
 def test_usage_is_aggregated_without_raw_session_data(
@@ -732,7 +734,11 @@ def test_usage_is_aggregated_without_raw_session_data(
         "tokens": tokens,
         "by_agent": {"claude": tokens},
         "by_model": {"claude-safe": {"tokens": tokens, "cost": 5e-05}},
-        "by_project": {"secret-project": {"tokens": tokens, "cost": 5e-05}},
+        "by_project": {
+            "/Users/private/secret-project": {
+                "tokens": tokens, "cost": 5e-05,
+            },
+        },
         "cost": 0.0001,
         "cost_basis": "estimated_from_public_prices",
         "unpriced_models": [],

@@ -242,7 +242,7 @@ ferry-runtime/src/
   skills/          skill library, candidate discovery, skill configuration
   tools/           Ferry tool catalog and delegation
   organizing/      summary and organization workflows
-  security/        redaction and runtime limits
+  security/        deterministic runtime size limits
 ```
 
 Ferry Runtime cannot write an external session directly. A requested mutation
@@ -353,8 +353,10 @@ selection, multi-selection, context menus, and detail caching. Native session
 IDs remain adapter data and must never become cross-tool UI identifiers.
 
 Runtime session/event records enter the database only through internal Engine
-RPC after the Runtime has redacted them; Python stores these records as opaque
-JSON and never interprets Provider or AgentMessage semantics. Rust and Ferry
+RPC after the Runtime has applied deterministic size limits; content, paths,
+and credential-shaped strings are otherwise preserved. Python stores these
+records as opaque JSON and never interprets Provider or AgentMessage semantics.
+Rust and Ferry
 Runtime never open
 `ferry-state.sqlite3` directly.
 

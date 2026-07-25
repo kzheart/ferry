@@ -15,7 +15,7 @@ from ..sessions.safety import (
     bounded_json,
     finalize_dto,
     record_session_id,
-    redact,
+    truncate_text,
 )
 from .plan_store import OperationPlan
 from .types import AssistantReply
@@ -233,7 +233,7 @@ class EditOperationHandler:
             "ref": record.opaque_ref,
             "mode": "edit",
             "session_id": record_session_id(record),
-            "revision": redact(str(result["revision"]), 256),
+            "revision": truncate_text(str(result["revision"]), 256)[0],
             "before": bounded_json(result["before"], 12 * 1024),
             "after": bounded_json(result["after"], 12 * 1024),
             "changes": bounded_json(result["changes"], 12 * 1024),

@@ -1,72 +1,27 @@
-"""会话查询与操作返回值的输入边界、脱敏和体积限制。"""
+"""会话查询与操作返回值的输入边界和体积限制。"""
 
 import hashlib
 import json
 import math
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 from ..errors import AgentRequestError
 
 
 MAX_AGENT_DTO_BYTES = 64 * 1024
 
-_SECRET_PATTERNS = (
-    re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(
-        r"(?i)\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY)"
-        r"[A-Z0-9_]*\s*[:=]\s*[^\s,;]+"
-    ),
-    re.compile(
-        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)"
-        r"\s*[:=]\s*[^\s,;]+"
-    ),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
-    re.compile(r"\b(?:gh[opusr]|github_pat)_[A-Za-z0-9_]{16,}\b"),
-    re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
-    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{12,}\b"),
-    re.compile(
-        r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----.*?"
-        r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----",
-        re.DOTALL,
-    ),
-)
-# 路径不会跨越尖括号:不排掉的话 `<command-name>/clear</command-name>` 会被
-# 整段吞成一个 [ABSOLUTE_PATH],把结构标记也一起抹掉。
-_PATH_STOP = r"\s\]\[\)\(\}\{\"'<>"
-_FILE_URI = re.compile(rf"(?i)\bfile://(?:/|\\)[^{_PATH_STOP}]+")
-_HOME_PATH = re.compile(rf"(?<!\w)~[/\\][^{_PATH_STOP}]+")
-# 至少要有一层目录:否则 `/clear`、`/command-name` 这类斜杠命令和标记
-# 也会被当成绝对路径抹掉,读到的会话正文变得没法看。
-_POSIX_PATH = re.compile(rf"(?<![:\w])/(?:[^/{_PATH_STOP}]+/)+[^{_PATH_STOP}]*")
-_WINDOWS_PATH = re.compile(rf"(?i)\b[A-Z]:[\\/][^{_PATH_STOP}]+")
-_UNC_PATH = re.compile(rf"\\\\[^\\\s]+\\[^{_PATH_STOP}]+")
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-def redact(value: str, limit: int | None = None) -> str:
-    text = _CONTROL_CHARS.sub("", value)
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[REDACTED]", text)
-    for pattern in (_FILE_URI, _HOME_PATH, _POSIX_PATH, _WINDOWS_PATH, _UNC_PATH):
-        text = pattern.sub("[ABSOLUTE_PATH]", text)
-    if limit is not None and len(text) > limit:
-        return text[:limit] + "…"
-    return text
-
-
-def safe_project(value: object) -> str:
-    if not isinstance(value, str) or not value:
-        return ""
-    return redact(Path(value).name, 120)
+def truncate_text(value: str, limit: int) -> tuple[str, bool]:
+    if len(value) <= limit:
+        return value, False
+    return value[:limit], True
 
 
 def record_session_id(record, session=None) -> str:
     row = getattr(record, "row", None)
     value = row.get("id") if isinstance(row, dict) else None
     value = value or getattr(session, "source_id", None)
-    return redact(str(value or ""), 512)
+    return truncate_text(str(value or ""), 512)[0]
 
 
 _TIME_FORMAT_HINT = (
@@ -227,32 +182,55 @@ def validated_interval(value) -> tuple[int | None, int | None]:
     return start, end
 
 
-def safe_json(value, depth: int = 0):
-    if depth > 6:
-        return "[truncated]"
-    if isinstance(value, str):
-        return redact(value, 1000)
-    if isinstance(value, (int, float, bool)) or value is None:
-        return value
+def _bounded_structure(
+    value,
+    *,
+    depth: int = 0,
+    budget: dict[str, int] | None = None,
+):
+    budget = budget or {"nodes": 2000}
+    if budget["nodes"] <= 0 or depth > 8:
+        return None, True
+    budget["nodes"] -= 1
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value, False
     if isinstance(value, list):
-        return [safe_json(item, depth + 1) for item in value[:100]]
+        result = []
+        truncated = len(value) > 200
+        for item in value[:200]:
+            child, child_truncated = _bounded_structure(
+                item, depth=depth + 1, budget=budget,
+            )
+            result.append(child)
+            truncated = truncated or child_truncated
+        return result, truncated
     if isinstance(value, dict):
-        return {
-            redact(str(key), 100): safe_json(item, depth + 1)
-            for key, item in list(value.items())[:50]
-        }
-    return redact(str(value), 1000)
+        result = {}
+        truncated = len(value) > 200
+        for key, item in list(value.items())[:200]:
+            child, child_truncated = _bounded_structure(
+                item, depth=depth + 1, budget=budget,
+            )
+            result[str(key)] = child
+            truncated = truncated or child_truncated
+        return result, truncated
+    return str(value), False
 
 
 def bounded_json(value, max_bytes: int = 32 * 1024):
-    safe = safe_json(value)
-    encoded = json.dumps(safe, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    bounded, structurally_truncated = _bounded_structure(value)
+    if structurally_truncated:
+        bounded = {"truncated": True, "value": bounded}
+    encoded = json.dumps(
+        bounded, ensure_ascii=False, sort_keys=True,
+    ).encode("utf-8")
     if len(encoded) <= max_bytes:
-        return safe
+        return bounded
+    preview_limit = min(4000, max(0, max_bytes - 256))
     return {
         "truncated": True,
         "sha256": hashlib.sha256(encoded).hexdigest(),
-        "preview": encoded[:4000].decode("utf-8", errors="ignore"),
+        "preview": encoded[:preview_limit].decode("utf-8", errors="ignore"),
     }
 
 

@@ -34,7 +34,13 @@ def test_runtime_source_is_grouped_by_responsibility():
     } == {"index.ts"}
     runtime = (RUNTIME / "src/runtime/runtime.ts").read_text()
     assert "function safeText" not in runtime
-    assert (RUNTIME / "src/security/redaction.ts").is_file()
+    security_files = {
+        path.name for path in (RUNTIME / "src/security").glob("*.ts")
+    }
+    assert security_files == {"limits.ts"}
+    limits = RUNTIME / "src/security/limits.ts"
+    assert limits.is_file()
+    assert "function truncateText" in limits.read_text()
     provider_config = (
         RUNTIME / "src/providers/provider-config.ts"
     ).read_text()

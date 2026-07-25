@@ -137,7 +137,8 @@ def test_session_reference_index_is_isolated_from_query_catalog():
         ENGINE / "operations/edit.py"
     ).read_text()
     safety = (sessions / "safety.py").read_text()
-    assert "def redact(" in safety
+    assert "def truncate_text(" in safety
+    assert "def bounded_json(" in safety
     assert "def validate_json_shape(" in safety
     assert (sessions / "scan_cache.py").is_file()
     assert not (ENGINE / "storage/scan_cache.py").exists()

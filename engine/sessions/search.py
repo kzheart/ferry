@@ -13,9 +13,8 @@ from .safety import (
     bounded_int,
     finalize_dto,
     record_session_id,
-    redact,
-    safe_project,
     string_set,
+    truncate_text,
     validated_interval,
 )
 
@@ -85,7 +84,9 @@ def search_sessions(query: str = "", agents=None, projects=None,
     hit_by_item = {}
     for record in records:
         row = record.row
-        project = safe_project(row.get("dir"))
+        project, project_truncated = truncate_text(
+            str(row.get("dir") or ""), 1024,
+        )
         updated = int(row.get("updated") or 0)
         haystack = " ".join((
             str(row.get("title") or ""),
@@ -112,18 +113,27 @@ def search_sessions(query: str = "", agents=None, projects=None,
                 continue
             if scope == "any" and not metadata_hit and content_hit is None:
                 continue
+        title, title_truncated = truncate_text(
+            str(row.get("title") or ""), 200,
+        )
+        model, model_truncated = truncate_text(
+            str(row.get("model") or ""), 120,
+        )
         item = {
             "tool": record.tool,
             "ref": record.opaque_ref,
             "session_id": record_session_id(record),
-            "title": redact(str(row.get("title") or ""), 200),
+            "title": title,
             "project": project,
+            "title_truncated": title_truncated,
+            "project_truncated": project_truncated,
             "updated": updated,
             # 与 session_read 的 message_count 不是一回事:这里是原始转录条数,
             # 读取视图会把同一轮的多个片段合并,数字明显更小。同名会让模型把
             # 两个数当成同一个口径,先后报给用户互相矛盾的结果。
             "record_count": int(row.get("count") or 0),
-            "model": redact(str(row.get("model") or ""), 120),
+            "model": model,
+            "model_truncated": model_truncated,
             "revision": record.revision,
         }
         if needle and content_active:
@@ -153,7 +163,7 @@ def search_sessions(query: str = "", agents=None, projects=None,
     else:
         matches.sort(key=lambda item: item["updated"], reverse=True)
 
-    # 摘要只为最终返回页生成;脱敏在此处收口。
+    # 摘要只为最终返回页生成，避免为未返回结果做额外读取。
     if content_active and content_index is not None:
         for item in matches[:limit]:
             hit = hit_by_item.get(id(item))
@@ -164,12 +174,12 @@ def search_sessions(query: str = "", agents=None, projects=None,
                     "message": row["message"],
                     "turn": row["turn"],
                     "role": row["role"],
-                    "snippet": redact(
+                    "snippet": truncate_text(
                         content_index.snippet(
                             row["id"], query.strip(), include_tool_outputs,
                         ),
                         _SNIPPET_CHARS,
-                    ),
+                    )[0],
                 }
                 for row in hit["rows"]
             ]
