@@ -122,6 +122,15 @@ def read(path: str) -> Session:
             session.model_provider = entry.get("provider")
             session.model = entry.get("modelId")
             continue
+        if kind == "branch_summary":
+            summary = str(entry.get("summary") or "")
+            session.messages.append(Message(
+                "user", [Block("text", summary)], source_id=entry_id,
+                parent_ids=[entry["parentId"]] if entry.get("parentId") else [],
+                created_at=entry.get("timestamp"),
+            ))
+            last_message_id = entry_id
+            continue
         if kind == "compaction":
             session.context_compactions.append(ContextCompaction(
                 id=entry_id, source="pi",

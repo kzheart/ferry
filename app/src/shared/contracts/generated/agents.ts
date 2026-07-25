@@ -56,10 +56,29 @@ export const AGENTS = {
     "editOperations": [
       "rewrite"
     ]
+  },
+  "pi": {
+    "displayName": "Pi Agent",
+    "icon": "pi",
+    "capabilities": [
+      "browse",
+      "resume",
+      "migration-source",
+      "migration-target",
+      "edit",
+      "delete",
+      "probe",
+      "models"
+    ],
+    "editOperations": [
+      "delete-turn",
+      "rewrite",
+      "replace-assistant-reply"
+    ]
   }
 } as const;
 export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
-export const ALLOWED_EXECUTABLES = ["claude", "codex", "opencode"] as const;
+export const ALLOWED_EXECUTABLES = ["claude", "codex", "opencode", "pi"] as const;
 export const AGENT_SKILL_PATHS = {
   "claude": [
     "~/.claude/skills"
@@ -69,7 +88,8 @@ export const AGENT_SKILL_PATHS = {
   ],
   "opencode": [
     "~/.config/opencode/skills"
-  ]
+  ],
+  "pi": []
 } as const;
 export const SHARED_SKILL_PATHS = ["~/.agents/skills"] as const;
 export type AgentId = keyof typeof AGENTS;

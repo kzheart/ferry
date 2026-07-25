@@ -31,5 +31,14 @@ AGENTS = {
         'executables': ('opencode',),
         'fallback_bin_dirs': ('~/.opencode/bin',),
     },
+    'pi': {
+        'display_name': 'Pi Agent',
+        'icon': 'pi',
+        'source_path': '~/.pi/agent/sessions',
+        'capabilities': ('browse', 'resume', 'migration-source', 'migration-target', 'edit', 'delete', 'probe', 'models'),
+        'edit_operations': ('delete-turn', 'rewrite', 'replace-assistant-reply'),
+        'executables': ('pi',),
+        'fallback_bin_dirs': (),
+    },
 }
 AGENT_IDS = tuple(AGENTS)

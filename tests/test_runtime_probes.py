@@ -6,6 +6,7 @@ import pytest
 from engine.adapters.claude import probe as claude_probe
 from engine.adapters.codex import probe as codex_probe
 from engine.adapters.opencode import probe as opencode_probe
+from engine.adapters.pi import probe as pi_probe
 from engine.system import probes
 
 
@@ -48,3 +49,14 @@ def test_cli_probe_rejects_success_exit_with_wrong_response(monkeypatch, module,
 
     assert report["status"] == "failed"
     assert report["code"] == "probe.unexpected_response"
+
+
+def test_pi_rpc_probe_requires_both_load_responses(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        pi_probe.subprocess, "run",
+        lambda *_args, **_kwargs: _Result(
+            '{"type":"response","command":"get_entries","success":true}\n'
+        ),
+    )
+    report = pi_probe._probe_path(str(tmp_path / "session.jsonl"), str(tmp_path))
+    assert report["status"] == "failed"
