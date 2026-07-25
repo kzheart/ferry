@@ -10,7 +10,7 @@ import Roles from "./Roles.jsx";
 
 const role = (id, extra = {}) => ({
   id, name: id, description: "", persona: "", tools: ["session_read"],
-  allow_bash: false, apply_policy: "manual", builtin: false, ...extra,
+  skills: [], apply_policy: "manual", builtin: false, ...extra,
 });
 
 function mount(overrides = {}) {
@@ -19,6 +19,8 @@ function mount(overrides = {}) {
     roles: [role("default", { builtin: true, name: "Ferry" }), role("reader")],
     models: [],
     reloadRoles: async () => {},
+    reloadSkills: async () => {},
+    skills: { skills: [], global: [], scan_sources: [] },
     updateRole: async input => calls.push(["update", input]),
     resetRole: async id => calls.push(["reset", id]),
     deleteRole: async id => calls.push(["delete", id]),
@@ -62,4 +64,43 @@ test("自定义角色仍然是删除,工具卡的勾选会写回草稿", () => {
   fireEvent.click(screen.getByText("settings:roles.tool.usage.label"));
   assert.equal(screen.getByText("settings:roles.save").disabled, false);
   assert.ok(screen.getByLabelText("settings:roles.discard"));
+});
+
+test("bash 是能力里的一张卡,安全区不再有占位开关", () => {
+  mount();
+  assert.ok(screen.getByText("settings:roles.tool.bash.label"));
+  assert.equal(screen.queryByText("settings:roles.bashLater"), null);
+});
+
+test("技能库为空时角色页给空态而不是一片空白", () => {
+  mount();
+  fireEvent.click(screen.getByText("reader"));
+  assert.ok(screen.getByText("settings:skills.roleEmpty"));
+});
+
+test("勾选一个已导入技能写回草稿,保存按钮出现", () => {
+  mount({
+    skills: {
+      skills: [{ id: "code-review", name: "代码评审", description: "", broken: false }],
+      global: [], scan_sources: [],
+    },
+  });
+  fireEvent.click(screen.getByText("reader"));
+  assert.equal(screen.queryByText("settings:roles.save"), null);
+  fireEvent.click(screen.getByText("代码评审"));
+  assert.equal(screen.getByText("settings:roles.save").disabled, false);
+});
+
+test("通用技能在角色层勾选态锁定,不可取消", () => {
+  mount({
+    skills: {
+      skills: [{ id: "code-review", name: "代码评审", description: "", broken: false }],
+      global: ["code-review"], scan_sources: [],
+    },
+  });
+  fireEvent.click(screen.getByText("reader"));
+  assert.ok(screen.getByText("settings:skills.globalBadge"));
+  fireEvent.click(screen.getByText("代码评审"));
+  // 锁死的行点不动,草稿不脏就不会冒出保存按钮
+  assert.equal(screen.queryByText("settings:roles.save"), null);
 });

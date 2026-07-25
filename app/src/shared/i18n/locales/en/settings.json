@@ -67,6 +67,10 @@
       "session_edit": {
         "label": "Session edit",
         "desc": "Rewrite or delete turns and assistant replies"
+      },
+      "bash": {
+        "label": "Run command",
+        "desc": "Really runs shell commands on your machine; every call goes through approval"
       }
     },
     "defaultModel": "Default model",
@@ -83,9 +87,7 @@
     "applyPolicyHint": "Edit / migrate tools",
     "manual": "Always require approval",
     "auto": "May follow Auto mode",
-    "bashLater": "Allow bash",
-    "bashHint": "Available in a later release",
-    "safetyNote": "The runtime and native trust boundary enforce the tool allowlist and approval policy; the persona cannot bypass them. This page never grants shell access.",
+    "safetyNote": "The tool allowlist and approval policy are enforced by the runtime and the native trust boundary; a persona cannot bypass them. Enabling \"Run command\" still requires approval for every command — it only runs straight through when the session is in Auto mode and this role's apply policy is auto.",
     "dangerTitle": "Delete role",
     "dangerDesc": "Sessions referencing this role fall back to the default role. This cannot be undone.",
     "delete": "Delete",
