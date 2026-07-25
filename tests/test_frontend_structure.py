@@ -4,6 +4,7 @@
 文件清单会把任何合理重构变成红灯,却挡不住真正的架构违规。
 """
 import json
+import re
 from pathlib import Path
 
 
@@ -237,13 +238,21 @@ def test_agent_icons_are_resources_not_inline_code():
     )
     assert "AGENT_FALLBACK_COLOR" in icons
     assert 'markup?.includes("<rect")' in icons
+    assert 'className="agent-icon-svg"' in icons
+    styles = (FRONTEND / "shared/styles/app.css").read_text(encoding="utf-8")
+    assert ".agent-icon-svg > svg" in styles
 
 
 def test_agent_icon_assets_are_self_contained():
     """彩色资源可烘焙底色，单色资源由渲染端着色；两者都不得引用外部资源。"""
     for path in (FRONTEND / "assets/icons").glob("*.svg"):
         markup = path.read_text(encoding="utf-8")
-        assert 'viewBox="0 0 24 24"' in markup, path.name
+        view_box = re.search(
+            r'viewBox="0 0 ([0-9]+(?:\.[0-9]+)?) ([0-9]+(?:\.[0-9]+)?)"',
+            markup,
+        )
+        assert view_box, f"{path.name} 缺少从原点开始的正数 viewBox"
+        assert float(view_box.group(1)) > 0 and float(view_box.group(2)) > 0
         assert "<rect" in markup or "currentColor" in markup, (
             f"{path.name} 既没有烘焙底色，也不是可着色的单色资源"
         )

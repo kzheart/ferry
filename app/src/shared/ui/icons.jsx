@@ -6,7 +6,7 @@ import { roleColorVar, roleIconPath } from "./roleIcons.js";
 //
 // Agent 图标是资源而非代码:构建期从 assets/icons/<icon>.svg 静态收集,
 // key 取自 contracts/agents.json 的 icon 字段。新增 Agent 只需放一个自
-// 包含的 24×24 svg(自带底色与留白),不必修改本文件。
+// 包含且带 viewBox 的 svg(自带底色与留白),不必修改本文件。
 const AGENT_ICON = Object.fromEntries(
   Object.entries(
     import.meta.glob("../../assets/icons/*.svg", {
@@ -36,7 +36,8 @@ export function ToolIcon({ tool, size = 26, dot = null }) {
       color: hasBakedBackground ? undefined : fallbackColor,
       border: "1px solid var(--line)", overflow: "hidden", flex: "none" }}>
       {markup ? (
-        <span style={{ width: size, height: size, display: "block" }}
+        <span className="agent-icon-svg"
+          style={{ width: size, height: size, display: "block" }}
           dangerouslySetInnerHTML={{ __html: markup }} />
       ) : (
         <svg viewBox="0 0 24 24" style={{ width: size, height: size, display: "block" }}>
