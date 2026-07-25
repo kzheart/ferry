@@ -15,6 +15,10 @@ from engine.adapters.opencode.native_schema import (
     extract_templates as extract_opencode,
     templates as opencode_templates,
 )
+from engine.adapters.pi.native_schema import (
+    extract_templates as extract_pi,
+    templates as pi_templates,
+)
 from engine.adapters.registry import create_registry
 
 
@@ -35,6 +39,7 @@ def _jsonl(path):
         ("claude", claude_templates, extract_claude, "session.jsonl"),
         ("codex", codex_templates, extract_codex, "session.jsonl"),
         ("opencode", opencode_templates, extract_opencode, "session.json"),
+        ("pi", pi_templates, extract_pi, "session.jsonl"),
     ],
 )
 def test_native_fixture_matches_current_structure(
@@ -51,6 +56,7 @@ def test_native_fixture_matches_current_structure(
         claude_templates,
         codex_templates,
         opencode_templates,
+        pi_templates,
     ],
 )
 def test_template_results_are_independent_copies(template_factory):
@@ -66,7 +72,7 @@ def test_adapter_does_not_expose_a_format_version_registry(agent_id):
 
 
 def test_fixtures_have_no_version_directory_layer():
-    for agent_id in ("claude", "codex", "opencode"):
+    for agent_id in ("claude", "codex", "opencode", "pi"):
         assert {path.name for path in (FIXTURES / agent_id).iterdir()} == {
             "case-01-plain",
             "case-02-tools",

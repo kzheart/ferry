@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 from engine.adapters.claude.native_schema import extract_templates as extract_claude  # noqa: E402
 from engine.adapters.codex.native_schema import extract_templates as extract_codex  # noqa: E402
 from engine.adapters.opencode.native_schema import extract_templates as extract_opencode  # noqa: E402
+from engine.adapters.pi.native_schema import extract_templates as extract_pi  # noqa: E402
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -32,6 +33,7 @@ EXTRACTORS = {
     "claude": (extract_claude, _jsonl),
     "codex": (extract_codex, _jsonl),
     "opencode": (extract_opencode, _json),
+    "pi": (extract_pi, _jsonl),
 }
 
 

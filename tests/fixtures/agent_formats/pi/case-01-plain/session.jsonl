@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"fixture-pi-plain","timestamp":"2026-07-25T09:00:00.000Z","cwd":"/fixture/pi/plain"}
+{"type":"message","id":"u1","parentId":null,"timestamp":"2026-07-25T09:00:01.000Z","message":{"role":"user","content":"Keep /fixture/pi/plain and token sk-test-fixture unchanged.","timestamp":1784970001000}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-07-25T09:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Both values remain unchanged."}],"api":"anthropic-messages","provider":"fixture","model":"fixture-model","usage":{"input":7,"output":4,"cacheRead":0,"cacheWrite":0,"totalTokens":11,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1784970002000}}
