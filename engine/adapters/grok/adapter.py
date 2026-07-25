@@ -87,6 +87,12 @@ class GrokBrowser:
     def fingerprint(self, ref): return fingerprint(str(resolve(ref)))
     def agent_fingerprint(self, ref): return agent_fingerprint(str(resolve(ref)))
 
+    def authoritative_members(self, ref):
+        path = resolve(ref)
+        updates = path / "updates.jsonl"
+        history = updates if updates.is_file() else path / "chat_history.jsonl"
+        return [path / "summary.json", history]
+
     def canonicalize(self, row):
         return filesystem_reference(
             row, MANIFEST.source_path, self.resolve_ref,
