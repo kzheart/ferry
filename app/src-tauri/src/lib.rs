@@ -46,10 +46,12 @@ pub fn run() {
             operations::operation_status,
             operations::operation_cancel,
             runtime::agent_command,
+            runtime::bash::bash_apply,
             desktop::terminal::open_terminal,
             desktop::reveal::reveal_path,
             desktop::role_file::export_roles_file,
-            desktop::role_file::import_roles_file
+            desktop::role_file::import_roles_file,
+            desktop::skill_dir::pick_skill_directory
         ])
         .on_window_event(desktop::window::handle_window_event)
         .run(tauri::generate_context!())
