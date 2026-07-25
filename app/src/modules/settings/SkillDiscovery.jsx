@@ -54,8 +54,9 @@ function CandidateRow({ candidate, on, onSelect }) {
   return (
     <button className={on ? undefined : "hov-item"}
       onClick={() => onSelect(`candidate:${candidate.candidateId}`)}
+      // 左内边距对齐来源名:8(行内边距) + 9(箭头) + 5(间距),候选看上去才是挂在来源下面的
       style={{ display: "flex", alignItems: "center", gap: 8, border: "none",
-        borderRadius: 8, padding: "6px 8px", textAlign: "left", cursor: "default",
+        borderRadius: 8, padding: "6px 8px 6px 22px", textAlign: "left", cursor: "default",
         width: "100%", fontFamily: "inherit",
         background: on ? "var(--seg-on)" : "transparent" }}>
       <span style={{ minWidth: 0, flex: 1 }}>
