@@ -12,6 +12,14 @@ try {
   document.documentElement.style.background = dark
     ? "#141416"
     : "#FBFCFD";
+  // 窗口外观(毛玻璃材质)也要赶在首帧前同步:应用主题与系统深浅色不一致时,
+  // 等 React 挂载后再 setTheme 会让侧栏先以错误材质渲染一下再跳变
+  const theme = settings.theme ?? "light";
+  if ("__TAURI_INTERNALS__" in window && theme !== "system") {
+    import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTheme(theme))
+      .catch(() => {});
+  }
 } catch {
   // 无有效缓存时保持默认浅色主题。
 }
