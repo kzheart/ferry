@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 from pathlib import Path
 
 
@@ -36,6 +37,10 @@ class ScanCache:
         if self._data is None:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
+        # 进程内可能有并发扫描(预热线程 + RPC),临时文件必须按线程区分,
+        # 否则两个线程互相 replace 掉对方的临时文件。
+        temp = self.path.with_name(
+            f"{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp",
+        )
         temp.write_text(json.dumps(self._data))
         os.replace(temp, self.path)

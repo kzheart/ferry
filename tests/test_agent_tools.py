@@ -17,8 +17,10 @@ from engine.adapters.opencode import scanner as opencode_scanner
 from engine.operations.edit import EditOperationHandler
 from engine.operations.migrate import MigrationService
 from engine.sessions import agent_read
+from engine.sessions import content_index as session_content
 from engine.sessions import search as session_search
 from engine.sessions import usage as session_usage
+from engine.sessions.content_index import ContentIndex
 from engine.sessions.index import AgentSessionIndex
 from engine.sessions.safety import redact
 from engine.sessions import scan as scanning
@@ -278,6 +280,7 @@ def agent_environment(tmp_path, monkeypatch):
         snapshot_dir=lambda: tmp_path, version="test",
     )
     index = AgentSessionIndex(ports)
+    content = ContentIndex(tmp_path / "content-index.sqlite3")
     for name in (
         "get_session_context", "search_session_content", "session_read",
     ):
@@ -287,7 +290,10 @@ def agent_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(
         session_search,
         "search_sessions",
-        partial(session_search.search_sessions, index=index),
+        partial(
+            session_search.search_sessions,
+            index=index, content_index=content,
+        ),
     )
     monkeypatch.setattr(
         session_usage,
@@ -296,7 +302,8 @@ def agent_environment(tmp_path, monkeypatch):
     )
     yield {"root": root, "transcript": transcript, "editor": editor,
            "claude_browser": claude.browser, "opencode_browser": opencode_browser,
-           "index": index, "ports": ports}
+           "index": index, "ports": ports, "content_index": content}
+    content.close()
 
 
 def _claude_ref():
@@ -323,6 +330,108 @@ def test_search_never_exposes_storage_locations(agent_environment):
     assert "/Users/" not in json.dumps(result, ensure_ascii=False)
     with pytest.raises(AgentRequestError):
         session_search.search_sessions(limit=51)
+
+
+def test_content_search_matches_message_bodies(agent_environment):
+    result = session_search.search_sessions("第一轮")
+    assert result["content_index"]["ready"] is True
+    assert result["content_index"]["match_mode"] == "trigram"
+    item = result["sessions"][0]
+    assert item["matched_in"] == ["content"]
+    assert item["content_match_count"] == 1
+    match = item["content_matches"][0]
+    assert (match["message"], match["turn"], match["role"]) == (1, 1, "user")
+    assert "第一轮" in match["snippet"]
+    assert "/Users/" not in json.dumps(result, ensure_ascii=False)
+
+
+def test_content_search_short_query_falls_back_to_substring_scan(
+        agent_environment):
+    result = session_search.search_sessions("回答")
+    assert result["content_index"]["match_mode"] == "substring_scan"
+    item = result["sessions"][0]
+    assert item["content_match_count"] == 2
+    assert [match["message"] for match in item["content_matches"]] == [2, 4]
+
+
+def test_content_search_tool_outputs_are_opt_in_and_redacted(
+        agent_environment):
+    hidden = session_search.search_sessions("very-secret-token-value")
+    assert hidden["total_matches"] == 0
+    found = session_search.search_sessions(
+        "very-secret-token-value", include_tool_outputs=True,
+    )
+    assert found["total_matches"] == 1
+    snippet = found["sessions"][0]["content_matches"][0]["snippet"]
+    assert "very-secret-token-value" not in snippet
+
+
+def test_content_search_ands_query_words_within_one_message(
+        agent_environment):
+    # 两个词都在消息 1 里 → 命中;跨消息(第一轮 vs 回答一)不算。
+    both = session_search.search_sessions("第一轮 topsecret")
+    assert both["total_matches"] == 1
+    assert both["sessions"][0]["content_matches"][0]["message"] == 1
+    across = session_search.search_sessions("第一轮 回答一")
+    assert across["total_matches"] == 0
+    # 引号短语要求精确相邻;裸 OR 按噪声丢弃而不是字面匹配。
+    assert session_search.search_sessions(
+        '"第一轮 token"',
+    )["total_matches"] == 1
+    assert session_search.search_sessions(
+        '"token 第一轮"',
+    )["total_matches"] == 0
+    assert session_search.search_sessions(
+        "第一轮 OR topsecret",
+    )["total_matches"] == 1
+    # 长短词混合:trigram 先筛,短词以 LIKE 补充 AND。
+    mixed = session_search.search_sessions("第一轮 tok")
+    assert mixed["total_matches"] == 1
+    assert mixed["content_index"]["match_mode"] == "trigram"
+
+
+def test_content_search_scope_validation(agent_environment):
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions("第一轮", scope="everything")
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions("", scope="content")
+    metadata_only = session_search.search_sessions("第一轮", scope="metadata")
+    assert metadata_only["total_matches"] == 0
+    assert "content_index" not in metadata_only
+    content_only = session_search.search_sessions("支付", scope="content")
+    assert content_only["total_matches"] == 0
+
+
+def test_content_search_reindexes_changed_and_dropped_sessions(
+        agent_environment):
+    assert session_search.search_sessions("第一轮")["total_matches"] == 1
+    browser = agent_environment["claude_browser"]
+    browser.session = Session(
+        source_tool="claude", source_id="private-source-id",
+        cwd="/Users/private/secret-project",
+        messages=[Message("user", [Block("text", "重写后的正文关键词")])],
+    )
+    # 内容摘要参与 revision:改文件字节数触发换发并重建索引。
+    agent_environment["transcript"].write_text('{"changed": true}\n')
+    assert session_search.search_sessions("第一轮")["total_matches"] == 0
+    replaced = session_search.search_sessions("重写后的正文")
+    assert replaced["total_matches"] == 1
+    browser.rows.clear()
+    gone = session_search.search_sessions("重写后的正文")
+    assert gone["total_matches"] == 0
+    assert gone["content_index"]["indexed_sessions"] == 1
+
+
+def test_content_search_reports_partial_coverage_while_building(
+        agent_environment, monkeypatch):
+    monkeypatch.setattr(session_content, "_SYNC_SESSION_LIMIT", 0)
+    first = session_search.search_sessions("第一轮")
+    assert first["content_index"]["ready"] is False
+    assert first["content_index"]["pending_sessions"] > 0
+    assert agent_environment["content_index"].wait_until_idle(timeout=30)
+    settled = session_search.search_sessions("第一轮")
+    assert settled["content_index"]["ready"] is True
+    assert settled["total_matches"] == 1
 
 
 def test_library_scan_issues_operation_refs(agent_environment):
@@ -605,15 +714,28 @@ def test_redaction_covers_cross_platform_paths_and_common_credentials():
     assert "supersecretvalue" not in redacted and "xoxb-" not in redacted
 
 
-def test_usage_is_aggregated_without_raw_session_data(agent_environment):
+def test_usage_is_aggregated_without_raw_session_data(
+    agent_environment, monkeypatch,
+):
+    monkeypatch.setattr(
+        session_usage, "pricing",
+        lambda **_: {"prices": {"claude-safe": {
+            "input": 1, "output": 2, "cache_read": 0, "cache_write": 0,
+        }}},
+    )
     result = session_usage.get_usage(agents=["claude"])
+    assert isinstance(result.pop("now"), int)
+    tokens = {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4}
+    # 单价按百万 token 计:10 * 1 + 20 * 2 = 50,即 5e-5 美元。
     assert result == {
         "sessions": 1,
-        "tokens": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4},
-        "by_agent": {
-            "claude": {"input": 10, "output": 20, "cache_read": 3, "cache_write": 4}
-        },
-        "cost": None,
+        "tokens": tokens,
+        "by_agent": {"claude": tokens},
+        "by_model": {"claude-safe": {"tokens": tokens, "cost": 5e-05}},
+        "by_project": {"secret-project": {"tokens": tokens, "cost": 5e-05}},
+        "cost": 0.0001,
+        "cost_basis": "estimated_from_public_prices",
+        "unpriced_models": [],
         "currency": "USD",
         "filters": {
             "agents": ["claude"],

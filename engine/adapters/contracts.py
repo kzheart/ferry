@@ -6,8 +6,9 @@ manifest 精确声明，并在装配时与 editor 实现校验一致。
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from pathlib import Path
+from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 @dataclass(frozen=True)
@@ -39,25 +40,47 @@ class NativeSessionReference:
     path_backed: bool
 
 
+@lru_cache(maxsize=32)
+def _resolved_root(source_path: str) -> str | None:
+    """扫描根只有三个固定目录,逐个会话重解析一次在数千行时是纯浪费。"""
+    try:
+        return os.path.realpath(os.path.expanduser(source_path), strict=True)
+    except OSError:
+        return None
+
+
+def _is_within(path: str, root: str) -> bool:
+    if path == root:
+        return True
+    prefix = root if root.endswith(os.sep) else root + os.sep
+    return path.startswith(prefix)
+
+
 def jsonl_reference(row: dict, source_path: str, resolve_ref) -> NativeSessionReference | None:
     """校验 JSONL 会话路径并收窄为 Adapter 可接受的内部引用。"""
     raw = row.get("path")
     if not isinstance(raw, str) or not raw:
         return None
+    root = _resolved_root(source_path)
+    if root is None:
+        return None
     try:
-        root = Path(source_path).expanduser().resolve(strict=True)
-        path = Path(raw).expanduser().resolve(strict=True)
+        path = os.path.realpath(os.path.expanduser(raw), strict=True)
     except OSError:
         return None
-    if not path.is_file() or path.suffix != ".jsonl" or not path.is_relative_to(root):
+    if (
+        not path.endswith(".jsonl")
+        or not os.path.isfile(path)
+        or not _is_within(path, root)
+    ):
         return None
     try:
-        resolved = Path(resolve_ref(str(path))).resolve(strict=True)
+        resolved = os.path.realpath(resolve_ref(path), strict=True)
     except (OSError, ValueError):
         return None
     if resolved != path:
         return None
-    return NativeSessionReference(str(path), str(root), True)
+    return NativeSessionReference(path, root, True)
 
 
 def id_reference(row: dict) -> NativeSessionReference | None:

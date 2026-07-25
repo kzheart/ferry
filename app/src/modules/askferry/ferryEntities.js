@@ -23,7 +23,9 @@ function sessionEntity(value) {
     project: text(value.project),
     updated: value.updated,
     model: text(value.model),
-    messageCount: value.message_count,
+    // 搜索结果给的是原始转录条数(record_count),读取结果给的是合并后的
+    // message_count;卡片两者都能接。
+    messageCount: value.message_count ?? value.record_count,
     locator: text(value.locator),
     turn: value.turn ?? value.round_index,
     raw: value,

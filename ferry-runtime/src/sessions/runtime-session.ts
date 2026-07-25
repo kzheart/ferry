@@ -128,6 +128,7 @@ export class RuntimeSession {
     private readonly canDelegate: boolean,
     private readonly resolvedSkills: ResolvedSkill[] = [],
     readSkill?: (id: string) => Promise<SkillReadResult>,
+    delegatableRoleIds: readonly string[] = [],
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -192,7 +193,7 @@ export class RuntimeSession {
                     onUpdate,
                     signal,
                   );
-                }),
+                }, delegatableRoleIds),
               ]
             : []),
         ],
