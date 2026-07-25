@@ -1,6 +1,6 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const AGENT_IDS = ["claude", "codex", "opencode"] as const;
-export const AGENT_LABELS = ["Claude Code", "Codex CLI", "OpenCode"] as const;
+export const AGENT_IDS = ["claude", "codex", "opencode", "pi"] as const;
+export const AGENT_LABELS = ["Claude Code", "Codex CLI", "OpenCode", "Pi Agent"] as const;
 export const AGENT_CAPABILITIES = {
   "claude": [
     "browse",
@@ -31,12 +31,23 @@ export const AGENT_CAPABILITIES = {
     "delete",
     "probe",
     "models"
+  ],
+  "pi": [
+    "browse",
+    "resume",
+    "migration-source",
+    "migration-target",
+    "edit",
+    "delete",
+    "probe",
+    "models"
   ]
 } as const;
 export const AGENT_EDIT_OPERATIONS = {
   claude: ["delete-turn", "rewrite", "replace-assistant-reply"],
   codex: ["delete-turn", "rewrite", "replace-assistant-reply"],
   opencode: ["rewrite"],
+  pi: ["delete-turn", "rewrite", "replace-assistant-reply"],
 } as const;
 export const AGENT_SKILL_PATHS = {
   "claude": [
@@ -47,7 +58,8 @@ export const AGENT_SKILL_PATHS = {
   ],
   "opencode": [
     "~/.config/opencode/skills"
-  ]
+  ],
+  "pi": []
 } as const;
 export const SHARED_SKILL_PATHS = ["~/.agents/skills"] as const;
 export type AgentId = (typeof AGENT_IDS)[number];

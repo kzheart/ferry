@@ -93,6 +93,32 @@
       "fallback_bin_dirs": [
         "~/.opencode/bin"
       ]
+    },
+    {
+      "id": "pi",
+      "display_name": "Pi Agent",
+      "icon": "pi",
+      "source_path": "~/.pi/agent/sessions",
+      "skill_paths": [],
+      "capabilities": [
+        "browse",
+        "resume",
+        "migration-source",
+        "migration-target",
+        "edit",
+        "delete",
+        "probe",
+        "models"
+      ],
+      "edit_operations": [
+        "delete-turn",
+        "rewrite",
+        "replace-assistant-reply"
+      ],
+      "executables": [
+        "pi"
+      ],
+      "fallback_bin_dirs": []
     }
   ],
   "shared_skill_paths": [

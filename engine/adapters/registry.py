@@ -9,11 +9,13 @@ from .contracts import AgentAdapter
 from .claude.adapter import build as build_claude
 from .codex.adapter import build as build_codex
 from .opencode.adapter import build as build_opencode
+from .pi.adapter import build as build_pi
 
 ADAPTER_BUILDERS = {
     "claude": build_claude,
     "codex": build_codex,
     "opencode": build_opencode,
+    "pi": build_pi,
 }
 
 
