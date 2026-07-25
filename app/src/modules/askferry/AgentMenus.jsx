@@ -103,7 +103,8 @@ export function ModeMenu({ mode, onPick, onClose }) {
   );
 }
 
-export function RoleMenu({ onClose, onManage }) {
+// 角色胶囊的下拉:列表可滚动,角色多时不撑爆版面;menuStyle 用于覆盖弹出方位
+export function RoleMenu({ onClose, onManage, menuStyle }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   return (
@@ -112,52 +113,52 @@ export function RoleMenu({ onClose, onManage }) {
         onMouseDown={onClose}
         style={{ position: "fixed", inset: 0, zIndex: 29 }}
       />
-      <div style={{ ...MENU_SHELL, width: 250 }}>
-        {(ferry.roles || []).map(role => (
-          <button
-            key={role.id}
-            type="button"
-            className="hov-item"
-            onMouseDown={event => {
-              event.preventDefault();
-              ferry.setSelectedRoleId(role.id);
-              onClose();
-            }}
-            style={{
-              ...MENU_ROW,
-              width: "100%",
-              border: "none",
-              background: role.id === ferry.selectedRoleId
-                ? "var(--acc-soft5)"
-                : "transparent",
-              fontFamily: "inherit",
-              textAlign: "left",
-            }}
-          >
-            <RoleAvatar icon={role.icon} color={role.color} size={24} />
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{
-                display: "block",
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: "var(--tx1)",
-              }}>
-                {role.name}
+      <div style={{ ...MENU_SHELL, width: 250, ...menuStyle }}>
+        <div className="fscroll" style={{ maxHeight: 280, overflowY: "auto" }}>
+          {(ferry.roles || []).map(role => (
+            <button
+              key={role.id}
+              type="button"
+              className="hov-item"
+              onMouseDown={event => {
+                event.preventDefault();
+                ferry.setSelectedRoleId(role.id);
+                onClose();
+              }}
+              style={{
+                ...MENU_ROW,
+                width: "100%",
+                border: "none",
+                background: "transparent",
+                fontFamily: "inherit",
+                textAlign: "left",
+              }}
+            >
+              <RoleAvatar icon={role.icon} color={role.color} size={24} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{
+                  display: "block",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: "var(--tx1)",
+                }}>
+                  {role.name}
+                </span>
+                <span style={{
+                  display: "block",
+                  fontSize: 10.5,
+                  color: "var(--tx5)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {role.description || role.tools?.join(" · ")}
+                </span>
               </span>
-              <span style={{
-                display: "block",
-                fontSize: 10.5,
-                color: "var(--tx5)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>
-                {role.description || role.tools?.join(" · ")}
-              </span>
-            </span>
-            {role.id === ferry.selectedRoleId && <CheckIcon size={12} />}
-          </button>
-        ))}
+              {role.id === ferry.selectedRoleId && <CheckIcon size={12} />}
+            </button>
+          ))}
+        </div>
         <div style={MENU_DIVIDER} />
         <button
           type="button"

@@ -59,7 +59,6 @@
     "kindMetadata": "Metadata change proposal",
     "kindGeneric": "Write proposal",
     "applied": "Approved & applied",
-    "autoApplied": "Auto-applied",
     "applying": "Applying…",
     "failed": "Apply failed",
     "dismissed": "Rejected",
@@ -81,11 +80,7 @@
     "removeAttachment": "Remove session reference"
   },
   "empty": {
-    "title": "What can I help with?",
-    "ex1": "Find last week's sessions about the payments refactor",
-    "ex2": "Compare the implementation paths of these two sessions",
-    "ex3": "Estimate what migrating this session to Codex would lose",
-    "ex4": "Summarize this month's token usage by project"
+    "title": "What can I help with?"
   },
   "auth": {
     "inProgress": "Signing in…",
@@ -138,8 +133,7 @@
     "manage": "Manage models"
   },
   "role": {
-    "default": "Default role",
-    "manage": "Manage roles…",
-    "snapshotLocked": "The role is snapshotted for this session; switch in a new chat"
+    "label": "Role",
+    "manage": "Manage roles…"
   }
 }
