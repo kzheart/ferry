@@ -5,13 +5,17 @@
       "display_name": "Claude Code",
       "icon": "claude",
       "source_path": "~/.claude/projects",
-      "skill_paths": ["~/.claude/skills"],
+      "skill_paths": [
+        "~/.claude/skills"
+      ],
       "edit_operations": [
         "delete-turn",
         "rewrite",
         "replace-assistant-reply"
       ],
-      "executables": ["claude"],
+      "executables": [
+        "claude"
+      ],
       "fallback_bin_dirs": []
     },
     {
@@ -19,13 +23,17 @@
       "display_name": "Codex CLI",
       "icon": "codex",
       "source_path": "~/.codex/sessions",
-      "skill_paths": [],
+      "skill_paths": [
+        "~/.codex/skills"
+      ],
       "edit_operations": [
         "delete-turn",
         "rewrite",
         "replace-assistant-reply"
       ],
-      "executables": ["codex"],
+      "executables": [
+        "codex"
+      ],
       "fallback_bin_dirs": []
     },
     {
@@ -33,10 +41,21 @@
       "display_name": "OpenCode",
       "icon": "opencode",
       "source_path": "~/.local/share/opencode",
-      "skill_paths": [],
-      "edit_operations": ["rewrite"],
-      "executables": ["opencode"],
-      "fallback_bin_dirs": ["~/.opencode/bin"]
+      "skill_paths": [
+        "~/.config/opencode/skills"
+      ],
+      "edit_operations": [
+        "rewrite"
+      ],
+      "executables": [
+        "opencode"
+      ],
+      "fallback_bin_dirs": [
+        "~/.opencode/bin"
+      ]
     }
+  ],
+  "shared_skill_paths": [
+    "~/.agents/skills"
   ]
 }

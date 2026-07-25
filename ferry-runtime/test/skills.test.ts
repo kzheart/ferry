@@ -28,7 +28,8 @@ async function fixture() {
   const external = join(base, "external");
   await mkdir(data, { recursive: true });
   await mkdir(external, { recursive: true });
-  const store = new FileSkillStore(data);
+  // 关掉内置来源:否则测试结果会取决于开发者主目录里装了哪些技能
+  const store = new FileSkillStore(data, false);
   await store.addSource(external);
   return { base, data, external, store, service: new SkillService(store) };
 }
@@ -50,9 +51,45 @@ describe("技能发现", () => {
     expect(await readdir(join(data, "skills"))).toEqual([]);
   });
 
+  it("软链进来的技能也算候选——CLI 目录常常整个是软链农场", async () => {
+    const { base, external, store } = await fixture();
+    const warehouse = join(base, "warehouse");
+    await mkdir(warehouse, { recursive: true });
+    const real = await candidateDirectory(warehouse, "go-plan");
+    await symlink(real, join(external, "go-plan"));
+
+    const { candidates } = await store.candidates();
+    expect(candidates.map((item) => item.name)).toContain("go-plan 技能");
+  });
+
+  it("同一份技能被多处软链只出现一次", async () => {
+    const base = await mkdtemp(join(tmpdir(), "ferry-skills-"));
+    const data = join(base, "data");
+    const warehouse = join(base, "warehouse");
+    const farmA = join(base, "farm-a");
+    const farmB = join(base, "farm-b");
+    for (const dir of [data, warehouse, farmA, farmB]) {
+      await mkdir(dir, { recursive: true });
+    }
+    const real = await candidateDirectory(warehouse, "go-plan");
+    await symlink(real, join(farmA, "go-plan"));
+    await symlink(real, join(farmB, "go-plan"));
+
+    const store = new FileSkillStore(data, false);
+    await store.addSource(warehouse);
+    await store.addSource(farmA);
+    await store.addSource(farmB);
+
+    const { candidates } = await store.candidates();
+    const hits = candidates.filter((item) => item.name === "go-plan 技能");
+    expect(hits).toHaveLength(1);
+    // 归属留给最先扫到的那个源,也就是真身所在的仓库
+    expect(hits[0]?.path).toBe(real);
+  });
+
   it("候选目录不存在时把来源标为 available:false 而不抛错", async () => {
     const missing = join(await mkdtemp(join(tmpdir(), "ferry-gone-")), "nope");
-    const { sources } = await discover([missing]);
+    const { sources } = await discover([missing], false);
     const custom = sources.find((source) => !source.builtin);
     expect(custom?.available).toBe(false);
   });
@@ -117,6 +154,17 @@ describe("技能导入", () => {
     await store.import({ candidateId: candidates[0]!.candidateId });
     const content = await store.read("linked");
     expect(content.files).not.toContain("leak.txt");
+  });
+
+  it("目录嵌套过深仍然被挡住——上限放宽了但没取消", async () => {
+    const { external, store } = await fixture();
+    const deep = join(external, "deep");
+    await mkdir(join(deep, ...Array(14).fill("x")), { recursive: true });
+    await writeFile(join(deep, "SKILL.md"), "---\nname: 深\n---\n正文\n");
+    await writeFile(
+      join(deep, ...Array(14).fill("x"), "f.txt"), "太深了\n");
+    await expect(store.import({ path: deep })).rejects.toThrow(/too deeply/);
+    expect((await store.list()).skills).toEqual([]);
   });
 
   it("缺 SKILL.md 的目录不能导入", async () => {

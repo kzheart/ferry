@@ -135,7 +135,15 @@ abstract class BaseSkillStore implements SkillStore {
   protected config: SkillConfig = emptyConfig();
   protected configError: string | undefined;
 
-  constructor(protected readonly library: SkillLibrary) {}
+  constructor(
+    protected readonly library: SkillLibrary,
+    /** 关掉后只扫用户自选目录;测试必须关,否则结果取决于开发者主目录。 */
+    protected readonly includeBuiltinSources = true,
+  ) {}
+
+  protected scan() {
+    return discover(this.config.scan_sources, this.includeBuiltinSources);
+  }
 
   async list(): Promise<SkillListing> {
     await this.settled();
@@ -144,14 +152,14 @@ abstract class BaseSkillStore implements SkillStore {
     return {
       skills,
       global: this.config.global.filter((id) => installed.has(id)),
-      scanSources: (await discover(this.config.scan_sources)).sources,
+      scanSources: (await this.scan()).sources,
       ...(this.configError ? { configError: this.configError } : {}),
     };
   }
 
   async candidates() {
     await this.settled();
-    const { sources, candidates } = await discover(this.config.scan_sources);
+    const { sources, candidates } = await this.scan();
     return { candidates, sources };
   }
 
@@ -221,12 +229,12 @@ abstract class BaseSkillStore implements SkillStore {
       this.config.scan_sources.push(normalized);
       await this.changed();
     }
-    return (await discover(this.config.scan_sources)).sources;
+    return (await this.scan()).sources;
   }
 
   async removeSource(sourceId: string): Promise<SkillSource[]> {
     await this.settled();
-    const { sources } = await discover(this.config.scan_sources);
+    const { sources } = await this.scan();
     const target = sources.find((source) => source.id === sourceId);
     if (!target) throw new Error("scan source not found");
     if (target.builtin) throw new Error("builtin scan source cannot be removed");
@@ -234,7 +242,7 @@ abstract class BaseSkillStore implements SkillStore {
       (path) => normalizeScanSource(path) !== target.path,
     );
     await this.changed();
-    return (await discover(this.config.scan_sources)).sources;
+    return (await this.scan()).sources;
   }
 
   read(id: string): Promise<SkillContent> {
@@ -251,8 +259,11 @@ abstract class BaseSkillStore implements SkillStore {
  * 库 root 默认落在临时目录——绝不碰真实的 ~/.ferry,免得测试污染用户数据。
  */
 export class EphemeralSkillStore extends BaseSkillStore {
-  constructor(root = join(tmpdir(), `ferry-skills-${randomUUID()}`)) {
-    super(new SkillLibrary(root));
+  constructor(
+    root = join(tmpdir(), `ferry-skills-${randomUUID()}`),
+    includeBuiltinSources = true,
+  ) {
+    super(new SkillLibrary(root), includeBuiltinSources);
   }
 
   protected async changed() {}
@@ -263,8 +274,8 @@ export class FileSkillStore extends BaseSkillStore {
   private readonly ready: Promise<void>;
   private writes = Promise.resolve();
 
-  constructor(dataDirectory: string) {
-    super(new SkillLibrary(join(dataDirectory, "skills")));
+  constructor(dataDirectory: string, includeBuiltinSources = true) {
+    super(new SkillLibrary(join(dataDirectory, "skills")), includeBuiltinSources);
     this.path = join(dataDirectory, "skills.json");
     this.ready = this.load();
   }

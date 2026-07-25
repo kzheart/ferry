@@ -32,7 +32,12 @@ export const AGENT_SKILL_PATHS = {
   "claude": [
     "~/.claude/skills"
   ],
-  "codex": [],
-  "opencode": []
+  "codex": [
+    "~/.codex/skills"
+  ],
+  "opencode": [
+    "~/.config/opencode/skills"
+  ]
 } as const;
+export const SHARED_SKILL_PATHS = ["~/.agents/skills"] as const;
 export type AgentId = keyof typeof AGENTS;
