@@ -5,7 +5,7 @@ import { buildRoleBundle, parseRoleBundle, planRoleImport, roleBundleFileName }
 
 const role = (id, extra = {}) => ({
   id, name: "审阅者", persona: "只陈述证据。", tools: ["session_read"],
-  allow_bash: false, apply_policy: "manual", builtin: false, ...extra,
+  skills: ["code-review"], apply_policy: "manual", builtin: false, ...extra,
 });
 
 test("导出剥掉运行时算出来的 builtin,保留图标与配色", () => {
@@ -16,8 +16,10 @@ test("导出剥掉运行时算出来的 builtin,保留图标与配色", () => {
   assert.deepEqual(bundle.roles[0], {
     id: "reader", name: "审阅者", icon: "code", color: "violet",
     persona: "只陈述证据。", tools: ["session_read"],
-    allow_bash: false, apply_policy: "manual",
+    skills: ["code-review"], apply_policy: "manual",
   });
+  // allow_bash 已经不是角色字段:bash 现在只是 tools 里的一项
+  assert.equal("allow_bash" in bundle.roles[0], false);
 });
 
 test("文件名单个角色用角色 ID,多个用 roles", () => {

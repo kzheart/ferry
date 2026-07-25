@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { exportRolesFile, importRolesFile } from "../../platform/desktop/client.js";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
+import RoleSkillPicker from "./RoleSkillPicker.jsx";
 import { CopyIcon, RoleAvatar } from "../../shared/ui/icons.jsx";
 import { Card, GroupTitle, Row, Select, inputStyle } from "./parts.jsx";
 import RoleIconPicker from "./RoleIconPicker.jsx";
@@ -46,6 +47,8 @@ export default function Roles() {
     setError("");
     try {
       await ferry.reloadRoles();
+      // 技能选择器只列已导入的技能,进这一页就得先把库拉回来
+      await ferry.reloadSkills();
     } catch (error2) {
       setError(error2.message || String(error2));
     } finally {
@@ -334,6 +337,16 @@ export default function Roles() {
               {t("settings:roles.groupCapability")}</GroupTitle>
             <RoleToolGrid tools={draft.tools} onChange={tools => patch({ tools })} />
 
+            {/* 技能 */}
+            <GroupTitle icon={glyph(GROUP_GLYPH.skill)}>
+              {t("settings:skills.roleTitle")}</GroupTitle>
+            <div style={{ fontSize: 10.5, color: "var(--tx5)", margin: "-4px 0 8px 2px",
+              lineHeight: 1.6 }}>
+              {t("settings:skills.roleHint")}</div>
+            <RoleSkillPicker skills={ferry.skills?.skills || []}
+              global={ferry.skills?.global || []} value={draft.skills}
+              onChange={skills => patch({ skills })} />
+
             {/* 模型 */}
             <GroupTitle icon={glyph(GROUP_GLYPH.model)}>
               {t("settings:roles.groupModel")}</GroupTitle>
@@ -401,14 +414,6 @@ export default function Roles() {
                         {t(`settings:roles.${value}`)}</button>
                     );
                   })}
-                </span>
-              </Row>
-              <Row title={t("settings:roles.bashLater")} desc={t("settings:roles.bashHint")}>
-                <span style={{ width: 40, height: 24, borderRadius: 20, flex: "none",
-                  background: "var(--toggle-off)", opacity: .55, position: "relative" }}>
-                  <span style={{ position: "absolute", top: 3, left: 3, width: 18, height: 18,
-                    borderRadius: "50%", background: "var(--surface)",
-                    boxShadow: "0 1px 3px rgba(0,0,0,.28)" }} />
                 </span>
               </Row>
               <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "11px 15px",

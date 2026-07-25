@@ -7,7 +7,7 @@ export const ROLE_BUNDLE_KIND = "ferry.roles";
 export const ROLE_BUNDLE_VERSION = 1;
 
 const FIELDS = ["id", "name", "description", "icon", "color", "persona", "tools",
-  "allow_bash", "apply_policy", "model", "thinking"];
+  "skills", "apply_policy", "model", "thinking"];
 
 const portable = role => Object.fromEntries(
   FIELDS.filter(field => role[field] !== undefined).map(field => [field, role[field]]));

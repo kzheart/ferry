@@ -8,6 +8,7 @@ export const TOOLS = [
   { name: "usage", write: false },
   { name: "migrate", write: true },
   { name: "session_edit", write: true },
+  { name: "bash", write: true },
 ];
 
 export function blankRole() {
@@ -19,7 +20,7 @@ export function blankRole() {
     color: DEFAULT_ROLE_COLOR,
     persona: "",
     tools: ["session_search", "session_read", "usage"],
-    allow_bash: false,
+    skills: [],
     apply_policy: "manual",
   };
 }
@@ -34,7 +35,7 @@ export function editable(role) {
     color: role.color || DEFAULT_ROLE_COLOR,
     persona: role.persona || "",
     tools: [...(role.tools || [])],
-    allow_bash: false,
+    skills: [...(role.skills || [])],
     apply_policy: role.apply_policy || "manual",
     ...(role.model ? { model: role.model } : {}),
     ...(role.thinking ? { thinking: role.thinking } : {}),
