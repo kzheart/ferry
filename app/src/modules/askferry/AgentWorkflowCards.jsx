@@ -45,9 +45,7 @@ export function ApprovalCard({
       ? "var(--err)"
       : "var(--warn)";
   const title = applied
-    ? item.auto
-      ? t("askferry:approval.autoApplied")
-      : t("askferry:approval.applied")
+    ? t("askferry:approval.applied")
     : failed
       ? t("askferry:approval.failed")
       : item.status === "applying"
