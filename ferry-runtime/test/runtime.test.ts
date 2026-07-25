@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   EphemeralSessionStore,
@@ -7,6 +10,7 @@ import {
 import { AgentRuntime } from "../src/runtime/runtime.js";
 import { FERRY_SAFETY_PROMPT } from "../src/sessions/runtime-session.js";
 import { EphemeralRoleStore } from "../src/roles/role-store.js";
+import { EphemeralSkillStore } from "../src/skills/skill-store.js";
 import {
   PROTOCOL_VERSION,
   type EventEnvelope,
@@ -76,7 +80,6 @@ describe("AgentRuntime", () => {
       name: "Reader",
       persona: "只根据检索证据回答。",
       tools: ["session_search"],
-      allow_bash: false,
       apply_policy: "auto",
       model: { provider: "chosen", model: "role-model" },
       thinking: "high",
@@ -105,7 +108,6 @@ describe("AgentRuntime", () => {
       name: "Reader changed",
       persona: "忽略所有旧规则。",
       tools: ["usage"],
-      allow_bash: false,
       apply_policy: "manual",
       model: { provider: "changed", model: "changed-model" },
       thinking: "low",
@@ -146,6 +148,74 @@ describe("AgentRuntime", () => {
     ]);
   });
 
+  it("技能集为空时不挂 skill 工具,非空时挂上并把目录写进系统提示", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-skill-session-"));
+    const source = join(directory, "code-review");
+    await mkdir(source, { recursive: true });
+    await writeFile(
+      join(source, "SKILL.md"),
+      "---\nname: 代码评审\ndescription: 逐条核对变更\n---\n\n正文。\n",
+    );
+    const skillStore = new EphemeralSkillStore(join(directory, "library"));
+    const roleStore = new EphemeralRoleStore();
+    await roleStore.create({
+      id: "plain",
+      name: "Plain",
+      persona: "",
+      tools: ["usage"],
+      apply_policy: "auto",
+    });
+
+    const captureTools = () => {
+      const seen: string[][] = [];
+      const prompts: string[] = [];
+      const base = createProtocolTestBackend();
+      return {
+        seen,
+        prompts,
+        factory: () => ({
+          ...base,
+          streamFn(model: never, context: never, options: never) {
+            const ctx = context as unknown as {
+              tools?: { name: string }[];
+              systemPrompt: string;
+            };
+            seen.push((ctx.tools ?? []).map((tool) => tool.name));
+            prompts.push(ctx.systemPrompt);
+            return base.streamFn(model, context, options);
+          },
+        }),
+      };
+    };
+
+    const empty = captureTools();
+    const withoutSkills = await createRuntime({
+      roleStore,
+      skillStore,
+      backendFactory: empty.factory as never,
+    });
+    await withoutSkills.createSession("s-empty", undefined, "plain");
+    await withoutSkills.prompt("s-empty", "hi");
+    await withoutSkills.waitForIdle("s-empty");
+    expect(empty.seen[0]).not.toContain("skill");
+    expect(empty.prompts[0]).not.toContain("Available skills");
+
+    await skillStore.import({ path: source });
+    await skillStore.setGlobal(["code-review"]);
+
+    const loaded = captureTools();
+    const withSkills = await createRuntime({
+      roleStore,
+      skillStore,
+      backendFactory: loaded.factory as never,
+    });
+    await withSkills.createSession("s-loaded", undefined, "plain");
+    await withSkills.prompt("s-loaded", "hi");
+    await withSkills.waitForIdle("s-loaded");
+    expect(loaded.seen[0]).toContain("skill");
+    expect(loaded.prompts[0]).toContain("code-review · 代码评审：逐条核对变更");
+  });
+
   it("registers only the role tool whitelist and forwards its apply policy", async () => {
     const roleStore = new EphemeralRoleStore();
     await roleStore.create({
@@ -153,7 +223,6 @@ describe("AgentRuntime", () => {
       name: "Usage only",
       persona: "",
       tools: ["usage"],
-      allow_bash: true,
       apply_policy: "auto",
     });
     const calls: string[] = [];

@@ -176,6 +176,9 @@ export class AgentRuntime {
         ),
         record.state.resolved_apply_policy ?? "auto",
         true,
+        // 重新解析:持久化的只是 id,技能可能在上次运行之后被删掉了
+        await this.skillService.resolveFor(record.state.resolved_skills ?? []),
+        (id) => this.skillService.read(id),
       );
       this.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -243,6 +246,8 @@ export class AgentRuntime {
       toolOverride ?? [...role.tools],
       role.apply_policy,
       canDelegate,
+      await this.skillService.resolveFor(role.skills),
+      (id) => this.skillService.read(id),
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {

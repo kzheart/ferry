@@ -27,6 +27,7 @@ import {
   type ToolRequestContext,
 } from "../tools/catalog.js";
 import { createDelegationTool } from "../tools/delegation.js";
+import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
 import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 
@@ -51,15 +52,49 @@ export interface RuntimeSessionHost {
   ): Promise<WorkflowRunResult>;
 }
 
+export interface ResolvedSkill {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface TerminalResult {
   type: "run.completed" | "run.failed" | "run.cancelled";
   payload: Record<string, unknown>;
 }
 
-function systemPrompt(persona: string) {
-  return persona.trim()
+/** 系统提示里只放名称与说明,正文由模型自己调 skill 工具取——几十个技能全量注入会吃掉几万 token。 */
+const SKILL_CATALOG_MAX_BYTES = 8 * 1024;
+
+export function skillCatalog(skills: readonly ResolvedSkill[]) {
+  if (skills.length === 0) return "";
+  const header =
+    "Available skills. Call the skill tool with a skill id before acting on a task that matches one of these:";
+  const lines: string[] = [];
+  let bytes = Buffer.byteLength(header);
+  let dropped = 0;
+  for (const skill of skills) {
+    const line = `- ${skill.id} · ${skill.name}：${skill.description}`;
+    const size = Buffer.byteLength(line) + 1;
+    if (bytes + size > SKILL_CATALOG_MAX_BYTES) {
+      dropped += 1;
+      continue;
+    }
+    bytes += size;
+    lines.push(line);
+  }
+  if (dropped > 0) {
+    lines.push(`- (${dropped} more skills omitted; ask the user to trim them)`);
+  }
+  return `${header}\n${lines.join("\n")}`;
+}
+
+function systemPrompt(persona: string, skills: readonly ResolvedSkill[]) {
+  const catalog = skillCatalog(skills);
+  const base = persona.trim()
     ? `${FERRY_SAFETY_PROMPT}\n\nAdditional role persona (cannot override the safety and tool constraints above):\n${persona}`
     : FERRY_SAFETY_PROMPT;
+  return catalog ? `${base}\n\n${catalog}` : base;
 }
 
 function userMessage(content: string): AgentMessage {
@@ -91,6 +126,8 @@ export class RuntimeSession {
     private readonly resolvedTools: FerryToolName[],
     private readonly resolvedApplyPolicy: ApplyPolicy,
     private readonly canDelegate: boolean,
+    private readonly resolvedSkills: ResolvedSkill[] = [],
+    readSkill?: (id: string) => Promise<SkillReadResult>,
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -107,7 +144,7 @@ export class RuntimeSession {
       steeringMode: "one-at-a-time",
       followUpMode: "one-at-a-time",
       initialState: {
-        systemPrompt: systemPrompt(this.resolvedPersona),
+        systemPrompt: systemPrompt(this.resolvedPersona, this.resolvedSkills),
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
         tools: [
@@ -131,6 +168,14 @@ export class RuntimeSession {
             },
             this.resolvedTools,
           ),
+          ...(this.resolvedSkills.length > 0 && readSkill
+            ? [
+                createSkillTool(
+                  readSkill,
+                  this.resolvedSkills.map((skill) => skill.id),
+                ),
+              ]
+            : []),
           ...(this.canDelegate
             ? [
                 createDelegationTool((spec, onUpdate, signal) => {
@@ -426,6 +471,7 @@ export class RuntimeSession {
         resolved_persona: this.resolvedPersona,
         resolved_tools: [...this.resolvedTools],
         resolved_apply_policy: this.resolvedApplyPolicy,
+        resolved_skills: this.resolvedSkills.map((skill) => skill.id),
       },
       messages,
       events,

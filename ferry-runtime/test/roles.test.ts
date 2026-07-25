@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_ROLE,
   FileRoleStore,
   ROLE_STORE_VERSION,
   type RoleInput,
@@ -15,7 +16,6 @@ function input(id: string): RoleInput {
     description: "只允许检索",
     persona: "回答必须简洁。",
     tools: ["session_search", "session_read"],
-    allow_bash: false,
     apply_policy: "manual" as const,
     thinking: "high" as const,
   };
@@ -28,7 +28,7 @@ describe("FileRoleStore", () => {
     const store = new FileRoleStore(path);
 
     expect(await store.list()).toMatchObject([
-      { id: "default", builtin: true, allow_bash: false },
+      { id: "default", builtin: true, skills: [] },
     ]);
     await store.create(input("reader"));
     await store.update("reader", {
@@ -98,8 +98,7 @@ describe("FileRoleStore", () => {
     await expect(
       store.create({
         ...input("unsafe"),
-        tools: ["bash"] as never,
-        allow_bash: true,
+        tools: ["shell"] as never,
       }),
     ).rejects.toThrow("unknown tool");
   });
@@ -118,5 +117,25 @@ describe("FileRoleStore", () => {
     await expect(
       store.create({ ...input("bad"), icon: "Code Icon!" }),
     ).rejects.toThrow("role icon is invalid");
+  });
+
+  it("角色技能是 id 列表,默认为空且拒绝非法 id", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-roles-"));
+    const store = new FileRoleStore(join(directory, "roles.json"));
+
+    // allow_bash 已经删除:bash 现在是能力清单里的一个工具,不再单独占一个开关
+    expect(DEFAULT_ROLE).not.toHaveProperty("allow_bash");
+    expect(DEFAULT_ROLE.skills).toEqual([]);
+    expect(await store.create(input("plain"))).toMatchObject({ skills: [] });
+    expect(
+      await store.create({ ...input("skilled"), skills: ["code-review"] }),
+    ).toMatchObject({ skills: ["code-review"] });
+
+    await expect(
+      store.create({ ...input("bad-skill"), skills: ["../escape"] }),
+    ).rejects.toThrow("invalid skill id");
+    await expect(
+      store.create({ ...input("dup-skill"), skills: ["a", "a"] }),
+    ).rejects.toThrow("duplicates");
   });
 });

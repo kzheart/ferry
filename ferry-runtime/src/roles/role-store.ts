@@ -30,14 +30,18 @@ export interface Role {
   color?: string;
   persona: string;
   tools: FerryToolName[];
-  allow_bash: boolean;
+  /** 挂在这个角色上的技能 id;不校验是否存在——技能可能被删,失效 id 由 resolveFor 静默丢弃。 */
+  skills: string[];
   apply_policy: ApplyPolicy;
   model?: ModelSelection;
   thinking?: ThinkingLevel;
   builtin: boolean;
 }
 
-export type RoleInput = Omit<Role, "builtin">;
+/** skills 可省略:老的角色载荷不带这个键,parseRole 会补成空数组。 */
+export type RoleInput = Omit<Role, "builtin" | "skills"> & {
+  skills?: string[];
+};
 
 interface RoleDocument {
   schema_version: typeof ROLE_STORE_VERSION;
@@ -48,6 +52,8 @@ interface RoleDocument {
 
 const MAX_ROLE_BYTES = 2 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SKILL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const MAX_ROLE_SKILLS = 64;
 // 图标与配色是纯展示标识:运行时不认识具体图标名,只挡住畸形值,前端遇到未知名回落默认样式
 const TOKEN_PATTERN = /^[a-z0-9-]{1,32}$/;
 
@@ -59,7 +65,7 @@ export const DEFAULT_ROLE: Role = Object.freeze({
   color: "blue",
   persona: "",
   tools: [...FERRY_TOOL_NAMES],
-  allow_bash: false,
+  skills: [],
   apply_policy: "auto",
   builtin: true,
 });
@@ -105,6 +111,24 @@ function parseModel(value: unknown): ModelSelection | undefined {
   };
 }
 
+function parseSkills(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("role skills are invalid");
+  const skills = value.map((skill) => {
+    if (typeof skill !== "string" || !SKILL_ID_PATTERN.test(skill)) {
+      throw new Error("role skills contain an invalid skill id");
+    }
+    return skill;
+  });
+  if (new Set(skills).size !== skills.length) {
+    throw new Error("role skills contain duplicates");
+  }
+  if (skills.length > MAX_ROLE_SKILLS) {
+    throw new Error("role has too many skills");
+  }
+  return skills;
+}
+
 export function parseRole(value: unknown, builtin = false): Role {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("role is invalid");
@@ -128,12 +152,10 @@ export function parseRole(value: unknown, builtin = false): Role {
   if (typeof input.persona !== "string" || input.persona.length > 20_000) {
     throw new Error("role persona is invalid");
   }
-  if (typeof input.allow_bash !== "boolean") {
-    throw new Error("role allow_bash is invalid");
-  }
   if (input.apply_policy !== "manual" && input.apply_policy !== "auto") {
     throw new Error("role apply_policy is invalid");
   }
+  const skills = parseSkills(input.skills);
   const model = parseModel(input.model);
   const thinking = parseThinkingLevel(input.thinking);
   const description = optionalText(
@@ -151,7 +173,7 @@ export function parseRole(value: unknown, builtin = false): Role {
     ...(color ? { color } : {}),
     persona: input.persona,
     tools,
-    allow_bash: input.allow_bash,
+    skills,
     apply_policy: input.apply_policy,
     ...(model ? { model } : {}),
     ...(thinking ? { thinking } : {}),
