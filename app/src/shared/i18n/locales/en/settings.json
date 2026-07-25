@@ -100,8 +100,6 @@
     "discard": "Discard changes",
     "save": "Save changes",
     "createSave": "Create role",
-    "dirty": "Unsaved changes",
-    "clean": "All changes saved",
     "transfer": "Import / export",
     "exportOne": "Export this role",
     "exportAll": "Export all roles",

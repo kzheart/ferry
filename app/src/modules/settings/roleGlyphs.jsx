@@ -15,6 +15,10 @@ export const GROUP_GLYPH = {
   security: '<path d="M8 1.8 13.4 4v4.2c0 3-2.2 5.2-5.4 6-3.2-.8-5.4-3-5.4-6V4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m5.6 7.9 1.8 1.8 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
 };
 
+export const EXPORT_GLYPH = '<path d="M8 2.6v6.6M5.5 6.9 8 9.4l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.9 10.8v1.5a1.2 1.2 0 0 0 1.2 1.2h7.8a1.2 1.2 0 0 0 1.2-1.2v-1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>';
+
+export const UNDO_GLYPH = '<path d="M6 9.3 2.7 6 6 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.7 6h7a3.7 3.7 0 0 1 0 7.4H7.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+
 export const INFO_GLYPH = '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4M8 4.9v.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>';
 
 export const glyph = (markup, size = 13) => (
