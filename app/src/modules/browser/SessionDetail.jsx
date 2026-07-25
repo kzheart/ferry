@@ -1,5 +1,5 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   supportsEditOperation,
@@ -60,6 +60,22 @@ export default memo(function SessionDetail({
     && supportsAgentCapability(meta.tool, "migration-source");
   const canResume = supportsAgentCapability(meta.tool, "resume");
   const [copied, setCopied] = useState(false);
+  const loadMoreRef = useRef(null);
+
+  // 无感分页:哨兵接近视口(提前 600px)即触发加载,加载完成后 next_from_message
+  // 变化会重建 observer,若哨兵仍在视口内则继续加载直到填满
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onLoadMore();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [data?.next_from_message, onLoadMore]);
   const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
 
@@ -368,21 +384,16 @@ export default memo(function SessionDetail({
           )}
           {data?.next_from_message && (
             <div
+              ref={loadMoreRef}
               style={{
                 display: "flex",
                 justifyContent: "center",
-                paddingTop: 12,
+                alignItems: "center",
+                height: 40,
+                color: "var(--tx4)",
               }}
             >
-              <button
-                className="fbtn"
-                disabled={loadingMore}
-                onClick={onLoadMore}
-              >
-                {loadingMore
-                  ? tt("browser:session.loadingMore")
-                  : tt("browser:session.loadMore")}
-              </button>
+              {loadingMore && <Spinner size={14} />}
             </div>
           )}
         </div>

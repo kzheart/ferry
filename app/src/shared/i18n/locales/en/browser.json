@@ -12,8 +12,6 @@
     "migrate": "Migrate…",
     "readFailed": "Failed to load: {{error}}",
     "parsing": "Parsing session…",
-    "loadMore": "Load more messages",
-    "loadingMore": "Loading more messages…",
     "noMessages": "No displayable messages in this session",
     "subSessions": "{{n}} sub-sessions",
     "subSessionsLine": "{{tool}} session",
