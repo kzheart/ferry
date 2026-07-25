@@ -100,8 +100,6 @@
     "discard": "放弃更改",
     "save": "保存更改",
     "createSave": "创建角色",
-    "dirty": "有未保存的更改",
-    "clean": "所有更改已保存",
     "transfer": "导入 / 导出",
     "exportOne": "导出此角色",
     "exportAll": "导出全部角色",

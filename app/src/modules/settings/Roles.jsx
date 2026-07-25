@@ -10,7 +10,8 @@ import RoleIconPicker from "./RoleIconPicker.jsx";
 import RoleList from "./RoleList.jsx";
 import RoleToolGrid from "./RoleToolGrid.jsx";
 import { TOOLS, blankRole, editable, modelKey, payload } from "./roleForm.js";
-import { GROUP_GLYPH, INFO_GLYPH, glyph } from "./roleGlyphs.jsx";
+import { EXPORT_GLYPH, GROUP_GLYPH, INFO_GLYPH, UNDO_GLYPH, glyph }
+  from "./roleGlyphs.jsx";
 import {
   buildRoleBundle, parseRoleBundle, planRoleImport, roleBundleFileName,
 } from "./roleBundle.js";
@@ -182,6 +183,15 @@ export default function Roles() {
   const knownModel = Boolean(matched);
   const modelLabel = matched ? (matched.name || matched.id) : currentModel;
   const control = { ...inputStyle, width: 320, maxWidth: "100%" };
+  // 标题栏的次级动作:只留图标,文字留给 title,免得三个按钮把头部压满
+  const iconAction = (title, onClick, icon) => (
+    <button type="button" className="hov" title={title} aria-label={title}
+      disabled={busy} onClick={onClick}
+      style={{ width: 30, height: 30, border: "none", borderRadius: 8, flex: "none",
+        background: "transparent", color: "var(--tx3b)", cursor: "default",
+        display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+      {icon}</button>
+  );
   // 恢复出厂设置只是丢弃改写,不该按删除那样报红
   const danger = builtinSelected
     ? { line: "var(--line4)", bg: "var(--fill3)", title: "var(--tx2)", action: "var(--tx2)" }
@@ -195,20 +205,18 @@ export default function Roles() {
         onSelect={id => { setSelectedId(id); setCreating(false); }}
         onCreate={startCreate} onToggleTransfer={setTransferOpen}
         transfer={{
-          canExportOne: !creating && Boolean(selected),
-          onExportOne: () => exportRoles([selected]),
           onExportAll: () => exportRoles(ferry.roles),
           onImport: importRoles,
         }} />
 
-      {/* 详情 */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <div ref={detailRef} className="fscroll"
-          style={{ flex: 1, overflowY: "auto", padding: "18px 24px 24px" }}>
-          <div style={{ maxWidth: 640, margin: "0 auto" }}>
-            {/* 身份头部 */}
-            <div style={{ display: "flex", alignItems: "center", gap: 13, paddingBottom: 16,
-              borderBottom: "1px solid var(--line4)" }}>
+      {/* 详情:动作跟着标题走,底部不再有工具条,右侧也就没有那条与左栏对不齐的分隔线 */}
+      <div ref={detailRef} className="fscroll"
+        style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "0 24px 24px" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+          {/* 身份头部:粘在顶部,表单再长也不用滚回去保存 */}
+          <div style={{ position: "sticky", top: 0, zIndex: 5, background: "var(--settings-bg)",
+            display: "flex", alignItems: "center", gap: 13, padding: "18px 0 16px",
+            borderBottom: "1px solid var(--line4)" }}>
               <div style={{ flex: "none" }}>
                 <button type="button" ref={avatarRef}
                   onClick={() => setPickerOpen(value => !value)}
@@ -221,7 +229,7 @@ export default function Roles() {
                   <RoleIconPicker anchorRef={avatarRef} value={draft.icon} color={draft.color}
                     onPick={patch} onClose={() => setPickerOpen(false)} />)}
               </div>
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 17, fontWeight: 680, color: "var(--tx1)",
                   display: "flex", alignItems: "center", gap: 8, letterSpacing: "-.01em" }}>
                   {draft.name || t("settings:roles.create")}
@@ -236,6 +244,21 @@ export default function Roles() {
                     t("settings:roles.toolCount", { n: enabled }),
                     modelLabel || t("settings:roles.metaFollowModel"),
                   ].filter(Boolean).join(" · ")}</div>
+              </div>
+              <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 4 }}>
+                {!creating && selected && iconAction(
+                  t("settings:roles.copy"), copy, <CopyIcon size={14} />)}
+                {!creating && selected && iconAction(
+                  t("settings:roles.exportOne"), () => exportRoles([selected]),
+                  glyph(EXPORT_GLYPH, 14))}
+                {(creating || dirty) && iconAction(
+                  t(creating ? "settings:roles.cancel" : "settings:roles.discard"),
+                  () => { setCreating(false); setDraft(editable(selected)); },
+                  glyph(UNDO_GLYPH, 14))}
+                {(creating || dirty) && (
+                  <button className="fbtn-primary" onClick={save} style={{ marginLeft: 3 }}
+                    disabled={busy || !draft.name.trim() || !draft.id.trim()}>
+                    {t(creating ? "settings:roles.createSave" : "settings:roles.save")}</button>)}
               </div>
             </div>
 
@@ -420,28 +443,6 @@ export default function Roles() {
                 </button>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 常驻保存条 */}
-        <div style={{ flex: "none", height: 56, display: "flex", alignItems: "center", gap: 9,
-          padding: "0 24px", borderTop: "1px solid var(--line4)" }}>
-          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 7,
-            fontSize: 11.5, color: "var(--tx5)" }}>
-            {dirty && <span style={{ width: 6, height: 6, borderRadius: "50%",
-              background: "var(--warn)", flex: "none" }} />}
-            {t(dirty ? "settings:roles.dirty" : "settings:roles.clean")}
-          </span>
-          {!creating && selected && (
-            <button className="fbtn" disabled={busy} onClick={copy}>
-              {t("settings:roles.copy")}</button>)}
-          {(creating || dirty) && (
-            <button className="fbtn" disabled={busy}
-              onClick={() => { setCreating(false); setDraft(editable(selected)); }}>
-              {t(creating ? "settings:roles.cancel" : "settings:roles.discard")}</button>)}
-          <button className="fbtn-primary" onClick={save}
-            disabled={busy || !draft.name.trim() || !draft.id.trim() || (!creating && !dirty)}>
-            {t(creating ? "settings:roles.createSave" : "settings:roles.save")}</button>
         </div>
       </div>
     </div>

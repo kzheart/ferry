@@ -2,14 +2,15 @@
 import { useTranslation } from "react-i18next";
 import { RoleAvatar } from "../../shared/ui/icons.jsx";
 
-function TransferMenu({ onExportOne, onExportAll, onImport, onClose, canExportOne }) {
+// 只放"整体"层面的动作:导出单个角色跟着角色标题走,不在这里重复一遍
+function TransferMenu({ onExportAll, onImport, onClose }) {
   const { t } = useTranslation();
-  const item = (label, onClick, disabled) => (
-    <button type="button" className={disabled ? undefined : "hov-item"} disabled={disabled}
-      onMouseDown={event => { event.preventDefault(); if (!disabled) { onClose(); onClick(); } }}
+  const item = (label, onClick) => (
+    <button type="button" className="hov-item"
+      onMouseDown={event => { event.preventDefault(); onClose(); onClick(); }}
       style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 9px",
         border: "none", borderRadius: 7, background: "transparent", fontFamily: "inherit",
-        fontSize: 12, color: disabled ? "var(--tx5)" : "var(--tx1)", cursor: "default" }}>
+        fontSize: 12, color: "var(--tx1)", cursor: "default" }}>
       {label}</button>
   );
   return (
@@ -18,9 +19,7 @@ function TransferMenu({ onExportOne, onExportAll, onImport, onClose, canExportOn
       <div style={{ position: "absolute", left: 0, bottom: "100%", marginBottom: 6, width: 186,
         background: "var(--surface)", borderRadius: 11, boxShadow: "var(--shadow-menu)",
         padding: 5, zIndex: 70, animation: "fpop .14s ease" }}>
-        {item(t("settings:roles.exportOne"), onExportOne, !canExportOne)}
         {item(t("settings:roles.exportAll"), onExportAll)}
-        <div style={{ height: 1, background: "var(--line6)", margin: "4px 6px" }} />
         {item(t("settings:roles.import"), onImport)}
       </div>
     </>

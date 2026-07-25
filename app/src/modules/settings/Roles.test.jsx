@@ -57,9 +57,9 @@ test("自定义角色仍然是删除,工具卡的勾选会写回草稿", () => {
   assert.ok(screen.getByText("settings:roles.dangerTitle"));
   assert.equal(screen.queryByText("settings:roles.resetTitle"), null);
 
-  // 未改动时保存按钮是灰的,点一下工具卡就该亮起来
-  const save = screen.getByText("settings:roles.save");
-  assert.equal(save.disabled, true);
+  // 没有改动就没有保存按钮,点一下工具卡才出现——按钮在不在就是脏标记
+  assert.equal(screen.queryByText("settings:roles.save"), null);
   fireEvent.click(screen.getByText("settings:roles.tool.usage.label"));
   assert.equal(screen.getByText("settings:roles.save").disabled, false);
+  assert.ok(screen.getByLabelText("settings:roles.discard"));
 });
