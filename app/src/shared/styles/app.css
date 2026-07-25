@@ -285,6 +285,7 @@ html, body {
   -webkit-touch-callout: none;
 }
 img, svg { -webkit-user-drag: none; }
+.agent-icon-svg > svg { display: block; width: 100%; height: 100%; }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
 .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
 .selectable { -webkit-user-select: text; user-select: text; cursor: text; }
