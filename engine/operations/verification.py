@@ -1,6 +1,7 @@
 """Operation 探针入口；具体 CLI 执行由 adapter verifier 持有。"""
 
 from ..context import EngineContext
+from ..errors import require_agent_capability
 
 
 class ProbeTimeout(RuntimeError):
@@ -17,8 +18,10 @@ def timeout_report(tool, error) -> dict:
 def run_probe(tool, session_id, dirpath=None, model=None, *,
               ports: EngineContext):
     try:
-        return ports.adapter(tool).verifier.probe(
-            session_id, dirpath, model)
+        verifier = require_agent_capability(
+            ports.adapter(tool), "probe", "verifier",
+        )
+        return verifier.probe(session_id, dirpath, model)
     except Exception as error:
         if error.__class__.__name__ == "ProbeTimeout":
             raise ProbeTimeout(str(error)) from error

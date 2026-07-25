@@ -5,6 +5,7 @@ import {
 } from "../../platform/desktop/client.js";
 import {
   TOOLS,
+  supportsAgentCapability,
   resumeDescriptor,
 } from "../../shared/contracts/tools.js";
 import {
@@ -42,17 +43,19 @@ export function createSessionContextMenu({
     .filter(Boolean);
 
   if (menu?.multi) {
+    const canDeleteAll = multipleSessions.every(session =>
+      supportsAgentCapability(session.tool, "delete"));
     return [
       {
         label: t("app:ctx.addTags"),
         onClick: () => setTagSelection({ sessions: multipleSessions, batch: true }),
       },
       { sep: true },
-      {
+      ...(canDeleteAll ? [{
         label: t("app:ctx.deleteN", { n: multipleSessions.length }),
         danger: true,
         onClick: () => setBatchDelete(multipleSessions),
-      },
+      }] : []),
       { sep: true },
       {
         label: t("app:ctx.cancelMulti"),
@@ -83,14 +86,15 @@ export function createSessionContextMenu({
 
   return [
     { label: t("app:ctx.addToAgent"), onClick: addToAgent },
-    {
+    ...(supportsAgentCapability(session.tool, "resume") ? [{
       label: t("app:ctx.resumeTerminal"),
       hint: "↩",
       onClick: () => resumeDescriptor(session.tool, sessionRef(session))
         .then(launch => openTerminal(launch, settings.terminalApp))
         .catch(() => {}),
-    },
-    ...(TOOLS.includes(session.tool) ? [{
+    }] : []),
+    ...(TOOLS.includes(session.tool)
+      && supportsAgentCapability(session.tool, "migration-source") ? [{
       label: t("app:ctx.migrateTo"),
       onClick: () => {
         if (sessionIdentity(session) !== selectedId) {
@@ -122,12 +126,12 @@ export function createSessionContextMenu({
       label: t("app:ctx.copyId"),
       onClick: () => writeClipboardText(session.id).catch(() => {}),
     },
-    {
+    ...(supportsAgentCapability(session.tool, "resume") ? [{
       label: t("app:ctx.copyResume"),
       onClick: () => resumeDescriptor(session.tool, sessionRef(session))
         .then(descriptor => writeClipboardText(descriptor.display_command))
         .catch(() => {}),
-    },
+    }] : []),
     {
       label: t("app:ctx.revealInFinder"),
       disabled: !session.path,
@@ -135,11 +139,11 @@ export function createSessionContextMenu({
       onClick: () => revealPath(session.path).catch(() => {}),
     },
     { sep: true },
-    {
+    ...(supportsAgentCapability(session.tool, "delete") ? [{
       label: t("app:ctx.deleteSession"),
       hint: "⌫",
       danger: true,
       onClick: () => askDelete(session),
-    },
+    }] : []),
   ];
 }

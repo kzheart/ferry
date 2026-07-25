@@ -13,6 +13,7 @@ import pytest
 from engine.adapters.contracts import (
     AgentManifest, AgentAdapter, id_reference, jsonl_reference,
 )
+from engine.contracts.agents import AGENT_CAPABILITIES
 from engine.adapters.opencode import scanner as opencode_scanner
 from engine.operations.edit import EditOperationHandler
 from engine.operations.migrate import MigrationService
@@ -248,6 +249,7 @@ def agent_environment(tmp_path, monkeypatch):
     claude = AgentAdapter(
         AgentManifest(
             "claude", "Claude Code", "claude", str(root),
+            AGENT_CAPABILITIES,
             ("delete-turn", "rewrite"),
         ),
         claude_browser,
@@ -266,6 +268,7 @@ def agent_environment(tmp_path, monkeypatch):
     opencode = AgentAdapter(
         AgentManifest(
             "opencode", "OpenCode", "opencode", "/unused",
+            AGENT_CAPABILITIES,
             ("delete-turn", "rewrite"),
         ),
         opencode_browser,

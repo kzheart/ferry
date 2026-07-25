@@ -60,3 +60,24 @@ test("多选菜单只暴露批量标签、删除和取消动作", () => {
     ["app:ctx.addTags", "app:ctx.deleteN:1", "app:ctx.cancelMulti"],
   );
 });
+
+test("缺少能力的会话不显示恢复、迁移和删除动作", () => {
+  const input = createInput({
+    menu: { key: "readonly:native-1" },
+    sessionsByKey: {
+      "readonly:native-1": {
+        id: "native-1",
+        ref: "fsr_current",
+        tool: "readonly",
+        title: "Read only",
+      },
+    },
+  });
+  const labels = createSessionContextMenu(input)
+    .filter(item => !item.sep)
+    .map(item => item.label);
+  assert.equal(labels.includes("app:ctx.resumeTerminal"), false);
+  assert.equal(labels.includes("app:ctx.copyResume"), false);
+  assert.equal(labels.includes("app:ctx.migrateTo"), false);
+  assert.equal(labels.includes("app:ctx.deleteSession"), false);
+});

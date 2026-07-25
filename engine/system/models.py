@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ..context import EngineContext
+from ..errors import require_agent_capability
 
 MODELS_CONFIG = Path.home() / ".resume-harness/models.json"
 
@@ -22,7 +23,9 @@ def _user_model_ids(tool):
 
 
 def list_models(tool_name: str, ports: EngineContext):
-    catalog = ports.adapter(tool_name).models
+    catalog = require_agent_capability(
+        ports.adapter(tool_name), "models", "models",
+    )
     error = default = None
     try:
         rows, source, default = catalog.discover()

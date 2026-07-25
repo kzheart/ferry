@@ -9,6 +9,7 @@ from ..errors import (
     ConcurrentModificationError,
     LocatorStaleError,
     OperationUnsupportedError,
+    require_agent_capability,
 )
 from ..sessions.index import AgentSessionIndex
 from ..sessions.safety import (
@@ -80,12 +81,13 @@ class EditOperationHandler:
         self._index = index
 
     def ensure_supported(self, record, ops: list[dict]) -> list[dict]:
+        adapter = self._ports.adapter(record.tool)
+        editor = require_agent_capability(adapter, "edit", "editor")
         try:
             native_ops = self.resolve_ops(record, ops)
         except LocatorStaleError as error:
             raise self.public_locator_error(ops) from error
-        adapter = self._ports.adapter(record.tool)
-        self.require_inplace_support(adapter, adapter.editor, native_ops)
+        self.require_inplace_support(adapter, editor, native_ops)
         return native_ops
 
     def apply(self, operation: OperationPlan, finish_mutation) -> dict:
@@ -101,7 +103,7 @@ class EditOperationHandler:
                 "会话在操作计划生成后已变化，请重新计划"
             )
         adapter = self._ports.adapter(params["tool"])
-        editor = adapter.editor
+        editor = require_agent_capability(adapter, "edit", "editor")
         native_ops = self.ensure_supported(record, params["ops"])
         try:
             if not any(
@@ -211,7 +213,7 @@ class EditOperationHandler:
             for operation in ops
         )
         adapter = self._ports.adapter(record.tool)
-        editor = adapter.editor
+        editor = require_agent_capability(adapter, "edit", "editor")
         native_ops = self.ensure_supported(record, ops)
         try:
             result = preview_mutation(

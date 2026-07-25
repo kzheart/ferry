@@ -2,6 +2,7 @@
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
+import { supportsAgentCapability } from "../shared/contracts/tools.js";
 import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
   SearchIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
 
@@ -168,9 +169,9 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi,
           title={r.pinned ? t("app:ctx.unpin") : t("app:ctx.pin")}
           style={r.pinned ? { color: ACCENT } : undefined}>
           <PinIcon filled={r.pinned} /></button>
-        <button className="row-act-btn row-act-danger" onClick={act(onRowDelete, r.key)}
+        {supportsAgentCapability(r.tool, "delete") && <button className="row-act-btn row-act-danger" onClick={act(onRowDelete, r.key)}
           title={t("app:ctx.deleteSession")}>
-          <TrashIcon size={13} /></button>
+          <TrashIcon size={13} /></button>}
         <button className="row-act-btn" onClick={act(onRowMore, r.key)}
           title={t("app:ctx.more")}><MoreDots /></button>
       </span>

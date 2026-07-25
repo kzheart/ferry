@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..adapters.shared import narration
 from ..context import EngineContext
+from ..errors import require_agent_capability
 from ..sessions import read as sessions
 from . import history
 from . import verification as probe_mod
@@ -21,7 +22,10 @@ class MigrationService:
         self._ports = ports
 
     def resume_command(self, tool: str, session_id: str, cwd: str) -> dict:
-        return self._ports.adapter(tool).lifecycle.resume_descriptor(session_id, cwd)
+        lifecycle = require_agent_capability(
+            self._ports.adapter(tool), "resume", "lifecycle",
+        )
+        return lifecycle.resume_descriptor(session_id, cwd)
 
     def preview(
             self, src: str, dst: str, ref: str,
@@ -42,6 +46,14 @@ class MigrationService:
             max_turn: int | None = None, probe_model: str | None = None,
             content_locale: str | None = None, *, session=None,
     ) -> dict:
+        target_adapter = self._ports.adapter(dst)
+        require_agent_capability(
+            target_adapter, "migration-target", "migration_target",
+        )
+        require_agent_capability(target_adapter, "browse", "browser")
+        require_agent_capability(target_adapter, "resume", "lifecycle")
+        if probe:
+            require_agent_capability(target_adapter, "probe", "verifier")
         source, target, target_cwd, base = self._prepare(
             src, dst, ref, cwd, max_turn, probe_model, session=session,
         )
@@ -103,10 +115,18 @@ class MigrationService:
             self, src: str, dst: str, ref: str, cwd: str | None,
             max_turn: int | None, probe_model: str | None, *, session=None,
     ):
-        source = session if session is not None else sessions.read_tree(src, ref, self._ports)
+        source_adapter = self._ports.adapter(src)
+        require_agent_capability(
+            source_adapter, "migration-source", "migration_source",
+        )
+        source = session if session is not None else sessions.read_tree(
+            src, ref, self._ports,
+        )
         if max_turn:
             _truncate_rounds(source, int(max_turn))
-        target = self._ports.adapter(dst).migration_target
+        target = require_agent_capability(
+            self._ports.adapter(dst), "migration-target", "migration_target",
+        )
         target_cwd = str(Path(cwd or source.cwd or ".").resolve())
         stats = target.plan(source)
         tree_count, message_count = _migration_counts(source)
@@ -141,7 +161,12 @@ class MigrationService:
         saved_loss = [(node, list(node.loss)) for node in source.walk()]
         shadow_session_id = shadow_destination = None
         try:
-            shadow_session_id, shadow_destination = self._ports.adapter(dst).migration_target.write(source, cwd)
+            target = require_agent_capability(
+                self._ports.adapter(dst),
+                "migration-target",
+                "migration_target",
+            )
+            shadow_session_id, shadow_destination = target.write(source, cwd)
             report = self.run_probe(dst, shadow_session_id, cwd, model=model)
             report.setdefault("isolation", {
                 "kind": "shadow_copy",
@@ -157,10 +182,13 @@ class MigrationService:
 
     def run_probe(self, tool: str, session_id: str, cwd: str, *, model: str | None = None) -> dict:
         try:
+            lifecycle = require_agent_capability(
+                self._ports.adapter(tool), "resume", "lifecycle",
+            )
             return probe_mod.run_probe(
                 tool,
                 session_id,
-                self._ports.adapter(tool).lifecycle.probe_cwd(cwd),
+                lifecycle.probe_cwd(cwd),
                 model,
                 ports=self._ports,
             )
@@ -172,8 +200,12 @@ class MigrationService:
     ) -> tuple[bool, str]:
         try:
             adapter = self._ports.adapter(tool)
-            ref = adapter.lifecycle.validation_ref(session_id, destination)
-            restored = adapter.browser.read(ref)
+            browser = require_agent_capability(adapter, "browse", "browser")
+            lifecycle = require_agent_capability(
+                adapter, "resume", "lifecycle",
+            )
+            ref = lifecycle.validation_ref(session_id, destination)
+            restored = browser.read(ref)
             nodes = list(restored.walk())
             ids = [node.source_id for node in nodes]
             edge_count = sum(len(node.children) for node in nodes)
@@ -195,7 +227,10 @@ class MigrationService:
             return False, f"树结构验收失败: {error}"
 
     def _cleanup_artifact(self, dst: str, session_id: str, destination) -> None:
-        self._ports.adapter(dst).lifecycle.cleanup(session_id, destination)
+        lifecycle = require_agent_capability(
+            self._ports.adapter(dst), "resume", "lifecycle",
+        )
+        lifecycle.cleanup(session_id, destination)
 
 
 def _truncate_rounds(session, max_turn: int):
