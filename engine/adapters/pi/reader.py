@@ -61,7 +61,7 @@ def _active_branch(entries: list[dict]) -> tuple[list[dict], set[str]]:
     return branch, seen
 
 
-def _content_blocks(content, source_id: str, session: Session) -> list[Block]:
+def _content_blocks(content, source_id: str, session: Session, calls=None) -> list[Block]:
     parts = [{"type": "text", "text": content}] if isinstance(content, str) else content
     blocks = []
     for index, part in enumerate(parts if isinstance(parts, list) else []):
@@ -72,6 +72,11 @@ def _content_blocks(content, source_id: str, session: Session) -> list[Block]:
             blocks.append(Block("text", str(part.get("text") or "")))
         elif kind == "thinking":
             blocks.append(Block("thinking", str(part.get("thinking") or "")))
+        elif kind == "toolCall" and calls is not None:
+            call = call_from_part(part, source_id)
+            blocks.append(Block("tool", tool=call))
+            if call.source_call_id:
+                calls[call.source_call_id] = call
         elif kind == "image":
             asset = image_from_base64(
                 f"pi:{source_id}:{index}",
@@ -124,9 +129,18 @@ def read(path: str) -> Session:
                 event_locator=entry_id, created_at=entry.get("timestamp"),
                 summary_status="available" if entry.get("summary") else "missing",
                 summary_text=str(entry.get("summary") or ""),
-                tail_status="known" if entry.get("firstKeptEntryId") else "unknown",
+                tail_status=(
+                    "located"
+                    if entry.get("firstKeptEntryId") in selected
+                    else "unknown"
+                ),
                 tail_start_locator=entry.get("firstKeptEntryId"),
-                metrics={"tokens_before": entry.get("tokensBefore")},
+                tail_start_message_index=next((
+                    index for index, message in enumerate(session.messages, 1)
+                    if message.source_id == entry.get("firstKeptEntryId")
+                ), None),
+                metrics=({"tokens_before": entry["tokensBefore"]}
+                         if entry.get("tokensBefore") is not None else {}),
                 source_meta={"from_hook": bool(entry.get("fromHook"))},
             ))
             continue
@@ -190,17 +204,13 @@ def read(path: str) -> Session:
             )
             continue
 
-        blocks = _content_blocks(message.get("content"), entry_id, session)
+        blocks = _content_blocks(
+            message.get("content"), entry_id, session,
+            calls if role == "assistant" else None,
+        )
         if role == "assistant":
             session.model_provider = message.get("provider") or session.model_provider
             session.model = message.get("model") or session.model
-            content = message.get("content")
-            for part in content if isinstance(content, list) else []:
-                if isinstance(part, dict) and part.get("type") == "toolCall":
-                    call = call_from_part(part, entry_id)
-                    blocks.append(Block("tool", tool=call))
-                    if call.source_call_id:
-                        calls[call.source_call_id] = call
         elif not session.title:
             text = " ".join(block.text for block in blocks if block.kind == "text").strip()
             session.title = text[:80] + ("…" if len(text) > 80 else "")

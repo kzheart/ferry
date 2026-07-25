@@ -1,0 +1,7 @@
+{"type":"session","version":3,"id":"fixture-pi-branch","timestamp":"2026-07-25T11:00:00.000Z","cwd":"/fixture/pi/branch"}
+{"type":"message","id":"u1","parentId":null,"timestamp":"2026-07-25T11:00:01.000Z","message":{"role":"user","content":"Choose the active branch.","timestamp":1784977201000}}
+{"type":"message","id":"dead","parentId":"u1","timestamp":"2026-07-25T11:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Abandoned branch."}],"api":"anthropic-messages","provider":"fixture","model":"fixture-model","usage":{"input":2,"output":2,"cacheRead":0,"cacheWrite":0,"totalTokens":4,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1784977202000}}
+{"type":"branch_summary","id":"summary","parentId":"u1","timestamp":"2026-07-25T11:00:03.000Z","fromId":"dead","summary":"The abandoned branch was summarized."}
+{"type":"compaction","id":"compact","parentId":"summary","timestamp":"2026-07-25T11:00:04.000Z","summary":"Active context summary.","firstKeptEntryId":"u1","tokensBefore":42}
+{"type":"message","id":"u2","parentId":"compact","timestamp":"2026-07-25T11:00:05.000Z","message":{"role":"user","content":"Continue after compaction.","timestamp":1784977205000}}
+{"type":"session_info","id":"info","parentId":"u2","timestamp":"2026-07-25T11:00:06.000Z","name":"Branch fixture"}

@@ -73,7 +73,7 @@ def test_adapter_does_not_expose_a_format_version_registry(agent_id):
 
 def test_fixtures_have_no_version_directory_layer():
     for agent_id in ("claude", "codex", "opencode", "pi"):
-        assert {path.name for path in (FIXTURES / agent_id).iterdir()} == {
-            "case-01-plain",
-            "case-02-tools",
-        }
+        expected = {"case-01-plain", "case-02-tools"}
+        if agent_id == "pi":
+            expected.add("case-03-branch-compaction")
+        assert {path.name for path in (FIXTURES / agent_id).iterdir()} == expected
