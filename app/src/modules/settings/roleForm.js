@@ -1,4 +1,3 @@
-// 角色详情表单的取值规则:草稿字段、默认值与提交前的清理。
 import { DEFAULT_ROLE_COLOR, DEFAULT_ROLE_ICON } from "../../shared/ui/roleIcons.js";
 
 // 与 ferry-runtime 的 FERRY_TOOL_NAMES 对齐。

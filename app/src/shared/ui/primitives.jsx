@@ -1,11 +1,9 @@
-// 共享 UI 构件:弹层容器 / 影响三栏 / 水位条 / 复制按钮等
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { renderEvents } from "../contracts/events.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 
-// 居中模态(带遮罩)
 export function Sheet({ width = 720, maxHeight = 800, onClose, children, z = 30 }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "var(--scrim)",
@@ -39,7 +37,6 @@ function Dot({ color, size = 6 }) {
   return <span style={{ width: size, height: size, flex: "none", borderRadius: "50%", background: color }} />;
 }
 
-// 影响分组:标题行(名称 + 计数) + 明细行
 function LossGroup({ kind, count, items, t }) {
   const c = COLS_KEY[kind];
   return (
@@ -100,7 +97,6 @@ export function LossCols({ loss, compact = false }) {
   );
 }
 
-// 命令 + 复制按钮行(卡片内)
 export function CmdRow({ cmd, head }) {
   const { t } = useTranslation();
   const text = typeof cmd === "string" ? cmd : cmd?.display_command || "";
@@ -125,7 +121,6 @@ export function CmdRow({ cmd, head }) {
   );
 }
 
-// 复选框样子的小方块
 export function CheckSquare({ on, accent = "var(--accent)", fg = "var(--accent-fg)", size = 15 }) {
   return (
     <span style={{ width: size, height: size, flex: "none", borderRadius: 4,
@@ -135,7 +130,6 @@ export function CheckSquare({ on, accent = "var(--accent)", fg = "var(--accent-f
   );
 }
 
-// 单选圆点
 export function RadioDot({ on, accent = "var(--accent)", size = 15 }) {
   return (
     <span style={{ width: size, height: size, flex: "none", borderRadius: "50%",

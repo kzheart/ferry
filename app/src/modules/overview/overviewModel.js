@@ -65,7 +65,6 @@ export function computeOverview({ sessions = [], history = [], snaps = [],
     const u = s.updated || 0; return u >= prevFrom && u < from;
   });
 
-  // KPI
   const tokTotals = emptyTokens();
   scoped.forEach(s => addTokens(tokTotals, s.tokens));
   const total = sumTokens(tokTotals);
@@ -76,7 +75,6 @@ export function computeOverview({ sessions = [], history = [], snaps = [],
     sum + costOf(s.tokens || emptyTokens(), matchPrice(s.model, prices, idx)), 0);
   const { streak, longest } = streaks(sessions, now);
 
-  // Token 构成
   const composition = TOKEN_KEYS
     .map(key => ({ key, value: tokTotals[key], pct: total ? tokTotals[key] / total * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
@@ -237,7 +235,6 @@ function buildBump(sessions, now) {
   const cur = monthKey(now);
   const keys = [];
   for (let i = monthsBack - 1; i >= 0; i--) keys.push(cur - i);
-  // 每月每模型 token
   const perMonth = keys.map(() => new Map());
   const totalByModel = new Map();
   sessions.forEach(s => {
@@ -254,7 +251,6 @@ function buildBump(sessions, now) {
   const monthLabels = keys.map(k => k % 12);   // 0-11 月份索引,由视图层按语言本地化
   const models = top.map(name => {
     const rank = keys.map((_, col) => {
-      // 该月 top 模型按 token 降序,算 name 的名次
       const ranked = top.map(m => [m, perMonth[col].get(m) || 0]).sort((a, b) => b[1] - a[1]);
       return ranked.findIndex(e => e[0] === name) + 1;
     });
@@ -310,7 +306,6 @@ function buildInsights({ sessions, scoped, history, snaps, repos, prices, idx, n
   if (spike) pool.push({ kind: "cost", priority: 5, key: "cost", featured: true,
     params: spike });
 
-  // 夜猫子
   if (nightShare >= 0.4) pool.push({ kind: "night", priority: 2, key: "night",
     params: { pct: Math.round(nightShare * 100), hour: peakHour } });
 
@@ -318,7 +313,6 @@ function buildInsights({ sessions, scoped, history, snaps, repos, prices, idx, n
   const wk = weekendSilent(sessions, now);
   if (wk) pool.push({ kind: "weekend", priority: 2, key: "weekend", params: {} });
 
-  // 连续活跃里程碑
   if (streak >= 7) pool.push({ kind: "streak", priority: 1, key: "streak",
     params: { days: streak } });
 
@@ -394,7 +388,6 @@ function weekendSilent(sessions, now) {
     const t = s.updated || 0; if (!t) return;
     const d = new Date(t); active.add(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime());
   });
-  // 上一个周日
   const d0 = new Date(now); const today = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()).getTime();
   const dow = new Date(today).getDay(); // 0=Sun
   const lastSun = today - (dow === 0 ? 7 : dow) * DAY;

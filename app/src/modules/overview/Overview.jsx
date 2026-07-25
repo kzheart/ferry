@@ -14,7 +14,6 @@ const toolColor = tool => {
   return TOOL_COLOR[tool] || CHART[(index < 0 ? 0 : index) % CHART.length];
 };
 
-// ---------- 格式化 ----------
 const fmtInt = n => Math.round(n || 0).toLocaleString("en-US");
 function fmtTokens(n) {
   n = n || 0;
@@ -46,7 +45,6 @@ function smooth(pts) {
   return d;
 }
 
-// ---------- 通用壳 ----------
 const card = { background: "var(--surface)", border: "1px solid var(--line)",
   borderRadius: 10, boxShadow: "var(--shadow)" };
 const num = { fontVariantNumeric: "tabular-nums" };
@@ -75,7 +73,6 @@ function Section({ title, note }) {
   );
 }
 
-// ---------- 图表 ----------
 function Spark({ values, w = 72, h = 24 }) {
   const max = Math.max(1, ...values), pad = 2;
   const x = i => pad + (i / Math.max(1, values.length - 1)) * (w - pad * 2);
@@ -278,7 +275,6 @@ function ToolFilter({ tool, setTool, t }) {
   );
 }
 
-// ---------- 洞察文案 ----------
 function insightCopy(ins, t) {
   const p = ins.params;
   return {
@@ -288,7 +284,6 @@ function insightCopy(ins, t) {
   };
 }
 
-// ---------- 主组件 ----------
 export default function Overview({ sessions = [], historyRows = [],
   prices = {}, scanning = false, navigationTarget }) {
   const { t, i18n } = useTranslation();
@@ -365,7 +360,6 @@ export default function Overview({ sessions = [], historyRows = [],
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "22px 24px 60px",
         display: "flex", flexDirection: "column", gap: 22 }}>
 
-        {/* 顶部:标题 + 时间范围 */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--tx1)" }}>{t("overview:title")}</h1>
           <div style={{ flex: 1 }} />
@@ -384,7 +378,6 @@ export default function Overview({ sessions = [], historyRows = [],
           </div>
         ) : (
           <>
-            {/* KPI */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               {kpiCard(t("overview:kpi.sessions"), fmtInt(data.kpis.sessions.value), null,
                 delta(data.kpis.sessions, fmtInt), data.trends.sessions)}
@@ -398,7 +391,6 @@ export default function Overview({ sessions = [], historyRows = [],
                 data.trends.sessions)}
             </div>
 
-            {/* 使用习惯 */}
             <Section title={t("overview:sec.habits")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {data.bump && (
@@ -417,7 +409,6 @@ export default function Overview({ sessions = [], historyRows = [],
               </div>
             </div>
 
-            {/* 热力图 */}
             <Card title={t("overview:heat.title")} sub={t("overview:heat.sub", { weeks: data.heatmap.weeks })}
               extra={<span style={{ fontSize: 11, color: "var(--tx4b)", ...num }}>{t("overview:heat.streak", { cur: data.kpis.streak.value, max: data.kpis.streak.longest })}</span>}>
               <div style={{ overflowX: "auto", paddingBottom: 4 }}>
@@ -437,10 +428,8 @@ export default function Overview({ sessions = [], historyRows = [],
               </div>
             </Card>
 
-            {/* Token 与成本 */}
             <Section title={t("overview:sec.tokens")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {/* 成本表 */}
               <div style={{ flex: "1 1 340px", minWidth: 0 }}>
                 <Card title={t("overview:cost.title")} sub={t("overview:cost.sub")}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
@@ -485,7 +474,6 @@ export default function Overview({ sessions = [], historyRows = [],
                 </Card>
               </div>
 
-              {/* Token 构成 */}
               <div style={{ flex: "1 1 340px", minWidth: 0 }}>
                 <Card title={t("overview:comp.title")} sub={t(`overview:scope.${scope}`)} fill>
                   <div style={{ display: "flex", height: 30, borderRadius: 5, overflow: "hidden", gap: 1 }}>
@@ -514,10 +502,8 @@ export default function Overview({ sessions = [], historyRows = [],
               </div>
             </div>
 
-            {/* 项目与迁移 */}
             <Section title={t("overview:sec.projects")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {/* 仓库排行 */}
               <div style={{ flex: "2 1 420px", minWidth: 0 }}>
                 <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")}
                   extra={<div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)" }}>
@@ -548,7 +534,6 @@ export default function Overview({ sessions = [], historyRows = [],
                 </Card>
               </div>
 
-              {/* 迁移流向 */}
               <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                 <Card title={t("overview:flow.title")} sub={t("overview:flow.sub")}>
                   {data.flows.length ? (
@@ -578,7 +563,6 @@ export default function Overview({ sessions = [], historyRows = [],
               </div>
             </div>
 
-            {/* 洞察 */}
             {(featured || smalls.length) && (
               <>
                 <Section title={t("overview:sec.insights")} />

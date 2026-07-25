@@ -1,7 +1,6 @@
 // 全局弹层的输入组装。哪些弹层存在、各自需要什么,集中在这里声明,
 // 主壳只负责把结果转交给 AppOverlayController;新增弹层不必改动渲染骨架。
 export function buildOverlayProps({
-  // 工作区与导航
   view,
   setView,
   environment: env,
@@ -14,7 +13,6 @@ export function buildOverlayProps({
   onboarding,
   rail,
   railOnly,
-  // 会话与详情
   sessions,
   current,
   selectedId,
@@ -27,18 +25,15 @@ export function buildOverlayProps({
   scan,
   scanning,
   doScan,
-  // 编辑
   dirtyOps,
   diff,
   setDiff,
   confirmApply,
   setConfirmApply,
   applyEdit,
-  // 元数据
   metaFor,
   updateMetadata,
   reloadMetadata,
-  // 弹层各自的开关与选中
   organizerOpen,
   setOrganizerOpen,
   peekId,
