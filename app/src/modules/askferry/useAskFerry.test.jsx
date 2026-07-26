@@ -15,7 +15,12 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
     emit = handler;
     return () => {};
   },
-  runtime: async (method) => (method === "sessions.list" ? sessionList : {}),
+  runtime: async (method) => {
+    if (method === "sessions.list") return sessionList;
+    // 回放接口返回事件数组;打开会话要靠它把时间线建出来
+    if (method === "events.replay") return [];
+    return {};
+  },
   operationApply: async (planId) => {
     applied.operation.push(planId);
     return { status: "applied" };
@@ -191,6 +196,57 @@ test("错误提示约 6 秒后自动清除，中途的无关重渲染不会重�
     await act(async () => vi.advanceTimersByTime(3100));
 
     expect(harness.get().lastError).toBe(null);
+    harness.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+function mountCounting() {
+  let api;
+  let renders = 0;
+  function Probe() {
+    api = useAskFerry();
+    renders += 1;
+    return null;
+  }
+  const view = render(<Probe />);
+  return { get: () => api, renders: () => renders, unmount: () => view.unmount() };
+}
+
+test("连续 delta 按帧合并成一次更新，非 delta 事件到达时立即冲刷且不乱序", async () => {
+  vi.useFakeTimers();
+  try {
+    sessionList = [{ session_id: "s1", title: "chat" }];
+    const harness = mountCounting();
+    await act(async () => {});
+    await act(async () => harness.get().openSession("s1"));
+
+    const before = harness.renders();
+    for (let seq = 1; seq <= 5; seq += 1) {
+      await act(async () =>
+        emit({ type: "content.delta", session_id: "s1", seq,
+          payload: { delta: `d${seq}` } }));
+    }
+    // 缓冲期内一次都不该重渲染,时间线也还没变
+    expect(harness.renders()).toBe(before);
+    expect(harness.get().activeLog.items).toEqual([]);
+
+    await act(async () => vi.advanceTimersByTime(20));
+    expect(harness.get().activeLog.items.map((item) => item.text))
+      .toEqual(["d1d2d3d4d5"]);
+    expect(harness.renders()).toBe(before + 1);
+
+    // 非 delta 事件必须先把缓冲落地,否则工具行会插到未冲刷的文本前面
+    await act(async () =>
+      emit({ type: "content.delta", session_id: "s1", seq: 6,
+        payload: { delta: "d6" } }));
+    await act(async () =>
+      emit({ type: "tool.started", session_id: "s1", seq: 7,
+        payload: { tool_call_id: "c1", name: "session_search", args: {} } }));
+
+    expect(harness.get().activeLog.items.map((item) => [item.kind, item.text]))
+      .toEqual([["assistant", "d1d2d3d4d5d6"], ["tool", undefined]]);
     harness.unmount();
   } finally {
     vi.useRealTimers();
