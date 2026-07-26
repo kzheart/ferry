@@ -86,7 +86,7 @@
       "exposure": "public",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "session_asset",
@@ -94,7 +94,7 @@
       "exposure": "public",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "session_meta_list",
