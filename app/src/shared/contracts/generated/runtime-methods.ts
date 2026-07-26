@@ -41,6 +41,7 @@ export const PUBLIC_RUNTIME_METHODS = [
   "models.refresh",
   "config.get",
   "credential.set",
+  "credential.get",
   "provider.logout",
   "model.select",
   "custom_provider.upsert",

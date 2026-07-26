@@ -97,6 +97,13 @@ export async function dispatchProviderCommand(
         ),
       };
     }
+    case "credential.get":
+      return {
+        handled: true,
+        result: await service.revealApiKey(
+          requireString(params, "provider_id", 128),
+        ),
+      };
     case "provider.logout":
       return {
         handled: true,

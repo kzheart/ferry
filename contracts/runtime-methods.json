@@ -41,6 +41,7 @@
     {"name": "models.refresh", "exposure": "public"},
     {"name": "config.get", "exposure": "public"},
     {"name": "credential.set", "exposure": "public"},
+    {"name": "credential.get", "exposure": "public"},
     {"name": "provider.logout", "exposure": "public"},
     {"name": "model.select", "exposure": "public"},
     {"name": "custom_provider.upsert", "exposure": "public"},
