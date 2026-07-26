@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { groupAgentTimeline, mergeReadTools } from "./agentTimelineModel.js";
+import { groupAgentTimeline, isAwaitingReply, mergeReadTools }
+  from "./agentTimelineModel.js";
 
 const tool = (name, callId, status = "complete") => ({
   kind: "tool",
@@ -52,4 +53,22 @@ test("时间线只聚合连续工具，不跨消息合并", () => {
     ["user", "trace", "assistant", "trace"]);
   assert.equal(grouped[1].rows[0].merged.length, 2);
   assert.equal(grouped[3].rows[0].callId, "read-3");
+});
+
+test("运行中且末尾无活动指示时判定为等待回复", () => {
+  assert.equal(isAwaitingReply("running", [{ kind: "user", text: "hi" }]), true);
+  assert.equal(isAwaitingReply("running", [tool("session_search", "s-1")]), true);
+  assert.equal(isAwaitingReply("running",
+    [{ kind: "assistant", text: "done" }]), true);
+  assert.equal(isAwaitingReply("running", []), true);
+});
+
+test("末尾自带活动指示或运行结束时不判定为等待", () => {
+  assert.equal(isAwaitingReply("running",
+    [tool("session_search", "s-1", "running")]), false);
+  assert.equal(isAwaitingReply("running",
+    [{ kind: "assistant", text: "…", streaming: true }]), false);
+  assert.equal(isAwaitingReply("running",
+    [{ kind: "approval", id: "a-1" }]), false);
+  assert.equal(isAwaitingReply("complete", [{ kind: "user", text: "hi" }]), false);
 });

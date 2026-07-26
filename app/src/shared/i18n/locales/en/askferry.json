@@ -5,7 +5,6 @@
     "placeholder": "Search chats",
     "newChat": "New chat",
     "empty": "No chats yet",
-    "footer": "{{n}} chats",
     "pin": "Pin",
     "unpin": "Unpin",
     "delete": "Delete chat",
@@ -26,6 +25,7 @@
   "chat": {
     "newChat": "New chat",
     "untitled": "Untitled chat",
+    "thinking": "Thinking…",
     "steered": "Steer",
     "followedUp": "Follow-up",
     "runFailed": "Run failed {{message}}",

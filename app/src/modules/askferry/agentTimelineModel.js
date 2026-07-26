@@ -19,6 +19,18 @@ export function mergeReadTools(run) {
     : row);
 }
 
+// 运行中但末尾条目没有自带活动指示(流式 spinner / 工具行 spinner)时,
+// 消息流末尾需要补一个「思考中」占位,否则等首个 token 或工具间隙界面完全静止。
+export function isAwaitingReply(status, items) {
+  if (status !== "running") return false;
+  const last = items[items.length - 1];
+  if (!last) return true;
+  if (last.kind === "user") return true;
+  if (last.kind === "assistant") return !last.streaming;
+  if (last.kind === "tool") return last.status !== "running";
+  return false; // workflow/approval/status 各自有状态展示
+}
+
 export function groupAgentTimeline(items) {
   const grouped = [];
   let index = 0;

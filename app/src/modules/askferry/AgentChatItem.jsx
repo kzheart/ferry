@@ -64,3 +64,16 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
 
 // 流式期间每个 token 都会重渲染整条消息流,但只有最后一条 assistant 在变。
 export const AgentChatItem = memo(AgentChatItemView);
+
+// 等待回复占位:呼吸圆点 + 文案,配合 isAwaitingReply 使用
+export function ThinkingIndicator() {
+  const { t } = useTranslation();
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8,
+      color: "var(--tx5)", fontSize: 12 }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%",
+        background: "var(--tx4)", animation: "fbreath 1.2s ease-in-out infinite" }} />
+      {t("askferry:chat.thinking")}
+    </div>
+  );
+}

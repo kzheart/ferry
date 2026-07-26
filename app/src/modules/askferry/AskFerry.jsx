@@ -5,12 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readClipboardText } from "../../platform/desktop/client.js";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
-import { groupAgentTimeline } from "./agentTimelineModel.js";
+import { groupAgentTimeline, isAwaitingReply } from "./agentTimelineModel.js";
 import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachmentKey, sessionDisplayText }
   from "../browser/public.js";
 import { Caret, RoleAvatar } from "../../shared/ui/icons.jsx";
-import { AgentChatItem } from "./AgentChatItem.jsx";
+import { AgentChatItem, ThinkingIndicator } from "./AgentChatItem.jsx";
 import { RoleMenu } from "./AgentMenus.jsx";
 import { AgentComposer } from "./AgentComposer.jsx";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";
@@ -217,6 +217,7 @@ export default function AskFerry({ scanSessions, onOpenConfig,
                   ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
                   : <AgentChatItem key={`item-${i}`} item={g} sessionId={activeId}
                       onNavigate={onNavigate} />))}
+              {isAwaitingReply(activeLog?.status, items) && <ThinkingIndicator />}
             </div>
           </div>
 
