@@ -11,6 +11,7 @@ import {
   HistoryFilter,
 } from "../modules/migration/HistoryOverlays.jsx";
 import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
+import FloatingAgentPanel from "../modules/askferry/FloatingAgentPanel.jsx";
 import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
 import { Guide } from "../modules/onboarding/Guide.jsx";
 import SettingsPage from "../modules/settings/Settings.jsx";
@@ -21,6 +22,7 @@ import { SearchPalette } from "./SearchPalette.jsx";
 
 export function AppOverlays({
   t,
+  floatChat,
   organization,
   peek,
   migration,
@@ -42,6 +44,17 @@ export function AppOverlays({
 }) {
   return (
     <>
+      {floatChat.mounted && (
+        <FloatingAgentPanel
+          open={floatChat.open}
+          onToggle={floatChat.onToggle}
+          session={floatChat.session}
+          scanSessions={floatChat.scanSessions}
+          onNavigate={floatChat.onNavigate}
+          onOpenConfig={floatChat.onOpenConfig}
+          onOpenFull={floatChat.onOpenFull}
+        />
+      )}
       {organization.open && (
         <OrganizationPanel
           sessions={organization.sessions.map(session => ({
@@ -98,6 +111,7 @@ export function AppOverlays({
           onQuery={search.pane.onQuery}
           recentLabel={search.pane.query ? null : t("app:search.recent")}
           emptyLabel={t("app:search.empty")}
+          notice={search.notice}
           results={search.results}
           onClose={search.onClose}
         />

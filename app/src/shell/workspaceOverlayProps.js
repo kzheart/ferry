@@ -44,6 +44,10 @@ export function buildOverlayProps({
   loadHistory,
   searchOpen,
   setSearchOpen,
+  floatChatOpen,
+  setFloatChatOpen,
+  peekEntity,
+  openConfig,
   paneConfig,
   ferrySessions,
   libraryGroups,
@@ -118,6 +122,21 @@ export function buildOverlayProps({
       setConfirmApply,
       apply: applyEdit,
     },
+    floatChat: {
+      // 会话库浮动 Agent 面板:仅在浏览具体会话且设置页未打开时挂载;
+      // open 只控制展开与否,悬浮球本身由 mounted 决定
+      mounted: view === "library" && Boolean(current) && !settingsOpen,
+      open: floatChatOpen,
+      session: current,
+      scanSessions: sessions,
+      onToggle: () => setFloatChatOpen((value) => !value),
+      onNavigate: peekEntity,
+      onOpenConfig: openConfig,
+      onOpenFull: () => {
+        setFloatChatOpen(false);
+        setView("askferry");
+      },
+    },
     search: {
       open: searchOpen,
       pane: paneConfig,
@@ -125,6 +144,8 @@ export function buildOverlayProps({
       ferrySessions,
       historyGroups,
       libraryGroups,
+      // 全文命中回来的是 opaque ref,要靠扫描列表换回选中用的 identity key
+      scanSessions: sessions,
       selectHistory,
       setMultiSelection: setMultiIds,
       selectSession: select,

@@ -16,7 +16,12 @@
     "renameTitle": "重命名对话",
     "renameDesc": "为“{{title}}”设置一个清晰的名称。",
     "renamePlaceholder": "输入对话名称",
-    "save": "保存"
+    "save": "保存",
+    "pinnedGroup": "置顶",
+    "attentionApproval": "等待你审批",
+    "attentionError": "本次运行失败",
+    "attentionUnread": "已完成,还没查看",
+    "attentionRunning": "运行中"
   },
   "chat": {
     "newChat": "新对话",
@@ -81,6 +86,16 @@
   },
   "empty": {
     "title": "有什么可以帮你?"
+  },
+  "float": {
+    "open": "询问 AI",
+    "close": "收起",
+    "title": "快速对话",
+    "aboutSession": "关于「{{title}}」",
+    "openFull": "在 Agent 中打开",
+    "suggestSummary": "总结这个会话做了什么",
+    "suggestFiles": "列出这个会话改动了哪些文件",
+    "suggestIssues": "这个会话遇到了什么问题?"
   },
   "auth": {
     "inProgress": "登录进行中…",

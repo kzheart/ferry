@@ -14,6 +14,15 @@ import { applyEvent, emptyLog, operationKey, patchApproval }
 const MODE_KEY = "ferry-askferry-mode";
 const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
   "run.cancelled", "run.interrupted"]);
+// 后台会话的提醒等级:待审批最紧急,其次是失败,最后是「跑完了还没看」。
+// 低等级不覆盖高等级,避免一条 run.completed 把待审批的提示冲掉。
+const ATTENTION_RANK = { approval: 3, error: 2, unread: 1 };
+const attentionOf = type => {
+  if (type === "tool.request" || type === "operation.proposed") return "approval";
+  if (type === "run.failed") return "error";
+  if (type === "run.completed") return "unread";
+  return null;
+};
 
 export function useAskFerry() {
   const available = true;
@@ -126,11 +135,34 @@ export function useAskFerry() {
         setLogs(prev => prev[sid]
           ? { ...prev, [sid]: applyEvent(prev[sid], ev) } : prev);
       }
-      if (RUN_TYPES.has(ev.type)) {
-        setSessions(list => list.map(s => s.session_id === sid
-          ? { ...s, status: ev.type === "run.started" ? "running" : "idle",
-              updated_at: ev.timestamp || s.updated_at }
-          : s));
+      // 标题由 runtime 在首轮结束后生成;auto=false 说明是用户手动改名,顺带锁住
+      if (ev.type === "session.renamed") {
+        const p = ev.payload || {};
+        if (p.title) {
+          setSessions(list => list.map(s => s.session_id === sid
+            ? { ...s, title: p.title, title_locked: p.auto ? s.title_locked : true }
+            : s));
+        }
+        return;
+      }
+      const isRun = RUN_TYPES.has(ev.type);
+      const attention = attentionOf(ev.type);
+      if (isRun || attention) {
+        setSessions(list => list.map(s => {
+          if (s.session_id !== sid) return s;
+          const next = { ...s };
+          if (isRun) {
+            next.status = ev.type === "run.started" ? "running" : "idle";
+            next.updated_at = ev.timestamp || s.updated_at;
+          }
+          // 用户正在看这个会话(或它刚开始新一轮),徽标没有意义
+          if (ev.type === "run.started" || sid === activeRef.current) next.attention = null;
+          else if (attention &&
+            ATTENTION_RANK[attention] >= (ATTENTION_RANK[s.attention] || 0)) {
+            next.attention = attention;
+          }
+          return next;
+        }));
       }
       if (ev.type === "operation.applied") setMutationVersion(value => value + 1);
     }).then(u => { un = u; });
@@ -160,6 +192,11 @@ export function useAskFerry() {
   // ----- 打开会话:回放事件 -----
   const openSession = useCallback(async id => {
     setActiveId(id);
+    if (id) {
+      setSessions(list => list.some(s => s.session_id === id && s.attention)
+        ? list.map(s => s.session_id === id ? { ...s, attention: null } : s)
+        : list);
+    }
     if (!id || logsRef.current[id] || loadingRef.current.has(id)) return;
     loadingRef.current.set(id, []);
     try {
@@ -181,9 +218,11 @@ export function useAskFerry() {
   const newChat = useCallback(() => setActiveId(null), []);
 
   // ----- 发送:无会话则先创建;运行中改走 follow_up -----
+  // 手动改名会把 title_locked 置上(runtime 回传),自动命名从此不再覆盖
   const rename = useCallback(async (id, title) => {
     const state = await runtime("session.rename", { session_id: id, title });
-    setSessions(list => list.map(s => s.session_id === id ? { ...s, ...state } : s));
+    setSessions(list => list.map(s => s.session_id === id
+      ? { ...s, ...state, title_locked: true } : s));
     return state;
   }, []);
 
@@ -213,18 +252,15 @@ export function useAskFerry() {
       setActiveId(sid);
     }
     const running = logsRef.current[sid]?.status === "running";
+    // 标题不在这里定:runtime 会在首轮跑完后用模型生成,再经 session.renamed 推回来
     await runtime(running ? "follow_up" : "prompt", {
       session_id: sid,
       text,
       display_text: displayText,
       auto_apply: modeRef.current === "auto",
     });
-    if (!running && !sessions.find(s => s.session_id === sid)?.title) {
-      const title = displayText.split("\n")[0].trim().slice(0, 200);
-      if (title) rename(sid, title).catch(() => {});
-    }
     return sid;
-  }, [rename, selectedRoleId, sessions]);
+  }, [selectedRoleId]);
 
   const reloadRoles = useCallback(async () => {
     const list = await runtime("roles.list");

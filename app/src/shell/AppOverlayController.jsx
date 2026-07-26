@@ -1,5 +1,9 @@
+import { useMemo } from "react";
+
+import { sessionIdentity } from "../modules/browser/public.js";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
 import { AppOverlays } from "./AppOverlays.jsx";
+import { useSessionContentSearch } from "./useSessionContentSearch.js";
 
 export function AppOverlayController({
   t,
@@ -7,6 +11,7 @@ export function AppOverlayController({
   peek,
   migration,
   editing,
+  floatChat,
   search,
   contextMenu,
   deletion,
@@ -20,7 +25,23 @@ export function AppOverlayController({
   guide,
 }) {
   const ferry = useFerryRuntime();
-  const searchResults = (
+  const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
+  // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
+  const contentSearch = useSessionContentSearch(
+    search.pane?.query,
+    Boolean(search.open && isLibrarySearch),
+  );
+  const identityByRef = useMemo(
+    () =>
+      new Map(
+        (search.scanSessions || [])
+          .filter((session) => session.ref)
+          .map((session) => [session.ref, sessionIdentity(session)]),
+      ),
+    [search.scanSessions],
+  );
+
+  const filteredResults = (
     search.view === "askferry"
       ? search.ferrySessions.map((session) => ({
           id: session.session_id,
@@ -53,9 +74,40 @@ export function AppOverlayController({
             }))
   ).slice(0, 60);
 
+  // 标题已经命中的会话不重复出现在「全文匹配」里
+  const alreadyListed = new Set(filteredResults.map((result) => result.id));
+  const contentResults = isLibrarySearch
+    ? (contentSearch?.sessions || []).flatMap((hit) => {
+        const key = identityByRef.get(hit.ref);
+        if (!key || alreadyListed.has(key)) return [];
+        alreadyListed.add(key);
+        return [
+          {
+            id: key,
+            section: t("app:search.fullText"),
+            title: hit.title || hit.project || hit.ref,
+            tool: hit.tool,
+            badge: hit.snippet ? t("app:search.contentHit") : null,
+            meta: hit.snippet || hit.project,
+            onClick: () => {
+              search.setMultiSelection([]);
+              search.selectSession(key);
+            },
+          },
+        ];
+      })
+    : [];
+  const searchResults = [...filteredResults, ...contentResults];
+  // 索引还在建的时候「没结果」是误导:明说一句,别让用户以为真的搜不到
+  const searchNotice =
+    isLibrarySearch && contentSearch?.content_index?.ready === false
+      ? t("app:search.indexing")
+      : null;
+
   return (
     <AppOverlays
       t={t}
+      floatChat={floatChat}
       organization={{
         open: organization.open,
         sessions: organization.sessions,
@@ -102,6 +154,7 @@ export function AppOverlayController({
         open: search.open,
         pane: search.pane,
         results: searchResults,
+        notice: searchNotice,
         onClose: () => search.setOpen(false),
       }}
       contextMenu={{

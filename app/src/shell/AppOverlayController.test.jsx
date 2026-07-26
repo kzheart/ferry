@@ -1,9 +1,20 @@
 // AppOverlayController 把主壳的状态翻译成弹层入参,这里有真正的推导:搜索结果的
 // 三种视图形态、重命名/标签的初始值与提交语义、删除历史的先清选中再删。
 // 下面的用例锁的是这些推导,不是渲染骨架(骨架在 AppOverlays.test.jsx)。
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import assert from "node:assert/strict";
-import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { act, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+
+// ⌘K 的全文匹配段要真的打 Engine,这里把 engine() 换成可控桩
+let engineResponse = null;
+const engineCalls = [];
+vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  engine: async (method, params) => {
+    engineCalls.push([method, params]);
+    return engineResponse;
+  },
+}));
 
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
@@ -42,6 +53,7 @@ stubFerry();
 function baseProps(overrides = {}) {
   return {
     t: key => key,
+    floatChat: { mounted: false },
     organization: { open: false, sessions: [], setOpen: noop, reloadMetadata: noop, scan: noop },
     peek: { id: null, current: null, setId: noop, setView: noop },
     migration: { state: null, current: null, settings: {}, setState: noop, loadHistory: noop },
@@ -175,6 +187,101 @@ test("搜索结果截断到 60 条", () => {
 
   assert.ok(screen.getByText("会话 59"));
   assert.equal(screen.queryByText("会话 60"), null);
+});
+
+// sessionIdentity 用 NUL 拼 tool 与 id,源码里不直接写这个字节
+const idKey = id => "claude" + String.fromCharCode(0) + id;
+
+// 全文检索有 300ms 防抖,等它过去并让 state 落定
+const settleSearch = () =>
+  act(async () => { await new Promise(resolve => setTimeout(resolve, 360)); });
+
+const contentSearchProps = (overrides = {}) => ({
+  ...baseProps().search,
+  open: true,
+  pane: { ...searchPane, query: "检索" },
+  view: "library",
+  scanSessions: [
+    { tool: "claude", id: "a", ref: "fsr_a" },
+    { tool: "claude", id: "b", ref: "fsr_b" },
+  ],
+  libraryGroups: [
+    { rows: [{ key: idKey("a"), title: "会话 A", tool: "claude", repo: "ferry" }] },
+  ],
+  ...overrides,
+});
+
+test("资料库视图追加全文匹配段,已在标题结果里的会话不重复出现", async () => {
+  engineCalls.length = 0;
+  engineResponse = {
+    query: "检索",
+    scope: "content",
+    sessions: [
+      { tool: "claude", ref: "fsr_a", title: "会话 A", snippet: "A 的正文" },
+      { tool: "claude", ref: "fsr_b", title: "会话 B", snippet: "命中的正文片段",
+        project: "ferry" },
+    ],
+    content_index: { ready: true },
+  };
+  const calls = [];
+  render(
+    <AppOverlayController
+      {...baseProps({
+        search: contentSearchProps({
+          setMultiSelection: value => calls.push(["multi", value]),
+          selectSession: key => calls.push(["select", key]),
+        }),
+      })}
+    />,
+  );
+  await settleSearch();
+
+  assert.deepEqual(engineCalls, [
+    ["session_search", { query: "检索", scope: "content", limit: 20 }],
+  ]);
+  // 前端过滤已经给出 A,全文段只补 B
+  assert.equal(screen.getAllByText("会话 A").length, 1);
+  assert.ok(screen.getByText("app:search.fullText"));
+  assert.ok(screen.getByText("命中的正文片段"));
+  assert.ok(screen.getByText("app:search.contentHit"));
+
+  // 点全文结果与点前端结果同样是先清多选再按 identity key 选中
+  fireEvent.click(screen.getByText("会话 B"));
+  assert.deepEqual(calls, [["multi", []], ["select", idKey("b")]]);
+});
+
+test("过期响应被丢弃:回显 query 与当前输入对不上就不渲染", async () => {
+  engineCalls.length = 0;
+  engineResponse = {
+    query: "上一次的输入",
+    sessions: [
+      { tool: "claude", ref: "fsr_b", title: "会话 B", snippet: "不该出现" },
+    ],
+    content_index: { ready: true },
+  };
+  render(<AppOverlayController {...baseProps({ search: contentSearchProps() })} />);
+  await settleSearch();
+
+  assert.equal(screen.queryByText("app:search.fullText"), null);
+  assert.equal(screen.queryByText("不该出现"), null);
+});
+
+test("内容索引未就绪时给出构建中提示,而不是当成无结果", async () => {
+  engineCalls.length = 0;
+  engineResponse = {
+    query: "检索",
+    sessions: [],
+    content_index: { ready: false },
+  };
+  render(
+    <AppOverlayController
+      {...baseProps({ search: contentSearchProps({ libraryGroups: [] }) })}
+    />,
+  );
+  await settleSearch();
+
+  assert.ok(screen.getByText("app:search.indexing"));
+  assert.equal(screen.queryByText("app:search.empty"), null);
 });
 
 test("重命名初始值优先取元数据里的自定名,其次才是原标题", () => {

@@ -6,6 +6,13 @@ import {
   ToolIcon,
 } from "../shared/ui/icons.jsx";
 
+const sectionLabelStyle = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: "var(--tx4)",
+  padding: "6px 10px 4px",
+};
+
 export function SearchPalette({
   placeholder,
   query,
@@ -13,6 +20,7 @@ export function SearchPalette({
   results,
   recentLabel,
   emptyLabel,
+  notice,
   onClose,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -97,17 +105,20 @@ export function SearchPalette({
           </button>
         </div>
         <div className="fscroll" style={{ overflowY: "auto", padding: 8, minHeight: 0 }}>
-          {recentLabel && (
+          {recentLabel && <div style={sectionLabelStyle}>{recentLabel}</div>}
+          {notice && (
             <div style={{
-              fontSize: 11,
-              fontWeight: 600,
+              margin: "4px 2px 6px",
+              padding: "8px 10px",
+              borderRadius: 8,
+              background: "var(--acc-soft2)",
               color: "var(--tx4)",
-              padding: "6px 10px 4px",
+              fontSize: 12,
             }}>
-              {recentLabel}
+              {notice}
             </div>
           )}
-          {results.length === 0 ? (
+          {results.length === 0 && !notice ? (
             <div style={{
               padding: "26px 12px",
               textAlign: "center",
@@ -117,8 +128,10 @@ export function SearchPalette({
               {emptyLabel}
             </div>
           ) : results.map((result, index) => (
+            <div key={result.id}>
+              {result.section && result.section !== results[index - 1]?.section
+                && <div style={sectionLabelStyle}>{result.section}</div>}
             <div
-              key={result.id}
               onMouseEnter={() => setSelectedIndex(index)}
               onClick={() => {
                 result.onClick?.();
@@ -149,6 +162,19 @@ export function SearchPalette({
               }}>
                 {result.title}
               </span>
+              {result.badge && (
+                <span style={{
+                  flex: "none",
+                  fontSize: 10,
+                  lineHeight: "16px",
+                  padding: "0 6px",
+                  borderRadius: 4,
+                  color: "var(--tx4)",
+                  border: "1px solid var(--line5)",
+                }}>
+                  {result.badge}
+                </span>
+              )}
               {result.meta && (
                 <span className="mono" style={{
                   fontSize: 11,
@@ -162,6 +188,7 @@ export function SearchPalette({
                   {result.meta}
                 </span>
               )}
+            </div>
             </div>
           ))}
         </div>

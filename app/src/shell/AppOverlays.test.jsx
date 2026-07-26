@@ -11,6 +11,7 @@ import { AppOverlays } from "./AppOverlays.jsx";
 function closedOverlays() {
   return {
     t: key => key,
+    floatChat: { mounted: false },
     organization: { open: false, sessions: [] },
     peek: { open: false },
     migration: { open: false },
