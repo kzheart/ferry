@@ -188,23 +188,31 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   );
 }
 
-function Sources({ scan, env, scanning, onRescan }) {
+function Sources({ scan, env, scanning, scanProgress, onRescan }) {
   const { t } = useTranslation();
   const tools = scan?.tools || {};
   const connected = TOOLS.filter(t2 => tools[t2]?.ok).length;
   const total = TOOLS.reduce((a, t2) => a + (tools[t2]?.count || 0), 0);
+  const indexing = scanning && scanProgress?.total > 0;
   return (
     <div style={{  }}>
       <div style={{ display: "flex", alignItems: "flex-end", margin: "0 0 9px 2px" }}>
         <div style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "var(--tx5)",
           letterSpacing: ".05em" }}>{t("settings:sources.connectedTools")}</div>
-        <div style={{ fontSize: 11, color: "var(--tx4)" }}>
-          {t("settings:sources.connectedMeta", { connected, total })}</div>
+        <div style={{ fontSize: 11, color: indexing ? "var(--accent)" : "var(--tx4)" }}>
+          {indexing
+            ? scanProgress.phase === "finalizing"
+              ? t("settings:sources.finalizing")
+              : t("settings:sources.indexing", {
+                done: scanProgress.processed, total: scanProgress.total,
+              })
+            : t("settings:sources.connectedMeta", { connected, total })}</div>
       </div>
       <Card>
         {TOOLS.map((t2, i) => {
           const info = tools[t2] || {};
           const ok = info.ok;
+          const progress = indexing ? scanProgress.tools?.[t2] : null;
           return (
             <div key={t2} style={{ display: "flex", alignItems: "center", gap: 13,
               padding: "14px 16px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
@@ -218,12 +226,28 @@ function Sources({ scan, env, scanning, onRescan }) {
                   {info.path || "—"}</div>
               </div>
               <div style={{ textAlign: "right", flex: "none", marginRight: 4 }}>
-                <div style={{ fontSize: 12, color: "var(--tx3b)" }}>
-                  {ok ? t("settings:sources.sessionsCount", { n: info.count }) : (info.error || t("settings:sources.unavailable"))}</div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11,
-                  fontWeight: 600, color: ok ? "var(--ok-deep)" : "var(--err-deep)", marginTop: 2 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%",
-                    background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? t("settings:sources.connected") : t("settings:sources.scanFailed")}</div>
+                {progress?.total > 0 ? (
+                  <>
+                    <div style={{ fontSize: 12, color: "var(--accent)",
+                      fontVariantNumeric: "tabular-nums" }}>
+                      {progress.processed}/{progress.total}</div>
+                    <div style={{ width: 96, height: 3, borderRadius: 2, marginTop: 6,
+                      marginLeft: "auto", background: "var(--line5)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", background: "var(--accent)",
+                        width: `${Math.min(100, progress.processed / progress.total * 100)}%`,
+                        transition: "width .3s ease" }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: "var(--tx3b)" }}>
+                      {ok ? t("settings:sources.sessionsCount", { n: info.count }) : (info.error || t("settings:sources.unavailable"))}</div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11,
+                      fontWeight: 600, color: ok ? "var(--ok-deep)" : "var(--err-deep)", marginTop: 2 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%",
+                        background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? t("settings:sources.connected") : t("settings:sources.scanFailed")}</div>
+                  </>
+                )}
               </div>
               <button className="fbtn" style={{ height: 30, fontSize: 12, flex: "none" }}
                 onClick={onRescan} disabled={scanning}>
@@ -324,8 +348,8 @@ function Updates({ s, set, updater }) {
   );
 }
 
-export default function SettingsPage({ settings, setSettings, scan, env, scanning, onRescan,
-  updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
+export default function SettingsPage({ settings, setSettings, scan, env, scanning, scanProgress,
+  onRescan, updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
   const { t } = useTranslation();
   const [section, setSection] = useState(initialSection || "prefs");
   const title = Object.fromEntries(SECTIONS)[section];
@@ -389,7 +413,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                 {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
                   onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
                 {section === "sources" && <Sources scan={scan} env={env}
-                  scanning={scanning} onRescan={onRescan} />}
+                  scanning={scanning} scanProgress={scanProgress} onRescan={onRescan} />}
                 {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}
               </div>
             </div>

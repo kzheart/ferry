@@ -3,9 +3,7 @@
     "expand": "Expand sidebar ⌘B",
     "collapse": "Collapse sidebar ⌘B",
     "scanning": "Scanning…",
-    "rescan": "Rescan",
-    "scanProgress": "Indexing {{done}}/{{total}}",
-    "scanFinalizing": "Building index…"
+    "rescan": "Rescan"
   },
   "rail": {
     "overview": "Overview",
