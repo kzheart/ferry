@@ -148,6 +148,26 @@ class RuntimeSessionStore:
                 (session_id, identifier, payload),
             )
 
+    def truncate(
+        self, session_id: str, from_ordinal: int, from_seq: int,
+    ) -> dict:
+        """删除某会话 ordinal >= from_ordinal 的消息与 seq >= from_seq 的事件。
+
+        存储本身按键不可变(见 _insert_records),编辑重发要重用被截断的
+        ordinal/seq,必须先物理删除旧记录。
+        """
+        with self._lock, self._connect() as connection:
+            messages = connection.execute(
+                "DELETE FROM runtime_messages"
+                " WHERE session_id = ? AND ordinal >= ?",
+                (session_id, from_ordinal),
+            ).rowcount
+            events = connection.execute(
+                "DELETE FROM runtime_events WHERE session_id = ? AND seq >= ?",
+                (session_id, from_seq),
+            ).rowcount
+            return {"messages_deleted": messages, "events_deleted": events}
+
     def delete(self, session_id: str) -> bool:
         with self._lock, self._connect() as connection:
             return connection.execute(

@@ -329,6 +329,55 @@ export class RuntimeSession {
     return runId;
   }
 
+  /**
+   * 编辑历史用户消息并从那一点重发:丢弃该消息(含)之后的全部事件与
+   * agent 消息,持久层同步删除后走正常 prompt。seq 指向该用户消息对应的
+   * run.started / user.message 事件。
+   */
+  async editResend(seq: number, text: string, displayText = text) {
+    if (this.isRunning) {
+      throw new ProtocolError(
+        "run_in_progress",
+        "session already has an active run",
+      );
+    }
+    const index = this.events.findIndex(
+      (event) =>
+        event.seq === seq &&
+        (event.type === "run.started" || event.type === "user.message"),
+    );
+    if (index < 0) {
+      throw new ProtocolError(
+        "invalid_params",
+        "seq does not reference a user message",
+      );
+    }
+    // 事件里第 N 个用户消息事件,对应 agent.state.messages 里第 N 条 user 消息;
+    // 从这条消息起截断(排队后从未进入 messages 的 steer 极端情形下取不到索引,
+    // 则消息数组无需截断)。
+    const priorUserEvents = this.events
+      .slice(0, index)
+      .filter(
+        (event) =>
+          event.type === "run.started" || event.type === "user.message",
+      ).length;
+    const userIndexes = this.agent.state.messages.flatMap((message, i) =>
+      message.role === "user" ? [i] : [],
+    );
+    const cut =
+      userIndexes[priorUserEvents] ?? this.agent.state.messages.length;
+    this.events.length = index;
+    this.nextSeq = seq;
+    this.agent.state.messages = this.agent.state.messages.slice(0, cut);
+    this.persistedEventSeq = Math.min(
+      this.persistedEventSeq,
+      this.events.at(-1)?.seq ?? 0,
+    );
+    this.persistedMessageCount = Math.min(this.persistedMessageCount, cut);
+    await this.runtime.store.truncate(this.id, cut, seq);
+    return this.prompt(text, [], displayText);
+  }
+
   abort() {
     if (!this.isRunning) {
       throw new ProtocolError("no_active_run", "session has no active run");

@@ -286,6 +286,56 @@ describe("AgentRuntime", () => {
     expect(runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
   });
 
+  it("edit_resend truncates memory and store history, then reruns", async () => {
+    const store = new RecordingSessionStore();
+    const runtime = await createRuntime({ store });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "first");
+    await runtime.waitForIdle("s1");
+    await runtime.prompt("s1", "second");
+    await runtime.waitForIdle("s1");
+
+    const target = runtime
+      .replay("s1", 0)
+      .filter((event) => event.type === "run.started")[1]!;
+    await runtime.editResend("s1", target.seq, "second-edited");
+    await runtime.waitForIdle("s1");
+
+    const replayed = runtime.replay("s1", 0);
+    expect(
+      replayed
+        .filter((event) => event.type === "run.started")
+        .map((event) => event.payload.prompt),
+    ).toEqual(["first", "second-edited"]);
+    // 截断后重用 seq:时间线连续无空洞
+    expect(replayed.map((event) => event.seq)).toEqual(
+      replayed.map((_, index) => index + 1),
+    );
+    // 持久层与内存一致,消息数组也从截断点重写
+    const [record] = await store.loadAll();
+    expect(record!.events.map((event) => event.seq)).toEqual(
+      replayed.map((event) => event.seq),
+    );
+    expect(
+      record!.state.messages
+        .filter((message) => message.role === "user")
+        .map((message) => JSON.stringify(message.content)),
+    ).toEqual([
+      JSON.stringify([{ type: "text", text: "first" }]),
+      JSON.stringify([{ type: "text", text: "second-edited" }]),
+    ]);
+  });
+
+  it("edit_resend rejects an unknown seq and an active run", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "hello");
+    await runtime.waitForIdle("s1");
+    await expect(runtime.editResend("s1", 999, "changed")).rejects.toMatchObject(
+      { code: "invalid_params" },
+    );
+  });
+
   it("reports the original bounded provider error", async () => {
     const runtime = await createRuntime();
     await runtime.createSession("s1");

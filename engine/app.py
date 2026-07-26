@@ -188,6 +188,13 @@ class EngineService:
     def delete_runtime_session(self, session_id: str) -> dict:
         return runtime_sessions.delete(session_id, self._ports)
 
+    def truncate_runtime_session(
+        self, session_id: str, from_ordinal: int, from_seq: int,
+    ) -> dict:
+        return runtime_sessions.truncate(
+            session_id, from_ordinal, from_seq, self._ports,
+        )
+
     def agent_search_sessions(self, query: str = "", **params) -> dict:
         return session_search.search_sessions(
             query, index=self._index,

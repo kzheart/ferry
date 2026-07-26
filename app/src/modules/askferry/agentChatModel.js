@@ -73,13 +73,15 @@ export function applyEvent(log, ev) {
       log.provider = p.provider_id;
       log.model = p.model_id;
       break;
+    // seq 记在用户消息上:编辑重发时靠它告诉 runtime 从哪一条截断
     case "run.started":
-      items.push({ kind: "user", text: p.prompt ?? "", imageCount: p.image_count || 0 });
+      items.push({ kind: "user", text: p.prompt ?? "",
+        imageCount: p.image_count || 0, seq: ev.seq });
       log.status = "running";
       log.runId = ev.run_id;
       break;
     case "user.message":
-      items.push({ kind: "user", text: p.text ?? "", sub: p.kind });
+      items.push({ kind: "user", text: p.text ?? "", sub: p.kind, seq: ev.seq });
       break;
     case "content.delta": {
       const last = items[items.length - 1];

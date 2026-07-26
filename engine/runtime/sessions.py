@@ -28,6 +28,20 @@ def commit(update: dict, ports: EngineContext) -> dict:
     return {"session_id": metadata["session_id"], "committed": True}
 
 
+def truncate(
+    session_id: str, from_ordinal: int, from_seq: int, ports: EngineContext,
+) -> dict:
+    if not isinstance(session_id, str) or not session_id:
+        raise AgentRequestError("runtime truncate 缺少 session_id")
+    for name, value in (("from_ordinal", from_ordinal), ("from_seq", from_seq)):
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise AgentRequestError(f"runtime truncate 的 {name} 必须是非负整数")
+    result = _database(ports).runtime_sessions.truncate(
+        session_id, from_ordinal, from_seq,
+    )
+    return {"session_id": session_id, **result}
+
+
 def delete(session_id: str, ports: EngineContext) -> dict:
     return {"session_id": session_id,
             "deleted": _database(ports).runtime_sessions.delete(session_id)}

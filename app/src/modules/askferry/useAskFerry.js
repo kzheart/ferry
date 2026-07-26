@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   onRuntimeEvent,
   operationApply,
-  pickSkillDirectory,
   runtime,
   shellApply,
 } from "../../platform/desktop/client.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
+import { useAskFerrySkills } from "./useAskFerrySkills.js";
 
 const MODE_KEY = "ferry-askferry-mode";
 const RUN_TYPES = new Set(["run.started", "run.completed", "run.failed",
@@ -34,11 +34,9 @@ export function useAskFerry() {
   const [auth, setAuth] = useState(null);
   const [models, setModels] = useState([]);
   const [roles, setRoles] = useState([]);
-  // 已导入技能与外部候选分成两份状态:候选每次进技能页才扫,不跟着 roles 一起刷
-  const [skills, setSkills] = useState(
-    { skills: [], global: [], scan_sources: [] });
-  const [skillCandidates, setSkillCandidates] = useState(
-    { candidates: [], sources: [] });
+  const { skills, skillCandidates, reloadSkills, loadSkillCandidates,
+    importSkill, importSkillFolder, deleteSkill, setGlobalSkills,
+    addSkillSource, removeSkillSource, readSkill } = useAskFerrySkills();
   const [selectedRoleId, setSelectedRoleId] = useState("default");
   const [lastError, setLastError] = useState(null);
   const [mutationVersion, setMutationVersion] = useState(0);
@@ -312,6 +310,37 @@ export function useAskFerry() {
     return sid;
   }, [selectedRoleId]);
 
+  // ----- 编辑重发:runtime 截断该消息(含)之后的历史并重新 prompt -----
+  // 时间线整体重建:与 openSession 同一套回放缓冲,重放完成前到达的实时事件
+  // 先排队,避免新 run 的事件抢在历史事件前面被 seq 去重挡掉
+  const editResend = useCallback(async (sessionId, seq, text) => {
+    flushDeltas();
+    loadingRef.current.set(sessionId, []);
+    try {
+      await runtime("edit_resend", { session_id: sessionId, seq, text,
+        auto_apply: modeRef.current === "auto" });
+      const events = await runtime("events.replay", {
+        session_id: sessionId, after_seq: 0 });
+      let log = emptyLog();
+      for (const ev of events || []) log = applyEvent(log, ev);
+      for (const ev of loadingRef.current.get(sessionId) || []) log = applyEvent(log, ev);
+      loadingRef.current.delete(sessionId);
+      setLogs(prev => ({ ...prev, [sessionId]: log }));
+      setSessions(list => list.map(s => s.session_id === sessionId
+        ? { ...s, status: "running", updated_at: new Date().toISOString() } : s));
+    } catch (error) {
+      // 失败时把排队事件补回原时间线,不能让它们随缓冲一起丢掉
+      const queued = loadingRef.current.get(sessionId) || [];
+      loadingRef.current.delete(sessionId);
+      if (queued.length) {
+        setLogs(prev => prev[sessionId]
+          ? { ...prev, [sessionId]: queued.reduce(applyEvent, prev[sessionId]) }
+          : prev);
+      }
+      setLastError(error);
+    }
+  }, [flushDeltas]);
+
   const reloadRoles = useCallback(async () => {
     const list = await runtime("roles.list");
     setRoles(list || []);
@@ -348,58 +377,6 @@ export function useAskFerry() {
     await reloadRoles();
     return result;
   }, [reloadRoles]);
-
-  const reloadSkills = useCallback(async () => {
-    const listing = await runtime("skills.list").catch(() => null);
-    const next = listing || { skills: [], global: [], scan_sources: [] };
-    setSkills(next);
-    return next;
-  }, []);
-  const loadSkillCandidates = useCallback(async () => {
-    const found = await runtime("skills.candidates").catch(() => null);
-    const next = found || { candidates: [], sources: [] };
-    setSkillCandidates(next);
-    return next;
-  }, []);
-  const importSkill = useCallback(async params => {
-    const result = await runtime("skill.import", params);
-    await reloadSkills();
-    await loadSkillCandidates();
-    return result;
-  }, [reloadSkills, loadSkillCandidates]);
-  const deleteSkill = useCallback(async skillId => {
-    const result = await runtime("skill.delete", { skill_id: skillId });
-    await reloadSkills();
-    await loadSkillCandidates();
-    return result;
-  }, [reloadSkills, loadSkillCandidates]);
-  const setGlobalSkills = useCallback(async skillIds => {
-    const result = await runtime("skills.global.set", { skill_ids: skillIds });
-    await reloadSkills();
-    return result;
-  }, [reloadSkills]);
-  const addSkillSource = useCallback(async () => {
-    const path = await pickSkillDirectory();
-    if (!path) return null;
-    const result = await runtime("skill.source.add", { path });
-    await reloadSkills();
-    await loadSkillCandidates();
-    return result;
-  }, [reloadSkills, loadSkillCandidates]);
-  const removeSkillSource = useCallback(async sourceId => {
-    const result = await runtime("skill.source.remove", { source_id: sourceId });
-    await reloadSkills();
-    await loadSkillCandidates();
-    return result;
-  }, [reloadSkills, loadSkillCandidates]);
-  /** 从文件夹直接导入:路径由系统对话框产生,webview 不能凭空指定。 */
-  const importSkillFolder = useCallback(async () => {
-    const path = await pickSkillDirectory();
-    if (!path) return null;
-    return importSkill({ path });
-  }, [importSkill]);
-  const readSkill = useCallback(
-    skillId => runtime("skill.read", { skill_id: skillId }), []);
 
   const steer = useCallback((text, displayText = text) =>
     runtime("steer", { session_id: activeRef.current, text,
@@ -466,7 +443,8 @@ export function useAskFerry() {
     roles, selectedRoleId, setSelectedRoleId,
     skills, skillCandidates,
     lastError, clearError, reportError: setLastError,
-    refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
+    refresh, openSession, newChat, send, editResend, steer, abort, setMode,
+    rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
     reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
@@ -477,7 +455,8 @@ export function useAskFerry() {
     roles, selectedRoleId, setSelectedRoleId,
     skills, skillCandidates,
     lastError, clearError,
-    refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
+    refresh, openSession, newChat, send, editResend, steer, abort, setMode,
+    rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
     reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
