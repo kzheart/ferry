@@ -116,22 +116,6 @@ export const Spinner = ({ size = 13, accent = "var(--accent)", track = "var(--sp
   `<circle cx="8" cy="8" r="6" fill="none" style="stroke:${track}" stroke-width="2"/><path d="M8 2 a6 6 0 0 1 6 6" fill="none" style="stroke:${accent}" stroke-width="2" stroke-linecap="round"/>`,
   { animation: "fspin .8s linear infinite", flex: "none" });
 
-// 环形进度:fraction ∈ [0,1];总量未知时调用方应回退到 Spinner
-export const ProgressRing = ({ size = 18, fraction = 0,
-  accent = "var(--accent)", track = "var(--spin-track)" }) => {
-  const radius = 6.5;
-  const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(1, fraction));
-  return svg("0 0 16 16", size, size,
-    `<circle cx="8" cy="8" r="${radius}" fill="none" style="stroke:${track}" stroke-width="2"/>`
-    + `<circle cx="8" cy="8" r="${radius}" fill="none" stroke-width="2"`
-    + ` stroke-linecap="round" stroke-dasharray="${circumference.toFixed(2)}"`
-    + ` stroke-dashoffset="${(circumference * (1 - clamped)).toFixed(2)}"`
-    + ` transform="rotate(-90 8 8)"`
-    + ` style="stroke:${accent};transition:stroke-dashoffset .3s ease"/>`,
-    { flex: "none" });
-};
-
 export const RescanIcon = ({ size = 13, color = "var(--tx2)" } = {}) => svg("0 0 16 16", size, size,
   '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   { color });

@@ -165,7 +165,9 @@
     "connected": "已连接",
     "rescan": "重新扫描",
     "scanning": "扫描中…",
-    "footnote": "Ferry 在本机自动发现受支持工具的会话目录。源会话保持只读,不会被修改。"
+    "footnote": "Ferry 在本机自动发现受支持工具的会话目录。源会话保持只读,不会被修改。",
+    "indexing": "索引中 {{done}}/{{total}}",
+    "finalizing": "正在写入索引…"
   },
   "updates": {
     "groupVersion": "版本",

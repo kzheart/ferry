@@ -1,5 +1,5 @@
 import { ACCENT } from "../shared/ui/toolDisplay.js";
-import { ProgressRing, RailGlyph, RescanIcon, Spinner } from "../shared/ui/icons.jsx";
+import { RailGlyph, RescanIcon, Spinner } from "../shared/ui/icons.jsx";
 
 export function AppRail({
   railOnly,
@@ -9,7 +9,6 @@ export function AppRail({
   draggingKey,
   dropTarget,
   scanning,
-  scanProgress,
   settingsOpen,
   scanningLabel,
   rescanLabel,
@@ -57,21 +56,16 @@ export function AppRail({
         );
       })}
       <div style={{ flex: 1 }} />
-      {/* 扫描中不禁用按钮:disabled 会吞掉 hover,进度 tooltip 就看不到了 */}
       <button className="hov-rail"
         onMouseEnter={event => onEnter(scanning ? scanningLabel : rescanLabel, event)}
         onMouseLeave={onLeave}
-        onClick={scanning ? undefined : onRescan}
+        disabled={scanning}
+        onClick={onRescan}
         style={{ width: 40, height: 40, border: "none", borderRadius: 8,
           background: "transparent", display: "flex", alignItems: "center",
           justifyContent: "center", cursor: "default", transition: "background .12s ease",
           color: "var(--tx4b)" }}>
-        {!scanning
-          ? <RescanIcon size={18} color="var(--tx4b)" />
-          : scanProgress?.phase !== "finalizing" && scanProgress?.total > 0
-            ? <ProgressRing size={18}
-              fraction={scanProgress.processed / scanProgress.total} />
-            : <Spinner size={18} />}
+        {scanning ? <Spinner size={18} /> : <RescanIcon size={18} color="var(--tx4b)" />}
       </button>
       <button className="hov-rail"
         onMouseEnter={event => onEnter(settingsLabel, event)} onMouseLeave={onLeave}

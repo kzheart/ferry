@@ -188,7 +188,7 @@ export function AppOverlays({
             borderRadius: 6,
             boxShadow: "var(--shadow-menu)",
             pointerEvents: "none",
-            whiteSpace: "pre",
+            whiteSpace: "nowrap",
             animation: "ffade .1s ease",
           }}
         >
@@ -204,6 +204,7 @@ export function AppOverlays({
           scan={settings.scan}
           env={settings.env}
           scanning={settings.scanning}
+          scanProgress={settings.scanProgress}
           onRescan={settings.onRescan}
           guideSeen={settings.guideSeen}
           onOpenGuide={settings.onOpenGuide}

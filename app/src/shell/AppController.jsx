@@ -27,7 +27,6 @@ import { AppOverlayController } from "./AppOverlayController.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
-import { scanProgressLabel } from "./scanProgressLabel.js";
 import { useRailNavigation } from "./useRailNavigation.js";
 import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
 import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
@@ -374,9 +373,8 @@ export default function App() {
             draggingKey={rail.draggingKey}
             dropTarget={rail.dropTarget}
             scanning={scanning}
-            scanProgress={scanProgress}
             settingsOpen={settingsOpen}
-            scanningLabel={scanProgressLabel(t, scanProgress)}
+            scanningLabel={t("app:titlebar.scanning")}
             rescanLabel={t("app:titlebar.rescan")}
             settingsLabel={t("app:rail.settings")}
             onSelect={(key) => {
@@ -521,6 +519,7 @@ export default function App() {
           navigationTarget,
           scan,
           scanning,
+          scanProgress,
           doScan,
           diff,
           setDiff,

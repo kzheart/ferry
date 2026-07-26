@@ -165,7 +165,9 @@
     "connected": "Connected",
     "rescan": "Rescan",
     "scanning": "Scanning…",
-    "footnote": "Ferry automatically discovers session directories of supported tools on this machine. Source sessions stay read-only and are not modified."
+    "footnote": "Ferry automatically discovers session directories of supported tools on this machine. Source sessions stay read-only and are not modified.",
+    "indexing": "Indexing {{done}}/{{total}}",
+    "finalizing": "Building index…"
   },
   "updates": {
     "groupVersion": "Version",
