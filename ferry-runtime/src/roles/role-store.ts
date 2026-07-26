@@ -11,6 +11,7 @@ import { WriteQueue } from "../storage/write-queue.js";
 
 export const ROLE_STORE_VERSION = 1 as const;
 export const DEFAULT_ROLE_ID = "default";
+export const SESSION_OPTIMIZER_ROLE_ID = "session-optimizer";
 
 export type ApplyPolicy = "manual" | "auto";
 
@@ -62,8 +63,27 @@ export const DEFAULT_ROLE: Role = Object.freeze({
   builtin: true,
 });
 
+export const SESSION_OPTIMIZER_ROLE: Role = Object.freeze({
+  id: SESSION_OPTIMIZER_ROLE_ID,
+  name: "会话优化器",
+  description: "改写会话中的用户提问,使其更清晰、更完整",
+  icon: "wand-sparkles",
+  color: "violet",
+  persona:
+    "你是会话优化器,负责把用户在历史会话里的提问改写得更清晰、更完整、更易被模型执行。" +
+    "改写必须忠实于原始意图,不得虚构原文没有的背景、需求或约束。" +
+    "只改写用户消息,不修改 assistant 回复;若改写后的提问可能与现存 assistant 回复不一致,必须明确提醒用户。",
+  tools: ["session_search", "session_read", "session_edit"],
+  skills: [],
+  apply_policy: "manual",
+  builtin: true,
+});
+
 /** 出厂内置角色:可以被改写,但改写只是覆盖层,原始定义永远留在这里供恢复默认。 */
-const BUILTIN_ROLES: readonly Role[] = Object.freeze([DEFAULT_ROLE]);
+const BUILTIN_ROLES: readonly Role[] = Object.freeze([
+  DEFAULT_ROLE,
+  SESSION_OPTIMIZER_ROLE,
+]);
 
 const builtinRole = (id: string) =>
   BUILTIN_ROLES.find((role) => role.id === id);

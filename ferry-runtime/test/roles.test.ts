@@ -29,6 +29,7 @@ describe("FileRoleStore", () => {
 
     expect(await store.list()).toMatchObject([
       { id: "default", builtin: true, skills: [] },
+      { id: "session-optimizer", builtin: true, apply_policy: "manual" },
     ]);
     await store.create(input("reader"));
     await store.update("reader", {
@@ -51,6 +52,7 @@ describe("FileRoleStore", () => {
     });
     expect(await restored.list()).toMatchObject([
       { id: "default", builtin: true },
+      { id: "session-optimizer", builtin: true },
       { id: "default-copy", builtin: false, name: "立即更新" },
     ]);
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
@@ -68,6 +70,7 @@ describe("FileRoleStore", () => {
     await store.update("default", { ...input("default"), name: "我的 Ferry" });
     expect(await store.list()).toMatchObject([
       { id: "default", builtin: true, name: "我的 Ferry", thinking: "high" },
+      { id: "session-optimizer", builtin: true },
     ]);
     // 改写单独存一列,老版本读到只会忽略它,而不是把整份配置判为非法
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
@@ -76,10 +79,14 @@ describe("FileRoleStore", () => {
     });
 
     const restored = new FileRoleStore(path);
-    expect(await restored.list()).toMatchObject([{ name: "我的 Ferry" }]);
+    expect(await restored.list()).toMatchObject([
+      { name: "我的 Ferry" },
+      { id: "session-optimizer" },
+    ]);
     expect(await restored.reset("default")).toMatchObject({ name: "Ferry" });
     expect(await restored.list()).toMatchObject([
       { id: "default", builtin: true, name: "Ferry", persona: "" },
+      { id: "session-optimizer", builtin: true },
     ]);
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
       builtin_overrides: [],
@@ -101,6 +108,36 @@ describe("FileRoleStore", () => {
         tools: ["shell"] as never,
       }),
     ).rejects.toThrow("unknown tool");
+  });
+
+  it("内置会话优化器可覆盖/重置/复制但不可删除", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ferry-roles-"));
+    const store = new FileRoleStore(join(directory, "roles.json"));
+
+    expect(await store.get("session-optimizer")).toMatchObject({
+      builtin: true,
+      icon: "wand-sparkles",
+      apply_policy: "manual",
+      tools: ["session_search", "session_read", "session_edit"],
+    });
+    await expect(store.delete("session-optimizer")).rejects.toThrow(
+      "cannot be deleted",
+    );
+
+    await store.update("session-optimizer", {
+      ...input("session-optimizer"),
+      name: "我的优化器",
+    });
+    expect(await store.get("session-optimizer")).toMatchObject({
+      name: "我的优化器",
+      builtin: true,
+    });
+    expect(await store.reset("session-optimizer")).toMatchObject({
+      name: "会话优化器",
+    });
+
+    const copy = await store.copy("session-optimizer", { id: "opt-copy" });
+    expect(copy).toMatchObject({ id: "opt-copy", builtin: false });
   });
 
   it("keeps icon and color as opaque display tokens", async () => {
