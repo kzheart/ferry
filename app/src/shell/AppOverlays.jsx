@@ -1,20 +1,20 @@
-import { repoOf } from "../modules/browser/sessionModel.js";
 import {
   BatchDeleteConfirm,
   LibraryFilter,
   SessionDeleteConfirm,
-} from "../modules/browser/BrowserOverlays.jsx";
-import { SessionPeekSheet } from "../modules/browser/SessionPeekSheet.jsx";
-import { ApplyConfirm, DiffSheet } from "../modules/editing/EditOverlays.jsx";
+  SessionPeekSheet,
+  repoOf,
+} from "../modules/browser/public.js";
+import { ApplyConfirm, DiffSheet } from "../modules/editing/public.js";
 import {
   HistoryDeleteConfirm,
   HistoryFilter,
-} from "../modules/migration/HistoryOverlays.jsx";
-import MigrateSheet from "../modules/migration/MigrateSheet.jsx";
-import FloatingAgentPanel from "../modules/askferry/FloatingAgentPanel.jsx";
-import OrganizationPanel from "../modules/organizing/OrganizationPanel.jsx";
-import { Guide } from "../modules/onboarding/Guide.jsx";
-import SettingsPage from "../modules/settings/Settings.jsx";
+  MigrateSheet,
+} from "../modules/migration/public.js";
+import { FloatingAgentPanel } from "../modules/askferry/public.js";
+import { OrganizationPanel } from "../modules/organizing/public.js";
+import { Guide } from "../modules/onboarding/public.js";
+import { SettingsPage } from "../modules/settings/public.js";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
 import { PromptBox } from "../shared/ui/PromptBox.jsx";
 import { Toast } from "../shared/ui/Toast.jsx";
