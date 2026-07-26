@@ -16,6 +16,7 @@ vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
   },
 }));
 
+import { AppChromeProvider } from "../shared/capabilities/appChrome.jsx";
 import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
@@ -42,6 +43,7 @@ const BROWSER_STATE_KEYS = [
 const OPERATIONS_STATE_KEYS = [
   "organization", "migration", "editing", "floatChat", "agentRename",
 ];
+const APP_CHROME_KEYS = ["toast", "railTip", "settings", "guide"];
 
 const pick = (props, keys) =>
   Object.fromEntries(keys.filter(key => key in props).map(key => [key, props[key]]));
@@ -54,7 +56,9 @@ function render(ui) {
           <OperationsStateProvider
             value={pick(node.props, OPERATIONS_STATE_KEYS)}
           >
-            {node}
+            <AppChromeProvider value={pick(node.props, APP_CHROME_KEYS)}>
+              {node}
+            </AppChromeProvider>
           </OperationsStateProvider>
         </BrowserStateProvider>
       </SessionEditingProvider>
