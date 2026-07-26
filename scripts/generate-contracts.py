@@ -28,6 +28,7 @@ ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
+    ROOT / "ferry-runtime/src/server/generated/engine-methods.ts": "runtime",
 }
 RUNTIME_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/runtime-methods.ts": "frontend",
@@ -173,6 +174,10 @@ def load_engine_methods() -> list[dict[str, object]]:
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
     required = {"name", "kind", "exposure", "timeout", "retry", "dispatch"}
+    # consumers 是纯元数据:标注哪些下游把这个方法编进自己的白名单/联合类型，
+    # 不参与 wire 协议，只驱动代码生成。
+    optional = {"consumers"}
+    allowed_consumers = {"runtime-gateway", "organizing-workflow"}
     allowed_kinds = {"read", "index-refresh", "mutation"}
     allowed_exposures = {"public", "trusted-ui", "internal"}
     allowed_timeouts = {"normal", "lookup"}
@@ -180,10 +185,24 @@ def load_engine_methods() -> list[dict[str, object]]:
     allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
-        if not isinstance(method, dict) or set(method) != required:
+        if (
+            not isinstance(method, dict)
+            or not required <= set(method)
+            or set(method) - required - optional
+        ):
             raise ValueError(
                 "Engine 方法契约字段必须精确为 "
-                "name/kind/exposure/timeout/retry/dispatch"
+                "name/kind/exposure/timeout/retry/dispatch(+可选 consumers)"
+            )
+        consumers = method.get("consumers")
+        if consumers is not None and (
+            not isinstance(consumers, list)
+            or not consumers
+            or len(set(consumers)) != len(consumers)
+            or not set(consumers) <= allowed_consumers
+        ):
+            raise ValueError(
+                f"Engine method {method.get('name')} 的 consumers 无效"
             )
         name = method["name"]
         if not isinstance(name, str) or not name:
@@ -585,6 +604,16 @@ def runtime(agents: list[dict[str, object]]) -> str:
     ))
 
 
+def methods_for_consumer(
+    methods: list[dict[str, object]], consumer: str,
+) -> list[str]:
+    """按 consumers 元数据挑出某个消费方的方法集，保持 JSON 中的声明顺序。"""
+    return [
+        method["name"] for method in methods
+        if consumer in (method.get("consumers") or ())
+    ]
+
+
 def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
     public = [method["name"] for method in methods if method["exposure"] == "public"]
     trusted = [
@@ -609,6 +638,7 @@ def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
 
 
 def engine_methods_rust(methods: list[dict[str, object]]) -> str:
+    gateway = methods_for_consumer(methods, "runtime-gateway")
     timeout_variants = {
         "normal": "Normal",
         "lookup": "Lookup",
@@ -667,6 +697,29 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "        _ => None,",
         "    }",
         "}",
+        "",
+        "/// Ferry Runtime 允许经网关转发到 Engine 的方法白名单。",
+        "pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[",
+        *(f"    {json.dumps(name)}," for name in gateway),
+        "];",
+        "",
+        "pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {",
+        "    RUNTIME_GATEWAY_METHODS.contains(&method)",
+        "}",
+        "",
+    ))
+
+
+def engine_methods_runtime(methods: list[dict[str, object]]) -> str:
+    organizing = methods_for_consumer(methods, "organizing-workflow")
+    values = "[\n" + "\n".join(
+        f"  {json.dumps(name)}," for name in organizing
+    ) + "\n]"
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const ORGANIZATION_ENGINE_METHODS = {values} as const;",
+        "export type OrganizationEngineMethod =",
+        "  (typeof ORGANIZATION_ENGINE_METHODS)[number];",
         "",
     ))
 
@@ -1510,6 +1563,7 @@ def generated_contents(
             "frontend": engine_methods_frontend,
             "rust": engine_methods_rust,
             "python": engine_methods_python,
+            "runtime": engine_methods_runtime,
         }[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }

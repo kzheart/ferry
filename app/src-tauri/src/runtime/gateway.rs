@@ -205,17 +205,7 @@ pub(super) fn complete_engine_request(resource_dir: &Path, stdin: &JsonlWriter, 
 }
 
 pub(super) fn is_runtime_engine_method(method: &str) -> bool {
-    matches!(
-        method,
-        "session_backbone"
-            | "session_summaries_set"
-            | "organization_digest_context"
-            | "organization_proposals_list"
-            | "organization_propose"
-            | "runtime_sessions.load_all"
-            | "runtime_sessions.commit"
-            | "runtime_sessions.delete"
-    )
+    crate::contracts::engine_methods::is_runtime_gateway_method(method)
 }
 
 fn route_tool(

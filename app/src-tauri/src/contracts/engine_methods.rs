@@ -185,3 +185,19 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
         _ => None,
     }
 }
+
+/// Ferry Runtime 允许经网关转发到 Engine 的方法白名单。
+pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[
+    "session_backbone",
+    "session_summaries_set",
+    "organization_digest_context",
+    "organization_propose",
+    "organization_proposals_list",
+    "runtime_sessions.load_all",
+    "runtime_sessions.commit",
+    "runtime_sessions.delete",
+];
+
+pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {
+    RUNTIME_GATEWAY_METHODS.contains(&method)
+}
