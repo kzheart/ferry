@@ -8,6 +8,7 @@ import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import { AppChromeProvider } from "../shared/capabilities/appChrome.jsx";
 import {
+  addSessionAttachment,
   sessionIdentity,
   useBrowserData,
   useLibraryResourcePane,
@@ -15,7 +16,12 @@ import {
   useSessionMetadata,
   useSessionSelection,
 } from "../modules/browser/public.js";
-import { useAskFerry } from "../modules/askferry/public.js";
+import {
+  SESSION_OPTIMIZATION_PURPOSE,
+  SESSION_OPTIMIZER_ROLE_ID,
+  buildSessionOptimizationDraft,
+  useAskFerry,
+} from "../modules/askferry/public.js";
 import { useAppUpdater, useSettings } from "../modules/settings/public.js";
 import { useSessionEditing } from "../modules/editing/public.js";
 import { useHistoryResourcePane } from "../modules/migration/public.js";
@@ -63,6 +69,8 @@ export default function App() {
 
   const ferry = useAskFerry();
   const [agentAttachments, setAgentAttachments] = useState([]);
+  // 优化入口预填的首条草稿:AskFerry 挂载时一次性消费,消费后即清空
+  const [optimizationDraft, setOptimizationDraft] = useState(null);
   const [settingsSection, setSettingsSection] = useState("prefs");
   const [aq, setAq] = useState("");
 
@@ -211,6 +219,21 @@ export default function App() {
   useEffect(() => {
     if (!selId && sessions.length) select(sessionIdentity(sessions[0]));
   }, [sessions]);
+
+  // 从当前浏览的会话进入专用优化对话:新优化会话 + 默认优化器角色 +
+  // 原会话附件 + 可编辑首条草稿;不自动发送,角色仍可在发送前切换
+  const startSessionOptimization = ({ turn } = {}) => {
+    if (!cur) return;
+    ferry.newChat(SESSION_OPTIMIZATION_PURPOSE);
+    if ((ferry.roles || []).some((role) => role.id === SESSION_OPTIMIZER_ROLE_ID)) {
+      ferry.setSelectedRoleId(SESSION_OPTIMIZER_ROLE_ID);
+    }
+    setAgentAttachments(addSessionAttachment([], cur));
+    setOptimizationDraft(
+      buildSessionOptimizationDraft(turn ? { turn } : undefined),
+    );
+    setView("askferry");
+  };
 
   // 打开设置并定位到指定分区:桌面菜单 / 路由 / 浮动面板共用
   const openConfig = (section = "providers") => {
@@ -498,6 +521,9 @@ export default function App() {
           historySelection={histSel}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
+          onStartOptimization={startSessionOptimization}
+          optimizationDraft={optimizationDraft}
+          onOptimizationDraftConsumed={() => setOptimizationDraft(null)}
           onFirstDone={onboarding.completeFirstRun}
           scanningLabel={t("app:detail.scanningSessions")}
           emptyLibraryLabel={t("app:detail.noSessionToDisplay")}
