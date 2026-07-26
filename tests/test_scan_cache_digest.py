@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from engine.sessions.index import _path_identity
-from engine.sessions.scan_cache import ScanCache
+from engine.sessions.scan_cache import ScanCache, shared_cache
 
 
 @pytest.fixture()
@@ -91,3 +91,27 @@ def test_legacy_cache_file_without_digests_key_still_loads(tmp_path, session_fil
 
     reopened = ScanCache(path)
     assert reopened.get_digest(session_file, session_file.stat()) is not None
+
+
+def test_two_scans_flush_without_dropping_each_others_entries(tmp_path):
+    """预热扫描与 scan RPC 各自 flush 时,后写的那份不能把先写的顶掉。"""
+    path = tmp_path / "scan-cache.json"
+    first_file = tmp_path / "a.jsonl"
+    second_file = tmp_path / "b.jsonl"
+    first_file.write_text("a\n")
+    second_file.write_text("b\n")
+
+    first = ScanCache(path)
+    second = ScanCache(path)
+    first.put(first_file, first_file.stat(), {"id": "a"})
+    second.put(second_file, second_file.stat(), {"id": "b"})
+    first.flush()
+    second.flush()
+
+    reopened = ScanCache(path)
+    assert reopened.get(first_file, first_file.stat()) == {"id": "a"}
+    assert reopened.get(second_file, second_file.stat()) == {"id": "b"}
+
+
+def test_shared_cache_is_one_instance():
+    assert shared_cache() is shared_cache()
