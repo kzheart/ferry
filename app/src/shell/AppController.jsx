@@ -5,6 +5,7 @@ import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
+import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import {
   sessionIdentity,
   useBrowserData,
@@ -447,10 +448,64 @@ export default function App() {
     ],
   );
 
+  const operationsState = useMemo(
+    () => ({
+      organization: {
+        open: organizerOpen,
+        sessions,
+        setOpen: setOrganizerOpen,
+        reloadMetadata,
+        scan: doScan,
+      },
+      migration: {
+        state: mig,
+        current: cur,
+        env,
+        settings,
+        setState: setMig,
+        loadHistory,
+      },
+      editing: {
+        diff,
+        dirtyOps,
+        confirmApply,
+        setDiff,
+        setConfirmApply,
+        apply: applyEdit,
+      },
+      floatChat: {
+        // 会话库浮动 Agent 面板:仅在浏览具体会话且设置页未打开时挂载;
+        // open 只控制展开与否,悬浮球本身由 mounted 决定
+        mounted: view === "library" && Boolean(cur) && !settingsOpen,
+        open: floatChatOpen,
+        session: cur,
+        scanSessions: sessions,
+        onToggle: () => setFloatChatOpen((value) => !value),
+        onNavigate: peekEntity,
+        onOpenConfig: openConfig,
+        onOpenFull: () => {
+          setFloatChatOpen(false);
+          setView("askferry");
+        },
+      },
+      agentRename: {
+        session: agentRenameFor,
+        setSession: setAgentRenameFor,
+      },
+    }),
+    [
+      organizerOpen, sessions, reloadMetadata, doScan, mig, cur, env, settings,
+      loadHistory, diff, dirtyOps, confirmApply, applyEdit, view, settingsOpen,
+      floatChatOpen, peekEntity, openConfig, agentRenameFor, setDiff,
+      setConfirmApply,
+    ],
+  );
+
   return (
     <FerryRuntimeProvider value={ferry}>
     <SessionEditingProvider value={editingSurface}>
     <BrowserStateProvider value={browserState}>
+    <OperationsStateProvider value={operationsState}>
     <div
       data-ferry-win="1"
       style={{
@@ -589,7 +644,6 @@ export default function App() {
       <AppOverlayController
         t={t}
         {...buildOverlayProps({
-          view,
           setView,
           environment: env,
           settings,
@@ -601,35 +655,16 @@ export default function App() {
           onboarding,
           rail,
           railOnly,
-          sessions,
-          current: cur,
           scan,
           scanning,
           scanProgress,
           doScan,
-          dirtyOps,
-          diff,
-          setDiff,
-          confirmApply,
-          setConfirmApply,
-          applyEdit,
-          reloadMetadata,
-          organizerOpen,
-          setOrganizerOpen,
-          migration: mig,
-          setMigration: setMig,
-          loadHistory,
-          floatChatOpen,
-          setFloatChatOpen,
-          peekEntity,
-          openConfig,
-          agentRename: agentRenameFor,
-          setAgentRename: setAgentRenameFor,
           toast,
           setToast,
         })}
       />
     </div>
+    </OperationsStateProvider>
     </BrowserStateProvider>
     </SessionEditingProvider>
     </FerryRuntimeProvider>

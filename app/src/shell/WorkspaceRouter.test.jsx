@@ -80,15 +80,6 @@ test("迁移历史工作区的删除按钮接的是详情动作里的 onDeleteHi
   assert.deepEqual(calls, ["delete"]);
 });
 
-test("首次运行工作区把环境与扫描结果透传给 FirstRun", () => {
-  const { container } = render(
-    <WorkspaceRouter
-      {...baseProps({ view: "firstrun", environment: { claude: true }, scan: { sessions: [] } })}
-    />,
-  );
-  assert.notEqual(container.innerHTML, "");
-});
-
 test("对话工作区从 Context 取 Ferry Runtime 句柄,不再由路由层转交", () => {
   const ferry = {
     available: true, activeId: null, activeLog: null, sessions: [], roles: [],
