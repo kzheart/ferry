@@ -8,7 +8,7 @@ from .app import EngineService
 from .context import EngineContext
 from .system.resources import resource_path
 from .sessions.scan_cache import shared_cache
-from .system.snapshots import backup_dir
+from .system.snapshots import backup_dir, data_dir
 from .operations.service import OperationService
 from .operations import metadata as _metadata
 
@@ -21,6 +21,7 @@ def create_context() -> EngineContext:
         cache_factory=shared_cache,
         resource_path=resource_path,
         snapshot_dir=backup_dir,
+        data_dir=data_dir,
         version=__version__,
     )
     context.metadata_list_all = lambda: _metadata.list_all(context)

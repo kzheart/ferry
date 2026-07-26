@@ -6,8 +6,9 @@ from engine.bootstrap import create_context
 
 @pytest.fixture(autouse=True)
 def isolate_backup_dir(tmp_path, monkeypatch):
-    """任何测试都不得写用户真实快照目录（~/.resume-harness/backups）。"""
+    """任何测试都不得写用户真实目录（~/.resume-harness/backups 与 ~/.ferry）。"""
     monkeypatch.setenv("FERRY_BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setenv("FERRY_DATA_DIR", str(tmp_path / "data"))
 
 
 @pytest.fixture
