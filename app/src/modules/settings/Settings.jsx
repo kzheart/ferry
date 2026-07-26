@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { LOCALE_META } from "../../shared/i18n/index.js";
-import { SetGlyph, TerminalIcon, ToolIcon } from "../../shared/ui/icons.jsx";
+import { RefreshIcon, SetGlyph, Spinner, TerminalIcon, ToolIcon } from "../../shared/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
 import Providers from "./Providers.jsx";
@@ -196,11 +196,16 @@ function Sources({ scan, env, scanning, scanProgress, onRescan }) {
   const indexing = scanning && scanProgress?.total > 0;
   return (
     <div style={{  }}>
-      <div style={{ display: "flex", alignItems: "flex-end", margin: "0 0 9px 2px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 9px 2px" }}>
         <div style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "var(--tx5)",
           letterSpacing: ".05em" }}>{t("settings:sources.connectedTools")}</div>
         <div style={{ fontSize: 11, color: "var(--tx4)" }}>
           {t("settings:sources.connectedMeta", { connected, total })}</div>
+        <button className="ftool-btn" style={{ flex: "none" }}
+          title={scanning ? t("settings:sources.scanning") : t("settings:sources.rescan")}
+          onClick={onRescan} disabled={scanning}>
+          {scanning ? <Spinner size={14} /> : <RefreshIcon size={14} />}
+        </button>
       </div>
       <Card>
         {TOOLS.map((t2, i) => {
@@ -226,9 +231,6 @@ function Sources({ scan, env, scanning, scanProgress, onRescan }) {
                   <span style={{ width: 6, height: 6, borderRadius: "50%",
                     background: ok ? "var(--ok)" : "var(--err)" }} />{ok ? t("settings:sources.connected") : t("settings:sources.scanFailed")}</div>
               </div>
-              <button className="fbtn" style={{ height: 30, fontSize: 12, flex: "none" }}
-                onClick={onRescan} disabled={scanning}>
-                {scanning ? t("settings:sources.scanning") : t("settings:sources.rescan")}</button>
             </div>
           );
         })}
@@ -407,7 +409,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             <Skills />
           ) : (
             <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-              <div style={{ maxWidth: 620 }}>
+              <div style={{ maxWidth: 620, margin: "0 auto" }}>
                 {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
                   onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
                 {section === "sources" && <Sources scan={scan} env={env}
