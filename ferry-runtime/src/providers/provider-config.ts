@@ -21,10 +21,18 @@ export interface ModelSelection {
   thinking?: ThinkingLevel;
 }
 
+// 自定义提供商支持的协议格式;缺省为 OpenAI 兼容,兼容已存在的旧配置
+export const CUSTOM_PROVIDER_APIS = [
+  "openai-completions",
+  "anthropic-messages",
+] as const;
+export type CustomProviderApi = (typeof CUSTOM_PROVIDER_APIS)[number];
+
 export interface CustomProviderConfig {
   id: string;
   name: string;
   base_url: string;
+  api?: CustomProviderApi;
   api_key?: string;
   models: CustomModelConfig[];
 }

@@ -1,5 +1,6 @@
 import type { Credential, ProviderEnv } from "@earendil-works/pi-ai";
 import {
+  CUSTOM_PROVIDER_APIS,
   PROVIDER_CONFIG_VERSION,
   THINKING_LEVELS,
   type CustomModelConfig,
@@ -191,10 +192,18 @@ export function parseCustomProvider(value: unknown): CustomProviderConfig {
     );
   }
   const apiKey = optionalSecret(value.api_key, "custom provider API key");
+  const api =
+    value.api === undefined
+      ? undefined
+      : CUSTOM_PROVIDER_APIS.find((item) => item === value.api);
+  if (value.api !== undefined && !api) {
+    throw new Error("custom provider api is invalid");
+  }
   return {
     id: parseProviderId(value.id, "custom provider id"),
     name: text(value.name, "custom provider name", 256),
     base_url: parsed.toString().replace(/\/$/, ""),
+    ...(api ? { api } : {}),
     ...(apiKey ? { api_key: apiKey } : {}),
     models: value.models.map(parseCustomModel),
   };

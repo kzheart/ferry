@@ -248,10 +248,26 @@ function parseCustomProvider(params: Record<string, unknown>) {
       max_tokens: requireInteger(value, "max_tokens"),
     };
   });
+  const rawApi = optionalString(params, "api", 32);
+  if (
+    rawApi !== undefined &&
+    rawApi !== "openai-completions" &&
+    rawApi !== "anthropic-messages"
+  ) {
+    throw new ProtocolError(
+      "invalid_params",
+      "api must be openai-completions or anthropic-messages",
+    );
+  }
+  const api = rawApi as
+    | "openai-completions"
+    | "anthropic-messages"
+    | undefined;
   return {
     id: requireString(params, "provider_id", 128),
     name: requireString(params, "name", 256),
     base_url: requireString(params, "base_url", 4_096),
+    ...(api ? { api } : {}),
     ...(params.api_key === undefined
       ? {}
       : { api_key: requireString(params, "api_key", 64 * 1024) }),

@@ -187,7 +187,31 @@ describe("ProviderHost", () => {
     });
     expect(await providers.isConfigured("local-ollama")).toBe(true);
     expect(providers.listModels("local-ollama")).toMatchObject([
-      { id: "qwen/qwen3:30b", provider: "local-ollama" },
+      { id: "qwen/qwen3:30b", provider: "local-ollama", api: "openai-completions" },
+    ]);
+  });
+
+  it("adds an Anthropic-compatible custom provider", async () => {
+    const { host: providers } = await host();
+    await providers.saveCustomProvider({
+      id: "my-gateway",
+      name: "My Gateway",
+      base_url: "https://gateway.example.com/anthropic",
+      api: "anthropic-messages",
+      api_key: "sk-test",
+      models: [
+        {
+          id: "some-model",
+          input: ["text"],
+          reasoning: true,
+          context_window: 200_000,
+          max_tokens: 64_000,
+        },
+      ],
+    });
+    expect(await providers.isConfigured("my-gateway")).toBe(true);
+    expect(providers.listModels("my-gateway")).toMatchObject([
+      { id: "some-model", provider: "my-gateway", api: "anthropic-messages" },
     ]);
   });
 

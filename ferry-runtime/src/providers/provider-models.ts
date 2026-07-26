@@ -6,10 +6,12 @@ import {
   type Model,
   type Provider,
 } from "@earendil-works/pi-ai";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
 import type {
   CustomModelConfig,
+  CustomProviderApi,
   CustomProviderConfig,
 } from "./provider-config.js";
 
@@ -42,10 +44,12 @@ export interface ModelSummary {
 }
 
 export function customProvider(config: CustomProviderConfig): Provider {
-  const models: Model<"openai-completions">[] = config.models.map((item) => ({
+  // 旧配置没有 api 字段,一律按 OpenAI 兼容处理
+  const api: CustomProviderApi = config.api ?? "openai-completions";
+  const models: Model<CustomProviderApi>[] = config.models.map((item) => ({
     id: item.id,
     name: item.name ?? item.id,
-    api: "openai-completions",
+    api,
     provider: config.id,
     baseUrl: config.base_url,
     reasoning: item.reasoning,
@@ -73,7 +77,10 @@ export function customProvider(config: CustomProviderConfig): Provider {
       },
     },
     models,
-    api: openAICompletionsApi(),
+    api:
+      api === "anthropic-messages"
+        ? anthropicMessagesApi()
+        : openAICompletionsApi(),
   });
 }
 
