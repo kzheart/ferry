@@ -18,6 +18,7 @@
     {"type": "runtime.disconnected", "source": "host", "forward_to_ui": true},
     {"type": "session.created", "source": "runtime", "forward_to_ui": true},
     {"type": "session.model_changed", "source": "runtime", "forward_to_ui": true},
+    {"type": "session.renamed", "source": "runtime", "forward_to_ui": true},
     {"type": "task.cancelled", "source": "runtime", "forward_to_ui": true},
     {"type": "task.completed", "source": "runtime", "forward_to_ui": true},
     {"type": "task.failed", "source": "runtime", "forward_to_ui": true},

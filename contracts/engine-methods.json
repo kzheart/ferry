@@ -105,6 +105,14 @@
       "dispatch": "parallel-read"
     },
     {
+      "name": "session_search",
+      "kind": "read",
+      "exposure": "public",
+      "timeout": "lookup",
+      "retry": "never",
+      "dispatch": "serial"
+    },
+    {
       "name": "session_backbone",
       "kind": "read",
       "exposure": "internal",

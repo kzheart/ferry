@@ -22,6 +22,18 @@ MAX_SEARCH_RESULTS = 50
 _SCOPES = ("any", "metadata", "content")
 _SNIPPET_CHARS = 320
 
+UI_SEARCH_LIMIT = 30
+# ⌘K 结果行只有一两行高,再长的片段渲染时也会被截掉,不如不传。
+_UI_SNIPPET_CHARS = 160
+# UI 用 title 称呼元数据档位:用户想的是"按标题找",而底层 haystack 还包含
+# 项目路径/工具/模型。两个词都收,避免前端再维护一张映射表。
+_UI_SCOPES = {
+    "any": "any",
+    "title": "metadata",
+    "metadata": "metadata",
+    "content": "content",
+}
+
 
 def _validated_scope(scope, needle: str) -> str:
     if scope not in _SCOPES:
@@ -219,4 +231,74 @@ def search_sessions(query: str = "", agents=None, projects=None,
     }
     if content_active:
         result["content_index"] = content_status
+    return finalize_dto(result)
+
+
+def _ui_clamped_limit(value) -> int:
+    """UI 的 limit 钳制而不是报错:搜索框不该因为翻页参数越界整个空掉。"""
+    if value is None:
+        return UI_SEARCH_LIMIT
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AgentRequestError("limit 必须是整数", {"field": "limit"})
+    return max(1, min(value, MAX_SEARCH_RESULTS))
+
+
+def search_sessions_for_ui(query: str = "", tools=None,
+                           limit: int = UI_SEARCH_LIMIT,
+                           scope: str = "any", *,
+                           index: AgentSessionIndex,
+                           content_index: ContentIndex | None = None) -> dict:
+    """全局搜索的 UI 视图:每个会话只留最佳片段,字段收窄到结果行要用的。
+
+    复用 search_sessions 的检索与排序,不另建索引;差别只在结果整形——
+    agent 需要多条命中做后续推理,UI 只渲染一行。
+    """
+    if not isinstance(query, str) or not query.strip():
+        raise AgentRequestError("query 必须是非空字符串", {"field": "query"})
+    if scope not in _UI_SCOPES:
+        raise AgentRequestError(
+            "scope 仅允许 any/title/content",
+            {"field": "scope", "accepts": ["any", "title", "content"]},
+        )
+    raw = search_sessions(
+        query,
+        agents=tools,
+        limit=_ui_clamped_limit(limit),
+        scope=_UI_SCOPES[scope],
+        index=index,
+        content_index=content_index,
+    )
+
+    sessions = []
+    for item in raw["sessions"]:
+        matches = item.get("content_matches") or []
+        best = matches[0] if matches else None
+        sessions.append({
+            "tool": item["tool"],
+            "ref": item["ref"],
+            "title": item["title"],
+            "project": item["project"],
+            "updated": item["updated"],
+            # 无内容检索档位时 search_sessions 不写 matched_in,但结果本身
+            # 就是元数据命中,这里补齐让前端只有一种分支。
+            "matched_in": item.get("matched_in") or ["metadata"],
+            "match_count": item.get("content_match_count", 0),
+            "snippet": truncate_text(
+                best["snippet"], _UI_SNIPPET_CHARS,
+            )[0] if best else "",
+            "message": best["message"] if best else None,
+            "role": best["role"] if best else None,
+        })
+
+    result = {
+        # 回显 query 让前端能丢弃被后续按键取代的过期响应。
+        "query": query.strip(),
+        "scope": scope,
+        "sessions": sessions,
+        "returned": len(sessions),
+        "total_matches": raw["total_matches"],
+        "has_more": raw["has_more"],
+    }
+    if "content_index" in raw:
+        result["content_index"] = raw["content_index"]
     return finalize_dto(result)

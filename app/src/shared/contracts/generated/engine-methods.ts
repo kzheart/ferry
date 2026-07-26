@@ -13,6 +13,7 @@ export const PUBLIC_ENGINE_METHODS = [
   "show",
   "session_asset",
   "session_meta_list",
+  "session_search",
 ] as const;
 export const TRUSTED_UI_ENGINE_METHODS = [
   "organization_proposals_list",

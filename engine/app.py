@@ -146,6 +146,12 @@ class EngineService:
     def list_session_metadata(self) -> dict:
         return metadata.list_all(self._ports)
 
+    def search_sessions_for_ui(self, query: str = "", **params) -> dict:
+        return session_search.search_sessions_for_ui(
+            query, index=self._index,
+            content_index=self._content_index, **params,
+        )
+
     def session_backbone(self, tool: str, ref: str) -> dict:
         require_agent_capability(
             self._ports.adapter(tool), "browse", "browser",

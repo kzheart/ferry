@@ -85,6 +85,10 @@ pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),
+        "session.renamed" => Some(EventPolicy {
+            source: EventSource::Runtime,
+            forward_to_ui: true,
+        }),
         "task.cancelled" => Some(EventPolicy {
             source: EventSource::Runtime,
             forward_to_ui: true,
