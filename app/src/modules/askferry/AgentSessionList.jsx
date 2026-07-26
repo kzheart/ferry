@@ -78,6 +78,9 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, editing
 
   return (
     <div onClick={() => onOpen(session.session_id)}
+      onDoubleClick={event => {
+        if (!event.target.closest(".row-act")) onStartRename(session);
+      }}
       className={active ? "lib-row" : "lib-row hov-item"}
       style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,
         borderRadius: 6, cursor: "default", transition: "background .12s ease",
@@ -151,9 +154,8 @@ const GROUP_LABEL = {
 };
 
 // 打开/新建/置顶/删除都是 Ferry Runtime 上的动作,自己取;列表内容由主壳决定
-// (经过筛选排序),仍走 props。onRename 是旧的主壳弹窗入口,已被行内编辑取代,
-// 保留参数只为不破坏调用方签名。
-export default function AgentSessionList({ sessions, onRename: _onRename }) {
+// (经过筛选排序),仍走 props。重命名走行内编辑:双击行或「更多」菜单进入。
+export default function AgentSessionList({ sessions }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const { activeId, openSession: onOpen, newChat: onNew } = ferry;

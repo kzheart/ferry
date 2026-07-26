@@ -64,7 +64,6 @@ export default function App() {
   const ferry = useAskFerry();
   const [agentAttachments, setAgentAttachments] = useState([]);
   const [settingsSection, setSettingsSection] = useState("prefs");
-  const [agentRenameFor, setAgentRenameFor] = useState(null);
   const [aq, setAq] = useState("");
 
   const [popover, setPopover] = useState(null); // 'lib'|'hist'
@@ -72,7 +71,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
   const [histDel, setHistDel] = useState(null);
-  const [renameFor, setRenameFor] = useState(null); // 待重命名的会话
+  const [renameFor, setRenameFor] = useState(null); // 行内重命名中的会话
   const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
@@ -242,6 +241,9 @@ export default function App() {
     onRowMore,
     onRowPin,
     onRowDelete,
+    onRowRename,
+    onRowRenameSubmit,
+    onRowRenameCancel,
   } = useWorkspaceInteractions({
     t,
     settings,
@@ -360,17 +362,17 @@ export default function App() {
 
 
   const { browserState, operationsState, appChrome } = useWorkspaceState({
-    agentRenameFor, allTags, applyEdit, clearHistF, clearLibF, confirmApply,
+    allTags, applyEdit, clearHistF, clearLibF, confirmApply,
     counts, ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs, dirs,
     detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
     histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
     onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId,
-    popAnchor, popover, rail, railOnly, refreshing, reloadMetadata, renameFor,
+    popAnchor, popover, rail, railOnly, refreshing, reloadMetadata,
     scan, scanning, searchOpen, select, selectHistory, selId,
-    sessions, setAgentRenameFor, setConfirmApply, setCtxMenu, setDiff,
+    sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setHistDel, setHistF, setLibF, setMetaFor, setMig,
-    setMultiSel, setOrganizerOpen, setPeekId, setPopover, setRenameFor,
+    setMultiSel, setOrganizerOpen, setPeekId, setPopover,
     setSearchOpen, setSettings, setSettingsOpen, setTagFor, setToast, setView,
     settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
   });
@@ -454,10 +456,14 @@ export default function App() {
                 onClear: clearLibF,
                 selectedId: selId,
                 multiSel,
+                renamingKey: renameFor ? sessionIdentity(renameFor) : null,
                 onRowClick,
                 onRowPin,
                 onRowDelete,
                 onRowMore,
+                onRowRename,
+                onRowRenameSubmit,
+                onRowRenameCancel,
               }}
               history={{
                 groups: histGroups,
@@ -466,10 +472,7 @@ export default function App() {
                   setHistDel(histItems.find((item) => item._id === id)),
                 onClear: clearHistF,
               }}
-              agent={{
-                sessions: ferrySessions,
-                onRename: setAgentRenameFor,
-              }}
+              agent={{ sessions: ferrySessions }}
             />
           )
         }

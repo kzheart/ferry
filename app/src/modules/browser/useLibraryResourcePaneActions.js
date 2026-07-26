@@ -16,6 +16,9 @@ export function useLibraryResourcePaneActions({
   onTogglePin,
   onDelete,
   onOpenMenu,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
 }) {
   const actions = useRef({});
   actions.current.click = (key, event) => {
@@ -61,11 +64,24 @@ export function useLibraryResourcePaneActions({
     const session = sessionsByKey[key];
     if (session) onDelete(session);
   };
+  actions.current.startRename = key => {
+    const session = sessionsByKey[key];
+    if (session) onStartRename(session);
+  };
+  actions.current.submitRename = (key, value) => {
+    const session = sessionsByKey[key];
+    if (session) onSubmitRename(session, value);
+    else onCancelRename();
+  };
+  actions.current.cancelRename = () => onCancelRename();
 
   return {
     onRowClick: useCallback((key, event) => actions.current.click(key, event), []),
     onRowMore: useCallback((key, event) => actions.current.more(key, event), []),
     onRowPin: useCallback(key => actions.current.pin(key), []),
     onRowDelete: useCallback(key => actions.current.delete(key), []),
+    onRowRename: useCallback(key => actions.current.startRename(key), []),
+    onRowRenameSubmit: useCallback((key, value) => actions.current.submitRename(key, value), []),
+    onRowRenameCancel: useCallback(() => actions.current.cancelRename(), []),
   };
 }

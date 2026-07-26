@@ -38,7 +38,7 @@ function baseProps(overrides = {}) {
       onRowClick: noop, onRowPin: noop, onRowDelete: noop, onRowMore: noop,
     },
     history: { groups: [], filtered: [], onDelete: noop, onClear: noop },
-    agent: { sessions: [], onRename: noop },
+    agent: { sessions: [] },
     ...overrides,
   };
 }

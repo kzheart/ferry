@@ -21,8 +21,6 @@ function closedOverlays() {
     sessionDelete: { prepared: null },
     historyDelete: { history: null },
     batchDelete: { prepared: null },
-    rename: { session: null },
-    agentRename: { session: null },
     tags: { selection: null },
     toast: { value: null },
     railTip: { value: null },
@@ -40,39 +38,6 @@ function renderOverlays(overrides) {
 test("全部关闭时不渲染任何弹层", () => {
   const { container } = renderOverlays({});
   assert.equal(container.innerHTML, "");
-});
-
-test("重命名弹层带入初始值,确认时回传去空白后的输入", () => {
-  const confirmed = [];
-  renderOverlays({
-    rename: {
-      session: { id: "s1", title: "旧标题" },
-      initial: "旧标题",
-      onCancel: () => confirmed.push("cancel"),
-      onConfirm: value => confirmed.push(value),
-    },
-  });
-
-  const input = screen.getByRole("textbox");
-  assert.equal(input.value, "旧标题");
-  fireEvent.change(input, { target: { value: "  新标题  " } });
-  fireEvent.click(screen.getByText("app:prompt.save"));
-  assert.deepEqual(confirmed, ["新标题"]);
-});
-
-test("重命名弹层的取消按钮接的是自己的 onCancel", () => {
-  let cancelled = false;
-  renderOverlays({
-    rename: {
-      session: { id: "s1", title: "t" },
-      initial: "",
-      onCancel: () => { cancelled = true; },
-      onConfirm: () => assert.fail("取消不应触发确认"),
-    },
-  });
-
-  fireEvent.click(screen.getByText("overlays:prompt.cancel"));
-  assert.equal(cancelled, true);
 });
 
 test("标签弹层按批量与否取不同标题,并回传原始输入", () => {
@@ -96,21 +61,6 @@ test("标签弹层按批量与否取不同标题,并回传原始输入", () => {
     />,
   );
   assert.ok(screen.getByText("app:prompt.tagsTitle"));
-});
-
-test("Agent 重命名弹层与会话重命名弹层各走各的回调", () => {
-  const calls = [];
-  renderOverlays({
-    agentRename: {
-      session: { session_id: "a1", title: "会话" },
-      onCancel: () => calls.push("cancel"),
-      onConfirm: title => calls.push(title),
-    },
-  });
-
-  assert.ok(screen.getByText("askferry:pane.renameTitle"));
-  fireEvent.click(screen.getByText("askferry:pane.save"));
-  assert.deepEqual(calls, ["会话"]);
 });
 
 test("右键菜单渲染条目,点击后先关闭再执行动作", () => {

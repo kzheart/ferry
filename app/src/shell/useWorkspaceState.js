@@ -5,18 +5,18 @@
 import { useMemo } from "react";
 
 export function useWorkspaceState({
-  agentRenameFor, allTags, applyEdit, clearHistF, clearLibF, confirmApply,
+  allTags, applyEdit, clearHistF, clearLibF, confirmApply,
   counts, ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
   dirs,
   detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
   histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
   onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId, popAnchor,
-  popover, rail, railOnly, refreshing, reloadMetadata, renameFor, scan,
+  popover, rail, railOnly, refreshing, reloadMetadata, scan,
   scanning, searchOpen, select, selectHistory, selId, sessions,
-  setAgentRenameFor, setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
+  setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setHistDel, setHistF, setLibF, setMetaFor, setMig, setMultiSel,
-  setOrganizerOpen, setPeekId, setPopover, setRenameFor, setSearchOpen,
+  setOrganizerOpen, setPeekId, setPopover, setSearchOpen,
   setSettings, setSettingsOpen, setTagFor, setToast, setView, settings,
   settingsOpen, settingsSection, tagFor, toast, updater, view,
 }) {
@@ -68,12 +68,6 @@ export function useWorkspaceState({
         selectHistory,
         onDeleteHistory: () => setHistDel(histSel),
       },
-      rename: {
-        session: renameFor,
-        setSession: setRenameFor,
-        metaFor,
-        updateMetadata: setMetaFor,
-      },
       tags: {
         selection: tagFor,
         setSelection: setTagFor,
@@ -105,7 +99,7 @@ export function useWorkspaceState({
       refreshing, loadingMore, searchOpen, paneCfg, view, ferrySessions,
       histGroups, libGroups, sessions, selectHistory, select, ctxMenu,
       ctxItems, deletion, histDel, deleteHistory, histSelectedId, histSel,
-      renameFor, metaFor, setMetaFor, tagFor, popover, libF, counts, dirs,
+      metaFor, setMetaFor, tagFor, popover, libF, counts, dirs,
       allTags, clearLibF, histF, historyToolIds, setHistF, clearHistF,
       setMultiSel, setLibF,
     ],
@@ -150,15 +144,11 @@ export function useWorkspaceState({
           setView("askferry");
         },
       },
-      agentRename: {
-        session: agentRenameFor,
-        setSession: setAgentRenameFor,
-      },
     }),
     [
       organizerOpen, sessions, reloadMetadata, doScan, mig, cur, env, settings,
       loadHistory, diff, dirtyOps, confirmApply, applyEdit, view, settingsOpen,
-      floatChatOpen, peekEntity, openConfig, agentRenameFor, setDiff,
+      floatChatOpen, peekEntity, openConfig, setDiff,
       setConfirmApply,
     ],
   );

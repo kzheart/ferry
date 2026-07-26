@@ -142,13 +142,37 @@ const PinGlyph = () => (
   </svg>
 );
 
-// 单行会话:紧凑单行,悬浮浮现操作按钮(置顶/删除/更多)
-const LibraryRow = memo(function LibraryRow({ r, selected, multi,
-  onRowClick, onRowPin, onRowDelete, onRowMore }) {
+// 单行会话:紧凑单行,悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
+const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
+  onRowClick, onRowPin, onRowDelete, onRowMore,
+  onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   const act = (fn, key) => e => { e.stopPropagation(); fn(key, e); };
+
+  if (editing) {
+    return (
+      <div className="lib-row" style={{ display: "flex", gap: 8, alignItems: "center",
+        padding: "5px 8px", height: 30, borderRadius: 6, background: "var(--acc-soft2)" }}>
+        <ToolIcon tool={r.tool} size={18} />
+        <input autoFocus defaultValue={r.title}
+          placeholder={t("app:prompt.renamePlaceholder")}
+          onFocus={e => e.target.select()}
+          onBlur={onRowRenameCancel}
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => {
+            e.stopPropagation();
+            if (e.key === "Enter") onRowRenameSubmit(r.key, e.currentTarget.value);
+            else if (e.key === "Escape") onRowRenameCancel();
+          }}
+          style={{ flex: 1, minWidth: 0, height: 20, border: "none", outline: "none",
+            background: "transparent", color: "var(--tx1)", fontSize: 12, padding: 0 }} />
+      </div>
+    );
+  }
+
   return (
     <div onClick={e => onRowClick(r.key, e)}
+      onDoubleClick={e => { if (!e.target.closest(".row-act")) onRowRename(r.key); }}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.key, e); }}
       title={r.dir}
       className={selected || multi ? "lib-row" : "lib-row hov-item"}
@@ -181,7 +205,8 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi,
 
 // 会话库分组列表
 export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selectedId, multiSel,
-  onRowClick, onRowPin, onRowDelete, onRowMore }) {
+  renamingKey, onRowClick, onRowPin, onRowDelete, onRowMore,
+  onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   if (empty) return <PaneEmpty text={t("common:empty.library")} onClear={onClear} />;
   const multiSet = new Set(multiSel);
@@ -202,8 +227,11 @@ export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selec
     if (expanded) g.rows.forEach(r => {
       items.push({ key: r.key, y, h: ROW_H, node: (
         <LibraryRow r={r} selected={r.key === selectedId} multi={multiSet.has(r.key)}
+          editing={r.key === renamingKey}
           onRowClick={onRowClick} onRowPin={onRowPin}
-          onRowDelete={onRowDelete} onRowMore={onRowMore} />
+          onRowDelete={onRowDelete} onRowMore={onRowMore}
+          onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
+          onRowRenameCancel={onRowRenameCancel} />
       ) });
       y += ROW_H;
     });

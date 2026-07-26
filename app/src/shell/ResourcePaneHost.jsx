@@ -35,14 +35,18 @@ export function ResourcePaneHost({
               collapsed={library.collapsedGroups} onToggle={library.onToggleGroup}
               empty={library.groups.length === 0} onClear={library.onClear}
               selectedId={library.selectedId} multiSel={library.multiSel}
+              renamingKey={library.renamingKey}
               onRowClick={library.onRowClick} onRowPin={library.onRowPin}
-              onRowDelete={library.onRowDelete} onRowMore={library.onRowMore} />)}
+              onRowDelete={library.onRowDelete} onRowMore={library.onRowMore}
+              onRowRename={library.onRowRename}
+              onRowRenameSubmit={library.onRowRenameSubmit}
+              onRowRenameCancel={library.onRowRenameCancel} />)}
       {view === "history" && (
         <HistoryList groups={history.groups} empty={history.filtered.length === 0}
           onDelete={history.onDelete}
           onClear={history.onClear} />)}
       {view === "askferry" && (
-        <AgentSessionList sessions={agent.sessions} onRename={agent.onRename} />)}
+        <AgentSessionList sessions={agent.sessions} />)}
     </Pane>
   );
 }

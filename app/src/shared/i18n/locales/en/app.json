@@ -103,8 +103,6 @@
     "search": "Search"
   },
   "prompt": {
-    "renameTitle": "Rename session",
-    "renameDesc": "Set a display name for \"{{title}}\"; leave empty to restore the original title. Renaming is stored on the Ferry side only and does not modify the session file.",
     "renamePlaceholder": "New session name",
     "save": "Save",
     "tagsBatchTitle": "Add tags to {{n}} sessions",
