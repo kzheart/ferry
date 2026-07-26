@@ -15,7 +15,6 @@ export function useBrowserData() {
   const [env, setEnv] = useState(() => preloaded?.env || null);
   const [scan, setScan] = useState(() => preloaded?.scan || null);
   const [scanning, setScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(null);
   const [scanReady, setScanReady] = useState(false);
   const [lastScan, setLastScan] = useState(() => preloaded?.lastScan || null);
   const [historyRows, setHistoryRows] = useState(() => preloaded?.history || []);
@@ -33,15 +32,6 @@ export function useBrowserData() {
   const doScan = async () => {
     if (scanning) return;
     setScanning(true);
-    setScanProgress(null);
-    // scan 阻塞在 serial 池,scan_progress 走 parallel-read 池,扫描期间可查
-    const poll = setInterval(() => {
-      engine("scan_progress")
-        .then(progress => {
-          if (progress?.state === "running") setScanProgress(progress);
-        })
-        .catch(() => {});
-    }, 350);
     try {
       const result = await engine("scan");
       const now = Date.now();
@@ -58,8 +48,6 @@ export function useBrowserData() {
         ...(current || {}),
       }));
     }
-    clearInterval(poll);
-    setScanProgress(null);
     setScanning(false);
   };
   const loadHistory = () => engine("history")
@@ -80,6 +68,23 @@ export function useBrowserData() {
     loadPricing();
   }, []);
 
-  return { env, scan, scanning, scanProgress, scanReady, lastScan, historyRows,
+  return { env, scan, scanning, scanReady, lastScan, historyRows,
     pricing, doScan, loadHistory, deleteHistory };
+}
+
+/** 扫描进度单独订阅:进度每 350ms 变一次,挂在根组件上等于全树重渲染。
+ *  由真正显示进度条的组件自己调用。 */
+export function useScanProgress(scanning) {
+  const [progress, setProgress] = useState(null);
+  useEffect(() => {
+    if (!scanning) { setProgress(null); return undefined; }
+    // scan 阻塞在 serial 池,scan_progress 走 parallel-read 池,扫描期间可查
+    const poll = setInterval(() => {
+      engine("scan_progress")
+        .then(next => { if (next?.state === "running") setProgress(next); })
+        .catch(() => {});
+    }, 350);
+    return () => { clearInterval(poll); setProgress(null); };
+  }, [scanning]);
+  return progress;
 }

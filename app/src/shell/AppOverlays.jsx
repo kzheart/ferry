@@ -218,7 +218,6 @@ export function AppOverlays({
           scan={settings.scan}
           env={settings.env}
           scanning={settings.scanning}
-          scanProgress={settings.scanProgress}
           onRescan={settings.onRescan}
           guideSeen={settings.guideSeen}
           onOpenGuide={settings.onOpenGuide}

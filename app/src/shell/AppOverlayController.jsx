@@ -237,7 +237,6 @@ export function AppOverlayController({ t }) {
         scan: settings.scanResult,
         env: settings.env,
         scanning: settings.scanning,
-        scanProgress: settings.scanProgress,
         onRescan: settings.scan,
         guideSeen: settings.guideSeen,
         onOpenGuide: () => {

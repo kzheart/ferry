@@ -34,13 +34,15 @@ import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
 import { useWorkspaceInteractions } from "./useWorkspaceInteractions.js";
 import { useWorkspaceState } from "./useWorkspaceState.js";
 
+// 启动阶段 scan 还是 null,每次渲染新建的空数组会把下游 useMemo 全部击穿。
+const EMPTY_SESSIONS = [];
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const {
     env,
     scan,
     scanning,
-    scanProgress,
     lastScan,
     historyRows,
     pricing,
@@ -83,7 +85,7 @@ export default function App() {
     scan: doScan,
   });
 
-  const sessions = scan?.sessions || [];
+  const sessions = scan?.sessions || EMPTY_SESSIONS;
   const selectionReset = useRef(() => {});
   const selection = useSessionSelection({
     sessions,
@@ -369,7 +371,7 @@ export default function App() {
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
     onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId,
     popAnchor, popover, rail, railOnly, refreshing, reloadMetadata, renameFor,
-    scan, scanning, scanProgress, searchOpen, select, selectHistory, selId,
+    scan, scanning, searchOpen, select, selectHistory, selId,
     sessions, setAgentRenameFor, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setHistDel, setHistF, setLibF, setMetaFor, setMig,
     setMultiSel, setOrganizerOpen, setPeekId, setPopover, setRenameFor,

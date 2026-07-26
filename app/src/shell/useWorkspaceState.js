@@ -13,7 +13,7 @@ export function useWorkspaceState({
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
   onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId, popAnchor,
   popover, rail, railOnly, refreshing, reloadMetadata, renameFor, scan,
-  scanning, scanProgress, searchOpen, select, selectHistory, selId, sessions,
+  scanning, searchOpen, select, selectHistory, selId, sessions,
   setAgentRenameFor, setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setHistDel, setHistF, setLibF, setMetaFor, setMig, setMultiSel,
   setOrganizerOpen, setPeekId, setPopover, setRenameFor, setSearchOpen,
@@ -175,7 +175,6 @@ export function useWorkspaceState({
         scanResult: scan,
         env,
         scanning,
-        scanProgress,
         scan: doScan,
         guideSeen: onboarding.seen,
         setOpen: setSettingsOpen,
@@ -190,7 +189,7 @@ export function useWorkspaceState({
     }),
     [
       toast, setToast, rail.railTip, railOnly, settingsOpen, settings,
-      setSettings, updater, settingsSection, scan, env, scanning, scanProgress,
+      setSettings, updater, settingsSection, scan, env, scanning,
       doScan, onboarding,
     ],
   );
