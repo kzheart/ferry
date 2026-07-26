@@ -106,35 +106,36 @@ export function toRounds(messages, replyTurns) {
   return rounds;
 }
 
-export function toTimeline(rounds, compactions) {
+export function toTimeline(rounds, compactions, hasMore = false) {
   const pending = new Map();
   for (const compaction of compactions || []) {
     const afterTurn = Number.isInteger(compaction.after_turn)
       ? compaction.after_turn : 0;
     pending.set(afterTurn, [...(pending.get(afterTurn) || []), compaction]);
   }
-  const timeline = (pending.get(0) || []).map(compaction => ({
-    kind: "compaction", key: `compaction:${compaction.id}`, compaction,
-  }));
+  const timeline = [];
+  // 同一位置的多次压缩合并为一个分组项，由 UI 折叠展示。
+  const pushGroup = items => {
+    if (!items?.length) return;
+    timeline.push({
+      kind: "compaction",
+      key: `compaction:${items[0].id}`,
+      compactions: items,
+    });
+  };
+  pushGroup(pending.get(0));
+  let lastTurn = 0;
   for (const round of rounds || []) {
     timeline.push({ kind: "round", key: `round:${round.n}`, round });
-    for (const compaction of pending.get(round.n) || []) {
-      timeline.push({
-        kind: "compaction",
-        key: `compaction:${compaction.id}`,
-        compaction,
-      });
-    }
+    if (round.n > lastTurn) lastTurn = round.n;
+    pushGroup(pending.get(round.n));
   }
+  // 尚未加载到对应轮次的压缩点先不渲染，等分页加载归位；
+  // 全部加载完后才把超出范围的兜底追加到末尾。
+  if (hasMore) return timeline;
   for (const [afterTurn, items] of pending) {
-    if (afterTurn <= (rounds?.length || 0)) continue;
-    for (const compaction of items) {
-      timeline.push({
-        kind: "compaction",
-        key: `compaction:${compaction.id}`,
-        compaction,
-      });
-    }
+    if (afterTurn <= lastTurn) continue;
+    pushGroup(items);
   }
   return timeline;
 }
