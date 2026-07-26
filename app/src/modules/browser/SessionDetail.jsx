@@ -46,8 +46,8 @@ export default memo(function SessionDetail({
   } = useSessionEditingSurface();
   const rounds = useMemo(() => toRounds(data?.messages, data?.turns), [data]);
   const timeline = useMemo(
-    () => toTimeline(rounds, data?.context_compactions),
-    [rounds, data?.context_compactions],
+    () => toTimeline(rounds, data?.context_compactions, Boolean(data?.next_from_message)),
+    [rounds, data?.context_compactions, data?.next_from_message],
   );
   const canDelete = supportsAgentCapability(meta.tool, "edit")
     && supportsEditOperation(meta.tool, "delete-turn");
@@ -326,7 +326,7 @@ export default memo(function SessionDetail({
                 return (
                   <CompactionBoundary
                     key={item.key}
-                    compaction={item.compaction}
+                    compactions={item.compactions}
                   />
                 );
               }
