@@ -179,3 +179,28 @@ class StateDatabase:
                     PRAGMA user_version = 8;
                     COMMIT;
                 """)
+
+
+_instances: dict[Path, StateDatabase] = {}
+_instances_lock = threading.Lock()
+
+
+def get_state_database(
+    path: Path,
+    *,
+    recover_interrupted: bool = True,
+) -> StateDatabase:
+    """按库文件复用 StateDatabase 实例。
+
+    每次 RPC 都新建一个的话,mkdir、schema 探测与六个 Store 都要重建一遍,
+    而 Ask Ferry 每提交一次就走一趟。连接本身仍是每次操作现开(见 `_connect`),
+    所以复用实例不会把 sqlite3 连接跨线程共享。
+    """
+    key = Path(path)
+    with _instances_lock:
+        existing = _instances.get(key)
+        if existing is not None:
+            return existing
+        database = StateDatabase(key, recover_interrupted=recover_interrupted)
+        _instances[key] = database
+        return database
