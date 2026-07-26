@@ -22,7 +22,6 @@ import type {
   ModelSelection,
 } from "./provider-config.js";
 import { FileProviderConfigStore } from "./provider-config-store.js";
-import { PROVIDER_RENAMES, extraProviders } from "./extra-providers.js";
 import {
   UNSUPPORTED_PROVIDER_IDS,
   customProvider,
@@ -59,14 +58,9 @@ export class ProviderHost {
       },
     });
     for (const provider of builtinProviders()) {
-      if (UNSUPPORTED_PROVIDER_IDS.has(provider.id)) continue;
-      const renamed = PROVIDER_RENAMES.get(provider.id);
-      models.setProvider(
-        renamed ? { ...provider, name: renamed } : provider,
-      );
-    }
-    for (const provider of extraProviders()) {
-      models.setProvider(provider);
+      if (!UNSUPPORTED_PROVIDER_IDS.has(provider.id)) {
+        models.setProvider(provider);
+      }
     }
     const config = await store.snapshot();
     const customIds = new Set<string>();

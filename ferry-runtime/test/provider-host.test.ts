@@ -26,15 +26,13 @@ describe("ProviderHost", () => {
   it("registers all Pi providers except Bedrock and Vertex", async () => {
     const { host: providers } = await host();
     const ids = (await providers.providers()).map((provider) => provider.id);
-    expect(ids).toHaveLength(39);
+    expect(ids).toHaveLength(36);
     for (const unsupported of UNSUPPORTED_PROVIDER_IDS) {
       expect(ids).not.toContain(unsupported);
     }
     expect(ids).toContain("deepseek");
     expect(ids).toContain("openai-codex");
     expect(ids).toContain("github-copilot");
-    // Xiaomi Token Plan 的 Anthropic 协议变体(见 extra-providers.ts)
-    expect(ids).toContain("xiaomi-token-plan-ams-anthropic");
   });
 
   it("only offers models from enabled, configured providers the user kept visible", async () => {
