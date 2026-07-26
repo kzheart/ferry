@@ -281,8 +281,11 @@ describe("AgentRuntime", () => {
         },
       },
     ];
-    const handled: Array<{ name: string; intent?: unknown; policy?: string }> =
-      [];
+    const handled: Array<{
+      name: string;
+      intent?: unknown;
+      policy?: string | undefined;
+    }> = [];
     const runtime = await createRuntime({
       roleStore,
       backendFactory: () => scriptedToolBackend(script),
