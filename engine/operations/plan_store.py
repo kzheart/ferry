@@ -54,13 +54,13 @@ class OperationState:
 
 
 class OperationPlanStore:
-    def __init__(self, snapshot_dir: Callable[[], str | Path]):
-        self._snapshot_dir = snapshot_dir
+    def __init__(self, state_dir: Callable[[], str | Path]):
+        self._state_dir = state_dir
         self._database_instance: StateDatabase | None = None
         self._database_path: Path | None = None
 
     def database(self) -> StateDatabase:
-        path = Path(self._snapshot_dir()) / "ferry-state.sqlite3"
+        path = Path(self._state_dir()) / "ferry-state.sqlite3"
         if self._database_instance is None or self._database_path != path:
             self._database_instance = StateDatabase(path)
             self._database_path = path

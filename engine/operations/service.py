@@ -38,7 +38,7 @@ class OperationService:
             thread_name_prefix="engine-operation",
         )
         self._jobs: dict[str, Future[None]] = {}
-        self._plans = OperationPlanStore(ports.snapshot_dir)
+        self._plans = OperationPlanStore(ports.state_dir)
         self._planner = OperationPlanner(
             ports,
             index,

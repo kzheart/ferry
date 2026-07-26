@@ -7,12 +7,23 @@ import time
 from pathlib import Path
 
 DEFAULT_BACKUP_DIR = Path.home() / ".resume-harness" / "backups"
+DEFAULT_DATA_DIR = Path.home() / ".ferry"
 
 
 def backup_dir() -> Path:
     """快照根目录；FERRY_BACKUP_DIR 可覆盖，测试据此隔离出 tmp 目录。"""
     override = os.environ.get("FERRY_BACKUP_DIR")
     return Path(override) if override else DEFAULT_BACKUP_DIR
+
+
+def data_dir() -> Path:
+    """Ferry 自有状态根目录（配置与状态库同处 ~/.ferry，与备份快照分开）。
+
+    FERRY_DATA_DIR 可覆盖，测试据此隔离；与 runtime 的 FERRY_RUNTIME_DATA_DIR
+    指向同一 ~/.ferry。
+    """
+    override = os.environ.get("FERRY_DATA_DIR")
+    return Path(override) if override else DEFAULT_DATA_DIR
 
 
 def _new_dest(stem: str) -> Path:

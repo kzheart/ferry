@@ -232,8 +232,8 @@ def get_state_database(
 
 
 def state_database_path(ports) -> Path:
-    """EngineContext 下 Ferry 自有状态库的位置。"""
-    return Path(ports.snapshot_dir()) / "ferry-state.sqlite3"
+    """EngineContext 下 Ferry 自有状态库的位置（~/.ferry，非备份目录）。"""
+    return Path(ports.state_dir()) / "ferry-state.sqlite3"
 
 
 def state_database(ports) -> StateDatabase:
