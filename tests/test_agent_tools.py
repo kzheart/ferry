@@ -497,6 +497,28 @@ def test_regex_prefilter_reports_clipped_blind_spot_and_exhaustive_rescans(
     assert match["message"] == 5
 
 
+def test_regex_prefilter_scans_sessions_the_index_does_not_know_yet(
+        agent_environment, monkeypatch):
+    content = agent_environment["content_index"]
+    # 先建好索引,再假装 claude 会话尚未入索引(重建期/刚写入形态):
+    # 字面量在索引里命不中,但"不知道"不等于"没有",必须进扫描候选。
+    session_search.search_sessions("第一轮")
+    known = content.indexed_session_keys()
+    assert any(tool == "claude" for tool, _ref in known)
+    monkeypatch.setattr(
+        content, "indexed_session_keys",
+        lambda: {key for key in known if key[0] != "claude"},
+    )
+    monkeypatch.setattr(
+        content, "sessions_matching_literals", lambda *_args: set(),
+    )
+    found = session_search.search_sessions(regex=r"topsecret\w*")
+    assert found["total_matches"] == 1
+    scan = found["content_index"]["regex_scan"]
+    assert scan["mode"] == "prefilter"
+    assert scan["scanned_sessions"] == 1
+
+
 def test_regex_without_literals_scans_all_filtered_sessions(
         agent_environment):
     result = session_search.search_sessions(regex=r"(第一|第二)轮")

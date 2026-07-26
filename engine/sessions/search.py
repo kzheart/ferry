@@ -233,13 +233,20 @@ def search_sessions(query: str = "", agents=None, projects=None,
             literals = (
                 [] if exhaustive else regex_search.required_literals(regex)
             )
-            if literals and content_index is not None \
-                    and content_status.get("ready"):
-                # 预过滤只在索引完整时启用:pending 会话不在索引里,用
-                # 残缺候选集会把它们静默排除在扫描之外。
-                candidates = content_index.sessions_matching_literals(
+            if literals and content_index is not None:
+                # 预过滤 = 字面量命中 ∪ 尚未入索引的会话:索引"说没有"
+                # 才可跳过,"还不知道"(构建中/刚写入)必须进扫描候选,
+                # 否则重建期间的会话会被静默漏掉。
+                matched = content_index.sessions_matching_literals(
                     literals, include_tool_outputs,
                 )
+                known = content_index.indexed_session_keys()
+                if matched is not None and known is not None:
+                    candidates = matched | {
+                        (item[0].tool, item[0].canonical_ref)
+                        for item in filtered
+                        if (item[0].tool, item[0].canonical_ref) not in known
+                    }
             content_hits, scan_meta = _scan_regex(
                 filtered, compiled, include_tool_outputs, index,
                 candidates, clipped_by_session,

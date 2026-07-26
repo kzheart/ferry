@@ -370,6 +370,21 @@ class ContentIndex:
 
     # ---------- 查询 ----------
 
+    def indexed_session_keys(self) -> set[tuple[str, str]] | None:
+        """内容已入索引的会话集(排除读取失败的);None 表示索引不可用。
+
+        预过滤用它区分"索引说没有"与"索引还不知道":不在这个集合里的
+        会话必须进扫描候选,否则构建期/新写入的会话会被静默漏掉。
+        """
+        with self._db_lock:
+            connection = self._db()
+            if connection is None:
+                return None
+            rows = connection.execute(
+                "SELECT tool, ref FROM indexed_sessions WHERE failed = 0",
+            ).fetchall()
+        return {(tool, ref) for tool, ref in rows}
+
     def clipped_rows_by_session(self) -> dict[tuple[str, str], int]:
         """每个会话被 16KB 截断的消息数;只返回确有截断的会话。
 
