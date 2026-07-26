@@ -12,6 +12,7 @@ import {
   PencilIcon,
   TrashIcon,
   UndoIcon,
+  WandIcon,
 } from "../../shared/ui/icons.jsx";
 import Markdown from "../../shared/ui/Markdown.jsx";
 import { ACCENT, fmtSize } from "../../shared/ui/toolDisplay.js";
@@ -218,6 +219,7 @@ export default function SessionRound({
   onDelete,
   onUndoDelete,
   onRewrite,
+  onOptimize,
   onUpdateRewrite,
   onCancelRewrite,
   migratable,
@@ -344,6 +346,14 @@ export default function SessionRound({
                 onClick={startRewrite}
               >
                 <PencilIcon />
+              </IconBtn>
+            )}
+            {canRewrite && r.locator && !deleted && onOptimize && (
+              <IconBtn
+                title={tt("browser:round.optimizeUser", { n: r.n })}
+                onClick={onOptimize}
+              >
+                <WandIcon size={13} />
               </IconBtn>
             )}
           </div>

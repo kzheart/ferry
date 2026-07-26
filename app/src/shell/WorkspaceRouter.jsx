@@ -17,6 +17,9 @@ export function WorkspaceRouter({
   historySelection,
   agentAttachments,
   onAgentAttachmentsChange,
+  onStartOptimization,
+  optimizationDraft,
+  onOptimizationDraftConsumed,
   onFirstDone,
   scanningLabel,
   emptyLibraryLabel,
@@ -62,6 +65,7 @@ export function WorkspaceRouter({
             onLoadMore={detailActions.onLoadMore}
             loadingMore={detailActions.loadingMore}
             onResume={detailActions.onResume}
+            onOptimize={onStartOptimization}
           />
         ) : (
           <div
@@ -88,6 +92,8 @@ export function WorkspaceRouter({
           scanSessions={sessions}
           attachments={agentAttachments}
           onAttachmentsChange={onAgentAttachmentsChange}
+          externalDraft={optimizationDraft}
+          onExternalDraftConsumed={onOptimizationDraftConsumed}
           onNavigate={floatChat.onNavigate}
           onOpenConfig={floatChat.onOpenConfig}
         />

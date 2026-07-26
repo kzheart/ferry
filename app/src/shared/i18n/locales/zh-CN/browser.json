@@ -13,6 +13,7 @@
     "readFailed": "读取失败:{{error}}",
     "parsing": "解析会话中…",
     "noMessages": "该会话没有可展示的消息",
+    "optimize": "用角色优化会话",
     "subSessions": "{{n}} 个子会话",
     "subSessionsLine": "{{tool}} 会话",
     "arrow": "→"
@@ -44,6 +45,7 @@
     "undoDelete": "撤销删除",
     "deleteTurn": "删除第 {{n}} 轮",
     "rewriteUser": "改写用户消息",
+    "optimizeUser": "优化第 {{n}} 轮提问",
     "cancelRewrite": "取消改写 Esc",
     "confirmRewrite": "确认改写 ⌘↵",
     "rewritten": "已改写",

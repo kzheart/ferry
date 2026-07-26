@@ -20,6 +20,7 @@ import {
   Spinner,
   TerminalIcon,
   ToolIcon,
+  WandIcon,
 } from "../../shared/ui/icons.jsx";
 import PendingEditBar from "./PendingEditBar.jsx";
 import { CompactionBoundary, ContextStatusChip } from "./SessionContext.jsx";
@@ -38,6 +39,7 @@ export default memo(function SessionDetail({
   navigationTarget,
   onLoadMore,
   loadingMore,
+  onOptimize,
 }) {
   const { t: tt } = useTranslation();
   const {
@@ -243,6 +245,15 @@ export default memo(function SessionDetail({
               >
                 {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
               </button>}
+              {canRewrite && onOptimize && (
+                <button
+                  className="ftool-btn"
+                  title={tt("browser:session.optimize")}
+                  onClick={() => onOptimize({})}
+                >
+                  <WandIcon />
+                </button>
+              )}
               {canMigrate && (
                 <button
                   data-guide="migrate"
@@ -358,6 +369,9 @@ export default memo(function SessionDetail({
                     const o = opFor(r.n, "rewrite");
                     if (o) removeOp(o.id);
                   }}
+                  onOptimize={
+                    onOptimize ? () => onOptimize({ turn: r.n }) : undefined
+                  }
                   onStartReply={() => startReplyEdit(r.assistantReply)}
                   onUpdateReply={(items) => {
                     const o = opFor(r.n, "assistant-reply");

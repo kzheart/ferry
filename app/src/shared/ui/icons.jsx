@@ -192,6 +192,10 @@ export const UndoIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M3.5 6.5h6a3.6 3.6 0 1 1 0 7.2H6" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"/><path d="M6.3 3.7L3.5 6.5l2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
+export const WandIcon = ({ size = 14 }) => svg("0 0 24 24", size, size,
+  '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></g>',
+  { flex: "none" });
+
 export const BookmarkIcon = ({ size = 12 }) => svg("0 0 16 16", size, size,
   '<path d="M4.2 2.5h7.6a.6.6 0 0 1 .6.6v10.4l-4.4-3-4.4 3V3.1a.6.6 0 0 1 .6-.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
   { flex: "none" });

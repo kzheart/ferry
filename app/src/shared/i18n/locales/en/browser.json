@@ -13,6 +13,7 @@
     "readFailed": "Failed to load: {{error}}",
     "parsing": "Parsing session…",
     "noMessages": "No displayable messages in this session",
+    "optimize": "Optimize with a role",
     "subSessions": "{{n}} sub-sessions",
     "subSessionsLine": "{{tool}} session",
     "arrow": "→"
@@ -44,6 +45,7 @@
     "undoDelete": "Undo delete",
     "deleteTurn": "Delete turn {{n}}",
     "rewriteUser": "Rewrite user message",
+    "optimizeUser": "Optimize turn {{n}} prompt",
     "cancelRewrite": "Cancel rewrite Esc",
     "confirmRewrite": "Confirm rewrite ⌘↵",
     "rewritten": "Edited",
