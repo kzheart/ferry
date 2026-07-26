@@ -5,7 +5,6 @@
     "placeholder": "搜索对话",
     "newChat": "新对话",
     "empty": "还没有对话",
-    "footer": "{{n}} 个对话",
     "pin": "置顶",
     "unpin": "取消置顶",
     "delete": "删除对话",
@@ -26,6 +25,7 @@
   "chat": {
     "newChat": "新对话",
     "untitled": "未命名对话",
+    "thinking": "正在思考…",
     "steered": "转向",
     "followedUp": "追加",
     "runFailed": "本次运行失败 {{message}}",

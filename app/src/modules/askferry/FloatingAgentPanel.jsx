@@ -9,8 +9,8 @@ import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
   sessionAttachment, sessionAttachmentKey, sessionDisplayText, sessionIdentity }
   from "../browser/public.js";
 import { CloseIcon, RailGlyph, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
-import { groupAgentTimeline } from "./agentTimelineModel.js";
-import { AgentChatItem } from "./AgentChatItem.jsx";
+import { groupAgentTimeline, isAwaitingReply } from "./agentTimelineModel.js";
+import { AgentChatItem, ThinkingIndicator } from "./AgentChatItem.jsx";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";
 import { AgentComposer } from "./AgentComposer.jsx";
 
@@ -240,6 +240,7 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
                         onNavigate={onNavigate} />
                     : <AgentChatItem key={`item-${index}`} item={group}
                         sessionId={ferry.activeId} onNavigate={onNavigate} />))}
+                {isAwaitingReply(log?.status, items) && <ThinkingIndicator />}
               </div>
             </div>
           )}
