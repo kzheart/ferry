@@ -113,6 +113,8 @@
     "turn": "第 {{n}} 轮",
     "migrationResult": "迁移结果",
     "edits": "{{n}} 项编辑",
+    "candidatePending": "候选，尚未写入",
+    "moreProposals": "还有 {{n}} 条候选",
     "openDiff": "打开会话差异",
     "tokens": "{{n}} tokens",
     "sessions": "{{n}} 个会话"

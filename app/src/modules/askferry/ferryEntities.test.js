@@ -59,6 +59,36 @@ test("supports explicit discriminated entities and keeps unknown results as text
   assert.deepEqual(entitiesFromToolResult("future_tool", { details: { value: 1 } }), []);
 });
 
+test("session_edit 的 rewrite args 规范化为候选 proposals,delete-turn 不混入", () => {
+  const args = {
+    tool: "codex", ref: "fsr_b", intent: "preview",
+    ops: [
+      { op: "rewrite", locator: "fml_1", text: "更清晰的提问 1" },
+      { op: "delete-turn", turn: 2 },
+      { op: "rewrite", locator: "fml_3", text: "更清晰的提问 3" },
+    ],
+  };
+  const entity = entitiesFromToolResult("session_edit", { details: {
+    kind: "edit", ref: "fsr_b",
+    preview: { tool: "codex", changes: [{ locator: "fml_1" }, { locator: "fml_3" }] },
+  } }, args)[0];
+
+  assert.equal(entity.type, FERRY_ENTITY.edit);
+  assert.equal(entity.intent, "preview");
+  assert.deepEqual(entity.proposals, [
+    { locator: "fml_1", text: "更清晰的提问 1" },
+    { locator: "fml_3", text: "更清晰的提问 3" },
+  ]);
+  // 完整候选文本保留,locator 原样携带
+  assert.equal(entity.proposals[1].locator, "fml_3");
+
+  // 没有 args 的旧路径不受影响
+  const bare = entitiesFromToolResult("session_edit", { details: {
+    kind: "edit", plan_id: "op_e", preview: { tool: "codex", changes: [] },
+  } })[0];
+  assert.deepEqual(bare.proposals, []);
+});
+
 test("unwraps auto-applied operation envelopes", () => {
   const entity = entitiesFromToolResult("migrate", { details: {
     status: "applied",

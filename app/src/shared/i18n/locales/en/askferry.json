@@ -114,6 +114,8 @@
     "migrationResult": "Migration result",
     "edits_one": "{{n}} edit",
     "edits_other": "{{n}} edits",
+    "candidatePending": "Candidate — not written yet",
+    "moreProposals": "{{n}} more candidates",
     "openDiff": "Open session diff",
     "tokens": "{{n}} tokens",
     "sessions_one": "{{n}} session",
