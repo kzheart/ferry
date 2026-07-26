@@ -63,6 +63,9 @@ def test_only_declared_pure_reads_can_use_parallel_dispatch():
         "models",
         "history",
         "session_meta_list",
+        # scan_progress 是内存快照纯读,必须并发:它的意义就是在 scan 占用
+        # serial 池期间提供进度
+        "scan_progress",
     }
     assert all(
         ENGINE_METHOD_POLICIES[method]["kind"] == "read"

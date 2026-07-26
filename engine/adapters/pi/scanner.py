@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from ...sessions.scan_progress import TRACKER
 from ...sessions.usage import add_tokens, empty_tokens, has_tokens, iso_ms
 from ...system.paths import pi_session_roots
 from ..shared.scanner import clip_text
@@ -86,28 +87,32 @@ def _meta(path: Path, stat) -> dict:
 def scan(cache):
     rows = []
     seen = set()
-    for root in pi_session_roots():
-        if not root.exists():
+    candidates = [
+        path
+        for root in pi_session_roots() if root.exists()
+        for path in root.rglob("*.jsonl")
+    ]
+    TRACKER.set_total(len(candidates))
+    for path in candidates:
+        TRACKER.advance()
+        try:
+            resolved = path.resolve(strict=True)
+            stat = resolved.stat()
+        except OSError:
             continue
-        for path in root.rglob("*.jsonl"):
+        if resolved in seen or not resolved.is_file():
+            continue
+        seen.add(resolved)
+        cached = cache.get(resolved, stat) if cache is not None else None
+        if cached is None:
             try:
-                resolved = path.resolve(strict=True)
-                stat = resolved.stat()
+                cached = _meta(resolved, stat)
             except OSError:
-                continue
-            if resolved in seen or not resolved.is_file():
-                continue
-            seen.add(resolved)
-            cached = cache.get(resolved, stat) if cache is not None else None
-            if cached is None:
-                try:
-                    cached = _meta(resolved, stat)
-                except OSError:
-                    cached = {}
-                if cache is not None:
-                    cache.put(resolved, stat, cached)
-            if cached:
-                rows.append(cached)
+                cached = {}
+            if cache is not None:
+                cache.put(resolved, stat, cached)
+        if cached:
+            rows.append(cached)
     return rows
 
 

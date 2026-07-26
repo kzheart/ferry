@@ -188,7 +188,7 @@ export function AppOverlays({
             borderRadius: 6,
             boxShadow: "var(--shadow-menu)",
             pointerEvents: "none",
-            whiteSpace: "nowrap",
+            whiteSpace: "pre",
             animation: "ffade .1s ease",
           }}
         >

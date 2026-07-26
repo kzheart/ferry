@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from ...sessions.scan_progress import TRACKER
 from ...sessions.topology import session_roots
 
 
@@ -17,7 +18,11 @@ def clip_text(text: str, size: int = 80) -> str:
 def scan_jsonl(pattern: str, cache, parse: Callable[[Path, object], dict]) -> list[dict]:
     """Scan cached JSONL files; adapters only implement their record schema."""
     rows = []
-    for filename in glob.glob(pattern, recursive=True):
+    filenames = glob.glob(pattern, recursive=True)
+    # 进度上报只在 RPC scan 期间生效,其他入口(如内容索引预热)是空操作
+    TRACKER.set_total(len(filenames))
+    for filename in filenames:
+        TRACKER.advance()
         path = Path(filename)
         try:
             stat = path.stat()

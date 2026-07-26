@@ -3,7 +3,9 @@
     "expand": "展开侧边栏 ⌘B",
     "collapse": "收起侧边栏 ⌘B",
     "scanning": "扫描中…",
-    "rescan": "重新扫描"
+    "rescan": "重新扫描",
+    "scanProgress": "索引中 {{done}}/{{total}}",
+    "scanFinalizing": "正在写入索引…"
   },
   "rail": {
     "overview": "总览",

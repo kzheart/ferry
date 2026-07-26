@@ -15,6 +15,7 @@ export function useBrowserData() {
   const [env, setEnv] = useState(() => preloaded?.env || null);
   const [scan, setScan] = useState(() => preloaded?.scan || null);
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(null);
   const [scanReady, setScanReady] = useState(false);
   const [lastScan, setLastScan] = useState(() => preloaded?.lastScan || null);
   const [historyRows, setHistoryRows] = useState(() => preloaded?.history || []);
@@ -32,6 +33,15 @@ export function useBrowserData() {
   const doScan = async () => {
     if (scanning) return;
     setScanning(true);
+    setScanProgress(null);
+    // scan 阻塞在 serial 池,scan_progress 走 parallel-read 池,扫描期间可查
+    const poll = setInterval(() => {
+      engine("scan_progress")
+        .then(progress => {
+          if (progress?.state === "running") setScanProgress(progress);
+        })
+        .catch(() => {});
+    }, 350);
     try {
       const result = await engine("scan");
       const now = Date.now();
@@ -48,6 +58,8 @@ export function useBrowserData() {
         ...(current || {}),
       }));
     }
+    clearInterval(poll);
+    setScanProgress(null);
     setScanning(false);
   };
   const loadHistory = () => engine("history")
@@ -68,6 +80,6 @@ export function useBrowserData() {
     loadPricing();
   }, []);
 
-  return { env, scan, scanning, scanReady, lastScan, historyRows, pricing,
-    doScan, loadHistory, deleteHistory };
+  return { env, scan, scanning, scanProgress, scanReady, lastScan, historyRows,
+    pricing, doScan, loadHistory, deleteHistory };
 }

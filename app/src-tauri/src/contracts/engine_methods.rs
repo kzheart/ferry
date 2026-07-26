@@ -42,6 +42,11 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
         }),
+        "scan_progress" => Some(EngineMethodPolicy {
+            exposure: Exposure::Public,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+        }),
         "env" => Some(EngineMethodPolicy {
             exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
