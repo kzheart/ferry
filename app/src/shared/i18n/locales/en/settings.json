@@ -214,7 +214,19 @@
     "test": "Test connection",
     "testOk": "Connected · {{model}} · {{ms}}ms",
     "models": "Models",
-    "noModels": "No models yet. Refresh the catalog on the Models page, or add one by hand here."
+    "noModels": "No models yet. Refresh the catalog on the Models page, or add one by hand here.",
+    "custom": {
+      "addEntry": "Add custom provider…",
+      "title": "Custom provider",
+      "name": "Name",
+      "namePlaceholder": "e.g. My Gateway",
+      "format": "API format",
+      "formatOpenAI": "OpenAI-compatible",
+      "formatAnthropic": "Anthropic-compatible",
+      "apiKeyOptional": "API key (optional)",
+      "firstModel": "Model ID",
+      "create": "Add"
+    }
   },
   "models": {
     "search": "Search models",
