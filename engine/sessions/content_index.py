@@ -22,7 +22,7 @@ from .model import tool_result_text
 
 log = logging.getLogger(__name__)
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 # trigram 至少要 3 个字符才能走倒排;更短的查询回退为子串扫描。
 _MIN_TRIGRAM_CHARS = 3
 # 单条消息两列各自的入索引上限。超长的工具输出(整文件 dump)截断进索引,
@@ -39,8 +39,12 @@ _SNIPPET_AFTER = 240
 _MATCHES_PER_SESSION = 3
 
 
-def _extract(message) -> tuple[str, str]:
-    """一条消息拆成正文列与工具输出列,分列才能支持检索范围过滤。"""
+def _extract(message) -> tuple[str, str, bool]:
+    """一条消息拆成正文列与工具输出列,分列才能支持检索范围过滤。
+
+    超过 _RECORD_TEXT_CAP 的部分截断进索引,并把截断事实作为第三个
+    返回值带出:静默丢尾巴会让"没搜到"与"没索引到"无法区分。
+    """
     texts, tools = [], []
     for block in message.blocks:
         if block.kind == "text" and block.text:
@@ -50,10 +54,10 @@ def _extract(message) -> tuple[str, str]:
             output = tool_result_text(block.tool.result)
             if output:
                 tools.append(output)
-    return (
-        "\n".join(texts)[:_RECORD_TEXT_CAP],
-        "\n".join(tools)[:_RECORD_TEXT_CAP],
-    )
+    text = "\n".join(texts)
+    tool_text = "\n".join(tools)
+    clipped = len(text) > _RECORD_TEXT_CAP or len(tool_text) > _RECORD_TEXT_CAP
+    return text[:_RECORD_TEXT_CAP], tool_text[:_RECORD_TEXT_CAP], clipped
 
 
 def _session_rows(session) -> list[tuple]:
@@ -62,10 +66,13 @@ def _session_rows(session) -> list[tuple]:
     for message_index, message in enumerate(session.messages):
         if message.role == "user":
             turn += 1
-        text, tool_text = _extract(message)
+        text, tool_text, clipped = _extract(message)
         if not text and not tool_text:
             continue
-        rows.append((message_index + 1, turn, message.role, text, tool_text))
+        rows.append((
+            message_index + 1, turn, message.role, text, tool_text,
+            int(clipped),
+        ))
     return rows
 
 
@@ -160,6 +167,7 @@ class ContentIndex:
                 ref TEXT NOT NULL,
                 revision TEXT NOT NULL,
                 record_rows INTEGER NOT NULL DEFAULT 0,
+                clipped_rows INTEGER NOT NULL DEFAULT 0,
                 failed INTEGER NOT NULL DEFAULT 0,
                 indexed_at INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(tool, ref)
@@ -172,7 +180,8 @@ class ContentIndex:
                 turn INTEGER NOT NULL,
                 role TEXT NOT NULL,
                 text TEXT NOT NULL DEFAULT '',
-                tool_text TEXT NOT NULL DEFAULT ''
+                tool_text TEXT NOT NULL DEFAULT '',
+                clipped INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS records_by_session
                 ON records(tool, ref);
@@ -307,8 +316,9 @@ class ContentIndex:
                 )
                 connection.executemany(
                     "INSERT INTO records"
-                    "(tool, ref, message, turn, role, text, tool_text)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "(tool, ref, message, turn, role, text, tool_text,"
+                    " clipped)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         (record.tool, record.canonical_ref, *row)
                         for row in rows
@@ -316,10 +326,12 @@ class ContentIndex:
                 )
                 connection.execute(
                     "INSERT OR REPLACE INTO indexed_sessions"
-                    "(tool, ref, revision, record_rows, failed, indexed_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    "(tool, ref, revision, record_rows, clipped_rows,"
+                    " failed, indexed_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (record.tool, record.canonical_ref, record.revision,
-                     len(rows), failed, int(time.time())),
+                     len(rows), sum(row[5] for row in rows), failed,
+                     int(time.time())),
                 )
 
     def _enqueue(self, index: AgentSessionIndex,
@@ -357,6 +369,53 @@ class ContentIndex:
             )
 
     # ---------- 查询 ----------
+
+    def clipped_rows_by_session(self) -> dict[tuple[str, str], int]:
+        """每个会话被 16KB 截断的消息数;只返回确有截断的会话。
+
+        搜索层用它把"这个会话有内容没进索引"透给模型——盲区必须是
+        已知的盲区,模型才能决定要不要升级到穷尽扫描。
+        """
+        with self._db_lock:
+            connection = self._db()
+            if connection is None:
+                return {}
+            rows = connection.execute(
+                "SELECT tool, ref, clipped_rows FROM indexed_sessions"
+                " WHERE clipped_rows > 0",
+            ).fetchall()
+        return {(tool, ref): count for tool, ref, count in rows}
+
+    def sessions_matching_literals(
+        self, literals: list[str], include_tool_outputs: bool,
+    ) -> set[tuple[str, str]] | None:
+        """正则预过滤:必然字面量全部命中(同一会话内,可跨消息)的会话集。
+
+        返回 None 表示索引不可用,调用方应退化为全量扫描。字面量按 AND
+        跨消息聚合——正则的各片段本就可能落在不同消息,按单条消息 AND
+        会漏;这里宁可候选集偏大,正则本体在扫描层兜底精确性。
+        """
+        with self._db_lock:
+            connection = self._db()
+            if connection is None:
+                return None
+            columns = "{text tool_text}" if include_tool_outputs else "{text}"
+            candidates: set[tuple[str, str]] | None = None
+            for literal in literals:
+                phrase = '"' + literal.replace('"', '""') + '"'
+                rows = connection.execute(
+                    "SELECT DISTINCT r.tool, r.ref FROM records_fts"
+                    " JOIN records r ON r.id = records_fts.rowid"
+                    " WHERE records_fts MATCH ?",
+                    (f"{columns}: {phrase}",),
+                ).fetchall()
+                matched = {(tool, ref) for tool, ref in rows}
+                candidates = (
+                    matched if candidates is None else candidates & matched
+                )
+                if not candidates:
+                    break
+        return candidates if candidates is not None else set()
 
     def _match_one(self, needle: str,
                    include_tool_outputs: bool) -> tuple[list, str]:

@@ -441,6 +441,106 @@ def test_patterns_metadata_scope_is_ored(agent_environment):
     assert hit["total_matches"] == 1
 
 
+def test_required_literals_are_conservative():
+    from engine.sessions import regex_search
+
+    # 必经路径上的连续字面量,≥3 字符才有 trigram 价值。
+    assert regex_search.required_literals(
+        r"ghp_[A-Za-z0-9]{36}") == ["ghp_"]
+    assert regex_search.required_literals(r"(foo|bar)baz") == ["baz"]
+    assert regex_search.required_literals(r"ab?cde") == ["cde"]
+    assert regex_search.required_literals(
+        r'record_count":\s*\d+') == ['record_count":']
+    # 纯字符类/分支提不出必然字面量 → 调用方退化为全量扫描。
+    assert regex_search.required_literals(r"[0-9a-f]{32}") == []
+    assert regex_search.required_literals(r"(第一|第二)轮") == []
+
+
+def test_clipped_messages_are_flagged_in_results(
+        agent_environment, monkeypatch):
+    monkeypatch.setattr(session_content, "_RECORD_TEXT_CAP", 50)
+    result = session_search.search_sessions("第一轮")
+    item = result["sessions"][0]
+    # 界*5000 的消息与超长工具输出都被截断,盲区必须逐会话透出。
+    assert item["partially_indexed_messages"] >= 1
+    # 纯元数据搜索不涉及内容覆盖度,不带该标记。
+    metadata = session_search.search_sessions("支付", scope="metadata")
+    assert "partially_indexed_messages" not in metadata["sessions"][0]
+
+
+def test_regex_prefilter_reports_clipped_blind_spot_and_exhaustive_rescans(
+        agent_environment, monkeypatch):
+    from engine.sessions.model import Block, Message
+
+    monkeypatch.setattr(session_content, "_RECORD_TEXT_CAP", 50)
+    browser = agent_environment["claude_browser"]
+    browser.session.messages.append(
+        Message("assistant", [Block("text", "x" * 200 + " tailsecret99")]),
+    )
+    # 字面量 tailsecret 只存在于截断掉的尾部:预过滤命不中,但必须把
+    # "有截断会话未被扫描"这个事实报出来,而不是让 0 结果冒充全覆盖。
+    missed = session_search.search_sessions(regex=r"tailsecret\d+")
+    assert missed["total_matches"] == 0
+    scan = missed["content_index"]["regex_scan"]
+    assert scan["mode"] == "prefilter"
+    assert scan["clipped_sessions_not_scanned"] >= 1
+    # exhaustive 跳过预过滤扫原始转录:原文没有 16KB 截断,命中在索引
+    # 从未见过的位置。
+    found = session_search.search_sessions(
+        regex=r"tailsecret\d+", exhaustive=True,
+    )
+    assert found["total_matches"] == 1
+    assert found["content_index"]["match_mode"] == "regex"
+    assert found["content_index"]["regex_scan"]["mode"] == "full"
+    match = found["sessions"][0]["content_matches"][0]
+    assert "tailsecret99" in match["snippet"]
+    assert match["message"] == 5
+
+
+def test_regex_without_literals_scans_all_filtered_sessions(
+        agent_environment):
+    result = session_search.search_sessions(regex=r"(第一|第二)轮")
+    assert result["total_matches"] == 1
+    item = result["sessions"][0]
+    assert item["matched_in"] == ["content"]
+    assert item["content_match_count"] == 2
+    assert [m["message"] for m in item["content_matches"]] == [1, 3]
+    scan = result["content_index"]["regex_scan"]
+    assert scan["mode"] == "full"
+    assert scan["scanned_sessions"] == 2
+    assert scan["skip_reason"] is None
+
+
+def test_regex_scans_tool_outputs_only_on_opt_in(agent_environment):
+    hidden = session_search.search_sessions(regex=r"Bearer \S+-token-\w+")
+    assert hidden["total_matches"] == 0
+    found = session_search.search_sessions(
+        regex=r"Bearer \S+-token-\w+", include_tool_outputs=True,
+    )
+    assert found["total_matches"] == 1
+    snippet = found["sessions"][0]["content_matches"][0]["snippet"]
+    assert "very-secret-token-value" in snippet
+
+
+def test_regex_matches_metadata_haystack(agent_environment):
+    result = session_search.search_sessions(
+        regex=r"secret-proj\w+", scope="metadata",
+    )
+    assert result["total_matches"] == 1
+    assert "content_index" not in result
+
+
+def test_regex_validation(agent_environment):
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions("第一轮", regex=r"foo")
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions(regex="(")
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions("第一轮", exhaustive=True)
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions(regex="r" * 501)
+
+
 def test_search_requires_query_or_patterns_and_bounds_patterns(
         agent_environment):
     # 两者都缺:不再默默返回全部,交由工具层拦截,引擎侧空检索不产生 needle。
