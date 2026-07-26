@@ -6,6 +6,7 @@ import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
+import { AppChromeProvider } from "../shared/capabilities/appChrome.jsx";
 import {
   sessionIdentity,
   useBrowserData,
@@ -31,7 +32,6 @@ import { useRailNavigation } from "./useRailNavigation.js";
 import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
 import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
 import { useWorkspaceInteractions } from "./useWorkspaceInteractions.js";
-import { buildOverlayProps } from "./workspaceOverlayProps.js";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -501,11 +501,45 @@ export default function App() {
     ],
   );
 
+  const appChrome = useMemo(
+    () => ({
+      toast: { value: toast, setValue: setToast },
+      railTip: { value: rail.railTip, railOnly },
+      settings: {
+        open: settingsOpen,
+        value: settings,
+        onChange: setSettings,
+        updater,
+        section: settingsSection,
+        scanResult: scan,
+        env,
+        scanning,
+        scanProgress,
+        scan: doScan,
+        guideSeen: onboarding.seen,
+        setOpen: setSettingsOpen,
+        openGuide: onboarding.openGuide,
+        setView,
+      },
+      guide: {
+        step: onboarding.step,
+        onGo: onboarding.setStep,
+        onFinish: onboarding.finishGuide,
+      },
+    }),
+    [
+      toast, setToast, rail.railTip, railOnly, settingsOpen, settings,
+      setSettings, updater, settingsSection, scan, env, scanning, scanProgress,
+      doScan, onboarding,
+    ],
+  );
+
   return (
     <FerryRuntimeProvider value={ferry}>
     <SessionEditingProvider value={editingSurface}>
     <BrowserStateProvider value={browserState}>
     <OperationsStateProvider value={operationsState}>
+    <AppChromeProvider value={appChrome}>
     <div
       data-ferry-win="1"
       style={{
@@ -614,56 +648,20 @@ export default function App() {
         }
       >
         <WorkspaceRouter
-          view={view}
-          sessions={sessions}
           historyRows={historyRows}
           pricing={pricing}
-          scanning={scanning}
-          navigationTarget={navigationTarget}
-          currentSession={cur}
-          selectedSessionId={selId}
-          detailMeta={detailMeta}
-          detail={detail}
-          detailActions={{
-            ...detailActs,
-                onDeleteHistory: () => setHistDel(histSel),
-          }}
           historySelection={histSel}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
-          onNavigate={peekEntity}
-          onOpenConfig={openConfig}
-          environment={env}
-          scan={scan}
           onFirstDone={onboarding.completeFirstRun}
           scanningLabel={t("app:detail.scanningSessions")}
           emptyLibraryLabel={t("app:detail.noSessionToDisplay")}
         />
       </AppShell>
 
-      <AppOverlayController
-        t={t}
-        {...buildOverlayProps({
-          setView,
-          environment: env,
-          settings,
-          setSettings,
-          settingsOpen,
-          setSettingsOpen,
-          settingsSection,
-          updater,
-          onboarding,
-          rail,
-          railOnly,
-          scan,
-          scanning,
-          scanProgress,
-          doScan,
-          toast,
-          setToast,
-        })}
-      />
+      <AppOverlayController t={t} />
     </div>
+    </AppChromeProvider>
     </OperationsStateProvider>
     </BrowserStateProvider>
     </SessionEditingProvider>

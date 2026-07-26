@@ -1,20 +1,16 @@
 import { useMemo } from "react";
 
 import { sessionIdentity } from "../modules/browser/public.js";
+import { useAppChrome } from "../shared/capabilities/appChrome.jsx";
 import { useBrowserState } from "../shared/capabilities/browserState.jsx";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
 import { useOperationsState } from "../shared/capabilities/operationsState.jsx";
 import { AppOverlays } from "./AppOverlays.jsx";
 import { useSessionContentSearch } from "./useSessionContentSearch.js";
 
-export function AppOverlayController({
-  t,
-  toast,
-  railTip,
-  settings,
-  guide,
-}) {
+export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
+  const { toast, railTip, settings, guide } = useAppChrome();
   const { peek, search, contextMenu, deletion, rename, tags, filters } =
     useBrowserState();
   const { organization, migration, editing, floatChat, agentRename } =
