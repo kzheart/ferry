@@ -35,6 +35,38 @@ test("replay reconstructs an approval card from a persisted operation plan", () 
   assert.equal(log.items[1].status, "pending");
 });
 
+test("优化 preview 的 rewrite args 变成候选实体,operation.proposed 仍走现有审批卡", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "tool.started", timestamp: "2026-01-01T00:00:00Z", run_id: "run",
+    payload: { tool_call_id: "call_1", name: "session_edit", args: {
+      tool: "codex", ref: "fsr_target1", intent: "preview",
+      ops: [{ op: "rewrite", locator: "fml_u1", text: "更清晰的提问" }],
+    } },
+  });
+  log = applyEvent(log, {
+    type: "tool.completed", timestamp: "2026-01-01T00:00:01Z", run_id: "run",
+    payload: { tool_call_id: "call_1", name: "session_edit", is_error: false,
+      result: { text: "fallback", details: {
+        kind: "edit", ref: "fsr_target1",
+        preview: { tool: "codex", changes: [{ locator: "fml_u1" }] },
+      } } },
+  });
+  // 候选实体保留 locator 与完整文本,状态非 applied → UI 标记"尚未写入"
+  assert.deepEqual(log.items[0].entities[0].proposals,
+    [{ locator: "fml_u1", text: "更清晰的提问" }]);
+  assert.notEqual(log.items[0].entities[0].status, "applied");
+
+  // 最终 execute 的 operation.proposed 仍生成现有 pending 审批卡
+  log = applyEvent(log, {
+    type: "operation.proposed", run_id: "run",
+    payload: { tool: "session_edit", operation: { plan_id: "op_opt", kind: "edit" } },
+  });
+  const approval = log.items.find(item => item.kind === "approval");
+  assert.ok(approval, "operation.proposed 没有生成审批卡");
+  assert.equal(approval.status, "pending");
+  assert.equal(approval.operation.plan_id, "op_opt");
+});
+
 test("auto-applied operations render no approval card from either event path", () => {
   let log = applyEvent(emptyLog(), {
     type: "tool.started", timestamp: "2026-01-01T00:00:00Z", run_id: "run",

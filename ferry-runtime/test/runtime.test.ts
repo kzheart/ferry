@@ -16,6 +16,63 @@ import {
   type EventEnvelope,
 } from "../src/server/messages.js";
 import { createProtocolTestBackend } from "./test-backend.js";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+
+/**
+ * 按脚本逐条发出工具调用的后端:每个 assistant 轮消费一条脚本;脚本耗尽后
+ * 回落到协议测试后端(把最后的 toolResult echo 成文本并正常收尾)。
+ */
+function scriptedToolBackend(
+  script: Array<{ name: string; arguments: Record<string, unknown> }>,
+) {
+  const base = createProtocolTestBackend();
+  let index = 0;
+  const assistant = (content: unknown[], stopReason: string) =>
+    ({
+      role: "assistant",
+      content,
+      api: "protocol-test",
+      provider: "protocol-test",
+      model: "protocol-test-driver",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason,
+      timestamp: Date.now(),
+    }) as never;
+  return {
+    ...base,
+    streamFn: ((model, context, options) => {
+      if (index >= script.length) return base.streamFn(model, context, options);
+      const step = script[index]!;
+      index += 1;
+      const call = {
+        type: "toolCall",
+        id: `scripted-${index}`,
+        name: step.name,
+        arguments: step.arguments,
+      } as never;
+      const stream = createAssistantMessageEventStream();
+      const partial = assistant([], "toolUse");
+      const complete = assistant([call], "toolUse");
+      stream.push({ type: "start", partial });
+      stream.push({ type: "toolcall_start", contentIndex: 0, partial });
+      stream.push({
+        type: "toolcall_end",
+        contentIndex: 0,
+        toolCall: call,
+        partial: complete,
+      });
+      stream.push({ type: "done", reason: "toolUse", message: complete });
+      return stream;
+    }) as typeof base.streamFn,
+  };
+}
 
 async function createRuntime(
   options: Parameters<typeof AgentRuntime.create>[0] = {},
@@ -178,6 +235,121 @@ describe("AgentRuntime", () => {
       purpose: "session-optimization",
     });
     expect(restored.state("legacy")).toMatchObject({ purpose: "general" });
+  });
+
+  it("optimization workflow enforces read/preview/execute with pending approval end to end", async () => {
+    const roleStore = new EphemeralRoleStore();
+    // 自定义角色配 auto:验证 workflow 约束由 purpose 而非角色生效
+    await roleStore.create({
+      id: "custom-optimizer",
+      name: "Custom optimizer",
+      persona: "自定义优化角色。",
+      tools: ["session_read", "session_edit"],
+      apply_policy: "auto",
+    });
+    const goodOps = [
+      { op: "rewrite", locator: "fml_u1", text: "优化后的提问" },
+    ];
+    const script = [
+      { name: "session_read", arguments: { tool: "codex", ref: "fsr_target_1" } },
+      // assistant locator:必须被工具边界拒绝,不到达 handler
+      {
+        name: "session_edit",
+        arguments: {
+          tool: "codex", ref: "fsr_target_1", intent: "preview",
+          ops: [{ op: "rewrite", locator: "fml_a1", text: "改 assistant" }],
+        },
+      },
+      {
+        name: "session_edit",
+        arguments: {
+          tool: "codex", ref: "fsr_target_1", intent: "preview", ops: goodOps,
+        },
+      },
+      // preview 之后改了文本再 execute:指纹不匹配,拒绝
+      {
+        name: "session_edit",
+        arguments: {
+          tool: "codex", ref: "fsr_target_1", intent: "execute",
+          ops: [{ op: "rewrite", locator: "fml_u1", text: "被偷改的提问" }],
+        },
+      },
+      {
+        name: "session_edit",
+        arguments: {
+          tool: "codex", ref: "fsr_target_1", intent: "execute", ops: goodOps,
+        },
+      },
+    ];
+    const handled: Array<{ name: string; intent?: unknown; policy?: string }> =
+      [];
+    const runtime = await createRuntime({
+      roleStore,
+      backendFactory: () => scriptedToolBackend(script),
+      toolHandler: async (name, args, context) => {
+        handled.push({ name, intent: args.intent, policy: context.applyPolicy });
+        if (name === "session_read") {
+          return {
+            messages: [
+              { role: "user", editable: true, locator: "fml_u1" },
+              { role: "assistant", editable: false, locator: "fml_a1" },
+            ],
+          };
+        }
+        if (args.intent === "execute") {
+          // Engine 侧的 manual 编排:execute 只产生待审批的 operation plan
+          return {
+            status: "pending",
+            operation: { plan_id: "op_opt_1", kind: "edit" },
+          };
+        }
+        return { kind: "edit", ref: "fsr_target_1", preview: { changes: [] } };
+      },
+    });
+    await runtime.createSession(
+      "opt",
+      undefined,
+      "custom-optimizer",
+      true,
+      undefined,
+      "session-optimization",
+    );
+    await runtime.prompt("opt", "优化这段会话");
+    await runtime.waitForIdle("opt");
+
+    // 被策略拦下的两次调用不会到达 Engine handler
+    expect(handled.map((call) => call.name)).toEqual([
+      "session_read",
+      "session_edit",
+      "session_edit",
+    ]);
+    expect(handled.slice(1).map((call) => call.intent)).toEqual([
+      "preview",
+      "execute",
+    ]);
+    // 角色是 auto,但优化会话对 Engine 始终宣告 manual
+    expect(handled.slice(1).every((call) => call.policy === "manual")).toBe(
+      true,
+    );
+
+    const events = runtime.replay("opt", 0);
+    const toolResults = events.filter(
+      (event) => event.type === "tool.completed",
+    );
+    // assistant locator 与指纹不匹配的 execute 都以错误结果回给模型
+    expect(
+      toolResults.filter((event) => event.payload.is_error === true).length,
+    ).toBe(2);
+    const finalEdit = toolResults.at(-1)!.payload as {
+      is_error: boolean;
+      result: { details: { status: string; operation: { plan_id: string } } };
+    };
+    expect(finalEdit.is_error).toBeFalsy();
+    expect(finalEdit.result.details).toMatchObject({
+      status: "pending",
+      operation: { plan_id: "op_opt_1" },
+    });
+    expect(events.at(-1)?.type).toBe("run.completed");
   });
 
   it("injects fixed optimization workflow prompt only for optimization sessions", async () => {

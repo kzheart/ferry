@@ -247,6 +247,7 @@ export default memo(function SessionDetail({
               </button>}
               {canRewrite && onOptimize && (
                 <button
+                  data-optimize="session"
                   className="ftool-btn"
                   title={tt("browser:session.optimize")}
                   onClick={() => onOptimize({})}
