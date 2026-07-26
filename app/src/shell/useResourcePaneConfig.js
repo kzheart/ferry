@@ -1,7 +1,7 @@
 // 资源栏骨架配置:各工作区的标题、计数、搜索框与页脚文案。
 // 新增工作区在此登记一条,不必改动主壳的渲染。
 import { useMemo } from "react";
-import { fmtTime } from "../modules/browser/sessionModel.js";
+import { fmtTime } from "../modules/browser/public.js";
 
 export function useResourcePaneConfig({
   t,

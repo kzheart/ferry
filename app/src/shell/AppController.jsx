@@ -4,21 +4,19 @@ import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
-import { sessionIdentity } from "../modules/browser/sessionAttachment.js";
-import { useAskFerry } from "../modules/askferry/useAskFerry.js";
-import { useSettings } from "../modules/settings/useSettings.js";
-import { useAppUpdater } from "../modules/settings/useAppUpdater.js";
-import { useBrowserData } from "../modules/browser/useBrowserData.js";
-import { useSessionEditing } from "../modules/editing/useSessionEditing.js";
-import { useLibraryResourcePane } from "../modules/browser/useLibraryResourcePane.js";
-import { useSessionDeletion } from "../modules/browser/useSessionDeletion.js";
-import { useSessionMetadata } from "../modules/browser/useSessionMetadata.js";
-import { useSessionSelection } from "../modules/browser/useSessionSelection.js";
-import { useHistoryResourcePane } from "../modules/migration/useHistoryResourcePane.js";
 import {
-  initialWorkspace,
-  useOnboarding,
-} from "../modules/onboarding/useOnboarding.js";
+  sessionIdentity,
+  useBrowserData,
+  useLibraryResourcePane,
+  useSessionDeletion,
+  useSessionMetadata,
+  useSessionSelection,
+} from "../modules/browser/public.js";
+import { useAskFerry } from "../modules/askferry/public.js";
+import { useAppUpdater, useSettings } from "../modules/settings/public.js";
+import { useSessionEditing } from "../modules/editing/public.js";
+import { useHistoryResourcePane } from "../modules/migration/public.js";
+import { initialWorkspace, useOnboarding } from "../modules/onboarding/public.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppRail } from "./AppRail.jsx";
 import { WorkspaceToolbar } from "./WorkspaceToolbar.jsx";

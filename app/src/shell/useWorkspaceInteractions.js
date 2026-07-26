@@ -6,9 +6,11 @@ import {
   resumeDescriptor,
   supportsAgentCapability,
 } from "../shared/contracts/tools.js";
-import { sessionRef } from "../modules/browser/sessionModel.js";
-import { createSessionContextMenu } from "../modules/browser/sessionContextMenu.js";
-import { useLibraryResourcePaneActions } from "../modules/browser/useLibraryResourcePaneActions.js";
+import {
+  createSessionContextMenu,
+  sessionRef,
+  useLibraryResourcePaneActions,
+} from "../modules/browser/public.js";
 
 export function useWorkspaceInteractions({
   t,

@@ -1,5 +1,5 @@
 import { Spinner } from "../shared/ui/icons.jsx";
-import AgentSessionList from "../modules/askferry/AgentSessionList.jsx";
+import { AgentSessionList } from "../modules/askferry/public.js";
 import { HistoryList, LibraryList, Pane } from "./ResourcePane.jsx";
 
 export function ResourcePaneHost({

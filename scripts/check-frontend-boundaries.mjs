@@ -98,6 +98,16 @@ const violations = [
         : [`${path}: 同级模块 ${target.module} 只能通过 public/index 导入`];
     });
   })),
+  ...(await checkDirectory(join(appSource, "shell"), (file, source) => {
+    const path = file.slice(root.length + 1);
+    return importsFrom(source).flatMap(specifier => {
+      const target = resolvedArea(file, specifier);
+      if (!target || target.area !== "modules") return [];
+      return isPublicModuleEntry(target.target)
+        ? []
+        : [`${path}: shell 只能通过 public/index 导入模块 ${target.module}`];
+    });
+  })),
 ];
 
 if (violations.length) {
