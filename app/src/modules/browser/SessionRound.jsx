@@ -340,22 +340,12 @@ export default function SessionRound({
                 <TrashIcon />
               </IconBtn>
             ) : null}
-            {canRewrite && r.locator && !deleted && (
-              <IconBtn
-                title={tt("browser:round.rewriteUser")}
-                onClick={startRewrite}
-              >
-                <PencilIcon />
-              </IconBtn>
-            )}
-            {canRewrite && r.locator && !deleted && onOptimize && (
-              <IconBtn
-                title={tt("browser:round.optimizeUser", { n: r.n })}
-                onClick={onOptimize}
-              >
-                <WandIcon size={13} />
-              </IconBtn>
-            )}
+            {canRewrite && r.locator && !deleted && (<>
+              <IconBtn title={tt("browser:round.rewriteUser")}
+                onClick={startRewrite}><PencilIcon /></IconBtn>
+              {onOptimize && <IconBtn onClick={onOptimize}
+                title={tt("browser:round.optimizeUser", { n: r.n })}><WandIcon size={13} /></IconBtn>}
+            </>)}
           </div>
         </div>
       )}
