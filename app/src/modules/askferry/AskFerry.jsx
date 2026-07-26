@@ -1,7 +1,7 @@
 // Ask Ferry 主聊天视图 —— 对齐 ChatGPT/Claude/Cursor 桌面端的对话形态:
 // 头部只留标题;模式与模型选择器收进输入胶囊底部工具条(Cursor 式下拉);
 // 未配置凭据时聊天框照常显示,模型按钮变成「配置模型」直达设置;空对话时输入框垂直居中。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { readClipboardText } from "../../platform/desktop/client.js";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
@@ -34,6 +34,9 @@ export default function AskFerry({ scanSessions, onOpenConfig,
   const running = activeLog?.status === "running";
   const items = activeLog?.items || [];
   const empty = items.length === 0;
+  // 流式期间每个 token 都会换一次 items:不 memo 的话每帧都要把整条时间线
+  // 重新分组一遍。
+  const groups = useMemo(() => groupAgentTimeline(items), [items]);
 
   // 新消息时贴底滚动(用户上翻后不打扰)
   const stickRef = useRef(true);
@@ -209,7 +212,7 @@ export default function AskFerry({ scanSessions, onOpenConfig,
             style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px 24px" }}>
             <div style={{ maxWidth: 680, margin: "0 auto", display: "flex",
               flexDirection: "column", gap: 14 }}>
-              {groupAgentTimeline(items).map((g, i) => (
+              {groups.map((g, i) => (
                 g.kind === "trace"
                   ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
                   : <AgentChatItem key={`item-${i}`} item={g} sessionId={activeId}

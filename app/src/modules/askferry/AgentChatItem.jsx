@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import Markdown from "../../shared/ui/Markdown.jsx";
@@ -5,7 +6,7 @@ import { Spinner } from "../../shared/ui/icons.jsx";
 import { AgentToolRow } from "./AgentToolTrace.jsx";
 import { ApprovalCard, WorkflowCard } from "./AgentWorkflowCards.jsx";
 
-export function AgentChatItem({ item, sessionId, onNavigate }) {
+function AgentChatItemView({ item, sessionId, onNavigate }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   if (item.kind === "user") {
@@ -60,3 +61,6 @@ export function AgentChatItem({ item, sessionId, onNavigate }) {
   }
   return null;
 }
+
+// 流式期间每个 token 都会重渲染整条消息流,但只有最后一条 assistant 在变。
+export const AgentChatItem = memo(AgentChatItemView);
