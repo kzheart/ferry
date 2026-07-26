@@ -77,6 +77,10 @@ def test_only_declared_pure_reads_can_use_parallel_dispatch():
         # scan_progress 是内存快照纯读,必须并发:它的意义就是在 scan 占用
         # serial 池期间提供进度
         "scan_progress",
+        # show / session_asset 只经 AgentSessionIndex 的纯读路径(RLock 已保护),
+        # 放进并发池是为了首扫期间点开会话不必排在扫描后面
+        "show",
+        "session_asset",
     }
     assert all(
         ENGINE_METHOD_POLICIES[method]["kind"] == "read"
