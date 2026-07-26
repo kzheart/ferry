@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import copy
-import re
 import sqlite3
 
 from ...errors import AgentFormatChangedError, SessionNotFoundError
@@ -19,31 +18,8 @@ from ...sessions.model import (
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_data_url
+from ..shared.tool_canon import canonical_tool_input, canonical_tool_op
 from . import store as native_store
-
-
-TOOL_OPS = {
-    "bash": CanonicalOp.SHELL_EXEC,
-    "read": CanonicalOp.FS_READ,
-    "write": CanonicalOp.FS_WRITE,
-    "edit": CanonicalOp.FS_EDIT,
-    "apply_patch": CanonicalOp.FS_PATCH,
-    "grep": CanonicalOp.FS_SEARCH,
-    "glob": CanonicalOp.FS_GLOB,
-    "webfetch": CanonicalOp.WEB_FETCH,
-    "websearch": CanonicalOp.WEB_SEARCH,
-}
-
-
-def _patch_operations(patch: str) -> list[dict]:
-    return [
-        {"operation": operation.lower(), "path": path.strip()}
-        for operation, path in re.findall(
-            r"^\*\*\* (Add|Update|Delete) File: ([^\r\n]+)$",
-            patch,
-            re.MULTILINE,
-        )
-    ]
 
 
 def _canonical_tool_input(name: str, source_input):
@@ -51,88 +27,15 @@ def _canonical_tool_input(name: str, source_input):
         dict(source_input) if isinstance(source_input, dict) else source_input
     )
     if name == "task":
-        return CanonicalOp.AGENT_SPAWN, {
-            "description": str(
-                inputs.get("description") or "migrated subagent"
-            ),
-            "prompt": str(inputs.get("prompt") or ""),
-            "subagent_type": str(inputs.get("subagent_type") or "general"),
-        }
-    operation = TOOL_OPS.get(name)
+        return CanonicalOp.AGENT_SPAWN, canonical_tool_input(name, inputs)
+    operation = canonical_tool_op("opencode", name)
     if operation is None:
         return CanonicalOp.TOOL_INVOKE, {
             "namespace": "opencode",
             "name": name,
             "input": inputs,
         }
-    if not isinstance(inputs, dict):
-        return operation, inputs
-    if name == "bash":
-        value = {"command": inputs.get("command", "")}
-        if "workdir" in inputs:
-            value["workdir"] = inputs["workdir"]
-        if "timeout" in inputs:
-            value["timeout_ms"] = inputs["timeout"]
-        if "run_in_background" in inputs:
-            value["background"] = inputs["run_in_background"]
-        return operation, value
-    if name == "read":
-        value = {"file_path": inputs.get("filePath", "")}
-        value.update(
-            {
-                key: inputs[key]
-                for key in ("offset", "limit")
-                if key in inputs
-            }
-        )
-        return operation, value
-    if name == "write":
-        return operation, {
-            "file_path": inputs.get("filePath", ""),
-            "content": inputs.get("content", ""),
-        }
-    if name == "edit":
-        value = {
-            "file_path": inputs.get("filePath", ""),
-            "old": inputs.get("oldString", ""),
-            "new": inputs.get("newString", ""),
-        }
-        if "replaceAll" in inputs:
-            value["replace_all"] = inputs["replaceAll"]
-        return operation, value
-    if name == "apply_patch":
-        patch = str(inputs.get("patchText", ""))
-        return operation, {
-            "operations": _patch_operations(patch),
-            "raw_patch": patch,
-        }
-    if name == "grep":
-        value = {"query": inputs.get("pattern", "")}
-        if "path" in inputs:
-            value["path"] = inputs["path"]
-        if "include" in inputs:
-            value["glob"] = inputs["include"]
-        if "limit" in inputs:
-            value["max_results"] = inputs["limit"]
-        return operation, value
-    if name == "glob":
-        value = {"pattern": inputs.get("pattern", "")}
-        if "path" in inputs:
-            value["path"] = inputs["path"]
-        return operation, value
-    if name == "webfetch":
-        value = {"url": inputs.get("url", "")}
-        if "format" in inputs:
-            value["format"] = inputs["format"]
-        if "timeout" in inputs:
-            value["timeout_ms"] = inputs["timeout"]
-        return operation, value
-    if name == "websearch":
-        value = {"query": inputs.get("query", "")}
-        if "numResults" in inputs:
-            value["num_results"] = inputs["numResults"]
-        return operation, value
-    return operation, inputs
+    return operation, canonical_tool_input(name, inputs)
 
 
 def _tool_result(state: dict) -> ToolResult:

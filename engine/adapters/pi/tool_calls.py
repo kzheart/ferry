@@ -5,16 +5,7 @@ import copy
 
 from ...sessions.model import ToolCall, ToolResult, ToolResultBlock
 from ...sessions.tool_ops import CanonicalOp
-
-
-TOOL_OPS = {
-    "bash": CanonicalOp.SHELL_EXEC,
-    "read": CanonicalOp.FS_READ,
-    "write": CanonicalOp.FS_WRITE,
-    "edit": CanonicalOp.FS_EDIT,
-    "grep": CanonicalOp.FS_SEARCH,
-    "find": CanonicalOp.FS_GLOB,
-}
+from ..shared.tool_canon import canonical_tool_op
 
 
 def normalize_input(name: str, value):
@@ -23,7 +14,7 @@ def normalize_input(name: str, value):
         return CanonicalOp.TOOL_INVOKE, {
             "namespace": "pi", "name": name, "input": source,
         }
-    op = TOOL_OPS.get(name)
+    op = canonical_tool_op("pi", name)
     if op is None:
         return CanonicalOp.TOOL_INVOKE, {
             "namespace": "pi", "name": name, "input": source,
