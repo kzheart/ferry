@@ -50,6 +50,44 @@ export function useAskFerry() {
   const loadingRef = useRef(new Map());
   const refreshRef = useRef(() => {});
 
+  // 流式期间每个 token 一次 setLogs,就是每个 token 一次渲染。delta 先入缓冲,
+  // 按帧合并成一次 setLogs;非 delta 事件到达时先冲刷缓冲再处理,事件顺序与
+  // 最终内容都不变。
+  const deltaBufferRef = useRef(new Map());
+  const frameRef = useRef(null);
+  const flushDeltas = useCallback(() => {
+    if (frameRef.current) { frameRef.current(); frameRef.current = null; }
+    const buffered = deltaBufferRef.current;
+    if (buffered.size === 0) return;
+    deltaBufferRef.current = new Map();
+    setLogs(prev => {
+      let next = prev;
+      for (const [id, events] of buffered) {
+        const log = next[id];
+        if (!log) continue;
+        let updated = log;
+        for (const ev of events) updated = applyEvent(updated, ev);
+        if (updated !== log) next = { ...next, [id]: updated };
+      }
+      return next;
+    });
+  }, []);
+  const scheduleFlush = useCallback(() => {
+    if (frameRef.current) return;
+    const run = () => { frameRef.current = null; flushDeltas(); };
+    // 非浏览器环境(测试、SSR)没有 rAF,退回一帧的定时器
+    if (typeof requestAnimationFrame === "function") {
+      const id = requestAnimationFrame(run);
+      frameRef.current = () => cancelAnimationFrame(id);
+    } else {
+      const id = setTimeout(run, 16);
+      frameRef.current = () => clearTimeout(id);
+    }
+  }, [flushDeltas]);
+  useEffect(() => () => {
+    if (frameRef.current) { frameRef.current(); frameRef.current = null; }
+  }, []);
+
   const setMode = useCallback(m => {
     setModeState(m);
     localStorage.setItem(MODE_KEY, m);
@@ -94,6 +132,7 @@ export function useAskFerry() {
       if (!ev || typeof ev !== "object") return;
       if (ev.type === "runtime.disconnected") {
         // 进程退出:运行中的时间线就地标记 interrupted,不自动重放
+        flushDeltas();
         setLogs(prev => {
           const next = { ...prev };
           for (const [id, log] of Object.entries(prev)) {
@@ -135,8 +174,16 @@ export function useAskFerry() {
       const pending = loadingRef.current.get(sid);
       if (pending) { pending.push(ev); return; }
       if (logsRef.current[sid]) {
-        setLogs(prev => prev[sid]
-          ? { ...prev, [sid]: applyEvent(prev[sid], ev) } : prev);
+        if (ev.type === "content.delta") {
+          const buffered = deltaBufferRef.current.get(sid);
+          if (buffered) buffered.push(ev);
+          else deltaBufferRef.current.set(sid, [ev]);
+          scheduleFlush();
+        } else {
+          flushDeltas();
+          setLogs(prev => prev[sid]
+            ? { ...prev, [sid]: applyEvent(prev[sid], ev) } : prev);
+        }
       }
       // 标题由 runtime 在首轮结束后生成;auto=false 说明是用户手动改名,顺带锁住
       if (ev.type === "session.renamed") {
