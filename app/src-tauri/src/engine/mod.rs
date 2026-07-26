@@ -6,6 +6,7 @@ use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
+use crate::process::handshake::verify_handshake;
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
@@ -112,15 +113,8 @@ fn handshake(engine: &EngineClient) -> Result<(), String> {
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     let health: Value = serde_json::from_str(&line)
         .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
-    if health.get("ok").and_then(Value::as_bool) != Some(true)
-        || health.pointer("/result/service").and_then(Value::as_str) != Some("engine")
-        || health
-            .pointer("/result/contract_hash")
-            .and_then(Value::as_str)
-            != Some(FERRY_CONTRACT_HASH)
-    {
-        return Err("引擎协议或契约握手失败".to_owned());
-    }
+    verify_handshake(&health, "engine", FERRY_CONTRACT_HASH)
+        .map_err(|_| "引擎协议或契约握手失败".to_owned())?;
     Ok(())
 }
 
