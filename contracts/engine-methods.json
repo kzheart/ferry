@@ -118,7 +118,11 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway",
+        "organizing-workflow"
+      ]
     },
     {
       "name": "session_summaries_set",
@@ -126,7 +130,11 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway",
+        "organizing-workflow"
+      ]
     },
     {
       "name": "organization_digest_context",
@@ -134,7 +142,11 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway",
+        "organizing-workflow"
+      ]
     },
     {
       "name": "organization_propose",
@@ -142,7 +154,11 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway",
+        "organizing-workflow"
+      ]
     },
     {
       "name": "organization_proposals_list",
@@ -150,7 +166,11 @@
       "exposure": "trusted-ui",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway",
+        "organizing-workflow"
+      ]
     },
     {
       "name": "organization_proposal_modify",
@@ -174,7 +194,10 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway"
+      ]
     },
     {
       "name": "runtime_sessions.commit",
@@ -182,7 +205,10 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway"
+      ]
     },
     {
       "name": "runtime_sessions.delete",
@@ -190,7 +216,10 @@
       "exposure": "internal",
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway"
+      ]
     },
     {
       "name": "agent_search_sessions",

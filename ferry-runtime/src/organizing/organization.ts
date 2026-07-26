@@ -1,12 +1,8 @@
 import type { OrganizerInput, OrganizerResult } from "./organizer.js";
 import { ProtocolError } from "../server/messages.js";
+import type { OrganizationEngineMethod } from "../server/generated/engine-methods.js";
 
-export type OrganizationEngineMethod =
-  | "session_backbone"
-  | "session_summaries_set"
-  | "organization_digest_context"
-  | "organization_proposals_list"
-  | "organization_propose";
+export type { OrganizationEngineMethod };
 
 export interface OrganizationEnginePort {
   invoke(
