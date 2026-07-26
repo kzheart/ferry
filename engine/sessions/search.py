@@ -19,6 +19,7 @@ from .safety import (
 )
 
 MAX_SEARCH_RESULTS = 50
+MAX_OR_PATTERNS = 16
 _SCOPES = ("any", "metadata", "content")
 _SNIPPET_CHARS = 320
 
@@ -35,23 +36,51 @@ _UI_SCOPES = {
 }
 
 
-def _validated_scope(scope, needle: str) -> str:
+def _validated_scope(scope, needles: list[str]) -> str:
     if scope not in _SCOPES:
         raise AgentRequestError(
             "scope 仅允许 any/metadata/content",
             {"field": "scope", "accepts": list(_SCOPES)},
         )
-    if scope == "content" and not needle:
+    if scope == "content" and not needles:
         raise AgentRequestError(
-            "scope=content 需要非空 query", {"field": "query"},
+            "scope=content 需要非空 query 或 patterns", {"field": "query"},
         )
     return scope
+
+
+def _validated_patterns(query: str, patterns) -> list[str]:
+    """把 query 与 patterns 归一成一组 OR pattern(原串,未折叠)。
+
+    任一 pattern 命中即算命中,单个 pattern 内部仍是词级 AND。这样"这些
+    密钥前缀有没有泄露"一次调用扫完,不必逐个前缀发独立搜索然后误把空格
+    分词当成 OR、系统性漏报。
+    """
+    needles = []
+    if query.strip():
+        needles.append(query.strip())
+    if patterns is not None:
+        if not isinstance(patterns, list) or len(patterns) > MAX_OR_PATTERNS:
+            raise AgentRequestError(
+                f"patterns 必须是至多 {MAX_OR_PATTERNS} 项的字符串数组",
+                {"field": "patterns"},
+            )
+        for pattern in patterns:
+            if not isinstance(pattern, str) or len(pattern) > 500:
+                raise AgentRequestError(
+                    "patterns 每项必须是不超过 500 字符的字符串",
+                    {"field": "patterns"},
+                )
+            if pattern.strip():
+                needles.append(pattern.strip())
+    return needles
 
 
 def search_sessions(query: str = "", agents=None, projects=None,
                     time_range=None, limit: int = 20,
                     scope: str = "any",
-                    include_tool_outputs: bool = False, *,
+                    include_tool_outputs: bool = False,
+                    patterns=None, *,
                     index: AgentSessionIndex,
                     content_index: ContentIndex | None = None) -> dict:
     limit = bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
@@ -65,19 +94,20 @@ def search_sessions(query: str = "", agents=None, projects=None,
         for item in string_set(projects, "projects", 20, 256)
     }
     start, end = validated_interval(time_range)
-    needle = query.strip().casefold()
-    scope = _validated_scope(scope, needle)
-    # 与内容检索同口径:空白拆词,同一目标里全部命中才算数。
-    needle_terms = (
+    needles = _validated_patterns(query, patterns)
+    has_needle = bool(needles)
+    scope = _validated_scope(scope, needles)
+    # 每个 pattern 拆词后折叠;OR 关系:任一 pattern 的词全部命中即算。
+    needle_groups = [
         [term.casefold() for term in parse_query_terms(needle)]
-        if needle else []
-    )
+        for needle in needles
+    ]
 
     records = index.refresh()
     # 内容命中与索引覆盖度。索引不可用时特性显式降级为纯元数据搜索。
     content_hits: dict = {}
     content_status: dict | None = None
-    content_active = bool(needle) and scope != "metadata"
+    content_active = has_needle and scope != "metadata"
     if content_active:
         if content_index is None:
             content_status = {
@@ -86,7 +116,7 @@ def search_sessions(query: str = "", agents=None, projects=None,
         else:
             content_status = content_index.sync(index, records)
             hits, meta = content_index.search(
-                query.strip(), include_tool_outputs=include_tool_outputs,
+                needles, include_tool_outputs=include_tool_outputs,
             )
             content_hits = hits
             content_status.update(meta)
@@ -114,11 +144,12 @@ def search_sessions(query: str = "", agents=None, projects=None,
             continue
         if end is not None and updated > end:
             continue
-        metadata_hit = bool(needle_terms) and all(
-            term in haystack for term in needle_terms
+        metadata_hit = any(
+            all(term in haystack for term in group)
+            for group in needle_groups
         )
         content_hit = content_hits.get((record.tool, record.canonical_ref))
-        if needle:
+        if has_needle:
             if scope == "metadata" and not metadata_hit:
                 continue
             if scope == "content" and content_hit is None:
@@ -148,7 +179,7 @@ def search_sessions(query: str = "", agents=None, projects=None,
             "model_truncated": model_truncated,
             "revision": record.revision,
         }
-        if needle and content_active:
+        if has_needle and content_active:
             matched_in = []
             if metadata_hit:
                 matched_in.append("metadata")
@@ -188,7 +219,7 @@ def search_sessions(query: str = "", agents=None, projects=None,
                     "role": row["role"],
                     "snippet": truncate_text(
                         content_index.snippet(
-                            row["id"], query.strip(), include_tool_outputs,
+                            row["id"], needles, include_tool_outputs,
                         ),
                         _SNIPPET_CHARS,
                     )[0],

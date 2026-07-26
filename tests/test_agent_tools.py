@@ -396,6 +396,62 @@ def test_content_search_ands_query_words_within_one_message(
     assert mixed["content_index"]["match_mode"] == "trigram"
 
 
+def test_patterns_are_ored_where_space_separated_query_is_anded(
+        agent_environment):
+    # 空格分词是 AND:两个不同消息里的词凑一起 → 0 命中(旧行为,漏报根源)。
+    assert session_search.search_sessions("第一轮 回答二")["total_matches"] == 0
+    # 同样两个词改走 patterns(OR)→ 命中:任一 pattern 命中即算。
+    ored = session_search.search_sessions(patterns=["第一轮", "回答二"])
+    assert ored["total_matches"] == 1
+    # 只有一个 pattern 命中也算(泄露排查的关键:宁可命中不可漏报)。
+    partial = session_search.search_sessions(
+        patterns=["第一轮", "根本不存在的词xyz"],
+    )
+    assert partial["total_matches"] == 1
+
+
+def test_patterns_dedupe_matching_rows_across_or_terms(agent_environment):
+    # 回答 命中 msg2+msg4;回答一 命中 msg2。并集去重后应是 {2,4}=2,不是 3。
+    result = session_search.search_sessions(patterns=["回答", "回答一"])
+    item = result["sessions"][0]
+    assert item["content_match_count"] == 2
+    assert sorted(m["message"] for m in item["content_matches"]) == [2, 4]
+
+
+def test_patterns_union_query_and_scan_tool_outputs(agent_environment):
+    # 泄露排查形态:一次调用扫多个凭证 pattern,带上工具输出。
+    found = session_search.search_sessions(
+        patterns=["very-secret-token-value", "另一个不存在的前缀"],
+        include_tool_outputs=True,
+    )
+    assert found["total_matches"] == 1
+    snippet = found["sessions"][0]["content_matches"][0]["snippet"]
+    assert "very-secret-token-value" in snippet
+    # query 与 patterns 可并用,合并为一组 OR。
+    combined = session_search.search_sessions(
+        "第一轮", patterns=["回答二"],
+    )
+    assert combined["total_matches"] == 1
+
+
+def test_patterns_metadata_scope_is_ored(agent_environment):
+    hit = session_search.search_sessions(
+        patterns=["支付", "zzz-miss"], scope="metadata",
+    )
+    assert hit["total_matches"] == 1
+
+
+def test_search_requires_query_or_patterns_and_bounds_patterns(
+        agent_environment):
+    # 两者都缺:不再默默返回全部,交由工具层拦截,引擎侧空检索不产生 needle。
+    empty = session_search.search_sessions()
+    assert empty["total_matches"] >= 0 and "content_index" not in empty
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions(patterns=["x"] * 17)
+    with pytest.raises(AgentRequestError):
+        session_search.search_sessions(patterns="not-a-list")
+
+
 def test_content_search_scope_validation(agent_environment):
     with pytest.raises(AgentRequestError):
         session_search.search_sessions("第一轮", scope="everything")

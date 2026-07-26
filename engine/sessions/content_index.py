@@ -8,6 +8,7 @@ SQLite FTS5 + trigram 分词:中英文与代码都按任意子串命中(与 Sign
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -73,6 +74,15 @@ def _like_pattern(needle: str) -> str:
         needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     )
     return f"%{escaped}%"
+
+
+def _rank_is_better(new, old) -> bool:
+    """bm25 越小越相关;None 排最后(子串扫描无排名)。"""
+    if new is None:
+        return False
+    if old is None:
+        return True
+    return new < old
 
 
 def parse_query_terms(query: str) -> list[str]:
@@ -348,35 +358,60 @@ class ContentIndex:
 
     # ---------- 查询 ----------
 
-    def search(self, needle: str,
-               include_tool_outputs: bool = False) -> tuple[dict, dict]:
-        """返回 (按 (tool, canonical_ref) 聚合的命中, 查询元信息)。
-
-        每个命中桶带 count/best_rank 与至多 3 条按相关性排序的消息行;
-        摘要文本延迟到最终返回页再取。
-        """
-        if self._db() is None:
-            return {}, {"match_mode": None, "rows_capped": False}
+    def _match_one(self, needle: str,
+                   include_tool_outputs: bool) -> tuple[list, str]:
         terms = parse_query_terms(needle)
         long_terms = [t for t in terms if len(t) >= _MIN_TRIGRAM_CHARS]
         short_terms = [t for t in terms if len(t) < _MIN_TRIGRAM_CHARS]
         if long_terms:
-            rows, mode = self._match_trigram(
+            return self._match_trigram(
                 long_terms, short_terms, include_tool_outputs,
             )
-        else:
-            rows, mode = self._match_substring(
-                short_terms, include_tool_outputs,
-            )
-        capped = len(rows) > _MAX_MATCH_ROWS
+        return self._match_substring(short_terms, include_tool_outputs)
+
+    def search(self, needles: str | list[str],
+               include_tool_outputs: bool = False) -> tuple[dict, dict]:
+        """返回 (按 (tool, canonical_ref) 聚合的命中, 查询元信息)。
+
+        needles 是 OR 关系的多个 pattern:任一 pattern 命中即算命中(单个
+        pattern 内部仍是词级 AND)。跨 pattern 去重按行 id,同一行命中多个
+        pattern 也只计一次,取最优 bm25 排名。每个命中桶带 count/best_rank
+        与至多 3 条按相关性排序的消息行;摘要文本延迟到最终返回页再取。
+        """
+        if self._db() is None:
+            return {}, {"match_mode": None, "rows_capped": False}
+        if isinstance(needles, str):
+            needles = [needles]
+        merged: dict[int, tuple] = {}
+        modes: set[str] = set()
+        for needle in needles:
+            if not needle or not needle.strip():
+                continue
+            rows, mode = self._match_one(needle, include_tool_outputs)
+            modes.add(mode)
+            for row in rows:
+                row_id, rank = row[0], row[6]
+                prev = merged.get(row_id)
+                if prev is None or _rank_is_better(rank, prev[6]):
+                    merged[row_id] = row
+        ordered = sorted(
+            merged.values(),
+            key=lambda row: row[6] if row[6] is not None else math.inf,
+        )
+        capped = len(ordered) > _MAX_MATCH_ROWS
+        mode = "trigram" if "trigram" in modes else (
+            next(iter(modes)) if modes else None
+        )
         hits: dict[tuple[str, str], dict] = {}
         for row_id, tool, ref, message, turn, role, rank in \
-                rows[:_MAX_MATCH_ROWS]:
+                ordered[:_MAX_MATCH_ROWS]:
             bucket = hits.setdefault(
                 (tool, ref),
                 {"count": 0, "best_rank": rank, "rows": []},
             )
             bucket["count"] += 1
+            if _rank_is_better(rank, bucket["best_rank"]):
+                bucket["best_rank"] = rank
             if len(bucket["rows"]) < _MATCHES_PER_SESSION:
                 bucket["rows"].append({
                     "id": row_id,
@@ -446,9 +481,12 @@ class ContentIndex:
             ).fetchall()
         return rows, "substring_scan"
 
-    def snippet(self, row_id: int, needle: str,
+    def snippet(self, row_id: int, needle: str | list[str],
                 include_tool_outputs: bool) -> str:
-        """定位命中上下文;返回原文窗口,脱敏由 DTO 边界负责。"""
+        """定位命中上下文;返回原文窗口,脱敏由 DTO 边界负责。
+
+        needle 支持多 pattern:任一 pattern 的任一词命中即取其上下文窗口。
+        """
         with self._db_lock:
             connection = self._db()
             if connection is None:
@@ -460,8 +498,11 @@ class ContentIndex:
         if row is None:
             return ""
         sources = [row[0], row[1]] if include_tool_outputs else [row[0]]
+        needles = [needle] if isinstance(needle, str) else needle
         folded_terms = [
-            term.casefold() for term in parse_query_terms(needle)
+            term.casefold()
+            for item in needles
+            for term in parse_query_terms(item)
         ]
         for source in sources:
             folded = source.casefold()
