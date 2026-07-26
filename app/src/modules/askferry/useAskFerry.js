@@ -9,6 +9,8 @@ import {
 } from "../../platform/desktop/client.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
+import { SESSION_OPTIMIZATION_PURPOSE, normalizeSessionPurpose }
+  from "./sessionOptimization.js";
 import { useAskFerrySkills } from "./useAskFerrySkills.js";
 
 const MODE_KEY = "ferry-askferry-mode";
@@ -263,7 +265,13 @@ export function useAskFerry() {
     }
   }, []);
 
-  const newChat = useCallback(() => setActiveId(null), []);
+  // purpose 只在会话创建时快照:newChat 记下意图,send 创建时一次性消费。
+  // 普通 newChat()(包括被绑成 onClick 收到事件对象)一律重置回 general。
+  const pendingPurposeRef = useRef("general");
+  const newChat = useCallback(purpose => {
+    pendingPurposeRef.current = normalizeSessionPurpose(purpose);
+    setActiveId(null);
+  }, []);
 
   // ----- 发送:无会话则先创建;运行中改走 follow_up -----
   // 手动改名会把 title_locked 置上(runtime 回传),自动命名从此不再覆盖
@@ -290,10 +298,15 @@ export function useAskFerry() {
   const send = useCallback(async (text, displayText = text) => {
     let sid = activeRef.current;
     if (!sid) {
+      const purpose = pendingPurposeRef.current;
       const state = await runtime("session.create", {
         role_id: selectedRoleId,
+        // 省略 purpose 与显式 general 等价;已有会话不会走到这里,purpose 不可切换
+        ...(purpose === SESSION_OPTIMIZATION_PURPOSE ? { purpose } : {}),
       });
       sid = state.session_id;
+      // 创建即消费:避免删除会话等路径复用过期的优化意图
+      pendingPurposeRef.current = "general";
       const log = { ...emptyLog(), provider: state.provider_id, model: state.model_id };
       setLogs(prev => ({ ...prev, [sid]: log }));
       setSessions(list => [{ ...state, updated_at: new Date().toISOString() }, ...list]);
