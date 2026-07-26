@@ -5,19 +5,9 @@ AgentMessage。
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from ..errors import AgentRequestError
-from ..storage.database import StateDatabase, get_state_database
 from ..context import EngineContext
-
-
-def _database(ports: EngineContext) -> StateDatabase:
-    return get_state_database(
-        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
-        recover_interrupted=False,
-    )
-
+from ..storage.database import cached_state_database as _database
 
 def load_all(ports: EngineContext) -> list[dict]:
     return _database(ports).runtime_sessions.load_all()

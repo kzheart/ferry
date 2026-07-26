@@ -183,7 +183,7 @@ export interface ToolRequestContext {
   onUpdate: (payload: unknown) => void;
 }
 
-export interface FerryToolPort {
+interface FerryToolPort {
   invoke(
     name: FerryToolName,
     args: Record<string, unknown>,

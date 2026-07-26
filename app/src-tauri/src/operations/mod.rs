@@ -40,12 +40,13 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
         let fields = operation
             .as_object()
             .ok_or_else(|| "Operation edit op 必须是 object".to_owned())?;
-        let kind = fields.get("op").and_then(Value::as_str);
-        if kind.is_none_or(|value| !EDIT_OPERATION_KINDS.contains(&value)) {
-            return Err("Operation edit op 不受支持".to_owned());
-        }
+        let kind = fields
+            .get("op")
+            .and_then(Value::as_str)
+            .filter(|value| EDIT_OPERATION_KINDS.contains(value))
+            .ok_or_else(|| "Operation edit op 不受支持".to_owned())?;
         match kind {
-            Some("delete-turn") => {
+            "delete-turn" => {
                 if fields.len() != 2
                     || !fields.contains_key("turn")
                     || fields
@@ -60,7 +61,7 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
                     return Err("Operation 不允许重复 delete-turn 目标".to_owned());
                 }
             }
-            Some("rewrite") => {
+            "rewrite" => {
                 if fields.len() != 3
                     || !fields.contains_key("locator")
                     || !fields.contains_key("text")
@@ -87,7 +88,7 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
                     return Err("Operation 不允许重复 rewrite locator".to_owned());
                 }
             }
-            Some("replace-assistant-reply") => {
+            "replace-assistant-reply" => {
                 if fields.len() != 3
                     || !fields.contains_key("turn")
                     || !fields.contains_key("reply")
@@ -115,7 +116,8 @@ fn validate_edit_operation_input(input: &EditOperationPlanInput) -> Result<(), S
                 }
                 validate_reply(&fields["reply"])?;
             }
-            _ => return Err("Operation edit op 不受支持".to_owned()),
+            // 契约已穷尽过滤,走到这里说明共享契约新增了 kind 而这里还没补校验分支
+            kind => return Err(format!("Operation edit op {kind} 缺少校验实现")),
         }
     }
     let encoded = serde_json::to_vec(&input.ops).map_err(|error| error.to_string())?;

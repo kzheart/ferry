@@ -177,10 +177,6 @@ def require_agent_capability(adapter, capability: str, component: str):
         raise AgentCapabilityError(adapter.id, capability) from error
 
 
-class AgentApprovalError(DomainError, ValueError):
-    code = "agent.approval_invalid"
-
-
 class SummaryBackboneMissingError(DomainError, ValueError):
     """尚未为该会话建立摘要底座，无法写回蒸馏摘要。"""
 

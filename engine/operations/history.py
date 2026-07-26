@@ -2,18 +2,8 @@
 from __future__ import annotations
 
 import secrets
-from pathlib import Path
-
-from ..storage.database import StateDatabase
 from ..context import EngineContext
-
-
-def _database(ports: EngineContext) -> StateDatabase:
-    return StateDatabase(
-        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
-        recover_interrupted=False,
-    )
-
+from ..storage.database import state_database as _database
 
 def append(entry: dict, ports: EngineContext) -> str:
     history_id = "history_" + secrets.token_urlsafe(18)

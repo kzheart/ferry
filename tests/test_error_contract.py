@@ -64,7 +64,7 @@ def test_runtime_protocol_errors_are_registered():
         r'new ProtocolError\(\s*"([^"]+)"', source, re.DOTALL,
     ))
     declared.update(re.findall(
-        r'failure\(\s*"([^"]+)"', source, re.DOTALL,
+        r'[Ff]ailure\(\s*"([^"]+)"', source, re.DOTALL,
     ))
     assert declared == runtime_codes
 

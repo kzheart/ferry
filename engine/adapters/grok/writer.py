@@ -16,6 +16,7 @@ from urllib.parse import quote
 
 from ...sessions.model import tool_result_text
 from ...system.paths import grok_home
+from ..shared.writing import write_jsonl
 from .blake3 import blake3_hex
 from .reader import read
 
@@ -306,14 +307,6 @@ def _write_json(path, value):
         os.fsync(stream.fileno())
 
 
-def _write_jsonl(path, rows):
-    with path.open("w") as stream:
-        for row in rows:
-            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-
-
 def _rendered_tool(block, session, message, tool_decider):
     tool = block.tool
     if not tool_decider:
@@ -529,8 +522,8 @@ def write(session, cwd: str, root: Path | None = None, tool_decider=None):
             if parent_id:
                 summary["parent_session_id"] = parent_id
             _write_json(temporary / "summary.json", summary)
-            _write_jsonl(temporary / "updates.jsonl", updates)
-            _write_jsonl(temporary / "chat_history.jsonl", chat)
+            write_jsonl(temporary / "updates.jsonl", updates)
+            write_jsonl(temporary / "chat_history.jsonl", chat)
             read(str(temporary))
             from .probe import probe_bundle
 

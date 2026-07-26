@@ -82,9 +82,6 @@
     "labelRewrite": "Rewrite turn {{n}}",
     "labelAuthor": "Author turn {{n}} assistant reply"
   },
-  "diff": {
-    "contentUnchanged": "Content unchanged"
-  },
   "edit": {
     "summaryDelete": "Whole turn removed: user and AI messages",
     "summaryDeleteWithTools": "Whole turn removed: user and AI messages · {{n}} tool calls",

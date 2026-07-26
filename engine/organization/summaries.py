@@ -7,36 +7,17 @@
 """
 
 import hashlib
-import time
-from pathlib import Path
 
 from ..context import EngineContext
+from ..sessions.model import native_locator
 from ..sessions.read import read_tree
 from ..errors import SummaryBackboneMissingError
-from ..storage.database import StateDatabase
+from ..storage.database import now_ms, state_database as _database
 
 MAX_DIGEST_CHARS = 4000
 
-
-def _database(ports: EngineContext) -> StateDatabase:
-    return StateDatabase(
-        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
-        recover_interrupted=False,
-    )
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
 def get_backbone(tool: str, session_id: str, ports: EngineContext) -> dict | None:
     return _database(ports).summaries.get(tool, session_id)
-
-
-def _locator(message, index: int) -> str:
-    if isinstance(message.source_id, str) and message.source_id:
-        return message.source_id
-    return f"index:{index}"
 
 
 def _message_text(message) -> str:
@@ -76,7 +57,7 @@ def segment_session(session) -> list[dict]:
                 segments.append(current)
             current = {
                 "turn": turn,
-                "anchor_locator": _locator(message, index),
+                "anchor_locator": native_locator(message, index),
                 "message_start": index,
                 "message_end": index,
                 "after_compaction": turn > 1 and (turn - 1) in compacted_after_turns,
@@ -149,7 +130,7 @@ def build_backbone(tool: str, ref: str, ports: EngineContext) -> dict:
         "segments": segments,
     }
     if previous != record:
-        now = _now_ms()
+        now = now_ms()
         database.summaries.store(record, now)
         database.organization.invalidate(
             tool, session.source_id, fingerprint, now,
@@ -180,5 +161,5 @@ def set_summaries(tool: str, session_id: str, digests: dict,
         if isinstance(digest, str) and digest.strip():
             segment["digest"] = digest.strip()[:MAX_DIGEST_CHARS]
             applied += 1
-    database.summaries.store(record, _now_ms())
+    database.summaries.store(record, now_ms())
     return {**_view(record), "applied": applied}

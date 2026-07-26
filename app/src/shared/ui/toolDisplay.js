@@ -1,5 +1,4 @@
 export const ACCENT = "var(--accent)";
-export const BIG = 100 * 1024;
 
 export function fmtSize(n) {
   if (!n) return "—";

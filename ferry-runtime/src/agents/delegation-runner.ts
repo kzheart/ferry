@@ -6,7 +6,7 @@ import {
   type WorkflowRunResult,
 } from "./scheduler.js";
 
-export interface DelegationRunnerPort {
+interface DelegationRunnerPort {
   createTaskSession(roleId: string): Promise<string>;
   prompt(sessionId: string, instruction: string): Promise<void>;
   waitForIdle(sessionId: string): Promise<unknown>;

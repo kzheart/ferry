@@ -18,6 +18,11 @@ export const PROTOCOL_VERSION = FERRY_IPC_PROTOCOL;
 
 export type CommandEnvelope = IpcRequest<RuntimeMethod>;
 
+/** 域 dispatcher 的返回:命中就带上结果,没命中交给下一个域。 */
+export type DispatchOutcome =
+  | { handled: true; result: unknown }
+  | { handled: false };
+
 export type ResponseEnvelope = IpcResponse;
 
 export interface EventEnvelope {
@@ -52,6 +57,18 @@ export class ProtocolError extends Error {
       params: { message: this.message },
     };
   }
+}
+
+/** 把底层异常裹成协议错误:有 message 就沿用,否则回落到给定文案。 */
+export function protocolFailure(
+  code: RuntimeErrorCode,
+  error: unknown,
+  fallback: string,
+) {
+  return new ProtocolError(
+    code,
+    error instanceof Error ? error.message : fallback,
+  );
 }
 
 export function isObject(value: unknown): value is Record<string, unknown> {

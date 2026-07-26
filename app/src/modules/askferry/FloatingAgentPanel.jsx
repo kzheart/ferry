@@ -3,11 +3,9 @@
 // 「被浏览会话 → Agent 会话」映射记忆在 localStorage,再次查看同一会话可续聊。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { readClipboardText } from "../../platform/desktop/client.js";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
-import { addSessionAttachment, buildSessionPrompt, parseSessionAttachments,
-  sessionAttachment, sessionAttachmentKey, sessionDisplayText, sessionIdentity }
-  from "../browser/public.js";
+import { sessionAttachment, sessionIdentity } from "../browser/public.js";
+import { useAgentComposer } from "./useAgentComposer.js";
 import { CloseIcon, RailGlyph, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
 import { groupAgentTimeline, isAwaitingReply } from "./agentTimelineModel.js";
 import { AgentChatItem, ThinkingIndicator } from "./AgentChatItem.jsx";
@@ -28,13 +26,8 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
   const [map, setMap] = useState(loadMap);
   const saveMap = next => { setMap(next); localStorage.setItem(MAP_KEY, JSON.stringify(next)); };
 
-  const [text, setText] = useState("");
-  const [mention, setMention] = useState(null);
   const [attachments, setAttachments] = useState([]);
   const [unread, setUnread] = useState(false);
-  const taRef = useRef(null);
-  const scrollRef = useRef(null);
-  const stickRef = useRef(true);
   const sessionsRef = useRef(ferry.sessions); sessionsRef.current = ferry.sessions;
 
   const boundId = identity ? map[identity] : null;
@@ -44,6 +37,19 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
   const log = open ? ferry.activeLog : null;
   const items = log?.items || [];
   const empty = items.length === 0;
+
+  const composer = useAgentComposer({
+    attachments,
+    setAttachments,
+    logItems: log?.items,
+    // 首条消息才会创建会话:发送前记下当时是否已有映射,成功后据此落库
+    onBeforeSend: () => identity && !map[identity],
+    onSent: (sid, wasUnbound) => {
+      if (wasUnbound) saveMap({ ...map, [identity]: sid });
+    },
+    stopEscapePropagation: true,
+  });
+  const { setText, setMention, send: sendText } = composer;
 
   // 绑定:打开面板或切换被浏览会话时,续上已映射的对话;否则开新对话并预填上下文。
   // 依赖里刻意不含 ferry.sessions:首条消息创建会话会改列表,不能触发重新绑定。
@@ -74,102 +80,9 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
   }, [running, open]);
   useEffect(() => { if (open) setUnread(false); }, [open]);
 
-  // 新消息贴底滚动(用户上翻后不打扰)
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [log?.items]);
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-  };
-
-  const updateText = value => {
-    setText(value);
-    const el = taRef.current;
-    const caret = el ? el.selectionStart : value.length;
-    const m = value.slice(0, caret).match(/@([^\s@]*)$/);
-    setMention(m ? { query: m[1], start: caret - m[0].length } : null);
-  };
-
-  const pickMention = target => {
-    const el = taRef.current;
-    const caret = el ? el.selectionStart : text.length;
-    setText(text.slice(0, mention.start) + text.slice(caret));
-    setAttachments(list => addSessionAttachment(list, target));
-    setMention(null);
-    el?.focus();
-  };
-
-  const removeAttachment = target => setAttachments(list =>
-    list.filter(item => sessionAttachmentKey(item) !== sessionAttachmentKey(target)));
-
-  const applyClipboardText = pastedText => {
-    const pasted = parseSessionAttachments(pastedText);
-    if (pasted.length) { setAttachments(list => pasted.reduce(addSessionAttachment, list)); return; }
-    if (!pastedText) return;
-    const el = taRef.current;
-    const start = el?.selectionStart ?? text.length;
-    const end = el?.selectionEnd ?? start;
-    updateText(text.slice(0, start) + pastedText + text.slice(end));
-  };
-
-  const onPaste = event => {
-    const pastedText = event.clipboardData?.getData("text/plain") || "";
-    if (!pastedText && window.__TAURI_INTERNALS__) {
-      event.preventDefault();
-      readClipboardText().then(applyClipboardText).catch(() => {});
-      return;
-    }
-    const pasted = parseSessionAttachments(pastedText);
-    if (!pasted.length) return;
-    event.preventDefault();
-    setAttachments(list => pasted.reduce(addSessionAttachment, list));
-  };
-
-  const sendText = async value => {
-    if (!value && !attachments.length) return;
-    const currentAttachments = attachments;
-    const prompt = buildSessionPrompt(value, currentAttachments);
-    const display = sessionDisplayText(value, currentAttachments);
-    setText(""); setAttachments([]); setMention(null); stickRef.current = true;
-    const wasUnbound = identity && !map[identity];
-    try {
-      const sid = await ferry.send(prompt, display);
-      if (wasUnbound && sid) saveMap({ ...map, [identity]: sid });
-    } catch (error) {
-      setText(value); setAttachments(currentAttachments); ferry.reportError(error);
-    }
-  };
-
-  const doSend = () => sendText(text.trim());
-  const doSteer = async () => {
-    const value = text.trim();
-    if (!value && !attachments.length) return;
-    const currentAttachments = attachments;
-    const prompt = buildSessionPrompt(value, currentAttachments);
-    const display = sessionDisplayText(value, currentAttachments);
-    setText(""); setAttachments([]); setMention(null);
-    try { await ferry.steer(prompt, display); }
-    catch (error) { setText(value); setAttachments(currentAttachments); ferry.reportError(error); }
-  };
-
-  const onKeyDown = event => {
-    if (window.__TAURI_INTERNALS__ && (event.metaKey || event.ctrlKey)
-        && event.key.toLowerCase() === "v") {
-      event.preventDefault();
-      readClipboardText().then(applyClipboardText).catch(() => {});
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey && !mention) { event.preventDefault(); doSend(); }
-    if (event.key === "Escape" && mention) { event.stopPropagation(); setMention(null); }
-  };
-
   const chatRunning = log?.status === "running";
-  const composerProps = { text, setTextValue: updateText, taRef, mention, scanSessions,
-    onPickMention: pickMention, onKeyDown, onPaste, onSend: doSend, onSteer: doSteer,
-    running: chatRunning, mode: ferry.mode, onOpenConfig, health: ferry.health,
-    attachments, onRemoveAttachment: removeAttachment };
+  const composerProps = { ...composer.composerProps, scanSessions,
+    running: chatRunning, mode: ferry.mode, onOpenConfig, health: ferry.health };
 
   const suggestions = ["suggestSummary", "suggestFiles", "suggestIssues"];
 
@@ -231,7 +144,7 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
               ))}
             </div>
           ) : (
-            <div ref={scrollRef} onScroll={onScroll} className="fscroll"
+            <div ref={composer.scrollRef} onScroll={composer.onScroll} className="fscroll"
               style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px 16px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {groupAgentTimeline(items).map((group, index) => (

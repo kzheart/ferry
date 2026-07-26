@@ -73,6 +73,7 @@ export function AppOverlays({
           actions={peek.actions}
           navigationTarget={peek.navigationTarget}
           refreshing={peek.refreshing}
+          loadingMore={peek.loadingMore}
           onClose={peek.onClose}
           onOpenLibrary={peek.onOpenLibrary}
         />

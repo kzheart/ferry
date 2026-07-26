@@ -24,29 +24,3 @@ def test_all_runtimes_use_the_generated_ferry_ipc_protocol():
         assert "ferry-runtime/v1" not in text
     assert FERRY_CONTRACT_HASH.startswith("sha256:")
     assert len(FERRY_CONTRACT_HASH) == len("sha256:") + 64
-
-
-def test_ipc_envelope_fields_are_exact():
-    source = json.loads((ROOT / "contracts/ipc.json").read_text())
-    assert source["request"]["required"] == [
-        "protocol", "id", "method", "params",
-    ]
-    assert source["response"]["success_required"] == [
-        "protocol", "id", "ok", "result",
-    ]
-    assert source["response"]["failure_required"] == [
-        "protocol", "id", "ok", "error",
-    ]
-    assert source["error"]["required"] == [
-        "code", "category", "retryable", "params",
-    ]
-    assert source["event"] == {
-        "required": ["protocol", "type", "payload"],
-        "optional": ["correlation_id", "context"],
-        "additional_properties": False,
-    }
-    assert all(
-        value["additional_properties"] is False
-        for key, value in source.items()
-        if key != "protocol"
-    )

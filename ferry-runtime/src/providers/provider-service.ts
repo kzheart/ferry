@@ -1,7 +1,9 @@
 import type { AuthType, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import type { RuntimeErrorCode } from "../server/generated/errors.js";
-import { ProtocolError } from "../server/messages.js";
+import {
+  ProtocolError,
+  protocolFailure as failure,
+} from "../server/messages.js";
 import {
   AuthCoordinator,
   type AuthCoordinatorEvent,
@@ -20,7 +22,7 @@ export interface AgentBackend {
   credentialAvailable?: () => boolean | Promise<boolean>;
 }
 
-export interface ProviderServiceOptions {
+interface ProviderServiceOptions {
   host?: ProviderHost;
   fallbackBackend: AgentBackend;
   emitAuth(event: AuthCoordinatorEvent): void;
@@ -319,11 +321,4 @@ export class ProviderService {
       );
     }
   }
-}
-
-function failure(code: RuntimeErrorCode, error: unknown, fallback: string) {
-  return new ProtocolError(
-    code,
-    error instanceof Error ? error.message : fallback,
-  );
 }

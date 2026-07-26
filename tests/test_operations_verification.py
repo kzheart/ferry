@@ -6,7 +6,7 @@ import pytest
 
 from engine.context import EngineContext
 from engine.errors import AgentCapabilityError
-from engine.operations.verification import ProbeTimeout, run_probe, timeout_report
+from engine.operations.verification import ProbeTimeout, run_probe
 
 
 class _Verifier:
@@ -103,18 +103,3 @@ def test_run_probe_propagates_other_adapter_errors(tmp_path):
     with pytest.raises(RuntimeError, match="CLI 崩溃") as raised:
         run_probe("claude", "session-1", ports=_ports(_Adapter(verifier), tmp_path))
     assert not isinstance(raised.value, ProbeTimeout)
-
-
-def test_timeout_report_shape_is_diagnostic_only():
-    report = timeout_report("claude", RuntimeError("超时 30s"))
-
-    assert report == {
-        "status": "failed",
-        "code": "probe.timeout",
-        "params": {"tool": "claude"},
-        "diagnostic": {
-            "stdout": "",
-            "stderr": "超时 30s",
-            "truncated": False,
-        },
-    }

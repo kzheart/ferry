@@ -140,13 +140,6 @@ def test_shell_composes_capabilities_without_reaching_into_their_internals():
     assert 'document.addEventListener("keydown"' not in app
 
 
-def test_deleted_ui_concepts_do_not_return():
-    assert not (FRONTEND / "shared/ui/Overlays.jsx").exists()
-    session_detail = (FRONTEND / "modules/browser/SessionDetail.jsx").read_text()
-    assert "function Round(" not in session_detail
-    assert "function ToolCard(" not in session_detail
-
-
 def test_operation_flow_has_one_module_controller():
     controller = FRONTEND / "modules/operations/operationController.ts"
     composition = FRONTEND / "modules/operations/operations.ts"

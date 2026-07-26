@@ -7,6 +7,14 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
+def is_within(path: str, root: str) -> bool:
+    """等价于 Path(path).is_relative_to(root)，按已规范化的路径串比较。"""
+    if path == root:
+        return True
+    prefix = root if root.endswith(os.sep) else root + os.sep
+    return path.startswith(prefix)
+
+
 def opencode_database_path(
     *,
     platform: str | None = None,

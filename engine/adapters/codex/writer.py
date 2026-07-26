@@ -71,7 +71,7 @@ def _msg(tpl, role: str, text: str, created_at: str | int | None = None) -> dict
     return rec
 
 
-def _result_payload(tool, output: str, exit_code=None) -> dict:
+def _result_payload(tool, output: str) -> dict:
     result = tool.result
     if result is None:
         return {"output": output}

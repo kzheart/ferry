@@ -4,19 +4,13 @@
 """
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
-import os
 import shutil
 import sqlite3
-import time
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 
-from ...events import event
 
 
 class CodexCloneError(RuntimeError):
@@ -220,11 +214,6 @@ def discover_closure(anchor_path: Path, store: CodexStore | None = None) -> Code
                         store, "sha256:" + h.hexdigest(), registry_revision)
 
 
-def verify_closure(closure: CodexClosure) -> None:
-    for node in closure.nodes.values():
-        if _digest(node.path.read_bytes()) != node.digest:
-            raise CodexCloneError(f"源会话树在预览后已变化: {node.thread_id}")
-
 
 def collect_thread_refs(value, known_ids: set[str], key: str | None = None) -> set[str]:
     refs = set()
@@ -278,48 +267,7 @@ def prune_referenced_subtrees(closure: CodexClosure, records: list[dict]) -> set
     return removed
 
 
-def _remap_known(value, id_map: dict[str, str], key: str | None = None):
-    if isinstance(value, dict):
-        return {k: _remap_known(v, id_map, k) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_remap_known(item, id_map, key) for item in value]
-    if key in JSON_STRING_KEYS and isinstance(value, str) and value[:1] in "[{":
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            parsed = None
-        if parsed is not None:
-            mapped = _remap_known(parsed, id_map)
-            if mapped != parsed:
-                return json.dumps(mapped, ensure_ascii=False, separators=(",", ":"))
-    if key in THREAD_KEYS and isinstance(value, str) and value in id_map:
-        return id_map[value]
-    return value
 
-
-def remap_records(records: list[dict], id_map: dict[str, str],
-                  node_id: str, new_root: str) -> list[dict]:
-    out = copy.deepcopy(records)
-    canonical_done = False
-    for record in out:
-        if record.get("type") == "session_meta" and not canonical_done:
-            canonical_done = True
-            payload = _remap_known(record.get("payload") or {}, id_map)
-            payload["id"] = id_map[node_id]
-            payload["session_id"] = new_root
-            record["payload"] = payload
-        elif record.get("type") != "session_meta":
-            record["payload"] = _remap_known(record.get("payload"), id_map)
-    return out
-
-
-def _write_jsonl(path: Path, records: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as stream:
-        for record in records:
-            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
 
 
 def _table_columns(db: sqlite3.Connection, table: str) -> list[str]:
@@ -350,49 +298,7 @@ def _registry_revision(db_path: Path | None, ids: set[str]) -> str | None:
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
-def _thread_rows(db: sqlite3.Connection, ids: set[str]) -> dict[str, dict]:
-    if not ids:
-        return {}
-    columns = _table_columns(db, "threads")
-    if not columns:
-        return {}
-    placeholders = ",".join("?" for _ in ids)
-    rows = db.execute(
-        f'SELECT * FROM threads WHERE id IN ({placeholders})', tuple(ids)).fetchall()
-    return {str(row[columns.index("id")]): dict(zip(columns, row)) for row in rows}
 
-
-def _insert_row(db: sqlite3.Connection, table: str, row: dict) -> None:
-    allowed = set(_table_columns(db, table))
-    names = [name for name in row if name in allowed]
-    quoted = ",".join('"' + name.replace('"', '""') + '"' for name in names)
-    db.execute(f'INSERT INTO "{table}" ({quoted}) VALUES ({",".join("?" for _ in names)})',
-               [row[name] for name in names])
-
-
-def _postorder(closure: CodexClosure) -> list[str]:
-    children: dict[str, list[str]] = {}
-    for child, parent in closure.parents.items():
-        children.setdefault(parent, []).append(child)
-    out, stack = [], [(closure.root_id, False)]
-    while stack:
-        node, expanded = stack.pop()
-        if expanded:
-            out.append(node)
-            continue
-        stack.append((node, True))
-        stack.extend((child, False) for child in reversed(sorted(children.get(node, []))))
-    return out
-
-
-def _journal_write(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w") as stream:
-        json.dump(payload, stream, ensure_ascii=False)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(tmp, path)
 
 
 def recover_transactions(store: CodexStore) -> None:
@@ -427,158 +333,3 @@ def recover_transactions(store: CodexStore) -> None:
         except (OSError, ValueError, sqlite3.Error, json.JSONDecodeError):
             # 无法证明归属时不做破坏性恢复，保留日志供人工检查。
             continue
-
-
-def clone_tree(closure: CodexClosure, edited_anchor: list[dict]) -> dict:
-    recover_transactions(closure.store)
-    verify_closure(closure)
-    id_map = {sid: str(uuid.uuid4()) for sid in closure.nodes}
-    new_root = id_map[closure.root_id]
-    txn = uuid.uuid4().hex
-    stage_dir = closure.store.home / ".resume-harness" / "staging" / txn
-    now = datetime.now(timezone.utc)
-    day_dir = closure.store.sessions_dir / now.strftime("%Y/%m/%d")
-    staged, finals = {}, {}
-    for sid, node in closure.nodes.items():
-        records = edited_anchor if sid == closure.anchor_id else node.records
-        mapped = remap_records(records, id_map, sid, new_root)
-        staged[sid] = stage_dir / f"{id_map[sid]}.jsonl"
-        finals[sid] = day_dir / (
-            f"rollout-{now.strftime('%Y-%m-%dT%H-%M-%S')}-{id_map[sid]}.jsonl")
-        _write_jsonl(staged[sid], mapped)
-        check = _rollout(staged[sid])
-        if check.thread_id != id_map[sid] or check.root_id != new_root:
-            shutil.rmtree(stage_dir, ignore_errors=True)
-            raise CodexCloneError(f"Codex staging 身份校验失败: {sid}")
-
-    journal = closure.store.home / ".resume-harness" / "transactions" / f"{txn}.json"
-    _journal_write(journal, {
-        "ids": list(id_map.values()), "paths": [str(p) for p in finals.values()],
-        "stage_dir": str(stage_dir), "created_at": time.time_ns(),
-    })
-
-    published: list[Path] = []
-    registered: list[str] = []
-    db = None
-    committed = False
-    warnings = []
-    try:
-        verify_closure(closure)
-        if closure.store.state_db and closure.store.state_db.exists():
-            db = sqlite3.connect(closure.store.state_db, timeout=5)
-            db.execute("PRAGMA foreign_keys=ON")
-            db.execute("BEGIN IMMEDIATE")
-            current_registry = _registry_revision(closure.store.state_db,
-                                                  set(closure.nodes))
-            if current_registry != closure.registry_revision:
-                raise CodexCloneError("Codex 注册关系在预览后已变化，请重新预览")
-            source_rows = _thread_rows(db, set(closure.nodes))
-            now_s, now_ms = int(time.time()), int(time.time() * 1000)
-            for sid in _postorder(closure)[::-1]:
-                row = source_rows.get(sid)
-                if not row:
-                    warnings.append(event("codex.thread_unregistered", session_id=sid))
-                    continue
-                row["id"] = id_map[sid]
-                row["rollout_path"] = str(finals[sid])
-                for name in ("created_at", "updated_at", "recency_at"):
-                    if name in row:
-                        row[name] = now_s
-                for name in ("created_at_ms", "updated_at_ms", "recency_at_ms"):
-                    if name in row:
-                        row[name] = now_ms
-                _insert_row(db, "threads", row)
-                registered.append(id_map[sid])
-
-            if _table_columns(db, "thread_spawn_edges"):
-                for child, parent in closure.parents.items():
-                    if id_map[parent] not in registered or id_map[child] not in registered:
-                        warnings.append(event("codex.thread_edge_unregistered",
-                                              parent=parent, child=child))
-                        continue
-                    source = db.execute(
-                        "SELECT status FROM thread_spawn_edges WHERE child_thread_id=?",
-                        (child,)).fetchone()
-                    _insert_row(db, "thread_spawn_edges", {
-                        "parent_thread_id": id_map[parent],
-                        "child_thread_id": id_map[child],
-                        "status": source[0] if source else "closed",
-                    })
-            if _table_columns(db, "thread_dynamic_tools"):
-                cols = _table_columns(db, "thread_dynamic_tools")
-                for sid in closure.nodes:
-                    if id_map[sid] not in registered:
-                        continue
-                    rows = db.execute(
-                        "SELECT * FROM thread_dynamic_tools WHERE thread_id=? ORDER BY position",
-                        (sid,)).fetchall()
-                    for values in rows:
-                        row = dict(zip(cols, values))
-                        row["thread_id"] = id_map[sid]
-                        _insert_row(db, "thread_dynamic_tools", row)
-
-        day_dir.mkdir(parents=True, exist_ok=True)
-        for sid in _postorder(closure):  # children first, root last
-            os.replace(staged[sid], finals[sid])
-            published.append(finals[sid])
-        if db:
-            db.commit()
-            committed = True
-        for sid, path in finals.items():
-            node = _rollout(path)
-            if node.thread_id != id_map[sid]:
-                raise CodexCloneError(f"发布后身份校验失败: {sid}")
-    except Exception:
-        if db and not committed:
-            db.rollback()
-        if db and committed and registered:
-            db.execute("BEGIN IMMEDIATE")
-            placeholders = ",".join("?" for _ in registered)
-            db.execute(f"DELETE FROM thread_spawn_edges WHERE parent_thread_id IN ({placeholders}) OR child_thread_id IN ({placeholders})",
-                       tuple(registered) + tuple(registered))
-            db.execute(f"DELETE FROM threads WHERE id IN ({placeholders})", tuple(registered))
-            db.commit()
-        for path in reversed(published):
-            path.unlink(missing_ok=True)
-        raise
-    finally:
-        if db:
-            db.close()
-        shutil.rmtree(stage_dir, ignore_errors=True)
-
-    journal.unlink(missing_ok=True)
-
-    return {
-        "session_id": id_map[closure.anchor_id],
-        "root_session_id": new_root,
-        "saved_as": str(finals[closure.anchor_id]),
-        "published_paths": [str(finals[sid]) for sid in closure.nodes],
-        "registered_ids": registered,
-        "id_map": id_map,
-        "tree_count": len(closure.nodes),
-        "events": warnings,
-        "resume": f"codex resume {id_map[closure.anchor_id]}",
-    }
-
-
-def discard_tree(result: dict, store: CodexStore) -> None:
-    ids = [str(value) for value in result.get("id_map", {}).values()]
-    if store.state_db and store.state_db.exists() and ids:
-        with sqlite3.connect(store.state_db, timeout=5) as db:
-            db.execute("PRAGMA foreign_keys=ON")
-            placeholders = ",".join("?" for _ in ids)
-            if _table_columns(db, "thread_spawn_edges"):
-                db.execute(f"DELETE FROM thread_spawn_edges WHERE parent_thread_id IN ({placeholders}) OR child_thread_id IN ({placeholders})",
-                           tuple(ids) + tuple(ids))
-            db.execute(f"DELETE FROM threads WHERE id IN ({placeholders})", tuple(ids))
-    root = store.sessions_dir.resolve()
-    for raw in result.get("published_paths", []):
-        path = Path(raw).resolve()
-        if root not in path.parents or not path.exists():
-            continue
-        try:
-            node = _rollout(path)
-        except CodexCloneError:
-            continue
-        if node.thread_id in ids:
-            path.unlink()

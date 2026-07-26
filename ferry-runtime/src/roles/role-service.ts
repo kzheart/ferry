@@ -1,4 +1,4 @@
-import { ProtocolError } from "../server/messages.js";
+import { ProtocolError, protocolFailure } from "../server/messages.js";
 import type { RoleInput, RoleStore } from "./role-store.js";
 
 export class RoleService {
@@ -41,10 +41,7 @@ export class RoleService {
     try {
       return await operation();
     } catch (error) {
-      throw new ProtocolError(
-        "invalid_role",
-        error instanceof Error ? error.message : "role is invalid",
-      );
+      throw protocolFailure("invalid_role", error, "role is invalid");
     }
   }
 }

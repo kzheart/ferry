@@ -3,7 +3,7 @@
 import { repoOf } from "../browser/public.js";
 
 const DAY = 86400e3;
-export const TOKEN_KEYS = ["input", "output", "cache_read", "cache_write"];
+const TOKEN_KEYS = ["input", "output", "cache_read", "cache_write"];
 
 export const emptyTokens = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0 });
 export const addTokens = (a, b) => { TOKEN_KEYS.forEach(k => { a[k] += (b?.[k] || 0); }); return a; };

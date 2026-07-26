@@ -27,7 +27,7 @@ interface PendingLogin {
   prompt?: DeferredPrompt | undefined;
 }
 
-export type LoginExecutor = (
+type LoginExecutor = (
   providerId: string,
   type: AuthType,
   interaction: AuthInteraction,

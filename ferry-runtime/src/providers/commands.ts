@@ -1,4 +1,4 @@
-import type { CommandEnvelope } from "../server/messages.js";
+import type { CommandEnvelope, DispatchOutcome } from "../server/messages.js";
 import {
   ProtocolError,
   isObject,
@@ -11,14 +11,10 @@ import type { ProviderService } from "./provider-service.js";
 import type { ThinkingLevel } from "./provider-config.js";
 import { parseThinkingLevel } from "./provider-config-validation.js";
 
-type ProviderCommandResult =
-  | { handled: true; result: unknown }
-  | { handled: false };
-
 export async function dispatchProviderCommand(
   service: ProviderService,
   command: CommandEnvelope,
-): Promise<ProviderCommandResult> {
+): Promise<DispatchOutcome> {
   const params = command.params;
   switch (command.method) {
     case "providers.list":
@@ -266,10 +262,7 @@ function parseCustomProvider(params: Record<string, unknown>) {
       "api must be openai-completions or anthropic-messages",
     );
   }
-  const api = rawApi as
-    | "openai-completions"
-    | "anthropic-messages"
-    | undefined;
+  const api = rawApi as "openai-completions" | "anthropic-messages" | undefined;
   return {
     id: requireString(params, "provider_id", 128),
     name: requireString(params, "name", 256),

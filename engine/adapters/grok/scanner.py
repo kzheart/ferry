@@ -1,13 +1,14 @@
 """Recursive Grok summary scanner."""
 from __future__ import annotations
 
-import hashlib
 import json
+from pathlib import Path
 
 from ...sessions.scan_progress import TRACKER
 from ...sessions.usage import iso_ms
 from ...sessions.topology import session_roots
 from ...system.paths import grok_home
+from ..shared.scanner import stat_digest
 
 
 def _meta(path):
@@ -63,10 +64,8 @@ def scan(cache):
 
 
 def agent_fingerprint(ref):
-    path = __import__("pathlib").Path(ref).resolve(strict=True)
-    stat = (path / "summary.json").stat()
-    marker = f"{path}:{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}"
-    return "stat:" + hashlib.sha256(marker.encode()).hexdigest()
+    path = Path(ref).resolve(strict=True)
+    return stat_digest(path, (path / "summary.json").stat())
 
 
 def fingerprint(ref):

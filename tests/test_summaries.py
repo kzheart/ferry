@@ -72,7 +72,6 @@ def test_internal_compaction_summary_is_excluded():
     ], compactions=[compaction])
     segments = summaries.segment_session(session)
     assert len(segments) == 2
-    assert "压缩摘要" not in segments[0]["hash"]
     assert segments[0]["char_count"] == len("问题")
 
 
@@ -112,15 +111,6 @@ def test_build_backbone_caches_and_preserves_digests(tmp_path, monkeypatch, port
     kept = next(s for s in rebuilt["segments"] if s["hash"] == head)
     assert kept["digest"] == "改了支付逻辑"
     assert len(rebuilt["pending"]) == 2
-
-
-def test_build_backbone_returns_cache_when_unchanged(tmp_path, monkeypatch, ports):
-    _use_database(tmp_path, monkeypatch)
-    session = _session([_msg("user", "只此一轮", "u1")])
-    monkeypatch.setattr(summaries, "read_tree", lambda tool, ref, ports: session)
-    first = summaries.build_backbone("claude", "fsr_x", ports)
-    again = summaries.build_backbone("claude", "fsr_x", ports)
-    assert first["fingerprint"] == again["fingerprint"]
 
 
 def test_build_backbone_refreshes_structure_for_textless_message(

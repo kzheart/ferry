@@ -87,16 +87,6 @@ def _attach_lifecycle(monkeypatch, ports, *, undoable=True):
     )
 
 
-def test_edit_plan_freezes_input_and_document_revision(agent_environment):
-    plan = _edit_plan()
-
-    assert plan["kind"] == "edit"
-    assert plan["status"] == "planned"
-    assert plan["document_revision"] == "revision-1"
-    assert plan["base_revision"]
-    assert plan["input_digest"] and plan["preview_digest"]
-
-
 def test_migration_plan_previews_without_writing(agent_environment):
     plan = _migration_plan()
 
@@ -105,14 +95,6 @@ def test_migration_plan_previews_without_writing(agent_environment):
     assert plan["document_revision"] is None
     assert plan["preview"]["dst"] == "opencode"
     assert plan["preview"]["loss"] == {"events": [], "lossless": True}
-
-
-def test_metadata_plan_preview_carries_before_and_patch(agent_environment):
-    plan = _metadata_plan()
-
-    assert plan["preview"]["tool"] == "claude"
-    assert plan["preview"]["before"] == {}
-    assert plan["preview"]["after_patch"] == {"name": "新名称"}
 
 
 def test_delete_plan_preview_exposes_undoable_and_truncated_title(

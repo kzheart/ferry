@@ -4,7 +4,7 @@ export const FERRY_ERROR_POLICIES = {
     "category": "permission",
     "retryable": false,
     "sources": [
-      "engine"
+      "host"
     ]
   },
   "agent.format_changed": {

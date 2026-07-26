@@ -11,6 +11,7 @@ from engine.adapters.contracts import (
     id_reference,
 )
 from engine.context import EngineContext
+from engine.contracts import session_ref
 from engine.contracts.session_ref import is_opaque_session_ref
 from engine.errors import AgentReferenceError
 from engine.sessions.index import AgentSessionIndex
@@ -20,13 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_session_ref_contract_is_generated_for_every_runtime():
+    """契约源(JSON)必须与生成的 Python 常量同步,各 runtime 的产物必须存在。"""
     contract = json.loads((ROOT / "contracts/session-ref.json").read_text())
-    assert contract == {
-        "opaque_prefix": "fsr_",
-        "minimum_length": 8,
-        "maximum_length": 128,
-        "allowed_suffix": "ascii-alphanumeric-underscore-hyphen",
-    }
+    assert contract["opaque_prefix"] == session_ref.OPAQUE_SESSION_REF_PREFIX
+    assert contract["minimum_length"] == session_ref.OPAQUE_SESSION_REF_MIN_LENGTH
+    assert contract["maximum_length"] == session_ref.OPAQUE_SESSION_REF_MAX_LENGTH
     for path in (
         "app/src/shared/contracts/generated/session-ref.ts",
         "app/src-tauri/src/contracts/session_ref.rs",

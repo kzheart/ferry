@@ -5,11 +5,7 @@ LLM 只负责从 T2 digest 生成建议；本模块负责引用/指纹校验、�
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import secrets
-import time
-from pathlib import Path
 
 from ..context import EngineContext
 from ..errors import (
@@ -18,7 +14,9 @@ from ..errors import (
     OrganizationProposalNotFoundError,
     OrganizationProposalStaleError,
 )
-from ..storage.database import StateDatabase
+from ..storage.database import (
+    digest_value, now_ms, state_database as _database,
+)
 from ..contracts.metadata import metadata_key
 from . import summaries
 
@@ -26,26 +24,6 @@ _PATCH_FIELDS = {
     "name", "summary", "tags", "cluster_id", "cluster_name",
     "dead_candidate", "dead_reason", "archived",
 }
-
-
-def _database(ports: EngineContext) -> StateDatabase:
-    return StateDatabase(
-        Path(ports.snapshot_dir()) / "ferry-state.sqlite3",
-        recover_interrupted=False,
-    )
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _canonical(value) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":"), allow_nan=False)
-
-
-def _digest(value) -> str:
-    return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
 def _backbone(tool: str, session_id: str, ports: EngineContext) -> dict:
@@ -170,11 +148,11 @@ def propose(targets: list[dict], ports: EngineContext) -> dict:
     identities = [(target["tool"], target["id"]) for target in normalized]
     if len(set(identities)) != len(identities):
         raise OrganizationProposalError("targets 不得重复")
-    generation_key = _digest([
+    generation_key = digest_value([
         [target["tool"], target["id"], target["fingerprint"]]
         for target in normalized
     ])
-    now = _now_ms()
+    now = now_ms()
     result = _database(ports).organization.create_or_get({
         "proposal_id": "org_" + secrets.token_urlsafe(18),
         "generation_key": generation_key,
@@ -220,7 +198,7 @@ def modify(proposal_id: str, changes: list[dict], ports: EngineContext) -> dict:
         patch = by_identity.get((target["tool"], target["id"]))
         if patch is not None:
             target["suggested"] = patch
-    result = database.organization.modify(proposal, _now_ms())
+    result = database.organization.modify(proposal, now_ms())
     if result["outcome"] == "missing":
         raise OrganizationProposalNotFoundError(
             "整理提案不存在", {"proposal_id": proposal_id})
@@ -239,7 +217,7 @@ def decide(proposal_id: str, decision: str, ports: EngineContext) -> dict:
     if decision not in {"approve", "reject"}:
         raise OrganizationProposalError("decision 必须是 approve/reject")
     result = _database(ports).organization.decide(
-        proposal_id, decision, _now_ms(),
+        proposal_id, decision, now_ms(),
     )
     if result["outcome"] == "missing":
         raise OrganizationProposalNotFoundError(

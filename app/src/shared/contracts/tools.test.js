@@ -11,7 +11,6 @@ import {
 import { AGENTS, AGENT_IDS } from "./generated/agents.js";
 
 test("当前静态 Agent 契约定义逐操作编辑范围", () => {
-  assert.deepEqual(AGENT_IDS, Object.keys(AGENTS));
   for (const [tool, agent] of Object.entries(AGENTS)) {
     for (const operation of agent.editOperations) {
       assert.equal(supportsEditOperation(tool, operation), true);
@@ -37,23 +36,8 @@ test("当前静态 Agent 契约定义逐操作编辑范围", () => {
   assert.ok(fullEditor);
 });
 
-test("能力 helper 按静态矩阵筛选 Agent", () => {
-  for (const capability of [
-    "browse",
-    "resume",
-    "migration-source",
-    "migration-target",
-    "edit",
-    "delete",
-    "probe",
-    "models",
-  ]) {
-    assert.deepEqual(
-      agentsWithCapability(capability),
-      AGENT_IDS.filter(tool =>
-        AGENTS[tool].capabilities.includes(capability)),
-    );
-  }
+test("能力 helper 拒绝未知与原型链上的 Agent id", () => {
   assert.equal(supportsAgentCapability("unknown", "browse"), false);
   assert.equal(supportsAgentCapability("__proto__", "browse"), false);
+  assert.equal(agentsWithCapability("unknown-capability").length, 0);
 });

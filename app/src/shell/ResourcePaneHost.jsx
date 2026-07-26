@@ -17,14 +17,14 @@ export function ResourcePaneHost({
 }) {
   return (
     <Pane collapsed={collapsed} width={width} dragging={resizing}
-      title={pane.title} count={pane.count} placeholder={pane.placeholder}
+      title={pane.title} count={pane.count}
       query={pane.query}
       onOpenSearch={onOpenSearch}
       onClearSearch={() => pane.onQuery({ target: { value: "" } })}
       filterCount={pane.filterCount}
       filterOn={filterOpen || pane.filterCount > 0}
       onFilter={onFilter}
-      footer={pane.footer} tokens={pane.tokens}
+      tokens={pane.tokens}
       listKey={view}>
       {view === "library" && (
         library.scanning && !library.sessions.length

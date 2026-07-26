@@ -113,80 +113,41 @@ def _write_fs_patch(add_tool_part, tool) -> bool:
     )
 
 
-def _write_fs_search(add_tool_part, tool) -> bool:
-    inputs = tool.input if isinstance(tool.input, dict) else {}
-    query = inputs.get("query")
-    if not query:
-        return False
-    native_input = {"pattern": query}
-    if "path" in inputs:
-        native_input["path"] = inputs["path"]
-    if "glob" in inputs:
-        native_input["include"] = inputs["glob"]
-    return add_tool_part(
-        "grep",
-        native_input,
-        tool_result_text(tool.result),
-        str(query),
-        {"truncated": False},
-        tool,
-    )
+def _renaming_writer(native_name: str, required: tuple[str, str],
+                     optional: tuple[tuple[str, str], ...] = ()):
+    """canonical 输入到 opencode 原生输入只差字段改名的一类工具。"""
+    source_key, native_key = required
+
+    def write(add_tool_part, tool) -> bool:
+        inputs = tool.input if isinstance(tool.input, dict) else {}
+        value = inputs.get(source_key)
+        if not value:
+            return False
+        native_input = {native_key: value}
+        for name, native in optional:
+            if name in inputs:
+                native_input[native] = inputs[name]
+        return add_tool_part(
+            native_name,
+            native_input,
+            tool_result_text(tool.result),
+            str(value),
+            {"truncated": False},
+            tool,
+        )
+
+    return write
 
 
-def _write_fs_glob(add_tool_part, tool) -> bool:
-    inputs = tool.input if isinstance(tool.input, dict) else {}
-    pattern = inputs.get("pattern")
-    if not pattern:
-        return False
-    native_input = {"pattern": pattern}
-    if "path" in inputs:
-        native_input["path"] = inputs["path"]
-    return add_tool_part(
-        "glob",
-        native_input,
-        tool_result_text(tool.result),
-        str(pattern),
-        {"truncated": False},
-        tool,
-    )
-
-
-def _write_web_fetch(add_tool_part, tool) -> bool:
-    inputs = tool.input if isinstance(tool.input, dict) else {}
-    url = inputs.get("url")
-    if not url:
-        return False
-    native_input = {"url": url}
-    if "format" in inputs:
-        native_input["format"] = inputs["format"]
-    if "timeout_ms" in inputs:
-        native_input["timeout"] = inputs["timeout_ms"]
-    return add_tool_part(
-        "webfetch",
-        native_input,
-        tool_result_text(tool.result),
-        str(url),
-        {"truncated": False},
-        tool,
-    )
-
-
-def _write_web_search(add_tool_part, tool) -> bool:
-    inputs = tool.input if isinstance(tool.input, dict) else {}
-    query = inputs.get("query")
-    if not query:
-        return False
-    native_input = {"query": query}
-    if "num_results" in inputs:
-        native_input["numResults"] = inputs["num_results"]
-    return add_tool_part(
-        "websearch",
-        native_input,
-        tool_result_text(tool.result),
-        str(query),
-        {"truncated": False},
-        tool,
-    )
+_write_fs_search = _renaming_writer(
+    "grep", ("query", "pattern"), (("path", "path"), ("glob", "include")))
+_write_fs_glob = _renaming_writer(
+    "glob", ("pattern", "pattern"), (("path", "path"),))
+_write_web_fetch = _renaming_writer(
+    "webfetch", ("url", "url"),
+    (("format", "format"), ("timeout_ms", "timeout")))
+_write_web_search = _renaming_writer(
+    "websearch", ("query", "query"), (("num_results", "numResults"),))
 
 
 def _write_tool_invoke(add_tool_part, tool) -> bool:

@@ -1,24 +1,39 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
+import {
+  WORKFLOW_ID_CHARACTER_CLASS,
+  WORKFLOW_LIMITS,
+  type TaskGraph,
+  type WorkflowRunResult,
+} from "../agents/scheduler.js";
+
+// schema 的上限与 scheduler 的校验必须同源,否则模型能构造出通过 schema 却被拒的工作流
+const idPattern = `^${WORKFLOW_ID_CHARACTER_CLASS}+$`;
 
 const task = Type.Object(
   {
     id: Type.String({
-      pattern: "^[A-Za-z0-9_-]+$",
+      pattern: idPattern,
       minLength: 1,
-      maxLength: 64,
+      maxLength: WORKFLOW_LIMITS.maxTaskIdChars,
     }),
     role_id: Type.String({
-      pattern: "^[A-Za-z0-9_-]+$",
+      pattern: idPattern,
       minLength: 1,
-      maxLength: 128,
+      maxLength: WORKFLOW_LIMITS.maxRoleIdChars,
     }),
-    instruction: Type.String({ minLength: 1, maxLength: 20_000 }),
+    instruction: Type.String({
+      minLength: 1,
+      maxLength: WORKFLOW_LIMITS.maxInstructionChars,
+    }),
     depends_on: Type.Optional(
-      Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
-        maxItems: 32,
-      }),
+      Type.Array(
+        Type.String({
+          minLength: 1,
+          maxLength: WORKFLOW_LIMITS.maxTaskIdChars,
+        }),
+        { maxItems: WORKFLOW_LIMITS.maxTasks },
+      ),
     ),
   },
   { additionalProperties: false },
@@ -26,14 +41,27 @@ const task = Type.Object(
 
 const parameters = Type.Object(
   {
-    tasks: Type.Array(task, { minItems: 1, maxItems: 32 }),
-    max_concurrency: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 })),
-    max_depth: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 })),
+    tasks: Type.Array(task, {
+      minItems: 1,
+      maxItems: WORKFLOW_LIMITS.maxTasks,
+    }),
+    max_concurrency: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: WORKFLOW_LIMITS.maxConcurrency }),
+    ),
+    max_depth: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: WORKFLOW_LIMITS.maxDepth }),
+    ),
     task_timeout_ms: Type.Optional(
-      Type.Integer({ minimum: 1_000, maximum: 30 * 60_000 }),
+      Type.Integer({
+        minimum: WORKFLOW_LIMITS.minTaskTimeoutMs,
+        maximum: WORKFLOW_LIMITS.maxTaskTimeoutMs,
+      }),
     ),
     max_output_chars: Type.Optional(
-      Type.Integer({ minimum: 1_000, maximum: 200_000 }),
+      Type.Integer({
+        minimum: WORKFLOW_LIMITS.minOutputChars,
+        maximum: WORKFLOW_LIMITS.maxOutputChars,
+      }),
     ),
     failure_policy: Type.Optional(
       Type.Union([Type.Literal("fail_fast"), Type.Literal("continue")]),

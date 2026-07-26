@@ -248,10 +248,6 @@ class MigrationTargetBase:
         )
         return self._with_result_fidelity(tool, decision)
 
-    def _tool_decision(self, tool, session, message=None) -> dict:
-        """兼容既有调用方；新代码应直接消费 RenderDecision。"""
-        return self.evaluate_tool(tool, session, message).to_dict()
-
     def plan(self, session) -> dict:
         """预演统计原生映射/降级/丢弃，与 write 的分发逻辑一致。"""
         native = degrade = 0

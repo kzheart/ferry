@@ -6,7 +6,7 @@ import json
 from ..adapters.contracts import NativeSessionReference
 from ..errors import AgentRequestError
 from .index import AgentSessionIndex, IndexedSession
-from .model import tool_result_text
+from .model import native_locator, tool_result_text
 from .safety import (
     MAX_AGENT_DTO_BYTES,
     bounded_int,
@@ -80,12 +80,6 @@ def _fit_context_result(result: dict, budget: int) -> dict:
         result["messages"][-1]["message"] if result["messages"] else None
     )
     return result
-
-
-def _message_native_locator(message, index: int) -> str:
-    if isinstance(message.source_id, str) and message.source_id:
-        return message.source_id
-    return f"index:{index}"
 
 
 def _message_is_rewritable(_tool: str, message) -> bool:
@@ -183,7 +177,7 @@ def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
         }
         item["locator"] = index.issue_message_locator(
             record,
-            _message_native_locator(message, message_index),
+            native_locator(message, message_index),
             message.role,
             editable,
         )
@@ -299,7 +293,7 @@ def search_session_content(tool: str, opaque_ref: str, terms,
             "editable": editable,
             "locator": index.issue_message_locator(
                 record,
-                _message_native_locator(message, message_index),
+                native_locator(message, message_index),
                 message.role,
                 editable,
             ),

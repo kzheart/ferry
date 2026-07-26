@@ -1,10 +1,15 @@
 import type { OrganizerInput, OrganizerResult } from "./organizer.js";
-import { ProtocolError } from "../server/messages.js";
+import { ProtocolError, isObject } from "../server/messages.js";
+import {
+  parseSessionEnvelope,
+  parseSessionHeader,
+  requiredText,
+} from "./session-input.js";
 import type { OrganizationEngineMethod } from "../server/generated/engine-methods.js";
 
 export type { OrganizationEngineMethod };
 
-export interface OrganizationEnginePort {
+interface OrganizationEnginePort {
   invoke(
     method: OrganizationEngineMethod,
     params: Record<string, unknown>,
@@ -12,7 +17,7 @@ export interface OrganizationEnginePort {
   ): Promise<unknown>;
 }
 
-export interface OrganizationWorkflowControl {
+interface OrganizationWorkflowControl {
   checkActive(): void;
   beforeCommit(): void;
 }
@@ -35,66 +40,28 @@ interface Backbone {
   segments: Array<{ hash: string; digest?: string | null }>;
 }
 
-function requiredText(value: unknown, field: string, max: number) {
-  if (typeof value !== "string" || !value.trim() || value.length > max) {
-    throw new ProtocolError("invalid_params", `${field} is invalid`);
-  }
-  return value.trim();
-}
-
 function parseInput(value: unknown): {
   sessions: SessionInput[];
   locale?: string;
 } {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { sessions?: unknown }).sessions)
-  ) {
-    throw new ProtocolError("invalid_params", "sessions must be an array");
-  }
-  const raw = (value as { sessions: unknown[]; locale?: unknown }).sessions;
-  if (raw.length === 0 || raw.length > 50) {
-    throw new ProtocolError("invalid_params", "sessions count is invalid");
-  }
-  const sessions = raw.map((item, index): SessionInput => {
-    if (typeof item !== "object" || item === null) {
-      throw new ProtocolError(
-        "invalid_params",
-        `sessions[${index}] is invalid`,
-      );
-    }
-    const record = item as Record<string, unknown>;
-    return {
-      tool: requiredText(record.tool, "session.tool", 64),
-      id: requiredText(record.id, "session.id", 512),
+  const parsed = parseSessionEnvelope(
+    value,
+    (record): SessionInput => ({
+      ...parseSessionHeader(record),
       ref: requiredText(record.ref, "session.ref", 512),
-      ...(typeof record.title === "string"
-        ? { title: record.title.slice(0, 500) }
-        : {}),
-      ...(typeof record.project === "string"
-        ? { project: record.project.slice(0, 500) }
-        : {}),
-      ...(typeof record.updated_at === "string"
-        ? { updated_at: record.updated_at.slice(0, 128) }
-        : {}),
-    };
-  });
-  const identities = new Set(sessions.map(({ tool, id }) => `${tool}\0${id}`));
-  if (identities.size !== sessions.length) {
+    }),
+  );
+  const identities = new Set(
+    parsed.sessions.map(({ tool, id }) => `${tool}\0${id}`),
+  );
+  if (identities.size !== parsed.sessions.length) {
     throw new ProtocolError("invalid_params", "sessions must be unique");
   }
-  const locale = (value as { locale?: unknown }).locale;
-  return {
-    sessions,
-    ...(typeof locale === "string" && locale.trim()
-      ? { locale: locale.trim().slice(0, 32) }
-      : {}),
-  };
+  return parsed;
 }
 
 function object(value: unknown, field: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isObject(value)) {
     throw new ProtocolError("organization_failed", `${field} is invalid`);
   }
   return value as Record<string, unknown>;

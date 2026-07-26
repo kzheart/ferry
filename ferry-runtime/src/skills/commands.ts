@@ -3,17 +3,14 @@ import {
   optionalString,
   requireString,
   type CommandEnvelope,
+  type DispatchOutcome,
 } from "../server/messages.js";
 import type { SkillService } from "./skill-service.js";
-
-type SkillCommandResult =
-  | { handled: true; result: unknown }
-  | { handled: false };
 
 export async function dispatchSkillCommand(
   service: SkillService,
   command: CommandEnvelope,
-): Promise<SkillCommandResult> {
+): Promise<DispatchOutcome> {
   const params = command.params;
   switch (command.method) {
     case "skills.list":

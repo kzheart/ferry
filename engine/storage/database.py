@@ -5,8 +5,11 @@ Engine RPC 访问，避免多个运行时竞争同一个事务边界。
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from ..operations.history_store import MigrationHistoryStore
@@ -18,6 +21,28 @@ from ..runtime.store import RuntimeSessionStore
 
 
 SCHEMA_VERSION = 8
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def canonical_json(value) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def digest_json(value_json: str) -> str:
+    return hashlib.sha256(value_json.encode()).hexdigest()
+
+
+def digest_value(value) -> str:
+    return digest_json(canonical_json(value))
 
 
 class StateDatabase:
@@ -204,3 +229,23 @@ def get_state_database(
         database = StateDatabase(key, recover_interrupted=recover_interrupted)
         _instances[key] = database
         return database
+
+
+def state_database_path(ports) -> Path:
+    """EngineContext 下 Ferry 自有状态库的位置。"""
+    return Path(ports.snapshot_dir()) / "ferry-state.sqlite3"
+
+
+def state_database(ports) -> StateDatabase:
+    """按 EngineContext 打开状态库。
+
+    元数据/历史/摘要等读写路径不能把正在执行的 Operation 标为中断；该恢复
+    动作仅由 OperationService 重启时执行。
+    """
+    return StateDatabase(state_database_path(ports), recover_interrupted=False)
+
+
+def cached_state_database(ports) -> StateDatabase:
+    """同 `state_database`，但复用实例（见 `get_state_database`）。"""
+    return get_state_database(state_database_path(ports),
+                              recover_interrupted=False)

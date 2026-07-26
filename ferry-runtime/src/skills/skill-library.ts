@@ -46,7 +46,7 @@ export interface SkillContent {
   files: string[];
 }
 
-export interface SkillOrigin {
+interface SkillOrigin {
   origin_label: string;
 }
 
@@ -121,13 +121,18 @@ export class SkillLibrary {
     return target;
   }
 
-  async list(origins: Record<string, SkillOrigin> = {}): Promise<SkillEntry[]> {
+  /** 只列目录名,不递归度量内容——只需要数量或 id 时别走 list()。 */
+  private async listIds(): Promise<string[]> {
     await this.ready;
-    const names = (await readdir(this.root, { withFileTypes: true }))
+    return (await readdir(this.root, { withFileTypes: true }))
       .filter((item) => item.isDirectory() && !item.name.startsWith("."))
       .map((item) => item.name)
       .filter((name) => SKILL_ID_PATTERN.test(name))
       .sort();
+  }
+
+  async list(origins: Record<string, SkillOrigin> = {}): Promise<SkillEntry[]> {
+    const names = await this.listIds();
     const entries: SkillEntry[] = [];
     for (const id of names) {
       entries.push(await this.describe(id, origins[id]?.origin_label ?? null));
@@ -221,7 +226,7 @@ export class SkillLibrary {
   }
 
   private async claimId(desired: string, overwrite: boolean) {
-    const existing = await this.list();
+    const existing = await this.listIds();
     if (existing.length >= MAX_SKILLS) {
       throw new Error("skill library is full");
     }

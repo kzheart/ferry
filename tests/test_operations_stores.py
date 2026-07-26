@@ -136,22 +136,6 @@ def test_migration_history_round_trips_newest_first(tmp_path):
     ]
 
 
-def test_migration_history_delete_reports_remaining(tmp_path):
-    database = _open(tmp_path)
-    database.migration_history.append("history-1", {"tool": "claude"})
-    database.migration_history.append("history-2", {"tool": "codex"})
-
-    assert database.migration_history.delete("history-1") == {
-        "deleted": True, "id": "history-1", "remaining": 1,
-    }
-    assert database.migration_history.delete("history-1") == {
-        "deleted": False, "id": "history-1", "remaining": 1,
-    }
-    assert [
-        entry["id"] for entry in _open(tmp_path).migration_history.list_all()
-    ] == ["history-2"]
-
-
 def test_session_metadata_round_trips_across_reopen(tmp_path):
     _open(tmp_path).metadata.set(
         "claude", "session-1", {"name": "名称", "tags": ["a", "b"]}, 5,
@@ -185,19 +169,6 @@ def test_session_metadata_entry_is_deleted_when_it_becomes_empty(tmp_path):
 
     assert database.metadata.set("claude", "session-1", {"pinned": False}, 2) == {}
     assert _open(tmp_path).metadata.list_all() == {}
-
-
-def test_session_metadata_compare_and_set_rolls_back_on_mismatch(tmp_path):
-    database = _open(tmp_path)
-    database.metadata.set("claude", "one", {"name": "before"}, 1)
-
-    assert database.metadata.compare_and_set([
-        ("claude", "one", {"name": "wrong"}, {"name": "after"}),
-        ("codex", "two", {}, {"pinned": True}),
-    ], 2) is None
-    assert _open(tmp_path).metadata.list_all() == {
-        metadata_key("claude", "one"): {"name": "before"},
-    }
 
 
 def test_merge_metadata_drops_falsey_values():

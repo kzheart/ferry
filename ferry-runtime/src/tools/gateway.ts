@@ -33,7 +33,7 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   bash: 125_000,
 };
 
-export interface RuntimeGatewayOptions {
+interface RuntimeGatewayOptions {
   newId: () => string;
   events: RuntimeEventBus;
   emitToolRequest: (
