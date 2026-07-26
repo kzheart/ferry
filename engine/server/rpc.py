@@ -28,7 +28,11 @@ RPC_METHODS = ENGINE_METHOD_NAMES
 
 
 def _error_envelope(error: DomainError, request_id: str) -> dict:
-    payload = {"code": error.code, "params": error.params,
+    # message 是 agent 自救指引的一部分:光有 code 模型只能盲猜,
+    # 与 runtime ProtocolError.toEnvelope 一致,借 params.message 下发。
+    params = dict(error.params)
+    params.setdefault("message", str(error)[:500])
+    payload = {"code": error.code, "params": params,
                "category": error.category, "retryable": error.retryable}
     return {
         "protocol": PROTOCOL,

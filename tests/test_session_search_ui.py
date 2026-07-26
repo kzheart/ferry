@@ -225,7 +225,9 @@ def test_rpc_reports_missing_query_as_a_parameter_error(search_environment):
     response = _rpc(search_environment, {})
     assert response["ok"] is False
     assert response["error"]["code"] == "rpc.missing_param"
-    assert response["error"]["params"] == {"param": "query"}
+    assert response["error"]["params"] == {
+        "param": "query", "message": "缺少参数: query",
+    }
 
 
 def test_rpc_surfaces_scope_validation_as_a_domain_error(search_environment):

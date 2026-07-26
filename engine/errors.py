@@ -8,7 +8,8 @@ class DomainError(Exception):
     """所有领域异常的基类。
 
     code 是稳定的机器码（如 session.concurrent_modification），
-    params 只放语义字段；message 仅用于日志与开发调试。
+    params 只放语义字段；message 会经 RPC envelope 的 params.message
+    下发给 agent 作恢复指引，写文案时按「模型读得懂、知道下一步」来写。
     """
 
     code = "internal.unexpected"
