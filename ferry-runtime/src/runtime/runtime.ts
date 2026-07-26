@@ -53,7 +53,15 @@ export interface RuntimeOptions {
   now?: () => Date;
   idFactory?: () => string;
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
+  /** 覆盖会话自动命名的取标题实现;缺省走 ProviderHost。 */
+  titleGenerator?: TitleGenerator;
 }
+
+export type TitleGenerator = (
+  selection: ModelSelection,
+  prompt: string,
+  reply: string,
+) => Promise<string | null>;
 
 export class AgentRuntime {
   store: SessionStore;
@@ -64,6 +72,7 @@ export class AgentRuntime {
   private readonly events: RuntimeEventBus;
   private readonly backendFactory: BackendFactory;
   private readonly providerHost: ProviderHost | undefined;
+  private readonly titleGenerator: TitleGenerator | undefined;
   private readonly idFactory: () => string;
   private readonly backendInfo: AgentBackend;
   readonly providerService: ProviderService;
@@ -86,6 +95,7 @@ export class AgentRuntime {
     this.events = new RuntimeEventBus(this.now);
     this.idFactory = options.idFactory ?? randomUUID;
     this.providerHost = options.providerHost;
+    this.titleGenerator = options.titleGenerator;
     this.backendFactory = backendFactory;
     this.backendInfo = this.backendFactory(defaultSelection);
     this.gateway = new RuntimeGateway({
@@ -297,6 +307,17 @@ export class AgentRuntime {
       );
     }
     return { run_id: await session.prompt(text, images, displayText) };
+  }
+
+  async generateTitle(
+    selection: ModelSelection,
+    prompt: string,
+    reply: string,
+  ) {
+    if (this.titleGenerator)
+      return this.titleGenerator(selection, prompt, reply);
+    if (!this.providerHost) return null;
+    return this.providerHost.summarizeTitle(prompt, reply, selection);
   }
 
   async renameSession(sessionId: string, title: string) {
