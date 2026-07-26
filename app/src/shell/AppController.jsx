@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
+import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import {
   sessionIdentity,
   useBrowserData,
@@ -355,9 +356,101 @@ export default function App() {
     selectHistory,
   });
 
+  const browserState = useMemo(
+    () => ({
+      peek: {
+        id: peekId,
+        current: cur,
+        selectedId: selId,
+        meta: detailMeta,
+        detail,
+        actions: detailActs,
+        navigationTarget,
+        refreshing,
+        loadingMore,
+        setId: setPeekId,
+        setView,
+      },
+      search: {
+        open: searchOpen,
+        pane: paneCfg,
+        view,
+        ferrySessions,
+        historyGroups: histGroups,
+        libraryGroups: libGroups,
+        // 全文命中回来的是 opaque ref,要靠扫描列表换回选中用的 identity key
+        scanSessions: sessions,
+        selectHistory,
+        setMultiSelection: setMultiSel,
+        selectSession: select,
+        setOpen: setSearchOpen,
+      },
+      contextMenu: {
+        value: ctxMenu,
+        items: ctxItems,
+        setValue: setCtxMenu,
+      },
+      deletion: {
+        sessionConfirmation: deletion.sessionConfirmation,
+        batchConfirmation: deletion.batchConfirmation,
+        cancelSessionDeletion: deletion.cancelSessionDeletion,
+        confirmSessionDeletion: deletion.confirmSessionDeletion,
+        cancelBatchDeletion: deletion.cancelBatchDeletion,
+        confirmBatchDeletion: deletion.confirmBatchDeletion,
+        history: histDel,
+        setHistory: setHistDel,
+        deleteHistory,
+        selectedHistoryId: histSelectedId,
+        selectHistory,
+        onDeleteHistory: () => setHistDel(histSel),
+      },
+      rename: {
+        session: renameFor,
+        setSession: setRenameFor,
+        metaFor,
+        updateMetadata: setMetaFor,
+      },
+      tags: {
+        selection: tagFor,
+        setSelection: setTagFor,
+        metaFor,
+        updateMetadata: setMetaFor,
+      },
+      filters: {
+        popover,
+        anchor: popAnchor.current,
+        onClose: () => setPopover(null),
+        library: {
+          value: libF,
+          onChange: setLibF,
+          counts,
+          dirs,
+          tags: allTags,
+          onClear: clearLibF,
+        },
+        history: {
+          value: histF,
+          tools: historyToolIds,
+          onChange: setHistF,
+          onClear: clearHistF,
+        },
+      },
+    }),
+    [
+      peekId, cur, selId, detailMeta, detail, detailActs, navigationTarget,
+      refreshing, loadingMore, searchOpen, paneCfg, view, ferrySessions,
+      histGroups, libGroups, sessions, selectHistory, select, ctxMenu,
+      ctxItems, deletion, histDel, deleteHistory, histSelectedId, histSel,
+      renameFor, metaFor, setMetaFor, tagFor, popover, libF, counts, dirs,
+      allTags, clearLibF, histF, historyToolIds, setHistF, clearHistF,
+      setMultiSel, setLibF,
+    ],
+  );
+
   return (
     <FerryRuntimeProvider value={ferry}>
     <SessionEditingProvider value={editingSurface}>
+    <BrowserStateProvider value={browserState}>
     <div
       data-ferry-win="1"
       style={{
@@ -429,8 +522,7 @@ export default function App() {
                 collapsedGroups,
                 onToggleGroup,
                 onClear: clearLibF,
-                selectedId: selId,
-                multiSel,
+                      multiSel,
                 onRowClick,
                 onRowPin,
                 onRowDelete,
@@ -479,9 +571,7 @@ export default function App() {
           detail={detail}
           detailActions={{
             ...detailActs,
-            refreshing,
-            loadingMore,
-            onDeleteHistory: () => setHistDel(histSel),
+                onDeleteHistory: () => setHistDel(histSel),
           }}
           historySelection={histSel}
           agentAttachments={agentAttachments}
@@ -513,77 +603,34 @@ export default function App() {
           railOnly,
           sessions,
           current: cur,
-          selectedId: selId,
-          detail,
-          detailMeta,
-          detailActions: detailActs,
-          refreshing,
-          loadingMore,
-          navigationTarget,
           scan,
           scanning,
           scanProgress,
           doScan,
+          dirtyOps,
           diff,
           setDiff,
           confirmApply,
           setConfirmApply,
           applyEdit,
-          metaFor,
-          updateMetadata: setMetaFor,
           reloadMetadata,
           organizerOpen,
           setOrganizerOpen,
-          peekId,
-          setPeekId,
           migration: mig,
           setMigration: setMig,
           loadHistory,
-          searchOpen,
-          setSearchOpen,
           floatChatOpen,
           setFloatChatOpen,
           peekEntity,
           openConfig,
-          paneConfig: paneCfg,
-          ferrySessions,
-          libraryGroups: libGroups,
-          historyGroups: histGroups,
-          selectHistory,
-          select,
-          setMultiIds: setMultiSel,
-          menu: ctxMenu,
-          menuItems: ctxItems,
-          setMenu: setCtxMenu,
-          deletion,
-          historyDeletion: histDel,
-          setHistoryDeletion: setHistDel,
-          deleteHistory,
-          selectedHistoryId: histSelectedId,
-          rename: renameFor,
-          setRename: setRenameFor,
           agentRename: agentRenameFor,
           setAgentRename: setAgentRenameFor,
-          tagSelection: tagFor,
-          setTagSelection: setTagFor,
           toast,
           setToast,
-          popover,
-          popoverAnchor: popAnchor.current,
-          setPopover,
-          libraryFilter: libF,
-          setLibraryFilter: setLibF,
-          libraryCounts: counts,
-          libraryDirs: dirs,
-          libraryTags: allTags,
-          clearLibraryFilter: clearLibF,
-          historyFilter: histF,
-          historyToolIds,
-          setHistoryFilter: setHistF,
-          clearHistoryFilter: clearHistF,
         })}
       />
     </div>
+    </BrowserStateProvider>
     </SessionEditingProvider>
     </FerryRuntimeProvider>
   );
