@@ -19,6 +19,7 @@ use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
+use crate::process::handshake::verify_handshake;
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use approval::{forget_auto_policy, remember_auto_policy};
 use gateway::{complete_engine_request, complete_tool_request};
@@ -135,15 +136,8 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         .request(health_id, &health.to_string(), STARTUP_HEALTH_TIMEOUT)
         .map_err(|error| error.to_string())?;
     let value: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
-    if value.get("ok").and_then(Value::as_bool) != Some(true)
-        || value.pointer("/result/service").and_then(Value::as_str) != Some("ferry-runtime")
-        || value
-            .pointer("/result/contract_hash")
-            .and_then(Value::as_str)
-            != Some(FERRY_CONTRACT_HASH)
-    {
-        return Err("Ferry Runtime 协议握手失败".to_owned());
-    }
+    verify_handshake(&value, "ferry-runtime", FERRY_CONTRACT_HASH)
+        .map_err(|_| "Ferry Runtime 协议握手失败".to_owned())?;
     Ok(process)
 }
 
