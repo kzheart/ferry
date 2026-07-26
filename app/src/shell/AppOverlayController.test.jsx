@@ -17,6 +17,7 @@ vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
 }));
 
 import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
+import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
@@ -38,18 +39,23 @@ const editingSurface = {
 const BROWSER_STATE_KEYS = [
   "peek", "search", "contextMenu", "deletion", "rename", "tags", "filters",
 ];
+const OPERATIONS_STATE_KEYS = [
+  "organization", "migration", "editing", "floatChat", "agentRename",
+];
 
-const browserStateOf = props =>
-  Object.fromEntries(
-    BROWSER_STATE_KEYS.filter(key => key in props).map(key => [key, props[key]]),
-  );
+const pick = (props, keys) =>
+  Object.fromEntries(keys.filter(key => key in props).map(key => [key, props[key]]));
 
 function render(ui) {
   const wrap = node => (
     <FerryRuntimeProvider value={ferry}>
       <SessionEditingProvider value={editingSurface}>
-        <BrowserStateProvider value={browserStateOf(node.props)}>
-          {node}
+        <BrowserStateProvider value={pick(node.props, BROWSER_STATE_KEYS)}>
+          <OperationsStateProvider
+            value={pick(node.props, OPERATIONS_STATE_KEYS)}
+          >
+            {node}
+          </OperationsStateProvider>
         </BrowserStateProvider>
       </SessionEditingProvider>
     </FerryRuntimeProvider>

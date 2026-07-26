@@ -1,7 +1,6 @@
 // 全局弹层的输入组装。哪些弹层存在、各自需要什么,集中在这里声明,
 // 主壳只负责把结果转交给 AppOverlayController;新增弹层不必改动渲染骨架。
 export function buildOverlayProps({
-  view,
   setView,
   environment: env,
   settings,
@@ -13,76 +12,14 @@ export function buildOverlayProps({
   onboarding,
   rail,
   railOnly,
-  sessions,
-  current,
   scan,
   scanning,
   scanProgress,
   doScan,
-  dirtyOps,
-  diff,
-  setDiff,
-  confirmApply,
-  setConfirmApply,
-  applyEdit,
-  reloadMetadata,
-  organizerOpen,
-  setOrganizerOpen,
-  migration,
-  setMigration,
-  loadHistory,
-  floatChatOpen,
-  setFloatChatOpen,
-  peekEntity,
-  openConfig,
-  agentRename,
-  setAgentRename,
   toast,
   setToast,
 }) {
   return {
-    organization: {
-      open: organizerOpen,
-      sessions,
-      setOpen: setOrganizerOpen,
-      reloadMetadata,
-      scan: doScan,
-    },
-    migration: {
-      state: migration,
-      current,
-      env,
-      settings,
-      setState: setMigration,
-      loadHistory,
-    },
-    editing: {
-      diff,
-      dirtyOps,
-      confirmApply,
-      setDiff,
-      setConfirmApply,
-      apply: applyEdit,
-    },
-    floatChat: {
-      // 会话库浮动 Agent 面板:仅在浏览具体会话且设置页未打开时挂载;
-      // open 只控制展开与否,悬浮球本身由 mounted 决定
-      mounted: view === "library" && Boolean(current) && !settingsOpen,
-      open: floatChatOpen,
-      session: current,
-      scanSessions: sessions,
-      onToggle: () => setFloatChatOpen((value) => !value),
-      onNavigate: peekEntity,
-      onOpenConfig: openConfig,
-      onOpenFull: () => {
-        setFloatChatOpen(false);
-        setView("askferry");
-      },
-    },
-    agentRename: {
-      session: agentRename,
-      setSession: setAgentRename,
-    },
     toast: { value: toast, setValue: setToast },
     railTip: { value: rail.railTip, railOnly },
     settings: {

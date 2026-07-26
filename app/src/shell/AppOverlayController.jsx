@@ -3,16 +3,12 @@ import { useMemo } from "react";
 import { sessionIdentity } from "../modules/browser/public.js";
 import { useBrowserState } from "../shared/capabilities/browserState.jsx";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
+import { useOperationsState } from "../shared/capabilities/operationsState.jsx";
 import { AppOverlays } from "./AppOverlays.jsx";
 import { useSessionContentSearch } from "./useSessionContentSearch.js";
 
 export function AppOverlayController({
   t,
-  organization,
-  migration,
-  editing,
-  floatChat,
-  agentRename,
   toast,
   railTip,
   settings,
@@ -21,6 +17,8 @@ export function AppOverlayController({
   const ferry = useFerryRuntime();
   const { peek, search, contextMenu, deletion, rename, tags, filters } =
     useBrowserState();
+  const { organization, migration, editing, floatChat, agentRename } =
+    useOperationsState();
   const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
   const contentSearch = useSessionContentSearch(
