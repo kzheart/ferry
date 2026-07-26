@@ -262,9 +262,31 @@ export class RuntimeSession {
       payload,
     };
     this.events.push(event);
-    await this.persist();
+    await this.persistIfCommittable(type);
     this.runtime.publish(event);
     return event;
+  }
+
+  /**
+   * 流式期间每个 token 都提交一次太贵:`lastCommittableEventSeq()` 本就把结尾
+   * 的 delta 排除在提交内容外,所以一轮里除了第一个 delta(它要把用户那条消息
+   * 落盘)之外,其余 delta 的提交全是零内容空写。只在真有未落盘内容时才写。
+   */
+  private async persistIfCommittable(type: RuntimeEventType) {
+    if (type === "content.delta" && !this.hasUncommittedContent()) return;
+    await this.persist();
+  }
+
+  private hasUncommittedContent() {
+    const lastMessage = this.agent.state.messages.at(-1);
+    const committableMessageCount =
+      lastMessage?.role === "assistant"
+        ? this.agent.state.messages.length - 1
+        : this.agent.state.messages.length;
+    return (
+      committableMessageCount > this.persistedMessageCount ||
+      this.lastCommittableEventSeq() > this.persistedEventSeq
+    );
   }
 
   async prompt(text: string, images: ImageContent[] = [], displayText = text) {
