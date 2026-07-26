@@ -6,11 +6,15 @@ import threading
 from pathlib import Path
 
 
+_DIGESTS_KEY = "digests"
+
+
 class ScanCache:
     def __init__(self, path=None, version=6):
         self.path = path or Path.home() / ".resume-harness" / "scan-cache.json"
         self.version = version
         self._data = None
+        self._lock = threading.Lock()
 
     def _load(self):
         if self._data is None:
@@ -33,6 +37,28 @@ class ScanCache:
         self._data[str(path)] = {"version": self.version,
             "mtime": stat.st_mtime_ns, "size": stat.st_size, "meta": meta}
 
+    def get_digest(self, path, stat):
+        """取文件内容摘要:stat 四元组完全一致才算命中。"""
+        self._load()
+        hit = self._data.get(_DIGESTS_KEY, {}).get(str(path))
+        if (hit and hit.get("dev") == stat.st_dev
+                and hit.get("ino") == stat.st_ino
+                and hit.get("mtime") == stat.st_mtime_ns
+                and hit.get("size") == stat.st_size):
+            return hit.get("sha256")
+        return None
+
+    def put_digest(self, path, stat, sha256):
+        # 全量扫描时会被多个规范化线程并发写入。
+        with self._lock:
+            self._load()
+            digests = self._data.setdefault(_DIGESTS_KEY, {})
+            digests[str(path)] = {
+                "dev": stat.st_dev, "ino": stat.st_ino,
+                "mtime": stat.st_mtime_ns, "size": stat.st_size,
+                "sha256": sha256,
+            }
+
     def flush(self):
         if self._data is None:
             return
@@ -42,5 +68,7 @@ class ScanCache:
         temp = self.path.with_name(
             f"{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp",
         )
-        temp.write_text(json.dumps(self._data))
+        with self._lock:
+            payload = json.dumps(self._data)
+        temp.write_text(payload)
         os.replace(temp, self.path)

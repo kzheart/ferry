@@ -9,6 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from ..context import EngineContext
 from ..contracts.session_ref import is_opaque_session_ref
@@ -33,6 +34,15 @@ def _revision(
         separators=(",", ":"),
     )
     return hashlib.sha256(stable.encode()).hexdigest()
+
+
+class _IdentityStat(NamedTuple):
+    """把 identity 四元组当 stat 用,避免写回摘要时再 stat 一次引入竞态。"""
+
+    st_dev: int
+    st_ino: int
+    st_mtime_ns: int
+    st_size: int
 
 
 @dataclass(frozen=True)
@@ -69,18 +79,32 @@ _PARALLEL_CANONICALIZE_THRESHOLD = 64
 _CANONICALIZE_WORKERS = min(8, (os.cpu_count() or 4))
 
 
-def _path_identity(path: Path, digest_cache: dict | None = None) -> tuple:
+def _path_identity(
+    path: Path,
+    digest_cache: dict | None = None,
+    digest_store=None,
+) -> tuple:
     """会话文件身份 = stat 四元组 + 内容摘要。
 
     `digest_cache` 只在全量扫描时传入:上千个会话每次搜索都重算一遍内容摘要
     要读掉整个会话库,固定给每次工具调用加上秒级延迟。stat 四元组没变时先
     复用摘要;真正读取或编辑某个会话时 `resolve()` 一定不带缓存重算,并在发现
     「stat 没变但内容变了」时删掉该缓存项,下一次扫描就会重新哈希并换发 ref。
+
+    `digest_store`(ScanCache)是同一份摘要的跨进程缓存:进程内 dict 冷启动时
+    永远是空的,没有它每次开机都要把整个会话库读一遍算 SHA-256。校验四元组
+    与进程内缓存完全一致,所以命中的安全语义相同。
     """
     if digest_cache is not None:
         probe = path.stat()
         key = (probe.st_dev, probe.st_ino, probe.st_mtime_ns, probe.st_size)
         cached = digest_cache.get(key)
+        if cached is None and digest_store is not None:
+            cached = digest_store.get_digest(path, probe)
+            if cached is not None:
+                if len(digest_cache) >= _DIGEST_CACHE_LIMIT:
+                    digest_cache.clear()
+                digest_cache[key] = cached
         if cached is not None:
             return (*key, cached)
     before = path.stat()
@@ -105,6 +129,8 @@ def _path_identity(path: Path, digest_cache: dict | None = None) -> tuple:
         if len(digest_cache) >= _DIGEST_CACHE_LIMIT:
             digest_cache.clear()
         digest_cache[identity[:4]] = identity[4]
+        if digest_store is not None:
+            digest_store.put_digest(path, after, identity[4])
     return identity
 
 
@@ -125,6 +151,7 @@ def _directory_identity(
     path: Path,
     browser,
     digest_cache: dict | None = None,
+    digest_store=None,
 ) -> tuple:
     member_provider = getattr(browser, "authoritative_members", None)
     if member_provider is None:
@@ -142,7 +169,7 @@ def _directory_identity(
             raise AgentReferenceError("目录会话权威成员超出 bundle")
         identities.append((
             str(resolved.relative_to(path)),
-            _path_identity(resolved, digest_cache),
+            _path_identity(resolved, digest_cache, digest_store),
         ))
     return tuple(sorted(identities))
 
@@ -173,13 +200,36 @@ class AgentSessionIndex:
         cache.flush()
         return self.index_rows(scanned)
 
+    def _digest_store(self):
+        """摘要的跨进程缓存。测试与旧上下文的 cache 不一定支持,拿不到就算了。"""
+        try:
+            cache = self._ports.cache_factory()
+        except Exception:
+            return None
+        return cache if hasattr(cache, "get_digest") else None
+
+    def _store_identity_digests(self, path: Path, storage_kind, identity):
+        store = self._digest_store()
+        if store is None:
+            return
+        if storage_kind == "file":
+            entries = [(path, identity[0])]
+        else:
+            entries = [(path / relative, member) for relative, member in identity]
+        for target, member in entries:
+            store.put_digest(target, _IdentityStat(*member[:4]), member[4])
+        store.flush()
+
     def index_rows(self, scanned) -> list[IndexedSession]:
         records: list[IndexedSession] = []
         active: set[str] = set()
         # 规范化要给每个会话文件算一遍内容摘要,几千个会话串行做会让每次
         # 搜索/用量调用固定多花两秒。摘要之间互不依赖,且 hashlib 与文件读取
         # 都会释放 GIL,所以先并行算完,再在锁内串行做签发与淘汰。
-        canonical_rows = self._canonicalize_all(scanned)
+        digest_store = self._digest_store()
+        canonical_rows = self._canonicalize_all(scanned, digest_store)
+        if digest_store is not None:
+            digest_store.flush()
         with self._lock:
             for (tool_name, _adapter, row), resolved in zip(
                 scanned, canonical_rows,
@@ -294,6 +344,11 @@ class AgentSessionIndex:
                             self._digest_cache.pop(identity[0][:4], None)
                         else:
                             self._digest_cache.clear()
+                    # 同一条陈旧摘要还躺在跨进程缓存里,不覆盖的话重启后会被
+                    # 再次命中。手上正好有刚算出的真实摘要,直接写回。
+                    self._store_identity_digests(
+                        resolved, record.storage_kind, identity,
+                    )
                     raise AgentReferenceError(
                         "ref 在扫描后已变化，请重新搜索",
                         {"tool": tool, "reason": "session_changed",
@@ -371,19 +426,24 @@ class AgentSessionIndex:
             )
         return message
 
-    def _canonicalize_all(self, scanned) -> list[tuple]:
+    def _canonicalize_all(self, scanned, digest_store=None) -> list[tuple]:
         rows = list(scanned)
         if len(rows) < _PARALLEL_CANONICALIZE_THRESHOLD:
-            return [self._canonicalize(adapter, row) for _, adapter, row in rows]
+            return [
+                self._canonicalize(adapter, row, digest_store)
+                for _, adapter, row in rows
+            ]
         with ThreadPoolExecutor(max_workers=_CANONICALIZE_WORKERS) as pool:
             return list(
                 pool.map(
-                    lambda item: self._canonicalize(item[1], item[2]),
+                    lambda item: self._canonicalize(
+                        item[1], item[2], digest_store,
+                    ),
                     rows,
                 )
             )
 
-    def _canonicalize(self, adapter, row: dict) -> tuple[
+    def _canonicalize(self, adapter, row: dict, digest_store=None) -> tuple[
         str | None,
         str | None,
         str | None,
@@ -413,12 +473,15 @@ class AgentSessionIndex:
             try:
                 identity = (
                     (
-                        _path_identity(Path(path), self._digest_cache),
+                        _path_identity(
+                            Path(path), self._digest_cache, digest_store,
+                        ),
                         _agent_fingerprint(adapter.browser, path),
                     )
                     if native.storage_kind == "file"
                     else _directory_identity(
                         Path(path), adapter.browser, self._digest_cache,
+                        digest_store,
                     )
                 )
                 if native.storage_kind == "file" and identity[1] is None:
