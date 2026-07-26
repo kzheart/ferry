@@ -194,7 +194,12 @@ interface FerryToolPort {
 const schemas = {
   session_search: Type.Object(
     {
-      query: Type.String({ minLength: 1, maxLength: 500 }),
+      query: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+      patterns: Type.Optional(
+        Type.Array(Type.String({ minLength: 1, maxLength: 500 }), {
+          maxItems: 16,
+        }),
+      ),
       agents: Type.Optional(
         Type.Array(Type.String({ maxLength: 32 }), { maxItems: 8 }),
       ),
@@ -278,7 +283,7 @@ const schemas = {
 
 const descriptions: Record<FerryToolName, string> = {
   session_search:
-    'Search the whole session library: metadata (title, project, source tool, model) and, by default, full-text message content across every session — use this instead of reading sessions one by one or shelling out to grep. scope narrows matching to metadata or content only; default any matches either. Query words are ANDed within one message (or one metadata row): every word must appear there, substring-matched, so prefer one or two distinctive words. Quote "a phrase" for exact adjacency. There is no OR — run separate searches for alternative wordings before concluding something is absent. Content hits carry matched_in, content_match_count and content_matches (message/turn/role plus a size-bounded original snippet) — jump to a hit with session_read from_message. Coding sessions keep most substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent from content. Check content_index in the result: when ready is false, pending_sessions are still being indexed and content results are partial — say so rather than presenting them as complete. Only the first 16KB per message is content-indexed; session_read with terms scans one session exhaustively. total_matches is how many sessions matched and returned is how many came back — when total_matches exceeds returned you have seen a sample, not the library, so never describe the result as the user\'s complete history. record_count counts raw transcript records and is larger than the message_count session_read reports for the same session. An fsr_ ref stops resolving once that session is written to again; if a read fails with reason session_changed, search again and use the fresh ref.',
+    'Search the whole session library: metadata (title, project, source tool, model) and, by default, full-text message content across every session — use this instead of reading sessions one by one or shelling out to grep. scope narrows matching to metadata or content only; default any matches either. Query words are ANDed within one message (or one metadata row): every word must appear there, substring-matched, so prefer one or two distinctive words. Quote "a phrase" for exact adjacency. For OR — alternative wordings, or a set of independent patterns like leaked-credential prefixes (sk-ant, ghp_, AKIA, "BEGIN PRIVATE KEY", "password=") — pass patterns: an array of up to 16 strings matched as a union, so one call covers them all; a session matches if ANY pattern matches, and each pattern keeps the same AND-within-a-message/phrase rules as query. Pass query, patterns, or both (at least one is required). Do NOT space-separate alternatives inside a single query string expecting OR — that ANDs them and silently returns nothing. Content hits carry matched_in, content_match_count and content_matches (message/turn/role plus a size-bounded original snippet) — jump to a hit with session_read from_message. Coding sessions keep most substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent from content. Check content_index in the result: when ready is false, pending_sessions are still being indexed and content results are partial — say so rather than presenting them as complete. Only the first 16KB per message is content-indexed; session_read with terms scans one session exhaustively. total_matches is how many sessions matched and returned is how many came back — when total_matches exceeds returned you have seen a sample, not the library, so never describe the result as the user\'s complete history. record_count counts raw transcript records and is larger than the message_count session_read reports for the same session. An fsr_ ref stops resolving once that session is written to again; if a read fails with reason session_changed, search again and use the fresh ref.',
   session_read:
     "Read one indexed session using an fsr_ ref returned by session_search. By default returns a size-bounded page of original messages; paginate with next_from_message, never turn numbers. Pass terms to search that session's content and get matching snippets; searched_scope tells you what was covered — by default only visible message text, and coding sessions keep most of their substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ, and both differ from search's record_count. If a search match has complete=false, re-read that message without terms before editing its full text.",
   usage:
@@ -301,6 +306,14 @@ export function createFerryTools(
     executionMode: "sequential",
     async execute(toolCallId, params, signal, onUpdate) {
       const input = params as Record<string, unknown>;
+      if (name === "session_search") {
+        const hasQuery =
+          typeof input.query === "string" && input.query.trim().length > 0;
+        const hasPatterns =
+          Array.isArray(input.patterns) && input.patterns.length > 0;
+        if (!hasQuery && !hasPatterns)
+          throw new Error("session_search requires query or patterns");
+      }
       if (
         name === "migrate" &&
         input.intent !== "preview" &&
