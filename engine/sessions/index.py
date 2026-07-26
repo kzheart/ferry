@@ -118,7 +118,10 @@ def _path_identity(
         (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)
         != (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size)
     ):
-        raise AgentReferenceError("会话在计算 revision 时发生变化")
+        raise AgentReferenceError(
+            "会话在计算 revision 时发生变化",
+            {"reason": "session_changed", "recovery": _REF_RECOVERY_HINT},
+        )
     identity = (
         after.st_dev,
         after.st_ino,
@@ -291,7 +294,16 @@ class AgentSessionIndex:
             raise AgentReferenceError("ref 不是 Engine 签发的 opaque ref")
         with self._lock:
             record = self._by_opaque.get(opaque_ref)
-        if record is None or record.tool != tool:
+        if record is not None and record.tool != tool:
+            # ref 已能唯一定位会话,tool 配错是 agent 高频笔误;报
+            # unknown_ref 会误导它重新搜索,这里直接给出正确配对。
+            raise AgentReferenceError(
+                f"ref 属于 {record.tool} 会话，不属于 {tool}",
+                {"expected_tool": record.tool, "given_tool": tool,
+                 "reason": "tool_mismatch",
+                 "recovery": f"retry the same ref with tool={record.tool}"},
+            )
+        if record is None:
             # 恢复办法要放进 params:agent 只看得到结构化错误,看不到这句中文。
             raise AgentReferenceError(
                 "ref 不在当前扫描索引中",
@@ -303,7 +315,11 @@ class AgentSessionIndex:
                 resolved = Path(record.canonical_ref).resolve(strict=True)
                 root = Path(record.root or "").resolve(strict=True)
             except OSError as error:
-                raise AgentReferenceError("ref 指向的会话已失效") from error
+                raise AgentReferenceError(
+                    "ref 指向的会话已失效",
+                    {"tool": tool, "reason": "session_missing",
+                     "recovery": _REF_RECOVERY_HINT},
+                ) from error
             expected_type = (
                 resolved.is_file()
                 if record.storage_kind == "file"
@@ -354,7 +370,11 @@ class AgentSessionIndex:
             browser = self._ports.adapter(tool).browser
             fingerprint = _agent_fingerprint(browser, record.canonical_ref)
             if fingerprint is None:
-                raise AgentReferenceError("ref 指向的会话已失效")
+                raise AgentReferenceError(
+                    "ref 指向的会话已失效",
+                    {"tool": tool, "reason": "session_missing",
+                     "recovery": _REF_RECOVERY_HINT},
+                )
             if pin_content and fingerprint != record.source_identity:
                 raise AgentReferenceError(
                     "ref 在扫描后已变化，请重新搜索",

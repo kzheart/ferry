@@ -57,7 +57,9 @@ def test_unknown_method_is_structured():
     response = request("nope")
     assert response["ok"] is False
     assert response["error"]["code"] == "rpc.unknown_method"
-    assert response["error"]["params"] == {"method": "nope"}
+    assert response["error"]["params"] == {
+        "method": "nope", "message": "未知 method: nope",
+    }
 
 
 def test_metadata_write_is_not_a_generic_rpc_method():
@@ -72,14 +74,18 @@ def test_missing_param_is_structured():
     response = request("models")
     assert response["ok"] is False
     assert response["error"]["code"] == "rpc.missing_param"
-    assert response["error"]["params"] == {"param": "tool"}
+    assert response["error"]["params"] == {
+        "param": "tool", "message": "缺少参数: tool",
+    }
 
 
 def test_unknown_tool_is_structured():
     response = request("models", {"tool": "nope"})
     assert response["ok"] is False
     assert response["error"]["code"] == "tool.unknown"
-    assert response["error"]["params"] == {"tool": "nope"}
+    assert response["error"]["params"] == {
+        "tool": "nope", "message": "未知工具: nope",
+    }
     assert response["error"]["category"] == "not-found"
 
 

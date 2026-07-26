@@ -563,8 +563,12 @@ def test_only_current_index_refs_are_accepted(agent_environment):
         agent_read.get_session_context(
             "claude", str(agent_environment["transcript"]),
         )
-    with pytest.raises(AgentReferenceError):
+    # tool 配错但 ref 有效:要指认正确配对,而不是误导 agent 重新搜索
+    with pytest.raises(AgentReferenceError, match="属于 claude") as mismatch:
         agent_read.get_session_context("opencode", ref)
+    assert mismatch.value.params["reason"] == "tool_mismatch"
+    assert mismatch.value.params["expected_tool"] == "claude"
+    assert "tool=claude" in mismatch.value.params["recovery"]
     with pytest.raises(AgentReferenceError):
         agent_read.get_session_context("opencode", "oc-arbitrary")
 
@@ -712,6 +716,27 @@ def test_context_paginates_long_single_turn_by_message(agent_environment):
     assert all(item["turn"] == 1 for item in second["messages"])
 
 
+def test_context_first_oversized_message_still_advances(agent_environment):
+    session = agent_environment["claude_browser"].session
+    session.messages = [
+        Message("user", [Block("text", "巨" * 40_000)]),
+        Message("assistant", [Block("text", "回答")]),
+    ]
+    ref = _claude_ref()
+
+    result = agent_read.get_session_context(
+        "claude", ref, from_message=1, limit=2, max_bytes=2048)
+    encoded = json.dumps(result, ensure_ascii=False).encode()
+    assert len(encoded) <= 2048
+    # 首条超预算也必须返回截断内容，游标不得回退——否则调用方按
+    # next_from_message 翻页会在第 1 条上死循环。
+    assert result["messages"], "首条消息超预算时不应返回空页"
+    assert result["messages"][0]["message"] == 1
+    assert result["messages"][0]["complete"] is False
+    assert result["truncation"]["truncated"] is True
+    assert result["next_from_message"] == 2
+
+
 def test_limits_preserve_paths_and_credentials_with_deterministic_truncation():
     private_key = (
         "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----")
@@ -783,7 +808,7 @@ def test_agent_rpc_returns_stable_structured_errors(agent_environment):
     assert response["ok"] is False
     assert response["error"] == {
         "code": "agent.reference_invalid",
-        "params": {},
+        "params": {"message": "ref 不是 Engine 签发的 opaque ref"},
         "category": "validation",
         "retryable": False,
     }

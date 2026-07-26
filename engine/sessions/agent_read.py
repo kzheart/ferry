@@ -61,20 +61,50 @@ def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
     return session
 
 
+def _shrink_sole_message(item: dict, truncation: dict) -> bool:
+    """仅剩一条消息仍超预算时继续压小它；无可再压返回 False。
+
+    弹掉最后一条消息会让 next_from_message 退回 from_message,调用方按
+    游标翻页就会在同一条消息上死循环,所以宁可返回更狠的截断内容。
+    """
+    blocks = item["blocks"]
+    texts = [block for block in blocks
+             if block.get("kind") == "text" and block.get("text")]
+    if texts:
+        largest = max(texts, key=lambda b: len(b["text"].encode("utf-8")))
+        encoded = largest["text"].encode("utf-8")
+        clipped = encoded[:len(encoded) // 2].decode("utf-8", errors="ignore")
+        truncation["omitted_bytes"] += (
+            len(encoded) - len(clipped.encode("utf-8"))
+        )
+        largest["text"] = clipped
+    elif blocks:
+        blocks.pop()
+        truncation["omitted_blocks"] += 1
+    else:
+        return False
+    item["complete"] = False
+    truncation["truncated"] = True
+    return True
+
+
 def _fit_context_result(result: dict, budget: int) -> dict:
     truncation = result["truncation"]
     while len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > budget:
         messages = result["messages"]
-        if not messages:
+        if len(messages) > 1:
+            removed = messages.pop()
+            next_message = removed["message"]
+            current_next = result.get("next_from_message")
+            result["next_from_message"] = min(current_next, next_message) \
+                if isinstance(current_next, int) else next_message
+            truncation["omitted_blocks"] += len(removed["blocks"])
+            truncation["truncated"] = True
+        elif messages and _shrink_sole_message(messages[0], truncation):
+            continue
+        else:
             result["title"] = ""
             break
-        removed = messages.pop()
-        next_message = removed["message"]
-        current_next = result.get("next_from_message")
-        result["next_from_message"] = min(current_next, next_message) \
-            if isinstance(current_next, int) else next_message
-        truncation["omitted_blocks"] += len(removed["blocks"])
-        truncation["truncated"] = True
     result["returned_message_count"] = len(result["messages"])
     result["message_range"]["to"] = (
         result["messages"][-1]["message"] if result["messages"] else None
