@@ -14,6 +14,7 @@ from ...sessions.model import (
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_data_url
+from ..shared.scanner import iter_lines
 from . import tool_calls, tool_results, topology
 
 
@@ -44,7 +45,7 @@ _SKIP_USER_PREFIX = (
 
 def _load_records(path: Path) -> list[dict]:
     records = []
-    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+    for line_number, line in enumerate(iter_lines(path), start=1):
         if not line.strip():
             continue
         try:

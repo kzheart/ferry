@@ -8,7 +8,7 @@ from pathlib import Path
 from ...sessions.scan_progress import TRACKER
 from ...sessions.usage import add_tokens, empty_tokens, has_tokens, iso_ms
 from ...system.paths import pi_session_roots
-from ..shared.scanner import clip_text
+from ..shared.scanner import clip_text, iter_lines
 
 
 def _text(content) -> str:
@@ -22,16 +22,18 @@ def _text(content) -> str:
 
 def _meta(path: Path, stat) -> dict:
     records = []
-    lines = path.read_text().splitlines()
-    for index, line in enumerate(lines):
+    # 只容忍「文件最后一行写了一半」:坏行后面还有任何一行都按整个文件不可解析
+    # 处理。逐行读时读到下一行才知道坏行不是末行,所以先记下再判。
+    broken = False
+    for line in iter_lines(path):
+        if broken:
+            return {}
         if not line.strip():
             continue
         try:
             records.append(json.loads(line))
         except json.JSONDecodeError:
-            if index == len(lines) - 1:
-                break
-            return {}
+            broken = True
     if not records:
         return {}
     header = records[0]

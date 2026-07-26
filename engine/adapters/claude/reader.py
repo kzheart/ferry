@@ -16,6 +16,7 @@ from ...sessions.model import (
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_base64
+from ..shared.scanner import iter_lines
 from ..shared.tool_canon import canonical_tool_input, canonical_tool_op
 
 # 归一化实现已迁往 shared/tool_canon.py；保留旧名给既有测试的导入。
@@ -119,7 +120,7 @@ def _tool_result(block: dict, native=None) -> ToolResult:
 
 def _load(path: Path) -> list[dict]:
     records = []
-    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+    for line_number, line in enumerate(iter_lines(path), start=1):
         if not line.strip():
             continue
         try:
