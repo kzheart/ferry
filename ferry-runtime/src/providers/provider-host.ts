@@ -228,6 +228,9 @@ export class ProviderHost {
       Object.entries(config.credentials).map(([id, value]) => [id, value.type]),
     );
     const enabled = new Set(config.enabled_providers);
+    const customConfigs = new Map(
+      config.custom_providers.map((item) => [item.id, item]),
+    );
     const output: ProviderSummary[] = [];
     for (const provider of this.models.getProviders()) {
       const credentialType = credentials.get(provider.id) ?? null;
@@ -236,7 +239,14 @@ export class ProviderHost {
       if (provider.auth.oauth) authTypes.push("oauth");
       const models = provider.getModels();
       const visible = config.visible_models[provider.id];
+      const customConfig = customConfigs.get(provider.id);
       output.push({
+        ...(customConfig
+          ? {
+              base_url: customConfig.base_url,
+              api: customConfig.api ?? "openai-completions",
+            }
+          : {}),
         id: provider.id,
         name: provider.name,
         configured: this.customIds.has(provider.id) || credentialType !== null,
