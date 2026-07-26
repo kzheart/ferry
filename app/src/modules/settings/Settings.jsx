@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { LOCALE_META } from "../../shared/i18n/index.js";
+import { useScanProgress } from "../browser/public.js";
 import { RefreshIcon, SetGlyph, Spinner, TerminalIcon, ToolIcon } from "../../shared/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
@@ -188,8 +189,9 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   );
 }
 
-function Sources({ scan, env, scanning, scanProgress, onRescan }) {
+function Sources({ scan, env, scanning, onRescan }) {
   const { t } = useTranslation();
+  const scanProgress = useScanProgress(scanning);
   const tools = scan?.tools || {};
   const connected = TOOLS.filter(t2 => tools[t2]?.ok).length;
   const total = TOOLS.reduce((a, t2) => a + (tools[t2]?.count || 0), 0);
@@ -348,7 +350,7 @@ function Updates({ s, set, updater }) {
   );
 }
 
-export default function SettingsPage({ settings, setSettings, scan, env, scanning, scanProgress,
+export default function SettingsPage({ settings, setSettings, scan, env, scanning,
   onRescan, updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
   const { t } = useTranslation();
   const [section, setSection] = useState(initialSection || "prefs");
@@ -413,7 +415,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                 {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
                   onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
                 {section === "sources" && <Sources scan={scan} env={env}
-                  scanning={scanning} scanProgress={scanProgress} onRescan={onRescan} />}
+                  scanning={scanning} onRescan={onRescan} />}
                 {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}
               </div>
             </div>

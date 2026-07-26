@@ -23,7 +23,7 @@ export {
   SessionDeleteConfirm,
 } from "./BrowserOverlays.jsx";
 export { createSessionContextMenu } from "./sessionContextMenu.js";
-export { useBrowserData } from "./useBrowserData.js";
+export { useBrowserData, useScanProgress } from "./useBrowserData.js";
 export { useLibraryResourcePane } from "./useLibraryResourcePane.js";
 export { useLibraryResourcePaneActions } from "./useLibraryResourcePaneActions.js";
 export { useSessionDeletion } from "./useSessionDeletion.js";
