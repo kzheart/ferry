@@ -191,6 +191,90 @@ interface FerryToolPort {
   ): Promise<unknown>;
 }
 
+/**
+ * 会话优化等受限用途的工具策略。字段全是字面量:策略不做配置组合,
+ * 只表达"启用了优化约束"这一件事,具体规则在执行边界内实现。
+ */
+export interface FerryToolPolicy {
+  sessionEdit?: {
+    allowedOperations: readonly ["rewrite"];
+    requireReadUserLocator: true;
+    requireMatchingPreview: true;
+  };
+}
+
+/** 批次指纹:tool + ref + 按原顺序的 (locator, text)。任何变化都要求重新 preview。 */
+function sessionEditBatchFingerprint(input: Record<string, unknown>): string {
+  const ops = (input.ops as Array<Record<string, unknown>>).map((operation) => [
+    operation.locator,
+    operation.text,
+  ]);
+  return JSON.stringify([input.tool, input.ref, ops]);
+}
+
+/** 从 session_read 成功结果里收集可改写的用户消息 locator。 */
+function collectEditableUserLocators(
+  details: unknown,
+  target: Set<string>,
+): void {
+  if (details === null || typeof details !== "object") return;
+  const result = details as Record<string, unknown>;
+  for (const key of ["messages", "matches"]) {
+    const entries = result[key];
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (entry === null || typeof entry !== "object") continue;
+      const item = entry as Record<string, unknown>;
+      if (
+        item.role === "user" &&
+        item.editable === true &&
+        typeof item.locator === "string" &&
+        item.locator.startsWith("fml_")
+      ) {
+        target.add(item.locator);
+      }
+    }
+  }
+}
+
+function enforceSessionEditPolicy(
+  input: Record<string, unknown>,
+  readUserLocators: ReadonlySet<string>,
+  previewedBatches: ReadonlySet<string>,
+): void {
+  if (input.patch !== undefined) {
+    throw new Error(
+      "session optimization does not allow metadata patch; only rewrite ops on user messages are permitted",
+    );
+  }
+  const ops = input.ops as Array<Record<string, unknown>>;
+  for (const operation of ops) {
+    if (operation.op !== "rewrite") {
+      throw new Error(
+        `session optimization only allows rewrite ops; got ${String(operation.op)}`,
+      );
+    }
+    if (
+      typeof operation.locator !== "string" ||
+      !readUserLocators.has(operation.locator)
+    ) {
+      throw new Error(
+        "session optimization can only rewrite user messages this session has read: " +
+          "call session_read first and copy an editable user message locator exactly",
+      );
+    }
+  }
+  if (
+    input.intent === "execute" &&
+    !previewedBatches.has(sessionEditBatchFingerprint(input))
+  ) {
+    throw new Error(
+      "session optimization requires a successful preview of this exact batch before execute; " +
+        "run session_edit with intent \"preview\" first and keep the ops identical",
+    );
+  }
+}
+
 const schemas = {
   session_search: Type.Object(
     {
@@ -297,7 +381,11 @@ export function createFerryTools(
   port: FerryToolPort,
   getContext: () => Omit<ToolRequestContext, "toolCallId" | "onUpdate">,
   allowedTools: readonly FerryToolName[] = FERRY_TOOL_NAMES,
+  policy?: FerryToolPolicy,
 ): AgentTool[] {
+  // 策略状态只活在这一次工厂调用里:Runtime 重启即清空,宁可重读也不复用过期凭据
+  const readUserLocators = new Set<string>();
+  const previewedBatches = new Set<string>();
   return allowedTools.map((name) => ({
     name,
     label: name,
@@ -332,6 +420,9 @@ export function createFerryTools(
         if (hasPatch && input.intent !== undefined)
           throw new Error("session_edit metadata patch does not accept intent");
         if (hasOps) validateSessionEditOperations(input);
+        if (policy?.sessionEdit) {
+          enforceSessionEditPolicy(input, readUserLocators, previewedBatches);
+        }
       }
       if (name === "bash" && String(input.command ?? "").trim().length === 0) {
         throw new Error("bash requires a non-empty command");
@@ -352,6 +443,14 @@ export function createFerryTools(
           },
         },
       );
+      if (policy?.sessionEdit) {
+        if (name === "session_read") {
+          collectEditableUserLocators(details, readUserLocators);
+        }
+        if (name === "session_edit" && input.intent === "preview") {
+          previewedBatches.add(sessionEditBatchFingerprint(input));
+        }
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(details) }],
         details,

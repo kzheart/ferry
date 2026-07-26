@@ -180,6 +180,37 @@ describe("AgentRuntime", () => {
     expect(restored.state("legacy")).toMatchObject({ purpose: "general" });
   });
 
+  it("injects fixed optimization workflow prompt only for optimization sessions", async () => {
+    const prompts: Array<string | undefined> = [];
+    const base = createProtocolTestBackend();
+    const runtime = await createRuntime({
+      backendFactory: () => ({
+        ...base,
+        streamFn(model, context, options) {
+          prompts.push(context.systemPrompt);
+          return base.streamFn(model, context, options);
+        },
+      }),
+    });
+    await runtime.createSession(
+      "opt",
+      undefined,
+      "session-optimizer",
+      true,
+      undefined,
+      "session-optimization",
+    );
+    await runtime.prompt("opt", "optimize");
+    await runtime.waitForIdle("opt");
+    await runtime.createSession("plain");
+    await runtime.prompt("plain", "hello");
+    await runtime.waitForIdle("plain");
+
+    expect(prompts[0]).toContain("session-optimization conversation");
+    expect(prompts[0]).toContain('session_edit(intent:"preview")');
+    expect(prompts.at(-1)).not.toContain("session-optimization conversation");
+  });
+
   it("forces_manual_apply_policy_for_optimization", async () => {
     const store = new EphemeralSessionStore();
     const roleStore = new EphemeralRoleStore();

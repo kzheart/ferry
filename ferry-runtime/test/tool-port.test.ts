@@ -29,6 +29,28 @@ const sessionEditTool = tools.find((tool) => tool.name === "session_edit")!;
 const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
 
+/** 一套启用了会话优化策略的工具;read/edit 共享同一次工厂调用的策略状态。 */
+function optimizationTools(
+  invoke: (name: string, args: Record<string, unknown>) => Promise<unknown>,
+) {
+  const created = createFerryTools(
+    { invoke: invoke as never },
+    () => ({ sessionId: "session", runId: "run" }),
+    ["session_search", "session_read", "session_edit"],
+    {
+      sessionEdit: {
+        allowedOperations: ["rewrite"],
+        requireReadUserLocator: true,
+        requireMatchingPreview: true,
+      },
+    },
+  );
+  return {
+    readTool: created.find((tool) => tool.name === "session_read")!,
+    editTool: created.find((tool) => tool.name === "session_edit")!,
+  };
+}
+
 describe("Ferry mutation tool schemas", () => {
   it("uses an object root accepted by function-tool providers", () => {
     for (const tool of tools) {
@@ -208,6 +230,154 @@ describe("Ferry mutation tool schemas", () => {
     await expect(execute({ ...migration, intent: "invalid" })).rejects.toThrow(
       "requires intent preview or execute",
     );
+  });
+
+  it("optimizer_rejects_non_rewrite_ops", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const { editTool } = optimizationTools(invoke);
+    await expect(
+      editTool.execute(
+        "call",
+        { tool: "codex", ref: "fsr_session", patch: { pinned: true } },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("does not allow metadata patch");
+    await expect(
+      editTool.execute(
+        "call",
+        {
+          tool: "codex",
+          ref: "fsr_session",
+          ops: [{ op: "delete-turn", turn: 1 }],
+          intent: "preview",
+        },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("only allows rewrite ops");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("optimizer_requires_read_user_locator", async () => {
+    const invoke = vi.fn(async (name: string) =>
+      name === "session_read"
+        ? {
+            messages: [
+              { role: "user", editable: true, locator: "fml_user_1" },
+              { role: "assistant", editable: false, locator: "fml_asst_1" },
+            ],
+            matches: [
+              { role: "user", editable: false, locator: "fml_user_locked" },
+            ],
+          }
+        : {},
+    );
+    const { editTool, readTool } = optimizationTools(invoke);
+    const preview = (locator: string) =>
+      editTool.execute(
+        "call",
+        {
+          tool: "codex",
+          ref: "fsr_session",
+          ops: [{ op: "rewrite", locator, text: "better" }],
+          intent: "preview",
+        },
+        undefined,
+        undefined,
+      );
+
+    // 未读取任何消息之前,一律拒绝
+    await expect(preview("fml_user_1")).rejects.toThrow(
+      "call session_read first",
+    );
+    await readTool.execute(
+      "call",
+      { tool: "codex", ref: "fsr_session" },
+      undefined,
+      undefined,
+    );
+    // assistant locator 和不可编辑的 user locator 都不进白名单
+    await expect(preview("fml_asst_1")).rejects.toThrow(
+      "call session_read first",
+    );
+    await expect(preview("fml_user_locked")).rejects.toThrow(
+      "call session_read first",
+    );
+    await expect(preview("fml_user_1")).resolves.toBeDefined();
+  });
+
+  it("optimizer_requires_matching_preview", async () => {
+    const invoke = vi.fn(async (name: string) =>
+      name === "session_read"
+        ? { messages: [{ role: "user", editable: true, locator: "fml_u1" }] }
+        : {},
+    );
+    const { editTool, readTool } = optimizationTools(invoke);
+    await readTool.execute(
+      "call",
+      { tool: "codex", ref: "fsr_session" },
+      undefined,
+      undefined,
+    );
+    const batch = (text: string, intent: string) =>
+      editTool.execute(
+        "call",
+        {
+          tool: "codex",
+          ref: "fsr_session",
+          ops: [{ op: "rewrite", locator: "fml_u1", text }],
+          intent,
+        },
+        undefined,
+        undefined,
+      );
+
+    // 没 preview 直接 execute:拒绝
+    await expect(batch("draft", "execute")).rejects.toThrow(
+      "requires a successful preview",
+    );
+    await batch("draft", "preview");
+    // preview 之后偷偷改文案再 execute:拒绝
+    await expect(batch("changed", "execute")).rejects.toThrow(
+      "requires a successful preview",
+    );
+  });
+
+  it("optimizer_allows_matching_execute", async () => {
+    const invoke = vi.fn(async (name: string) =>
+      name === "session_read"
+        ? { messages: [{ role: "user", editable: true, locator: "fml_u1" }] }
+        : {},
+    );
+    const { editTool, readTool } = optimizationTools(invoke);
+    await readTool.execute(
+      "call",
+      { tool: "codex", ref: "fsr_session" },
+      undefined,
+      undefined,
+    );
+    const params = {
+      tool: "codex",
+      ref: "fsr_session",
+      ops: [{ op: "rewrite", locator: "fml_u1", text: "final" }],
+    };
+    await editTool.execute(
+      "call",
+      { ...params, intent: "preview" },
+      undefined,
+      undefined,
+    );
+    await expect(
+      editTool.execute(
+        "call",
+        { ...params, intent: "execute" },
+        undefined,
+        undefined,
+      ),
+    ).resolves.toBeDefined();
+    // read + preview + execute 各一次都真正到达 port
+    expect(invoke).toHaveBeenCalledTimes(3);
   });
 
   it("describes the explicit operation intent", () => {

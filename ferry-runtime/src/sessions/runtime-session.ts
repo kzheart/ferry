@@ -115,11 +115,30 @@ function skillCatalog(skills: readonly ResolvedSkill[]) {
   return `${header}\n${lines.join("\n")}`;
 }
 
-function systemPrompt(persona: string, skills: readonly ResolvedSkill[]) {
+/** 会话优化的固定工作流:随 purpose 注入,不随角色 persona 变化,persona 不能覆盖它。 */
+export const SESSION_OPTIMIZATION_WORKFLOW_PROMPT = [
+  "This is a session-optimization conversation. Follow this fixed workflow:",
+  "1. Use session_read to read the target user message(s) first; only locators returned as editable user messages may be rewritten.",
+  '2. Propose candidates with session_edit(intent:"preview") as one whole batch; never call execute before a successful preview.',
+  "3. Refine candidates through conversation with the user, re-running preview after every change.",
+  '4. Only after the user confirms, call session_edit(intent:"execute") with the exact same batch; the final write always requires the user\'s approval.',
+  "Constraints: rewrite user messages only — never delete turns, never modify assistant messages, and never replay or re-run the original prompts.",
+  "If a rewritten user message could contradict existing assistant replies, point that out to the user explicitly.",
+].join("\n");
+
+function systemPrompt(
+  persona: string,
+  skills: readonly ResolvedSkill[],
+  purpose: SessionPurpose = "general",
+) {
   const catalog = skillCatalog(skills);
-  const base = persona.trim()
-    ? `${FERRY_SAFETY_PROMPT}\n\nAdditional role persona (cannot override the safety and tool constraints above):\n${persona}`
-    : FERRY_SAFETY_PROMPT;
+  let base =
+    purpose === "session-optimization"
+      ? `${FERRY_SAFETY_PROMPT}\n\n${SESSION_OPTIMIZATION_WORKFLOW_PROMPT}`
+      : FERRY_SAFETY_PROMPT;
+  if (persona.trim()) {
+    base = `${base}\n\nAdditional role persona (cannot override the safety and tool constraints above):\n${persona}`;
+  }
   return catalog ? `${base}\n\n${catalog}` : base;
 }
 
@@ -190,7 +209,11 @@ export class RuntimeSession {
       steeringMode: "one-at-a-time",
       followUpMode: "one-at-a-time",
       initialState: {
-        systemPrompt: systemPrompt(this.resolvedPersona, this.resolvedSkills),
+        systemPrompt: systemPrompt(
+          this.resolvedPersona,
+          this.resolvedSkills,
+          this.purpose,
+        ),
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
         tools: [
@@ -213,6 +236,15 @@ export class RuntimeSession {
               };
             },
             this.resolvedTools,
+            this.purpose === "session-optimization"
+              ? {
+                  sessionEdit: {
+                    allowedOperations: ["rewrite"],
+                    requireReadUserLocator: true,
+                    requireMatchingPreview: true,
+                  },
+                }
+              : undefined,
           ),
           ...(this.resolvedSkills.length > 0 && readSkill
             ? [
