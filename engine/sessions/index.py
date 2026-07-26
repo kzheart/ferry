@@ -229,7 +229,21 @@ class AgentSessionIndex:
                     )
         return records
 
-    def resolve(self, tool: str, opaque_ref: str) -> IndexedSession:
+    def resolve(
+        self,
+        tool: str,
+        opaque_ref: str,
+        *,
+        pin_content: bool = True,
+    ) -> IndexedSession:
+        """把 opaque ref 换回索引记录。
+
+        `pin_content=True`（Agent 读取与编辑路径）要求会话内容与签发时
+        一字未变,否则报 session_changed 逼 agent 重新搜索——编辑安全依赖它。
+        `pin_content=False`（UI 只读浏览）只做路径归属与存在性校验:活跃会话
+        随时在被 CLI 追加写入,按最新内容展示正是期望行为,而且省掉了每次
+        点开都要对整个会话文件做两遍 sha256 的开销。
+        """
         if not is_opaque_session_ref(opaque_ref):
             raise AgentReferenceError("ref 不是 Engine 签发的 opaque ref")
         with self._lock:
@@ -255,42 +269,45 @@ class AgentSessionIndex:
             if not resolved.is_relative_to(root) or not expected_type:
                 raise AgentReferenceError("ref 超出 Agent 会话根目录")
             browser = self._ports.adapter(tool).browser
-            try:
-                identity = (
-                    (
-                        _path_identity(resolved),
-                        _agent_fingerprint(browser, str(resolved)),
+            if pin_content:
+                try:
+                    identity = (
+                        (
+                            _path_identity(resolved),
+                            _agent_fingerprint(browser, str(resolved)),
+                        )
+                        if record.storage_kind == "file"
+                        else _directory_identity(resolved, browser)
                     )
-                    if record.storage_kind == "file"
-                    else _directory_identity(resolved, browser)
-                )
-            except (OSError, ValueError) as error:
-                raise AgentReferenceError(
-                    "ref 指向的会话已失效",
-                ) from error
-            if (
-                record.storage_kind == "file"
-                and identity[1] is None
-            ) or record.source_identity != identity:
-                # 摘要缓存可能命中了「stat 没变但内容变了」的旧值:踢掉它,
-                # 下一次扫描才会重新哈希并换发新的 ref。
-                with self._lock:
-                    if record.storage_kind == "file":
-                        self._digest_cache.pop(identity[0][:4], None)
-                    else:
-                        self._digest_cache.clear()
-                raise AgentReferenceError(
-                    "ref 在扫描后已变化，请重新搜索",
-                    {"tool": tool, "reason": "session_changed",
-                     "recovery": _REF_RECOVERY_HINT},
-                )
+                except (OSError, ValueError) as error:
+                    raise AgentReferenceError(
+                        "ref 指向的会话已失效",
+                    ) from error
+                if (
+                    record.storage_kind == "file"
+                    and identity[1] is None
+                ) or record.source_identity != identity:
+                    # 摘要缓存可能命中了「stat 没变但内容变了」的旧值:踢掉它,
+                    # 下一次扫描才会重新哈希并换发新的 ref。
+                    with self._lock:
+                        if record.storage_kind == "file":
+                            self._digest_cache.pop(identity[0][:4], None)
+                        else:
+                            self._digest_cache.clear()
+                    raise AgentReferenceError(
+                        "ref 在扫描后已变化，请重新搜索",
+                        {"tool": tool, "reason": "session_changed",
+                         "recovery": _REF_RECOVERY_HINT},
+                    )
             adapter_ref = browser.resolve_ref(str(resolved))
             if Path(adapter_ref).resolve(strict=True) != resolved:
                 raise AgentReferenceError("adapter 未能规范解析 ref")
         else:
             browser = self._ports.adapter(tool).browser
             fingerprint = _agent_fingerprint(browser, record.canonical_ref)
-            if fingerprint is None or fingerprint != record.source_identity:
+            if fingerprint is None:
+                raise AgentReferenceError("ref 指向的会话已失效")
+            if pin_content and fingerprint != record.source_identity:
                 raise AgentReferenceError(
                     "ref 在扫描后已变化，请重新搜索",
                     {"tool": tool, "reason": "session_changed",
