@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { SessionStore } from "../sessions/session-store.js";
+import type {
+  SessionPurpose,
+  SessionStore,
+} from "../sessions/session-store.js";
 import { EphemeralSessionStore } from "../sessions/session-store.js";
 import { RuntimeSession } from "../sessions/runtime-session.js";
 import type {
@@ -190,6 +193,10 @@ export class AgentRuntime {
         await this.skillService.resolveFor(record.state.resolved_skills ?? []),
         (id) => this.skillService.read(id),
         await this.delegatableRoleIds(),
+        // 旧记录没有 purpose 字段,一律按 general 恢复
+        record.state.purpose === "session-optimization"
+          ? "session-optimization"
+          : "general",
       );
       this.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -230,6 +237,7 @@ export class AgentRuntime {
     requestedRoleId = DEFAULT_ROLE_ID,
     canDelegate = true,
     toolOverride?: FerryToolName[],
+    purpose: SessionPurpose = "general",
   ) {
     const id = requestedId ?? this.newId();
     if (this.sessions.has(id))
@@ -265,11 +273,13 @@ export class AgentRuntime {
       role.id,
       role.persona,
       toolOverride ?? [...role.tools],
-      role.apply_policy,
+      // 优化会话是产品级约束:无论角色怎么配,最终写回都必须人工审批
+      purpose === "session-optimization" ? "manual" : role.apply_policy,
       canDelegate,
       await this.skillService.resolveFor(role.skills),
       (id) => this.skillService.read(id),
       canDelegate ? await this.delegatableRoleIds() : [],
+      purpose,
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {

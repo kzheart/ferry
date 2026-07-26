@@ -148,6 +148,70 @@ describe("AgentRuntime", () => {
     ]);
   });
 
+  it("persists_and_restores_session_optimization_purpose", async () => {
+    const store = new EphemeralSessionStore();
+    const runtime = await createRuntime({ store });
+    const created = await runtime.createSession(
+      "opt",
+      undefined,
+      "session-optimizer",
+      true,
+      undefined,
+      "session-optimization",
+    );
+    expect(created).toMatchObject({
+      session_id: "opt",
+      role_id: "session-optimizer",
+      purpose: "session-optimization",
+    });
+    expect(store.records.get("opt")!.state.purpose).toBe(
+      "session-optimization",
+    );
+
+    // 旧记录没有 purpose 字段:恢复时回落 general
+    const { purpose: _purpose, ...legacy } = structuredClone(
+      store.records.get("opt")!.state,
+    );
+    await commitSnapshot(store, { ...legacy, session_id: "legacy" }, []);
+    const restored = await createRuntime({ store });
+    expect(restored.state("opt")).toMatchObject({
+      purpose: "session-optimization",
+    });
+    expect(restored.state("legacy")).toMatchObject({ purpose: "general" });
+  });
+
+  it("forces_manual_apply_policy_for_optimization", async () => {
+    const store = new EphemeralSessionStore();
+    const roleStore = new EphemeralRoleStore();
+    await roleStore.create({
+      id: "auto-writer",
+      name: "Auto Writer",
+      persona: "",
+      tools: ["session_read", "session_edit"],
+      apply_policy: "auto",
+    });
+    const runtime = await createRuntime({ store, roleStore });
+    const optimization = await runtime.createSession(
+      "opt",
+      undefined,
+      "auto-writer",
+      true,
+      undefined,
+      "session-optimization",
+    );
+    expect(optimization).toMatchObject({ apply_policy: "manual" });
+    expect(store.records.get("opt")!.state.resolved_apply_policy).toBe(
+      "manual",
+    );
+
+    // 普通会话不受影响,角色的 auto 策略保持原样
+    const general = await runtime.createSession("plain", undefined, "auto-writer");
+    expect(general).toMatchObject({
+      apply_policy: "auto",
+      purpose: "general",
+    });
+  });
+
   it("技能集为空时不挂 skill 工具,非空时挂上并把目录写进系统提示", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ferry-skill-session-"));
     const source = join(directory, "code-review");

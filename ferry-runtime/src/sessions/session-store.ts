@@ -1,6 +1,15 @@
 /** Ferry 对话会话的持久化端口与进程内实现。 */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { EventEnvelope } from "../server/messages.js";
+import { ProtocolError, type EventEnvelope } from "../server/messages.js";
+
+/** 会话目的:产品级约束,不随角色切换;旧记录缺失一律视为 general。 */
+export type SessionPurpose = "general" | "session-optimization";
+
+export function parseSessionPurpose(value: unknown): SessionPurpose {
+  if (value === undefined || value === "general") return "general";
+  if (value === "session-optimization") return "session-optimization";
+  throw new ProtocolError("invalid_params", "session purpose is invalid");
+}
 
 export interface PersistedSession {
   session_id: string;
@@ -22,6 +31,7 @@ export interface PersistedSession {
   resolved_apply_policy?: "manual" | "auto";
   /** 只记 id;重启时重新 resolveFor,磁盘上的技能可能已经被删了。 */
   resolved_skills?: string[];
+  purpose?: SessionPurpose;
 }
 
 type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
