@@ -176,6 +176,50 @@ export class ProviderHost {
     }
   }
 
+  /**
+   * 给会话取一个短标题。用会话自己的 provider/model,失败抛错由调用方吞掉。
+   * 输入只截首轮问答的开头——标题只需要话题,不需要全文。
+   */
+  async summarizeTitle(
+    prompt: string,
+    reply: string,
+    selection: ModelSelection,
+  ) {
+    const model = this.model(selection);
+    if (!(await this.isConfigured(selection.provider))) {
+      throw new Error("provider is not configured");
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const message = await this.models.completeSimple(
+        model,
+        {
+          systemPrompt:
+            "You name chat conversations. Reply with a single short title of at most 8 words (or 20 Chinese characters) that names the topic. Use the same language as the user. No quotes, no punctuation at the end, no preamble.",
+          messages: [
+            {
+              role: "user",
+              content: `User asked:\n${prompt.slice(0, 1_000)}\n\nAssistant replied:\n${reply.slice(0, 1_000)}\n\nTitle:`,
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        { maxTokens: 64, signal: controller.signal },
+      );
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        throw new Error(message.errorMessage ?? "title request failed");
+      }
+      return message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("")
+        .trim();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async organize(input: OrganizerInput, selection?: ModelSelection) {
     const selected = selection ?? (await this.defaultModel());
     const model = this.model(selected);

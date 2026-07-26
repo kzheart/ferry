@@ -66,6 +66,12 @@ export interface RuntimeSessionHost {
     onUpdate: (payload: unknown) => void,
     signal?: AbortSignal,
   ): Promise<WorkflowRunResult>;
+  /** 返回 null 表示当前环境没有可用于命名的模型。 */
+  generateTitle(
+    selection: ModelSelection,
+    prompt: string,
+    reply: string,
+  ): Promise<string | null>;
 }
 
 export interface ResolvedSkill {
@@ -117,6 +123,22 @@ function userMessage(content: string): AgentMessage {
   return { role: "user", content, timestamp: Date.now() };
 }
 
+const AUTO_TITLE_MAX_CHARS = 40;
+
+/** 模型爱把标题裹在引号里、末尾带句号,存之前统一削掉。 */
+export function normalizeAutoTitle(raw: string | null | undefined) {
+  const line = (raw ?? "")
+    .split("\n")
+    .map((piece) => piece.trim())
+    .find(Boolean);
+  if (!line) return "";
+  return line
+    .replace(/^["'`“”‘’「」『』《》]+/, "")
+    .replace(/["'`“”‘’「」『』《》。.!?！？]+$/, "")
+    .trim()
+    .slice(0, AUTO_TITLE_MAX_CHARS);
+}
+
 export class RuntimeSession {
   readonly events: EventEnvelope[];
   readonly agent: Agent;
@@ -128,6 +150,7 @@ export class RuntimeSession {
   private runPromise: Promise<void> | null = null;
   private containsImages: boolean;
   private title: string | null;
+  private titleLocked: boolean;
   private pinned: boolean;
 
   constructor(
@@ -152,6 +175,7 @@ export class RuntimeSession {
     this.persistedMessageCount = state?.messages.length ?? 0;
     this.containsImages = state?.contains_images ?? false;
     this.title = state?.title ?? null;
+    this.titleLocked = state?.title_locked ?? false;
     this.pinned = state?.pinned ?? false;
     this.activeRunId = null;
     this.agent = new Agent({
@@ -277,6 +301,7 @@ export class RuntimeSession {
       await this.persist();
       if (this.runPromise === task) this.runPromise = null;
       await this.emit(terminal.type, terminal.payload, runId);
+      if (terminal.type === "run.completed") await this.autoTitle();
     })();
     this.runPromise = task;
     return runId;
@@ -332,6 +357,7 @@ export class RuntimeSession {
       queued_messages: this.agent.hasQueuedMessages(),
       contains_images: this.containsImages,
       title: this.title,
+      title_locked: this.titleLocked,
       pinned: this.pinned,
       thinking_level: this.selection.thinking ?? "off",
       role_id: this.roleId,
@@ -382,8 +408,46 @@ export class RuntimeSession {
       );
     }
     this.title = next;
+    this.titleLocked = true;
     await this.persist();
+    await this.emit("session.renamed", {
+      session_id: this.id,
+      title: next,
+      auto: false,
+    });
     return this.summary();
+  }
+
+  /**
+   * 首轮跑完后让模型补一个短标题。只在会话还没有标题、且用户没手动改过名时发生;
+   * 生成失败一律静默放弃——命名是锦上添花,不该把对话本身拖失败。
+   */
+  private async autoTitle() {
+    if (this.titleLocked || this.title) return;
+    const opening = this.events.find((event) => event.type === "run.started");
+    const prompt =
+      typeof opening?.payload.prompt === "string" ? opening.payload.prompt : "";
+    if (!prompt.trim()) return;
+    let generated: string | null = null;
+    try {
+      generated = await this.runtime.generateTitle(
+        this.selection,
+        prompt,
+        this.finalText(),
+      );
+    } catch {
+      return;
+    }
+    const title = normalizeAutoTitle(generated);
+    // 生成期间用户可能已经手动改名了,再查一次锁
+    if (!title || this.titleLocked || this.title) return;
+    this.title = title;
+    await this.persist();
+    await this.emit(
+      "session.renamed",
+      { session_id: this.id, title, auto: true },
+      null,
+    );
   }
 
   async pin(pinned: boolean) {
@@ -482,6 +546,7 @@ export class RuntimeSession {
         status: this.activeRunId ? "running" : "idle",
         active_run_id: this.activeRunId,
         title: this.title,
+        title_locked: this.titleLocked,
         pinned: this.pinned,
         thinking_level: this.selection.thinking ?? "off",
         role_id: this.roleId,

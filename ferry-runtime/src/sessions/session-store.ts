@@ -12,6 +12,8 @@ export interface PersistedSession {
   active_run_id: string | null;
   messages: AgentMessage[];
   title?: string | null;
+  /** 用户手动改过名:自动命名从此不再覆盖。 */
+  title_locked?: boolean;
   pinned?: boolean;
   thinking_level?: string;
   role_id?: string;

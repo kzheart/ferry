@@ -444,6 +444,135 @@ describe("AgentRuntime", () => {
     expect(await store.loadAll()).toEqual([]);
   });
 
+  it("auto-names a session after its first completed run", async () => {
+    const calls: Array<{ prompt: string; reply: string; model: string }> = [];
+    const runtime = await createRuntime({
+      titleGenerator: async (selection, prompt, reply) => {
+        calls.push({ prompt, reply, model: selection.model });
+        return '"检索会话历史"\n';
+      },
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "帮我找一下上周的会话");
+    await runtime.waitForIdle("s1");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ prompt: "帮我找一下上周的会话" });
+    expect(calls[0]?.reply).toContain("Echo:");
+    // 引号与尾随空白由 normalizeAutoTitle 削掉
+    expect(runtime.state("s1")).toMatchObject({
+      title: "检索会话历史",
+      title_locked: false,
+    });
+    const renamed = runtime
+      .replay("s1", 0)
+      .filter((event) => event.type === "session.renamed");
+    expect(renamed).toHaveLength(1);
+    expect(renamed[0]?.payload).toEqual({
+      session_id: "s1",
+      title: "检索会话历史",
+      auto: true,
+    });
+  });
+
+  it("only auto-names once, on the first run", async () => {
+    let generated = 0;
+    const runtime = await createRuntime({
+      titleGenerator: async () => `标题 ${++generated}`,
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "第一轮");
+    await runtime.waitForIdle("s1");
+    await runtime.prompt("s1", "第二轮");
+    await runtime.waitForIdle("s1");
+
+    expect(generated).toBe(1);
+    expect(runtime.state("s1").title).toBe("标题 1");
+  });
+
+  it("never overwrites a title the user set by hand", async () => {
+    let generated = 0;
+    const store = new EphemeralSessionStore();
+    const runtime = await createRuntime({
+      store,
+      titleGenerator: async () => `自动 ${++generated}`,
+    });
+    await runtime.createSession("s1");
+    const summary = await runtime.renameSession("s1", "我自己起的名字");
+    expect(summary).toMatchObject({ title_locked: true });
+
+    await runtime.prompt("s1", "第一轮");
+    await runtime.waitForIdle("s1");
+    expect(generated).toBe(0);
+    expect(runtime.state("s1").title).toBe("我自己起的名字");
+
+    // 锁要能扛过重启
+    const restored = await createRuntime({
+      store,
+      titleGenerator: async () => `自动 ${++generated}`,
+    });
+    expect(restored.state("s1")).toMatchObject({
+      title: "我自己起的名字",
+      title_locked: true,
+    });
+  });
+
+  it("emits session.renamed when the user renames a session", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    await runtime.renameSession("s1", "手动标题");
+
+    expect(runtime.replay("s1", 0).at(-1)).toMatchObject({
+      type: "session.renamed",
+      payload: { session_id: "s1", title: "手动标题", auto: false },
+    });
+  });
+
+  it("keeps the run healthy when title generation fails or returns nothing", async () => {
+    const runtime = await createRuntime({
+      titleGenerator: async () => {
+        throw new Error("provider is not configured");
+      },
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "hello");
+    await runtime.waitForIdle("s1");
+
+    expect(runtime.state("s1").title).toBeNull();
+    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
+
+    const blank = await createRuntime({ titleGenerator: async () => "   " });
+    await blank.createSession("s2");
+    await blank.prompt("s2", "hello");
+    await blank.waitForIdle("s2");
+    expect(blank.state("s2").title).toBeNull();
+    expect(
+      blank.replay("s2", 0).some((event) => event.type === "session.renamed"),
+    ).toBe(false);
+  });
+
+  it("does not auto-name a session whose first run failed", async () => {
+    let generated = 0;
+    const runtime = await createRuntime({
+      titleGenerator: async () => `自动 ${++generated}`,
+    });
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "error: boom");
+    await runtime.waitForIdle("s1");
+
+    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.failed");
+    expect(generated).toBe(0);
+    expect(runtime.state("s1").title).toBeNull();
+  });
+
+  it("falls back to no title when nothing can generate one", async () => {
+    const runtime = await createRuntime();
+    await runtime.createSession("s1");
+    await runtime.prompt("s1", "hello");
+    await runtime.waitForIdle("s1");
+    expect(runtime.state("s1").title).toBeNull();
+  });
+
   it("rejects deletion while a run is active", async () => {
     const runtime = await createRuntime();
     await runtime.createSession("s1");
