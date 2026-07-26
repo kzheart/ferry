@@ -92,6 +92,11 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
         }),
+        "session_search" => Some(EngineMethodPolicy {
+            exposure: Exposure::Public,
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+        }),
         "session_backbone" => Some(EngineMethodPolicy {
             exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,

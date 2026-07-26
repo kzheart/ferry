@@ -72,6 +72,10 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
+  "session.renamed": {
+    "source": "runtime",
+    "forwardToUi": true
+  },
   "task.cancelled": {
     "source": "runtime",
     "forwardToUi": true

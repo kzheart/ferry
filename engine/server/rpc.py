@@ -62,6 +62,7 @@ class RpcDispatcher:
             ),
             "session_asset": lambda p: application.session_asset(p["tool"], p["ref"], p["asset_id"]),
             "session_meta_list": lambda p: application.list_session_metadata(),
+            "session_search": lambda p: application.search_sessions_for_ui(p["query"], tools=p.get("tools"), limit=p.get("limit"), scope=p.get("scope", "any")),
             "session_backbone": lambda p: application.session_backbone(p["tool"], p["ref"]),
             "session_summaries_set": lambda p: application.set_session_summaries(p["tool"], p["id"], p.get("digests") or {}),
             "organization_digest_context": lambda p: application.organization_digest_context(p["targets"]),
