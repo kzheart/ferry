@@ -71,14 +71,12 @@ class EngineService:
     def environment(self) -> dict:
         return environment.inspect(self._ports)
 
-    def _resolve_session(self, tool: str, ref: str) -> IndexedSession:
-        return self._index.resolve(tool, ref)
-
     def _checked_query(self, tool: str, ref: str, query):
-        record = self._resolve_session(tool, ref)
-        result = query(record)
-        self._resolve_session(tool, ref)
-        return result
+        # UI 只读浏览走宽松解析:活跃会话随时被 CLI 追加写入,若像 Agent
+        # 路径那样把内容 pin 死,点开正在进行的会话会稳定撞上
+        # agent.reference_invalid。
+        record = self._index.resolve(tool, ref, pin_content=False)
+        return query(record)
 
     def resume_command(self, tool: str, ref: str) -> dict:
         lifecycle = require_agent_capability(

@@ -514,6 +514,31 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
         application.resume_command("opencode", session["ref"])
 
 
+def test_ui_queries_tolerate_active_session_writes(
+        agent_environment, monkeypatch):
+    """活跃会话在扫描后被 CLI 追加写入:UI 只读浏览要能照常打开。"""
+    scanned = scanning.scan(
+        agent_environment["ports"], agent_environment["index"],
+    )["sessions"]
+    session = next(item for item in scanned if item["tool"] == "claude")
+
+    agent_environment["transcript"].write_text('{"appended": true}\n')
+
+    # Agent 路径保持强校验:内容变了必须换发 ref。
+    with pytest.raises(AgentReferenceError) as error:
+        agent_environment["index"].resolve(session["tool"], session["ref"])
+    assert error.value.params["reason"] == "session_changed"
+
+    monkeypatch.setattr(
+        "engine.sessions.read.show",
+        lambda _tool, _ref, _ports: {"ok": True},
+    )
+    application = EngineService(
+        agent_environment["ports"], agent_environment["index"], _Operations(),
+    )
+    assert application.show_session("claude", session["ref"]) == {"ok": True}
+
+
 def test_session_read_requires_engine_issued_reference(agent_environment):
     ref = _claude_ref()
     by_ref = agent_read.session_read("claude", ref=ref)
