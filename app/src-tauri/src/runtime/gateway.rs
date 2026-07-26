@@ -2,6 +2,7 @@ use serde_json::{json, Map, Value};
 use std::path::Path;
 use std::time::Duration;
 
+use crate::contracts::engine_methods::is_runtime_gateway_method;
 use crate::contracts::errors::error_policy;
 use crate::contracts::ipc::FERRY_IPC_PROTOCOL;
 use crate::contracts::operations::{
@@ -196,16 +197,12 @@ pub(super) fn complete_engine_request(resource_dir: &Path, stdin: &JsonlWriter, 
         .and_then(|value| value.get("params"))
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let outcome = if is_runtime_engine_method(method) {
+    let outcome = if is_runtime_gateway_method(method) {
         engine_value(resource_dir, method, params)
     } else {
         Err("engine.method_not_allowed".to_owned())
     };
     send_gateway_result(stdin, session_id, request_id, outcome);
-}
-
-pub(super) fn is_runtime_engine_method(method: &str) -> bool {
-    crate::contracts::engine_methods::is_runtime_gateway_method(method)
 }
 
 fn route_tool(
@@ -232,10 +229,14 @@ fn route_tool(
         })?;
     let envelope: Value =
         serde_json::from_str(&response).map_err(|_| "engine.invalid_response".to_owned())?;
+    engine_envelope_result(&envelope)
+}
+
+fn engine_envelope_result(envelope: &Value) -> Result<Value, String> {
     if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
         Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
     } else {
-        Err(structured_engine_error(&envelope))
+        Err(structured_engine_error(envelope))
     }
 }
 
@@ -265,11 +266,7 @@ fn engine_value(resource_dir: &Path, method: &str, params: Value) -> Result<Valu
     let request = json!({"method": method, "params": params});
     let response = engine_request_blocking(resource_dir, &request.to_string())?;
     let envelope: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
-    if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
-        Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
-    } else {
-        Err(structured_engine_error(&envelope))
-    }
+    engine_envelope_result(&envelope)
 }
 
 fn apply_operation_plan(resource_dir: &Path, plan_id: &str) -> Result<Value, String> {
@@ -357,10 +354,10 @@ mod tests {
             "runtime_sessions.commit",
             "runtime_sessions.delete",
         ] {
-            assert!(is_runtime_engine_method(method));
+            assert!(is_runtime_gateway_method(method));
         }
-        assert!(!is_runtime_engine_method("operation.apply"));
-        assert!(!is_runtime_engine_method("session_delete"));
+        assert!(!is_runtime_gateway_method("operation.apply"));
+        assert!(!is_runtime_gateway_method("session_delete"));
     }
 
     #[test]

@@ -23,7 +23,7 @@ function baseProps(overrides = {}) {
     view: "library",
     pane: {
       title: "资料库", count: 2, placeholder: "搜索会话",
-      query: "", onQuery: noop, filterCount: 0, footer: null, tokens: [],
+      query: "", onQuery: noop, filterCount: 0, tokens: [],
     },
     collapsed: false,
     width: 260,

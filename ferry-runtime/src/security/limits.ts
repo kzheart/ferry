@@ -20,11 +20,9 @@ function boundedStructure(
   if (
     value === null ||
     typeof value === "boolean" ||
-    typeof value === "number"
+    typeof value === "number" ||
+    typeof value === "string"
   ) {
-    return [value, false];
-  }
-  if (typeof value === "string") {
     return [value, false];
   }
   if (Array.isArray(value)) {

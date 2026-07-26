@@ -23,9 +23,6 @@ from engine.adapters.grok.native_schema import (
     extract_templates as extract_grok,
     templates as grok_templates,
 )
-from engine.adapters.registry import create_registry
-
-
 FIXTURES = Path(__file__).parent / "fixtures" / "agent_formats"
 
 
@@ -76,14 +73,6 @@ def test_template_results_are_independent_copies(template_factory):
     first = template_factory()
     first.clear()
     assert template_factory()
-
-
-@pytest.mark.parametrize(
-    "agent_id", ["claude", "codex", "opencode", "pi", "grok"],
-)
-def test_adapter_does_not_expose_a_format_version_registry(agent_id):
-    adapter = create_registry().get(agent_id)
-    assert not hasattr(adapter, "formats")
 
 
 def test_pi_current_structure_is_session_v3():

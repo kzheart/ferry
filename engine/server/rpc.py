@@ -84,10 +84,6 @@ class RpcDispatcher:
         if set(self._methods) != RPC_METHODS:
             raise RuntimeError("Engine RPC 与生成方法契约不一致")
 
-    @property
-    def method_names(self):
-        return frozenset(self._methods)
-
     def handle(self, request: str) -> dict:
         return _handle(request, self._methods)
 

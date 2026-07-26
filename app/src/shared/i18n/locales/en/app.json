@@ -98,13 +98,8 @@
     "filterButton": "Filter",
     "libraryTitle": "Sessions",
     "libraryPlaceholder": "Search sessions, dirs, commands…",
-    "libraryFooterError": "Scan error: {{error}}",
-    "libraryFooterMulti": "{{n}} sessions selected · right-click for batch actions, Esc to cancel",
-    "libraryFooterBrowsing": "Browsing {{n}} sessions{{lastScan}}",
-    "libraryFooterLastScan": " · last scan {{time}}",
     "historyTitle": "Migration history",
     "historyPlaceholder": "Search migration records…",
-    "historyFooter": "{{n}} migration records",
     "search": "Search"
   },
   "prompt": {

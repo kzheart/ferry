@@ -10,6 +10,7 @@ from pathlib import Path
 from ...sessions.model import tool_result_text
 from ...sessions.tool_ops import CanonicalOp
 from ...system.paths import pi_session_roots
+from ..shared.narration import narrate
 from .reader import read
 
 
@@ -56,7 +57,21 @@ def _native_input(tool):
                   **({"path": value["path"]} if "path" in value else {})}
 
 
-def _records(session, cwd, sid, parent_session=None):
+def _tool_native(tool, session, message, tool_decider):
+    """返回 (name, arguments)；None 表示该调用降级为叙述文本。"""
+    if tool_decider is None:
+        try:
+            return _native_input(tool)
+        except (KeyError, TypeError):
+            return None
+    decision = tool_decider(tool, session, message)
+    if decision.rendered is None:
+        return None
+    return (str(decision.rendered.get("name") or tool.name),
+            decision.rendered.get("input", tool.input))
+
+
+def _records(session, cwd, sid, parent_session=None, tool_decider=None):
     header = {"type": "session", "version": 3, "id": sid,
               "timestamp": _stamp(), "cwd": cwd}
     if parent_session:
@@ -73,12 +88,12 @@ def _records(session, cwd, sid, parent_session=None):
                 content.append({"type": "image", "data": block.image.data,
                                 "mimeType": block.image.mime_type})
             elif block.kind == "tool" and block.tool:
-                try:
-                    name, arguments = _native_input(block.tool)
-                except (KeyError, TypeError):
-                    content.append({"type": "text", "text":
-                                    f"[Tool {block.tool.name}] {json.dumps(block.tool.input, ensure_ascii=False)}"})
+                native = _tool_native(block.tool, session, message, tool_decider)
+                if native is None:
+                    content.append({"type": "text",
+                                    "text": narrate(block.tool)})
                     continue
+                name, arguments = native
                 call_id = block.tool.source_call_id or "call_" + uuid.uuid4().hex[:16]
                 content.append({"type": "toolCall", "id": call_id,
                                 "name": name, "arguments": arguments})
@@ -122,7 +137,7 @@ def write(session, cwd: str, root: Path | None = None, tool_decider=None):
         filename_stamp = time.strftime("%Y-%m-%dT%H-%M-%S", time.gmtime())
         path = root / f"{filename_stamp}_{sid}.jsonl"
         temp = root / f".{sid}.{os.getpid()}.tmp"
-        records = _records(node, node_cwd, sid, parent_session)
+        records = _records(node, node_cwd, sid, parent_session, tool_decider)
         temp.write_text("\n".join(json.dumps(row, ensure_ascii=False)
                                   for row in records) + "\n")
         read(str(temp))

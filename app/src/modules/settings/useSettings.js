@@ -6,7 +6,7 @@ import { changeLanguage } from "../../shared/i18n/index.js";
 
 const KEY = "ferry-settings";
 
-export const DEFAULTS = {
+const DEFAULTS = {
   theme: "light",
   reduceMotion: false,
   runtimeProbe: false,

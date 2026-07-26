@@ -126,6 +126,13 @@ class Message:
     created_at: str | int | None = None
 
 
+def native_locator(message: Message, index: int) -> str:
+    """消息在原生会话里的定位串；没有 source_id 时退回序号。"""
+    if isinstance(message.source_id, str) and message.source_id:
+        return message.source_id
+    return f"index:{index}"
+
+
 @dataclass
 class ContextCompaction:
     id: str

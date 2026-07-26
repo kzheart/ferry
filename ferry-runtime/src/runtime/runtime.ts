@@ -36,9 +36,9 @@ import type { TaskGraph } from "../agents/scheduler.js";
 import { runDelegatedWorkflow as runDelegation } from "../agents/delegation-runner.js";
 import { RuntimeEventBus } from "./event-bus.js";
 
-export type BackendFactory = (selection?: ModelSelection) => AgentBackend;
+type BackendFactory = (selection?: ModelSelection) => AgentBackend;
 
-export interface RuntimeOptions {
+interface RuntimeOptions {
   store?: SessionStore;
   storeFactory?: (
     invoke: import("../sessions/engine-store.js").RuntimeEngineInvoke,
@@ -57,7 +57,7 @@ export interface RuntimeOptions {
   titleGenerator?: TitleGenerator;
 }
 
-export type TitleGenerator = (
+type TitleGenerator = (
   selection: ModelSelection,
   prompt: string,
   reply: string,

@@ -1,6 +1,6 @@
 {
   "errors": [
-    {"code": "agent.approval_invalid", "category": "permission", "retryable": false, "sources": ["engine"]},
+    {"code": "agent.approval_invalid", "category": "permission", "retryable": false, "sources": ["host"]},
     {"code": "agent.format_changed", "category": "unsupported", "retryable": false, "sources": ["engine"]},
     {"code": "agent.reference_invalid", "category": "validation", "retryable": false, "sources": ["engine"]},
     {"code": "agent.request_invalid", "category": "validation", "retryable": false, "sources": ["engine"]},

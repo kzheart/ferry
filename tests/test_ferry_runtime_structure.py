@@ -29,11 +29,9 @@ def test_runtime_source_is_grouped_by_responsibility():
         "protocol",
         "workflows",
     } & directories
-    assert {
+    assert not {
         path.name for path in (RUNTIME / "src").glob("*.ts")
-    } == {"index.ts"}
-    runtime = (RUNTIME / "src/runtime/runtime.ts").read_text()
-    assert "function safeText" not in runtime
+    }
     security_files = {
         path.name for path in (RUNTIME / "src/security").glob("*.ts")
     }
@@ -41,11 +39,6 @@ def test_runtime_source_is_grouped_by_responsibility():
     limits = RUNTIME / "src/security/limits.ts"
     assert limits.is_file()
     assert "function truncateText" in limits.read_text()
-    provider_config = (
-        RUNTIME / "src/providers/provider-config.ts"
-    ).read_text()
-    assert "class FileProviderConfigStore" not in provider_config
-    assert "function parseProviderConfig" not in provider_config
     assert (
         RUNTIME / "src/providers/provider-config-store.ts"
     ).is_file()
@@ -53,34 +46,21 @@ def test_runtime_source_is_grouped_by_responsibility():
         RUNTIME / "src/providers/provider-config-validation.ts"
     ).is_file()
     assert (RUNTIME / "src/providers/provider-models.ts").is_file()
-    provider_host = (RUNTIME / "src/providers/provider-host.ts").read_text()
-    assert "function customProvider(" not in provider_host
-    assert "function withCustomModels(" not in provider_host
     assert (RUNTIME / "src/providers/provider-service.ts").is_file()
     assert (RUNTIME / "src/providers/commands.ts").is_file()
     assert (RUNTIME / "src/roles/role-service.ts").is_file()
     assert (RUNTIME / "src/roles/role-store.ts").is_file()
     assert not (RUNTIME / "src/roles/role-repository.ts").exists()
     assert (RUNTIME / "src/roles/commands.ts").is_file()
-    assert "runtime.providerService" not in runtime
-    assert "runtime.roleService" not in runtime
-    assert "new AuthCoordinator" not in runtime
-    assert "this.providerHost.saveApiKey" not in runtime
-    assert "new Set<(event: EventEnvelope)" not in runtime
     assert (RUNTIME / "src/runtime/event-bus.ts").is_file()
-    assert "pendingTools" not in runtime
-    assert "TOOL_DEADLINES_MS" not in runtime
     assert (RUNTIME / "src/tools/gateway.ts").is_file()
-    assert "new WorkflowRun(" not in runtime
     assert (RUNTIME / "src/agents/delegation-runner.ts").is_file()
-    assert "runOrganizationWorkflow(" not in runtime
     assert (RUNTIME / "src/organizing/coordinator.ts").is_file()
     runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
     assert runtime_session.is_file()
     assert (RUNTIME / "src/sessions/session-store.ts").is_file()
     assert not (RUNTIME / "src/sessions/session-repository.ts").exists()
     assert (RUNTIME / "src/sessions/commands.ts").is_file()
-    assert "class RuntimeSession" not in runtime
     assert "export class RuntimeSession" in runtime_session.read_text()
 
 

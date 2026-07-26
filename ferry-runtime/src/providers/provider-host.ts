@@ -1,8 +1,6 @@
 import {
   createModels,
-  type AuthEvent,
   type AuthInteraction,
-  type AuthPrompt,
   type AuthType,
   type MutableModels,
   type Provider,
@@ -30,6 +28,8 @@ import {
   type ModelSummary,
   type ProviderSummary,
 } from "./provider-models.js";
+
+type CompleteArgs = Parameters<MutableModels["completeSimple"]>;
 
 export class ProviderHost {
   // 未叠加手填模型的原始 Provider,重新叠加时要从它出发,否则会套娃
@@ -64,19 +64,57 @@ export class ProviderHost {
     }
     const config = await store.snapshot();
     const customIds = new Set<string>();
-    for (const item of config.custom_providers) {
+    ProviderHost.registerCustomProviders(
+      models,
+      config.custom_providers,
+      customIds,
+    );
+    await models.refresh({ allowNetwork: false });
+    const host = new ProviderHost(store, models, customIds);
+    await host.applyCustomModels();
+    return host;
+  }
+
+  /** 注册自定义 Provider 并记录其 id;与内置 Provider 撞 id 直接报错。 */
+  private static registerCustomProviders(
+    models: MutableModels,
+    configs: readonly CustomProviderConfig[],
+    ids: Set<string>,
+  ) {
+    for (const item of configs) {
       if (models.getProvider(item.id)) {
         throw new Error(
           `custom provider conflicts with built-in provider: ${item.id}`,
         );
       }
       models.setProvider(customProvider(item));
-      customIds.add(item.id);
+      ids.add(item.id);
     }
-    await models.refresh({ allowNetwork: false });
-    const host = new ProviderHost(store, models, customIds);
-    await host.applyCustomModels();
-    return host;
+  }
+
+  /** 发一条一次性补全,取回拼接后的文本;超时与错误 stopReason 统一在这里处理。 */
+  private async completeText(
+    model: CompleteArgs[0],
+    request: CompleteArgs[1],
+    options: { maxTokens: number; timeoutMs: number; errorMessage: string },
+  ) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+    try {
+      const message = await this.models.completeSimple(model, request, {
+        maxTokens: options.maxTokens,
+        signal: controller.signal,
+      });
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        throw new Error(message.errorMessage ?? options.errorMessage);
+      }
+      return message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async applyCustomModels() {
@@ -104,15 +142,11 @@ export class ProviderHost {
       this.baseProviders.delete(id);
     }
     this.customIds = new Set();
-    for (const item of (await this.store.snapshot()).custom_providers) {
-      if (this.models.getProvider(item.id)) {
-        throw new Error(
-          `custom provider conflicts with built-in provider: ${item.id}`,
-        );
-      }
-      this.models.setProvider(customProvider(item));
-      this.customIds.add(item.id);
-    }
+    ProviderHost.registerCustomProviders(
+      this.models,
+      (await this.store.snapshot()).custom_providers,
+      this.customIds,
+    );
     await this.applyCustomModels();
   }
 
@@ -154,26 +188,17 @@ export class ProviderHost {
       ? models.find((item) => item.id === modelId)
       : models[0];
     if (!model) throw new Error("provider has no model to test");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30_000);
     const started = Date.now();
-    try {
-      const message = await this.models.completeSimple(
-        model,
-        { messages: [{ role: "user", content: "ping", timestamp: started }] },
-        { maxTokens: 16, signal: controller.signal },
-      );
-      if (message.stopReason === "error" || message.stopReason === "aborted") {
-        throw new Error(message.errorMessage ?? "request failed");
-      }
-      return {
-        provider_id: providerId,
-        model: model.id,
-        latency_ms: Date.now() - started,
-      };
-    } finally {
-      clearTimeout(timer);
-    }
+    await this.completeText(
+      model,
+      { messages: [{ role: "user", content: "ping", timestamp: started }] },
+      { maxTokens: 16, timeoutMs: 30_000, errorMessage: "request failed" },
+    );
+    return {
+      provider_id: providerId,
+      model: model.id,
+      latency_ms: Date.now() - started,
+    };
   }
 
   /**
@@ -189,35 +214,26 @@ export class ProviderHost {
     if (!(await this.isConfigured(selection.provider))) {
       throw new Error("provider is not configured");
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000);
-    try {
-      const message = await this.models.completeSimple(
-        model,
-        {
-          systemPrompt:
-            "You name chat conversations. Reply with a single short title of at most 8 words (or 20 Chinese characters) that names the topic. Use the same language as the user. No quotes, no punctuation at the end, no preamble.",
-          messages: [
-            {
-              role: "user",
-              content: `User asked:\n${prompt.slice(0, 1_000)}\n\nAssistant replied:\n${reply.slice(0, 1_000)}\n\nTitle:`,
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        { maxTokens: 64, signal: controller.signal },
-      );
-      if (message.stopReason === "error" || message.stopReason === "aborted") {
-        throw new Error(message.errorMessage ?? "title request failed");
-      }
-      return message.content
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("")
-        .trim();
-    } finally {
-      clearTimeout(timer);
-    }
+    const title = await this.completeText(
+      model,
+      {
+        systemPrompt:
+          "You name chat conversations. Reply with a single short title of at most 8 words (or 20 Chinese characters) that names the topic. Use the same language as the user. No quotes, no punctuation at the end, no preamble.",
+        messages: [
+          {
+            role: "user",
+            content: `User asked:\n${prompt.slice(0, 1_000)}\n\nAssistant replied:\n${reply.slice(0, 1_000)}\n\nTitle:`,
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        maxTokens: 64,
+        timeoutMs: 20_000,
+        errorMessage: "title request failed",
+      },
+    );
+    return title.trim();
   }
 
   async organize(input: OrganizerInput, selection?: ModelSelection) {
@@ -226,35 +242,26 @@ export class ProviderHost {
     if (!(await this.isConfigured(selected.provider))) {
       throw new Error("provider is not configured");
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120_000);
-    try {
-      const message = await this.models.completeSimple(
-        model,
-        {
-          systemPrompt:
-            "You return strictly validated JSON for Ferry's local session organizer.",
-          messages: [
-            {
-              role: "user",
-              content: organizerPrompt(input),
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        { maxTokens: 8_000, signal: controller.signal },
-      );
-      if (message.stopReason === "error" || message.stopReason === "aborted") {
-        throw new Error(message.errorMessage ?? "organizer request failed");
-      }
-      const text = message.content
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("");
-      return validateOrganizerResult(text, input);
-    } finally {
-      clearTimeout(timer);
-    }
+    const text = await this.completeText(
+      model,
+      {
+        systemPrompt:
+          "You return strictly validated JSON for Ferry's local session organizer.",
+        messages: [
+          {
+            role: "user",
+            content: organizerPrompt(input),
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        maxTokens: 8_000,
+        timeoutMs: 120_000,
+        errorMessage: "organizer request failed",
+      },
+    );
+    return validateOrganizerResult(text, input);
   }
 
   async deleteCustomModel(providerId: string, modelId: string) {
@@ -334,18 +341,9 @@ export class ProviderHost {
   async enabledModels(): Promise<
     Array<ModelSummary & { provider_name: string }>
   > {
-    const config = await this.store.snapshot();
-    const output: Array<ModelSummary & { provider_name: string }> = [];
-    for (const providerId of config.enabled_providers) {
-      const provider = this.models.getProvider(providerId);
-      if (!provider || !(await this.isConfigured(providerId))) continue;
-      const visible = config.visible_models[providerId];
-      for (const model of this.models.getModels(providerId)) {
-        if (visible && !visible.includes(model.id)) continue;
-        output.push({ ...modelSummary(model), provider_name: provider.name });
-      }
-    }
-    return output;
+    return (await this.catalogModels())
+      .filter((model) => model.shown)
+      .map(({ shown, custom, ...model }) => model);
   }
 
   // 模型设置页的数据源:已添加且已配置凭据的 Provider 的全部模型,附带是否出现在选择器里
@@ -507,5 +505,3 @@ export class ProviderHost {
     await this.reloadCustomProviders();
   }
 }
-
-export type { AuthEvent, AuthPrompt };

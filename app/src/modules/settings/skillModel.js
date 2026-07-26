@@ -3,7 +3,7 @@
 // 只有 installedId 非空才说明库里已经有一份。
 
 /** 候选与库里已有技能的匹配:同名目录视为同一个技能的不同版本。 */
-export const candidateInstalledId = (candidate, skills) => {
+const candidateInstalledId = (candidate, skills) => {
   const target = candidate.candidateId.split(":").slice(1).join(":");
   return skills.find(skill => skill.id === target)?.id ?? null;
 };

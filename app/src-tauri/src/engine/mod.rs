@@ -118,19 +118,6 @@ fn handshake(engine: &EngineClient) -> Result<(), String> {
     Ok(())
 }
 
-impl EngineClient {
-    fn request(&self, request: &str, timeout: Duration) -> Result<String, ProcessError> {
-        let value: Value = serde_json::from_str(request).map_err(|error| {
-            ProcessError::InvalidFrame(format!("Engine 请求不是有效 JSON: {error}"))
-        })?;
-        let request_id = value
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ProcessError::InvalidFrame("Engine 请求缺少 id".to_owned()))?;
-        self.transport.request(request_id, request, timeout)
-    }
-}
-
 fn read_engine_output(mut stdout: impl BufRead, pending: PendingResponses) {
     let mut line = String::new();
     loop {
@@ -177,7 +164,7 @@ pub(crate) fn engine_request_blocking(
     let mut last_error = String::new();
     for _attempt in 0..request_attempts(&request) {
         let client = engine_client(resource_dir)?;
-        match client.request(&request, timeout) {
+        match client.transport.request(&request_id, &request, timeout) {
             Ok(line) => match validate_engine_response_id(&line, &request_id) {
                 Ok(()) => return Ok(line),
                 Err(error) => {

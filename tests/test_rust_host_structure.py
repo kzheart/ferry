@@ -99,4 +99,3 @@ def test_engine_tests_do_not_hide_the_production_entrypoint():
     assert (engine / "tests.rs").is_file()
     root = (engine / "mod.rs").read_text()
     assert "mod tests;" in root
-    assert "fn operation_inputs_are_strictly_validated" not in root

@@ -131,7 +131,7 @@ function UsageCard({ entity, onNavigate }) {
   );
 }
 
-export function EntityCard({ entity, onNavigate }) {
+function EntityCard({ entity, onNavigate }) {
   switch (rendererForEntity(entity)) {
     case "session-card":
       return <SessionCard entity={entity} onNavigate={onNavigate} />;

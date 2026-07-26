@@ -20,14 +20,14 @@ import type {
 import type { PublicRuntimeMethod } from "../../shared/contracts/generated/runtime-methods.js";
 import { throwEngineError } from "./errors.js";
 
-export type DesktopParams = Record<string, unknown>;
-export type RuntimeEvent = FerryEvent & {
+type DesktopParams = Record<string, unknown>;
+type RuntimeEvent = FerryEvent & {
   type: FerryEventType;
 };
 
 let requestSequence = 1;
 
-export class RuntimeError extends Error {
+class RuntimeError extends Error {
   readonly code: string;
 
   constructor(code: string, message?: string) {

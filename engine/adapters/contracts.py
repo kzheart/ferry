@@ -7,6 +7,7 @@ from functools import lru_cache
 from typing import Literal, Protocol, runtime_checkable
 
 from ..contracts.agents import AGENT_CAPABILITIES
+from ..system.paths import is_within
 
 
 _COMPONENT_CAPABILITIES = {
@@ -68,13 +69,6 @@ def _resolved_root(source_path: str) -> str | None:
         return None
 
 
-def _is_within(path: str, root: str) -> bool:
-    if path == root:
-        return True
-    prefix = root if root.endswith(os.sep) else root + os.sep
-    return path.startswith(prefix)
-
-
 def filesystem_reference(
     row: dict,
     source_path: str,
@@ -97,7 +91,7 @@ def filesystem_reference(
     if (
         (kind == "file" and not os.path.isfile(path))
         or (kind == "directory" and not os.path.isdir(path))
-        or not _is_within(path, root)
+        or not is_within(path, root)
     ):
         return None
     if required_name is not None:
@@ -109,7 +103,7 @@ def filesystem_reference(
             )
         except OSError:
             return None
-        if not os.path.isfile(required) or not _is_within(required, path):
+        if not os.path.isfile(required) or not is_within(required, path):
             return None
     try:
         resolved = os.path.realpath(resolve_ref(path), strict=True)

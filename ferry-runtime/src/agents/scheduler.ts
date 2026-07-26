@@ -1,7 +1,7 @@
 import { ProtocolError } from "../server/messages.js";
 
-export type WorkflowFailurePolicy = "fail_fast" | "continue";
-export type TaskStatus =
+type WorkflowFailurePolicy = "fail_fast" | "continue";
+type TaskStatus =
   | "pending"
   | "running"
   | "completed"
@@ -9,7 +9,7 @@ export type TaskStatus =
   | "cancelled"
   | "skipped";
 
-export interface TaskNode {
+interface TaskNode {
   id: string;
   role_id: string;
   instruction: string;
@@ -25,7 +25,7 @@ export interface TaskGraph {
   failure_policy?: WorkflowFailurePolicy;
 }
 
-export interface TaskResult {
+interface TaskResult {
   task_id: string;
   role_id: string;
   status: TaskStatus;
@@ -49,12 +49,12 @@ export type WorkflowRunEvent =
   | { type: "task.skipped"; task_id: string; reason: string }
   | { type: "workflow.completed"; status: WorkflowRunResult["status"] };
 
-export interface TaskExecutionContext {
+interface TaskExecutionContext {
   signal: AbortSignal;
   dependency_results: Readonly<Record<string, string>>;
 }
 
-export type TaskExecutor = (
+type TaskExecutor = (
   task: TaskNode,
   context: TaskExecutionContext,
 ) => Promise<string>;
@@ -65,7 +65,36 @@ const MAX_DEPTH = 8;
 const MAX_INSTRUCTION_CHARS = 20_000;
 const MAX_RESULT_CHARS = 40_000;
 const MAX_WORKFLOW_OUTPUT_CHARS = 200_000;
+const MIN_WORKFLOW_OUTPUT_CHARS = 1_000;
 const DEFAULT_TASK_TIMEOUT_MS = 5 * 60_000;
+const MIN_TASK_TIMEOUT_MS = 1_000;
+const MAX_TASK_TIMEOUT_MS = 30 * 60_000;
+const MAX_TASK_ID_CHARS = 64;
+const MAX_ROLE_ID_CHARS = 128;
+
+/** 任务与角色 id 的字符集;delegation 的 JSON Schema 也用它拼 pattern。 */
+export const WORKFLOW_ID_CHARACTER_CLASS = "[A-Za-z0-9_-]";
+
+/** 工作流规格的上限:delegation 工具的 schema 从这里取,不再各写一份字面量。 */
+export const WORKFLOW_LIMITS = {
+  maxTasks: MAX_TASKS,
+  maxConcurrency: MAX_CONCURRENCY,
+  maxDepth: MAX_DEPTH,
+  maxInstructionChars: MAX_INSTRUCTION_CHARS,
+  minOutputChars: MIN_WORKFLOW_OUTPUT_CHARS,
+  maxOutputChars: MAX_WORKFLOW_OUTPUT_CHARS,
+  minTaskTimeoutMs: MIN_TASK_TIMEOUT_MS,
+  maxTaskTimeoutMs: MAX_TASK_TIMEOUT_MS,
+  maxTaskIdChars: MAX_TASK_ID_CHARS,
+  maxRoleIdChars: MAX_ROLE_ID_CHARS,
+} as const;
+
+const TASK_ID_PATTERN = new RegExp(
+  `^${WORKFLOW_ID_CHARACTER_CLASS}{1,${MAX_TASK_ID_CHARS}}$`,
+);
+const ROLE_ID_PATTERN = new RegExp(
+  `^${WORKFLOW_ID_CHARACTER_CLASS}{1,${MAX_ROLE_ID_CHARS}}$`,
+);
 
 function boundedInteger(
   value: unknown,
@@ -96,10 +125,10 @@ function validate(spec: TaskGraph) {
   const ids = new Set<string>();
   const byId = new Map<string, TaskNode>();
   for (const task of spec.tasks) {
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(task.id) || ids.has(task.id)) {
+    if (!TASK_ID_PATTERN.test(task.id) || ids.has(task.id)) {
       throw new ProtocolError("invalid_workflow", "task id is invalid");
     }
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(task.role_id)) {
+    if (!ROLE_ID_PATTERN.test(task.role_id)) {
       throw new ProtocolError("invalid_workflow", "task role_id is invalid");
     }
     if (
@@ -183,14 +212,14 @@ function validate(spec: TaskGraph) {
   const timeout = boundedInteger(
     spec.task_timeout_ms,
     DEFAULT_TASK_TIMEOUT_MS,
-    1_000,
-    30 * 60_000,
+    MIN_TASK_TIMEOUT_MS,
+    MAX_TASK_TIMEOUT_MS,
     "task_timeout_ms",
   );
   const maxOutputChars = boundedInteger(
     spec.max_output_chars,
     MAX_WORKFLOW_OUTPUT_CHARS,
-    1_000,
+    MIN_WORKFLOW_OUTPUT_CHARS,
     MAX_WORKFLOW_OUTPUT_CHARS,
     "max_output_chars",
   );
@@ -361,29 +390,30 @@ export class WorkflowRun {
             task_id: task.id,
             role_id: task.role_id,
           });
+          // 超时与主动取消都走 abort 信号,两条回调路径共用这段收尾
+          const settleAborted = () => {
+            if (timedOut) {
+              failed = true;
+              state.status = "failed";
+              state.error = "task timed out";
+              this.onEvent({
+                type: "task.failed",
+                task_id: task.id,
+                error: state.error,
+              });
+              if (config.failurePolicy === "fail_fast") this.cancel();
+              return;
+            }
+            state.status = "cancelled";
+            this.onEvent({ type: "task.cancelled", task_id: task.id });
+          };
           void this.executor(task, {
             signal: controller.signal,
             dependency_results: dependencyResults,
           })
             .then((output) => {
               if (controller.signal.aborted) {
-                if (timedOut) {
-                  failed = true;
-                  state.status = "failed";
-                  state.error = "task timed out";
-                  this.onEvent({
-                    type: "task.failed",
-                    task_id: task.id,
-                    error: state.error,
-                  });
-                  if (config.failurePolicy === "fail_fast") this.cancel();
-                  return;
-                }
-                state.status = "cancelled";
-                this.onEvent({
-                  type: "task.cancelled",
-                  task_id: task.id,
-                });
+                settleAborted();
                 return;
               }
               if (typeof output !== "string") {
@@ -401,23 +431,7 @@ export class WorkflowRun {
             })
             .catch((error) => {
               if (controller.signal.aborted) {
-                if (timedOut) {
-                  failed = true;
-                  state.status = "failed";
-                  state.error = "task timed out";
-                  this.onEvent({
-                    type: "task.failed",
-                    task_id: task.id,
-                    error: state.error,
-                  });
-                  if (config.failurePolicy === "fail_fast") this.cancel();
-                  return;
-                }
-                state.status = "cancelled";
-                this.onEvent({
-                  type: "task.cancelled",
-                  task_id: task.id,
-                });
+                settleAborted();
                 return;
               }
               failed = true;

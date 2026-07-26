@@ -121,19 +121,16 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         transport,
     };
     let process = ManagedProcess::new(generation, child, client.clone());
+    let health_id = next_id("health");
     let health = json!({
         "protocol": FERRY_IPC_PROTOCOL,
-        "id": next_id("health"),
+        "id": health_id,
         "method": "health",
         "params": {},
     });
-    let health_id = health
-        .get("id")
-        .and_then(Value::as_str)
-        .expect("health request has id");
     let response = client
         .transport
-        .request(health_id, &health.to_string(), STARTUP_HEALTH_TIMEOUT)
+        .request(&health_id, &health.to_string(), STARTUP_HEALTH_TIMEOUT)
         .map_err(|error| error.to_string())?;
     let value: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
     verify_handshake(&value, "ferry-runtime", FERRY_CONTRACT_HASH)
@@ -175,10 +172,7 @@ fn read_runtime_output(
                 });
                 continue;
             }
-            if matches!(
-                Some(event_type),
-                Some("run.completed" | "run.failed" | "run.cancelled")
-            ) {
+            if matches!(event_type, "run.completed" | "run.failed" | "run.cancelled") {
                 if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
                     forget_auto_policy(session_id);
                 }

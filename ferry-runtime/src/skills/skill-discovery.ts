@@ -32,7 +32,7 @@ export interface SkillCandidate {
   path: string;
 }
 
-export function expandHome(input: string): string {
+function expandHome(input: string): string {
   const trimmed = input.trim();
   if (trimmed === "~") return homedir();
   if (trimmed.startsWith("~/")) return join(homedir(), trimmed.slice(2));

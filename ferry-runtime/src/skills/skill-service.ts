@@ -1,4 +1,4 @@
-import { ProtocolError } from "../server/messages.js";
+import { ProtocolError, protocolFailure } from "../server/messages.js";
 import type { SkillEntry } from "./skill-library.js";
 import type { SkillImportInput, SkillStore } from "./skill-store.js";
 
@@ -71,10 +71,7 @@ export class SkillService {
     try {
       return await operation();
     } catch (error) {
-      throw new ProtocolError(
-        "invalid_skill",
-        error instanceof Error ? error.message : "skill request is invalid",
-      );
+      throw protocolFailure("invalid_skill", error, "skill request is invalid");
     }
   }
 }

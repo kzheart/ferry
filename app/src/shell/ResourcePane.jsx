@@ -6,8 +6,8 @@ import { supportsAgentCapability } from "../shared/contracts/tools.js";
 import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
   SearchIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
 
-export function Pane({ collapsed, width, dragging, title, count, placeholder,
-  query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter, footer,
+export function Pane({ collapsed, width, dragging, title, count,
+  query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter,
   tokens, listKey, children }) {
   const { t } = useTranslation();
   const w = collapsed ? 0 : width;
@@ -72,7 +72,7 @@ export function Pane({ collapsed, width, dragging, title, count, placeholder,
   );
 }
 
-export function PaneEmpty({ text, onClear }) {
+function PaneEmpty({ text, onClear }) {
   const { t } = useTranslation();
   return (
     <div style={{ textAlign: "center", padding: "34px 12px", color: "var(--tx5)" }}>

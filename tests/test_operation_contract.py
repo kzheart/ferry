@@ -47,7 +47,6 @@ def test_operation_contract_is_generated_for_every_runtime():
         "app/src/shared/contracts/generated/operations.ts",
         "app/src-tauri/src/contracts/operations.rs",
         "engine/contracts/operations.py",
-        "ferry-runtime/src/server/generated/operations.ts",
     ):
         assert (ROOT / path).is_file()
 

@@ -33,9 +33,8 @@ export const LOCALE_META = [
   { code: "en", nativeName: "English" },
 ];
 
-export const SUPPORTED_LOCALES = LOCALE_META.map(l => l.code);
-export const FALLBACK_LOCALE = "zh-CN";
-export const DEFAULT_LOCALE = null;
+const SUPPORTED_LOCALES = LOCALE_META.map(l => l.code);
+const FALLBACK_LOCALE = "zh-CN";
 
 const RESOURCES = {
   "zh-CN": { common: zhCNCommon, errors: zhCNErrors, events: zhCNEvents, browser: zhCNBrowser, migration: zhCNMigration, onboarding: zhCNOnboarding, settings: zhCNSettings, overlays: zhCNOverlays, app: zhCNApp, overview: zhCNOverview, askferry: zhCNAskFerry, organizing: zhCNOrganizing },
@@ -61,16 +60,16 @@ function matchByLanguageTag(tag) {
   return SUPPORTED_LOCALES.find(c => c.toLowerCase().split("-")[0] === primary) || null;
 }
 
-export function matchSystemLocale() {
+function matchSystemLocale() {
   return matchByLanguageTag(navigator.language) || FALLBACK_LOCALE;
 }
 
-export function resolveLocale() {
+function resolveLocale() {
   const stored = readStoredLocale();
   return stored || matchSystemLocale();
 }
 
-export function normalizeLocale(locale) {
+function normalizeLocale(locale) {
   if (!locale) return matchSystemLocale();
   return matchByLanguageTag(locale) || FALLBACK_LOCALE;
 }
@@ -114,9 +113,6 @@ export function changeLanguage(locale) {
   return i18n.changeLanguage(next);
 }
 
-export function currentLocale() {
-  return i18n.language || FALLBACK_LOCALE;
-}
 
 export default i18n;
 export const t = (key, params) => i18n.t(key, params);

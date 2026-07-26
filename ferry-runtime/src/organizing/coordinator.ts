@@ -6,7 +6,7 @@ import {
   type OrganizationEngineMethod,
 } from "./organization.js";
 
-export interface OrganizationCoordinatorOptions {
+interface OrganizationCoordinatorOptions {
   providerHost?: ProviderHost;
   newId: () => string;
   invokeEngine: (
@@ -69,10 +69,7 @@ export class OrganizationCoordinator {
 
   cancel(jobId: string) {
     const job = this.requireJob(jobId);
-    if (job.status !== "running") {
-      return { ...this.publicState(job), accepted: false };
-    }
-    if (job.phase === "committing") {
+    if (job.status !== "running" || job.phase === "committing") {
       return { ...this.publicState(job), accepted: false };
     }
     job.cancelled = true;
@@ -119,7 +116,7 @@ export class OrganizationCoordinator {
   }
 
   private checkActive(job: OrganizationJob) {
-    if (job.cancelled || job.status === "cancelled") {
+    if (job.cancelled) {
       throw new OrganizationCancelled();
     }
   }

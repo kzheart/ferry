@@ -49,7 +49,7 @@ const MIGRATION_TARGETS = AGENT_IDS.filter((tool) =>
 
 export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${BROWSABLE_AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated into ${MIGRATION_TARGETS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
 
-export interface RuntimeSessionHost {
+interface RuntimeSessionHost {
   readonly store: SessionStore;
   readonly now: () => Date;
   newId(): string;
@@ -74,7 +74,7 @@ export interface RuntimeSessionHost {
   ): Promise<string | null>;
 }
 
-export interface ResolvedSkill {
+interface ResolvedSkill {
   id: string;
   name: string;
   description: string;
@@ -88,7 +88,7 @@ interface TerminalResult {
 /** 系统提示里只放名称与说明,正文由模型自己调 skill 工具取——几十个技能全量注入会吃掉几万 token。 */
 const SKILL_CATALOG_MAX_BYTES = 8 * 1024;
 
-export function skillCatalog(skills: readonly ResolvedSkill[]) {
+function skillCatalog(skills: readonly ResolvedSkill[]) {
   if (skills.length === 0) return "";
   const header =
     "Available skills. Call the skill tool with a skill id before acting on a task that matches one of these:";

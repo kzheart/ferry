@@ -7,6 +7,8 @@ from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.opencode import payload as opencode_payload
 from engine.adapters.opencode.migration import OpenCodeMigrationTarget
 from engine.adapters.opencode.native_schema import templates as opencode_templates
+from engine.adapters.pi import writer as pi_writer
+from engine.adapters.pi.migration import PiMigrationTarget
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -101,10 +103,24 @@ def _opencode_has_native_tool(session, target):
     )
 
 
+def _pi_has_native_tool(session, target):
+    records = pi_writer._records(
+        session, "/tmp", "fixture-session",
+        tool_decider=target.evaluate_tool,
+    )
+    return any(
+        item.get("type") == "toolCall"
+        for record in records
+        for item in ((record.get("message") or {}).get("content") or [])
+        if isinstance(item, dict)
+    )
+
+
 @pytest.mark.parametrize(("target", "namespace", "writer_dispatch"), [
     (ClaudeMigrationTarget(), "claude", _claude_has_native_tool),
     (CodexMigrationTarget(), "codex", _codex_has_native_tool),
     (OpenCodeMigrationTarget(), "opencode", _opencode_has_native_tool),
+    (PiMigrationTarget(), "pi", _pi_has_native_tool),
 ])
 @pytest.mark.parametrize("op", OPS)
 def test_plan_preview_and_writer_share_one_call_level_render_decision(

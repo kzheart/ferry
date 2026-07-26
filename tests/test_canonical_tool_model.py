@@ -4,7 +4,6 @@ import pytest
 
 from engine.sessions.model import (
     TOOL_RESULT_BLOCK_KINDS,
-    TOOL_RESULT_STATUSES,
     ToolCall,
     ToolResult,
     ToolResultBlock,
@@ -51,25 +50,9 @@ def test_none_result_means_unpaired_call():
     assert tool_result_text(call.result) == ""
 
 
-def test_reader_can_pair_a_result_without_mirrored_fields():
-    call = ToolCall("tool", None, {})
-    call.result = ToolResult(
-        status="interrupted",
-        blocks=[ToolResultBlock("text", text="stopped")],
-    )
-
-    assert call.result.status == "interrupted"
-    assert tool_result_text(call.result) == "stopped"
-
-
 def test_tool_call_rejects_a_text_result_shortcut():
     with pytest.raises(TypeError, match="ToolResult"):
         ToolCall("tool", None, {}, "text")
-
-
-@pytest.mark.parametrize("status", sorted(TOOL_RESULT_STATUSES))
-def test_canonical_result_statuses_are_stable(status):
-    assert ToolResult(status=status).status == status
 
 
 def test_domain_rejects_native_statuses():

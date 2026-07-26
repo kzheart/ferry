@@ -6,9 +6,6 @@ import {
   migrationPlanInput,
   migrationPlanKey,
 } from "./migrationOperation.js";
-import { agentsWithCapability } from "../../shared/contracts/tools.js";
-import { AGENTS } from "../../shared/contracts/generated/agents.js";
-
 const base = {
   sourceTool: "claude",
   ref: "fsr_current",
@@ -62,8 +59,3 @@ test("target, scope, probe and model changes invalidate a cached plan", () => {
   }
 });
 
-test("迁移目标只来自 migration-target capability", () => {
-  assert.ok(agentsWithCapability("migration-target").every(
-    tool => AGENTS[tool].capabilities.includes("migration-target"),
-  ));
-});

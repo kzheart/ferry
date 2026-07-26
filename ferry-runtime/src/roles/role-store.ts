@@ -1,20 +1,13 @@
 /** 角色定义与持久化存储。 */
-import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname } from "node:path";
 import { FERRY_TOOL_NAMES, type FerryToolName } from "../tools/catalog.js";
+import { SKILL_ID_PATTERN } from "../skills/skill-library.js";
 import {
   type ModelSelection,
   type ThinkingLevel,
 } from "../providers/provider-config.js";
 import { parseThinkingLevel } from "../providers/provider-config-validation.js";
+import { readJsonFile, writeJsonAtomic } from "../storage/json-file.js";
+import { WriteQueue } from "../storage/write-queue.js";
 
 export const ROLE_STORE_VERSION = 1 as const;
 export const DEFAULT_ROLE_ID = "default";
@@ -52,7 +45,6 @@ interface RoleDocument {
 
 const MAX_ROLE_BYTES = 2 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
-const SKILL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const MAX_ROLE_SKILLS = 64;
 // 图标与配色是纯展示标识:运行时不认识具体图标名,只挡住畸形值,前端遇到未知名回落默认样式
 const TOKEN_PATTERN = /^[a-z0-9-]{1,32}$/;
@@ -73,7 +65,7 @@ export const DEFAULT_ROLE: Role = Object.freeze({
 /** 出厂内置角色:可以被改写,但改写只是覆盖层,原始定义永远留在这里供恢复默认。 */
 const BUILTIN_ROLES: readonly Role[] = Object.freeze([DEFAULT_ROLE]);
 
-export const builtinRole = (id: string) =>
+const builtinRole = (id: string) =>
   BUILTIN_ROLES.find((role) => role.id === id);
 
 function text(value: unknown, field: string, maximum: number) {
@@ -129,7 +121,7 @@ function parseSkills(value: unknown): string[] {
   return skills;
 }
 
-export function parseRole(value: unknown, builtin = false): Role {
+function parseRole(value: unknown, builtin = false): Role {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("role is invalid");
   }
@@ -303,7 +295,7 @@ export class EphemeralRoleStore extends BaseRoleStore {
 
 export class FileRoleStore extends BaseRoleStore {
   private readonly ready: Promise<void>;
-  private writes = Promise.resolve();
+  private readonly writes = new WriteQueue();
 
   constructor(readonly path: string) {
     super();
@@ -311,23 +303,21 @@ export class FileRoleStore extends BaseRoleStore {
   }
 
   private async load() {
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    try {
-      const source = await readFile(this.path, "utf8");
-      if (Buffer.byteLength(source) > MAX_ROLE_BYTES) {
-        throw new Error("role config is too large");
-      }
-      const document = parseDocument(JSON.parse(source) as unknown);
-      this.roles = document.roles;
-      this.overrides = document.builtin_overrides;
-      await chmod(this.path, 0o600);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const document = await readJsonFile({
+      path: this.path,
+      maxBytes: MAX_ROLE_BYTES,
+      tooLargeMessage: "role config is too large",
+      parse: parseDocument,
+    });
+    if (!document) {
       await this.writeDisk();
+      return;
     }
+    this.roles = document.roles;
+    this.overrides = document.builtin_overrides;
   }
 
-  private async writeDisk() {
+  private writeDisk() {
     const payload = JSON.stringify(
       {
         schema_version: ROLE_STORE_VERSION,
@@ -337,20 +327,12 @@ export class FileRoleStore extends BaseRoleStore {
       null,
       2,
     );
-    const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
-      await rename(temporary, this.path);
-      await chmod(this.path, 0o600);
-    } catch (error) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
+    return writeJsonAtomic(this.path, payload);
   }
 
   private async settled() {
     await this.ready;
-    await this.writes;
+    await this.writes.settled();
   }
 
   override async list() {
@@ -375,10 +357,6 @@ export class FileRoleStore extends BaseRoleStore {
 
   protected async changed() {
     await this.ready;
-    const write = this.writes
-      .catch(() => undefined)
-      .then(() => this.writeDisk());
-    this.writes = write;
-    await write;
+    await this.writes.run(() => this.writeDisk());
   }
 }

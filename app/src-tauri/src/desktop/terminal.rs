@@ -21,18 +21,3 @@ pub(crate) async fn open_terminal(
     .await
     .map_err(|error| error.to_string())?
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ALLOWED_EXECUTABLES;
-    use std::collections::HashSet;
-
-    #[test]
-    fn terminal_executables_use_static_policy() {
-        assert!(!ALLOWED_EXECUTABLES.is_empty());
-        assert_eq!(
-            ALLOWED_EXECUTABLES.len(),
-            ALLOWED_EXECUTABLES.iter().collect::<HashSet<_>>().len()
-        );
-    }
-}

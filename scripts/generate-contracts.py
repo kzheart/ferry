@@ -51,7 +51,6 @@ OPERATIONS_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/operations.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
     ROOT / "engine/contracts/operations.py": "python",
-    ROOT / "ferry-runtime/src/server/generated/operations.ts": "runtime",
 }
 EVENT_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/events.ts": "frontend",
@@ -1200,30 +1199,6 @@ def operations_python(contract: dict[str, object]) -> str:
     ))
 
 
-def operations_runtime(contract: dict[str, object]) -> str:
-    def array(values: list[str]) -> str:
-        return "[\n" + "\n".join(
-            f"  {json.dumps(value)}," for value in values
-        ) + "\n]"
-
-    return "\n".join((
-        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        *_typescript_operation_types(contract),
-        f'export const OPERATION_PLAN_ID_PREFIX = "{contract["plan_id_prefix"]}" as const;',
-        f"export const OPERATION_KINDS = {array(contract['kinds'])} as const;",
-        "export const EDIT_OPERATION_KINDS = "
-        f"{array(contract['edit_operations'])} as const;",
-        f"export const OPERATION_STATUSES = {array(contract['statuses'])} as const;",
-        "export const OPERATION_TERMINAL_STATUSES = "
-        f"{array(contract['terminal_statuses'])} as const;",
-        f'export const OPERATION_SUCCESS_STATUS = "{contract["success_status"]}" as const;',
-        "export type OperationKind = (typeof OPERATION_KINDS)[number];",
-        "export type EditOperationKind = (typeof EDIT_OPERATION_KINDS)[number];",
-        "export type OperationStatus = (typeof OPERATION_STATUSES)[number];",
-        "",
-    ))
-
-
 def events_frontend(events: list[dict[str, object]]) -> str:
     policies = {
         event["type"]: {
@@ -1589,7 +1564,6 @@ def generated_contents(
             "frontend": operations_frontend,
             "rust": operations_rust,
             "python": operations_python,
-            "runtime": operations_runtime,
         }[kind](operations)
         for path, kind in OPERATIONS_OUTPUTS.items()
     }

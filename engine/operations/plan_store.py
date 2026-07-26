@@ -1,10 +1,8 @@
 """Operation plan 的当前模型、摘要和 SQLite 装载。"""
 from __future__ import annotations
 
-import hashlib
 import json
 import secrets
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -14,29 +12,12 @@ from ..contracts.operations import (
     OPERATION_STATUSES,
 )
 from ..errors import AgentRequestError
-from ..storage.database import StateDatabase
+from ..storage.database import (
+    StateDatabase, canonical_json, digest_json, now_ms,
+)
 
 
 PLAN_TTL_MS = 10 * 60 * 1000
-
-
-def now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def canonical_json(value) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
-
-
-def digest_json(value_json: str) -> str:
-    return hashlib.sha256(value_json.encode()).hexdigest()
-
 
 @dataclass(frozen=True)
 class OperationPlan:

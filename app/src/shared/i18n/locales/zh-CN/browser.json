@@ -82,9 +82,6 @@
     "labelRewrite": "改写 第 {{n}} 轮",
     "labelAuthor": "编排 第 {{n}} 轮 AI 回复"
   },
-  "diff": {
-    "contentUnchanged": "内容未改动"
-  },
   "edit": {
     "summaryDelete": "整轮移除:用户与 AI 消息",
     "summaryDeleteWithTools": "整轮移除:用户与 AI 消息 · {{n}} 次工具调用",

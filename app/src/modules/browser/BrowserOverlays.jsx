@@ -4,7 +4,7 @@ import {
   TOOL_NAME,
   agentsWithCapability,
 } from "../../shared/contracts/tools.js";
-import { ConfirmBox } from "../../shared/ui/ConfirmBox.jsx";
+import { DangerConfirm } from "../../shared/ui/DangerConfirm.jsx";
 import {
   FilterCheckRow,
   FilterPopover,
@@ -40,74 +40,20 @@ export function SessionDeleteConfirm({ prepared, onCancel, onConfirm }) {
     ],
   ].filter(Boolean);
   return (
-    <ConfirmBox
+    <DangerConfirm
       width={430}
       title={t("overlays:delete.title")}
-      actions={(
-        <>
-          <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>
-            {t("overlays:delete.cancel")}
-          </button>
-          <button
-            style={{
-              height: 34,
-              padding: "0 16px",
-              background: "var(--err2)",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              color: "#fff",
-              cursor: "default",
-              fontWeight: 600,
-            }}
-            onClick={onConfirm}
-          >
-            {undoable
-              ? t("overlays:delete.confirmUndoable")
-              : t("overlays:delete.confirmIrreversible")}
-          </button>
-        </>
-      )}
-    >
-      <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 7, lineHeight: 1.5 }}>
-        {t("overlays:delete.desc", {
-          title: sess.title || sess.id,
-          tool: TOOL_NAME[sess.tool],
-        })}
-      </div>
-      <div style={{
-        marginTop: 14,
-        border: "1px solid var(--line3)",
-        borderRadius: 10,
-        padding: "12px 14px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 9,
-      }}>
-        {bullets.map(([color, text], index) => (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontSize: 12,
-              color: "var(--tx2b)",
-              lineHeight: 1.45,
-            }}
-          >
-            <span style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: color,
-              flex: "none",
-              marginTop: 6,
-            }} />
-            {text}
-          </div>
-        ))}
-      </div>
-    </ConfirmBox>
+      desc={t("overlays:delete.desc", {
+        title: sess.title || sess.id,
+        tool: TOOL_NAME[sess.tool],
+      })}
+      bullets={bullets}
+      confirmLabel={undoable
+        ? t("overlays:delete.confirmUndoable")
+        : t("overlays:delete.confirmIrreversible")}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 
@@ -130,66 +76,47 @@ export function BatchDeleteConfirm({ prepared, onCancel, onConfirm }) {
     ["var(--warn)", t("overlays:delete.bulletBatchPartial")],
   ].filter(Boolean);
   return (
-    <ConfirmBox
+    <DangerConfirm
       width={430}
       title={t("overlays:delete.batchTitle", { n: summary.total })}
-      actions={(
-        <>
-          <button className="fbtn" style={{ height: 34, fontSize: 13 }} onClick={onCancel}>
-            {t("overlays:delete.cancel")}
-          </button>
+      bullets={bullets}
+      confirmLabel={t("overlays:delete.confirmBatch")}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+// 目录 / 标签的可切换芯片行:单选,再点一次取消
+function ChipRow({ items, activeItem, onToggle, mono = false, empty = null }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+      {items.map(item => {
+        const active = activeItem === item;
+        return (
           <button
+            key={item}
+            className={mono ? "mono" : undefined}
+            onClick={() => onToggle(item)}
             style={{
-              height: 34,
-              padding: "0 16px",
-              background: "var(--err2)",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 13,
-              color: "#fff",
+              height: 24,
+              padding: "0 9px",
+              borderRadius: 20,
+              border: `1px solid ${active ? ACCENT : "var(--line)"}`,
+              background: active ? "var(--acc-soft)" : "var(--surface)",
+              color: active ? ACCENT : "var(--tx3)",
+              fontSize: 11,
               cursor: "default",
-              fontWeight: 600,
             }}
-            onClick={onConfirm}
           >
-            {t("overlays:delete.confirmBatch")}
+            {item}
           </button>
-        </>
+        );
+      })}
+      {empty && items.length === 0 && (
+        <span style={{ fontSize: 11, color: "var(--tx5)" }}>{empty}</span>
       )}
-    >
-      <div style={{
-        marginTop: 14,
-        border: "1px solid var(--line3)",
-        borderRadius: 10,
-        padding: "12px 14px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 9,
-      }}>
-        {bullets.map(([color, text], index) => (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              gap: 9,
-              fontSize: 12,
-              color: "var(--tx2b)",
-              lineHeight: 1.45,
-            }}
-          >
-            <span style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: color,
-              flex: "none",
-              marginTop: 6,
-            }} />
-            {text}
-          </div>
-        ))}
-      </div>
-    </ConfirmBox>
+    </div>
   );
 }
 
@@ -238,67 +165,27 @@ export function LibraryFilter({
         />
       ))}
       <FilterSectionTitle>{t("overlays:filter.projectDir")}</FilterSectionTitle>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {dirs.map(dir => {
-          const active = f.dir === dir;
-          return (
-            <button
-              key={dir}
-              className="mono"
-              onClick={() => setF(value => ({
-                ...value,
-                dir: active ? null : dir,
-              }))}
-              style={{
-                height: 24,
-                padding: "0 9px",
-                borderRadius: 20,
-                border: `1px solid ${active ? ACCENT : "var(--line)"}`,
-                background: active ? "var(--acc-soft)" : "var(--surface)",
-                color: active ? ACCENT : "var(--tx3)",
-                fontSize: 11,
-                cursor: "default",
-              }}
-            >
-              {dir}
-            </button>
-          );
-        })}
-        {dirs.length === 0 && (
-          <span style={{ fontSize: 11, color: "var(--tx5)" }}>
-            {t("overlays:filter.noDirs")}
-          </span>
-        )}
-      </div>
+      <ChipRow
+        items={dirs}
+        mono
+        activeItem={f.dir}
+        onToggle={dir => setF(value => ({
+          ...value,
+          dir: value.dir === dir ? null : dir,
+        }))}
+        empty={t("overlays:filter.noDirs")}
+      />
       {tags.length > 0 && (
         <>
           <FilterSectionTitle>{t("overlays:filter.tags")}</FilterSectionTitle>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-            {tags.map(tag => {
-              const active = f.tag === tag;
-              return (
-                <button
-                  key={tag}
-                  onClick={() => setF(value => ({
-                    ...value,
-                    tag: active ? null : tag,
-                  }))}
-                  style={{
-                    height: 24,
-                    padding: "0 9px",
-                    borderRadius: 20,
-                    border: `1px solid ${active ? ACCENT : "var(--line)"}`,
-                    background: active ? "var(--acc-soft)" : "var(--surface)",
-                    color: active ? ACCENT : "var(--tx3)",
-                    fontSize: 11,
-                    cursor: "default",
-                  }}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
+          <ChipRow
+            items={tags}
+            activeItem={f.tag}
+            onToggle={tag => setF(value => ({
+              ...value,
+              tag: value.tag === tag ? null : tag,
+            }))}
+          />
         </>
       )}
       <FilterSectionTitle>{t("overlays:filter.content")}</FilterSectionTitle>

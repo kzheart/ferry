@@ -16,7 +16,6 @@ export function useBrowserData() {
   const [scan, setScan] = useState(() => preloaded?.scan || null);
   const [scanning, setScanning] = useState(false);
   const [scanReady, setScanReady] = useState(false);
-  const [lastScan, setLastScan] = useState(() => preloaded?.lastScan || null);
   const [historyRows, setHistoryRows] = useState(() => preloaded?.history || []);
   const [pricing, setPricing] = useState(() => preloaded?.pricing || null);
   const booted = useRef(false);
@@ -34,10 +33,9 @@ export function useBrowserData() {
     setScanning(true);
     try {
       const result = await engine("scan");
-      const now = Date.now();
-      setScan(result); setLastScan(now);
+      setScan(result);
       setScanReady(true);
-      persist({ scan: result, lastScan: now });
+      persist({ scan: result });
     }
     catch (error) {
       setScanReady(false);
@@ -68,7 +66,7 @@ export function useBrowserData() {
     loadPricing();
   }, []);
 
-  return { env, scan, scanning, scanReady, lastScan, historyRows,
+  return { env, scan, scanning, scanReady, historyRows,
     pricing, doScan, loadHistory, deleteHistory };
 }
 

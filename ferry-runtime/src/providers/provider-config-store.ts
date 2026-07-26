@@ -1,13 +1,3 @@
-import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname } from "node:path";
 import type {
   Credential,
   CredentialInfo,
@@ -31,74 +21,51 @@ import {
   parseProviderId,
   toCredential,
 } from "./provider-config-validation.js";
+import { readJsonFile, writeJsonAtomic } from "../storage/json-file.js";
+import { WriteQueue } from "../storage/write-queue.js";
 
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024;
 
 export class FileProviderConfigStore implements CredentialStore {
   private document = createInitialProviderConfig();
   private ready: Promise<void>;
-  private writeQueue = Promise.resolve();
+  private readonly writes = new WriteQueue();
 
   constructor(readonly path: string) {
     this.ready = this.load();
   }
 
   private async load() {
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    const existing = await this.readDisk();
+    const existing = await readJsonFile({
+      path: this.path,
+      maxBytes: MAX_CONFIG_BYTES,
+      tooLargeMessage: "provider config is too large",
+      parse: parseProviderConfig,
+    });
     if (existing) this.document = existing;
     else await this.writeDisk(this.document);
   }
 
-  private async readDisk() {
-    try {
-      const source = await readFile(this.path, "utf8");
-      if (Buffer.byteLength(source) > MAX_CONFIG_BYTES) {
-        throw new Error("provider config is too large");
-      }
-      await chmod(this.path, 0o600);
-      return parseProviderConfig(JSON.parse(source) as unknown);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      throw error;
-    }
-  }
-
-  private async writeDisk(document: ProviderConfigDocument) {
-    const payload = JSON.stringify(document, null, 2);
-    const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
-      await rename(temporary, this.path);
-      await chmod(this.path, 0o600);
-    } catch (error) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
+  private writeDisk(document: ProviderConfigDocument) {
+    return writeJsonAtomic(this.path, JSON.stringify(document, null, 2));
   }
 
   private async mutate<T>(
     action: (document: ProviderConfigDocument) => T | Promise<T>,
   ) {
     await this.ready;
-    const previous = this.writeQueue;
-    let result!: T;
-    const task = previous
-      .catch(() => undefined)
-      .then(async () => {
-        const draft = structuredClone(this.document);
-        result = await action(draft);
-        this.document = parseProviderConfig(draft);
-        await this.writeDisk(this.document);
-      });
-    this.writeQueue = task;
-    await task;
-    return result;
+    return this.writes.run(async () => {
+      const draft = structuredClone(this.document);
+      const result = await action(draft);
+      this.document = parseProviderConfig(draft);
+      await this.writeDisk(this.document);
+      return result;
+    });
   }
 
   async snapshot() {
     await this.ready;
-    await this.writeQueue;
+    await this.writes.settled();
     return structuredClone(this.document);
   }
 

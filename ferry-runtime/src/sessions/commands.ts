@@ -7,17 +7,14 @@ import {
   requireInteger,
   requireString,
   type CommandEnvelope,
+  type DispatchOutcome,
 } from "../server/messages.js";
 import type { AgentRuntime } from "../runtime/runtime.js";
-
-type SessionCommandResult =
-  | { handled: true; result: unknown }
-  | { handled: false };
 
 export async function dispatchSessionCommand(
   runtime: AgentRuntime,
   command: CommandEnvelope,
-): Promise<SessionCommandResult> {
+): Promise<DispatchOutcome> {
   const params = command.params;
   switch (command.method) {
     case "session.create":

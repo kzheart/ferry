@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import os
 from collections.abc import Callable, Iterator
@@ -18,6 +19,18 @@ _SCAN_WORKERS = min(8, (os.cpu_count() or 4))
 def clip_text(text: str, size: int = 80) -> str:
     text = " ".join(text.split())
     return text[:size] + ("…" if len(text) > size else "")
+
+
+def stat_digest(label, stat) -> str:
+    """把文件 stat 折成稳定的修订标记。"""
+    marker = f"{label}:{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}"
+    return "stat:" + hashlib.sha256(marker.encode()).hexdigest()
+
+
+def path_stat_fingerprint(ref: str) -> str:
+    """Agent 检索阶段的 O(1) 修订标记；深度校验留给写入链路。"""
+    path = Path(ref).resolve(strict=True)
+    return stat_digest(path, path.stat())
 
 
 def iter_lines(path: Path) -> Iterator[str]:

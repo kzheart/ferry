@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
 
-export const MAX_JSONL_RECORD_BYTES = 16 * 1024 * 1024;
+const MAX_JSONL_RECORD_BYTES = 16 * 1024 * 1024;
 
 export async function* readJsonLines(
   input: Readable,

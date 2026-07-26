@@ -1,5 +1,6 @@
+from engine.adapters.pi.migration import PiMigrationTarget
 from engine.adapters.pi.reader import read
-from engine.adapters.pi.writer import write
+from engine.adapters.pi.writer import _records, write
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -36,3 +37,28 @@ def test_pi_writer_roundtrips_text_tools_and_children(tmp_path):
     children = [item for item in tmp_path.glob("*.jsonl") if item != path]
     assert len(children) == 1
     assert read(str(children[0])).messages[0].blocks[0].text == "child"
+
+
+def _content(records):
+    return [item for record in records
+            for item in record.get("message", {}).get("content", [])]
+
+
+def test_pi_writer_narrates_tool_calls_the_target_cannot_render():
+    # 外部 namespace 的 TOOL_INVOKE 在 Pi 端没有原生形态，必须走叙述降级。
+    foreign = ToolCall(
+        "native_lookup", CanonicalOp.TOOL_INVOKE,
+        {"namespace": "codex", "name": "native_lookup", "input": {"query": "x"}},
+        text_tool_result("output"),
+    )
+    session = Session("fixture", "root", "/tmp", messages=[
+        Message("assistant", [Block("tool", tool=foreign)]),
+    ])
+    target = PiMigrationTarget()
+
+    assert target.evaluate_tool(
+        foreign, session, session.messages[0]).rendered is None
+    kinds = [item["type"] for item in _content(
+        _records(session, "/tmp", "sid", tool_decider=target.evaluate_tool))]
+    assert "toolCall" not in kinds
+    assert kinds == ["text"]

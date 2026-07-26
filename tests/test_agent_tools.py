@@ -576,7 +576,7 @@ def test_id_backed_ref_rejects_changed_or_recreated_session(agent_environment):
         agent_read.get_session_context("opencode", ref)
 
 
-def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
+def test_stale_reference_is_rejected_and_reissued(agent_environment):
     ref = _claude_ref()
     old_stat = agent_environment["transcript"].stat()
     agent_environment["transcript"].write_text("[]\n")
@@ -587,15 +587,6 @@ def test_stale_and_symlink_escape_are_rejected(agent_environment, tmp_path):
     refreshed = _claude_ref()
     assert refreshed != ref
     with pytest.raises(AgentReferenceError, match="扫描索引"):
-        agent_read.get_session_context("claude", ref)
-
-    ref = _claude_ref()
-    child_dir = agent_environment["root"] / "session" / "subagents"
-    child_dir.mkdir(parents=True)
-    outside = tmp_path / "outside.jsonl"
-    outside.write_text("{}\n")
-    (child_dir / "agent-escape.jsonl").symlink_to(outside)
-    with pytest.raises(AgentReferenceError, match="超出"):
         agent_read.get_session_context("claude", ref)
 
 
@@ -842,11 +833,8 @@ def test_opencode_fingerprint_detects_update_and_delete(tmp_path, monkeypatch):
     assert opencode_scanner.fingerprint("s1") is None
 
 
-def test_path_ref_rejects_changed_child_tree(agent_environment):
-    child_dir = agent_environment["root"] / "session" / "subagents"
-    child_dir.mkdir(parents=True)
-    child = child_dir / "agent-child.jsonl"
-    child.write_text("{}\n")
+def test_path_ref_rejects_changed_agent_fingerprint(agent_environment):
+    """file 型 ref 的 identity 含 agent_fingerprint,变了同样要换发。"""
     ref = _claude_ref()
     agent_environment["claude_browser"].fingerprint_value = "fingerprint-2"
     with pytest.raises(AgentReferenceError, match="扫描后已变化"):

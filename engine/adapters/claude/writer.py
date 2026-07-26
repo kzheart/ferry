@@ -14,6 +14,7 @@ from ...sessions.model import (
 )
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from ..shared.narration import narrate
+from ..shared.writing import write_jsonl
 from .native_schema import templates
 
 
@@ -361,14 +362,6 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
     return records
 
 
-def _write_jsonl(path: Path, records: list[dict]):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text("\n".join(json.dumps(record, ensure_ascii=False)
-                                    for record in records) + "\n")
-    temporary.replace(path)
-
-
 def write(sess: Session, cwd: str | None = None,
           dest_root: str | Path | None = None,
           tool_decider=None) -> tuple[str, Path]:
@@ -387,7 +380,7 @@ def write(sess: Session, cwd: str | None = None,
         root_records = _generated_lines(
             sess, sid, cwd, templates, agent_map, source_uuids,
             tool_decider=tool_decider)
-        _write_jsonl(main_path, root_records)
+        write_jsonl(main_path, root_records)
         created.append(main_path)
         edges = {edge.child_session_id: edge for node in sess.walk()
                  for edge in node.agent_edges}
@@ -404,7 +397,7 @@ def write(sess: Session, cwd: str | None = None,
                                        tool_decider)
             new_agent = agent_map.get(child.source_id)
             child_path = _child_path(destination, sid, child, new_agent)
-            _write_jsonl(child_path, records)
+            write_jsonl(child_path, records)
             created.append(child_path)
         return sid, main_path
     except Exception:

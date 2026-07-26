@@ -19,25 +19,23 @@ export async function dispatch(
   try {
     const params = command.params;
     let result: unknown;
-    const providerCommand = await dispatchProviderCommand(
-      runtime.providerService,
-      command,
-    );
-    const roleCommand = await dispatchRoleCommand(runtime.roleService, command);
-    const skillCommand = await dispatchSkillCommand(
-      runtime.skillService,
-      command,
-    );
-    const sessionCommand = await dispatchSessionCommand(runtime, command);
-    if (providerCommand.handled) {
-      result = providerCommand.result;
-    } else if (roleCommand.handled) {
-      result = roleCommand.result;
-    } else if (skillCommand.handled) {
-      result = skillCommand.result;
-    } else if (sessionCommand.handled) {
-      result = sessionCommand.result;
-    } else
+    // 逐个域试派发,命中即止——未命中的域不该被无谓地调一遍
+    const domains = [
+      () => dispatchProviderCommand(runtime.providerService, command),
+      () => dispatchRoleCommand(runtime.roleService, command),
+      () => dispatchSkillCommand(runtime.skillService, command),
+      () => dispatchSessionCommand(runtime, command),
+    ];
+    let handled = false;
+    for (const dispatchDomain of domains) {
+      const outcome = await dispatchDomain();
+      if (outcome.handled) {
+        result = outcome.result;
+        handled = true;
+        break;
+      }
+    }
+    if (!handled)
       switch (command.method) {
         case "health":
           result = {

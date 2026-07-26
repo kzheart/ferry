@@ -1,16 +1,20 @@
 import { ProtocolError } from "../server/messages.js";
+import {
+  parseSessionEnvelope,
+  parseSessionHeader,
+  requiredText,
+} from "./session-input.js";
 
-const MAX_SESSIONS = 50;
 const MAX_SEGMENTS = 200;
 const MAX_SOURCE_CHARS = 48_000;
 
-export interface OrganizerSegment {
+interface OrganizerSegment {
   hash: string;
   text: string;
   digest?: string | null;
 }
 
-export interface OrganizerSession {
+interface OrganizerSession {
   tool: string;
   id: string;
   title?: string | null;
@@ -24,7 +28,7 @@ export interface OrganizerInput {
   locale?: string;
 }
 
-export interface OrganizerSessionResult {
+interface OrganizerSessionResult {
   tool: string;
   id: string;
   digests: Record<string, string>;
@@ -44,35 +48,10 @@ export interface OrganizerResult {
   }>;
 }
 
-function requiredText(value: unknown, field: string, max: number) {
-  if (typeof value !== "string" || !value.trim() || value.length > max) {
-    throw new ProtocolError("invalid_params", `${field} is invalid`);
-  }
-  return value.trim();
-}
-
 export function parseOrganizerInput(value: unknown): OrganizerInput {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { sessions?: unknown }).sessions)
-  ) {
-    throw new ProtocolError("invalid_params", "sessions must be an array");
-  }
-  const raw = (value as { sessions: unknown[]; locale?: unknown }).sessions;
-  if (raw.length === 0 || raw.length > MAX_SESSIONS) {
-    throw new ProtocolError("invalid_params", "sessions count is invalid");
-  }
   let segmentCount = 0;
   let sourceChars = 0;
-  const sessions = raw.map((item, sessionIndex): OrganizerSession => {
-    if (typeof item !== "object" || item === null) {
-      throw new ProtocolError(
-        "invalid_params",
-        `sessions[${sessionIndex}] is invalid`,
-      );
-    }
-    const record = item as Record<string, unknown>;
+  const parsed = parseSessionEnvelope(value, (record, sessionIndex) => {
     if (!Array.isArray(record.segments)) {
       throw new ProtocolError(
         "invalid_params",
@@ -99,19 +78,9 @@ export function parseOrganizerInput(value: unknown): OrganizerInput {
       };
     });
     return {
-      tool: requiredText(record.tool, "session.tool", 64),
-      id: requiredText(record.id, "session.id", 512),
-      ...(typeof record.title === "string"
-        ? { title: record.title.slice(0, 500) }
-        : {}),
-      ...(typeof record.project === "string"
-        ? { project: record.project.slice(0, 500) }
-        : {}),
-      ...(typeof record.updated_at === "string"
-        ? { updated_at: record.updated_at.slice(0, 128) }
-        : {}),
+      ...parseSessionHeader(record),
       segments,
-    };
+    } satisfies OrganizerSession;
   });
   if (
     segmentCount === 0 ||
@@ -120,13 +89,7 @@ export function parseOrganizerInput(value: unknown): OrganizerInput {
   ) {
     throw new ProtocolError("invalid_params", "organizer input is too large");
   }
-  const localeValue = (value as { locale?: unknown }).locale;
-  return {
-    sessions,
-    ...(typeof localeValue === "string" && localeValue.trim()
-      ? { locale: localeValue.trim().slice(0, 32) }
-      : {}),
-  };
+  return parsed;
 }
 
 export function organizerPrompt(input: OrganizerInput) {

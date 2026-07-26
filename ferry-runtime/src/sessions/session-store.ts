@@ -24,7 +24,7 @@ export interface PersistedSession {
   resolved_skills?: string[];
 }
 
-export type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
+type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
 
 export interface SessionCommit {
   metadata: PersistedSessionMetadata;

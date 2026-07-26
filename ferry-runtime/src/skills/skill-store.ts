@@ -3,16 +3,8 @@
  * 「已安装」以目录存在为准,skills.json 里的 installed 只补来源标注。
  */
 import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import {
   SkillLibrary,
   normalizeSkillId,
@@ -26,8 +18,10 @@ import {
   type SkillCandidate,
   type SkillSource,
 } from "./skill-discovery.js";
+import { readJsonFile, writeJsonAtomic } from "../storage/json-file.js";
+import { WriteQueue } from "../storage/write-queue.js";
 
-export const SKILL_STORE_VERSION = 1 as const;
+const SKILL_STORE_VERSION = 1 as const;
 
 const MAX_GLOBAL = 64;
 const MAX_SCAN_SOURCES = 16;
@@ -46,7 +40,7 @@ interface SkillConfig {
   installed: Record<string, InstalledRecord>;
 }
 
-export interface SkillListing {
+interface SkillListing {
   skills: SkillEntry[];
   global: string[];
   scanSources: SkillSource[];
@@ -276,7 +270,7 @@ export class EphemeralSkillStore extends BaseSkillStore {
 export class FileSkillStore extends BaseSkillStore {
   private readonly path: string;
   private readonly ready: Promise<void>;
-  private writes = Promise.resolve();
+  private readonly writes = new WriteQueue();
 
   constructor(dataDirectory: string, includeBuiltinSources = true) {
     super(
@@ -288,50 +282,36 @@ export class FileSkillStore extends BaseSkillStore {
   }
 
   private async load() {
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+    let config: SkillConfig | undefined;
     try {
-      const source = await readFile(this.path, "utf8");
-      if (Buffer.byteLength(source) > MAX_CONFIG_BYTES) {
-        throw new Error("skill config is too large");
-      }
-      this.config = parseConfig(JSON.parse(source) as unknown);
-      await chmod(this.path, 0o600);
+      config = await readJsonFile({
+        path: this.path,
+        maxBytes: MAX_CONFIG_BYTES,
+        tooLargeMessage: "skill config is too large",
+        parse: parseConfig,
+      });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        await this.writeDisk();
-        return;
-      }
       // 配置坏了不能让 runtime 起不来:回落空配置,把原因带给 UI
       this.config = emptyConfig();
       this.configError =
         error instanceof Error ? error.message : "skill config is invalid";
+      return;
     }
+    if (config) this.config = config;
+    else await this.writeDisk();
   }
 
-  private async writeDisk() {
-    const payload = JSON.stringify(this.config, null, 2);
-    const temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, payload, { encoding: "utf8", mode: 0o600 });
-      await rename(temporary, this.path);
-      await chmod(this.path, 0o600);
-    } catch (error) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
+  private writeDisk() {
+    return writeJsonAtomic(this.path, JSON.stringify(this.config, null, 2));
   }
 
   protected override async settled() {
     await this.ready;
-    await this.writes;
+    await this.writes.settled();
   }
 
   protected async changed() {
     await this.ready;
-    const write = this.writes
-      .catch(() => undefined)
-      .then(() => this.writeDisk());
-    this.writes = write;
-    await write;
+    await this.writes.run(() => this.writeDisk());
   }
 }

@@ -2,7 +2,7 @@
 
 export const SKILL_MANIFEST = "SKILL.md";
 
-export interface SkillDocument {
+interface SkillDocument {
   name: string;
   description: string;
 }

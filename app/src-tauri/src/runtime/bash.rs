@@ -46,10 +46,9 @@ pub(super) fn is_bash_plan(plan_id: &str) -> bool {
 /// 与会话是否开着 Auto 无关。判定故意保守:宁可多问一次。
 pub(super) fn needs_explicit_approval(command: &str) -> bool {
     let lower = command.to_lowercase();
-    const MARKERS: [&str; 10] = [
+    const MARKERS: [&str; 9] = [
         "rm -r",
         "rm -f",
-        "rm -rf",
         "sudo ",
         "mkfs",
         "dd if=",

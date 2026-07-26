@@ -38,12 +38,11 @@ import { useWorkspaceState } from "./useWorkspaceState.js";
 const EMPTY_SESSIONS = [];
 
 export default function App() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const {
     env,
     scan,
     scanning,
-    lastScan,
     historyRows,
     pricing,
     scanReady,
@@ -288,13 +287,10 @@ export default function App() {
     agentQuery: aq,
     setAgentQuery: setAq,
     sessions,
-    scan,
-    lastScan,
     libraryQuery: q,
     setLibraryQuery: setQ,
     libraryFilterCount: libFilterCount,
     libraryTokens: libTokens,
-    multiIds: multiSel,
     historyItems: histItems,
     historyQuery: hq,
     setHistoryQuery: setHq,
@@ -456,7 +452,8 @@ export default function App() {
                 collapsedGroups,
                 onToggleGroup,
                 onClear: clearLibF,
-                      multiSel,
+                selectedId: selId,
+                multiSel,
                 onRowClick,
                 onRowPin,
                 onRowDelete,

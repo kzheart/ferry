@@ -1,12 +1,13 @@
 """Codex rollout 文件扫描。"""
 
-import hashlib
 import json
 import os
 from pathlib import Path
 
 from ...sessions.usage import has_tokens, iso_ms
-from ..shared.scanner import clip_text, iter_lines, scan_jsonl
+from ..shared.scanner import (
+    clip_text, iter_lines, path_stat_fingerprint, scan_jsonl,
+)
 from .topology import session_id
 
 
@@ -87,9 +88,4 @@ def fingerprint(ref: str) -> str:
     return closure.revision + ":" + (closure.registry_revision or "none")
 
 
-def agent_fingerprint(ref: str) -> str:
-    """Agent 检索阶段的 O(1) 修订标记；深度 closure 校验留给写入链路。"""
-    path = Path(ref).resolve(strict=True)
-    stat = path.stat()
-    marker = f"{path}:{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}"
-    return "stat:" + hashlib.sha256(marker.encode()).hexdigest()
+agent_fingerprint = path_stat_fingerprint

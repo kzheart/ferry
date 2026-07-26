@@ -17,10 +17,9 @@ class Adapter:
     editor = PiBackend()
 
 
-def test_pi_resume_uses_absolute_file(tmp_path, monkeypatch):
+def test_pi_resume_uses_absolute_file(tmp_path):
     path = tmp_path / "session.jsonl"
     shutil.copy(FIXTURE, path)
-    monkeypatch.setattr("engine.adapters.pi.lifecycle.resolve", None, raising=False)
     lifecycle = PiLifecycle()
     descriptor = lifecycle.resume_descriptor(str(path), str(tmp_path))
     assert descriptor["args"] == ["--session", str(path.resolve())]

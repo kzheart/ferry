@@ -10,13 +10,10 @@ import {
   type StoredCredential,
   type ThinkingLevel,
 } from "./provider-config.js";
+import { isObject } from "../server/messages.js";
 
 const MAX_SECRET_BYTES = 64 * 1024;
 const MAX_VISIBLE_MODELS = 500;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function parseProviderId(value: unknown, label = "provider id"): string {
   if (
@@ -59,7 +56,7 @@ function optionalSecret(value: unknown, label: string): string | undefined {
 
 function providerFields(value: unknown): ProviderEnv | undefined {
   if (value === undefined) return undefined;
-  if (!record(value)) throw new Error("credential fields are invalid");
+  if (!isObject(value)) throw new Error("credential fields are invalid");
   const entries = Object.entries(value);
   if (entries.length > 64) throw new Error("credential fields are too large");
   return Object.fromEntries(
@@ -71,7 +68,7 @@ function providerFields(value: unknown): ProviderEnv | undefined {
 }
 
 function storedCredential(value: unknown): StoredCredential {
-  if (!record(value)) throw new Error("credential is invalid");
+  if (!isObject(value)) throw new Error("credential is invalid");
   if (value.type === "api_key") {
     const key = optionalSecret(value.key, "API key");
     const fields = providerFields(value.fields);
@@ -130,7 +127,7 @@ export function toCredential(value: StoredCredential): Credential {
 }
 
 export function parseCustomModel(value: unknown): CustomModelConfig {
-  if (!record(value)) throw new Error("custom model is invalid");
+  if (!isObject(value)) throw new Error("custom model is invalid");
   if (
     !Array.isArray(value.input) ||
     value.input.length === 0 ||
@@ -173,7 +170,7 @@ export function parseCustomModel(value: unknown): CustomModelConfig {
 }
 
 export function parseCustomProvider(value: unknown): CustomProviderConfig {
-  if (!record(value)) throw new Error("custom provider is invalid");
+  if (!isObject(value)) throw new Error("custom provider is invalid");
   // 模型可以为空:自定义提供商会从端点的模型列表接口自动发现
   if (!Array.isArray(value.models) || value.models.length > 200) {
     throw new Error("custom provider models are invalid");
@@ -231,7 +228,7 @@ function providerIdList(value: unknown, label: string): string[] {
 }
 
 function visibleModels(value: unknown): Record<string, string[]> {
-  if (!record(value)) throw new Error("visible models are invalid");
+  if (!isObject(value)) throw new Error("visible models are invalid");
   return Object.fromEntries(
     Object.entries(value).map(([providerId, ids]) => {
       if (!Array.isArray(ids) || ids.length > MAX_VISIBLE_MODELS) {
@@ -246,7 +243,7 @@ function visibleModels(value: unknown): Record<string, string[]> {
 }
 
 function customModelMap(value: unknown): Record<string, CustomModelConfig[]> {
-  if (!record(value)) throw new Error("custom models are invalid");
+  if (!isObject(value)) throw new Error("custom models are invalid");
   return Object.fromEntries(
     Object.entries(value).map(([providerId, list]) => {
       if (!Array.isArray(list) || list.length > 200) {
@@ -262,10 +259,10 @@ function customModelMap(value: unknown): Record<string, CustomModelConfig[]> {
 }
 
 export function parseProviderConfig(value: unknown): ProviderConfigDocument {
-  if (!record(value) || value.schema_version !== PROVIDER_CONFIG_VERSION) {
+  if (!isObject(value) || value.schema_version !== PROVIDER_CONFIG_VERSION) {
     throw new Error("provider config schema is unsupported");
   }
-  if (!record(value.default_model) || !record(value.credentials)) {
+  if (!isObject(value.default_model) || !isObject(value.credentials)) {
     throw new Error("provider config is invalid");
   }
   if (!Array.isArray(value.custom_providers)) {

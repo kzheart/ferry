@@ -14,6 +14,7 @@ from typing import NamedTuple
 from ..context import EngineContext
 from ..contracts.session_ref import is_opaque_session_ref
 from ..errors import AgentReferenceError, LocatorStaleError
+from ..system.paths import is_within
 
 
 def _revision(
@@ -132,14 +133,6 @@ def _path_identity(
         if digest_store is not None:
             digest_store.put_digest(path, after, identity[4])
     return identity
-
-
-def _is_within(path: str, root: str) -> bool:
-    """等价于 Path(path).is_relative_to(root),按已规范化的路径串比较。"""
-    if path == root:
-        return True
-    prefix = root if root.endswith(os.sep) else root + os.sep
-    return path.startswith(prefix)
 
 
 def _agent_fingerprint(browser, ref: str):
@@ -460,7 +453,7 @@ class AgentSessionIndex:
                 path = os.path.realpath(native.canonical_ref, strict=True)
             except OSError:
                 return None, None, native.storage_kind, None
-            if not _is_within(path, root):
+            if not is_within(path, root):
                 return None, None, native.storage_kind, None
             if (
                 native.storage_kind == "file"

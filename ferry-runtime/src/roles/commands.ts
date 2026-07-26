@@ -4,18 +4,15 @@ import {
   optionalString,
   requireString,
   type CommandEnvelope,
+  type DispatchOutcome,
 } from "../server/messages.js";
 import type { RoleInput } from "./role-store.js";
 import type { RoleService } from "./role-service.js";
 
-type RoleCommandResult =
-  | { handled: true; result: unknown }
-  | { handled: false };
-
 export async function dispatchRoleCommand(
   service: RoleService,
   command: CommandEnvelope,
-): Promise<RoleCommandResult> {
+): Promise<DispatchOutcome> {
   const params = command.params;
   switch (command.method) {
     case "roles.list":

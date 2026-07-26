@@ -8,7 +8,7 @@ from pathlib import Path
 from ...sessions.scan_progress import TRACKER
 from ...sessions.usage import add_tokens, empty_tokens, has_tokens, iso_ms
 from ...system.paths import pi_session_roots
-from ..shared.scanner import clip_text, iter_lines
+from ..shared.scanner import clip_text, iter_lines, path_stat_fingerprint
 
 
 def _text(content) -> str:
@@ -123,8 +123,4 @@ def fingerprint(ref: str) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def agent_fingerprint(ref: str) -> str:
-    path = Path(ref).resolve(strict=True)
-    stat = path.stat()
-    marker = f"{path}:{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}"
-    return "stat:" + hashlib.sha256(marker.encode()).hexdigest()
+agent_fingerprint = path_stat_fingerprint

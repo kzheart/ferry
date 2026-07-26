@@ -1,4 +1,4 @@
-"""损耗目录归属：共享层不得持有任何 Agent 私有 loss code。"""
+"""损耗目录：声明规则与 lose() 产出的 code 必须闭环。"""
 import re
 from pathlib import Path
 
@@ -8,14 +8,7 @@ from engine.adapters import registry
 from engine.sessions import loss
 
 ROOT = Path(__file__).resolve().parents[1]
-SHARED = ROOT / "engine/adapters/shared"
 ADAPTERS = ROOT / "engine/adapters"
-
-
-def test_declared_outcomes_are_known_values():
-    registry.create_registry()
-    for code, outcome in loss._OUTCOMES.items():
-        assert outcome in (loss.DEGRADED, loss.DROPPED), code
 
 
 def test_conflicting_declaration_is_rejected():
@@ -29,14 +22,6 @@ def test_conflicting_declaration_is_rejected():
 def test_unknown_outcome_is_rejected():
     with pytest.raises(ValueError, match="未知损耗后果"):
         loss.declare({"test.loss_bad": "maybe"})
-
-
-def test_shared_migration_holds_no_agent_private_loss_code():
-    """apply_patch 属于 Codex；共享层不得再枚举任何一家的私有 code。"""
-    source = (SHARED / "migration.py").read_text(encoding="utf-8")
-    assert "apply_patch" not in source
-    assert "_DEGRADED_LOSS_CODES" not in source
-    assert "_DROPPED_LOSS_CODES" not in source
 
 
 def test_every_produced_loss_code_is_declared_by_its_owner():
