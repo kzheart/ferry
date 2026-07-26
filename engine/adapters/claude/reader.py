@@ -16,17 +16,10 @@ from ...sessions.model import (
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_base64
+from ..shared.tool_canon import canonical_tool_input, canonical_tool_op
 
-TOOL_OPS = {
-    "Bash": CanonicalOp.SHELL_EXEC,
-    "Read": CanonicalOp.FS_READ,
-    "Write": CanonicalOp.FS_WRITE,
-    "Edit": CanonicalOp.FS_EDIT,
-    "Grep": CanonicalOp.FS_SEARCH,
-    "Glob": CanonicalOp.FS_GLOB,
-    "WebFetch": CanonicalOp.WEB_FETCH,
-    "WebSearch": CanonicalOp.WEB_SEARCH,
-}
+# 归一化实现已迁往 shared/tool_canon.py；保留旧名给既有测试的导入。
+_norm_input = canonical_tool_input
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,77 +49,6 @@ _RESULT_STATUS = {
     "async_launched": "running",
     "pending": "pending",
 }
-
-
-def _norm_input(name: str, inp: dict | str) -> dict | str:
-    if not isinstance(inp, dict):
-        return inp
-    if name == "Edit":
-        value = {"file_path": inp.get("file_path", ""),
-                 "old": inp.get("old_string", ""),
-                 "new": inp.get("new_string", "")}
-        if "replace_all" in inp:
-            value["replace_all"] = inp["replace_all"]
-        return value
-    if name == "Read":
-        value = {"file_path": inp.get("file_path", "")}
-        for field in ("offset", "limit"):
-            if field in inp:
-                value[field] = inp[field]
-        return value
-    if name == "Write":
-        return {"file_path": inp.get("file_path", ""),
-                "content": inp.get("content", "")}
-    if name == "Bash":
-        value = {"command": inp.get("command", "")}
-        if "timeout" in inp:
-            value["timeout_ms"] = inp["timeout"]
-        if "run_in_background" in inp:
-            value["background"] = inp["run_in_background"]
-        if "dangerouslyDisableSandbox" in inp:
-            value["sandbox_policy"] = (
-                "dangerously-disable" if inp["dangerouslyDisableSandbox"]
-                else "default")
-        return value
-    if name == "Agent":
-        value = {
-            "description": inp.get("description", ""),
-            "prompt": inp.get("prompt", ""),
-            "subagent_type": inp.get("subagent_type", ""),
-        }
-        aliases = {
-            "name": "task_name",
-            "model": "model",
-            "mode": "fork_mode",
-            "reasoning_effort": "reasoning_effort",
-        }
-        for source, target in aliases.items():
-            if source in inp:
-                value[target] = inp[source]
-        return value
-    if name == "Grep":
-        value = {"query": inp.get("pattern", "")}
-        aliases = {"path": "path", "glob": "glob", "head_limit": "max_results"}
-        for source, target in aliases.items():
-            if source in inp:
-                value[target] = inp[source]
-        return value
-    if name == "Glob":
-        value = {"pattern": inp.get("pattern", "")}
-        if "path" in inp:
-            value["path"] = inp["path"]
-        return value
-    if name == "WebFetch":
-        value = {"url": inp.get("url", "")}
-        if "prompt" in inp:
-            value["prompt"] = inp["prompt"]
-        return value
-    if name == "WebSearch":
-        value = {"query": inp.get("query", "")}
-        if "allowed_domains" in inp:
-            value["domains"] = inp["allowed_domains"]
-        return value
-    return inp
 
 
 def _result_status(block: dict, native: dict) -> str:
@@ -371,7 +293,8 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
                     session.lose("migration.reasoning_dropped", metadata_kind="signature")
             elif kind == "tool_use":
                 name = item.get("name", "")
-                op = CanonicalOp.AGENT_SPAWN if name == "Agent" else TOOL_OPS.get(name)
+                op = (CanonicalOp.AGENT_SPAWN if name == "Agent"
+                      else canonical_tool_op("claude", name))
                 source_input = item.get("input") or {}
                 if op is None:
                     op = CanonicalOp.TOOL_INVOKE
@@ -381,7 +304,7 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
                         "input": source_input,
                     }
                 else:
-                    canonical_input = _norm_input(name, source_input)
+                    canonical_input = canonical_tool_input(name, source_input)
                 tool = ToolCall(
                     name=name, op=op,
                     input=canonical_input,
