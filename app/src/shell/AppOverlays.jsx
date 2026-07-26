@@ -32,8 +32,6 @@ export function AppOverlays({
   sessionDelete,
   historyDelete,
   batchDelete,
-  rename,
-  agentRename,
   tags,
   toast,
   railTip,
@@ -144,32 +142,6 @@ export function AppOverlays({
           prepared={batchDelete.prepared}
           onCancel={batchDelete.onCancel}
           onConfirm={batchDelete.onConfirm}
-        />
-      )}
-      {rename.session && (
-        <PromptBox
-          title={t("app:prompt.renameTitle")}
-          desc={t("app:prompt.renameDesc", {
-            title: rename.session.title || rename.session.id,
-          })}
-          placeholder={t("app:prompt.renamePlaceholder")}
-          confirmLabel={t("app:prompt.save")}
-          initial={rename.initial}
-          onCancel={rename.onCancel}
-          onConfirm={rename.onConfirm}
-        />
-      )}
-      {agentRename.session && (
-        <PromptBox
-          title={t("askferry:pane.renameTitle")}
-          desc={t("askferry:pane.renameDesc", {
-            title: agentRename.session.title || t("askferry:chat.untitled"),
-          })}
-          placeholder={t("askferry:pane.renamePlaceholder")}
-          confirmLabel={t("askferry:pane.save")}
-          initial={agentRename.session.title || ""}
-          onCancel={agentRename.onCancel}
-          onConfirm={agentRename.onConfirm}
         />
       )}
       {tags.selection && (

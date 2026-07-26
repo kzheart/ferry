@@ -11,9 +11,9 @@ import { useSessionContentSearch } from "./useSessionContentSearch.js";
 export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
   const { toast, railTip, settings, guide } = useAppChrome();
-  const { peek, search, contextMenu, deletion, rename, tags, filters } =
+  const { peek, search, contextMenu, deletion, tags, filters } =
     useBrowserState();
-  const { organization, migration, editing, floatChat, agentRename } =
+  const { organization, migration, editing, floatChat } =
     useOperationsState();
   const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
@@ -175,29 +175,6 @@ export function AppOverlayController({ t }) {
         prepared: deletion.batchConfirmation,
         onCancel: deletion.cancelBatchDeletion,
         onConfirm: deletion.confirmBatchDeletion,
-      }}
-      rename={{
-        session: rename.session,
-        initial: rename.session
-          ? rename.metaFor(rename.session).name || rename.session.title || ""
-          : "",
-        onCancel: () => rename.setSession(null),
-        onConfirm: (value) => {
-          const session = rename.session;
-          rename.setSession(null);
-          rename.updateMetadata(session, { name: value });
-        },
-      }}
-      agentRename={{
-        session: agentRename.session,
-        onCancel: () => agentRename.setSession(null),
-        onConfirm: (title) => {
-          const session = agentRename.session;
-          agentRename.setSession(null);
-          if (title) {
-            ferry.rename(session.session_id, title).catch(ferry.reportError);
-          }
-        },
       }}
       tags={{
         selection: tags.selection,

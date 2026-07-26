@@ -1,5 +1,5 @@
 // AppOverlayController 把主壳的状态翻译成弹层入参,这里有真正的推导:搜索结果的
-// 三种视图形态、重命名/标签的初始值与提交语义、删除历史的先清选中再删。
+// 三种视图形态、标签的初始值与提交语义、删除历史的先清选中再删。
 // 下面的用例锁的是这些推导,不是渲染骨架(骨架在 AppOverlays.test.jsx)。
 import { test, vi } from "vitest";
 import assert from "node:assert/strict";
@@ -38,10 +38,10 @@ const editingSurface = {
 // browser 域的入参已从 props 下沉为 Context。用例仍按命名空间构造同一份数据,
 // 这里按 key 分流:browser 那几个进 Provider,其余照旧作为 props。
 const BROWSER_STATE_KEYS = [
-  "peek", "search", "contextMenu", "deletion", "rename", "tags", "filters",
+  "peek", "search", "contextMenu", "deletion", "tags", "filters",
 ];
 const OPERATIONS_STATE_KEYS = [
-  "organization", "migration", "editing", "floatChat", "agentRename",
+  "organization", "migration", "editing", "floatChat",
 ];
 const APP_CHROME_KEYS = ["toast", "railTip", "settings", "guide"];
 
@@ -97,8 +97,6 @@ function baseProps(overrides = {}) {
       history: null, setHistory: noop, deleteHistory: async () => {},
       selectedHistoryId: null, selectHistory: noop,
     },
-    rename: { session: null, setSession: noop, metaFor: () => ({}), updateMetadata: noop },
-    agentRename: { session: null, setSession: noop },
     tags: { selection: null, setSelection: noop, metaFor: () => ({}), updateMetadata: noop },
     toast: { value: null, setValue: noop },
     railTip: { value: null, railOnly: false },
@@ -308,47 +306,6 @@ test("内容索引未就绪时给出构建中提示,而不是当成无结果", a
 
   assert.ok(screen.getByText("app:search.indexing"));
   assert.equal(screen.queryByText("app:search.empty"), null);
-});
-
-test("重命名初始值优先取元数据里的自定名,其次才是原标题", () => {
-  const session = { id: "s1", title: "原标题" };
-  // 弹层每次打开都是新挂载(initial 只在 mount 时读一次),所以这里分两次渲染。
-  const openRename = metaFor =>
-    render(
-      <AppOverlayController
-        {...baseProps({
-          rename: { session, setSession: noop, updateMetadata: noop, metaFor },
-        })}
-      />,
-    );
-
-  const withName = openRename(() => ({ name: "自定名" }));
-  assert.equal(screen.getByRole("textbox").value, "自定名");
-  withName.unmount();
-
-  openRename(() => ({}));
-  assert.equal(screen.getByRole("textbox").value, "原标题");
-});
-
-test("确认重命名先关闭弹层,再拿关闭前的会话写元数据", () => {
-  const calls = [];
-  const session = { id: "s1", title: "原标题" };
-  render(
-    <AppOverlayController
-      {...baseProps({
-        rename: {
-          session,
-          metaFor: () => ({}),
-          setSession: value => calls.push(["close", value]),
-          updateMetadata: (target, patch) => calls.push(["write", target.id, patch]),
-        },
-      })}
-    />,
-  );
-
-  fireEvent.change(screen.getByRole("textbox"), { target: { value: "新名" } });
-  fireEvent.click(screen.getByText("app:prompt.save"));
-  assert.deepEqual(calls, [["close", null], ["write", "s1", { name: "新名" }]]);
 });
 
 test("单会话标签弹层带出已有标签,提交时整组替换", async () => {

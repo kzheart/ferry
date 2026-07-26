@@ -98,6 +98,15 @@ export function useWorkspaceInteractions({
       updateMetadata(session, { pinned: !metaFor(session).pinned }),
     onDelete: askDelete,
     onOpenMenu: setMenu,
+    onStartRename: setRename,
+    // 留空恢复原始标题(与旧弹窗语义一致);未改动则不写元数据
+    onSubmitRename: (session, value) => {
+      setRename(null);
+      const name = value.trim();
+      if (name === (metaFor(session).name || session.title || "")) return;
+      updateMetadata(session, { name });
+    },
+    onCancelRename: () => setRename(null),
   });
 
   // 详情区回调:经 ref 转发保持身份稳定,memo 化的 SessionDetail 才不会

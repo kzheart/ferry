@@ -103,8 +103,6 @@
     "search": "搜索"
   },
   "prompt": {
-    "renameTitle": "重命名会话",
-    "renameDesc": "为「{{title}}」设置显示名称;留空则恢复原始标题。重命名只存在 Ferry 侧,不改动会话文件。",
     "renamePlaceholder": "新的会话名称",
     "save": "保存",
     "tagsBatchTitle": "为 {{n}} 个会话添加标签",
