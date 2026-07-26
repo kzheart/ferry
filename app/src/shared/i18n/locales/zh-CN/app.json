@@ -120,6 +120,9 @@
   },
   "search": {
     "recent": "最近会话",
-    "empty": "无匹配结果"
+    "empty": "无匹配结果",
+    "fullText": "全文匹配",
+    "contentHit": "正文命中",
+    "indexing": "内容索引构建中,建好后这里会出现全文匹配结果。"
   }
 }

@@ -1,5 +1,5 @@
 // Agent 对话列表：悬浮显示置顶、删除和更多操作；更多菜单承载低频动作。
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
@@ -40,12 +40,42 @@ function MoreMenu({ item, anchor, onClose, onRename }) {
   </>, document.body);
 }
 
-const AgentSessionRow = memo(function AgentSessionRow({ session, active, onOpen, onPin, onDelete, onRename }) {
+// 提醒徽标的颜色与提示：待审批用警告色并放大一圈，让它在一列圆点里跳出来
+const ATTENTION_STYLE = {
+  approval: { color: "var(--warn)", size: 8, key: "attentionApproval" },
+  error: { color: "var(--err)", size: 7, key: "attentionError" },
+  unread: { color: "var(--accent)", size: 7, key: "attentionUnread" },
+};
+
+const AgentSessionRow = memo(function AgentSessionRow({ session, active, editing,
+  onOpen, onPin, onDelete, onStartRename, onSubmitRename, onCancelRename }) {
   const { t } = useTranslation();
   const [menu, setMenu] = useState(null);
   const running = session.status === "running";
   const title = session.title || t("askferry:chat.untitled");
   const action = callback => event => { event.stopPropagation(); callback(session); };
+  const badge = ATTENTION_STYLE[session.attention];
+
+  if (editing) {
+    return (
+      <div className="lib-row" style={{ display: "flex", alignItems: "center", padding: "5px 8px",
+        height: 30, borderRadius: 6, background: "var(--acc-soft2)" }}>
+        <input autoFocus defaultValue={session.title || ""}
+          placeholder={t("askferry:pane.renamePlaceholder")}
+          onFocus={event => event.target.select()}
+          onBlur={onCancelRename}
+          onClick={event => event.stopPropagation()}
+          onKeyDown={event => {
+            event.stopPropagation();
+            if (event.key === "Enter") onSubmitRename(session, event.currentTarget.value);
+            else if (event.key === "Escape") onCancelRename();
+          }}
+          style={{ flex: 1, minWidth: 0, height: 20, border: "none", outline: "none",
+            background: "transparent", color: "var(--tx1)", fontSize: 12, padding: 0 }} />
+      </div>
+    );
+  }
+
   return (
     <div onClick={() => onOpen(session.session_id)}
       className={active ? "lib-row" : "lib-row hov-item"}
@@ -54,7 +84,11 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, onOpen,
         background: active ? "var(--acc-soft2)" : "transparent" }}>
       {running
         ? <Spinner size={12} />
-        : <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--line-strong)", flex: "none" }} />}
+        : badge
+          ? <span title={t(`askferry:pane.${badge.key}`)}
+              style={{ width: badge.size, height: badge.size, borderRadius: "50%",
+                background: badge.color, flex: "none" }} />
+          : <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--line-strong)", flex: "none" }} />}
       <span title={title} style={{ fontSize: 12, color: "var(--tx1)", whiteSpace: "nowrap",
         overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{title}</span>
       {session.pinned && <span className="row-meta" style={{ display: "inline-flex", color: "var(--accent)" }}><PinIcon filled /></span>}
@@ -77,21 +111,88 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, onOpen,
             bottom: event.currentTarget.getBoundingClientRect().bottom });
         }} title={t("askferry:pane.more")}><MoreDots /></button>
       </span>
-      {menu && <MoreMenu item={session} anchor={menu} onClose={() => setMenu(null)} onRename={onRename} />}
+      {menu && <MoreMenu item={session} anchor={menu} onClose={() => setMenu(null)} onRename={onStartRename} />}
     </div>
   );
 });
 
-// 打开/新建/置顶/删除都是 Ferry Runtime 上的动作,自己取;列表内容与重命名
-// 入口由主壳决定(前者经过筛选排序,后者要弹主壳的输入框),仍走 props。
-export default function AgentSessionList({ sessions, onRename }) {
+// 按更新时间切段：传入的 sessions 已是「置顶优先 + 时间倒序」，这里只负责插分组头
+function groupSessions(sessions) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const today = startOfToday.getTime();
+  const yesterday = today - 86400000;
+  const last7 = today - 6 * 86400000;
+  const buckets = new Map();
+  const push = (key, session) => {
+    const rows = buckets.get(key);
+    if (rows) rows.push(session);
+    else buckets.set(key, [session]);
+  };
+  for (const session of sessions) {
+    if (session.pinned) { push("pinned", session); continue; }
+    const at = session.updated_at ? Date.parse(session.updated_at) : NaN;
+    if (!Number.isFinite(at) || at < last7) push("earlier", session);
+    else if (at >= today) push("today", session);
+    else if (at >= yesterday) push("yesterday", session);
+    else push("last7", session);
+  }
+  return ["pinned", "today", "yesterday", "last7", "earlier"]
+    .filter(key => buckets.has(key))
+    .map(key => ({ key, rows: buckets.get(key) }));
+}
+
+const GROUP_LABEL = {
+  pinned: "askferry:pane.pinnedGroup",
+  today: "common:bucket.today",
+  yesterday: "common:bucket.yesterday",
+  last7: "common:bucket.last7",
+  earlier: "common:bucket.earlier",
+};
+
+// 打开/新建/置顶/删除都是 Ferry Runtime 上的动作,自己取;列表内容由主壳决定
+// (经过筛选排序),仍走 props。onRename 是旧的主壳弹窗入口,已被行内编辑取代,
+// 保留参数只为不破坏调用方签名。
+export default function AgentSessionList({ sessions, onRename: _onRename }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const { activeId, openSession: onOpen, newChat: onNew } = ferry;
+  const [editingId, setEditingId] = useState(null);
   const onPin = session =>
     ferry.pin(session.session_id, !session.pinned).catch(ferry.reportError);
   const onDelete = session =>
     ferry.deleteSession(session.session_id).catch(ferry.reportError);
+  const onSubmitRename = (session, value) => {
+    setEditingId(null);
+    const title = value.trim();
+    if (!title || title === session.title) return;
+    ferry.rename(session.session_id, title).catch(ferry.reportError);
+  };
+
+  const groups = useMemo(() => groupSessions(sessions), [sessions]);
+
+  // ↑/↓ 在当前可见顺序里换会话;分组只是切段,展开后的顺序与 sessions 一致
+  const navRef = useRef({ sessions, activeId, onOpen, editing: false });
+  navRef.current = { sessions, activeId, onOpen, editing: editingId !== null };
+  useEffect(() => {
+    const onKeyDown = event => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const el = document.activeElement;
+      if (el && (["INPUT", "TEXTAREA"].includes(el.tagName) || el.isContentEditable)) return;
+      const { sessions: list, activeId: current, onOpen: open, editing } = navRef.current;
+      if (editing || !list.length) return;
+      event.preventDefault();
+      const index = list.findIndex(s => s.session_id === current);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = index < 0
+        ? 0
+        : Math.max(0, Math.min(list.length - 1, index + step));
+      open(list[next].session_id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div className="hov-item" onClick={onNew}
@@ -103,9 +204,25 @@ export default function AgentSessionList({ sessions, onRename }) {
       {sessions.length === 0 && (
         <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--tx5)", fontSize: 12 }}>
           {t("askferry:pane.empty")}</div>)}
-      {sessions.map(session => <AgentSessionRow key={session.session_id} session={session}
-        active={session.session_id === activeId} onOpen={onOpen} onPin={onPin}
-        onDelete={onDelete} onRename={onRename} />)}
+      {groups.map(group => (
+        <div key={group.key} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 8px",
+            height: 24, marginTop: 3 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3)" }}>
+              {t(GROUP_LABEL[group.key])}</span>
+            <span style={{ fontSize: 11, color: "var(--tx5)" }}>· {group.rows.length}</span>
+          </div>
+          {group.rows.map(session => (
+            <AgentSessionRow key={session.session_id} session={session}
+              active={session.session_id === activeId}
+              editing={session.session_id === editingId}
+              onOpen={onOpen} onPin={onPin} onDelete={onDelete}
+              onStartRename={item => setEditingId(item.session_id)}
+              onSubmitRename={onSubmitRename}
+              onCancelRename={() => setEditingId(null)} />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

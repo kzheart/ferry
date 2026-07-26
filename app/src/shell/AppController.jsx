@@ -53,6 +53,7 @@ export default function App() {
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [organizerOpen, setOrganizerOpen] = useState(false);
   const [peekId, setPeekId] = useState(null); // Ask Ferry 卡片就地预览的会话 id
+  const [floatChatOpen, setFloatChatOpen] = useState(false); // 会话库右下角浮动 Agent 面板
 
   const [mig, setMig] = useState(null); // {scope}
 
@@ -210,11 +211,14 @@ export default function App() {
     if (!selId && sessions.length) select(sessionIdentity(sessions[0]));
   }, [sessions]);
 
+  // 打开设置并定位到指定分区:桌面菜单 / 路由 / 浮动面板共用
+  const openConfig = (section = "providers") => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  };
+
   useDesktopChrome({
-    onOpenSettings: () => {
-      setSettingsSection("prefs");
-      setSettingsOpen(true);
-    },
+    onOpenSettings: () => openConfig("prefs"),
     onToggleSidebar: paneLayout.toggleCollapsed,
     onRescan: doScan,
   });
@@ -330,6 +334,10 @@ export default function App() {
       { open: Boolean(mig), dismiss: () => setMig(null) },
       { open: Boolean(peekId), dismiss: () => setPeekId(null) },
       { open: searchOpen, dismiss: () => setSearchOpen(false) },
+      {
+        open: floatChatOpen && view === "library",
+        dismiss: () => setFloatChatOpen(false),
+      },
       { open: multiSel.length > 0, dismiss: () => setMultiSel([]) },
       { open: onboarding.step > 0, dismiss: onboarding.finishGuide },
     ],
@@ -481,10 +489,7 @@ export default function App() {
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
           onNavigate={peekEntity}
-          onOpenConfig={(section = "providers") => {
-            setSettingsSection(section);
-            setSettingsOpen(true);
-          }}
+          onOpenConfig={openConfig}
           environment={env}
           scan={scan}
           onFirstDone={onboarding.completeFirstRun}
@@ -538,6 +543,10 @@ export default function App() {
           loadHistory,
           searchOpen,
           setSearchOpen,
+          floatChatOpen,
+          setFloatChatOpen,
+          peekEntity,
+          openConfig,
           paneConfig: paneCfg,
           ferrySessions,
           libraryGroups: libGroups,

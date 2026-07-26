@@ -1,13 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const DEFAULT_WIDTH = 232;
 const MIN_WIDTH = 190;
 const MAX_WIDTH = 360;
+const WIDTH_KEY = "ferry-pane-width";
+const COLLAPSED_KEY = "ferry-pane-collapsed";
+
+// 存量值可能来自旧版本或被手改过,读回时一律钳到合法区间
+const readWidth = () => {
+  const stored = Number(localStorage.getItem(WIDTH_KEY));
+  if (!Number.isFinite(stored) || stored <= 0) return DEFAULT_WIDTH;
+  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, stored));
+};
 
 export function useResourcePaneLayout() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(COLLAPSED_KEY) === "1");
+  const [width, setWidth] = useState(readWidth);
   const [resizing, setResizing] = useState(false);
+
+  // 拖动过程中每帧写 localStorage 太重,拖完(resizing 落回 false)再落盘
+  useEffect(() => {
+    if (!resizing) localStorage.setItem(WIDTH_KEY, String(width));
+  }, [width, resizing]);
+  useEffect(() => {
+    localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
 
   const startResize = event => {
     if (collapsed) return;

@@ -16,7 +16,12 @@
     "renameTitle": "Rename chat",
     "renameDesc": "Give “{{title}}” a clear name.",
     "renamePlaceholder": "Enter a chat name",
-    "save": "Save"
+    "save": "Save",
+    "pinnedGroup": "Pinned",
+    "attentionApproval": "Waiting for your approval",
+    "attentionError": "Run failed",
+    "attentionUnread": "Finished, not viewed yet",
+    "attentionRunning": "Running"
   },
   "chat": {
     "newChat": "New chat",
@@ -81,6 +86,16 @@
   },
   "empty": {
     "title": "What can I help with?"
+  },
+  "float": {
+    "open": "Ask AI",
+    "close": "Collapse",
+    "title": "Quick chat",
+    "aboutSession": "About “{{title}}”",
+    "openFull": "Open in Agent",
+    "suggestSummary": "Summarize what this session did",
+    "suggestFiles": "List the files this session changed",
+    "suggestIssues": "What problems did this session run into?"
   },
   "auth": {
     "inProgress": "Signing in…",

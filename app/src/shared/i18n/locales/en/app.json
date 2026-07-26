@@ -120,6 +120,9 @@
   },
   "search": {
     "recent": "Recent",
-    "empty": "No matches"
+    "empty": "No matches",
+    "fullText": "Full-text matches",
+    "contentHit": "in content",
+    "indexing": "Building the content index — full-text matches will appear once it is ready."
   }
 }
