@@ -177,6 +177,15 @@ export class ProviderService {
     }
   }
 
+  async revealApiKey(providerId: string) {
+    const host = this.requireHost("provider config unavailable");
+    try {
+      return await host.revealApiKey(providerId);
+    } catch (error) {
+      throw failure("provider_not_found", error, "credential read failed");
+    }
+  }
+
   async logoutProvider(providerId: string) {
     const host = this.requireHost("provider config unavailable");
     this.ensureProviderAuthIdle(providerId);

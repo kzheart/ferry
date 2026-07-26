@@ -260,6 +260,8 @@ export default function Providers() {
   const [adding, setAdding] = useState(false);
   const [catalog, setCatalog] = useState([]);
   const [addingModel, setAddingModel] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [revealedKey, setRevealedKey] = useState(null);
 
   const load = useCallback(async () => {
     const list = await runtime("providers.list");
@@ -331,11 +333,25 @@ export default function Providers() {
     setAdding(false);
   });
 
-  // 就地编辑自动保存;端点或格式变了以后重新拉取模型列表
+  // 就地编辑自动保存;模型列表用「拉取模型」按钮手动获取
   const saveCustomProviderSettings = payload => act(async () => {
     await runtime("custom_provider.upsert", payload);
     await load();
-    await runtime("models.refresh").catch(() => {});
+    await syncFerry();
+  });
+
+  // 从端点拉取该提供商支持的模型,拉回来后逐个勾选或全选
+  const fetchProviderModels = () => act(async () => {
+    await runtime("models.refresh");
+    await load();
+    await syncFerry();
+  });
+
+  const setModelShown = (modelIds) => act(async () => {
+    await runtime("models.visibility.set", {
+      provider_id: sel.id,
+      model_ids: modelIds,
+    });
     await load();
     await syncFerry();
   });
@@ -354,9 +370,24 @@ export default function Providers() {
     await syncFerry();
   });
 
+  // 「眼睛」按钮:第一次点从后端取回已保存的 Key 回显,再点收起
+  const toggleReveal = () => act(async () => {
+    if (revealed) { setRevealed(false); return; }
+    let value = revealedKey;
+    if (value === null) {
+      const result = await runtime("credential.get", { provider_id: sel.id });
+      value = result?.key ?? "";
+    }
+    setRevealedKey(value);
+    if (!key && value) setKey(value);
+    setRevealed(true);
+  });
+
   const saveKey = () => act(async () => {
     await runtime("credential.set", { provider_id: sel.id, key });
     setKey("");
+    setRevealed(false);
+    setRevealedKey(null);
     // 有了凭据才能问 Provider 要动态模型表,存完 Key 立刻拉一次
     await runtime("models.refresh").catch(() => {});
     await load();
@@ -386,6 +417,9 @@ export default function Providers() {
 
   const logout = () => act(async () => {
     await runtime("provider.logout", { provider_id: sel.id });
+    setKey("");
+    setRevealed(false);
+    setRevealedKey(null);
     await load();
     await syncFerry();
   });
@@ -401,6 +435,7 @@ export default function Providers() {
             <div key={p.id} className={p.id === selId ? undefined : "hov-item"}
               onClick={() => {
                 setSelId(p.id); setNotice(null); setKey(""); setAddingModel(false);
+                setRevealed(false); setRevealedKey(null);
               }}
               style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px",
                 borderRadius: 8, cursor: "default",
@@ -455,10 +490,44 @@ export default function Providers() {
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
                   {t("settings:providers.apiKey")}</span>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <input type="password" value={key} onChange={e => setKey(e.target.value)}
-                    placeholder={sel.credential_type === "api_key"
-                      ? t("settings:providers.keySet") : t("settings:providers.keyPlaceholder")}
-                    style={{ ...inputStyle, flex: 1 }} />
+                  <div style={{ position: "relative", flex: 1, display: "flex" }}>
+                    <input type={revealed ? "text" : "password"} value={key}
+                      onChange={e => setKey(e.target.value)}
+                      placeholder={sel.credential_type === "api_key"
+                        ? t("settings:providers.keySet") : t("settings:providers.keyPlaceholder")}
+                      className={revealed ? "mono" : undefined}
+                      style={{ ...inputStyle, flex: 1, paddingRight: 34 }} />
+                    {(sel.credential_type === "api_key" || sel.custom || key) && (
+                      <button className="hov" disabled={busy} onClick={toggleReveal}
+                        title={t(revealed
+                          ? "settings:providers.hideKey" : "settings:providers.showKey")}
+                        style={{ position: "absolute", right: 4, top: "50%",
+                          transform: "translateY(-50%)", width: 26, height: 26, border: "none",
+                          borderRadius: 6, background: "transparent", color: "var(--tx4)",
+                          display: "inline-flex", alignItems: "center",
+                          justifyContent: "center", cursor: "default" }}>
+                        <svg viewBox="0 0 16 16" style={{ width: 14, height: 14 }} aria-hidden>
+                          {revealed ? (
+                            <>
+                              <path d="M1.8 8s2.3-4.2 6.2-4.2S14.2 8 14.2 8s-2.3 4.2-6.2 4.2S1.8 8 1.8 8z"
+                                fill="none" stroke="currentColor" strokeWidth="1.3" />
+                              <circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor"
+                                strokeWidth="1.3" />
+                              <path d="M2.5 13.5l11-11" stroke="currentColor" strokeWidth="1.3"
+                                strokeLinecap="round" />
+                            </>
+                          ) : (
+                            <>
+                              <path d="M1.8 8s2.3-4.2 6.2-4.2S14.2 8 14.2 8s-2.3 4.2-6.2 4.2S1.8 8 1.8 8z"
+                                fill="none" stroke="currentColor" strokeWidth="1.3" />
+                              <circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor"
+                                strokeWidth="1.3" />
+                            </>
+                          )}
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                   <button className="fbtn fbtn-primary" disabled={!key || busy} onClick={saveKey}
                     style={{ height: 32 }}>{t("settings:providers.save")}</button>
                 </div>
@@ -495,6 +564,14 @@ export default function Providers() {
                     {t("settings:providers.models")}</span>
                   <span style={{ fontSize: 11, color: "var(--tx5)" }}>{selModels.length}</span>
                   <span style={{ flex: 1 }} />
+                  {sel.custom && (
+                    <button className="fbtn" disabled={busy} style={{ height: 26, fontSize: 11 }}
+                      onClick={fetchProviderModels}>
+                      {t("settings:providers.custom.fetchModels")}</button>)}
+                  {sel.custom && selModels.some(m => !m.shown) && (
+                    <button className="fbtn" disabled={busy} style={{ height: 26, fontSize: 11 }}
+                      onClick={() => setModelShown(null)}>
+                      {t("settings:providers.custom.selectAll")}</button>)}
                   <button className="fbtn" disabled={busy} style={{ height: 26, fontSize: 11 }}
                     onClick={() => setAddingModel(v => !v)}>
                     {t("settings:models.add")}</button>
@@ -507,7 +584,21 @@ export default function Providers() {
                 {selModels.map((m, i) => (
                   <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10,
                     padding: "7px 2px", borderTop: i === 0 ? "none" : "1px solid var(--line6)" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    {sel.custom && (
+                      <span onClick={() => {
+                        if (busy) return;
+                        const shown = new Set(
+                          selModels.filter(x => x.shown).map(x => x.id));
+                        if (shown.has(m.id)) shown.delete(m.id);
+                        else shown.add(m.id);
+                        setModelShown(
+                          shown.size === selModels.length ? null : [...shown]);
+                      }} style={{ flex: "none", display: "inline-flex", cursor: "default" }}>
+                        <Check on={m.shown} size={15} />
+                      </span>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0,
+                      opacity: sel.custom && !m.shown ? 0.45 : 1 }}>
                       <div style={{ fontSize: 12.5, color: "var(--tx1)", overflow: "hidden",
                         textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
                       <div className="mono"

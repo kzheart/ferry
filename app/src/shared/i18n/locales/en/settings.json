@@ -222,8 +222,12 @@
       "namePlaceholder": "e.g. My Gateway",
       "format": "API format",
       "formatOpenAI": "OpenAI-compatible",
-      "formatAnthropic": "Anthropic-compatible"
-    }
+      "formatAnthropic": "Anthropic-compatible",
+      "fetchModels": "Fetch models",
+      "selectAll": "Select all"
+    },
+    "showKey": "Show key",
+    "hideKey": "Hide key"
   },
   "models": {
     "search": "Search models",

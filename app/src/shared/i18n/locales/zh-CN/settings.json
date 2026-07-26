@@ -222,8 +222,12 @@
       "namePlaceholder": "例如 My Gateway",
       "format": "API 格式",
       "formatOpenAI": "OpenAI 兼容",
-      "formatAnthropic": "Anthropic 兼容"
-    }
+      "formatAnthropic": "Anthropic 兼容",
+      "fetchModels": "拉取模型",
+      "selectAll": "全选"
+    },
+    "showKey": "显示 Key",
+    "hideKey": "隐藏 Key"
   },
   "models": {
     "search": "搜索模型",

@@ -399,6 +399,21 @@ export class ProviderHost {
     }));
   }
 
+  // 回显已保存的 API Key(设置页「眼睛」按钮):凭据库优先,自定义配置里的兜底
+  async revealApiKey(providerId: string) {
+    if (!this.models.getProvider(providerId)) {
+      throw new Error("provider not found");
+    }
+    const stored = await this.store.read(providerId);
+    if (stored?.type === "api_key") {
+      return { provider_id: providerId, key: stored.key };
+    }
+    const custom = (await this.store.snapshot()).custom_providers.find(
+      (item) => item.id === providerId,
+    );
+    return { provider_id: providerId, key: custom?.api_key ?? null };
+  }
+
   async logout(providerId: string) {
     if (!this.models.getProvider(providerId))
       throw new Error("provider not found");

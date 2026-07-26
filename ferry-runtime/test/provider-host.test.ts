@@ -101,6 +101,36 @@ describe("ProviderHost", () => {
     ).toBe(false);
   });
 
+  it("reveals stored API keys, falling back to custom provider config", async () => {
+    const { host: providers } = await host();
+    await providers.saveApiKey("openai", "sk-openai-secret");
+    expect(await providers.revealApiKey("openai")).toEqual({
+      provider_id: "openai",
+      key: "sk-openai-secret",
+    });
+    // 未配置凭据的内置 Provider 返回 null
+    expect((await providers.revealApiKey("anthropic")).key).toBeNull();
+
+    await providers.saveCustomProvider({
+      id: "reveal-test",
+      name: "Reveal Test",
+      base_url: "http://127.0.0.1:11434/v1",
+      api_key: "sk-from-config",
+      models: [],
+    });
+    // 自定义提供商:凭据库为空时回落到配置里的 api_key
+    expect((await providers.revealApiKey("reveal-test")).key).toBe(
+      "sk-from-config",
+    );
+    await providers.saveApiKey("reveal-test", "sk-from-store");
+    expect((await providers.revealApiKey("reveal-test")).key).toBe(
+      "sk-from-store",
+    );
+    await expect(providers.revealApiKey("no-such")).rejects.toThrow(
+      "provider not found",
+    );
+  });
+
   it("never reads ambient provider environment variables", async () => {
     process.env.OPENAI_API_KEY = "ambient-key-must-not-be-used";
     const { host: providers } = await host();
