@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...operations.types import AssistantReply, ToolItem
+from ...contracts.operation_types import AssistantReply, ToolItem
 from ...errors import (
     OperationUnsupportedError,
     SubagentNotSupportedError,

@@ -7,7 +7,7 @@ import uuid
 
 from ...errors import LocatorStaleError, OperationUnsupportedError
 from ...events import event
-from ...operations.types import TextItem
+from ...contracts.operation_types import TextItem
 from ..shared.codec import TurnSpan
 from ..shared.editing import reject_replacement_spawn
 

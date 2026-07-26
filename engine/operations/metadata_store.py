@@ -1,26 +1,19 @@
-"""Ferry 会话元数据的 SQLite 存储。"""
+"""Ferry 会话元数据的 SQLite 存储。
+
+键编码/行解码/补丁合并三个纯函数已抽到 contracts.metadata，此处保留
+re-export 一个版本周期。
+"""
 
 import json
 import sqlite3
 import threading
 from collections.abc import Callable
 
-
-def metadata_key(tool: str, session_id: str) -> str:
-    return f"{tool}\0{session_id}"
-
-
-def metadata_entry(row: sqlite3.Row | None) -> dict:
-    return json.loads(row["value_json"]) if row is not None else {}
-
-
-def merge_metadata(current: dict, patch: dict) -> dict:
-    merged = {**current, **patch}
-    return {
-        key: value
-        for key, value in merged.items()
-        if value not in (None, False, "", [])
-    }
+from ..contracts.metadata import (  # noqa: F401
+    merge_metadata,
+    metadata_entry,
+    metadata_key,
+)
 
 
 class SessionMetadataStore:

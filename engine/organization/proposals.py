@@ -19,7 +19,7 @@ from ..errors import (
     OrganizationProposalStaleError,
 )
 from ..storage.database import StateDatabase
-from ..operations import metadata as metadata_store
+from ..contracts.metadata import metadata_key
 from . import summaries
 
 _PATCH_FIELDS = {
@@ -148,7 +148,7 @@ def _validated_target(target: dict, current_metadata: dict,
         "tool": tool,
         "id": session_id,
         "fingerprint": fingerprint,
-        "current": current_metadata.get(metadata_store.key(tool, session_id), {}),
+        "current": current_metadata.get(metadata_key(tool, session_id), {}),
         "suggested": suggested,
         "sources": [{
             "segment_hash": source,
@@ -162,7 +162,7 @@ def propose(targets: list[dict], ports: EngineContext) -> dict:
     """接收 runtime 的结构化整理结果；同一内容指纹只产生一个提案。"""
     if not isinstance(targets, list) or not targets:
         raise OrganizationProposalError("targets 必须是非空数组")
-    current_metadata = metadata_store.list_all(ports)
+    current_metadata = ports.metadata_list_all()
     normalized = [
         _validated_target(target, current_metadata, ports)
         for target in targets

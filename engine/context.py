@@ -26,6 +26,13 @@ AdapterResolver = Callable[[str], "AgentAdapter"]
 AdapterIds = Callable[[], tuple[str, ...]]
 CacheFactory = Callable[[], ScanCachePort]
 SnapshotDir = Callable[[], Path]
+MetadataListAll = Callable[[], dict]
+
+
+def _metadata_port_missing() -> dict:
+    raise RuntimeError(
+        "EngineContext.metadata_list_all 未组装；请经 bootstrap.create_context 构造"
+    )
 
 
 @dataclass
@@ -36,3 +43,5 @@ class EngineContext:
     resource_path: ResourcePathResolver
     snapshot_dir: SnapshotDir
     version: str
+    # organization 不再直接 import operations 的元数据模块，改由此端口注入。
+    metadata_list_all: MetadataListAll = _metadata_port_missing
