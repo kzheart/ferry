@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from ...sessions.usage import has_tokens, iso_ms
-from ..shared.scanner import clip_text, scan_jsonl
+from ..shared.scanner import clip_text, iter_lines, scan_jsonl
 from .topology import session_id
 
 
@@ -24,7 +24,7 @@ def _meta(path: Path, stat) -> dict:
     root_id = agent_id = agent_path = agent_type = None
     has_meta = False
     model, tokens, created = "", None, None
-    for line in path.read_text().splitlines():
+    for line in iter_lines(path):
         if not line.strip():
             continue
         record = json.loads(line)

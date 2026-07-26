@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from ...sessions.usage import add_tokens, dominant_model, empty_tokens, has_tokens, iso_ms
-from ..shared.scanner import clip_text, scan_jsonl
+from ..shared.scanner import clip_text, iter_lines, scan_jsonl
 
 
 def _usage_tokens(usage) -> dict:
@@ -19,7 +19,7 @@ def _usage_tokens(usage) -> dict:
 def _meta(path: Path, stat, base: Path) -> dict:
     cwd, title, count = "", "", 0
     by_model, created = {}, None
-    for line in path.read_text().splitlines():
+    for line in iter_lines(path):
         if not line.strip():
             continue
         record = json.loads(line)
