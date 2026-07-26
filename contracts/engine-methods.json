@@ -222,6 +222,17 @@
       ]
     },
     {
+      "name": "runtime_sessions.truncate",
+      "kind": "mutation",
+      "exposure": "internal",
+      "timeout": "normal",
+      "retry": "never",
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway"
+      ]
+    },
+    {
       "name": "agent_search_sessions",
       "kind": "read",
       "exposure": "internal",

@@ -35,7 +35,8 @@ export async function dispatch(
         break;
       }
     }
-    if (!handled)
+    if (!handled) {
+      handled = true;
       switch (command.method) {
         case "health":
           result = {
@@ -70,7 +71,17 @@ export async function dispatch(
             params.ok === true ? params.result : params.error,
           );
           break;
+        default:
+          handled = false;
       }
+    }
+    // 未知方法必须报错:静默返回 ok+undefined 会把契约漂移伪装成成功
+    if (!handled) {
+      throw new ProtocolError(
+        "unknown_method",
+        `unknown method ${command.method}`,
+      );
+    }
     return { protocol: PROTOCOL_VERSION, id: command.id, ok: true, result };
   } catch (error) {
     if (!(error instanceof ProtocolError)) {

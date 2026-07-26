@@ -39,6 +39,12 @@ export interface SessionStore {
   >;
   commit(update: SessionCommit): Promise<void>;
   delete(sessionId: string): Promise<void>;
+  /** 编辑重发:删掉 ordinal >= fromOrdinal 的消息与 seq >= fromSeq 的事件。 */
+  truncate(
+    sessionId: string,
+    fromOrdinal: number,
+    fromSeq: number,
+  ): Promise<void>;
 }
 
 /** 仅供测试与显式注入使用；不构成跨会话或长期记忆。 */
@@ -77,5 +83,12 @@ export class EphemeralSessionStore implements SessionStore {
 
   async delete(sessionId: string) {
     this.records.delete(sessionId);
+  }
+
+  async truncate(sessionId: string, fromOrdinal: number, fromSeq: number) {
+    const record = this.records.get(sessionId);
+    if (!record) return;
+    record.state.messages = record.state.messages.slice(0, fromOrdinal);
+    record.events = record.events.filter((event) => event.seq < fromSeq);
   }
 }

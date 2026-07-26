@@ -26,6 +26,7 @@ const PUBLIC_RUNTIME_METHODS: &[&str] = &[
     "abort",
     "steer",
     "follow_up",
+    "edit_resend",
     "state",
     "sessions.list",
     "events.replay",

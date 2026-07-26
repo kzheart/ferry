@@ -147,6 +147,11 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
         }),
+        "runtime_sessions.truncate" => Some(EngineMethodPolicy {
+            exposure: Exposure::Internal,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+        }),
         "agent_search_sessions" => Some(EngineMethodPolicy {
             exposure: Exposure::Internal,
             timeout: TimeoutClass::Lookup,
@@ -196,6 +201,7 @@ pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[
     "runtime_sessions.load_all",
     "runtime_sessions.commit",
     "runtime_sessions.delete",
+    "runtime_sessions.truncate",
 ];
 
 pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {

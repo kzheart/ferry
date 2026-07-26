@@ -8,7 +8,8 @@ import type { EventEnvelope } from "../server/messages.js";
 export type RuntimeEngineMethod =
   | "runtime_sessions.load_all"
   | "runtime_sessions.commit"
-  | "runtime_sessions.delete";
+  | "runtime_sessions.delete"
+  | "runtime_sessions.truncate";
 
 export type RuntimeEngineInvoke = (
   method: RuntimeEngineMethod,
@@ -45,6 +46,18 @@ export class EngineSessionStore implements SessionStore {
     await this.invoke(
       "runtime_sessions.delete",
       { session_id: sessionId },
+      sessionId,
+    );
+  }
+
+  async truncate(sessionId: string, fromOrdinal: number, fromSeq: number) {
+    await this.invoke(
+      "runtime_sessions.truncate",
+      {
+        session_id: sessionId,
+        from_ordinal: fromOrdinal,
+        from_seq: fromSeq,
+      },
       sessionId,
     );
   }

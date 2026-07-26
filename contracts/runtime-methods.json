@@ -26,6 +26,7 @@
     {"name": "abort", "exposure": "public"},
     {"name": "steer", "exposure": "public"},
     {"name": "follow_up", "exposure": "public"},
+    {"name": "edit_resend", "exposure": "public"},
     {"name": "state", "exposure": "public"},
     {"name": "sessions.list", "exposure": "public"},
     {"name": "events.replay", "exposure": "public"},

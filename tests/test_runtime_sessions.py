@@ -53,6 +53,38 @@ def test_runtime_delete_cascades_messages_and_events(store, ports):
     assert runtime_sessions.load_all(ports) == []
 
 
+def test_runtime_truncate_deletes_tail_and_allows_seq_reuse(store, ports):
+    runtime_sessions.commit(_update(), ports)
+    runtime_sessions.commit({
+        "metadata": {"session_id": "runtime-1", "provider_id": "test", "next_seq": 3},
+        "messages": [{"ordinal": 1, "message": {"role": "assistant", "content": "hi"}}],
+        "events": [{"seq": 2, "type": "run.completed"}],
+        "timestamp": "2026-07-24T00:00:01.000Z",
+    }, ports)
+
+    assert runtime_sessions.truncate("runtime-1", 1, 2, ports) == {
+        "session_id": "runtime-1", "messages_deleted": 1, "events_deleted": 1,
+    }
+    # 截断后同键可以重新写入不同内容:编辑重发正是要重用这些 ordinal/seq
+    runtime_sessions.commit({
+        "metadata": {"session_id": "runtime-1", "provider_id": "test", "next_seq": 3},
+        "messages": [{"ordinal": 1, "message": {"role": "assistant", "content": "changed"}}],
+        "events": [{"seq": 2, "type": "run.failed"}],
+        "timestamp": "2026-07-24T00:00:02.000Z",
+    }, ports)
+    assert runtime_sessions.load_all(ports)[0]["state"]["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "changed"},
+    ]
+
+
+def test_runtime_truncate_validates_params(store, ports):
+    with pytest.raises(Exception, match="session_id"):
+        runtime_sessions.truncate("", 0, 0, ports)
+    with pytest.raises(Exception, match="from_seq"):
+        runtime_sessions.truncate("runtime-1", 0, -1, ports)
+
+
 def test_state_database_is_reused_per_path(tmp_path):
     path = tmp_path / "ferry-state.sqlite3"
     first = get_state_database(path, recover_interrupted=False)

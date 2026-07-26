@@ -467,6 +467,25 @@ html[data-platform="mac"][data-theme="dark"] {
 }
 [data-theme="dark"] .chat-user { background: rgba(255,255,255,.08); }
 
+/* 消息 hover 操作栏(复制/编辑):沿用 .fhact 的浮现语义,作用域是单条消息 */
+.chat-msg .fhact { opacity: 0; transition: opacity .15s ease; }
+.chat-msg:hover .fhact, .chat-msg .fhact:focus-within { opacity: 1; }
+
+/* 用户消息的行内编辑框:形态沿用输入胶囊 */
+.chat-edit {
+  background: var(--surface); border-radius: 16px;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 2px 12px rgba(0,0,0,.05);
+}
+[data-theme="dark"] .chat-edit {
+  background: var(--fill2);
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.11), 0 2px 12px rgba(0,0,0,.35);
+}
+.chat-edit textarea {
+  width: 100%; border: none; outline: none; background: transparent; resize: none;
+  padding: 10px 14px 4px; font-size: 13px; line-height: 1.6; color: var(--tx1);
+  font-family: inherit; box-sizing: border-box; max-height: 220px; overflow-y: auto;
+}
+
 /* 工具调用:一行灰字,悬浮才浮现浅底,展开看参数 */
 .chat-tool {
   display: inline-flex; align-items: center; gap: 7px; max-width: 100%;

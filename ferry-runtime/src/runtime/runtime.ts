@@ -309,6 +309,26 @@ export class AgentRuntime {
     return { run_id: await session.prompt(text, images, displayText) };
   }
 
+  async editResend(
+    sessionId: string,
+    seq: number,
+    text: string,
+    displayText = text,
+  ) {
+    const session = this.session(sessionId);
+    const state = session.state();
+    const configured = this.providerHost
+      ? await this.providerHost.isConfigured(state.provider_id)
+      : ((await this.backendInfo.credentialAvailable?.()) ?? true);
+    if (!configured) {
+      throw new ProtocolError(
+        "provider_unavailable",
+        `provider ${state.provider_id} is not configured`,
+      );
+    }
+    return { run_id: await session.editResend(seq, text, displayText) };
+  }
+
   async generateTitle(
     selection: ModelSelection,
     prompt: string,

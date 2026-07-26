@@ -81,6 +81,17 @@ export async function dispatchSessionCommand(
             requireString(params, "text"),
         ),
       };
+    case "edit_resend":
+      return {
+        handled: true,
+        result: await runtime.editResend(
+          requireString(params, "session_id", 128),
+          requireInteger(params, "seq"),
+          requireString(params, "text"),
+          optionalString(params, "display_text") ??
+            requireString(params, "text"),
+        ),
+      };
     case "state":
       return {
         handled: true,
