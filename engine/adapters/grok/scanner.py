@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from ...sessions.scan_progress import TRACKER
 from ...sessions.usage import iso_ms
 from ...sessions.topology import session_roots
 from ...system.paths import grok_home
@@ -43,7 +44,10 @@ def scan(cache):
     rows = []
     if not root.exists():
         return rows
-    for summary in root.rglob("summary.json"):
+    summaries = list(root.rglob("summary.json"))
+    TRACKER.set_total(len(summaries))
+    for summary in summaries:
+        TRACKER.advance()
         path, stat = summary.parent, summary.stat()
         cached = cache.get(summary, stat) if cache else None
         if cached is None:

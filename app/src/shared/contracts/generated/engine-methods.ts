@@ -3,6 +3,7 @@ export const PUBLIC_ENGINE_METHODS = [
   "health",
   "version",
   "scan",
+  "scan_progress",
   "env",
   "resume",
   "models",

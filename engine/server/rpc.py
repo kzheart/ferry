@@ -47,6 +47,7 @@ class RpcDispatcher:
             "health": lambda p: application.health(),
             "version": lambda p: application.version(),
             "scan": lambda p: application.scan(),
+            "scan_progress": lambda p: application.scan_progress(),
             "env": lambda p: application.environment(),
             "resume": lambda p: application.resume_command(p["tool"], p["ref"]),
             "models": lambda p: application.list_models(p["tool"]),

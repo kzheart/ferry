@@ -65,6 +65,9 @@ class EngineService:
     def scan(self) -> dict:
         return scanning.scan(self._ports, self._index)
 
+    def scan_progress(self) -> dict:
+        return scanning.scan_progress()
+
     def environment(self) -> dict:
         return environment.inspect(self._ports)
 
