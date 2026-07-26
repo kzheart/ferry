@@ -81,26 +81,56 @@ function EditCard({ entity, onNavigate }) {
   const before = entity.preview?.before;
   const after = entity.preview?.after;
   const changes = renderEvents(entity.changes).slice(0, 3);
+  // 候选批次:已 apply/失败的沿用现有审批展示,其余(preview/planned)必须
+  // 明确告诉用户"这只是候选,还没写入原会话"
+  const proposals = entity.proposals || [];
+  const pending = proposals.length > 0 &&
+    !["applied", "failed"].includes(entity.status);
+  const shownProposals = proposals.slice(0, 3);
   return (
     <button type="button" style={{ ...shell, alignItems: "flex-start" }}
       onClick={() => onNavigate?.(navigationActionFor(entity), entity)}>
       <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--warn-deep)",
         flex: "none" }}>±</span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 12.5, fontWeight: 600 }}>
-          {t("askferry:entity.edits", {
-            count: entity.changes.length || 1, n: entity.changes.length || 1,
-          })}
+        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+            {t("askferry:entity.edits", {
+              count: entity.changes.length || 1, n: entity.changes.length || 1,
+            })}
+          </span>
+          {pending && (
+            <span style={{ fontSize: 10.5, fontWeight: 600, padding: "1px 7px",
+              borderRadius: 6, background: "var(--warn-soft, rgba(240,180,41,.16))",
+              color: "var(--warn-deep)", flex: "none" }}>
+              {t("askferry:entity.candidatePending")}
+            </span>
+          )}
         </span>
         <span style={secondary}>
           {before?.size != null && after?.size != null
             ? `${before.size} → ${after.size} bytes`
             : entity.locators[0] || t("askferry:entity.openDiff")}
         </span>
-        {changes.map((change, index) => (
-          <span key={index} style={{ display: "block", fontSize: 11,
-            color: "var(--tx3)", marginTop: 4 }}>{change}</span>
-        ))}
+        {pending
+          ? shownProposals.map((proposal, index) => (
+            <span key={proposal.locator || index} style={{ display: "block",
+              fontSize: 11, color: "var(--tx3)", marginTop: 4,
+              whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {proposal.text.slice(0, 400)}
+            </span>
+          ))
+          : changes.map((change, index) => (
+            <span key={index} style={{ display: "block", fontSize: 11,
+              color: "var(--tx3)", marginTop: 4 }}>{change}</span>
+          ))}
+        {pending && proposals.length > shownProposals.length && (
+          <span style={{ display: "block", fontSize: 11, color: "var(--tx4)",
+            marginTop: 4 }}>
+            {t("askferry:entity.moreProposals",
+              { n: proposals.length - shownProposals.length })}
+          </span>
+        )}
       </span>
       <span aria-hidden style={{ color: "var(--tx5)" }}>›</span>
     </button>

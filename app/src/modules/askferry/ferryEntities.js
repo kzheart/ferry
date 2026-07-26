@@ -56,7 +56,16 @@ function migrationEntity(value) {
   };
 }
 
-function editEntity(value) {
+/** 只把 args 里的 rewrite ops 当候选;delete-turn 不是"候选文本",不得伪装进来。 */
+function rewriteProposals(args) {
+  if (!isObject(args) || !Array.isArray(args.ops)) return [];
+  return args.ops
+    .filter(op => isObject(op) && op.op === "rewrite")
+    .map(op => ({ locator: text(op.locator), text: text(op.text) }))
+    .filter(op => op.locator && op.text);
+}
+
+function editEntity(value, args = {}) {
   if (!isObject(value)) return null;
   const preview = isObject(value.preview) ? value.preview : value;
   const applied = isObject(value.result?.result) ? value.result.result : value.result;
@@ -65,6 +74,8 @@ function editEntity(value) {
   if (!ref && !value.plan_id && !value.edit_id) return null;
   const changes = Array.isArray(preview.changes) ? preview.changes : [];
   return {
+    proposals: rewriteProposals(args),
+    intent: text(args.intent),
     type: FERRY_ENTITY.edit,
     key: `edit:${value.plan_id || value.edit_id || ref}`,
     id: text(value.plan_id) || text(value.edit_id),
@@ -142,7 +153,9 @@ export function entitiesFromToolResult(name, result, args = {}) {
     }
     case "session_edit": {
       const kind = details.kind || details.mode;
-      const entity = kind === "migration" ? migrationEntity(details) : editEntity(details);
+      const entity = kind === "migration"
+        ? migrationEntity(details)
+        : editEntity(details, args);
       return entity ? [entity] : [];
     }
     default:
