@@ -8,7 +8,7 @@ import json
 import secrets
 from datetime import datetime, timezone
 
-from ...operations.types import TextItem
+from ...contracts.operation_types import TextItem
 from ...events import event
 from ...errors import LocatorStaleError, OperationUnsupportedError
 from ..shared.editing import (

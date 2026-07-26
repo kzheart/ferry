@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from ...errors import ConcurrentModificationError, OperationUnsupportedError
-from ...operations.snapshots import snapshot_file
+from ...system.snapshots import snapshot_file
 from ..shared.codec import positive_turn, select_span
 from ..shared.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
 from .codec import CODEC, TURN_INDEX

@@ -4,7 +4,7 @@ import json
 import sqlite3
 from typing import Callable
 
-from ..operations.metadata_store import (
+from ..contracts.metadata import (
     merge_metadata,
     metadata_entry,
     metadata_key,

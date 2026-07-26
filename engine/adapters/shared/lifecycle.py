@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from ...errors import OperationUnsupportedError, SnapshotInvalidSourceError
-from ...operations.snapshots import snapshot_file
+from ...system.snapshots import snapshot_file
 
 
 class BaseLifecycle:
