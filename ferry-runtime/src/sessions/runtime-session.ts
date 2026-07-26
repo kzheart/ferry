@@ -33,7 +33,11 @@ import {
 import { createDelegationTool } from "../tools/delegation.js";
 import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
 import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
-import type { PersistedSession, SessionStore } from "./session-store.js";
+import type {
+  PersistedSession,
+  SessionPurpose,
+  SessionStore,
+} from "./session-store.js";
 
 type AgentId = (typeof AGENT_IDS)[number];
 type AgentCapability = (typeof AGENT_CAPABILITIES)[AgentId][number];
@@ -168,6 +172,7 @@ export class RuntimeSession {
     private readonly resolvedSkills: ResolvedSkill[] = [],
     readSkill?: (id: string) => Promise<SkillReadResult>,
     delegatableRoleIds: readonly string[] = [],
+    readonly purpose: SessionPurpose = "general",
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -433,6 +438,7 @@ export class RuntimeSession {
       thinking_level: this.selection.thinking ?? "off",
       role_id: this.roleId,
       apply_policy: this.resolvedApplyPolicy,
+      purpose: this.purpose,
     };
   }
 
@@ -625,6 +631,7 @@ export class RuntimeSession {
         resolved_tools: [...this.resolvedTools],
         resolved_apply_policy: this.resolvedApplyPolicy,
         resolved_skills: this.resolvedSkills.map((skill) => skill.id),
+        purpose: this.purpose,
       },
       messages,
       events,

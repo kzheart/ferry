@@ -133,4 +133,51 @@ describe("JSONL protocol", () => {
       error: { code: "invalid_role" },
     });
   });
+
+  it("rejects_invalid_session_purpose", async () => {
+    const runtime = await AgentRuntime.create({
+      backendFactory: createProtocolTestBackend,
+    });
+    const invalid = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "bad-purpose",
+        method: "session.create",
+        params: { session_id: "s-bad", purpose: "replay" },
+      }),
+    );
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: { code: "invalid_params" },
+    });
+
+    const optimization = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "opt-purpose",
+        method: "session.create",
+        params: { session_id: "s-opt", purpose: "session-optimization" },
+      }),
+    );
+    expect(optimization).toMatchObject({
+      ok: true,
+      result: { session_id: "s-opt", purpose: "session-optimization" },
+    });
+
+    const plain = await dispatch(
+      runtime,
+      parseCommand({
+        protocol: PROTOCOL_VERSION,
+        id: "no-purpose",
+        method: "session.create",
+        params: { session_id: "s-plain" },
+      }),
+    );
+    expect(plain).toMatchObject({
+      ok: true,
+      result: { session_id: "s-plain", purpose: "general" },
+    });
+  });
 });

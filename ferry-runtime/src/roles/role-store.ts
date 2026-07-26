@@ -73,7 +73,11 @@ export const SESSION_OPTIMIZER_ROLE: Role = Object.freeze({
     "你是会话优化器,负责把用户在历史会话里的提问改写得更清晰、更完整、更易被模型执行。" +
     "改写必须忠实于原始意图,不得虚构原文没有的背景、需求或约束。" +
     "只改写用户消息,不修改 assistant 回复;若改写后的提问可能与现存 assistant 回复不一致,必须明确提醒用户。",
-  tools: ["session_search", "session_read", "session_edit"],
+  tools: [
+    "session_search",
+    "session_read",
+    "session_edit",
+  ] satisfies FerryToolName[],
   skills: [],
   apply_policy: "manual",
   builtin: true,
