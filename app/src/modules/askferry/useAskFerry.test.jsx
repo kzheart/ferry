@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { act, render } from "@testing-library/react";
+import { useEffect, useState } from "react";
 
 const applied = { operation: [], shell: [] };
 // 事件订阅的回调:测试里直接调它来模拟 runtime 推事件
@@ -140,4 +141,58 @@ test("当前会话不攒 attention,打开会话会清掉已有徽标", async () 
   expect(attentionOf(harness, "s1")).toBe("approval");
 
   harness.unmount();
+});
+
+// 返回对象经 context 发给整棵 Ask Ferry 子树:每次渲染新建一个,根组件任何
+// state 变化都会把所有消费者连带重渲染,并且把 toast 的自动关闭计时器一直重置掉。
+function mountWithToast() {
+  let api;
+  let bump = () => {};
+  function Probe() {
+    const [, setTick] = useState(0);
+    bump = () => setTick((tick) => tick + 1);
+    const ferry = useAskFerry();
+    api = ferry;
+    // 与 AskFerry.jsx 的错误提示自动关闭逻辑一致
+    useEffect(() => {
+      if (!ferry.lastError) return undefined;
+      const id = setTimeout(ferry.clearError, 6000);
+      return () => clearTimeout(id);
+    }, [ferry.lastError, ferry.clearError]);
+    return null;
+  }
+  const view = render(<Probe />);
+  return { get: () => api, bump: () => bump(), unmount: () => view.unmount() };
+}
+
+test("无关重渲染时返回值引用不变", async () => {
+  sessionList = [];
+  const harness = mountWithToast();
+  await act(async () => {});
+  const before = harness.get();
+
+  await act(async () => harness.bump());
+
+  expect(harness.get()).toBe(before);
+  harness.unmount();
+});
+
+test("错误提示约 6 秒后自动清除，中途的无关重渲染不会重置计时器", async () => {
+  vi.useFakeTimers();
+  try {
+    sessionList = [];
+    const harness = mountWithToast();
+    await act(async () => {});
+    act(() => harness.get().reportError(new Error("boom")));
+    expect(harness.get().lastError).toBeTruthy();
+
+    await act(async () => vi.advanceTimersByTime(3000));
+    await act(async () => harness.bump());
+    await act(async () => vi.advanceTimersByTime(3100));
+
+    expect(harness.get().lastError).toBe(null);
+    harness.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });
