@@ -217,15 +217,12 @@
     "noModels": "该提供商暂时没有可用模型,试试在「模型」页刷新目录,或在这里手动新建一个。",
     "custom": {
       "addEntry": "添加自定义提供商…",
-      "title": "自定义提供商",
+      "defaultName": "自定义提供商",
       "name": "名称",
       "namePlaceholder": "例如 My Gateway",
       "format": "API 格式",
       "formatOpenAI": "OpenAI 兼容",
-      "formatAnthropic": "Anthropic 兼容",
-      "apiKeyOptional": "API Key(可选)",
-      "firstModel": "模型 ID",
-      "create": "添加"
+      "formatAnthropic": "Anthropic 兼容"
     }
   },
   "models": {

@@ -217,15 +217,12 @@
     "noModels": "No models yet. Refresh the catalog on the Models page, or add one by hand here.",
     "custom": {
       "addEntry": "Add custom provider…",
-      "title": "Custom provider",
+      "defaultName": "Custom provider",
       "name": "Name",
       "namePlaceholder": "e.g. My Gateway",
       "format": "API format",
       "formatOpenAI": "OpenAI-compatible",
-      "formatAnthropic": "Anthropic-compatible",
-      "apiKeyOptional": "API key (optional)",
-      "firstModel": "Model ID",
-      "create": "Add"
+      "formatAnthropic": "Anthropic-compatible"
     }
   },
   "models": {

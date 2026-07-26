@@ -174,11 +174,8 @@ export function parseCustomModel(value: unknown): CustomModelConfig {
 
 export function parseCustomProvider(value: unknown): CustomProviderConfig {
   if (!record(value)) throw new Error("custom provider is invalid");
-  if (
-    !Array.isArray(value.models) ||
-    value.models.length === 0 ||
-    value.models.length > 200
-  ) {
+  // 模型可以为空:自定义提供商会从端点的模型列表接口自动发现
+  if (!Array.isArray(value.models) || value.models.length > 200) {
     throw new Error("custom provider models are invalid");
   }
   const baseUrl = text(value.base_url, "custom provider base_url", 4_096);

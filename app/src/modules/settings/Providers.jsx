@@ -140,63 +140,56 @@ function Capability({ on, onChange, label }) {
   );
 }
 
-// 自定义提供商表单:任意 OpenAI / Anthropic 兼容端点都能接入
-function AddCustomProvider({ existingIds, onSubmit, onCancel, busy }) {
+// 自定义提供商就地编辑:改完自动保存,模型列表随后从端点自动拉取
+function CustomProviderSettings({ sel, onSave }) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [api, setApi] = useState("openai-completions");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [ctx, setCtx] = useState("");
-  const ready = name.trim() && baseUrl.trim() && modelId.trim();
+  const [name, setName] = useState(sel.name);
+  const [api, setApi] = useState(sel.api || "openai-completions");
+  const [baseUrl, setBaseUrl] = useState(sel.base_url || "");
+  useEffect(() => {
+    setName(sel.name);
+    setApi(sel.api || "openai-completions");
+    setBaseUrl(sel.base_url || "");
+  }, [sel.id]);
 
-  const slugify = value => {
-    const slug = value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-")
-      .replace(/^[^a-z0-9]+|-+$/g, "").slice(0, 100) || "provider";
-    let id = `custom-${slug}`;
-    for (let i = 2; existingIds.has(id); i += 1) id = `custom-${slug}-${i}`;
-    return id;
-  };
-  const submit = () => ready && onSubmit({
-    provider_id: slugify(name.trim()),
-    name: name.trim(),
-    api,
-    base_url: baseUrl.trim(),
-    ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
-    models: [{
-      id: modelId.trim(),
-      input: ["text"],
-      reasoning: false,
-      context_window: Number(ctx) > 0 ? Math.round(Number(ctx) * 1000) : 128_000,
-      max_tokens: 8_192,
-    }],
-  });
+  useEffect(() => {
+    const dirty = name !== sel.name || api !== (sel.api || "openai-completions")
+      || baseUrl !== (sel.base_url || "");
+    if (!dirty || !name.trim() || !/^https?:\/\/\S+$/.test(baseUrl.trim())) return undefined;
+    const timer = setTimeout(() => onSave({
+      provider_id: sel.id,
+      name: name.trim(),
+      api,
+      base_url: baseUrl.trim(),
+      models: [],
+    }), 800);
+    return () => clearTimeout(timer);
+  }, [name, api, baseUrl]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>
-        {t("settings:providers.custom.title")}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-          {t("settings:providers.custom.name")}</span>
-        <input autoFocus value={name} onChange={e => setName(e.target.value)}
-          placeholder={t("settings:providers.custom.namePlaceholder")}
-          style={{ ...inputStyle, width: "100%" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-          {t("settings:providers.custom.format")}</span>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[["openai-completions", t("settings:providers.custom.formatOpenAI")],
-            ["anthropic-messages", t("settings:providers.custom.formatAnthropic")]]
-            .map(([value, label]) => (
-              <button key={value} className="fbtn" onClick={() => setApi(value)}
-                style={{ flex: 1, height: 30, fontSize: 12,
-                  ...(api === value ? { borderColor: "var(--accent)", color: "var(--acc-text)",
-                    background: "var(--acc-soft3)", fontWeight: 650 } : {}) }}>
-                {label}</button>
-            ))}
+      <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
+            {t("settings:providers.custom.name")}</span>
+          <input value={name} onChange={e => setName(e.target.value)}
+            placeholder={t("settings:providers.custom.namePlaceholder")}
+            style={{ ...inputStyle, width: "100%" }} />
+        </div>
+        <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
+            {t("settings:providers.custom.format")}</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[["openai-completions", t("settings:providers.custom.formatOpenAI")],
+              ["anthropic-messages", t("settings:providers.custom.formatAnthropic")]]
+              .map(([value, label]) => (
+                <button key={value} className="fbtn" onClick={() => setApi(value)}
+                  style={{ height: 32, fontSize: 12,
+                    ...(api === value ? { borderColor: "var(--accent)", color: "var(--acc-text)",
+                      background: "var(--acc-soft3)", fontWeight: 650 } : {}) }}>
+                  {label}</button>
+              ))}
+          </div>
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -205,33 +198,6 @@ function AddCustomProvider({ existingIds, onSubmit, onCancel, busy }) {
           placeholder={api === "anthropic-messages"
             ? "https://api.example.com/anthropic" : "https://api.example.com/v1"}
           className="mono" style={{ ...inputStyle, width: "100%" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-          {t("settings:providers.custom.apiKeyOptional")}</span>
-        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-          placeholder={t("settings:providers.keyPlaceholder")}
-          style={{ ...inputStyle, width: "100%" }} />
-      </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-            {t("settings:providers.custom.firstModel")}</span>
-          <input value={modelId} onChange={e => setModelId(e.target.value)}
-            placeholder={t("settings:models.idPlaceholder")}
-            className="mono" style={{ ...inputStyle, width: "100%" }} />
-        </div>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-            {t("settings:models.contextWindow")} (k)</span>
-          <input value={ctx} onChange={e => setCtx(e.target.value.replace(/[^\d]/g, ""))}
-            placeholder="128" className="mono" style={{ ...inputStyle, width: "100%" }} />
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-        <button className="fbtn" onClick={onCancel}>{t("settings:models.cancel")}</button>
-        <button className="fbtn fbtn-primary" disabled={!ready || busy} onClick={submit}
-          style={{ height: 30 }}>{t("settings:providers.custom.create")}</button>
       </div>
     </div>
   );
@@ -294,7 +260,6 @@ export default function Providers() {
   const [adding, setAdding] = useState(false);
   const [catalog, setCatalog] = useState([]);
   const [addingModel, setAddingModel] = useState(false);
-  const [customForm, setCustomForm] = useState(false);
 
   const load = useCallback(async () => {
     const list = await runtime("providers.list");
@@ -348,11 +313,30 @@ export default function Providers() {
     setAdding(false);
   });
 
-  const addCustomProvider = payload => act(async () => {
+  // 点「添加自定义提供商」直接建一条并选中,细节在右侧就地编辑
+  const addCustomProvider = () => act(async () => {
+    const ids = new Set((providers || []).map(p => p.id));
+    let n = 1;
+    while (ids.has(`custom-${n}`)) n += 1;
+    const id = `custom-${n}`;
+    await runtime("custom_provider.upsert", {
+      provider_id: id,
+      name: t("settings:providers.custom.defaultName"),
+      api: "openai-completions",
+      base_url: "http://localhost/v1",
+      models: [],
+    });
+    await load();
+    setSelId(id);
+    setAdding(false);
+  });
+
+  // 就地编辑自动保存;端点或格式变了以后重新拉取模型列表
+  const saveCustomProviderSettings = payload => act(async () => {
     await runtime("custom_provider.upsert", payload);
     await load();
-    setSelId(payload.provider_id);
-    setCustomForm(false);
+    await runtime("models.refresh").catch(() => {});
+    await load();
     await syncFerry();
   });
 
@@ -417,7 +401,6 @@ export default function Providers() {
             <div key={p.id} className={p.id === selId ? undefined : "hov-item"}
               onClick={() => {
                 setSelId(p.id); setNotice(null); setKey(""); setAddingModel(false);
-                setCustomForm(false);
               }}
               style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px",
                 borderRadius: 8, cursor: "default",
@@ -436,7 +419,7 @@ export default function Providers() {
           padding: "6px 10px", borderTop: "1px solid var(--line4)" }}>
           {adding && (
             <AddMenu candidates={candidates} onPick={addProvider}
-              onCustom={() => { setAdding(false); setCustomForm(true); setNotice(null); }}
+              onCustom={addCustomProvider}
               onClose={() => setAdding(false)} />)}
           <button className="hov" title={t("settings:providers.add")} disabled={busy}
             onClick={() => setAdding(v => !v)}
@@ -452,28 +435,20 @@ export default function Providers() {
 
       <div className="fscroll" style={{ flex: 1, minWidth: 0, overflowY: "auto",
         padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {customForm && (
-          <>
-            <AddCustomProvider busy={busy}
-              existingIds={new Set((providers || []).map(p => p.id))}
-              onSubmit={addCustomProvider}
-              onCancel={() => { setCustomForm(false); setNotice(null); }} />
-            {notice && (
-              <div style={{ fontSize: 11.5, color: "var(--acc-text)", background: "var(--acc-soft3)",
-                border: "1px solid var(--acc-line)", borderRadius: 8, padding: "7px 10px" }}>
-                {notice}</div>)}
-          </>
-        )}
-        {!customForm && !sel && (
+        {!sel && (
           <div style={{ color: "var(--tx5)", fontSize: 12.5, paddingTop: 40, textAlign: "center",
             lineHeight: 1.6, whiteSpace: "pre-line" }}>
             {t("settings:providers.emptyHint")}</div>)}
-        {!customForm && sel && (
+        {sel && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <ProviderIcon provider={sel.id} size={20} />
               <span style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{sel.name}</span>
             </div>
+
+            {sel.custom && (
+              <CustomProviderSettings key={sel.id} sel={sel}
+                onSave={saveCustomProviderSettings} />)}
 
             {sel.auth_types.includes("api_key") && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
