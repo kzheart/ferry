@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from datetime import datetime, timezone
 
 from ..errors import AgentRequestError
+from . import regex_search
+from .agent_read import read_indexed_session
 from .content_index import ContentIndex, parse_query_terms
 from .index import AgentSessionIndex
 from .safety import (
@@ -22,6 +25,10 @@ MAX_SEARCH_RESULTS = 50
 MAX_OR_PATTERNS = 16
 _SCOPES = ("any", "metadata", "content")
 _SNIPPET_CHARS = 320
+# 正则扫描读的是原始转录,必须有界:runtime 侧 25s 超时,留出余量;
+# 字节按会话元数据的 size 估算。超预算即停止并如实报告 skipped。
+_SCAN_TIME_BUDGET_SECONDS = 15.0
+_SCAN_BYTE_BUDGET = 256 * 1024 * 1024
 
 UI_SEARCH_LIMIT = 30
 # ⌘K 结果行只有一两行高,再长的片段渲染时也会被截掉,不如不传。
@@ -36,15 +43,16 @@ _UI_SCOPES = {
 }
 
 
-def _validated_scope(scope, needles: list[str]) -> str:
+def _validated_scope(scope, needles: list[str], has_regex: bool) -> str:
     if scope not in _SCOPES:
         raise AgentRequestError(
             "scope 仅允许 any/metadata/content",
             {"field": "scope", "accepts": list(_SCOPES)},
         )
-    if scope == "content" and not needles:
+    if scope == "content" and not needles and not has_regex:
         raise AgentRequestError(
-            "scope=content 需要非空 query 或 patterns", {"field": "query"},
+            "scope=content 需要非空 query、patterns 或 regex",
+            {"field": "query"},
         )
     return scope
 
@@ -76,11 +84,71 @@ def _validated_patterns(query: str, patterns) -> list[str]:
     return needles
 
 
+def _scan_regex(filtered, compiled, include_tool_outputs: bool,
+                index: AgentSessionIndex, candidates,
+                clipped_by_session) -> tuple[dict, dict]:
+    """对候选会话的原始转录跑正则,返回 (命中, 覆盖度元信息)。
+
+    candidates 为 None 表示无预过滤,全量扫描(按最近更新优先,预算内
+    尽力);预过滤模式下,索引里有截断消息却不在候选集里的会话计入
+    clipped_sessions_not_scanned——字面量可能恰好只出现在没进索引的
+    尾部,模型看到这个数字非零且结果存疑时,应改用 exhaustive 重扫。
+    """
+    ordered = sorted(filtered, key=lambda item: -item[3])
+    deadline = time.monotonic() + _SCAN_TIME_BUDGET_SECONDS
+    scanned = skipped = read_failures = bytes_read = 0
+    skip_reason = None
+    clipped_not_scanned = 0
+    hits: dict[tuple[str, str], dict] = {}
+    for record, _project, _truncated, _updated, _haystack, _raw in ordered:
+        key = (record.tool, record.canonical_ref)
+        if candidates is not None and key not in candidates:
+            if key in clipped_by_session:
+                clipped_not_scanned += 1
+            continue
+        if skip_reason is not None:
+            skipped += 1
+            continue
+        if time.monotonic() > deadline:
+            skip_reason = "time_budget"
+            skipped += 1
+            continue
+        size = int(record.row.get("size") or 0)
+        if scanned > 0 and bytes_read + size > _SCAN_BYTE_BUDGET:
+            skip_reason = "byte_budget"
+            skipped += 1
+            continue
+        try:
+            session = read_indexed_session(index, record)
+        except Exception:
+            # 会话正被写入等瞬态失败:跳过但计数,覆盖度必须如实。
+            read_failures += 1
+            continue
+        scanned += 1
+        bytes_read += size
+        count, rows = regex_search.scan_session(
+            session, compiled, include_tool_outputs,
+        )
+        if count:
+            hits[key] = {"count": count, "best_rank": None, "rows": rows}
+    meta = {
+        "mode": "prefilter" if candidates is not None else "full",
+        "scanned_sessions": scanned,
+        "skipped_sessions": skipped,
+        "skip_reason": skip_reason,
+        "read_failures": read_failures,
+    }
+    if candidates is not None:
+        meta["clipped_sessions_not_scanned"] = clipped_not_scanned
+    return hits, meta
+
+
 def search_sessions(query: str = "", agents=None, projects=None,
                     time_range=None, limit: int = 20,
                     scope: str = "any",
                     include_tool_outputs: bool = False,
-                    patterns=None, *,
+                    patterns=None, regex=None,
+                    exhaustive: bool = False, *,
                     index: AgentSessionIndex,
                     content_index: ContentIndex | None = None) -> dict:
     limit = bounded_int(limit, 20, 1, MAX_SEARCH_RESULTS, "limit")
@@ -88,6 +156,17 @@ def search_sessions(query: str = "", agents=None, projects=None,
         raise AgentRequestError("query 必须是不超过 500 字符的字符串")
     if not isinstance(include_tool_outputs, bool):
         raise AgentRequestError("include_tool_outputs 必须是 boolean")
+    if not isinstance(exhaustive, bool):
+        raise AgentRequestError(
+            "exhaustive 必须是 boolean", {"field": "exhaustive"},
+        )
+    compiled = (
+        regex_search.compile_regex(regex) if regex is not None else None
+    )
+    if exhaustive and compiled is None:
+        raise AgentRequestError(
+            "exhaustive 仅与 regex 搭配使用", {"field": "exhaustive"},
+        )
     allowed_agents = string_set(agents, "agents", 8, 32)
     allowed_projects = {
         item.casefold()
@@ -95,8 +174,12 @@ def search_sessions(query: str = "", agents=None, projects=None,
     }
     start, end = validated_interval(time_range)
     needles = _validated_patterns(query, patterns)
-    has_needle = bool(needles)
-    scope = _validated_scope(scope, needles)
+    if compiled is not None and needles:
+        raise AgentRequestError(
+            "regex 不能与 query/patterns 同用", {"field": "regex"},
+        )
+    has_needle = bool(needles) or compiled is not None
+    scope = _validated_scope(scope, needles, compiled is not None)
     # 每个 pattern 拆词后折叠;OR 关系:任一 pattern 的词全部命中即算。
     needle_groups = [
         [term.casefold() for term in parse_query_terms(needle)]
@@ -104,9 +187,38 @@ def search_sessions(query: str = "", agents=None, projects=None,
     ]
 
     records = index.refresh()
-    # 内容命中与索引覆盖度。索引不可用时特性显式降级为纯元数据搜索。
+    # 元数据过滤前置:正则扫描只扫过滤后的会话,主循环复用同一份。
+    filtered = []
+    for record in records:
+        row = record.row
+        project, project_truncated = truncate_text(
+            str(row.get("dir") or ""), 1024,
+        )
+        updated = int(row.get("updated") or 0)
+        raw_haystack = " ".join((
+            str(row.get("title") or ""),
+            project,
+            record.tool,
+            str(row.get("model") or ""),
+        ))
+        if allowed_agents and record.tool not in allowed_agents:
+            continue
+        if allowed_projects and project.casefold() not in allowed_projects:
+            continue
+        if start is not None and updated < start:
+            continue
+        if end is not None and updated > end:
+            continue
+        filtered.append((
+            record, project, project_truncated, updated,
+            raw_haystack.casefold(), raw_haystack,
+        ))
+
+    # 内容命中与索引覆盖度。索引不可用时特性显式降级:词法搜索退成纯
+    # 元数据搜索,正则搜索退成全量扫描(它本就不依赖索引的正确性)。
     content_hits: dict = {}
     content_status: dict | None = None
+    clipped_by_session: dict = {}
     content_active = has_needle and scope != "metadata"
     if content_active:
         if content_index is None:
@@ -115,6 +227,26 @@ def search_sessions(query: str = "", agents=None, projects=None,
             }
         else:
             content_status = content_index.sync(index, records)
+            clipped_by_session = content_index.clipped_rows_by_session()
+        if compiled is not None:
+            candidates = None
+            literals = (
+                [] if exhaustive else regex_search.required_literals(regex)
+            )
+            if literals and content_index is not None \
+                    and content_status.get("ready"):
+                # 预过滤只在索引完整时启用:pending 会话不在索引里,用
+                # 残缺候选集会把它们静默排除在扫描之外。
+                candidates = content_index.sessions_matching_literals(
+                    literals, include_tool_outputs,
+                )
+            content_hits, scan_meta = _scan_regex(
+                filtered, compiled, include_tool_outputs, index,
+                candidates, clipped_by_session,
+            )
+            content_status["match_mode"] = "regex"
+            content_status["regex_scan"] = scan_meta
+        elif content_index is not None:
             hits, meta = content_index.search(
                 needles, include_tool_outputs=include_tool_outputs,
             )
@@ -124,30 +256,16 @@ def search_sessions(query: str = "", agents=None, projects=None,
     matches = []
     ranking = {}
     hit_by_item = {}
-    for record in records:
+    for record, project, project_truncated, updated, haystack, \
+            raw_haystack in filtered:
         row = record.row
-        project, project_truncated = truncate_text(
-            str(row.get("dir") or ""), 1024,
-        )
-        updated = int(row.get("updated") or 0)
-        haystack = " ".join((
-            str(row.get("title") or ""),
-            project,
-            record.tool,
-            str(row.get("model") or ""),
-        )).casefold()
-        if allowed_agents and record.tool not in allowed_agents:
-            continue
-        if allowed_projects and project.casefold() not in allowed_projects:
-            continue
-        if start is not None and updated < start:
-            continue
-        if end is not None and updated > end:
-            continue
-        metadata_hit = any(
-            all(term in haystack for term in group)
-            for group in needle_groups
-        )
+        if compiled is not None:
+            metadata_hit = bool(compiled.search(raw_haystack))
+        else:
+            metadata_hit = any(
+                all(term in haystack for term in group)
+                for group in needle_groups
+            )
         content_hit = content_hits.get((record.tool, record.canonical_ref))
         if has_needle:
             if scope == "metadata" and not metadata_hit:
@@ -187,6 +305,14 @@ def search_sessions(query: str = "", agents=None, projects=None,
                 matched_in.append("content")
                 item["content_match_count"] = content_hit["count"]
             item["matched_in"] = matched_in
+        if content_active:
+            clipped = clipped_by_session.get(
+                (record.tool, record.canonical_ref),
+            )
+            # 盲区透出:这些消息只有前 16KB 进了索引,词法搜索"没命中"
+            # 不等于"不存在";模型可据此升级到 regex 原文扫描。
+            if clipped:
+                item["partially_indexed_messages"] = clipped
         # 有内容命中时按相关性分组排序:双命中 > 内容命中(bm25) > 纯元数据。
         rank = (
             content_hit["best_rank"] if content_hit is not None else None
@@ -207,7 +333,17 @@ def search_sessions(query: str = "", agents=None, projects=None,
         matches.sort(key=lambda item: item["updated"], reverse=True)
 
     # 摘要只为最终返回页生成，避免为未返回结果做额外读取。
-    if content_active and content_index is not None:
+    # regex 扫描的命中行自带原文摘要;词法命中回索引取上下文窗口。
+    if content_active:
+        def _row_snippet(row):
+            if "snippet" in row:
+                return row["snippet"]
+            if content_index is None:
+                return ""
+            return content_index.snippet(
+                row["id"], needles, include_tool_outputs,
+            )
+
         for item in matches[:limit]:
             hit = hit_by_item.get(id(item))
             if hit is None:
@@ -218,10 +354,7 @@ def search_sessions(query: str = "", agents=None, projects=None,
                     "turn": row["turn"],
                     "role": row["role"],
                     "snippet": truncate_text(
-                        content_index.snippet(
-                            row["id"], needles, include_tool_outputs,
-                        ),
-                        _SNIPPET_CHARS,
+                        _row_snippet(row), _SNIPPET_CHARS,
                     )[0],
                 }
                 for row in hit["rows"]
