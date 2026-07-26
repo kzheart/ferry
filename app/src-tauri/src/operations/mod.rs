@@ -285,3 +285,229 @@ pub(crate) async fn operation_cancel(
     )
     .await
 }
+
+/// 这道关卡与 Python `engine/operations/validation.py` 是同一判定的两侧实现，
+/// 非法输入样例与 `tests/test_operations_validation.py` 取同一组字面量。
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    const REF: &str = "fsr_0123456789abcdef";
+
+    fn validate(input: Value) -> Result<(), String> {
+        validate_operation_plan_input(
+            &serde_json::from_value::<OperationPlanInput>(input).expect("input decodes"),
+        )
+    }
+
+    fn edit(overrides: Value) -> Value {
+        merge(
+            json!({
+                "kind": "edit",
+                "tool": "claude",
+                "ref": REF,
+                "ops": [{"op": "delete-turn", "turn": 1}],
+            }),
+            overrides,
+        )
+    }
+
+    fn migration(overrides: Value) -> Value {
+        merge(
+            json!({
+                "kind": "migration",
+                "source_tool": "claude",
+                "ref": REF,
+                "target_tool": "opencode",
+            }),
+            overrides,
+        )
+    }
+
+    fn metadata(patch: Value) -> Value {
+        json!({"kind": "metadata", "tool": "claude", "ref": REF, "patch": patch})
+    }
+
+    fn merge(mut base: Value, overrides: Value) -> Value {
+        let fields = base.as_object_mut().expect("base is an object");
+        for (key, value) in overrides.as_object().expect("overrides is an object") {
+            fields.insert(key.clone(), value.clone());
+        }
+        base
+    }
+
+    #[test]
+    fn edit_accepts_every_declared_edit_op() {
+        assert!(validate(edit(json!({}))).is_ok());
+        assert!(validate(edit(json!({
+            "ops": [
+                {"op": "rewrite", "locator": "fml_one", "text": "改写"},
+                {
+                    "op": "replace-assistant-reply",
+                    "turn": 2,
+                    "reply": {"items": [{"kind": "text", "text": "答"}]},
+                },
+            ],
+            "probe": true,
+        })))
+        .is_ok());
+    }
+
+    #[test]
+    fn edit_rejects_unknown_agent_and_missing_capability() {
+        assert!(validate(edit(json!({"tool": "unknown"}))).is_err());
+        // grok 在共享契约里没有 edit 能力。
+        assert!(validate(edit(json!({"tool": "grok"}))).is_err());
+    }
+
+    #[test]
+    fn edit_rejects_bad_reference_and_op_count() {
+        assert!(validate(edit(json!({"ref": ""}))).is_err());
+        assert!(validate(edit(json!({"ref": "a".repeat(513)}))).is_err());
+        assert!(validate(edit(json!({"ref": "fsr_bad\u{7}ref"}))).is_err());
+        assert!(validate(edit(json!({"ops": []}))).is_err());
+        let too_many: Vec<Value> = (1..=51)
+            .map(|turn| json!({"op": "delete-turn", "turn": turn}))
+            .collect();
+        assert!(validate(edit(json!({"ops": too_many}))).is_err());
+    }
+
+    #[test]
+    fn edit_rejects_malformed_or_duplicated_ops() {
+        assert!(validate(edit(json!({"ops": ["delete-turn"]}))).is_err());
+        assert!(validate(edit(json!({"ops": [{"op": "purge", "turn": 1}]}))).is_err());
+        assert!(validate(edit(json!({"ops": [{"op": "delete-turn", "turn": 0}]}))).is_err());
+        assert!(validate(edit(json!({
+            "ops": [{"op": "delete-turn", "turn": 1}, {"op": "delete-turn", "turn": 1}],
+        })))
+        .is_err());
+        assert!(validate(edit(json!({
+            "ops": [{"op": "rewrite", "locator": "no-prefix", "text": "改写"}],
+        })))
+        .is_err());
+        let duplicated_reply = json!({
+            "op": "replace-assistant-reply",
+            "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "答"}]},
+        });
+        assert!(validate(edit(json!({
+            "ops": [duplicated_reply.clone(), duplicated_reply],
+        })))
+        .is_err());
+        assert!(validate(edit(json!({
+            "ops": [{
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": []},
+            }],
+        })))
+        .is_err());
+    }
+
+    #[test]
+    fn edit_rejects_ops_payload_over_64_kib() {
+        let ops: Vec<Value> = (0..5)
+            .map(|index| {
+                json!({
+                    "op": "rewrite",
+                    "locator": format!("fml_{index}"),
+                    "text": "x".repeat(20_000),
+                })
+            })
+            .collect();
+
+        assert!(validate(edit(json!({"ops": ops}))).is_err());
+    }
+
+    #[test]
+    fn migration_accepts_probe_with_model_on_capable_target() {
+        assert!(validate(migration(json!({}))).is_ok());
+        assert!(validate(migration(json!({
+            "max_turn": 7, "probe": true, "probe_model": "model-a",
+        })))
+        .is_ok());
+    }
+
+    #[test]
+    fn migration_rejects_unknown_identical_or_incapable_agents() {
+        assert!(validate(migration(json!({"source_tool": "unknown"}))).is_err());
+        assert!(validate(migration(json!({"target_tool": "claude"}))).is_err());
+    }
+
+    #[test]
+    fn migration_rejects_out_of_range_and_inconsistent_probe_fields() {
+        assert!(validate(migration(json!({"ref": "not-opaque"}))).is_err());
+        assert!(validate(migration(json!({"max_turn": 0}))).is_err());
+        assert!(validate(migration(json!({"max_turn": 100_001}))).is_err());
+        assert!(validate(migration(json!({"probe": true, "probe_model": ""}))).is_err());
+        assert!(validate(migration(json!({"probe_model": "model-a"}))).is_err());
+    }
+
+    #[test]
+    fn metadata_accepts_any_non_empty_subset_of_the_patch() {
+        assert!(validate(metadata(json!({"name": "新名称"}))).is_ok());
+        assert!(validate(metadata(json!({
+            "name": "n", "pinned": true, "archived": false, "tags": ["a"],
+        })))
+        .is_ok());
+    }
+
+    #[test]
+    fn metadata_rejects_empty_patch_and_out_of_range_fields() {
+        assert!(validate(metadata(json!({}))).is_err());
+        assert!(validate(metadata(json!({"name": "名".repeat(201)}))).is_err());
+        assert!(validate(metadata(json!({"tags": vec!["a"; 21]}))).is_err());
+        assert!(validate(metadata(json!({"tags": [""]}))).is_err());
+        assert!(validate(metadata(json!({"tags": ["标".repeat(65)]}))).is_err());
+    }
+
+    #[test]
+    fn metadata_rejects_unknown_agent_and_non_opaque_reference() {
+        assert!(validate(json!({
+            "kind": "metadata", "tool": "unknown", "ref": REF, "patch": {"pinned": true},
+        }))
+        .is_err());
+        assert!(validate(json!({
+            "kind": "metadata", "tool": "claude", "ref": "", "patch": {"pinned": true},
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn delete_accepts_every_agent_declaring_the_delete_capability() {
+        for tool in crate::contracts::agents::AGENT_IDS {
+            assert!(validate(json!({"kind": "delete", "tool": tool, "ref": REF})).is_ok());
+        }
+    }
+
+    #[test]
+    fn delete_rejects_unknown_agent_and_non_opaque_reference() {
+        assert!(validate(json!({"kind": "delete", "tool": "unknown", "ref": REF})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "ref": ""})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "ref": "a b"})).is_err());
+    }
+
+    #[test]
+    fn restore_delete_accepts_prefixed_recovery_id() {
+        assert!(validate(json!({
+            "kind": "restore-delete", "recovery_id": "recovery_0123456789abcdef",
+        }))
+        .is_ok());
+    }
+
+    #[test]
+    fn restore_delete_rejects_bad_prefix_length_or_charset() {
+        for recovery_id in [
+            "plan_0123456789abcdef",
+            "recovery_short",
+            "recovery_bad/chars/here!!",
+            &"recovery_".to_owned().repeat(20),
+        ] {
+            assert!(
+                validate(json!({"kind": "restore-delete", "recovery_id": recovery_id})).is_err(),
+                "{recovery_id} 应被拒绝"
+            );
+        }
+    }
+}
