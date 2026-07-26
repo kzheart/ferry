@@ -1,6 +1,6 @@
 // Ask Ferry 状态中枢:订阅 ferry-runtime-event,维护会话列表与每会话时间线,
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   onRuntimeEvent,
   operationApply,
@@ -50,7 +50,10 @@ export function useAskFerry() {
   const loadingRef = useRef(new Map());
   const refreshRef = useRef(() => {});
 
-  const setMode = m => { setModeState(m); localStorage.setItem(MODE_KEY, m); };
+  const setMode = useCallback(m => {
+    setModeState(m);
+    localStorage.setItem(MODE_KEY, m);
+  }, []);
 
   const mutateLog = useCallback((id, fn) => {
     setLogs(prev => {
@@ -406,17 +409,32 @@ export function useAskFerry() {
   }, [auth?.loginId]);
   const clearAuth = useCallback(() => setAuth(null), []);
 
+  const clearError = useCallback(() => setLastError(null), []);
+
   const activeLog = activeId ? logs[activeId] : null;
-  return {
+  // 这个对象经 context 发给所有消费者:每次渲染新建一个,等于让根组件的任何
+  // state 变化都把整棵 Ask Ferry 子树重渲染一遍。写法同 SessionEditingProvider。
+  return useMemo(() => ({
     available, health, sessions, activeId, activeLog, mode, auth, models, mutationVersion,
     roles, selectedRoleId, setSelectedRoleId,
     skills, skillCandidates,
-    lastError, clearError: () => setLastError(null), reportError: setLastError,
+    lastError, clearError, reportError: setLastError,
     refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
     reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
     setGlobalSkills, addSkillSource, removeSkillSource, readSkill,
     startLogin, respondLogin, cancelLogin, clearAuth,
-  };
+  }), [
+    available, health, sessions, activeId, activeLog, mode, auth, models, mutationVersion,
+    roles, selectedRoleId, setSelectedRoleId,
+    skills, skillCandidates,
+    lastError, clearError,
+    refresh, openSession, newChat, send, steer, abort, setMode, rename, pin, deleteSession,
+    approve, dismiss, selectModel, loadModels,
+    reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
+    reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
+    setGlobalSkills, addSkillSource, removeSkillSource, readSkill,
+    startLogin, respondLogin, cancelLogin, clearAuth,
+  ]);
 }
