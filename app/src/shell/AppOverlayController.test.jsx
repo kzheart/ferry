@@ -16,6 +16,7 @@ vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
   },
 }));
 
+import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
@@ -32,10 +33,25 @@ const editingSurface = {
   onOpenDiff: noop, onApply: noop, applying: false, onDiscardAll: noop,
 };
 
+// browser 域的入参已从 props 下沉为 Context。用例仍按命名空间构造同一份数据,
+// 这里按 key 分流:browser 那几个进 Provider,其余照旧作为 props。
+const BROWSER_STATE_KEYS = [
+  "peek", "search", "contextMenu", "deletion", "rename", "tags", "filters",
+];
+
+const browserStateOf = props =>
+  Object.fromEntries(
+    BROWSER_STATE_KEYS.filter(key => key in props).map(key => [key, props[key]]),
+  );
+
 function render(ui) {
   const wrap = node => (
     <FerryRuntimeProvider value={ferry}>
-      <SessionEditingProvider value={editingSurface}>{node}</SessionEditingProvider>
+      <SessionEditingProvider value={editingSurface}>
+        <BrowserStateProvider value={browserStateOf(node.props)}>
+          {node}
+        </BrowserStateProvider>
+      </SessionEditingProvider>
     </FerryRuntimeProvider>
   );
   const result = rtlRender(wrap(ui));
