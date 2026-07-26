@@ -6,6 +6,9 @@ const applied = { operation: [], shell: [] };
 // 事件订阅的回调:测试里直接调它来模拟 runtime 推事件
 let emit = () => {};
 let sessionList = [];
+// 记录 runtime 命令调用,创建类断言用
+const runtimeCalls = [];
+let createdCount = 0;
 
 // bash 提案与 Engine 提案共用同一张审批卡,分流只看 plan_id 前缀——这条走错就会
 // 把 shell 命令送进 Engine 的 operation 状态机。
@@ -15,10 +18,14 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
     emit = handler;
     return () => {};
   },
-  runtime: async (method) => {
+  runtime: async (method, params) => {
+    runtimeCalls.push({ method, params });
     if (method === "sessions.list") return sessionList;
     // 回放接口返回事件数组;打开会话要靠它把时间线建出来
     if (method === "events.replay") return [];
+    if (method === "session.create") {
+      return { session_id: `created-${++createdCount}` };
+    }
     return {};
   },
   operationApply: async (planId) => {
@@ -144,6 +151,34 @@ test("当前会话不攒 attention,打开会话会清掉已有徽标", async () 
   // 其他会话照常
   await act(async () => emit({ type: "operation.proposed", session_id: "s1" }));
   expect(attentionOf(harness, "s1")).toBe("approval");
+
+  harness.unmount();
+});
+
+test("新会话按 purpose 创建;后续消息不重建,普通 newChat 重置 general", async () => {
+  runtimeCalls.length = 0;
+  const harness = await mountWithSessions([]);
+  const creates = () =>
+    runtimeCalls.filter((call) => call.method === "session.create");
+
+  // 优化新会话:session.create 带 purpose
+  await act(async () => harness.get().newChat("session-optimization"));
+  await act(async () => { await harness.get().send("优化这段会话"); });
+  expect(creates()).toHaveLength(1);
+  expect(creates()[0].params).toMatchObject({
+    role_id: "default",
+    purpose: "session-optimization",
+  });
+
+  // 已有会话继续发消息:不再创建,purpose 不可切换
+  await act(async () => { await harness.get().send("继续调整"); });
+  expect(creates()).toHaveLength(1);
+
+  // 普通 newChat(即使收到点击事件对象)必须回到 general 语义:省略 purpose
+  await act(async () => harness.get().newChat({ type: "click" }));
+  await act(async () => { await harness.get().send("普通对话"); });
+  expect(creates()).toHaveLength(2);
+  expect(creates()[1].params).not.toHaveProperty("purpose");
 
   harness.unmount();
 });
