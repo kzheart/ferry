@@ -16,6 +16,7 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
+    "prompt",
     "models",
   ],
   codex: [
@@ -26,6 +27,7 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
+    "prompt",
     "models",
   ],
   opencode: [
@@ -36,6 +38,7 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
+    "prompt",
     "models",
   ],
   pi: [
@@ -46,6 +49,7 @@ export const AGENT_CAPABILITIES = {
     "edit",
     "delete",
     "probe",
+    "prompt",
     "models",
   ],
   grok: [
@@ -55,6 +59,7 @@ export const AGENT_CAPABILITIES = {
     "migration-target",
     "delete",
     "probe",
+    "prompt",
     "models",
   ],
 } as const;
