@@ -16,6 +16,7 @@ from urllib.parse import quote
 
 from ...sessions.model import tool_result_text
 from ...system.paths import grok_home
+from ..shared.scanner import split_jsonl_lines
 from ..shared.writing import write_jsonl
 from .blake3 import blake3_hex
 from .reader import read
@@ -195,7 +196,8 @@ def _updated_at(summary):
 
 def _index_content(bundle):
     parts = []
-    for line in (bundle / "chat_history.jsonl").read_text().splitlines():
+    for line in split_jsonl_lines(
+            (bundle / "chat_history.jsonl").read_text()):
         if not line.strip():
             continue
         row = json.loads(line)

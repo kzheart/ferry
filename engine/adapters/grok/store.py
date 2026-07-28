@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import AgentFormatChangedError, SessionNotFoundError
+from ..shared.scanner import split_jsonl_lines
 
 
 @dataclass
@@ -29,7 +30,7 @@ class GrokBundle:
 def _jsonl(path: Path) -> tuple[list[dict], list[dict]]:
     if not path.is_file():
         return [], []
-    lines = path.read_text().splitlines()
+    lines = split_jsonl_lines(path.read_text())
     nonempty = [i for i, line in enumerate(lines) if line.strip()]
     final = nonempty[-1] if nonempty else -1
     records, diagnostics = [], []

@@ -125,6 +125,27 @@ def test_writer_roundtrips_order_and_indexes_search_document(
     assert result_update["status"] == "completed"
 
 
+def test_writer_indexes_unicode_line_separators_as_content(
+        tmp_path, monkeypatch):
+    monkeypatch.setattr(grok_probe, "probe_bundle", _passing_probe)
+    sessions = tmp_path / "sessions"
+    source = _session(tmp_path)
+    content = "alpha\u0085beta\u2028gamma\u2029omega"
+    source.messages[0].blocks[0].text = content
+
+    sid, path = write(source, str(tmp_path), sessions)
+    migrated = read(str(path))
+    database = sqlite3.connect(sessions / "session_search.sqlite")
+    indexed = database.execute(
+        "SELECT content FROM session_docs WHERE session_id=?",
+        (sid,),
+    ).fetchone()[0]
+    database.close()
+
+    assert migrated.messages[0].blocks[0].text == content
+    assert content in indexed
+
+
 def test_writer_preserves_tree_links_and_existing_bundle(
         tmp_path, monkeypatch):
     monkeypatch.setattr(grok_probe, "probe_bundle", _passing_probe)

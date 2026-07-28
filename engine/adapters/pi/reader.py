@@ -11,11 +11,12 @@ from ...sessions.model import (
 )
 from ...sessions.tool_ops import CanonicalOp
 from ..shared.media import image_from_base64
+from ..shared.scanner import split_jsonl_lines
 from .tool_calls import call_from_part, result_from_message
 
 def _load(path: Path) -> tuple[dict, list[dict], list[int]]:
     try:
-        lines = path.read_text().splitlines()
+        lines = split_jsonl_lines(path.read_text())
     except OSError as error:
         raise SessionNotFoundError("pi", str(path)) from error
     records, malformed = [], []

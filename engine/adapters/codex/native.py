@@ -11,6 +11,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..shared.scanner import split_jsonl_lines
 
 
 class CodexCloneError(RuntimeError):
@@ -71,7 +72,7 @@ def _digest(data: bytes) -> str:
 def _read_jsonl(path: Path) -> tuple[list[dict], str]:
     raw = path.read_bytes()
     try:
-        records = [json.loads(line) for line in raw.decode().splitlines()
+        records = [json.loads(line) for line in split_jsonl_lines(raw.decode())
                    if line.strip()]
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise CodexCloneError(f"无法解析 Codex rollout: {path}: {error}") from error

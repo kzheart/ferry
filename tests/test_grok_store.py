@@ -47,3 +47,23 @@ def test_bad_tail_keeps_valid_history(tmp_path):
     bundle = load_grok_bundle(tmp_path)
     assert len(bundle.updates) == 1
     assert bundle.diagnostics == []
+
+
+def test_unicode_line_separators_remain_inside_jsonl_record(tmp_path):
+    content = "alpha\u0085beta\u2028gamma\u2029omega"
+    (tmp_path / "summary.json").write_text(json.dumps({
+        "info": {"id": "x", "cwd": "/tmp"}, "chat_format_version": 1,
+    }))
+    (tmp_path / "updates.jsonl").write_text(
+        json.dumps(
+            {"method": "session/update", "content": content},
+            ensure_ascii=False,
+        ) + "\n"
+    )
+
+    bundle = load_grok_bundle(tmp_path)
+
+    assert bundle.updates == [{
+        "method": "session/update", "content": content,
+    }]
+    assert bundle.diagnostics == []

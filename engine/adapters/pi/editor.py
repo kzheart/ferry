@@ -9,6 +9,7 @@ from ...errors import ConcurrentModificationError, OperationUnsupportedError
 from ...system.snapshots import snapshot_file
 from ..shared.codec import positive_turn, select_span
 from ..shared.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
+from ..shared.scanner import split_jsonl_lines
 from .codec import CODEC, TURN_INDEX
 from .reader import _load
 
@@ -20,7 +21,7 @@ class PiBackend(EditBackend):
     def load(self, ref):
         path = Path(ref).resolve(strict=True)
         raw = path.read_bytes()
-        records = [json.loads(line) for line in raw.decode().splitlines()
+        records = [json.loads(line) for line in split_jsonl_lines(raw.decode())
                    if line.strip()]
         return EditDocument(self.name, ref, path, records, hash_bytes(raw))
 

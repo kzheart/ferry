@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from ...system import executables, probes
+from ..shared.scanner import split_jsonl_lines
 
 
 def _probe_path(path: str, cwd=None):
@@ -40,7 +41,7 @@ def _probe_path(path: str, cwd=None):
         except subprocess.TimeoutExpired as error:
             return probes.timeout_report("pi", error)
     responses = []
-    for line in (result.stdout or "").splitlines():
+    for line in split_jsonl_lines(result.stdout or ""):
         try:
             value = json.loads(line)
         except json.JSONDecodeError:

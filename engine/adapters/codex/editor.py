@@ -11,6 +11,7 @@ from ...errors import ConcurrentModificationError, OperationUnsupportedError, Se
 from ...system.snapshots import snapshot_file
 from ..shared.codec import positive_turn, select_span
 from ..shared.editing import EditBackend, EditDocument, hash_bytes, json_size, write_jsonl
+from ..shared.scanner import split_jsonl_lines
 from . import native as codex_native
 from .codec import CODEC, TURN_INDEX
 
@@ -45,7 +46,7 @@ class CodexBackend(EditBackend):
         if recover:
             codex_native.recover_transactions(store)
         raw = path.read_bytes()
-        records = [json.loads(line) for line in raw.decode().splitlines()
+        records = [json.loads(line) for line in split_jsonl_lines(raw.decode())
                    if line.strip()]
         closure = codex_native.discover_closure(path, store)
         return EditDocument(self.name, ref, path, records, hash_bytes(raw), closure)
