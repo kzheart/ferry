@@ -7,6 +7,7 @@ import pytest
 
 from engine.adapters.claude import probe as claude_probe
 from engine.adapters.codex import probe as codex_probe
+from engine.adapters.grok import probe as grok_probe
 from engine.adapters.opencode import probe as opencode_probe
 from engine.adapters.pi import probe as pi_probe
 from engine.system import probes
@@ -270,3 +271,257 @@ def test_opencode_agent_prompt_command(monkeypatch):
     assert failed["code"] == "agent_prompt.process_failed"
     assert failed["params"]["exit_code"] == 4
     assert invalid["code"] == "agent_prompt.invalid_output"
+
+
+def test_pi_agent_prompt_uses_json_session_and_stdin(monkeypatch, tmp_path):
+    path = tmp_path / "session.jsonl"
+    calls = []
+    output = json.dumps({
+        "type": "agent_end",
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "finished"}],
+                "stopReason": "stop",
+                "provider": "test-provider",
+                "model": "test-model",
+            },
+        ],
+    })
+    monkeypatch.setattr(
+        pi_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        pi_probe.probes,
+        "run_agent_command",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)),
+            probes.AgentProcessResult(0, output, "", False),
+        )[1],
+    )
+    monkeypatch.setattr(
+        "engine.adapters.pi.adapter.resolve",
+        lambda _session_id: path,
+    )
+
+    report = pi_probe.PiVerifier().prompt_session(
+        "sid",
+        "/work",
+        "do it",
+        model="provider/model",
+        timeout=24,
+    )
+
+    assert calls == [([
+        "pi",
+        "--mode",
+        "json",
+        "--session",
+        str(path.resolve()),
+        "--approve",
+        "--model",
+        "provider/model",
+    ], {"cwd": "/work", "input_text": "do it", "timeout": 24})]
+    assert report["status"] == "completed"
+    assert report["text"] == "finished"
+    assert report["params"]["stop_reason"] == "stop"
+    assert report["params"]["provider"] == "test-provider"
+    assert report["params"]["model"] == "test-model"
+
+
+def test_pi_agent_prompt_checks_stop_reason(monkeypatch, tmp_path):
+    results = iter([
+        probes.AgentProcessResult(
+            0,
+            json.dumps({
+                "type": "agent_end",
+                "messages": [{
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "partial"}],
+                    "stopReason": "error",
+                    "errorMessage": "boom",
+                }],
+            }),
+            "",
+            False,
+        ),
+        probes.AgentProcessResult(
+            0,
+            json.dumps({
+                "type": "agent_end",
+                "messages": [{
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "partial"}],
+                    "stopReason": "aborted",
+                }],
+            }),
+            "",
+            False,
+        ),
+        probes.AgentProcessResult(
+            0,
+            json.dumps({
+                "type": "agent_end",
+                "messages": [{
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "bounded"}],
+                    "stopReason": "length",
+                }],
+            }),
+            "",
+            False,
+        ),
+    ])
+    monkeypatch.setattr(
+        pi_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        pi_probe.probes,
+        "run_agent_command",
+        lambda *_args, **_kwargs: next(results),
+    )
+
+    failed = pi_probe._run_prompt_path(
+        tmp_path / "session.jsonl",
+        "/work",
+        "first",
+    )
+    aborted = pi_probe._run_prompt_path(
+        tmp_path / "session.jsonl",
+        "/work",
+        "second",
+    )
+    limited = pi_probe._run_prompt_path(
+        tmp_path / "session.jsonl",
+        "/work",
+        "third",
+    )
+
+    assert failed["status"] == "failed"
+    assert failed["code"] == "agent_prompt.process_failed"
+    assert failed["params"]["stop_reason"] == "error"
+    assert failed["params"]["error_message"] == "boom"
+    assert aborted["status"] == "failed"
+    assert aborted["params"]["stop_reason"] == "aborted"
+    assert limited["status"] == "completed"
+    assert limited["params"]["stop_reason"] == "length"
+    assert limited["text"] == "bounded"
+
+
+def test_grok_agent_prompt_uses_headless_resume(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "summary.json").write_text(json.dumps({
+        "info": {"id": "019f0000-0000-7000-8000-000000000000"},
+    }))
+    calls = []
+    monkeypatch.setattr(
+        grok_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        grok_probe.probes,
+        "run_agent_command",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)),
+            probes.AgentProcessResult(
+                0,
+                json.dumps({
+                    "text": "finished",
+                    "stopReason": "EndTurn",
+                    "sessionId": "019f0000-0000-7000-8000-000000000000",
+                    "requestId": "request-id",
+                }),
+                "",
+                False,
+            ),
+        )[1],
+    )
+    monkeypatch.setattr(
+        "engine.adapters.grok.adapter.resolve",
+        lambda _session_id: bundle,
+    )
+
+    report = grok_probe.GrokVerifier().prompt_session(
+        "sid",
+        "/work",
+        "do it",
+        model="grok-test",
+        timeout=25,
+    )
+
+    assert calls == [([
+        "grok",
+        "--no-auto-update",
+        "--cwd",
+        "/work",
+        "--resume",
+        "019f0000-0000-7000-8000-000000000000",
+        "--single",
+        "do it",
+        "--verbatim",
+        "--output-format",
+        "json",
+        "--always-approve",
+        "--model",
+        "grok-test",
+    ], {"cwd": "/work", "timeout": 25})]
+    assert "--session-id" not in calls[0][0]
+    assert report["status"] == "completed"
+    assert report["text"] == "finished"
+    assert report["params"]["stop_reason"] == "EndTurn"
+    assert report["params"]["session_id"] == (
+        "019f0000-0000-7000-8000-000000000000"
+    )
+    assert report["params"]["request_id"] == "request-id"
+
+
+def test_grok_agent_prompt_error_json(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "summary.json").write_text(json.dumps({
+        "info": {"id": "019f0000-0000-7000-8000-000000000000"},
+    }))
+    results = iter([
+        probes.AgentProcessResult(
+            0,
+            json.dumps({"type": "error", "message": "failed"}),
+            "",
+            False,
+        ),
+        probes.AgentProcessResult(
+            7,
+            json.dumps({"text": "partial"}),
+            "failed",
+            False,
+        ),
+    ])
+    monkeypatch.setattr(
+        grok_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        grok_probe.probes,
+        "run_agent_command",
+        lambda *_args, **_kwargs: next(results),
+    )
+    monkeypatch.setattr(
+        "engine.adapters.grok.adapter.resolve",
+        lambda _session_id: bundle,
+    )
+    verifier = grok_probe.GrokVerifier()
+
+    error_json = verifier.prompt_session("sid", "/work", "first")
+    nonzero = verifier.prompt_session("sid", "/work", "second")
+
+    assert error_json["status"] == "failed"
+    assert error_json["code"] == "agent_prompt.process_failed"
+    assert nonzero["status"] == "failed"
+    assert nonzero["code"] == "agent_prompt.process_failed"
+    assert nonzero["params"]["exit_code"] == 7
