@@ -69,7 +69,12 @@ function chunkedBackend(chunks: number) {
       });
     }
     const complete = assistant([{ type: "text", text }], "stop");
-    stream.push({ type: "text_end", contentIndex: 0, content: text, partial: complete });
+    stream.push({
+      type: "text_end",
+      contentIndex: 0,
+      content: text,
+      partial: complete,
+    });
     stream.push({ type: "done", reason: "stop", message: complete });
     return stream;
   };
@@ -138,8 +143,8 @@ describe("streaming persistence", () => {
     expect(userCommit).toBeGreaterThanOrEqual(0);
     expect(userCommit).toBeLessThan(assistantCommit);
     const [restored] = await store.loadAll();
-    expect(restored?.state.messages.some((entry) => entry.role === "user")).toBe(
-      true,
-    );
+    expect(
+      restored?.state.messages.some((entry) => entry.role === "user"),
+    ).toBe(true);
   });
 });

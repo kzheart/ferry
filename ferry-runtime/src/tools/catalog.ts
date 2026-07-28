@@ -274,7 +274,7 @@ function enforceSessionEditPolicy(
   ) {
     throw new Error(
       "session optimization requires a successful preview of this exact batch before execute; " +
-        "run session_edit with intent \"preview\" first and keep the ops identical",
+        'run session_edit with intent "preview" first and keep the ops identical',
     );
   }
 }

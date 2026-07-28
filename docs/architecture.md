@@ -80,12 +80,13 @@ never select parsers by CLI version.
 
 `contracts/agents.json` is the compile-time source of truth for built-in Agent
 identity and capabilities. Each Agent declares its browse, resume, migration,
-edit, delete, probe, and model support, plus an exact `edit_operations` subset
-of `contracts/operations.json`. Generation publishes that policy to the UI,
-Python Engine, Ferry Runtime, and Rust Host; Rust consumes capabilities at its
-operation boundary alongside Agent IDs and executable allowlists. Adapter construction rejects any
-manifest/component or manifest/editor-operation mismatch, so declarations
-cannot drift from the native implementation.
+edit, delete, probe, prompt, and model support, plus an exact
+`edit_operations` subset of `contracts/operations.json`. Generation publishes
+that policy to the UI, Python Engine, Ferry Runtime, and Rust Host; Rust
+consumes capabilities at its operation boundary alongside Agent IDs and
+executable allowlists. Adapter construction rejects any manifest/component or
+manifest/editor-operation mismatch, so declarations cannot drift from the
+native implementation.
 
 Current structure may legitimately contain more than one record subtype when
 the upstream runtime itself emits them. Codex is the important example:
@@ -330,6 +331,32 @@ and editing — bash gets no additional bypass. Execution clears the environment
 down to `PATH`/`HOME`/`LANG`/`TERM`, runs in its own process group so a timeout
 can kill grandchildren too, and truncates each stream at 64KB.
 
+#### agent_prompt
+
+`agent_prompt` is a native high-privilege Coding Agent driver for Claude Code,
+Codex CLI, OpenCode, Pi Agent, and Grok Build. It resumes an indexed native
+session and passes the requested prompt to that Agent's own CLI execution path,
+where the Agent may use its configured tools, run commands, and modify both the
+workspace and its native session. It is not a Ferry Provider completion and
+does not run through Ferry's model-provider host.
+
+The role tool allowlist is the authorization boundary. A role that includes
+`agent_prompt` may invoke it without a separate Ferry approval for each call;
+a role that omits it cannot invoke it. Calls are serialized per runtime,
+classified as mutations, never retried automatically, and bounded by the
+native-run timeout. This policy is deliberately separate from `bash`, migration,
+and session-edit approval.
+
+The caller supplies an opaque `fsr_` reference rather than a native session id.
+Any started native run can change the indexed session revision, so the Engine
+refreshes the index and returns `next_ref`; follow-up calls must replace the old
+reference with that value. Structured status, diagnostic output, and visible
+text truncation describe the run without turning it into an approval plan.
+
+The existing `probe` capability keeps its fixed validation prompt and current
+shadow-session isolation for edited outputs. `agent_prompt` neither replaces
+probe nor changes its validation contract.
+
 ## Data ownership
 
 External Claude, Codex, OpenCode, Pi, and Grok stores remain external sources
@@ -454,7 +481,9 @@ external module so the policy does not require inline script execution.
 - Apply timeouts, cancellation, and bounded concurrency.
 - Never let Node write external session stores directly.
 - Read skills only from Ferry's own library, by id, never by caller-supplied path.
-- Execute shell commands only in the Rust host, only from a registered proposal.
+- Execute Ferry `bash` commands only in the Rust host and only from a registered
+  proposal; native Coding Agents invoked through allowlisted `agent_prompt`
+  retain their own tool execution model.
 
 ## Dependency direction
 

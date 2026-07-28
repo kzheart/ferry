@@ -137,7 +137,7 @@ def test_edit_plan_requires_probe_capability_only_when_requested(
         capabilities=tuple(
             capability
             for capability in AGENT_CAPABILITIES
-            if capability != "probe"
+            if capability not in {"probe", "prompt"}
         ),
     )
     adapter = replace(

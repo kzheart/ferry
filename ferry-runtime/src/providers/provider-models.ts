@@ -72,11 +72,18 @@ interface ModelsDevEntry {
   image: boolean;
   context?: number;
   output?: number;
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
 }
 
 // pi-ai 没收录的模型,退而查 models.dev 公共目录;整份目录按天缓存在内存里
-let modelsDevCache: { at: number; index: Map<string, ModelsDevEntry> } | undefined;
+let modelsDevCache:
+  | { at: number; index: Map<string, ModelsDevEntry> }
+  | undefined;
 async function modelsDevById(
   id: string,
   signal?: AbortSignal,
@@ -201,14 +208,17 @@ export function customProvider(config: CustomProviderConfig): Provider {
             ? row.name
             : undefined;
       const known = builtinModelById(row.id);
-      const dev = known ? undefined : await modelsDevById(row.id, context.signal);
+      const dev = known
+        ? undefined
+        : await modelsDevById(row.id, context.signal);
       output.push({
         id: row.id,
         name: listedName ?? known?.name ?? row.id,
         api,
         provider: config.id,
         baseUrl: config.base_url,
-        reasoning: known?.reasoning ?? dev?.reasoning ?? template?.reasoning ?? false,
+        reasoning:
+          known?.reasoning ?? dev?.reasoning ?? template?.reasoning ?? false,
         input: known
           ? [...known.input]
           : dev
@@ -222,7 +232,10 @@ export function customProvider(config: CustomProviderConfig): Provider {
           ? { ...known.cost }
           : (dev?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
         contextWindow:
-          known?.contextWindow ?? dev?.context ?? template?.context_window ?? 128_000,
+          known?.contextWindow ??
+          dev?.context ??
+          template?.context_window ??
+          128_000,
         maxTokens:
           known?.maxTokens ?? dev?.output ?? template?.max_tokens ?? 8_192,
       });
