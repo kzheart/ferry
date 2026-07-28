@@ -6,7 +6,11 @@ import pytest
 
 from engine.context import EngineContext
 from engine.errors import AgentCapabilityError
-from engine.operations.verification import ProbeTimeout, run_probe
+from engine.operations.verification import (
+    ProbeTimeout,
+    run_agent_prompt,
+    run_probe,
+)
 
 
 class _Verifier:
@@ -17,6 +21,16 @@ class _Verifier:
 
     def probe(self, session_id, dirpath, model):
         self.calls.append((session_id, dirpath, model))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+    def prompt_session(
+        self, session_id, dirpath, prompt, model, timeout,
+    ):
+        self.calls.append(
+            (session_id, dirpath, prompt, model, timeout),
+        )
         if self.error is not None:
             raise self.error
         return self.result
@@ -103,3 +117,41 @@ def test_run_probe_propagates_other_adapter_errors(tmp_path):
     with pytest.raises(RuntimeError, match="CLI 崩溃") as raised:
         run_probe("claude", "session-1", ports=_ports(_Adapter(verifier), tmp_path))
     assert not isinstance(raised.value, ProbeTimeout)
+
+
+def test_run_agent_prompt_delegates_to_prompt_verifier(tmp_path):
+    report = {"status": "completed", "params": {}, "text": "done"}
+    verifier = _Verifier(result=report)
+
+    result = run_agent_prompt(
+        "claude",
+        "session-1",
+        "finish the task",
+        "/tmp/project",
+        "model-a",
+        ports=_ports(_Adapter(verifier), tmp_path),
+        timeout=45,
+    )
+
+    assert result == report
+    assert verifier.calls == [
+        (
+            "session-1",
+            "/tmp/project",
+            "finish the task",
+            "model-a",
+            45,
+        ),
+    ]
+
+
+def test_run_agent_prompt_requires_prompt_capability(tmp_path):
+    adapter = _Adapter(_Verifier(), supports=False)
+
+    with pytest.raises(AgentCapabilityError):
+        run_agent_prompt(
+            "claude",
+            "session-1",
+            "continue",
+            ports=_ports(adapter, tmp_path),
+        )

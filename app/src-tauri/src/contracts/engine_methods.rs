@@ -10,6 +10,7 @@ pub(crate) enum Exposure {
 pub(crate) enum TimeoutClass {
     Normal,
     Lookup,
+    AgentRun,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,6 +168,11 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
         }),
+        "agent_prompt" => Some(EngineMethodPolicy {
+            exposure: Exposure::Internal,
+            timeout: TimeoutClass::AgentRun,
+            retry: RetryPolicy::Never,
+        }),
         "operation.plan" => Some(EngineMethodPolicy {
             exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
@@ -202,6 +208,7 @@ pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",
+    "agent_prompt",
 ];
 
 pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {

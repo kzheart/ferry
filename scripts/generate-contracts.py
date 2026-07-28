@@ -180,7 +180,7 @@ def load_engine_methods() -> list[dict[str, object]]:
     allowed_consumers = {"runtime-gateway", "organizing-workflow"}
     allowed_kinds = {"read", "index-refresh", "mutation"}
     allowed_exposures = {"public", "trusted-ui", "internal"}
-    allowed_timeouts = {"normal", "lookup"}
+    allowed_timeouts = {"normal", "lookup", "agent-run"}
     allowed_retries = {"safe-read", "never"}
     allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
@@ -642,6 +642,7 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
     timeout_variants = {
         "normal": "Normal",
         "lookup": "Lookup",
+        "agent-run": "AgentRun",
     }
     used_timeout_variants = [
         timeout_variants[timeout]

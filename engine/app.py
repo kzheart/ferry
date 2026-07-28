@@ -8,8 +8,12 @@ import logging
 
 from .context import EngineContext
 from .contracts.ipc import FERRY_CONTRACT_HASH
-from .errors import AgentReferenceError, require_agent_capability
-from .operations import history, metadata
+from .errors import (
+    AgentReferenceError,
+    AgentRequestError,
+    require_agent_capability,
+)
+from .operations import history, metadata, verification
 from .operations.service import OperationService
 from .organization import proposals as organizing
 from .organization import summaries
@@ -209,6 +213,120 @@ class EngineService:
 
     def agent_get_usage(self, **params) -> dict:
         return session_usage.get_usage(index=self._index, **params)
+
+    def agent_prompt(
+        self,
+        tool: str,
+        ref: str,
+        prompt: str,
+        model: str | None = None,
+        timeout_sec: int = 360,
+    ) -> dict:
+        self._validate_agent_prompt(tool, ref, prompt, model, timeout_sec)
+        record = self._index.resolve(tool, ref, pin_content=True)
+        session_id = record.row.get("id")
+        if not isinstance(session_id, str) or not session_id:
+            raise AgentReferenceError("会话缺少原生 ID")
+        cwd = record.row.get("dir")
+        if not isinstance(cwd, str) or not cwd:
+            cwd = "."
+
+        try:
+            report = verification.run_agent_prompt(
+                tool,
+                session_id,
+                prompt,
+                cwd,
+                model,
+                ports=self._ports,
+                timeout=timeout_sec,
+            )
+        except Exception:
+            self._refresh_agent_prompt_ref(tool, session_id)
+            raise
+        next_ref = self._refresh_agent_prompt_ref(tool, session_id)
+        if not isinstance(report, dict):
+            raise RuntimeError("Agent prompt verifier 返回值必须是 object")
+
+        params = report.setdefault("params", {})
+        if not isinstance(params, dict):
+            raise RuntimeError("Agent prompt report params 必须是 object")
+        params.setdefault("tool", tool)
+        params["session_id"] = session_id
+        if model is not None:
+            params.setdefault("model", model)
+        if next_ref is None:
+            params["ref_refresh_failed"] = True
+        else:
+            report["next_ref"] = next_ref
+        return report
+
+    def _refresh_agent_prompt_ref(
+        self,
+        tool: str,
+        session_id: str,
+    ) -> str | None:
+        try:
+            records = self._index.refresh()
+        except Exception:  # noqa: BLE001 - prompt 结果优先，刷新失败写入报告
+            logging.getLogger(__name__).exception(
+                "Agent prompt 后刷新索引失败",
+            )
+            return None
+        match = next(
+            (
+                record for record in records
+                if record.tool == tool and record.row.get("id") == session_id
+            ),
+            None,
+        )
+        return match.opaque_ref if match is not None else None
+
+    def _validate_agent_prompt(
+        self,
+        tool,
+        ref,
+        prompt,
+        model,
+        timeout_sec,
+    ) -> None:
+        if (
+            not isinstance(tool, str)
+            or not tool
+            or tool not in self._ports.adapters()
+        ):
+            raise AgentRequestError(
+                "agent_prompt tool 无效",
+                {"field": "tool"},
+            )
+        if not isinstance(ref, str) or not ref:
+            raise AgentRequestError(
+                "agent_prompt ref 无效",
+                {"field": "ref"},
+            )
+        if not isinstance(prompt, str) or not 1 <= len(prompt) <= 100_000:
+            raise AgentRequestError(
+                "agent_prompt prompt 长度必须为 1..100000",
+                {"field": "prompt"},
+            )
+        if model is not None and (
+            not isinstance(model, str)
+            or not 1 <= len(model) <= 512
+            or any(ord(character) < 32 for character in model)
+        ):
+            raise AgentRequestError(
+                "agent_prompt model 长度必须为 1..512",
+                {"field": "model"},
+            )
+        if (
+            isinstance(timeout_sec, bool)
+            or not isinstance(timeout_sec, int)
+            or not 1 <= timeout_sec <= 360
+        ):
+            raise AgentRequestError(
+                "agent_prompt timeout_sec 必须为 1..360 的整数",
+                {"field": "timeout_sec"},
+            )
 
     def operation_plan(self, value: dict) -> dict:
         return self._operations.plan(value)

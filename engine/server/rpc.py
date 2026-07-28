@@ -81,6 +81,13 @@ class RpcDispatcher:
             "agent_search_sessions": lambda p: application.agent_search_sessions(p.get("query", ""), agents=p.get("agents"), projects=p.get("projects"), time_range=p.get("time_range"), limit=p.get("limit", 20), scope=p.get("scope", "any"), include_tool_outputs=p.get("include_tool_outputs", False), patterns=p.get("patterns"), regex=p.get("regex"), exhaustive=p.get("exhaustive", False)),
             "agent_session_read": lambda p: application.agent_session_read(p["tool"], ref=p["ref"], terms=p.get("terms"), roles=p.get("roles"), from_message=p.get("from_message", 1), limit=p.get("limit", 20), include_tool_outputs=p.get("include_tool_outputs", False), max_bytes=p.get("max_bytes", agent_read.DEFAULT_CONTEXT_BYTES)),
             "agent_get_usage": lambda p: application.agent_get_usage(agents=p.get("agents"), projects=p.get("projects"), time_range=p.get("time_range")),
+            "agent_prompt": lambda p: application.agent_prompt(
+                p["tool"],
+                p["ref"],
+                p["prompt"],
+                model=p.get("model"),
+                timeout_sec=p.get("timeout_sec", 360),
+            ),
             "operation.plan": lambda p: application.operation_plan(p["input"]),
             "operation.apply": lambda p: application.operation_apply(p["plan_id"]),
             "operation.status": lambda p: application.operation_status(p["plan_id"]),

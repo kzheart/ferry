@@ -26,3 +26,25 @@ def run_probe(tool, session_id, dirpath=None, model=None, *,
         if error.__class__.__name__ == "ProbeTimeout":
             raise ProbeTimeout(str(error)) from error
         raise
+
+
+def run_agent_prompt(
+    tool,
+    session_id,
+    prompt,
+    dirpath=None,
+    model=None,
+    *,
+    ports: EngineContext,
+    timeout=360,
+):
+    verifier = require_agent_capability(
+        ports.adapter(tool), "prompt", "verifier",
+    )
+    return verifier.prompt_session(
+        session_id,
+        dirpath,
+        prompt,
+        model,
+        timeout,
+    )

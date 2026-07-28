@@ -1,9 +1,9 @@
-use super::policy::{AGENT_LOOKUP_TIMEOUT, ENGINE_TIMEOUT};
+use super::policy::{AGENT_LOOKUP_TIMEOUT, AGENT_RUN_TIMEOUT, ENGINE_TIMEOUT};
 use super::{
     read_engine_output, request_attempts, request_timeout, stamp_engine_request,
     validate_engine_request_exposure, validate_engine_response_id, FERRY_IPC_PROTOCOL,
 };
-use crate::contracts::engine_methods::Exposure;
+use crate::contracts::engine_methods::{is_runtime_gateway_method, Exposure};
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
     MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
@@ -103,6 +103,15 @@ fn agent_lookups_have_one_short_deadline() {
     let request = r#"{"method":"agent_search_sessions"}"#;
     assert_eq!(request_timeout(request), AGENT_LOOKUP_TIMEOUT);
     assert_eq!(request_attempts(request), 1);
+}
+
+#[test]
+fn agent_prompt_has_one_long_deadline_and_no_retry() {
+    let request = r#"{"method":"agent_prompt"}"#;
+    assert_eq!(request_timeout(request), AGENT_RUN_TIMEOUT);
+    assert_eq!(request_attempts(request), 1);
+    assert_eq!(AGENT_RUN_TIMEOUT, std::time::Duration::from_secs(390));
+    assert!(is_runtime_gateway_method("agent_prompt"));
 }
 
 fn edit_operation_input() -> EditOperationPlanInput {
