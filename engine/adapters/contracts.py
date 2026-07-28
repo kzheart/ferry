@@ -189,6 +189,15 @@ class SessionVerifier(Protocol):
 
     def probe_edited(self, editor, doc, result: dict, model=None): ...
 
+    def prompt_session(
+        self,
+        session_id: str,
+        cwd,
+        prompt: str,
+        model: str | None = None,
+        timeout: int = 360,
+    ) -> dict: ...
+
 
 @runtime_checkable
 class ModelCatalog(Protocol):
