@@ -257,6 +257,17 @@
       "dispatch": "serial"
     },
     {
+      "name": "agent_prompt",
+      "kind": "mutation",
+      "exposure": "internal",
+      "timeout": "agent-run",
+      "retry": "never",
+      "dispatch": "serial",
+      "consumers": [
+        "runtime-gateway"
+      ]
+    },
+    {
       "name": "operation.plan",
       "kind": "mutation",
       "exposure": "internal",

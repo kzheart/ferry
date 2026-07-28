@@ -55,6 +55,16 @@ def test_operation_enqueue_and_agent_lookup_policies_are_explicit():
         assert ENGINE_METHOD_POLICIES[method]["retry"] == "never"
 
 
+def test_agent_prompt_is_an_internal_serial_mutation_without_retry():
+    assert ENGINE_METHOD_POLICIES["agent_prompt"] == {
+        "kind": "mutation",
+        "exposure": "internal",
+        "timeout": "agent-run",
+        "retry": "never",
+        "dispatch": "serial",
+    }
+
+
 def test_ui_session_search_is_public_but_stays_off_the_parallel_read_pool():
     # 内容索引会在检索途中做增量重建(写 SQLite),不能进并发只读池。
     assert ENGINE_METHOD_POLICIES["session_search"] == {

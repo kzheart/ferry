@@ -1,6 +1,6 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
 export const FERRY_IPC_PROTOCOL = "ferry-ipc/1" as const;
-export const FERRY_CONTRACT_HASH = "sha256:9da94e3db62ad211ccc29c921e0ff8b45108dfddd00600378f7e1ea3d865fd9c" as const;
+export const FERRY_CONTRACT_HASH = "sha256:3af7e7b6416a56adbd0239f4affa470a338c8fae2f079010c7c454f83afe0673" as const;
 export interface IpcRequest<Method extends string = string> {
   protocol: typeof FERRY_IPC_PROTOCOL;
   id: string;
