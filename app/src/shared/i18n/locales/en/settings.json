@@ -46,6 +46,7 @@
     "personaHint": "Appended after Ferry's safety prefix",
     "personaCount": "{{n}} / 500 suggested",
     "capabilityCount": "{{n}} / {{total}} enabled",
+    "mutationBadge": "Writes",
     "tool": {
       "session_search": {
         "label": "Session search",
@@ -70,6 +71,10 @@
       "bash": {
         "label": "Run command",
         "desc": "Really runs shell commands on your machine; every call goes through approval"
+      },
+      "agent_prompt": {
+        "label": "Drive Agent",
+        "desc": "Resumes the native Coding Agent with elevated privileges; it can run tools and modify the workspace or session without per-call approval"
       }
     },
     "defaultModel": "Default model",
@@ -86,7 +91,7 @@
     "applyPolicyHint": "Edit / migrate tools",
     "manual": "Always require approval",
     "auto": "May follow Auto mode",
-    "safetyNote": "The tool allowlist and approval policy are enforced by the runtime and the native trust boundary; a persona cannot bypass them. Enabling \"Run command\" still requires approval for every command — it only runs straight through when the session is in Auto mode and this role's apply policy is auto.",
+    "safetyNote": "The tool allowlist and approval policy are enforced by the runtime and the native trust boundary; a persona cannot bypass them. Enabling \"Run command\" still requires approval for every command — it only runs straight through when the session is in Auto mode and this role's apply policy is auto. Enabling \"Drive Agent\" authorizes the native Coding Agent to run tools and modify the workspace or session with elevated privileges and no per-call approval.",
     "deleteAsk": "Delete “{{name}}”?",
     "dangerDesc": "Sessions referencing this role fall back to the default role. This cannot be undone.",
     "delete": "Delete",

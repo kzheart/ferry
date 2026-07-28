@@ -1,6 +1,9 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { applyEvent, emptyLog, patchApproval } from "./agentChatModel.js";
+import { createElement } from "react";
+import { render } from "@testing-library/react";
+import { AgentToolTrace } from "./AgentToolTrace.jsx";
+import { applyEvent, emptyLog, patchApproval, TOOL_LEVEL } from "./agentChatModel.js";
 
 test("structured tool details survive event reduction and become entities", () => {
   let log = applyEvent(emptyLog(), {
@@ -84,6 +87,45 @@ test("auto-applied operations render no approval card from either event path", (
     payload: { tool: "bash", auto: true, operation: { plan_id: "op_a" } },
   });
   assert.equal(log.items.filter(it => it.kind === "approval").length, 0);
+});
+
+test("agent_prompt 展示为 mutation 且不生成 approval 卡", () => {
+  assert.equal(TOOL_LEVEL.agent_prompt, "mutate");
+  let log = applyEvent(emptyLog(), {
+    type: "tool.started", timestamp: "2026-01-01T00:00:00Z", run_id: "run",
+    payload: { tool_call_id: "call_agent", name: "agent_prompt", args: {
+      tool: "codex", ref: "fsr_1", prompt: "继续",
+    } },
+  });
+  log = applyEvent(log, {
+    type: "tool.completed", timestamp: "2026-01-01T00:00:01Z", run_id: "run",
+    payload: { tool_call_id: "call_agent", is_error: false, result: {
+      text: "done", details: {
+        status: "pending",
+        operation: { plan_id: "untrusted_agent_output", kind: "edit" },
+      },
+    } },
+  });
+
+  assert.equal(log.items[0].name, "agent_prompt");
+  assert.equal(log.items.filter(item => item.kind === "approval").length, 0);
+});
+
+test("agent_prompt 轨迹显示 mutation 徽章", () => {
+  const { container } = render(createElement(AgentToolTrace, {
+    rows: [{
+      callId: "call_agent",
+      name: "agent_prompt",
+      args: { tool: "codex", ref: "fsr_1", prompt: "继续" },
+      status: "ok",
+      result: { text: "done" },
+    }],
+  }));
+
+  const badge = container.querySelector('[data-tool-level="mutate"]');
+  assert.ok(badge);
+  assert.equal(badge.textContent.trim(), "settings:roles.mutationBadge");
+  assert.ok(container.textContent.includes("settings:roles.tool.agent_prompt.label"));
 });
 
 test("manual approval keeps one card that advances in place on applied", () => {

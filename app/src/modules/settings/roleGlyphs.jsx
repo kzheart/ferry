@@ -6,6 +6,7 @@ export const TOOL_GLYPH = {
   migrate: '<path d="M9.6 3.2h3a1.2 1.2 0 0 1 1.2 1.2v7.2a1.2 1.2 0 0 1-1.2 1.2h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M1.8 8h8M7 4.8 10.2 8 7 11.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   session_edit: '<path d="M11.1 2.6a1.5 1.5 0 0 1 2.1 2.1L6 11.9l-2.9.8.8-2.9z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.6 14.2h10.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
   bash: '<rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.6 6.2 6.8 8l-2.2 1.8M8.4 10.2h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  agent_prompt: '<path d="M8 1.8 9.4 4.6l3.1.5-2.3 2.2.6 3.1L8 8.9l-2.8 1.5.6-3.1-2.3-2.2 3.1-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M3 13.2h10M11.1 11.2l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
 };
 
 export const GROUP_GLYPH = {
