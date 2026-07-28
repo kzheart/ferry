@@ -9,7 +9,7 @@ from ...sessions.usage import add_tokens, dominant_model, empty_tokens, has_toke
 from ...system.paths import opencode_database_path
 
 OPENCODE_DB = opencode_database_path()
-_FINGERPRINT_INDEX: tuple[tuple, set[str]] | None = None
+_FINGERPRINT_INDEX: tuple | None = None
 
 
 def _msg_tokens(data: dict) -> dict:
@@ -63,27 +63,116 @@ def scan(_cache):
     return [root for root in session_roots(rows) if root["count"]]
 
 
+def _database_stamp() -> tuple:
+    paths = (
+        OPENCODE_DB,
+        OPENCODE_DB.with_name(OPENCODE_DB.name + "-wal"),
+        OPENCODE_DB.with_name(OPENCODE_DB.name + "-shm"),
+    )
+    stamp = []
+    for path in paths:
+        try:
+            stat = path.stat()
+        except OSError:
+            stamp.append((str(path), None))
+            continue
+        stamp.append((
+            str(path), stat.st_dev, stat.st_ino,
+            stat.st_mtime_ns, stat.st_size,
+        ))
+    return tuple(stamp)
+
+
+def _hash_row(digest, table: str, row) -> None:
+    payload = json.dumps(
+        [table, *row], ensure_ascii=False, default=str,
+        separators=(",", ":"),
+    ).encode()
+    digest.update(len(payload).to_bytes(8, "big"))
+    digest.update(payload)
+
+
+def _read_fingerprint_index() -> tuple[dict, dict, dict]:
+    uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as database:
+        database.execute("BEGIN")
+        tables = {row[0] for row in database.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if "session" not in tables:
+            return {}, {}, {}
+        session_columns = [
+            str(row[1]) for row in database.execute(
+                'PRAGMA table_info("session")')
+        ]
+        session_id_index = session_columns.index("id")
+        parent_index = session_columns.index("parent_id")
+        sessions = {}
+        digests = {}
+        for row in database.execute('SELECT * FROM "session" ORDER BY "id"'):
+            sid = str(row[session_id_index])
+            parent = row[parent_index]
+            sessions[sid] = None if parent is None else str(parent)
+            digest = hashlib.sha256()
+            _hash_row(digest, "session", row)
+            digests[sid] = digest
+        for table in ("message", "part"):
+            if table not in tables:
+                continue
+            columns = [
+                str(row[1]) for row in database.execute(
+                    f'PRAGMA table_info("{table}")')
+            ]
+            session_index = columns.index("session_id")
+            for row in database.execute(
+                    f'SELECT * FROM "{table}"'
+                    f' ORDER BY "session_id", "id"'):
+                sid = str(row[session_index])
+                if sid in digests:
+                    _hash_row(digests[sid], table, row)
+    children: dict[str, list[str]] = {}
+    for sid, parent in sessions.items():
+        if parent is not None:
+            children.setdefault(parent, []).append(sid)
+    return (
+        sessions,
+        {sid: digest.digest() for sid, digest in digests.items()},
+        children,
+    )
+
+
 def fingerprint(session_id: str) -> str | None:
-    """以 SQLite 修订元数据校验 Agent 引用，避免每个会话重复哈希整库。"""
+    """以会话子树的修订元数据校验 Agent 引用。
+
+    粒度必须是会话级:所有 OpenCode 会话同住一个 SQLite 库,若把整库
+    stat 混入指纹,任何其他会话的写入都会让本会话的引用与迁移计划失效。
+    """
     if not OPENCODE_DB.exists():
         return None
-    digest = hashlib.sha256()
-    stat = OPENCODE_DB.stat()
-    stamp = (str(OPENCODE_DB.resolve()), stat.st_dev, stat.st_ino,
-             stat.st_mtime_ns, stat.st_size)
     global _FINGERPRINT_INDEX
-    if _FINGERPRINT_INDEX is None or _FINGERPRINT_INDEX[0] != stamp:
-        uri = f"file:{OPENCODE_DB.resolve()}?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=5) as database:
-            tables = {row[0] for row in database.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
-            if "session" not in tables:
-                return None
-            session_ids = {str(row[0]) for row in database.execute(
-                'SELECT "id" FROM "session"')}
-        _FINGERPRINT_INDEX = (stamp, session_ids)
-    if session_id not in _FINGERPRINT_INDEX[1]:
+    stamp = _database_stamp()
+    cached = _FINGERPRINT_INDEX
+    if cached is None or cached[0] != stamp:
+        current = None
+        for _attempt in range(3):
+            before = _database_stamp()
+            sessions, revisions, children = _read_fingerprint_index()
+            after = _database_stamp()
+            current = (after, sessions, revisions, children)
+            if before == after:
+                _FINGERPRINT_INDEX = current
+                break
+        cached = current
+    _stamp, sessions, revisions, children = cached
+    if session_id not in sessions:
         return None
-    digest.update(session_id.encode())
-    digest.update(f"\0{stat.st_dev}:{stat.st_ino}:{stat.st_mtime_ns}:{stat.st_size}\0".encode())
+    digest = hashlib.sha256()
+    pending, seen = [session_id], set()
+    while pending:
+        sid = pending.pop()
+        if sid in seen:
+            continue
+        seen.add(sid)
+        digest.update(f"\0{sid}\0{sessions[sid]}\0".encode())
+        digest.update(revisions[sid])
+        pending.extend(sorted(children.get(sid, ()), reverse=True))
     return "sha256:" + digest.hexdigest()

@@ -1019,21 +1019,77 @@ def test_engine_revalidates_limits_without_relying_on_sidecar(agent_environment)
 def test_opencode_fingerprint_detects_update_and_delete(tmp_path, monkeypatch):
     database_path = tmp_path / "opencode.db"
     with sqlite3.connect(database_path) as database:
-        database.execute("CREATE TABLE session (id TEXT PRIMARY KEY, data TEXT)")
-        database.execute("CREATE TABLE message (id TEXT, session_id TEXT, data TEXT)")
-        database.execute("CREATE TABLE part (id TEXT, session_id TEXT, data TEXT)")
-        database.execute("INSERT INTO session VALUES ('s1', '{}')")
-        database.execute("INSERT INTO message VALUES ('m1', 's1', '{}')")
-        database.execute("INSERT INTO part VALUES ('p1', 's1', '{\"text\":\"a\"}')")
+        database.execute(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT,"
+            " time_updated INTEGER)")
+        database.execute(
+            "CREATE TABLE message (id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute(
+            "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute("INSERT INTO session VALUES ('s1', NULL, 1)")
+        database.execute("INSERT INTO session VALUES ('s1c', 's1', 1)")
+        database.execute("INSERT INTO session VALUES ('s2', NULL, 1)")
+        database.execute("INSERT INTO message VALUES ('m1', 's1', 1, '{}')")
+        database.execute(
+            "INSERT INTO part VALUES"
+            " ('p1', 'm1', 's1', 1, '{\"text\":\"a\"}')")
     monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
     first = opencode_scanner.fingerprint("s1")
+    # 其他会话的写入不应使本会话的指纹失效(整库粒度会误伤活跃库里的所有会话)
     with sqlite3.connect(database_path) as database:
         database.execute(
-            "UPDATE part SET data = '{\"text\":\"b\"}' WHERE id = 'p1'")
-    assert opencode_scanner.fingerprint("s1") != first
+            "INSERT INTO message VALUES ('m2', 's2', 2, '{}')")
+    assert opencode_scanner.fingerprint("s1") == first
+    # 即使 id、数量和时间不变，正文原地更新也要能被察觉
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "UPDATE part SET data = '{\"text\":\"b\"}'"
+            " WHERE id = 'p1'")
+    second = opencode_scanner.fingerprint("s1")
+    assert second != first
+    # 子会话的变化也属于本会话子树
+    with sqlite3.connect(database_path) as database:
+        database.execute("INSERT INTO message VALUES ('m3', 's1c', 3, '{}')")
+    assert opencode_scanner.fingerprint("s1") != second
     with sqlite3.connect(database_path) as database:
         database.execute("DELETE FROM session WHERE id = 's1'")
     assert opencode_scanner.fingerprint("s1") is None
+
+
+def test_opencode_fingerprint_refreshes_from_wal(tmp_path, monkeypatch):
+    database_path = tmp_path / "opencode.db"
+    writer = sqlite3.connect(database_path)
+    try:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT,"
+            " time_updated INTEGER)")
+        writer.execute(
+            "CREATE TABLE message (id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        writer.execute(
+            "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        writer.execute("INSERT INTO session VALUES ('s1', NULL, 1)")
+        writer.execute("INSERT INTO message VALUES ('m1', 's1', 1, '{}')")
+        writer.execute(
+            "INSERT INTO part VALUES"
+            " ('p1', 'm1', 's1', 1, '{\"text\":\"a\"}')")
+        writer.commit()
+        monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+        monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+        first = opencode_scanner.fingerprint("s1")
+
+        writer.execute(
+            "UPDATE part SET data = '{\"text\":\"b\"}' WHERE id = 'p1'")
+        writer.commit()
+
+        assert opencode_scanner.fingerprint("s1") != first
+    finally:
+        writer.close()
 
 
 def test_path_ref_rejects_changed_agent_fingerprint(agent_environment):
