@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ...errors import SessionNotFoundError
 from ...system.snapshots import snapshot_file
+from ..shared.scanner import iter_lines
 
 
 def resolve(ref: str) -> Path:
@@ -28,7 +29,7 @@ def backup(path: Path, reason_code: str = "snapshot.before_edit",
 def load(path: Path) -> list[dict]:
     return [
         json.loads(line)
-        for line in path.read_text().splitlines()
+        for line in iter_lines(path)
         if line.strip()
     ]
 

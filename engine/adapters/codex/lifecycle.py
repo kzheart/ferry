@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ...system.snapshots import snapshot_file
 from ..shared.lifecycle import FileSessionLifecycle
+from ..shared.scanner import iter_lines
 from .native import CodexCloneError, CodexStore, discover_closure
 from .registry import unregister_tree
 
@@ -32,7 +33,7 @@ class CodexLifecycle(FileSessionLifecycle):
                 continue
             try:
                 records = (json.loads(line) for line in
-                           hit.read_text().splitlines() if line.strip())
+                           iter_lines(hit) if line.strip())
                 meta = next((row.get("payload", {}) for row in records
                              if row.get("type") == "session_meta"), {})
                 if meta.get("id") == session_id:

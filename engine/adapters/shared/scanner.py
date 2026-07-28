@@ -37,11 +37,16 @@ def iter_lines(path: Path) -> Iterator[str]:
     """逐行读 JSONL。
 
     `read_text().splitlines()` 会把整个文件读进内存再复制一份行列表,大会话的
-    峰值内存是文件体积的两倍。行内容与原写法一致(行尾换行符统一削掉)。
+    峰值内存是文件体积的两倍,还会把 U+0085/U+2028/U+2029 误判为记录边界。
     """
     with path.open(encoding="utf-8") as stream:
         for line in stream:
             yield line.rstrip("\n")
+
+
+def split_jsonl_lines(text: str) -> list[str]:
+    """只按 JSON Lines 规定的 LF 分隔记录。"""
+    return text.split("\n")
 
 
 def _scan_one(filename: str, cache, parse) -> dict | None:
