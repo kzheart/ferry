@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
+  AGENT_CAPABILITIES,
   AGENT_EDIT_OPERATIONS,
   AGENT_IDS,
 } from "../src/server/generated/agents.js";
@@ -28,6 +29,8 @@ const sessionEditSchema = tools.find(
 const sessionEditTool = tools.find((tool) => tool.name === "session_edit")!;
 const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
+const agentPromptTool = tools.find((tool) => tool.name === "agent_prompt")!;
+const agentPromptSchema = agentPromptTool.parameters;
 
 /** 一套启用了会话优化策略的工具;read/edit 共享同一次工厂调用的策略状态。 */
 function optimizationTools(
@@ -115,6 +118,101 @@ describe("Ferry mutation tool schemas", () => {
     expect(Check(migrateSchema, { ...migration, intent: "invalid" })).toBe(
       false,
     );
+  });
+
+  it("exposes agent_prompt only for prompt-capable agents with strict bounds", () => {
+    const promptAgents = AGENT_IDS.filter((agent) =>
+      (AGENT_CAPABILITIES[agent] as readonly string[]).includes("prompt"),
+    );
+    for (const tool of promptAgents) {
+      expect(
+        Check(agentPromptSchema, {
+          tool,
+          ref: "fsr_session",
+          prompt: "继续完成任务",
+          model: "configured-model",
+          timeout_sec: 360,
+        }),
+      ).toBe(true);
+    }
+    expect(
+      Check(agentPromptSchema, {
+        tool: "unknown",
+        ref: "fsr_session",
+        prompt: "继续",
+      }),
+    ).toBe(false);
+    expect(
+      Check(agentPromptSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        prompt: "",
+      }),
+    ).toBe(false);
+    expect(
+      Check(agentPromptSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        prompt: "继续",
+        timeout_sec: 361,
+      }),
+    ).toBe(false);
+    expect(
+      Check(agentPromptSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        prompt: "继续",
+        session_id: "bypass",
+      }),
+    ).toBe(false);
+    expect(agentPromptTool.executionMode).toBe("sequential");
+    expect(agentPromptTool.description).toContain("high-privilege");
+    expect(agentPromptTool.description).toContain("next_ref");
+  });
+
+  it("returns agent_prompt text and next_ref through the existing tool port", async () => {
+    const invoke = vi.fn(async () => ({
+      status: "completed",
+      text: "implemented",
+      next_ref: "fsr_next",
+    }));
+    const promptTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "agent_prompt")!;
+
+    const result = await promptTool.execute(
+      "call",
+      {
+        tool: "pi",
+        ref: "fsr_session",
+        prompt: "继续",
+        timeout_sec: 120,
+      },
+      undefined,
+      undefined,
+    );
+
+    expect(invoke).toHaveBeenCalledWith(
+      "agent_prompt",
+      {
+        tool: "pi",
+        ref: "fsr_session",
+        prompt: "继续",
+        timeout_sec: 120,
+      },
+      expect.objectContaining({
+        sessionId: "session",
+        runId: "run",
+        toolCallId: "call",
+      }),
+    );
+    expect(result).toMatchObject({
+      details: {
+        text: "implemented",
+        next_ref: "fsr_next",
+      },
+    });
   });
 
   it("enforces content intent and metadata boundaries during execution", async () => {
