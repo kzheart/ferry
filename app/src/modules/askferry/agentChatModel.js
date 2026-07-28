@@ -19,6 +19,7 @@ export const TOOL_LEVEL = {
   migrate: "mutate",
   session_edit: "mutate",
   bash: "mutate",
+  agent_prompt: "mutate",
 };
 
 const sealAssistant = items => {
@@ -108,7 +109,8 @@ export function applyEvent(log, ev) {
         const operation = envelope?.operation;
         const key = operationKey(operation);
         // 自动执行(信封已是 applied)不出卡:工具行本身就是执行痕迹,只有待审批才值得打断
-        if (!p.is_error && key && envelope.status !== "applied" &&
+        if (current.name !== "agent_prompt" && !p.is_error && key
+            && envelope.status !== "applied" &&
             !items.some(item => item.kind === "approval" &&
               operationKey(item.operation) === key)) {
           items.push({

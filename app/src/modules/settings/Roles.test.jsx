@@ -7,6 +7,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { FerryRuntimeProvider } from "../../shared/capabilities/ferryRuntime.jsx";
 import Roles from "./Roles.jsx";
+import { TOOLS } from "./roleForm.js";
+import { TOOL_GLYPH } from "./roleGlyphs.jsx";
+import zhSettings from "../../shared/i18n/locales/zh-CN/settings.json";
+import enSettings from "../../shared/i18n/locales/en/settings.json";
 
 const role = (id, extra = {}) => ({
   id, name: id, description: "", persona: "", tools: ["session_read"],
@@ -87,6 +91,25 @@ test("bash 是能力里的一张卡,安全区不再有占位开关", () => {
   mount();
   assert.ok(screen.getByText("settings:roles.tool.bash.label"));
   assert.equal(screen.queryByText("settings:roles.bashLater"), null);
+});
+
+test("agent_prompt 是第七项高权限能力,勾选后可保存到角色", async () => {
+  const calls = mount();
+  fireEvent.click(screen.getByText("reader"));
+
+  assert.equal(TOOLS.length, 7);
+  assert.ok(TOOL_GLYPH.agent_prompt);
+  assert.equal(zhSettings.roles.tool.agent_prompt.label, "驱动 Agent");
+  assert.equal(enSettings.roles.tool.agent_prompt.label, "Drive Agent");
+  assert.match(zhSettings.roles.tool.agent_prompt.desc, /修改工作区或会话/);
+  assert.match(enSettings.roles.tool.agent_prompt.desc, /modify the workspace or session/);
+
+  fireEvent.click(screen.getByText("settings:roles.tool.agent_prompt.label"));
+  fireEvent.click(screen.getByText("settings:roles.save"));
+  await Promise.resolve();
+
+  assert.equal(calls[0][0], "update");
+  assert.ok(calls[0][1].tools.includes("agent_prompt"));
 });
 
 // 草稿是在渲染期跟着 baseline 换的,不是等 effect——否则切角色会闪一帧上一个角色的

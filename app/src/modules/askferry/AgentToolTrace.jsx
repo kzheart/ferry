@@ -55,6 +55,9 @@ const TRACE_ICON = {
   bash: (
     <><rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M7 9l3 3-3 3M13 15h4" /></>),
+  agent_prompt: (
+    <><path d="m12 2 1.8 3.7 4.1.6-3 2.9.7 4.1-3.6-1.9-3.6 1.9.7-4.1-3-2.9 4.1-.6z" />
+      <path d="M5 19h14M16 16l3 3-3 3" /></>),
 };
 
 function TraceIcon({ name, size = 14 }) {
@@ -186,7 +189,9 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
   const count = merged ? merged.length : 1;
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   const shell = item.name === "bash" ? shellResult(item.result?.text) : null;
-  const verb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
+  const verb = item.name === "agent_prompt"
+    ? t("settings:roles.tool.agent_prompt.label")
+    : t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
   const summary = toolSummary(item, t);
   const showCards = !error && !merged && item.entities?.length > 0
     && (level === "mutate" || open);
@@ -200,6 +205,14 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
         style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22,
           cursor: "default", fontSize: 12 }}>
         <span style={{ color: "var(--tx2)", fontWeight: 500, flex: "none" }}>{verb}</span>
+        {level === "mutate" && (
+          <span data-tool-level="mutate" style={{ fontSize: 9.5, fontWeight: 650,
+            letterSpacing: ".04em", textTransform: "uppercase", color: "var(--warn-text)",
+            background: "var(--warn-soft, rgba(240,180,41,.16))",
+            padding: "1px 5px", borderRadius: 4,
+            flex: "none" }}>
+            {t("settings:roles.mutationBadge")}
+          </span>)}
         {count > 1 && (
           <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--acc)",
             background: "var(--acc-soft2)", padding: "0 5px", borderRadius: 4, flex: "none" }}>

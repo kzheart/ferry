@@ -9,6 +9,7 @@ export const TOOLS = [
   "migrate",
   "session_edit",
   "bash",
+  "agent_prompt",
 ];
 
 export function blankRole() {
