@@ -8,13 +8,13 @@ import re
 from ...sessions.loss import DEGRADED, declare as declare_loss
 from ...sessions.model import Session, ToolCall
 from ...sessions.tool_ops import CanonicalOp
+from .dialect import DIALECT, decode_shell as _shell_input
 
 # apply_patch 是 Codex 私有的工具形态：解析不出补丁时降级叙述，不丢内容。
 declare_loss({"migration.apply_patch_unparsed": DEGRADED})
 
 _FS_PATCH = getattr(CanonicalOp, "FS_PATCH", "fs.patch")
 _TOOL_INVOKE = getattr(CanonicalOp, "TOOL_INVOKE", "tool.invoke")
-_LOCAL_SHELL_NAMES = frozenset({"shell", "exec", "exec_command"})
 _PATCH_HEADER_RE = re.compile(
     r"^\*\*\* (Add|Update|Delete) File: ([^\r\n]+)$",
     re.M,
@@ -237,27 +237,6 @@ def _opaque_call(name: str, native_input, *, calls=()) -> ToolCall:
     )
 
 
-def _shell_input(args: dict) -> dict | None:
-    command = args.get("cmd")
-    if command is None:
-        command = args.get("command")
-    if command is None:
-        return None
-    if isinstance(command, list):
-        command = (
-            " ".join(str(part) for part in command[2:])
-            if command[:2] == ["bash", "-lc"]
-            else " ".join(str(part) for part in command)
-        )
-    result = {"command": str(command)}
-    for field in ("workdir", "timeout_ms", "background"):
-        if field in args and args[field] is not None:
-            result[field] = args[field]
-    if "timeout_ms" not in result and args.get("timeout") is not None:
-        result["timeout_ms"] = args["timeout"]
-    return result
-
-
 def parse_custom_call(payload, session: Session) -> ToolCall:
     source = payload.get("input", "")
     native_name = payload.get("name", "custom_tool")
@@ -340,15 +319,14 @@ def parse_function_call(payload: dict) -> ToolCall:
             input=spawn_input(args),
             source_call_id=payload.get("call_id"),
         )
-    if name in _LOCAL_SHELL_NAMES and isinstance(args, dict):
-        shell_input = _shell_input(args)
-        if shell_input is not None:
-            return ToolCall(
-                name=name,
-                op=CanonicalOp.SHELL_EXEC,
-                input=shell_input,
-                source_call_id=payload.get("call_id"),
-            )
+    parsed = DIALECT.parse(name, args)
+    if parsed is not None:
+        return ToolCall(
+            name=name,
+            op=parsed[0],
+            input=parsed[1],
+            source_call_id=payload.get("call_id"),
+        )
     return ToolCall(
         name=name,
         op=_TOOL_INVOKE,

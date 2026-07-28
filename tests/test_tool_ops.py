@@ -3,7 +3,7 @@ import pytest
 
 from engine.adapters.claude.migration import ClaudeMigrationTarget
 from engine.adapters.claude.writer import OP_FIDELITY as CLAUDE_FIDELITY
-from engine.adapters.claude.writer import OP_WRITERS as CLAUDE_WRITERS
+from engine.adapters.claude.dialect import DIALECT as CLAUDE_DIALECT
 from engine.adapters.codex.migration import CodexMigrationTarget
 from engine.adapters.codex.writer import OP_FIDELITY as CODEX_FIDELITY
 from engine.adapters.codex.writer import OP_WRITERS as CODEX_WRITERS
@@ -17,7 +17,7 @@ from engine.sessions.tool_ops import (
 
 
 ALL_FIDELITY = (CLAUDE_FIDELITY, CODEX_FIDELITY, OPENCODE_FIDELITY)
-ALL_WRITERS = (CLAUDE_WRITERS, CODEX_WRITERS, OPENCODE_WRITERS)
+ALL_WRITERS = (CLAUDE_DIALECT.write_ops(), CODEX_WRITERS, OPENCODE_WRITERS)
 
 
 def _valid_input(op):

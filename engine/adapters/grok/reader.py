@@ -1,6 +1,7 @@
 """Grok current ACP/update bundle to canonical session."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ...sessions.model import (
@@ -8,13 +9,82 @@ from ...sessions.model import (
     ToolResultBlock,
 )
 from ...sessions.tool_ops import CanonicalOp
+from .dialect import DIALECT
 from .rewind import filter_rewind_updates
 from .store import load_grok_bundle
 from .updates import aggregate_updates
 
 
+def _bytes_text(value):
+    """Grok 把命令输出编码成字节数组([97,110,...]),解回 UTF-8 文本。"""
+    if isinstance(value, list):
+        if not value:
+            return ""
+        if all(isinstance(item, int) and 0 <= item < 256 for item in value):
+            return bytes(value).decode("utf-8", "replace")
+        return None
+    return value if isinstance(value, str) else None
+
+
+def _unwrap_output(value):
+    """rawOutput 类型信封 -> (语义文本, 元数据)；解不开返回 (None, {})。
+
+    信封里除文本外只有回显输入或传输元数据,拆出文本不构成信息损失,
+    却能让结果以原生 text 块迁移而不是 json 投影。
+    """
+    if not isinstance(value, dict):
+        return None, {}
+    kind = value.get("type")
+    if kind == "ReadFile":
+        content = (value.get("FileContent") or {}).get("content")
+        if isinstance(content, str):
+            return content, {}
+    elif kind == "ListDir":
+        content = (value.get("Content") or {}).get("content")
+        if isinstance(content, str):
+            return content, {}
+    elif kind == "Text":
+        if isinstance(value.get("text"), str):
+            return value["text"], {}
+    elif kind == "Todo":
+        summary = (value.get("TodosUpdated") or {}).get("summary_for_prompt")
+        if isinstance(summary, str):
+            return summary, {}
+    elif kind == "SearchReplace":
+        # EditsApplied 只回显 old/new 输入,编辑成功本身没有输出文本。
+        if isinstance(value.get("EditsApplied"), dict):
+            return "", {}
+    elif kind == "Bash":
+        text = _bytes_text(value.get("output"))
+        if text is None and isinstance(value.get("output_for_prompt"), str):
+            text = value["output_for_prompt"]
+        if text is not None:
+            meta = {}
+            if isinstance(value.get("exit_code"), int) and \
+                    not isinstance(value.get("exit_code"), bool):
+                meta["exit_code"] = value["exit_code"]
+            if isinstance(value.get("truncated"), bool):
+                meta["truncated"] = value["truncated"]
+            return text, meta
+    elif kind == "GrepSearch":
+        text = _bytes_text(value.get("stdout"))
+        if text is not None:
+            meta = {}
+            if isinstance(value.get("exit_code"), int) and \
+                    not isinstance(value.get("exit_code"), bool):
+                meta["exit_code"] = value["exit_code"]
+            stderr = _bytes_text(value.get("stderr"))
+            if stderr:
+                meta["stderr"] = stderr
+            return text, meta
+    return None, {}
+
+
 def _result(value, status):
-    if isinstance(value, str):
+    text, meta = _unwrap_output(value)
+    if text is not None:
+        blocks = [ToolResultBlock("text", text=text)] if text else []
+    elif isinstance(value, str):
         blocks = [ToolResultBlock("text", text=value)]
     elif value is None:
         blocks = []
@@ -22,14 +92,34 @@ def _result(value, status):
         blocks = [ToolResultBlock("json", data=value)]
     mapped = {"completed": "success", "failed": "error",
               "pending": "pending"}.get(status, "unknown")
-    return ToolResult(mapped, blocks)
+    if mapped == "success" and meta.get("exit_code") not in (None, 0):
+        mapped = "error"
+    return ToolResult(mapped, blocks,
+                      stderr=meta.get("stderr"),
+                      exit_code=meta.get("exit_code"),
+                      truncated=meta.get("truncated"))
+
+
+def _normalize(name: str, raw):
+    """Grok 的 arguments 可能是 dict 也可能是 JSON 字符串,先解包再归一。"""
+    decoded = raw
+    if isinstance(raw, str):
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError:
+            decoded = raw
+    parsed = DIALECT.parse(name, decoded)
+    if parsed is None:
+        return CanonicalOp.TOOL_INVOKE, {
+            "namespace": "grok", "name": name, "input": raw,
+        }
+    return parsed
 
 
 def _tool(data):
+    op, value = _normalize(data["name"], data["input"])
     return ToolCall(
-        name=data["name"], op=CanonicalOp.TOOL_INVOKE,
-        input={"namespace": "grok", "name": data["name"],
-               "input": data["input"]},
+        name=data["name"], op=op, input=value,
         result=_result(data["output"], data["status"])
         if data["output"] is not None else None,
         source_call_id=data["id"],
@@ -53,11 +143,10 @@ def _chat_messages(bundle, session):
         elif role == "assistant":
             blocks = [Block("text", str(row.get("content") or ""))]
             for native in row.get("tool_calls") or []:
+                name = str(native.get("name") or "tool")
+                op, value = _normalize(name, native.get("arguments") or {})
                 call = ToolCall(
-                    str(native.get("name") or "tool"), CanonicalOp.TOOL_INVOKE,
-                    {"namespace": "grok",
-                     "name": str(native.get("name") or "tool"),
-                     "input": native.get("arguments") or {}},
+                    name, op, value,
                     source_call_id=native.get("id"),
                 )
                 calls[call.source_call_id] = call

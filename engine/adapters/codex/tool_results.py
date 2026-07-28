@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
 
 from ...sessions.model import ToolResult, ToolResultBlock
+
+# unified-exec(exec_command/write_stdin)的分块文本头,携带真实退出状态:
+#   Chunk ID: 1448c0
+#   Wall time: 0.0000 seconds
+#   Process exited with code 128 | Process running with session ID x
+_UNIFIED_EXEC_HEAD = re.compile(
+    r"\AChunk ID: \S+\nWall time: [\d.]+ seconds\n"
+    r"(?:Process exited with code (-?\d+)"
+    r"|Process running with session ID \S+)\n"
+)
 
 _RESULT_STATUS = {
     "success": "success",
@@ -123,6 +134,14 @@ def parse_result(raw) -> ToolResult:
     if structured_envelope:
         wrapper_ids = {id(block) for block in wrapper_blocks}
         blocks = [block for block in blocks if id(block) not in wrapper_ids]
+    if (status == "unknown" and exit_code is None and len(blocks) == 1
+            and blocks[0].kind == "text"):
+        head = _UNIFIED_EXEC_HEAD.match(blocks[0].text or "")
+        if head:
+            if head.group(1) is not None:
+                exit_code = int(head.group(1))
+            else:
+                status = "running"
     if status == "unknown" and exit_code is not None:
         status = "success" if exit_code == 0 else "error"
     if stderr and status == "unknown":

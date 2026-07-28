@@ -5,7 +5,9 @@ import shlex
 
 from ..shared.migration import MigrationTargetBase, linked_agent_edge
 from ...sessions.model import tool_result_text
-from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
+from ...sessions.tool_ops import (
+    ANNOTATION_INPUTS, CanonicalOp, has_valid_tool_input,
+)
 from .writer import OP_FIDELITY, write
 
 
@@ -17,9 +19,14 @@ class CodexMigrationTarget(MigrationTargetBase):
         if not has_valid_tool_input(tool.op, tool.input):
             return None
         inputs = tool.input
+
+        def dropped(supported: set) -> set:
+            # 注释性字段(如 bash 的 description)丢弃不算信息损失
+            return (set(inputs) - supported
+                    - ANNOTATION_INPUTS.get(tool.op, frozenset()))
         if tool.op == CanonicalOp.SHELL_EXEC:
             supported = {"command", "workdir"}
-            ignored = set(inputs) - supported
+            ignored = dropped(supported)
             return {"kind": "tool", "name": "exec", "input": {
                 "cmd": inputs["command"], "workdir": inputs.get("workdir", session.cwd)},
                 "output": tool_result_text(tool.result), "conversion": "native",
@@ -27,7 +34,7 @@ class CodexMigrationTarget(MigrationTargetBase):
                 "_ignored_fields": ignored,
                 "_reason_codes": ("unsupported_tool_fields",) if ignored else ()}
         if tool.op == CanonicalOp.FS_READ:
-            ignored = set(inputs) - {"file_path"}
+            ignored = dropped({"file_path"})
             return {"kind": "tool", "name": "exec", "input": {
                 "cmd": f"cat {shlex.quote(str(inputs['file_path']))}",
                 "workdir": session.cwd},
@@ -41,7 +48,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             supported = ({"file_path", "content"} if
                          tool.op == CanonicalOp.FS_WRITE else
                          {"file_path", "old", "new"})
-            ignored = set(inputs) - supported
+            ignored = dropped(supported)
             return {"kind": "tool", "name": "apply_patch", "input": inputs,
                     "output": tool_result_text(tool.result), "conversion": "native",
                     "_consumed_fields": set(inputs) - ignored,
@@ -50,7 +57,7 @@ class CodexMigrationTarget(MigrationTargetBase):
         if tool.op == CanonicalOp.FS_PATCH:
             if not inputs.get("raw_patch"):
                 return None
-            ignored = set(inputs) - {"operations", "raw_patch"}
+            ignored = dropped({"operations", "raw_patch"})
             return {
                 "kind": "tool", "name": "apply_patch",
                 "input": {"patch": inputs["raw_patch"]},
@@ -65,7 +72,7 @@ class CodexMigrationTarget(MigrationTargetBase):
                 command.extend(["-g", str(inputs["glob"])])
             command.extend([
                 "--", str(inputs["query"]), str(inputs.get("path") or ".")])
-            ignored = set(inputs) - {"query", "path", "glob"}
+            ignored = dropped({"query", "path", "glob"})
             return {
                 "kind": "tool", "name": "exec",
                 "input": {
@@ -82,7 +89,7 @@ class CodexMigrationTarget(MigrationTargetBase):
         if tool.op == CanonicalOp.FS_GLOB:
             command = ["rg", "--files", "-g", str(inputs["pattern"]), "--",
                        str(inputs.get("path") or ".")]
-            ignored = set(inputs) - {"pattern", "path"}
+            ignored = dropped({"pattern", "path"})
             return {
                 "kind": "tool", "name": "exec",
                 "input": {
@@ -100,7 +107,7 @@ class CodexMigrationTarget(MigrationTargetBase):
             if not linked_agent_edge(session, tool, message, allow_message=True):
                 return None
             supported = {"description", "prompt", "subagent_type"}
-            ignored = set(inputs) - supported
+            ignored = dropped(supported)
             return {"kind": "tool", "name": "spawn_agent", "input": inputs,
                     "output": tool_result_text(tool.result), "conversion": "native",
                     "_consumed_fields": set(inputs) - ignored,

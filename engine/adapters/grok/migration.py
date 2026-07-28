@@ -3,16 +3,19 @@ from __future__ import annotations
 
 from ...events import event
 from ...sessions.model import tool_result_text
-from ...sessions.tool_ops import CANONICAL_OPS, CanonicalOp
+from ...sessions.tool_ops import CANONICAL_OPS, CanonicalOp, has_valid_tool_input
 from ..shared.migration import MigrationTargetBase
+from .dialect import DIALECT
 from .writer import write
 
 
 class GrokMigrationTarget(MigrationTargetBase):
     tool = "grok"
+    dialect = DIALECT
     tool_fidelity = {
         operation: (
-            "native" if operation == CanonicalOp.TOOL_INVOKE else "degrade"
+            "native" if operation == CanonicalOp.TOOL_INVOKE
+            or operation in DIALECT.write_ops() else "degrade"
         )
         for operation in CANONICAL_OPS
     }
@@ -23,21 +26,19 @@ class GrokMigrationTarget(MigrationTargetBase):
     def preview_tool(self, tool, session, message=None):
         if message is not None and message.role == "user":
             return None
-        if tool.op == CanonicalOp.TOOL_INVOKE:
-            value = tool.input
-            if value.get("namespace") not in {"grok", "mcp"}:
-                return None
-            name, tool_input = value["name"], value["input"]
-        else:
-            name, tool_input = tool.name, tool.input
+        if not has_valid_tool_input(tool.op, tool.input):
+            return None
+        rendered = self._dialect_preview(tool)
+        if rendered is not None or tool.op == CanonicalOp.TOOL_INVOKE:
+            return rendered
+        # 方言尚无映射的操作:按源端名称与参数原样落地为外来工具记录。
+        # 形态没变,身份变了,理由码要说清楚,否则差异卡上看不出改了什么。
         return {
-            "kind": "tool", "name": name, "input": tool_input,
+            "kind": "tool", "name": tool.name, "input": tool.input,
             "output": tool_result_text(tool.result),
-            "conversion": (
-                "native" if tool.op == CanonicalOp.TOOL_INVOKE
-                else "transformed"
-            ),
+            "conversion": "transformed",
             "_consumed_fields": set(tool.input),
+            "_reason_codes": ("foreign_tool_record",),
         }
 
     def plan(self, session):
