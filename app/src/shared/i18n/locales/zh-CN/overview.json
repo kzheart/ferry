@@ -101,6 +101,16 @@
       "title": "连续 {{days}} 天",
       "body": "已经连着 {{days}} 天有活动,这股手感值得保持。"
     },
+    "idle": {
+      "eyebrow": "闲置",
+      "title": "{{repo}} 停了 {{days}} 天",
+      "body": "这个仓库有一定体量,但已经 {{days}} 天没动过了。要么捡起来,要么放心归档。"
+    },
+    "snapshot": {
+      "eyebrow": "空间",
+      "title": "快照占了 {{gb}} GB",
+      "body": "「{{title}}」的快照有 {{gb}} GB,已经 {{days}} 天没碰过,可以考虑清一清。"
+    },
     "topRepo": {
       "eyebrow": "项目",
       "title": "{{repo}}",
