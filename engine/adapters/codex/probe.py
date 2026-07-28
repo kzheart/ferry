@@ -9,6 +9,39 @@ from pathlib import Path
 from ...system import executables, probes
 
 
+def _prompt_session(session_id, _cwd, prompt, model=None, timeout=360):
+    command = executables.argv(
+        "codex",
+        "exec",
+        "resume",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+    )
+    if model:
+        command += ["-m", model]
+    command += [session_id, prompt]
+    result = probes.run_agent_command(command, timeout=timeout)
+    params = {
+        "tool": "codex",
+        "exit_code": result.returncode,
+    }
+    if result.timed_out:
+        status, code, text = "failed", "agent_prompt.timeout", ""
+    elif result.returncode != 0:
+        status, code, text = "failed", "agent_prompt.process_failed", ""
+    else:
+        status, code, text = "completed", None, result.stdout
+    report = probes.report(
+        status,
+        code,
+        params,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+    report["text"], report["text_truncated"] = probes.normalize_agent_text(text)
+    return report
+
+
 def _probe_in_env(session_id, model=None, env=None):
     command = executables.argv("codex", "exec", "resume", session_id,
                                "--skip-git-repo-check")
@@ -33,6 +66,11 @@ def _probe(session_id, _cwd, model=None):
 class CodexVerifier:
     def probe(self, session_id, cwd, model=None):
         return _probe(session_id, cwd, model)
+
+    def prompt_session(
+        self, session_id, cwd, prompt, model=None, timeout=360,
+    ):
+        return _prompt_session(session_id, cwd, prompt, model, timeout)
 
     def probe_edited(self, _editor, _doc, result, model=None):
         with tempfile.TemporaryDirectory(prefix="ferry-codex-probe-") as tmp:

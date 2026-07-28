@@ -109,3 +109,164 @@ def test_agent_text_is_bounded():
     assert text == "x" * 65536
     assert truncated is True
     assert probes.normalize_agent_text("ok") == ("ok", False)
+
+
+def test_claude_agent_prompt_command(monkeypatch):
+    results = iter([
+        probes.AgentProcessResult(
+            0,
+            json.dumps({
+                "result": "finished",
+                "stop_reason": "end_turn",
+                "session_id": "sid",
+            }),
+            "",
+            False,
+        ),
+        probes.AgentProcessResult(7, "process failed", "failed", False),
+        probes.AgentProcessResult(0, "not-json", "", False),
+    ])
+    calls = []
+    monkeypatch.setattr(
+        claude_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        claude_probe.probes,
+        "run_agent_command",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)),
+            next(results),
+        )[1],
+    )
+
+    verifier = claude_probe.ClaudeVerifier()
+    report = verifier.prompt_session(
+        "sid", "/work", "do it", model="claude-test", timeout=21,
+    )
+    failed = verifier.prompt_session("sid", "/work", "again")
+    invalid = verifier.prompt_session("sid", "/work", "invalid")
+
+    assert calls[0] == ([
+        "claude",
+        "-p",
+        "do it",
+        "--resume",
+        "sid",
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+        "--model",
+        "claude-test",
+    ], {"cwd": "/work", "timeout": 21})
+    assert report["status"] == "completed"
+    assert report["text"] == "finished"
+    assert report["params"]["stop_reason"] == "end_turn"
+    assert failed["status"] == "failed"
+    assert failed["code"] == "agent_prompt.process_failed"
+    assert failed["params"]["exit_code"] == 7
+    assert invalid["code"] == "agent_prompt.invalid_output"
+
+
+def test_codex_agent_prompt_command(monkeypatch):
+    results = iter([
+        probes.AgentProcessResult(0, "finished\n", "warning", False),
+        probes.AgentProcessResult(9, "partial", "failed", False),
+    ])
+    calls = []
+    monkeypatch.setattr(
+        codex_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        codex_probe.probes,
+        "run_agent_command",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)),
+            next(results),
+        )[1],
+    )
+
+    verifier = codex_probe.CodexVerifier()
+    report = verifier.prompt_session(
+        "sid", "/work", "do it", model="gpt-test", timeout=22,
+    )
+    failed = verifier.prompt_session("sid", "/work", "again")
+
+    assert calls[0] == ([
+        "codex",
+        "exec",
+        "resume",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-m",
+        "gpt-test",
+        "sid",
+        "do it",
+    ], {"timeout": 22})
+    assert report["status"] == "completed"
+    assert report["text"] == "finished\n"
+    assert report["diagnostic"]["stderr"] == "warning"
+    assert failed["status"] == "failed"
+    assert failed["code"] == "agent_prompt.process_failed"
+    assert failed["params"]["exit_code"] == 9
+
+
+def test_opencode_agent_prompt_command(monkeypatch):
+    results = iter([
+        probes.AgentProcessResult(
+            0,
+            "\n".join([
+                json.dumps({"type": "text", "part": {"text": "first"}}),
+                json.dumps({"type": "text", "part": {"text": "finished"}}),
+            ]),
+            "",
+            False,
+        ),
+        probes.AgentProcessResult(4, "", "failed", False),
+        probes.AgentProcessResult(0, "not-json", "", False),
+    ])
+    calls = []
+    monkeypatch.setattr(
+        opencode_probe.executables,
+        "argv",
+        lambda tool, *args: [tool, *args],
+    )
+    monkeypatch.setattr(
+        opencode_probe.probes,
+        "run_agent_command",
+        lambda command, **kwargs: (
+            calls.append((command, kwargs)),
+            next(results),
+        )[1],
+    )
+
+    verifier = opencode_probe.OpenCodeVerifier()
+    report = verifier.prompt_session(
+        "sid", "/work", "do it", model="provider/model", timeout=23,
+    )
+    failed = verifier.prompt_session("sid", "/work", "again")
+    invalid = verifier.prompt_session("sid", "/work", "invalid")
+
+    assert calls[0] == ([
+        "opencode",
+        "run",
+        "-s",
+        "sid",
+        "--dir",
+        "/work",
+        "--format",
+        "json",
+        "--auto",
+        "-m",
+        "provider/model",
+        "do it",
+    ], {"cwd": "/work", "timeout": 23})
+    assert report["status"] == "completed"
+    assert report["text"] == "finished"
+    assert failed["status"] == "failed"
+    assert failed["code"] == "agent_prompt.process_failed"
+    assert failed["params"]["exit_code"] == 4
+    assert invalid["code"] == "agent_prompt.invalid_output"
