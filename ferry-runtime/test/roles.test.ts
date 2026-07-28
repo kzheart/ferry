@@ -108,6 +108,13 @@ describe("FileRoleStore", () => {
         tools: ["shell"] as never,
       }),
     ).rejects.toThrow("unknown tool");
+
+    await expect(
+      store.create({
+        ...input("agent-driver"),
+        tools: ["agent_prompt"],
+      }),
+    ).resolves.toMatchObject({ tools: ["agent_prompt"] });
   });
 
   it("内置会话优化器可覆盖/重置/复制但不可删除", async () => {

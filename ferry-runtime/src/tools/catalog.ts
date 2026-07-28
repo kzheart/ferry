@@ -112,6 +112,9 @@ const migrationTargets = AGENT_IDS.filter((tool) =>
 const migrationSources = AGENT_IDS.filter((tool) =>
   supportsAgentCapability(tool, "migration-source"),
 );
+const promptAgents = AGENT_IDS.filter((tool) =>
+  supportsAgentCapability(tool, "prompt"),
+);
 const agentEnum = (values: readonly string[]) =>
   Type.Unsafe({ type: "string", enum: [...values] });
 
@@ -169,6 +172,7 @@ export const FERRY_TOOL_NAMES = [
   "usage",
   "migrate",
   "session_edit",
+  "agent_prompt",
   "bash",
 ] as const;
 
@@ -355,6 +359,16 @@ const schemas = {
   // Function-tool providers require an object root. Conditional constraints
   // live inside oneOf while the execution boundary validates them again.
   session_edit: sessionEditSchema,
+  agent_prompt: Type.Object(
+    {
+      tool: agentEnum(promptAgents),
+      ref: opaqueSessionRef,
+      prompt: Type.String({ minLength: 1, maxLength: 100_000 }),
+      model: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
+      timeout_sec: Type.Optional(Type.Integer({ minimum: 1, maximum: 360 })),
+    },
+    { additionalProperties: false },
+  ),
   bash: Type.Object(
     {
       command: Type.String({ minLength: 1, maxLength: 4_000 }),
@@ -376,6 +390,7 @@ const descriptions: Record<FerryToolName, string> = {
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
+  agent_prompt: `Resume and actively drive a native Coding Agent session (${promptAgents.join(", ")}). This is a high-privilege mutation: the target Agent may run commands, use its configured tools, and modify the workspace and native session without a separate Ferry approval. Pass an fsr_ ref from session_search and the prompt to execute. The returned next_ref replaces the old ref after every started run; always use next_ref for the next call because the previous ref becomes stale. Calls execute sequentially and are never safe to retry automatically.`,
   bash: "Run a shell command on the user's machine. The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.",
 };
 

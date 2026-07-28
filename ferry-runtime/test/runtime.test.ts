@@ -1,14 +1,16 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   EphemeralSessionStore,
   type PersistedSession,
   type SessionCommit,
 } from "../src/sessions/session-store.js";
 import { AgentRuntime } from "../src/runtime/runtime.js";
+import { RuntimeEventBus } from "../src/runtime/event-bus.js";
 import { FERRY_SAFETY_PROMPT } from "../src/sessions/runtime-session.js";
+import { RuntimeGateway } from "../src/tools/gateway.js";
 import { EphemeralRoleStore } from "../src/roles/role-store.js";
 import { EphemeralSkillStore } from "../src/skills/skill-store.js";
 import {
@@ -743,6 +745,80 @@ describe("AgentRuntime", () => {
     await runtime.waitForIdle("s1");
 
     expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
+  });
+
+  it("returns agent_prompt text and next_ref through the Runtime gateway", async () => {
+    const roleStore = new EphemeralRoleStore();
+    await roleStore.create({
+      id: "agent-driver",
+      name: "Agent Driver",
+      persona: "",
+      tools: ["agent_prompt"],
+      apply_policy: "manual",
+    });
+    const runtime = await createRuntime({
+      roleStore,
+      backendFactory: () =>
+        scriptedToolBackend([
+          {
+            name: "agent_prompt",
+            arguments: {
+              tool: "codex",
+              ref: "fsr_current",
+              prompt: "继续实现",
+            },
+          },
+        ]),
+      toolHandler: async (name) => {
+        expect(name).toBe("agent_prompt");
+        return {
+          status: "completed",
+          text: "实现完成",
+          next_ref: "fsr_next",
+        };
+      },
+    });
+    await runtime.createSession("s1", undefined, "agent-driver");
+    await runtime.prompt("s1", "驱动目标 Agent");
+    await runtime.waitForIdle("s1");
+
+    expect(
+      runtime.replay("s1", 0).find((event) => event.type === "tool.completed")
+        ?.payload,
+    ).toMatchObject({
+      result: {
+        details: {
+          text: "实现完成",
+          next_ref: "fsr_next",
+        },
+      },
+    });
+  });
+
+  it("uses a 400 second default deadline for agent_prompt", async () => {
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const controller = new AbortController();
+    const gateway = new RuntimeGateway({
+      newId: () => "prompt-request",
+      events: new RuntimeEventBus(() => new Date(0)),
+      emitToolRequest: async () => {},
+    });
+
+    const pending = gateway.invokeTool(
+      "agent_prompt",
+      {},
+      {
+        sessionId: "session",
+        runId: "run",
+        toolCallId: "call",
+        signal: controller.signal,
+        onUpdate() {},
+      },
+    );
+    expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 400_000);
+    controller.abort();
+    await expect(pending).rejects.toThrow("tool request aborted");
+    timeoutSpy.mockRestore();
   });
 
   it("persists renamed and pinned sessions, then deletes them", async () => {

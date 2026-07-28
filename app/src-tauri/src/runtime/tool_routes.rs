@@ -35,6 +35,16 @@ pub(super) fn resolve_tool_request(
         "session_search" => read("agent_search_sessions"),
         "session_read" => read("agent_session_read"),
         "usage" => read("agent_get_usage"),
+        "agent_prompt" => {
+            if !has_exact_keys(args, &["tool", "ref", "prompt"], &["model", "timeout_sec"]) {
+                return None;
+            }
+            ToolRequestRoute {
+                method: "agent_prompt",
+                params: Value::Object(args.clone()),
+                requires_approval: false,
+            }
+        }
         "migrate" => {
             if !has_exact_keys(
                 args,
@@ -191,6 +201,30 @@ mod tests {
         assert_eq!(metadata.method, "operation.plan");
         assert!(metadata.requires_approval);
 
+        let prompt = resolve_tool_request(
+            "agent_prompt",
+            &map(json!({
+                "tool": "grok",
+                "ref": "fsr_a",
+                "prompt": "继续实现",
+                "model": "grok-code-fast-1",
+                "timeout_sec": 360,
+            })),
+        )
+        .unwrap();
+        assert_eq!(prompt.method, "agent_prompt");
+        assert!(!prompt.requires_approval);
+        assert_eq!(
+            prompt.params,
+            json!({
+                "tool": "grok",
+                "ref": "fsr_a",
+                "prompt": "继续实现",
+                "model": "grok-code-fast-1",
+                "timeout_sec": 360,
+            })
+        );
+
         assert_eq!(
             resolve_tool_request(
                 "session_edit",
@@ -201,6 +235,25 @@ mod tests {
                     "patch": {"pinned": true},
                     "intent": "execute",
                 })),
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_request(
+                "agent_prompt",
+                &map(json!({
+                    "tool": "codex",
+                    "ref": "fsr_a",
+                    "prompt": "继续",
+                    "session_id": "bypass",
+                })),
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_request(
+                "agent_prompt",
+                &map(json!({"tool": "codex", "ref": "fsr_a"})),
             ),
             None
         );
