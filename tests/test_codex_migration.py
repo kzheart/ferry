@@ -10,6 +10,7 @@ from engine.adapters.codex.lifecycle import CodexLifecycle
 from engine.adapters.codex.writer import write
 from engine.adapters.opencode import writer as opencode_writer
 from engine.adapters.opencode import store as opencode_store
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.contracts.agents import AGENTS
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
@@ -84,7 +85,11 @@ def test_claude_writer_publishes_discoverable_session(tmp_path, monkeypatch):
     restored = read_claude(str(path))
     assert restored.source_id == session_id
     assert restored.messages[0].blocks[0].text == "continue this work"
-    records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    records = [
+        json.loads(line)
+        for line in split_jsonl_lines(path.read_text())
+        if line.strip()
+    ]
     assert all(record.get("timestamp") for record in records
                if record.get("type") in {"user", "assistant"})
     assert all(record.get("userType") == "external" for record in records
@@ -108,7 +113,7 @@ def test_claude_semantic_rewrite_uses_current_shape_without_unknown_fields(
     source = read_claude(str(native))
 
     session_id, path = write_claude(source, cwd=str(tmp_path / "proj"))
-    record = json.loads(path.read_text().splitlines()[0])
+    record = json.loads(split_jsonl_lines(path.read_text())[0])
     assert record["sessionId"] == session_id
     assert record["cwd"] == str(tmp_path / "proj")
     assert record["timestamp"]
@@ -255,7 +260,11 @@ def test_codex_writer_registers_rollout_tree(tmp_path):
     assert edge[1] in {row[0] for row in rows}
     assert edge[2] == "closed"
 
-    records = [json.loads(line) for line in root_path.read_text().splitlines()]
+    records = [
+        json.loads(line)
+        for line in split_jsonl_lines(root_path.read_text())
+        if line.strip()
+    ]
     meta = records[0]
     assert meta["type"] == "session_meta"
     required = {"timestamp", "originator", "source", "thread_source",
@@ -270,7 +279,9 @@ def test_codex_writer_registers_rollout_tree(tmp_path):
         path for path in sessions.glob("*/*/*/rollout-*.jsonl")
         if path != root_path
     )
-    child_meta = json.loads(child_path.read_text().splitlines()[0])["payload"]
+    child_meta = json.loads(
+        split_jsonl_lines(child_path.read_text())[0],
+    )["payload"]
     assert child_meta["thread_source"] == "subagent"
     assert isinstance(child_meta["source"]["subagent"], dict)
 

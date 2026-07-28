@@ -2,6 +2,7 @@ import json
 
 from engine.adapters.claude.reader import read
 from engine.adapters.claude.writer import write
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.sessions.model import (
     AgentEdge,
     Block,
@@ -40,7 +41,11 @@ def test_claude_child_forks_from_agent_call_after_text_in_same_message(tmp_path)
 
     _sid, root_path = write(root, dest_root=tmp_path / "claude")
 
-    root_records = [json.loads(line) for line in root_path.read_text().splitlines()]
+    root_records = [
+        json.loads(line)
+        for line in split_jsonl_lines(root_path.read_text())
+        if line.strip()
+    ]
     agent_call = next(record for record in root_records
                       if record.get("type") == "assistant" and
                       any(item.get("type") == "tool_use" and
@@ -48,7 +53,7 @@ def test_claude_child_forks_from_agent_call_after_text_in_same_message(tmp_path)
                           for item in record["message"]["content"]))
     child_path = next((tmp_path / "claude" / root_path.stem /
                        "subagents").glob("agent-*.jsonl"))
-    fork = json.loads(child_path.read_text().splitlines()[0])
+    fork = json.loads(split_jsonl_lines(child_path.read_text())[0])
     agent_result = next(
         record["toolUseResult"]
         for record in root_records
@@ -83,7 +88,11 @@ def test_claude_synthetic_missing_task_link_also_updates_fork_anchor(tmp_path):
 
     _sid, root_path = write(root, dest_root=tmp_path / "claude")
 
-    root_records = [json.loads(line) for line in root_path.read_text().splitlines()]
+    root_records = [
+        json.loads(line)
+        for line in split_jsonl_lines(root_path.read_text())
+        if line.strip()
+    ]
     agent_call = next(record for record in root_records
                       if record.get("type") == "assistant" and
                       any(item.get("type") == "tool_use" and
@@ -91,6 +100,6 @@ def test_claude_synthetic_missing_task_link_also_updates_fork_anchor(tmp_path):
                           for item in record["message"]["content"]))
     child_path = next((tmp_path / "claude" / root_path.stem /
                        "subagents").glob("agent-*.jsonl"))
-    fork = json.loads(child_path.read_text().splitlines()[0])
+    fork = json.loads(split_jsonl_lines(child_path.read_text())[0])
 
     assert fork["parentLastUuid"] == agent_call["uuid"]

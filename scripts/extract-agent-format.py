@@ -16,12 +16,13 @@ from engine.adapters.codex.native_schema import extract_templates as extract_cod
 from engine.adapters.opencode.native_schema import extract_templates as extract_opencode  # noqa: E402
 from engine.adapters.pi.native_schema import extract_templates as extract_pi  # noqa: E402
 from engine.adapters.grok.native_schema import extract_templates as extract_grok  # noqa: E402
+from engine.adapters.shared.scanner import split_jsonl_lines  # noqa: E402
 
 
 def _jsonl(path: Path) -> list[dict]:
     return [
         json.loads(line)
-        for line in path.read_text().splitlines()
+        for line in split_jsonl_lines(path.read_text())
         if line.strip()
     ]
 

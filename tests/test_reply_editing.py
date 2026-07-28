@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from engine.adapters.shared.editing import EditDocument
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.adapters.claude.editor import ClaudeBackend
 from engine.adapters.claude.editing import check_invariants
 from engine.adapters.claude.reader import read as read_claude
@@ -26,7 +27,11 @@ FORMAT_FIXTURES = ROOT / "tests" / "fixtures" / "agent_formats"
 
 
 def _jsonl(path):
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [
+        json.loads(line)
+        for line in split_jsonl_lines(path.read_text())
+        if line.strip()
+    ]
 
 
 def _opencode_payload(case):

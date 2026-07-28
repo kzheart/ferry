@@ -12,7 +12,9 @@ async function collect(chunks: string[], maxBytes?: number) {
 
 describe("strict LF JSONL framing", () => {
   it("does not split valid JSON strings containing Unicode separators", async () => {
-    const first = JSON.stringify({ text: "left\u2028middle\u2029right" });
+    const first = JSON.stringify({
+      text: "left\u0085next\u2028middle\u2029right",
+    });
     await expect(collect([`${first}\n`, '{"ok":true}\r\n'])).resolves.toEqual([
       first,
       '{"ok":true}',

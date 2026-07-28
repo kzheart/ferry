@@ -4,6 +4,7 @@ import sqlite3
 from engine.adapters.codex import reader as codex_reader
 from engine.adapters.codex import topology as codex_topology
 from engine.adapters.codex.writer import write
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.sessions.model import (
     AgentEdge, Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -72,7 +73,11 @@ def test_codex_writer_preserves_message_time_and_spawn_position(tmp_path, monkey
     monkeypatch.setattr(codex_topology, "_META_CACHE_PATH", tmp_path / "rollout-cache.json")
 
     root_id, path = write(_tree(tmp_path), sessions_dir=sessions)
-    records = [json.loads(line) for line in path.read_text().splitlines()]
+    records = [
+        json.loads(line)
+        for line in split_jsonl_lines(path.read_text())
+        if line.strip()
+    ]
     messages = [record for record in records
                 if record["type"] == "response_item" and
                 record["payload"].get("type") == "message"]
@@ -132,7 +137,11 @@ def test_codex_writer_uses_parent_message_time_for_tools_without_own_time(tmp_pa
     )]
 
     _root_id, path = write(root, sessions_dir=sessions)
-    records = [json.loads(line) for line in path.read_text().splitlines()]
+    records = [
+        json.loads(line)
+        for line in split_jsonl_lines(path.read_text())
+        if line.strip()
+    ]
     tool_records = [record for record in records
                     if record["type"] == "response_item"]
 
