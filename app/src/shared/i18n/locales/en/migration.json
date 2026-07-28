@@ -50,13 +50,12 @@
       "open": "Review migration differences",
       "none": "No migration differences",
       "title": "Migration differences",
-      "summary": "{{exact}} exact · {{transformed}} transformed · {{lossy}} lossy · {{narrated}} narrated · {{dropped}} dropped",
       "back": "Back to message preview",
       "all": "All",
       "degraded": "Degraded",
-      "exact": "Exact",
-      "transformed": "Transformed",
-      "lossy": "Lossy",
+      "exact": "Kept as-is",
+      "transformed": "Rewritten",
+      "lossy": "Lossy rewrite",
       "narrated": "Narrated",
       "dropped": "Dropped",
       "search": "Search differences…",
@@ -66,6 +65,11 @@
       "thinking": "Thinking",
       "original": "Original content",
       "migrated": "Migrated content",
+      "params": "Arguments",
+      "result": "Result",
+      "narration": "history text",
+      "noTarget": "not kept",
+      "lostFields": "Dropped arguments {{fields}}",
       "truncated": "Long content truncated ({{n}} characters originally)",
       "viewTurn": "View containing turn",
       "noLocation": "No corresponding location after migration",
@@ -73,7 +77,7 @@
       "loadMore": "Show {{n}} more",
       "reasons": {
         "tool_transformed": "{{tool}} must be converted to a form supported by the target",
-        "tool_to_history": "{{tool}} cannot be restored natively and was converted to history text",
+        "tool_to_history": "The target has no matching {{tool}} tool, so the call was written as history text",
         "unknown_result_status": "{{tool}} has an unknown result status and was converted to history text instead of being presented as a success",
         "unsupported_result_status": "The target cannot reliably represent the result status of {{tool}}, so it was converted to history text",
         "tool_result_truncated": "The source result of {{tool}} was truncated",
@@ -82,7 +86,9 @@
         "invalid_tool_input": "{{tool}} has parameters that cannot be converted and was converted to history text",
         "tool_unsupported": "The target does not support {{tool}} and this content will be dropped",
         "unsupported_image": "The target session format does not support this image",
-        "unsupported_thinking": "The target session format does not retain thinking content"
+        "unsupported_thinking": "The target session format does not retain thinking content",
+        "foreign_tool_record": "The target has no native tool mapping for {{tool}}; the call is stored verbatim under the source tool's name and the target will not treat it as its own",
+        "workdir_inlined": "The target shell tool has no separate working-directory argument, so a cd prefix was folded into the command; semantics are unchanged"
       }
     }
   },
