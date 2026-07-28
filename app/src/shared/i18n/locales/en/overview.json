@@ -101,6 +101,16 @@
       "title": "{{days}}-day streak",
       "body": "{{days}} days of activity in a row now — that flow is worth keeping."
     },
+    "idle": {
+      "eyebrow": "Idle",
+      "title": "{{repo}} quiet for {{days}} days",
+      "body": "This repo has some history, but nothing has moved in {{days}} days. Pick it back up — or archive it guilt-free."
+    },
+    "snapshot": {
+      "eyebrow": "Storage",
+      "title": "Snapshot using {{gb}} GB",
+      "body": "The snapshot for “{{title}}” takes {{gb}} GB and hasn't been touched in {{days}} days — worth cleaning up."
+    },
     "topRepo": {
       "eyebrow": "Project",
       "title": "{{repo}}",
