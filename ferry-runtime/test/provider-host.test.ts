@@ -217,7 +217,11 @@ describe("ProviderHost", () => {
     });
     expect(await providers.isConfigured("local-ollama")).toBe(true);
     expect(providers.listModels("local-ollama")).toMatchObject([
-      { id: "qwen/qwen3:30b", provider: "local-ollama", api: "openai-completions" },
+      {
+        id: "qwen/qwen3:30b",
+        provider: "local-ollama",
+        api: "openai-completions",
+      },
     ]);
   });
 

@@ -12,7 +12,7 @@ def test_grok_adapter_enables_every_capability_except_edit():
 
     assert adapter.manifest.capabilities == (
         "browse", "resume", "migration-source", "migration-target",
-        "delete", "probe", "models",
+        "delete", "probe", "prompt", "models",
     )
     assert adapter.migration_target is not None
     assert adapter.verifier is not None

@@ -188,6 +188,7 @@ CAPABILITY_MODULES = {
     "edit": {"codec", "editor"},
     "delete": {"lifecycle"},
     "probe": {"probe"},
+    "prompt": {"probe"},
     "models": {"models"},
 }
 

@@ -16,6 +16,16 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+### Added
+
+- **Native Coding Agent driving** — roles can allowlist `agent_prompt` to resume
+  and actively drive Claude Code, Codex CLI, OpenCode, Pi Agent, or Grok Build
+  sessions with the Agent's native high-privilege execution mode. The role
+  allowlist is the authorization, so calls do not require per-run Ferry
+  approval; each started run returns a fresh session reference for follow-up
+  calls. This is separate from Ferry Provider completions and does not change
+  the existing fixed-prompt probe behavior.
+
 ## [0.5.0] - 2026-07-23
 
 ### Added

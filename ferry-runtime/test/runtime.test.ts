@@ -253,33 +253,46 @@ describe("AgentRuntime", () => {
       { op: "rewrite", locator: "fml_u1", text: "优化后的提问" },
     ];
     const script = [
-      { name: "session_read", arguments: { tool: "codex", ref: "fsr_target_1" } },
+      {
+        name: "session_read",
+        arguments: { tool: "codex", ref: "fsr_target_1" },
+      },
       // assistant locator:必须被工具边界拒绝,不到达 handler
       {
         name: "session_edit",
         arguments: {
-          tool: "codex", ref: "fsr_target_1", intent: "preview",
+          tool: "codex",
+          ref: "fsr_target_1",
+          intent: "preview",
           ops: [{ op: "rewrite", locator: "fml_a1", text: "改 assistant" }],
         },
       },
       {
         name: "session_edit",
         arguments: {
-          tool: "codex", ref: "fsr_target_1", intent: "preview", ops: goodOps,
+          tool: "codex",
+          ref: "fsr_target_1",
+          intent: "preview",
+          ops: goodOps,
         },
       },
       // preview 之后改了文本再 execute:指纹不匹配,拒绝
       {
         name: "session_edit",
         arguments: {
-          tool: "codex", ref: "fsr_target_1", intent: "execute",
+          tool: "codex",
+          ref: "fsr_target_1",
+          intent: "execute",
           ops: [{ op: "rewrite", locator: "fml_u1", text: "被偷改的提问" }],
         },
       },
       {
         name: "session_edit",
         arguments: {
-          tool: "codex", ref: "fsr_target_1", intent: "execute", ops: goodOps,
+          tool: "codex",
+          ref: "fsr_target_1",
+          intent: "execute",
+          ops: goodOps,
         },
       },
     ];
@@ -292,7 +305,11 @@ describe("AgentRuntime", () => {
       roleStore,
       backendFactory: () => scriptedToolBackend(script),
       toolHandler: async (name, args, context) => {
-        handled.push({ name, intent: args.intent, policy: context.applyPolicy });
+        handled.push({
+          name,
+          intent: args.intent,
+          policy: context.applyPolicy,
+        });
         if (name === "session_read") {
           return {
             messages: [
@@ -413,7 +430,11 @@ describe("AgentRuntime", () => {
     );
 
     // 普通会话不受影响,角色的 auto 策略保持原样
-    const general = await runtime.createSession("plain", undefined, "auto-writer");
+    const general = await runtime.createSession(
+      "plain",
+      undefined,
+      "auto-writer",
+    );
     expect(general).toMatchObject({
       apply_policy: "auto",
       purpose: "general",
@@ -603,9 +624,9 @@ describe("AgentRuntime", () => {
     await runtime.createSession("s1");
     await runtime.prompt("s1", "hello");
     await runtime.waitForIdle("s1");
-    await expect(runtime.editResend("s1", 999, "changed")).rejects.toMatchObject(
-      { code: "invalid_params" },
-    );
+    await expect(
+      runtime.editResend("s1", 999, "changed"),
+    ).rejects.toMatchObject({ code: "invalid_params" });
   });
 
   it("reports the original bounded provider error", async () => {
