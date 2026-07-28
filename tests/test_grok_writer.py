@@ -9,6 +9,7 @@ from engine.adapters.grok import adapter as grok_adapter
 from engine.adapters.grok.migration import GrokMigrationTarget
 from engine.adapters.grok.reader import read
 from engine.adapters.grok.writer import _blake3, write
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
@@ -103,11 +104,13 @@ def test_writer_roundtrips_order_and_indexes_search_document(
 
     chat = [
         json.loads(line) for line in
-        (path / "chat_history.jsonl").read_text().splitlines()
+        split_jsonl_lines((path / "chat_history.jsonl").read_text())
+        if line.strip()
     ]
     updates = [
         json.loads(line)["params"]["update"] for line in
-        (path / "updates.jsonl").read_text().splitlines()
+        split_jsonl_lines((path / "updates.jsonl").read_text())
+        if line.strip()
     ]
     native_call = next(item for item in chat if item["type"] == "assistant")
     assert native_call["tool_calls"][0]["arguments"] == (

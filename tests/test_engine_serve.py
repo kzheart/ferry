@@ -7,6 +7,34 @@ import pytest
 
 from engine.server.cli import serve
 from engine.server.rpc import PROTOCOL
+from engine.adapters.shared.scanner import split_jsonl_lines
+
+
+def test_jsonl_response_preserves_unicode_line_separators():
+    content = "alpha\u0085beta\u2028gamma\u2029omega"
+    output = io.StringIO()
+
+    serve(
+        io.StringIO(
+            f'{{"protocol":"{PROTOCOL}","id":"unicode",'
+            '"method":"health","params":{}}\n'
+        ),
+        output,
+        lambda _request: {
+            "protocol": PROTOCOL,
+            "id": "unicode",
+            "ok": True,
+            "result": {"content": content},
+        },
+    )
+
+    records = [
+        json.loads(line)
+        for line in split_jsonl_lines(output.getvalue())
+        if line.strip()
+    ]
+    assert len(records) == 1
+    assert records[0]["result"]["content"] == content
 
 
 def test_parallel_read_requests_can_finish_out_of_input_order():
@@ -42,7 +70,11 @@ def test_parallel_read_requests_can_finish_out_of_input_order():
         handler,
     )
 
-    responses = [json.loads(line) for line in output.getvalue().splitlines()]
+    responses = [
+        json.loads(line)
+        for line in split_jsonl_lines(output.getvalue())
+        if line.strip()
+    ]
     assert peak == 2
     assert [response["id"] for response in responses] == ["fast", "slow"]
 
@@ -81,7 +113,11 @@ def test_non_parallel_request_stays_on_ordered_lane():
     )
 
     assert peak == 1
-    assert [json.loads(line)["id"] for line in output.getvalue().splitlines()] == [
+    assert [
+        json.loads(line)["id"]
+        for line in split_jsonl_lines(output.getvalue())
+        if line.strip()
+    ] == [
         "first",
         "second",
     ]

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from engine.adapters.shared.scanner import split_jsonl_lines
 from engine.adapters.claude.native_schema import (
     extract_templates as extract_claude,
     templates as claude_templates,
@@ -29,7 +30,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "agent_formats"
 def _jsonl(path):
     return [
         json.loads(line)
-        for line in path.read_text().splitlines()
+        for line in split_jsonl_lines(path.read_text())
         if line.strip()
     ]
 

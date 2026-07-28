@@ -9,7 +9,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -121,18 +120,24 @@ async function smokeSea(executable, dataDirectory) {
   child.stderr.on("data", (chunk) => {
     stderr += chunk;
   });
-  const lines = createInterface({ input: child.stdout });
-  lines.on("line", (line) => {
-    const message = JSON.parse(line);
-    messages.push(message);
-    if (message.type !== "engine.request") return;
-    send(`sea-engine-${messages.length}`, "tool.result", {
-      request_id: message.payload?.request_id,
-      session_id: message.session_id,
-      ok: true,
-      result: [],
-    });
-  });
+  let outputError;
+  const stopReading = readJsonLines(
+    child.stdout,
+    (line) => {
+      const message = JSON.parse(line.toString("utf8"));
+      messages.push(message);
+      if (message.type !== "engine.request") return;
+      send(`sea-engine-${messages.length}`, "tool.result", {
+        request_id: message.payload?.request_id,
+        session_id: message.session_id,
+        ok: true,
+        result: [],
+      });
+    },
+    (error) => {
+      outputError = error;
+    },
+  );
   const send = (id, method, params = {}) => {
     child.stdin.write(
       `${JSON.stringify({ protocol: ipcProtocol, id, method, params })}\n`,
@@ -141,6 +146,7 @@ async function smokeSea(executable, dataDirectory) {
   const waitFor = async (predicate, label) => {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
+      if (outputError) throw outputError;
       const match = messages.find(predicate);
       if (match) return match;
       if (child.exitCode !== null) {
@@ -216,9 +222,50 @@ async function smokeSea(executable, dataDirectory) {
     }
   } finally {
     child.stdin.end();
-    lines.close();
+    stopReading();
     if (child.exitCode === null) child.kill();
   }
+}
+
+function readJsonLines(input, onLine, onError) {
+  let pending = Buffer.alloc(0);
+  const fail = (error) => {
+    cleanup();
+    onError(error);
+  };
+  const onData = (chunk) => {
+    pending = Buffer.concat([
+      pending,
+      Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+    ]);
+    let newline = pending.indexOf(0x0a);
+    while (newline !== -1) {
+      let record = pending.subarray(0, newline);
+      pending = pending.subarray(newline + 1);
+      if (record.at(-1) === 0x0d) record = record.subarray(0, -1);
+      try {
+        onLine(record);
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      newline = pending.indexOf(0x0a);
+    }
+  };
+  const onEnd = () => {
+    if (pending.length > 0) {
+      fail(new Error("Runtime JSONL output ended without LF delimiter"));
+    }
+  };
+  const cleanup = () => {
+    input.off("data", onData);
+    input.off("end", onEnd);
+    input.off("error", fail);
+  };
+  input.on("data", onData);
+  input.on("end", onEnd);
+  input.on("error", fail);
+  return cleanup;
 }
 
 function run(command, args) {

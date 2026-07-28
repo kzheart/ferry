@@ -165,7 +165,7 @@ jobs:
                       "params": {},
                   }) + "\n",
                   text=True, capture_output=True, check=True, timeout=30)
-              response = json.loads(process.stdout.splitlines()[0])
+              response = json.loads(process.stdout.split("\n", 1)[0])
               assert response["ok"], (method, response, process.stderr)
               if method == "health":
                   assert response["protocol"] == protocol, response
@@ -291,7 +291,7 @@ jobs:
                       "params": {},
                   }) + "\n",
                   text=True, capture_output=True, check=True, timeout=30)
-              response = json.loads(process.stdout.splitlines()[0])
+              response = json.loads(process.stdout.split("\n", 1)[0])
               assert response["ok"], (method, response, process.stderr)
               if method == "health":
                   assert response["protocol"] == protocol, response
