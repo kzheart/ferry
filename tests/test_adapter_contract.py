@@ -119,6 +119,11 @@ class _FakeVerifier:
     def probe_edited(self, _editor, _doc, _result, _model=None):
         return {"status": "skipped"}
 
+    def prompt_session(
+        self, _session_id, _cwd, _prompt, _model=None, _timeout=360,
+    ):
+        return {"status": "skipped"}
+
 
 class _FakeLifecycle:
     executable = "fake"
@@ -221,6 +226,21 @@ def test_registry_explicitly_composes_all_bundled_adapters():
             assert adapter.manifest.edit_operations == adapter.editor.operations
         else:
             assert adapter.editor is None
+
+
+def test_prompt_capability_has_callable_verifier_implementation():
+    registry = create_registry()
+    prompt_agents = [
+        agent_id
+        for agent_id in AGENT_IDS
+        if "prompt" in AGENTS[agent_id]["capabilities"]
+    ]
+
+    assert prompt_agents == list(AGENT_IDS)
+    for agent_id in prompt_agents:
+        adapter = registry.get(agent_id)
+        verifier = adapter.require("prompt", "verifier")
+        assert callable(verifier.prompt_session)
 
 
 def test_adapter_rejects_manifest_editor_operation_mismatch():

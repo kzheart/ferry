@@ -72,6 +72,7 @@ AGENT_CAPABILITIES = (
     "edit",
     "delete",
     "probe",
+    "prompt",
     "models",
 )
 

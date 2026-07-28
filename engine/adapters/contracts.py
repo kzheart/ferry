@@ -15,7 +15,7 @@ _COMPONENT_CAPABILITIES = {
     "migration_source": ("migration-source",),
     "migration_target": ("migration-target",),
     "editor": ("edit",),
-    "verifier": ("probe",),
+    "verifier": ("probe", "prompt"),
     "lifecycle": ("resume", "delete"),
     "models": ("models",),
 }
