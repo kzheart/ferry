@@ -9,7 +9,9 @@ from typing import Any
 from ...events import event
 from ...sessions.loss import outcome as _loss_outcome
 from ...sessions.model import tool_result_text
-from ...sessions.tool_ops import has_valid_tool_input
+from ...sessions.tool_ops import (
+    ANNOTATION_INPUTS, CanonicalOp, has_valid_tool_input,
+)
 from .narration import narrate
 
 
@@ -134,9 +136,14 @@ class TreeMigrationSource:
 
 
 class MigrationTargetBase:
-    """迁移目标基类：write 由子类实现，plan/classify 提供默认策略。"""
+    """迁移目标基类：write 由子类实现，plan/classify 提供默认策略。
+
+    子类设置 dialect 后，preview 的名称与参数映射、丢失字段计算全部由
+    方言声明推导；子类只保留真正个性化的判断（agent 边校验、兜底策略）。
+    """
 
     tool: str
+    dialect = None
     tool_fidelity: Mapping[str, str] = {}
     tool_result_statuses = frozenset({"success", "error"})
     tool_result_native_blocks = frozenset({"text"})
@@ -294,11 +301,47 @@ class MigrationTargetBase:
 
     def preview_tool(self, tool, session, message=None):
         """返回目标端可见的工具块；None 表示会降级成历史叙述。"""
+        if self.dialect is not None:
+            if not has_valid_tool_input(tool.op, tool.input):
+                return None
+            return self._dialect_preview(tool)
         if self.classify_tool_call(tool) != "native":
             return None
         output = tool_result_text(tool.result)
         return {"kind": "tool", "name": tool.name, "input": tool.input,
                 "output": output, "conversion": "native"}
+
+    def _dialect_preview(self, tool):
+        """按方言渲染目标端形态；None 表示方言没有该操作的原生映射。"""
+        dialect = self.dialect
+        value = tool.input
+        if tool.op == CanonicalOp.TOOL_INVOKE:
+            if value["namespace"] not in {dialect.namespace, "mcp"}:
+                return None
+            return {"kind": "tool", "name": value["name"],
+                    "input": value["input"],
+                    "output": tool_result_text(tool.result),
+                    "conversion": "native", "_fidelity": "exact",
+                    "_consumed_fields": set(value)}
+        rendered = dialect.render(tool.op, value) \
+            if isinstance(value, dict) else None
+        if rendered is None:
+            return None
+        name, native = rendered
+        supported = dialect.supported_fields(tool.op) | \
+            ANNOTATION_INPUTS.get(tool.op, frozenset())
+        ignored = set(value) - supported
+        result = {"kind": "tool", "name": name, "input": native,
+                  "output": tool_result_text(tool.result),
+                  "conversion": "native",
+                  "_consumed_fields": set(value) - ignored,
+                  "_ignored_fields": ignored,
+                  "_reason_codes": (("unsupported_tool_fields",)
+                                    if ignored else ())}
+        binding = dialect.binding_for(tool.op)
+        if binding.render_flags is not None:
+            result.update(binding.render_flags(value, native))
+        return result
 
     def preview(self, session, cwd: str | None = None) -> dict:
         """构建写入前可展示的目标会话语义，不修改 session 或目标存储。"""
@@ -316,12 +359,26 @@ class MigrationTargetBase:
                     "detail": text[:limit] + ("\n…" if len(text) > limit else ""),
                     "truncated": len(text) > limit, "char_count": len(text)}
 
+        def as_text(value) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value
+            return json.dumps(value, ensure_ascii=False, indent=2, default=str)
+
+        def clip(text: str) -> str:
+            limit = 2500
+            return text[:limit] + ("\n…" if len(text) > limit else "")
+
+        def tool_snapshot(label: str, tool_input, output) -> dict:
+            """工具调用快照：detail 保留整体载荷，parts 供 UI 做逐项对照。"""
+            value = snapshot({"input": tool_input, "output": output}, "tool", label)
+            value["parts"] = {"input": clip(as_text(tool_input)),
+                              "output": clip(as_text(output))}
+            return value
+
         def tool_source(tool) -> dict:
-            payload = {
-                "input": tool.input,
-                "output": tool_result_text(tool.result),
-            }
-            return snapshot(payload, "tool", tool.name)
+            return tool_snapshot(tool.name, tool.input, tool_result_text(tool.result))
 
         def add_difference(*, diff_id, kind, reason_code, value, node_key,
                            node_path, message_key=None, message_index=None,
@@ -378,13 +435,17 @@ class MigrationTargetBase:
                             if decision["outcome"] == "degraded":
                                 blocks.append(rendered)
                         if decision["outcome"] != "native":
-                            target = None if decision["outcome"] == "dropped" else (
-                                snapshot(rendered.get("text", {
-                                    "name": rendered.get("name"),
-                                    "input": rendered.get("input"),
-                                    "output": rendered.get("output", ""),
-                                }), rendered["kind"],
-                                rendered.get("name") or "history"))
+                            if decision["outcome"] == "dropped":
+                                target = None
+                            elif rendered["kind"] == "tool":
+                                target = tool_snapshot(
+                                    rendered.get("name") or "history",
+                                    rendered.get("input"),
+                                    rendered.get("output", ""))
+                            else:
+                                target = snapshot(
+                                    rendered.get("text", ""), rendered["kind"],
+                                    rendered.get("name") or "history")
                             node_differences.append({
                                 "diff_id": f"{block_key}/difference",
                                 "kind": decision["outcome"],

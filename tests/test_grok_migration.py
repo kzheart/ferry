@@ -40,7 +40,7 @@ def test_grok_target_preserves_native_tool_payload():
     }
 
 
-def test_grok_target_reports_transformed_tools_and_dropped_compaction():
+def test_grok_target_maps_shell_natively_and_drops_compaction():
     target = GrokMigrationTarget()
     session = Session("fixture", "source", "/tmp")
     tool = ToolCall(
@@ -55,9 +55,29 @@ def test_grok_target_reports_transformed_tools_and_dropped_compaction():
     decision = target.evaluate_tool(tool, session)
     plan = target.plan(session)
 
-    assert decision.fidelity == "transformed"
+    # 方言表里有 SHELL_EXEC 的当前代映射,迁入 Grok 是原生工具调用。
+    assert decision.fidelity == "exact"
+    assert decision.rendered["name"] == "run_terminal_command"
     assert plan["dropped"] == 1
     assert plan["drop_details"][0]["params"]["kind"] == "compaction"
+
+
+def test_grok_target_keeps_unmapped_op_as_foreign_record():
+    target = GrokMigrationTarget()
+    session = Session("fixture", "source", "/tmp")
+    tool = ToolCall(
+        "apply_patch", CanonicalOp.FS_PATCH,
+        {"operations": [{"operation": "update", "path": "a.txt"}],
+         "raw_patch": "*** Begin Patch\n*** End Patch"},
+        text_tool_result("ok"),
+    )
+
+    decision = target.evaluate_tool(tool, session)
+
+    # 名称参数原样落地时,差异卡只能靠理由码说明"改写"改的是身份而不是形态。
+    assert decision.fidelity == "transformed"
+    assert decision.reason_code == "foreign_tool_record"
+    assert decision.rendered["name"] == "apply_patch"
 
 
 def test_user_role_tool_is_explicitly_narrated():

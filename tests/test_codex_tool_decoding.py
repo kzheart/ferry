@@ -432,3 +432,27 @@ def test_sqlite_parent_edge_attaches_child_when_rollout_metadata_lacks_parent(
     assert edge.confidence == 0.95
     assert edge.status == "open"
     assert not hasattr(edge, "meta")
+
+
+def test_unified_exec_chunk_header_carries_real_exit_status():
+    """exec_command 的分块文本头携带真实退出码,不该被当成 unknown 状态。"""
+    from engine.adapters.codex.tool_results import parse_result
+
+    failed = parse_result(
+        "Chunk ID: 1448c0\nWall time: 0.0000 seconds\n"
+        "Process exited with code 128\nOriginal token count: 18\n"
+        "Output:\nfatal: not a git repository\n")
+    assert failed.status == "error"
+    assert failed.exit_code == 128
+
+    ok = parse_result(
+        "Chunk ID: ab12cd\nWall time: 1.5000 seconds\n"
+        "Process exited with code 0\nOriginal token count: 4\n"
+        "Output:\ndone\n")
+    assert ok.status == "success"
+
+    running = parse_result(
+        "Chunk ID: ff00aa\nWall time: 10.0000 seconds\n"
+        "Process running with session ID s1\nOriginal token count: 2\n"
+        "Output:\nbuilding...\n")
+    assert running.status == "running"

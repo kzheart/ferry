@@ -33,11 +33,13 @@ class ToolOpSpec:
 TOOL_OP_SPECS: Final = {
     CanonicalOp.SHELL_EXEC: ToolOpSpec(
         ("command",),
-        ("workdir", "timeout_ms", "background", "sandbox_policy"),
+        ("workdir", "timeout_ms", "background", "sandbox_policy",
+         "description"),
         ("command",),
         (
             ("command", str), ("workdir", str), ("timeout_ms", int),
             ("background", bool), ("sandbox_policy", str),
+            ("description", str),
         ),
     ),
     CanonicalOp.FS_READ: ToolOpSpec(
@@ -107,6 +109,12 @@ TOOL_OP_SPECS: Final = {
 }
 
 CANONICAL_OPS: Final = frozenset(TOOL_OP_SPECS)
+
+# 注释性字段:丢弃它们不构成信息损失,迁移预览不计入 ignored_fields。
+# description 是模型给人看的一句话说明,不影响调用语义。
+ANNOTATION_INPUTS: Final = {
+    CanonicalOp.SHELL_EXEC: frozenset({"description"}),
+}
 
 
 def has_valid_tool_input(op: str | None, value) -> bool:

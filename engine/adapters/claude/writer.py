@@ -15,46 +15,11 @@ from ...sessions.model import (
 from ...sessions.tool_ops import CanonicalOp, has_valid_tool_input
 from ..shared.narration import narrate
 from ..shared.writing import write_jsonl
+from .dialect import DIALECT
 from .native_schema import templates
 
 
-OP_WRITERS = {
-    CanonicalOp.SHELL_EXEC: ("Bash", lambda i: {
-        "command": i.get("command", ""),
-        **({"timeout": i["timeout_ms"]} if "timeout_ms" in i else {}),
-        **({"run_in_background": i["background"]} if "background" in i else {}),
-    }),
-    CanonicalOp.FS_WRITE: ("Write", lambda i: {"file_path": i.get("file_path", ""),
-                                                 "content": i.get("content", "")}),
-    CanonicalOp.FS_READ: ("Read", lambda i: {
-        "file_path": i.get("file_path", ""),
-        **{key: i[key] for key in ("offset", "limit") if key in i},
-    }),
-    CanonicalOp.FS_EDIT: ("Edit", lambda i: {"file_path": i.get("file_path", ""),
-                                               "old_string": i.get("old", ""),
-                                               "new_string": i.get("new", ""),
-                                               **({"replace_all": i["replace_all"]}
-                                                  if "replace_all" in i else {})}),
-    CanonicalOp.FS_SEARCH: ("Grep", lambda i: {
-        "pattern": i.get("query", ""),
-        **({"path": i["path"]} if "path" in i else {}),
-        **({"glob": i["glob"]} if "glob" in i else {}),
-    }),
-    CanonicalOp.FS_GLOB: ("Glob", lambda i: {
-        "pattern": i.get("pattern", ""),
-        **({"path": i["path"]} if "path" in i else {}),
-    }),
-    CanonicalOp.WEB_FETCH: ("WebFetch", lambda i: {
-        "url": i.get("url", ""),
-        "prompt": i.get("prompt", "Fetch this URL and preserve its relevant content."),
-    }),
-    CanonicalOp.WEB_SEARCH: ("WebSearch", lambda i: {
-        "query": i.get("query", ""),
-    }),
-}
-
-OP_FIDELITY = {op: "native" for op in OP_WRITERS} | {
-    CanonicalOp.AGENT_SPAWN: "native",
+OP_FIDELITY = {op: "native" for op in DIALECT.write_ops()} | {
     CanonicalOp.FS_PATCH: "degrade",
     CanonicalOp.TOOL_INVOKE: "degrade",
 }
@@ -268,8 +233,7 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
             native_name = str(tool.input["name"])
             native_input = _clone(tool.input["input"])
         else:
-            native_name, convert = OP_WRITERS[tool.op]
-            native_input = convert(tool.input)
+            native_name, native_input = DIALECT.render(tool.op, tool.input)
         use_id = "toolu_" + uuid.uuid4().hex[:24]
         assistant = base("assistant")
         assistant["message"]["content"] = [{
@@ -313,7 +277,7 @@ def _generated_lines(session: Session, sid: str, cwd: str, templates: dict,
                 decision = tool_decider(
                     tool, session, message) if tool_decider else None
                 native = decision.rendered is not None if decision is not None else (
-                    (tool.op in OP_WRITERS and
+                    (DIALECT.binding_for(tool.op) is not None and
                      has_valid_tool_input(tool.op, tool.input))
                     or ((tool.op == CanonicalOp.AGENT_SPAWN or
                          tool.name == "Agent") and

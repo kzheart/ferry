@@ -11,15 +11,11 @@ from ...sessions.model import tool_result_text
 from ...sessions.tool_ops import CanonicalOp
 from ...system.paths import pi_session_roots
 from ..shared.narration import narrate
+from .dialect import DIALECT
 from .reader import read
 
 
-OP_NAMES = {
-    CanonicalOp.SHELL_EXEC: "bash", CanonicalOp.FS_READ: "read",
-    CanonicalOp.FS_WRITE: "write", CanonicalOp.FS_EDIT: "edit",
-    CanonicalOp.FS_SEARCH: "grep", CanonicalOp.FS_GLOB: "find",
-}
-OP_FIDELITY = {op: "native" for op in OP_NAMES} | {
+OP_FIDELITY = {op: "native" for op in DIALECT.write_ops()} | {
     CanonicalOp.TOOL_INVOKE: "native",
     CanonicalOp.FS_PATCH: "degrade", CanonicalOp.WEB_FETCH: "degrade",
     CanonicalOp.WEB_SEARCH: "degrade", CanonicalOp.AGENT_SPAWN: "degrade",
@@ -34,27 +30,7 @@ def _native_input(tool):
     value = tool.input
     if tool.op == CanonicalOp.TOOL_INVOKE:
         return str(value["name"]), value["input"]
-    name = OP_NAMES[tool.op]
-    if name == "bash":
-        return name, {"command": value["command"],
-                      **({"timeout": value["timeout_ms"] / 1000}
-                         if "timeout_ms" in value else {})}
-    if name in {"read", "write"}:
-        return name, {"path": value["file_path"],
-                      **{key: value[key] for key in ("content", "offset", "limit")
-                         if key in value}}
-    if name == "edit":
-        return name, {"path": value["file_path"], "edits": [{
-            "oldText": value["old"], "newText": value["new"],
-        }]}
-    if name == "grep":
-        return name, {"pattern": value["query"],
-                      **({"path": value["path"]} if "path" in value else {}),
-                      **({"glob": value["glob"]} if "glob" in value else {}),
-                      **({"limit": value["max_results"]}
-                         if "max_results" in value else {})}
-    return name, {"pattern": value["pattern"],
-                  **({"path": value["path"]} if "path" in value else {})}
+    return DIALECT.render(tool.op, value)
 
 
 def _tool_native(tool, session, message, tool_decider):
