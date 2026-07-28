@@ -120,7 +120,8 @@
     "openTerminal": "在终端打开",
     "failTitle": "迁移失败 · 验收未通过",
     "failDesc": "已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,请修正问题后重试。",
-    "failDescProbe": " · 探针模型 {{model}}"
+    "failDescProbe": " · 探针模型 {{model}}",
+    "failConcurrent": "源会话在确认期间被 {{tool}} 写入了新内容,与预览不再一致,已中止写入。请等源会话空闲后重新发起迁移。"
   },
   "sheet": {
     "title": "迁移会话",

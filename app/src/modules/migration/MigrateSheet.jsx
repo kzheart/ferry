@@ -149,6 +149,14 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   );
   const d = previewPlan?.preview;
   const errorMessage = error => String(error?.message || error || t("errors:fallback"));
+  // 后端把失败原因放在 error_type(异常类名)里,通用 message 只有状态码,
+  // 不翻译的话用户只能看到 operation.not_applied: failed。
+  const failureText = error => {
+    const errorType = error?.params?.error_type;
+    if (errorType === "ConcurrentModificationError")
+      return t("migration:result.failConcurrent", { tool: TOOL_NAME[meta.tool] });
+    return errorType ? `${errorMessage(error)} · ${errorType}` : errorMessage(error);
+  };
 
   const rememberPlan = (key, input, plan) => {
     const value = { key, input, plan };
@@ -221,7 +229,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
       const plan = await ensurePlan(currentInput);
       const applied = await operations.apply(plan);
       setResult(applied.result);
-    } catch (e) { setError(errorMessage(e)); }
+    } catch (e) { setError(failureText(e)); }
     setStep("result");
     if (!doneRef.current) { doneRef.current = true; onDone?.(); }
   };

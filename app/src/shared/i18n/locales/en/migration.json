@@ -120,7 +120,8 @@
     "openTerminal": "Open in terminal",
     "failTitle": "Migration failed · verification did not pass",
     "failDesc": "Rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
-    "failDescProbe": " · probe model {{model}}"
+    "failDescProbe": " · probe model {{model}}",
+    "failConcurrent": "The source session was modified by {{tool}} while you were confirming, so it no longer matches the preview. The write was aborted; retry once the source session is idle."
   },
   "sheet": {
     "title": "Migrate session",
