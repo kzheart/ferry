@@ -10,6 +10,87 @@ from ...system import executables, probes
 from . import editing as claude_edit
 
 
+def _prompt_report(result, *, status, code=None, params=None, text=""):
+    report = probes.report(
+        status,
+        code,
+        params,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+    report["text"], report["text_truncated"] = probes.normalize_agent_text(text)
+    return report
+
+
+def _prompt_session(session_id, cwd, prompt, model=None, timeout=360):
+    if not cwd:
+        raise ValueError("claude prompt 必须提供项目目录")
+    command = executables.argv(
+        "claude",
+        "-p",
+        prompt,
+        "--resume",
+        session_id,
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+    )
+    if model:
+        command += ["--model", model]
+    result = probes.run_agent_command(command, cwd=cwd, timeout=timeout)
+    params = {
+        "tool": "claude",
+        "exit_code": result.returncode,
+    }
+    if result.timed_out:
+        return _prompt_report(
+            result,
+            status="failed",
+            code="agent_prompt.timeout",
+            params=params,
+        )
+    raw = (result.stdout or "").strip()
+    try:
+        output = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        output = None
+    if not isinstance(output, dict):
+        code = (
+            "agent_prompt.process_failed"
+            if result.returncode != 0
+            else "agent_prompt.invalid_output"
+        )
+        return _prompt_report(
+            result,
+            status="failed",
+            code=code,
+            params=params,
+        )
+    for key in ("terminal_reason", "stop_reason", "session_id"):
+        if output.get(key) is not None:
+            params[key] = output[key]
+    if output.get("is_error") or result.returncode != 0:
+        return _prompt_report(
+            result,
+            status="failed",
+            code="agent_prompt.process_failed",
+            params=params,
+        )
+    if not isinstance(output.get("result"), str):
+        return _prompt_report(
+            result,
+            status="failed",
+            code="agent_prompt.invalid_output",
+            params=params,
+        )
+    return _prompt_report(
+        result,
+        status="completed",
+        params=params,
+        text=output["result"],
+    )
+
+
 def _probe(session_id, cwd, model=None):
     if not cwd:
         raise ValueError("claude 探针必须提供 --dir(项目目录)")
@@ -47,6 +128,11 @@ def _probe(session_id, cwd, model=None):
 class ClaudeVerifier:
     def probe(self, session_id, cwd, model=None):
         return _probe(session_id, cwd, model)
+
+    def prompt_session(
+        self, session_id, cwd, prompt, model=None, timeout=360,
+    ):
+        return _prompt_session(session_id, cwd, prompt, model, timeout)
 
     def probe_edited(self, editor, _doc, result, model=None):
         path = Path(result["saved_as"])
