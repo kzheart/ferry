@@ -12,7 +12,8 @@ export function Pane({ collapsed, width, dragging, title, count,
   const { t } = useTranslation();
   const w = collapsed ? 0 : width;
   return (
-    <div style={{ width: w, flex: "none", overflow: "hidden", background: "var(--pane)",
+    <div data-guide="pane"
+      style={{ width: w, flex: "none", overflow: "hidden", background: "var(--pane)",
       borderRight: collapsed ? "none" : "1px solid var(--line)",
       transition: dragging ? "width 0s" : "width .2s ease-out" }}>
       <div style={{ width, height: "100%", display: "flex", flexDirection: "column",
@@ -30,7 +31,8 @@ export function Pane({ collapsed, width, dragging, title, count,
               title={t("app:pane.search")} onClick={onOpenSearch}
               style={query ? { background: "var(--fill4)", color: "var(--tx1)" } : undefined}>
               <SearchIcon /></button>
-            <button className="ftool-btn" title={t("app:pane.filterButton")} onClick={onFilter}
+            <button className="ftool-btn" data-guide="filter"
+              title={t("app:pane.filterButton")} onClick={onFilter}
               style={{ position: "relative",
                 ...(filterOn ? { background: "var(--fill4)", color: "var(--tx1)" } : {}) }}>
               <FilterIcon />

@@ -32,7 +32,8 @@ export function AppRail({
 }) {
   const agentDot = useAgentRailDot();
   return (
-    <div style={{ width: railOnly ? 80 : 56, flex: "none", background: "var(--pane)",
+    <div data-guide="rail"
+      style={{ width: railOnly ? 80 : 56, flex: "none", background: "var(--pane)",
       position: "relative", display: "flex", flexDirection: "column", alignItems: "center",
       padding: "0 0 12px", gap: 4, zIndex: 5,
       transition: resizing ? "none" : "width .2s ease-out" }}>
@@ -50,7 +51,7 @@ export function AppRail({
         return (
           <button key={item.key} className="hov-rail"
             data-rail-key={item.key}
-            data-guide={item.key === "library" ? "rail" : undefined}
+            data-guide={`rail-${item.key}`}
             onMouseEnter={event => onEnter(item.label, event)} onMouseLeave={onLeave}
             onPointerDown={pointerHandlers.down} onPointerMove={pointerHandlers.move}
             onPointerUp={pointerHandlers.up} onPointerCancel={pointerHandlers.cancel}

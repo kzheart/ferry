@@ -166,7 +166,7 @@ export function useWorkspaceState({
       },
       guide: {
         step: onboarding.step,
-        onGo: onboarding.setStep,
+        onGo: onboarding.goStep,
         onFinish: onboarding.finishGuide,
       },
     }),
