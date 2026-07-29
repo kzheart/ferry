@@ -116,6 +116,19 @@ def _message_is_rewritable(_tool: str, message) -> bool:
     return any(block.kind == "text" for block in message.blocks)
 
 
+def browser_locator_issuer(index: AgentSessionIndex, record: IndexedSession):
+    """UI 浏览路径的 locator 签发器:与 Agent 读取共用同一 (ref, 原生定位,
+    role) 键,保证两条路径对同一条消息拿到同一个 fml_ 引用。"""
+    def issue(message, message_index: int) -> str:
+        return index.issue_message_locator(
+            record,
+            native_locator(message, message_index),
+            message.role,
+            _message_is_rewritable(record.tool, message),
+        )
+    return issue
+
+
 def get_session_context(tool: str, opaque_ref: str, from_message: int = 1,
                         limit: int = 20,
                         include_tool_outputs: bool = False,

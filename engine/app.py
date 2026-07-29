@@ -123,8 +123,14 @@ class EngineService:
             self._ports.adapter(tool), "browse", "browser",
         )
         def show(record):
+            # 浏览路径与 Agent 读取共用同一 locator 命名空间:详情里的
+            # turn_locator 与 Agent preview 候选、operations 编辑通道对得上
+            issuer = agent_read.browser_locator_issuer(self._index, record)
             if from_message == 1 and limit is None:
-                return sessions.show(tool, record.canonical_ref, self._ports)
+                return sessions.show(
+                    tool, record.canonical_ref, self._ports,
+                    locator_issuer=issuer,
+                )
             return sessions.show(
                 tool, record.canonical_ref, self._ports,
                 from_message=from_message,
@@ -132,6 +138,7 @@ class EngineService:
                 tree_count=record.row.get("tree_count"),
                 child_count=record.row.get("child_count"),
                 total_count=record.row.get("count"),
+                locator_issuer=issuer,
             )
 
         return self._checked_query(

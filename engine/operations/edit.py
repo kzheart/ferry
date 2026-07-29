@@ -138,7 +138,13 @@ class EditOperationHandler:
         resolved = []
         for operation in ops:
             if operation["op"] == "replace-assistant-reply":
-                resolved.append(dict(operation))
+                item = dict(operation)
+                turn = item.get("turn")
+                if isinstance(turn, str) and turn.startswith("fml_"):
+                    item["turn"] = self._index.resolve_message_locator(
+                        record, turn,
+                    ).native_locator
+                resolved.append(item)
                 continue
             item = dict(operation)
             if item["op"] == "rewrite":
