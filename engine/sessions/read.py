@@ -24,7 +24,7 @@ def read_tree(tool_name: str, ref: str, ports: EngineContext):
 DEFAULT_BROWSER_MESSAGE_LIMIT = 30
 
 
-def _messages(messages, offset: int = 0):
+def _messages(messages, offset: int = 0, locator_issuer=None):
     result = []
     for index, message in enumerate(messages):
         blocks = []
@@ -42,7 +42,9 @@ def _messages(messages, offset: int = 0):
                     "id": block.image.id, "mime_type": block.image.mime_type,
                     "filename": block.image.filename}})
         entry = {"index": offset + index, "role": message.role, "blocks": blocks}
-        if message.source_id:
+        if locator_issuer is not None:
+            entry["locator"] = locator_issuer(message, offset + index)
+        elif message.source_id:
             entry["locator"] = message.source_id
         else:
             entry["locator"] = f"index:{index}"
@@ -119,7 +121,8 @@ def session_json(session, *, from_message: int = 1,
                  include_tree: bool = True,
                  tree_count: int | None = None,
                  child_count: int | None = None,
-                 total_count: int | None = None):
+                 total_count: int | None = None,
+                 locator_issuer=None):
     children = [session_json(child) for child in session.children] \
         if include_tree else []
     edges = [{name: getattr(edge, name) for name in (
@@ -139,7 +142,7 @@ def session_json(session, *, from_message: int = 1,
     first, last, page = _page_messages(
         display_messages, from_message, message_limit,
     )
-    messages = _messages(page, first)
+    messages = _messages(page, first, locator_issuer)
     context_compactions = _context_compactions(session, display_messages)
     turns = []
     turn_offset = sum(
@@ -191,7 +194,8 @@ def show(tool: str, ref: str, ports: EngineContext, *,
          include_messages: bool = False,
          tree_count: int | None = None,
          child_count: int | None = None,
-         total_count: int | None = None) -> dict:
+         total_count: int | None = None,
+         locator_issuer=None) -> dict:
     return session_json(
         read_tree(tool, ref, ports),
         from_message=from_message,
@@ -201,6 +205,7 @@ def show(tool: str, ref: str, ports: EngineContext, *,
         tree_count=tree_count,
         child_count=child_count,
         total_count=total_count,
+        locator_issuer=locator_issuer,
     )
 
 

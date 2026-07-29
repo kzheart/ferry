@@ -646,7 +646,7 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
     session = next(item for item in scanned if item["tool"] == "claude")
     calls = {}
 
-    def show(tool, ref, _ports):
+    def show(tool, ref, _ports, **_kwargs):
         calls["show"] = (tool, ref)
         return {"ok": True}
 
@@ -700,7 +700,7 @@ def test_ui_queries_tolerate_active_session_writes(
 
     monkeypatch.setattr(
         "engine.sessions.read.show",
-        lambda _tool, _ref, _ports: {"ok": True},
+        lambda _tool, _ref, _ports, **_kwargs: {"ok": True},
     )
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
