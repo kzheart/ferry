@@ -29,6 +29,8 @@ export interface Role {
   apply_policy: ApplyPolicy;
   model?: ModelSelection;
   thinking?: ThinkingLevel;
+  /** 显式标记该角色可用作会话优化器;只有标记的角色才会出现在优化器选择里。 */
+  optimizer?: boolean;
   builtin: boolean;
 }
 
@@ -80,6 +82,7 @@ export const SESSION_OPTIMIZER_ROLE: Role = Object.freeze({
   ] satisfies FerryToolName[],
   skills: [],
   apply_policy: "manual",
+  optimizer: true,
   builtin: true,
 });
 
@@ -171,6 +174,9 @@ function parseRole(value: unknown, builtin = false): Role {
   if (input.apply_policy !== "manual" && input.apply_policy !== "auto") {
     throw new Error("role apply_policy is invalid");
   }
+  if (input.optimizer !== undefined && typeof input.optimizer !== "boolean") {
+    throw new Error("role optimizer flag is invalid");
+  }
   const skills = parseSkills(input.skills);
   const model = parseModel(input.model);
   const thinking = parseThinkingLevel(input.thinking);
@@ -193,6 +199,7 @@ function parseRole(value: unknown, builtin = false): Role {
     apply_policy: input.apply_policy,
     ...(model ? { model } : {}),
     ...(thinking ? { thinking } : {}),
+    ...(input.optimizer === true ? { optimizer: true } : {}),
     builtin,
   };
 }

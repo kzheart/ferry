@@ -46,6 +46,8 @@
     "personaHint": "追加在 Ferry 安全前缀之后",
     "personaCount": "{{n}} / 建议 500 字",
     "capabilityCount": "{{n}} / {{total}} 已开启",
+    "optimizer": "用作会话优化器",
+    "optimizerHint": "开启后此角色可在会话浏览里被选为优化器;需要同时开启会话读取与会话编辑工具",
     "mutationBadge": "修改",
     "tool": {
       "session_search": {

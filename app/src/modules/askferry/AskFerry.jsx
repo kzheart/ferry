@@ -14,8 +14,7 @@ import { AgentToolTrace } from "./AgentToolTrace.jsx";
 
 // ----- 主视图 -----
 export default function AskFerry({ scanSessions, onOpenConfig,
-  attachments, onAttachmentsChange, onNavigate,
-  externalDraft, onExternalDraftConsumed }) {
+  attachments, onAttachmentsChange, onNavigate }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const { activeId, activeLog, mode, health } = ferry;
@@ -37,14 +36,6 @@ export default function AskFerry({ scanSessions, onOpenConfig,
     setAttachments: onAttachmentsChange,
     logItems: activeLog?.items,
   });
-
-  // 外部入口(会话优化)预填的首条草稿:仅新会话时一次性写进输入框,
-  // 不自动发送;消费后立即通知清除,避免覆盖用户后续输入
-  useEffect(() => {
-    if (!externalDraft || activeId) return;
-    composer.setText(externalDraft);
-    onExternalDraftConsumed?.();
-  }, [externalDraft, activeId]);
 
   // 错误 toast:6 秒自动消失
   useEffect(() => {

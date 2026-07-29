@@ -39,6 +39,26 @@ vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
     if (method === "env") return { claude: true };
     return null;
   },
+  runtime: async (method) => {
+    if (method === "health") return { status: "ready" };
+    if (method === "sessions.list") return [];
+    if (method === "roles.list") {
+      return [
+        {
+          id: "session-optimizer", name: "会话优化器", builtin: true,
+          icon: "wand-sparkles", color: "violet", optimizer: true,
+          tools: ["session_search", "session_read", "session_edit"],
+        },
+        // 有读写工具但没有 optimizer 标记:不该出现在优化器下拉里
+        {
+          id: "default", name: "通用助手", builtin: true,
+          tools: ["session_search", "session_read", "session_edit"],
+        },
+      ];
+    }
+    if (method === "models.enabled") return [];
+    return null;
+  },
 }));
 
 import App from "./AppController.jsx";
@@ -94,26 +114,24 @@ test("回到起点仍然正常,说明工作区切换没有留下坏状态", asyn
   assert.ok(container.querySelector("[data-pane-scroll]"));
 });
 
-test("优化入口:点击后切到 Ask Ferry 新会话,草稿与原会话附件就位且不自动发送", async () => {
+test("优化入口:可 rewrite 来源渲染分体魔法棒,角色下拉只列合格角色", async () => {
   const { container } = await mountApp();
 
   await act(async () => { railItem(container, "library").click(); });
   const entry = container.querySelector('[data-optimize="session"]');
   assert.ok(entry, "可 rewrite 来源没有渲染整段优化入口");
 
-  await act(async () => { entry.click(); });
-
-  // 已切到 Ask Ferry:输入框预填了可编辑草稿,但没有自动发送(时间线为空)
-  const textarea = container.querySelector("textarea");
-  assert.ok(textarea, "Ask Ferry 输入框没有渲染");
+  // 点旁边的下拉箭头弹出角色列表:只列出具备 session_read+session_edit 的角色
+  const caret = entry.parentElement.querySelector("button:nth-of-type(2)");
+  assert.ok(caret, "魔法棒旁没有角色下拉箭头");
+  await act(async () => { caret.click(); });
   assert.ok(
-    textarea.value.includes("通读附件会话"),
-    `草稿没有预填,当前值:${textarea.value}`,
+    container.textContent.includes("会话优化器"),
+    "角色下拉没有列出内置优化器",
   );
-  // 原会话作为附件挂在 composer 上(标题出现在附件 chip 里)
   assert.ok(
-    container.textContent.includes("一次会话"),
-    "原会话附件没有出现在优化对话里",
+    !container.textContent.includes("通用助手"),
+    "未标记 optimizer 的角色不该出现在优化器下拉里",
   );
 });
 

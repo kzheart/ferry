@@ -29,7 +29,8 @@ describe("FileRoleStore", () => {
 
     expect(await store.list()).toMatchObject([
       { id: "default", builtin: true, skills: [] },
-      { id: "session-optimizer", builtin: true, apply_policy: "manual" },
+      { id: "session-optimizer", builtin: true, apply_policy: "manual",
+        optimizer: true },
     ]);
     await store.create(input("reader"));
     await store.update("reader", {

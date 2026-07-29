@@ -5,5 +5,4 @@ export { useAskFerry } from "./useAskFerry.js";
 export {
   SESSION_OPTIMIZATION_PURPOSE,
   SESSION_OPTIMIZER_ROLE_ID,
-  buildSessionOptimizationDraft,
 } from "./sessionOptimization.js";

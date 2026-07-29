@@ -46,6 +46,8 @@
     "personaHint": "Appended after Ferry's safety prefix",
     "personaCount": "{{n}} / 500 suggested",
     "capabilityCount": "{{n}} / {{total}} enabled",
+    "optimizer": "Use as session optimizer",
+    "optimizerHint": "When on, this role can be picked as an optimizer while browsing sessions; it also needs the session read and session edit tools",
     "mutationBadge": "Writes",
     "tool": {
       "session_search": {

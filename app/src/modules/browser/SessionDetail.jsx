@@ -1,5 +1,5 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   supportsEditOperation,
@@ -20,12 +20,19 @@ import {
   Spinner,
   TerminalIcon,
   ToolIcon,
-  WandIcon,
 } from "../../shared/ui/icons.jsx";
 import PendingEditBar from "./PendingEditBar.jsx";
 import { CompactionBoundary, ContextStatusChip } from "./SessionContext.jsx";
 import SessionImagePreview from "./SessionImagePreview.jsx";
 import SessionRound from "./SessionRound.jsx";
+import {
+  OptimizationAgentBar,
+  OptimizationFloatBar,
+  OptimizationMinimap,
+  OptimizationNotice,
+  OptimizerWandControl,
+} from "./OptimizationSurface.jsx";
+import { useOptimizationView } from "./useOptimizationView.js";
 
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({
@@ -39,7 +46,7 @@ export default memo(function SessionDetail({
   navigationTarget,
   onLoadMore,
   loadingMore,
-  onOptimize,
+  optimization,
 }) {
   const { t: tt } = useTranslation();
   const {
@@ -80,6 +87,21 @@ export default memo(function SessionDetail({
   }, [data?.next_from_message, onLoadMore]);
   const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
+  const scrollRef = useRef(null);
+
+  // 会话优化的视图状态(候选映射/多选/乐观展示/跳转/快捷键)收在专用 hook
+  const optView = useOptimizationView({
+    optimization,
+    rounds,
+    data,
+    metaId: meta.id,
+    canRewrite,
+    scrollRef,
+  });
+  const {
+    optActive, candidates, pendingTurns, acceptAllCandidates,
+    selectedTurns, setSelectedTurns, startOptimization, jumpToTurn, navDiff,
+  } = optView;
 
   useEffect(() => {
     if (!data || navigationTarget?.view !== "library") return;
@@ -145,6 +167,7 @@ export default memo(function SessionDetail({
       }}
     >
       <div
+        ref={scrollRef}
         className="fscroll"
         data-guide-scroll="1"
         style={{ flex: 1, overflowY: "auto", minWidth: 0 }}
@@ -245,15 +268,12 @@ export default memo(function SessionDetail({
               >
                 {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
               </button>}
-              {canRewrite && onOptimize && (
-                <button
-                  data-optimize="session"
-                  className="ftool-btn"
-                  title={tt("browser:session.optimize")}
-                  onClick={() => onOptimize({})}
-                >
-                  <WandIcon />
-                </button>
+              {optActive && (
+                <OptimizerWandControl
+                  optimization={optimization}
+                  disabled={!data}
+                  onStart={() => startOptimization()}
+                />
               )}
               {canMigrate && (
                 <button
@@ -304,6 +324,12 @@ export default memo(function SessionDetail({
             </div>
           )}
         </div>
+        {optActive && (
+          <>
+            <OptimizationAgentBar optimization={optimization} />
+            <OptimizationNotice optimization={optimization} />
+          </>
+        )}
         <div
           style={{
             padding: `20px 26px ${dirtyOps.length ? 110 : 48}px`,
@@ -370,9 +396,7 @@ export default memo(function SessionDetail({
                     const o = opFor(r.n, "rewrite");
                     if (o) removeOp(o.id);
                   }}
-                  onOptimize={
-                    onOptimize ? () => onOptimize({ turn: r.n }) : undefined
-                  }
+                  {...optView.roundProps(r)}
                   onStartReply={() => startReplyEdit(r.assistantReply)}
                   onUpdateReply={(items) => {
                     const o = opFor(r.n, "assistant-reply");
@@ -413,6 +437,34 @@ export default memo(function SessionDetail({
           )}
         </div>
       </div>
+      {optActive && (
+        <>
+          <OptimizationFloatBar
+            pendingCount={candidates.length}
+            applying={optimization.status === "applying"}
+            onPrev={() => navDiff(-1)}
+            onNext={() => navDiff(1)}
+            onAcceptAll={acceptAllCandidates}
+            onRejectAll={optimization.rejectAll}
+            selection={
+              optimization.role
+                ? {
+                    count: selectedTurns.length,
+                    roleName: optimization.role.name,
+                    roleColor: optimization.role.color,
+                    onCancel: () => setSelectedTurns([]),
+                    onRun: () => startOptimization(selectedTurns),
+                  }
+                : null
+            }
+          />
+          <OptimizationMinimap
+            scrollRef={scrollRef}
+            pendingTurns={pendingTurns}
+            onJump={jumpToTurn}
+          />
+        </>
+      )}
       {dirtyOps.length > 0 && (
         <PendingEditBar
           ops={dirtyOps}
