@@ -161,7 +161,16 @@ export function OptimizationNotice({ optimization }) {
       background: warn ? "var(--err-bg, var(--fill))" : "var(--fill)",
       border: `1px solid ${warn ? "var(--err-line, var(--line2))" : "var(--line3)"}`,
       color: warn ? "var(--err-deep)" : "var(--tx3)" }}>
-      <span style={{ flex: 1 }}>{text}</span>
+      <span style={{ flex: 1 }}>
+        {text}
+        {/* 空结果时附上 Agent 自己的解释,让「为什么没改」有个说法 */}
+        {error.kind === "empty" && error.detail && (
+          <span className="selectable" style={{ display: "block", marginTop: 3,
+            fontSize: 11.5, color: "var(--tx4)", whiteSpace: "pre-wrap" }}>
+            {error.detail}
+          </span>
+        )}
+      </span>
       <button className="ficon-btn" title={tt("browser:round.cancel")}
         onClick={clearError}><CloseIcon /></button>
     </div>
