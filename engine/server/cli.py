@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import json
+import logging
 import sys
 import threading
 
@@ -88,6 +89,11 @@ def main(argv=None):
             return
         if cmd == "serve":
             # 常驻模式:stdin 每行一个 JSON 请求,stdout 每行一个 JSON 响应。
+            # 日志只能走 stderr(stdout 是 RPC 通道),宿主会把它接到日志文件。
+            logging.basicConfig(
+                level=logging.INFO, stream=sys.stderr,
+                format="%(asctime)s %(levelname)s %(name)s %(message)s",
+            )
             # 内容索引在后台预热,首个内容搜索到来时通常已就绪。
             threading.Thread(
                 target=application.warm_agent_search,

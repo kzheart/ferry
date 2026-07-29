@@ -20,6 +20,7 @@ use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
 use crate::process::handshake::verify_handshake;
+use crate::process::logging::{host_log, sidecar_stderr};
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use approval::{forget_auto_policy, remember_auto_policy};
 use gateway::{complete_engine_request, complete_tool_request};
@@ -95,10 +96,11 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(sidecar_stderr("runtime.log"));
     let mut child = command
         .spawn()
         .map_err(|error| format!("启动 Ferry Runtime 失败: {error}"))?;
+    host_log("runtime", &format!("Runtime 进程已启动 pid={}", child.id()));
     let stdin = child.stdin.take().ok_or("Ferry Runtime stdin 不可用")?;
     let stdout = child.stdout.take().ok_or("Ferry Runtime stdout 不可用")?;
     let transport = JsonlProcessClient::new("Ferry Runtime", stdin);
@@ -128,13 +130,36 @@ fn spawn_runtime(app: &tauri::AppHandle, resource_dir: &Path) -> Result<RuntimeP
         "method": "health",
         "params": {},
     });
+    let started = std::time::Instant::now();
     let response = client
         .transport
         .request(&health_id, &health.to_string(), STARTUP_HEALTH_TIMEOUT)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            host_log(
+                "runtime",
+                &format!(
+                    "Runtime health 请求失败 耗时={:.1}s: {error}",
+                    started.elapsed().as_secs_f64()
+                ),
+            );
+            error.to_string()
+        })?;
     let value: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
-    verify_handshake(&value, "ferry-runtime", FERRY_CONTRACT_HASH)
-        .map_err(|_| "Ferry Runtime 协议握手失败".to_owned())?;
+    verify_handshake(&value, "ferry-runtime", FERRY_CONTRACT_HASH).map_err(|reason| {
+        // 展示文案保持稳定,真实原因(含对端返回的 hash)只进日志。
+        host_log(
+            "runtime",
+            &format!("Runtime 握手失败: {reason}; 响应={:.500}", response),
+        );
+        "Ferry Runtime 协议握手失败".to_owned()
+    })?;
+    host_log(
+        "runtime",
+        &format!(
+            "Runtime 握手成功 耗时={:.1}s",
+            started.elapsed().as_secs_f64()
+        ),
+    );
     Ok(process)
 }
 
@@ -216,8 +241,14 @@ fn request_runtime(
         .ok()
         .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
         .ok_or("Runtime 命令缺少 id")?;
-    let client = ensure_runtime(app, resource_dir)?;
+    let client = ensure_runtime(app, resource_dir).map_err(|error| {
+        host_log("runtime", &format!("Runtime 启动失败: {error}"));
+        error
+    })?;
     let result = client.transport.request(&id, request, COMMAND_TIMEOUT);
+    if let Err(error) = &result {
+        host_log("runtime", &format!("Runtime 命令失败 id={id}: {error}"));
+    }
     if result
         .as_ref()
         .is_err_and(ProcessError::invalidates_process)

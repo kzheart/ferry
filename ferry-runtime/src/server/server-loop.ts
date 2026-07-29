@@ -35,9 +35,22 @@ export async function serveRuntime(
   write: RuntimeWriter,
 ) {
   runtime.subscribe(write);
+  // stderr 由宿主接到日志文件;恢复失败会连带 health 失败,必须留下现场。
+  const restoreStarted = Date.now();
   const restore: Promise<RestoreOutcome> = runtime.restore().then(
-    () => ({ ok: true as const }),
-    (error) => ({ ok: false as const, error }),
+    () => {
+      console.error(
+        `session restore completed in ${Date.now() - restoreStarted}ms`,
+      );
+      return { ok: true as const };
+    },
+    (error) => {
+      console.error(
+        `session restore failed after ${Date.now() - restoreStarted}ms`,
+        error,
+      );
+      return { ok: false as const, error };
+    },
   );
 
   const handle = async (line: string) => {

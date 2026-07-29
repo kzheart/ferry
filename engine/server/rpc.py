@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 
 from ..app import EngineService
 from ..bootstrap import build_engine
@@ -90,7 +91,18 @@ class RpcDispatcher:
             raise RuntimeError("Engine RPC 与生成方法契约不一致")
 
     def handle(self, request: str) -> dict:
-        return _handle(request, self._methods)
+        started = time.monotonic()
+        response = _handle(request, self._methods)
+        elapsed = time.monotonic() - started
+        # 高频轮询(scan_progress 等)不刷屏,只记慢请求;串行池被谁占住靠它还原。
+        if elapsed >= 1.0:
+            try:
+                method = json.loads(request).get("method")
+            except (json.JSONDecodeError, AttributeError):
+                method = None
+            log.info("RPC %s 耗时=%.1fs ok=%s",
+                     method, elapsed, response.get("ok"))
+        return response
 
 
 def _raised_in_dispatch(error: KeyError) -> bool:

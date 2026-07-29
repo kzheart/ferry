@@ -197,11 +197,20 @@ pub(super) fn complete_engine_request(resource_dir: &Path, stdin: &JsonlWriter, 
         .and_then(|value| value.get("params"))
         .cloned()
         .unwrap_or_else(|| json!({}));
+    let started = std::time::Instant::now();
     let outcome = if is_runtime_gateway_method(method) {
         engine_value(resource_dir, method, params)
     } else {
         Err("engine.method_not_allowed".to_owned())
     };
+    crate::process::logging::host_log(
+        "gateway",
+        &format!(
+            "engine.request {method} {} 耗时={:.1}s",
+            if outcome.is_ok() { "成功" } else { "失败" },
+            started.elapsed().as_secs_f64()
+        ),
+    );
     send_gateway_result(stdin, session_id, request_id, outcome);
 }
 

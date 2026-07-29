@@ -7,6 +7,7 @@ use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
 use crate::process::handshake::verify_handshake;
+use crate::process::logging::{host_log, sidecar_stderr};
 use crate::process::supervisor::{ManagedProcess, ProcessSupervisor};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
@@ -16,7 +17,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     OnceLock,
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 struct EngineClient {
@@ -79,10 +80,11 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(sidecar_stderr("engine.log"));
     let mut child = command
         .spawn()
         .map_err(|error| format!("启动引擎失败: {error}"))?;
+    host_log("engine", &format!("引擎进程已启动 pid={}", child.id()));
     let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
     let stdout = child.stdout.take().ok_or("引擎 stdout 不可用")?;
     let transport = JsonlProcessClient::new("Engine", stdin);
@@ -113,8 +115,12 @@ fn handshake(engine: &EngineClient) -> Result<(), String> {
         .map_err(|error| format!("引擎健康检查失败: {error}"))?;
     let health: Value = serde_json::from_str(&line)
         .map_err(|error| format!("引擎健康检查返回无效 JSON: {error}"))?;
-    verify_handshake(&health, "engine", FERRY_CONTRACT_HASH)
-        .map_err(|_| "引擎协议或契约握手失败".to_owned())?;
+    verify_handshake(&health, "engine", FERRY_CONTRACT_HASH).map_err(|reason| {
+        // 展示文案保持稳定,真实原因只进日志。
+        host_log("engine", &format!("引擎握手失败: {reason}"));
+        "引擎协议或契约握手失败".to_owned()
+    })?;
+    host_log("engine", "引擎握手成功");
     Ok(())
 }
 
@@ -160,19 +166,47 @@ pub(crate) fn engine_request_blocking(
     request: &str,
 ) -> Result<String, String> {
     let (request, request_id) = stamp_engine_request(request)?;
+    let method = serde_json::from_str::<Value>(&request)
+        .ok()
+        .and_then(|value| value.get("method").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or_default();
     let timeout = request_timeout(&request);
     let mut last_error = String::new();
-    for _attempt in 0..request_attempts(&request) {
+    for attempt in 0..request_attempts(&request) {
         let client = engine_client(resource_dir)?;
+        let started = Instant::now();
         match client.transport.request(&request_id, &request, timeout) {
             Ok(line) => match validate_engine_response_id(&line, &request_id) {
-                Ok(()) => return Ok(line),
+                Ok(()) => {
+                    // scan_progress 这类高频轮询不刷屏,只记慢请求。
+                    if started.elapsed() >= Duration::from_secs(1) {
+                        host_log(
+                            "engine",
+                            &format!(
+                                "{method} 完成 id={request_id} 耗时={:.1}s",
+                                started.elapsed().as_secs_f64()
+                            ),
+                        );
+                    }
+                    return Ok(line);
+                }
                 Err(error) => {
+                    host_log(
+                        "engine",
+                        &format!("{method} 响应校验失败 id={request_id}: {error}"),
+                    );
                     last_error = error;
                     invalidate_engine(client.generation);
                 }
             },
             Err(error) => {
+                host_log(
+                    "engine",
+                    &format!(
+                        "{method} 失败 id={request_id} attempt={attempt} 耗时={:.1}s: {error}",
+                        started.elapsed().as_secs_f64()
+                    ),
+                );
                 last_error = error.to_string();
                 if error.invalidates_process() {
                     invalidate_engine(client.generation);
