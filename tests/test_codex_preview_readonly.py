@@ -20,11 +20,11 @@ def test_codex_preview_load_does_not_recover_pending_transactions(tmp_path):
     victim = sessions / "2026/07/22/rollout-victim.jsonl"
     _rollout(anchor, "anchor")
     _rollout(victim, "victim")
-    stage = home / ".resume-harness" / "staging" / "pending"
+    stage = home / ".ferry" / "staging" / "pending"
     stage.mkdir(parents=True)
     marker = stage / "marker"
     marker.write_text("must-survive")
-    journal = home / ".resume-harness" / "transactions" / "pending.json"
+    journal = home / ".ferry" / "transactions" / "pending.json"
     journal.parent.mkdir(parents=True)
     journal.write_text(json.dumps({
         "ids": ["victim"], "paths": [str(victim)], "stage_dir": str(stage),

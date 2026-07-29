@@ -127,7 +127,7 @@ def _load(path: Path) -> list[dict]:
             records.append(json.loads(line))
         except json.JSONDecodeError as error:
             records.append({
-                "type": "__resume_harness_malformed_jsonl__",
+                "type": "__ferry_malformed_jsonl__",
                 "line_number": line_number,
                 "error": error.msg,
             })
@@ -237,7 +237,7 @@ def _decode_transcript(path: Path, is_child: bool = False) -> ClaudeDecodeResult
                       cwd=first.get("cwd", ""), agent_id=agent_id)
     session.context_compactions = _context_compactions(lines)
     for record in lines:
-        if record.get("type") == "__resume_harness_malformed_jsonl__":
+        if record.get("type") == "__ferry_malformed_jsonl__":
             session.lose(
                 "session.malformed_record",
                 line_number=record["line_number"],

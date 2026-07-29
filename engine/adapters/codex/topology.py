@@ -11,7 +11,7 @@ from ...sessions.model import AgentEdge, Session, ToolCall, tool_result_text
 from ...sessions.tool_ops import CanonicalOp
 from ...sessions.scan_cache import ScanCache
 
-_META_CACHE_PATH = Path.home() / ".resume-harness" / "rollout-meta-cache.json"
+_META_CACHE_PATH = Path.home() / ".ferry" / "rollout-meta-cache.json"
 
 
 def session_id(meta: dict, fallback: str) -> str:

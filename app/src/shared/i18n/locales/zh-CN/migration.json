@@ -15,7 +15,7 @@
     "sourceFallback": "发现失败,使用内置回退",
     "sourceCache": "本地缓存",
     "sourceUser": "用户配置",
-    "hint": "验收时用该模型 resume 并发送极小探测消息。留空则用目标工具默认模型。也可在 ~/.resume-harness/models.json 追加自定义 id。",
+    "hint": "验收时用该模型 resume 并发送极小探测消息。留空则用目标工具默认模型。也可在 ~/.ferry/models.json 追加自定义 id。",
     "loadFailed": "列表加载失败:{{error}}",
     "discoverWarn": "动态发现告警:{{error}}",
     "filterPlaceholder": "筛选模型…",

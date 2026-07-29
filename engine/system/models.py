@@ -6,7 +6,7 @@ from pathlib import Path
 from ..context import EngineContext
 from ..errors import require_agent_capability
 
-MODELS_CONFIG = Path.home() / ".resume-harness/models.json"
+MODELS_CONFIG = Path.home() / ".ferry/models.json"
 
 
 def _user_model_ids(tool):

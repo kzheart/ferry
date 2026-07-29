@@ -53,7 +53,7 @@ def _load_records(path: Path) -> list[dict]:
         except json.JSONDecodeError as error:
             records.append(
                 {
-                    "type": "__resume_harness_malformed_jsonl__",
+                    "type": "__ferry_malformed_jsonl__",
                     "line_number": line_number,
                     "error": error.msg,
                 }
@@ -64,7 +64,7 @@ def _load_records(path: Path) -> list[dict]:
         else:
             records.append(
                 {
-                    "type": "__resume_harness_malformed_record__",
+                    "type": "__ferry_malformed_record__",
                     "line_number": line_number,
                     "error": "record is not an object",
                 }
@@ -152,8 +152,8 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     sess.parent_association = "parent-metadata" if ident["parent_id"] else None
     for record in lines:
         if record.get("type") in {
-            "__resume_harness_malformed_jsonl__",
-            "__resume_harness_malformed_record__",
+            "__ferry_malformed_jsonl__",
+            "__ferry_malformed_record__",
         }:
             sess.lose(
                 "session.malformed_record",

@@ -303,7 +303,7 @@ def _registry_revision(db_path: Path | None, ids: set[str]) -> str | None:
 
 
 def recover_transactions(store: CodexStore) -> None:
-    directory = store.home / ".resume-harness" / "transactions"
+    directory = store.home / ".ferry" / "transactions"
     if not directory.exists():
         return
     for journal in directory.glob("*.json"):
