@@ -39,11 +39,13 @@ export function useBrowserData() {
     }
     catch (error) {
       setScanReady(false);
+      // 保留上次扫到的会话继续可用,但 error 必须是这次的——
+      // 展开写在最前面,否则上一次失败留下的旧 error 会盖掉新的
       setScan(current => ({
         tools: {},
         sessions: [],
-        error: error.message,
         ...(current || {}),
+        error: error.message || String(error),
       }));
     }
     setScanning(false);

@@ -15,7 +15,9 @@
     "noMessages": "该会话没有可展示的消息",
     "subSessions": "{{n}} 个子会话",
     "subSessionsLine": "{{tool}} 会话",
-    "arrow": "→"
+    "arrow": "→",
+    "resumeFailed": "无法打开终端:{{error}}",
+    "copyResumeFailed": "取不到接续命令:{{error}}"
   },
   "optimize": {
     "run": "用「{{role}}」优化整段会话",

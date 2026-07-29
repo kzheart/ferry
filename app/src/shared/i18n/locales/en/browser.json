@@ -15,7 +15,9 @@
     "noMessages": "No displayable messages in this session",
     "subSessions": "{{n}} sub-sessions",
     "subSessionsLine": "{{tool}} session",
-    "arrow": "→"
+    "arrow": "→",
+    "resumeFailed": "Could not open the terminal: {{error}}",
+    "copyResumeFailed": "Could not get the resume command: {{error}}"
   },
   "optimize": {
     "run": "Optimize the whole session with \"{{role}}\"",
