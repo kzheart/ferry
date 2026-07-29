@@ -145,7 +145,9 @@
     "probeNotRunDefault": "运行时探针未执行(默认关闭,可在设置中开启)",
     "probeNotRun": "未运行探针验收",
     "rollbackTitle": "回滚信息",
-    "rollbackDesc": "探针未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可修正问题后重试。",
+    "rollbackDesc": "结构验收未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可修正问题后重试。",
+    "retainedTitle": "产物保留",
+    "retainedDesc": "探针未通过,但结构验收已通过,产物保留在 {{tool}} 中。探针失败常源于目标环境(CLI 未安装、超时、模型不可用),可直接接续使用,或删除这条记录后重试。",
     "continueIn": "交付 · 在 {{tool}} 中继续",
     "delete": "删除这条记录"
   }

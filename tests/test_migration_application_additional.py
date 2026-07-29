@@ -149,6 +149,36 @@ def test_validation_failure_rolls_back_the_written_artifact(monkeypatch, tmp_pat
     assert removed == ["written"]
 
 
+def test_probe_failure_keeps_the_artifact_that_passed_structure_validation(
+        monkeypatch, tmp_path):
+    target = _migrate_target(lambda _session, _cwd: ("written", tmp_path / "written"))
+    _install_target(monkeypatch, target)
+    removed = []
+    monkeypatch.setattr(
+        migration.MigrationService, "validate_written_tree", lambda *_: (True, "ok"))
+    monkeypatch.setattr(
+        migration.MigrationService, "_isolated_probe",
+        lambda *_args, **_kwargs: {
+            "status": "failed", "code": "probe.timeout", "params": {},
+            "diagnostic": {"stdout": "", "stderr": "timeout", "truncated": False},
+        })
+    monkeypatch.setattr(
+        migration.MigrationService, "_cleanup_artifact", lambda _self, _dst, sid, _dest:
+        removed.append(sid))
+
+    result = migration.MigrationService(None).apply(
+        "claude", "opencode", "ignored", cwd=str(tmp_path),
+        probe=True, session=_scoped_tree(),
+    )
+
+    assert removed == []
+    assert "rolled_back" not in result
+    assert result["session_id"] == "written"
+    assert result["probe"]["status"] == "failed"
+    assert result["validation"]["structure"]["ok"] is True
+    assert result["validation"]["runtime"]["status"] == "failed"
+
+
 def test_probe_shadow_write_failure_restores_the_original_loss_state(monkeypatch):
     session = Session("claude", "root", "/tmp/project")
     target = _migrate_target(lambda value, _cwd: (
