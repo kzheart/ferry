@@ -76,6 +76,23 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   const updater = useAppUpdater(settings.autoCheckUpdates);
+  // 内置优化器角色属于「会话优化」测试中功能:功能关闭时从角色列表整体隐身
+  // (角色设置、问答角色下拉都经由这份 Context 取角色)
+  const ferryValue = useMemo(() => {
+    if (settings.sessionOptimization) return ferry;
+    return {
+      ...ferry,
+      roles: (ferry.roles || []).filter(
+        role => !(role.builtin && role.optimizer === true)),
+    };
+  }, [ferry, settings.sessionOptimization]);
+  // 被隐藏的角色若正被问答选中,回落到默认角色
+  useEffect(() => {
+    if (ferry.roles.length
+      && !ferryValue.roles.some(role => role.id === ferry.selectedRoleId)) {
+      ferry.setSelectedRoleId("default");
+    }
+  }, [ferryValue.roles, ferry.selectedRoleId]);
   const onboarding = useOnboarding({
     setView,
     closeSettings: () => setSettingsOpen(false),
@@ -389,7 +406,7 @@ export default function App() {
   });
 
   return (
-    <FerryRuntimeProvider value={ferry}>
+    <FerryRuntimeProvider value={ferryValue}>
     <SessionEditingProvider value={editingSurface}>
     <BrowserStateProvider value={browserState}>
     <OperationsStateProvider value={operationsState}>
