@@ -477,11 +477,13 @@ export default function App() {
               library={{
                 scanning,
                 sessions,
+                scanError: scan?.error || null,
                 scanningLabel: t("app:detail.scanningSessions"),
                 groups: libGroups,
                 collapsedGroups,
                 onToggleGroup,
                 onClear: clearLibF,
+                onRescan: doScan,
                 selectedId: selId,
                 multiSel,
                 renamingKey: renameFor ? sessionIdentity(renameFor) : null,

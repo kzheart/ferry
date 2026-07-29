@@ -14,6 +14,18 @@
   "empty": {
     "library": "没有匹配会话",
     "history": "没有匹配迁移记录",
+    "libraryNone": "还没有会话",
+    "libraryNoneHint": "Ferry 会从本机读取 Claude Code、Codex CLI 与 OpenCode 的会话记录。",
+    "historyNone": "还没有迁移记录",
+    "historyNoneHint": "把一个会话迁移到别的工具后,记录会出现在这里。",
+    "rescan": "重新扫描",
+    "titleOnlyHint": "侧栏搜索只匹配标题。会话正文里的内容要用全文搜索。",
+    "fullTextSearch": "在全文中搜索",
+    "scanFailed": "扫描会话失败",
+    "scanFailedHint": "没能读到本机的会话目录,所以列表是空的——不是你的会话不见了。",
+    "retryScan": "重试扫描",
+    "retryingScan": "正在重试…",
+    "staleScan": "最近一次扫描失败,下面是上次的结果,可能已经不是最新的。",
     "clearFilter": "清除筛选"
   },
   "bucket": {
