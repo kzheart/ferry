@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,9 @@ from ..context import EngineContext
 from ..contracts.session_ref import is_opaque_session_ref
 from ..errors import AgentReferenceError, LocatorStaleError
 from ..system.paths import is_within
+from .scan_progress import TRACKER
+
+log = logging.getLogger(__name__)
 
 
 def _revision(
@@ -144,6 +149,15 @@ def _agent_fingerprint(browser, ref: str):
     return (marker or browser.fingerprint)(ref)
 
 
+def _scan_fingerprint(browser, ref: str):
+    """扫描路径的指纹:adapter 可提供容忍旧快照的变体,避免活跃存储的
+    每次写入都把全量扫描拖进同步重建;resolve 的钉内容校验仍走严格版。"""
+    marker = getattr(browser, "scan_fingerprint", None)
+    if marker is not None:
+        return marker(ref)
+    return _agent_fingerprint(browser, ref)
+
+
 def _directory_identity(
     path: Path,
     browser,
@@ -171,6 +185,15 @@ def _directory_identity(
     return tuple(sorted(identities))
 
 
+class _RefreshFlight:
+    """一次进行中的全量刷新:后到者在 done 上等待并复用结果。"""
+
+    def __init__(self):
+        self.done = threading.Event()
+        self.result: tuple[dict, list[IndexedSession]] | None = None
+        self.error: BaseException | None = None
+
+
 class AgentSessionIndex:
     def __init__(self, ports: EngineContext):
         self._ports = ports
@@ -180,22 +203,100 @@ class AgentSessionIndex:
         self._opaque_by_message_key: dict[tuple[str, str, str], str] = {}
         self._digest_cache: dict[tuple, str] = {}
         self._lock = threading.RLock()
+        self._refresh_lock = threading.Lock()
+        self._refresh_inflight: _RefreshFlight | None = None
 
     @property
     def ports(self) -> EngineContext:
         return self._ports
 
     def refresh(self) -> list[IndexedSession]:
-        cache = self._ports.cache_factory()
+        return self.refresh_with_status()[1]
+
+    def refresh_with_status(self) -> tuple[dict, list[IndexedSession]]:
+        """全量扫库并重建索引;并发调用单飞合并。
+
+        启动预热与 UI 首扫、agent 搜索与 usage 都会全量刷新,工作完全
+        相同却各跑一遍。后到者等待先行者并复用其结果:至多陈旧一轮扫描,
+        内容一致性由 pin_content 与 locator 的 revision 校验兜底。
+        """
+        with self._refresh_lock:
+            flight = self._refresh_inflight
+            leader = flight is None
+            if leader:
+                flight = self._refresh_inflight = _RefreshFlight()
+        if not leader:
+            flight.done.wait()
+            if flight.error is not None:
+                raise flight.error
+            return flight.result
+        try:
+            flight.result = self._scan_all()
+            return flight.result
+        except BaseException as error:
+            flight.error = error
+            raise
+        finally:
+            with self._refresh_lock:
+                self._refresh_inflight = None
+            flight.done.set()
+
+    def _scan_all(self) -> tuple[dict, list[IndexedSession]]:
+        tools: dict[str, dict] = {}
         scanned = []
-        for tool_name in self._ports.adapters():
-            adapter = self._ports.adapter(tool_name)
-            scanned.extend(
-                (tool_name, adapter, row)
-                for row in adapter.browser.scan(cache)
-            )
-        cache.flush()
-        return self.index_rows(scanned)
+        cache = self._ports.cache_factory()
+        names = list(self._ports.adapters())
+        TRACKER.begin(names)
+        started = time.monotonic()
+        try:
+            for name in names:
+                tool = self._ports.adapter(name)
+                source_path = getattr(
+                    getattr(tool, "manifest", None), "source_path", None,
+                )
+                TRACKER.start_tool(name)
+                tool_started = time.monotonic()
+                try:
+                    rows = tool.browser.scan(cache)
+                    scanned.extend((name, tool, row) for row in rows)
+                    tools[name] = {
+                        "ok": True, "count": len(rows), "path": source_path,
+                    }
+                    log.info("扫描 %s: %d 条会话 耗时=%.1fs",
+                             name, len(rows),
+                             time.monotonic() - tool_started)
+                except Exception as error:  # noqa: BLE001 - 单工具失败不拖垮全量
+                    tools[name] = {
+                        "ok": False, "error": str(error)[:200],
+                        "path": source_path,
+                    }
+                    log.warning("扫描 %s 失败 耗时=%.1fs: %s",
+                                name, time.monotonic() - tool_started, error)
+                finally:
+                    TRACKER.finish_tool(name)
+            TRACKER.finalize()
+            cache.flush()
+            index_started = time.monotonic()
+            records = self.index_rows(scanned)
+            log.info("索引 %d 条会话 耗时=%.1fs 全程=%.1fs", len(records),
+                     time.monotonic() - index_started,
+                     time.monotonic() - started)
+            # 扫描主体完成后才做各 adapter 的维护(如 opencode 指纹后台
+            # 重建),避免维护任务与扫描本身争抢 CPU/GIL。
+            for name in names:
+                maintenance = getattr(
+                    self._ports.adapter(name).browser,
+                    "post_scan_maintenance", None,
+                )
+                if maintenance is None:
+                    continue
+                try:
+                    maintenance()
+                except Exception:  # noqa: BLE001 - 维护失败不影响扫描结果
+                    log.exception("扫描收尾维护失败: %s", name)
+            return tools, records
+        finally:
+            TRACKER.end()
 
     def _digest_store(self):
         """摘要的跨进程缓存。测试与旧上下文的 cache 不一定支持,拿不到就算了。"""
@@ -373,7 +474,10 @@ class AgentSessionIndex:
                 raise AgentReferenceError("adapter 未能规范解析 ref")
         else:
             browser = self._ports.adapter(tool).browser
-            fingerprint = _agent_fingerprint(browser, record.canonical_ref)
+            # 钉内容才需要严格指纹;只查存在性时用扫描口径的宽松指纹,
+            # 否则 UI 浏览/内容索引会在活跃库上触发同步整库重建。
+            probe = _agent_fingerprint if pin_content else _scan_fingerprint
+            fingerprint = probe(browser, record.canonical_ref)
             if fingerprint is None:
                 raise AgentReferenceError(
                     "ref 指向的会话已失效",
@@ -494,7 +598,7 @@ class AgentSessionIndex:
                         _path_identity(
                             Path(path), self._digest_cache, digest_store,
                         ),
-                        _agent_fingerprint(adapter.browser, path),
+                        _scan_fingerprint(adapter.browser, path),
                     )
                     if native.storage_kind == "file"
                     else _directory_identity(
@@ -509,7 +613,7 @@ class AgentSessionIndex:
             return path, root, native.storage_kind, identity
         if adapter.browser.resolve_ref(native.canonical_ref) != native.canonical_ref:
             return None, None, "id", None
-        fingerprint = _agent_fingerprint(
+        fingerprint = _scan_fingerprint(
             adapter.browser,
             native.canonical_ref,
         )

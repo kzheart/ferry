@@ -297,9 +297,13 @@ class ContentIndex:
 
     def _index_session(self, index: AgentSessionIndex,
                        record: IndexedSession) -> None:
-        # 解析在锁外做,大会话的读取不能阻塞并发查询。
+        # 解析在锁外做,大会话的读取不能阻塞并发查询。索引是批量后台读,
+        # 不钉内容:读到比 revision 更新的内容无害,下轮 revision 变化会
+        # 重新入队;钉死反而让活跃库频繁触发同步指纹重建。
         try:
-            rows = _session_rows(read_indexed_session(index, record))
+            rows = _session_rows(
+                read_indexed_session(index, record, pin_content=False),
+            )
             failed = 0
         except Exception:
             # 读取失败(会话正在被写入等)按当前 revision 记账,不空转重试;

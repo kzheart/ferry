@@ -45,7 +45,12 @@ def _take_json(value, remaining: int) -> tuple[object, int, bool]:
     return {}, max(0, remaining - 2), True
 
 
-def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
+def read_indexed_session(
+    index: AgentSessionIndex,
+    record: IndexedSession,
+    *,
+    pin_content: bool = True,
+):
     browser = index.ports.adapter(record.tool).browser
     native_ref = NativeSessionReference(
         canonical_ref=record.canonical_ref,
@@ -56,7 +61,7 @@ def read_indexed_session(index: AgentSessionIndex, record: IndexedSession):
     session = getattr(browser, "read_agent", browser.read)(
         record.canonical_ref,
     )
-    index.resolve(record.tool, record.opaque_ref)
+    index.resolve(record.tool, record.opaque_ref, pin_content=pin_content)
     browser.validate_read_scope(native_ref)
     return session
 

@@ -780,6 +780,24 @@ def test_id_backed_ref_rejects_changed_or_recreated_session(agent_environment):
         agent_read.get_session_context("opencode", ref)
 
 
+def test_ui_resolve_of_id_sessions_avoids_strict_fingerprint(
+        agent_environment):
+    """UI 浏览与内容索引(pin_content=False)只查存在性,必须走扫描口径
+    的宽松指纹——严格指纹在活跃 opencode 库上意味着同步整库重建。"""
+    ref = session_search.search_sessions("Other")["sessions"][0]["ref"]
+    browser = agent_environment["opencode_browser"]
+    browser.scan_fingerprint = lambda _ref: browser.fingerprint_value
+
+    def strict_forbidden(_ref):
+        raise AssertionError("pin_content=False 不应触发严格指纹")
+
+    browser.agent_fingerprint = strict_forbidden
+    record = agent_environment["index"].resolve(
+        "opencode", ref, pin_content=False,
+    )
+    assert record.opaque_ref == ref
+
+
 def test_stale_reference_is_rejected_until_reindexed(agent_environment):
     ref = _claude_ref()
     old_stat = agent_environment["transcript"].stat()
@@ -1079,6 +1097,91 @@ def test_opencode_fingerprint_detects_update_and_delete(tmp_path, monkeypatch):
     with sqlite3.connect(database_path) as database:
         database.execute("DELETE FROM session WHERE id = 's1'")
     assert opencode_scanner.fingerprint("s1") is None
+
+
+def test_opencode_fingerprint_survives_process_restart_via_store(
+        tmp_path, monkeypatch):
+    """冷启动库未变时直接吃落盘缓存,不再整库读+逐行哈希重建。"""
+    database_path = tmp_path / "opencode.db"
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT,"
+            " time_updated INTEGER)")
+        database.execute(
+            "CREATE TABLE message (id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute(
+            "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute("INSERT INTO session VALUES ('s1', NULL, 1)")
+        database.execute("INSERT INTO message VALUES ('m1', 's1', 1, '{}')")
+    monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+    first = opencode_scanner.fingerprint("s1")
+    assert first
+
+    # 模拟进程重启:内存缓存清空;此时重建路径必须不被走到。
+    monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+
+    def forbidden_rebuild():
+        raise AssertionError("库未变化时不应触发全量重建")
+
+    monkeypatch.setattr(
+        opencode_scanner, "_read_fingerprint_index", forbidden_rebuild,
+    )
+    assert opencode_scanner.fingerprint("s1") == first
+
+    # 库变化后缓存按 stamp 失效,恢复重建路径后能得到新指纹。
+    monkeypatch.undo()
+    monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+    with sqlite3.connect(database_path) as database:
+        database.execute("INSERT INTO message VALUES ('m2', 's1', 2, '{}')")
+    assert opencode_scanner.fingerprint("s1") != first
+
+
+def test_opencode_scan_fingerprint_serves_stale_and_repairs_in_background(
+        tmp_path, monkeypatch):
+    """库刚被写入时,扫描路径吃旧快照不阻塞,后台重建收敛后拿到新值;
+    Agent 严格路径始终同步拿到新值。"""
+    database_path = tmp_path / "opencode.db"
+    with sqlite3.connect(database_path) as database:
+        database.execute(
+            "CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT,"
+            " time_updated INTEGER)")
+        database.execute(
+            "CREATE TABLE message (id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute(
+            "CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT,"
+            " time_created INTEGER, data TEXT)")
+        database.execute("INSERT INTO session VALUES ('s1', NULL, 1)")
+        database.execute("INSERT INTO message VALUES ('m1', 's1', 1, '{}')")
+    monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+    monkeypatch.setattr(opencode_scanner, "_REBUILD_THREAD", None)
+    first = opencode_scanner.scan_fingerprint("s1")
+    assert first
+
+    with sqlite3.connect(database_path) as database:
+        database.execute("INSERT INTO message VALUES ('m2', 's1', 2, '{}')")
+
+    stale = opencode_scanner.scan_fingerprint("s1")
+    assert stale == first
+    # 重建由扫描收尾钩子统一调度,而不是在扫描中途自发触发。
+    assert opencode_scanner._REBUILD_THREAD is None
+    opencode_scanner.ensure_fingerprint_index_fresh()
+    rebuild_thread = opencode_scanner._REBUILD_THREAD
+    assert rebuild_thread is not None
+    rebuild_thread.join(timeout=10)
+    assert opencode_scanner.scan_fingerprint("s1") != first
+
+    with sqlite3.connect(database_path) as database:
+        database.execute("INSERT INTO message VALUES ('m3', 's1', 3, '{}')")
+    # 严格路径不吃旧快照,同步重建后立刻反映最新内容。
+    strict = opencode_scanner.fingerprint("s1")
+    assert strict not in {first, stale}
+    assert opencode_scanner.scan_fingerprint("s1") == strict
 
 
 def test_opencode_fingerprint_refreshes_from_wal(tmp_path, monkeypatch):
