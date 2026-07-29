@@ -80,10 +80,14 @@ export function useOptimizationView({
   // diff 间跳转:悬浮栏 ↑↓ 与缩略指示条共用
   const navIndexRef = useRef(-1);
   const jumpToTurn = useCallback(turn => {
-    scrollRef.current
-      ?.querySelector(`[data-round="${turn}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const round = scrollRef.current?.querySelector(`[data-round="${turn}"]`);
+    if (!round) return;
+    // 长轮次里 diff 在轮首,整轮居中会把 diff 推出视口:优先定位 diff 块本身
+    (round.querySelector("[data-opt-diff]") || round)
+      .scrollIntoView({ behavior: "smooth", block: "center" });
   }, [scrollRef]);
+  // 处理掉几条后待处理列表变短,旧游标会指到错误的轮次:列表一变就复位
+  useEffect(() => { navIndexRef.current = -1; }, [pendingTurns]);
   const navDiff = useCallback(direction => {
     if (!pendingTurns.length) return;
     navIndexRef.current =
