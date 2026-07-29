@@ -14,6 +14,7 @@ import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 import {
   CheckIcon,
+  WarnIcon,
   CopyIcon,
   MigrateIcon,
   RefreshIcon,
@@ -69,6 +70,8 @@ export default memo(function SessionDetail({
     && supportsAgentCapability(meta.tool, "migration-source");
   const canResume = supportsAgentCapability(meta.tool, "resume");
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(null);
+  const [resumeError, setResumeError] = useState(null);
   const loadMoreRef = useRef(null);
 
   // 无感分页:哨兵接近视口(提前 600px)即触发加载,加载完成后 next_from_message
@@ -119,19 +122,29 @@ export default memo(function SessionDetail({
     r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
 
-  const copyResume = () => {
-    resumeDescriptor(meta.tool, sessionRef(meta))
-      .then((d) => writeClipboardText(d.display_command))
-      .catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+  // 拿不到接续命令时不能先报"已复制":用户粘出来会是空的,却以为是自己操作错了。
+  // 成败都只落在按钮上——这是本模块既有的反馈方式(见 SessionRound / SessionImagePreview)。
+  const copyResume = async () => {
+    try {
+      const d = await resumeDescriptor(meta.tool, sessionRef(meta));
+      await writeClipboardText(d.display_command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      setCopyError(error?.message || String(error));
+      setTimeout(() => setCopyError(null), 4000);
+    }
   };
 
   const resumeInTerminal = async () => {
     if (resuming) return;
     setResuming(true);
+    setResumeError(null);
     try {
       await onResume(meta);
+    } catch (error) {
+      setResumeError(error?.message || String(error));
+      setTimeout(() => setResumeError(null), 4000);
     } finally {
       setResuming(false);
     }
@@ -250,24 +263,32 @@ export default memo(function SessionDetail({
                 onClick={resumeInTerminal}
                 disabled={resuming}
                 title={
-                  resuming
-                    ? tt("browser:session.resumingTerminal")
-                    : tt("browser:session.resumeTerminal")
+                  resumeError
+                    ? tt("browser:session.resumeFailed", { error: resumeError })
+                    : resuming
+                      ? tt("browser:session.resumingTerminal")
+                      : tt("browser:session.resumeTerminal")
                 }
+                style={resumeError ? { color: "var(--err)" } : undefined}
               >
-                {resuming ? <Spinner size={14} /> : <TerminalIcon />}
+                {resuming ? <Spinner size={14} />
+                  : resumeError ? <WarnIcon size={15} /> : <TerminalIcon />}
               </button>}
               {canResume && <button
                 className="ftool-btn"
                 onClick={copyResume}
                 title={
-                  copied
-                    ? tt("browser:session.copiedResume")
-                    : tt("browser:session.copyResume")
+                  copyError
+                    ? tt("browser:session.copyResumeFailed", { error: copyError })
+                    : copied
+                      ? tt("browser:session.copiedResume")
+                      : tt("browser:session.copyResume")
                 }
-                style={copied ? { color: "var(--ok)" } : undefined}
+                style={copied ? { color: "var(--ok)" }
+                  : copyError ? { color: "var(--err)" } : undefined}
               >
-                {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+                {copied ? <CheckIcon size={15} />
+                  : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
               </button>}
               {optActive && (
                 <OptimizerWandControl
