@@ -55,6 +55,8 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, editing
   const title = session.title || t("askferry:chat.untitled");
   const action = callback => event => { event.stopPropagation(); callback(session); };
   const badge = ATTENTION_STYLE[session.attention];
+  // Enter/Esc 已经了结这次重命名后,紧随的 blur 不能再触发一次提交
+  const settled = useRef(false);
 
   if (editing) {
     return (
@@ -62,13 +64,23 @@ const AgentSessionRow = memo(function AgentSessionRow({ session, active, editing
         height: 30, borderRadius: 6, background: "var(--acc-soft2)" }}>
         <input autoFocus defaultValue={session.title || ""}
           placeholder={t("askferry:pane.renamePlaceholder")}
-          onFocus={event => event.target.select()}
-          onBlur={onCancelRename}
+          onFocus={event => { settled.current = false; event.target.select(); }}
+          // 失焦即提交(对齐 Finder):点向别处不该丢掉刚输入的名字
+          onBlur={event => {
+            if (settled.current) return;
+            settled.current = true;
+            onSubmitRename(session, event.currentTarget.value);
+          }}
           onClick={event => event.stopPropagation()}
           onKeyDown={event => {
             event.stopPropagation();
-            if (event.key === "Enter") onSubmitRename(session, event.currentTarget.value);
-            else if (event.key === "Escape") onCancelRename();
+            if (event.key === "Enter") {
+              settled.current = true;
+              onSubmitRename(session, event.currentTarget.value);
+            } else if (event.key === "Escape") {
+              settled.current = true;
+              onCancelRename();
+            }
           }}
           style={{ flex: 1, minWidth: 0, height: 20, border: "none", outline: "none",
             background: "transparent", color: "var(--tx1)", fontSize: 12, padding: 0 }} />

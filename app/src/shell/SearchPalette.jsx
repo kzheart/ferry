@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   CloseIcon,
@@ -24,7 +24,15 @@ export function SearchPalette({
   onClose,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const rowsRef = useRef([]);
+  // 鼠标只有真的动过才有权改选中:方向键会滚动列表,新行滑到静止的光标底下时
+  // 浏览器照样派发 mouseenter,不设这道闸,高亮会被"划过"的行抢走。
+  const mouseLive = useRef(false);
   useEffect(() => setSelectedIndex(0), [query]);
+  // 键盘选中要跟着滚:结果超过一屏时,高亮不能停在视口外
+  useEffect(() => {
+    rowsRef.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex, results]);
   useEffect(() => {
     const onKey = event => {
       if (event.key === "Escape") {
@@ -32,9 +40,11 @@ export function SearchPalette({
         onClose();
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
+        mouseLive.current = false;
         setSelectedIndex(index => Math.min(index + 1, results.length - 1));
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
+        mouseLive.current = false;
         setSelectedIndex(index => Math.max(index - 1, 0));
       } else if (event.key === "Enter") {
         event.preventDefault();
@@ -104,7 +114,8 @@ export function SearchPalette({
             <CloseIcon size={13} />
           </button>
         </div>
-        <div className="fscroll" style={{ overflowY: "auto", padding: 8, minHeight: 0 }}>
+        <div className="fscroll" onMouseMove={() => { mouseLive.current = true; }}
+          style={{ overflowY: "auto", padding: 8, minHeight: 0 }}>
           {recentLabel && <div style={sectionLabelStyle}>{recentLabel}</div>}
           {notice && (
             <div style={{
@@ -132,7 +143,8 @@ export function SearchPalette({
               {result.section && result.section !== results[index - 1]?.section
                 && <div style={sectionLabelStyle}>{result.section}</div>}
             <div
-              onMouseEnter={() => setSelectedIndex(index)}
+              ref={node => { rowsRef.current[index] = node; }}
+              onMouseEnter={() => { if (mouseLive.current) setSelectedIndex(index); }}
               onClick={() => {
                 result.onClick?.();
                 onClose();

@@ -14,6 +14,18 @@
   "empty": {
     "library": "No matching sessions",
     "history": "No matching migration records",
+    "libraryNone": "No sessions yet",
+    "libraryNoneHint": "Ferry reads sessions from Claude Code, Codex CLI, and OpenCode on this machine.",
+    "historyNone": "No migrations yet",
+    "historyNoneHint": "Migrate a session to another tool and it will show up here.",
+    "rescan": "Rescan",
+    "titleOnlyHint": "Sidebar search matches titles only. Use full-text search to look inside sessions.",
+    "fullTextSearch": "Search full text",
+    "scanFailed": "Session scan failed",
+    "scanFailedHint": "Ferry could not read the session directories on this machine, so the list is empty — your sessions are not gone.",
+    "retryScan": "Retry scan",
+    "retryingScan": "Retrying…",
+    "staleScan": "The last scan failed. The results below are from the previous scan and may be out of date.",
     "clearFilter": "Clear filters"
   },
   "bucket": {

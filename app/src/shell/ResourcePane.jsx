@@ -1,5 +1,5 @@
 // 上下文资源栏:三种视图共享同一骨架(标题+搜索/筛选图标/标签/列表/页脚)
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
 import { supportsAgentCapability } from "../shared/contracts/tools.js";
@@ -74,12 +74,52 @@ export function Pane({ collapsed, width, dragging, title, count,
   );
 }
 
-function PaneEmpty({ text, onClear }) {
-  const { t } = useTranslation();
+// 空态分三种:被筛掉了、本来就没有、扫描失败。
+// 首次启动一个会话都没扫到的人,不该看到"没有匹配"和一个点了没反应的清除筛选;
+// 扫描失败的人更不该——那等于把故障说成了搜索条件太严。
+function PaneEmpty({ text, hint, detail, actions = [] }) {
+  const live = actions.filter(Boolean);
   return (
     <div style={{ textAlign: "center", padding: "34px 12px", color: "var(--tx5)" }}>
       <div style={{ fontSize: 12 }}>{text}</div>
-      <button className="fbtn" style={{ marginTop: 10 }} onClick={onClear}>{t("common:empty.clearFilter")}</button>
+      {hint && <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.55, opacity: .85 }}>{hint}</div>}
+      {detail && (
+        <div className="mono selectable" style={{ fontSize: 10, marginTop: 8, padding: "6px 8px",
+          background: "var(--err-bg)", border: "1px solid var(--err-line)", borderRadius: 6,
+          color: "var(--err-text)", textAlign: "left", lineHeight: 1.5,
+          wordBreak: "break-word" }}>{detail}</div>
+      )}
+      {live.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center",
+          marginTop: 11 }}>
+          {live.map(a => (
+            <button key={a.label} className={a.primary ? "fbtn fbtn-primary" : "fbtn"}
+              onClick={a.onClick}>{a.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 扫描失败但上次的结果还在:列表照常能用,但不说一声就等于让用户对着旧数据
+// 以为是最新的——尤其是刚新建了会话却怎么也刷不出来的时候。
+export function StaleScanNotice({ error, scanning, onRescan }) {
+  const { t } = useTranslation();
+  return (
+    <div style={{ margin: "0 2px 8px", padding: "8px 9px", borderRadius: 7,
+      background: "var(--err-bg)", border: "1px solid var(--err-line)" }}>
+      <div style={{ fontSize: 11, color: "var(--err-text)", lineHeight: 1.5 }}>
+        {t("common:empty.staleScan")}
+      </div>
+      <div className="mono selectable" style={{ fontSize: 10, marginTop: 4, opacity: .8,
+        color: "var(--err-text)", wordBreak: "break-word", lineHeight: 1.45 }}>{error}</div>
+      {onRescan && (
+        <button className="fbtn" disabled={scanning} onClick={onRescan}
+          style={{ marginTop: 7, height: 24, fontSize: 11 }}>
+          {t(scanning ? "common:empty.retryingScan" : "common:empty.retryScan")}
+        </button>
+      )}
     </div>
   );
 }
@@ -88,6 +128,11 @@ function PaneEmpty({ text, onClear }) {
 const ROW_H = 30;      // 会话/历史行高(与行内 style 的 height 一致)
 const HEADER_H = 24;   // 分组标题行高
 const OVERSCAN = 300;  // 视口上下各多渲染的像素,避免快速滚动露白
+
+// 列表顶部相对滚动容器内容原点的偏移:虚拟化的 y 都以此为基准
+function listBase(el, sc) {
+  return el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+}
 
 // 跟踪所在滚动容器的视口(相对本列表顶部的偏移 + 高度),scroll 用 rAF 合帧
 function useViewport(ref) {
@@ -99,7 +144,7 @@ function useViewport(ref) {
     let raf = 0;
     const measure = () => {
       raf = 0;
-      const base = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+      const base = listBase(el, sc);
       setVp(v => {
         const top = sc.scrollTop - base, h = sc.clientHeight;
         return v.top === top && v.h === h ? v : { top, h };
@@ -115,10 +160,51 @@ function useViewport(ref) {
   return vp;
 }
 
+// 选中行滚动跟随:列表是虚拟化的,视口外的行根本没挂载,
+// 键盘 ↑/↓ 翻过视口后光靠 DOM 找不到目标,只能按 y 直接算滚动位置。
+const SCROLL_PAD = 8;
+
+/**
+ * 让目标行进入视口所需的 scrollTop;已经在视口内则返回 null(不打断用户滚动)。
+ * 语义对齐 scrollIntoView({ block: "nearest" }):上方超出就贴上沿,下方超出就贴下沿。
+ * 纯函数——jsdom 不做布局,滚动跟随的正确性只能在这里断言。
+ */
+export function nextFocusScrollTop({ itemTop, itemHeight, scrollTop, viewHeight }) {
+  const itemBottom = itemTop + itemHeight;
+  if (itemTop < scrollTop + SCROLL_PAD) {
+    return Math.max(0, itemTop - SCROLL_PAD);
+  }
+  if (itemBottom > scrollTop + viewHeight - SCROLL_PAD) {
+    return Math.max(0, itemBottom - viewHeight + SCROLL_PAD);
+  }
+  return null;
+}
+
+function useFocusScroll(ref, items, focusKey) {
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  useEffect(() => {
+    if (!focusKey) return;
+    const el = ref.current;
+    const sc = el?.closest("[data-pane-scroll]");
+    if (!sc) return;
+    const item = itemsRef.current.find(it => it.key === focusKey);
+    if (!item) return; // 被筛掉或所在分组已折叠
+    const next = nextFocusScrollTop({
+      itemTop: listBase(el, sc) + item.y,
+      itemHeight: item.h,
+      scrollTop: sc.scrollTop,
+      viewHeight: sc.clientHeight,
+    });
+    if (next !== null) sc.scrollTop = next;
+  }, [focusKey]);
+}
+
 // 平铺后的分组列表:items 为 {key, y, h, node},总高 total,超出视口的行不渲染
-function VirtualItems({ items, total }) {
+function VirtualItems({ items, total, focusKey }) {
   const ref = useRef(null);
   const { top, h } = useViewport(ref);
+  useFocusScroll(ref, items, focusKey);
   const lo = top - OVERSCAN, hi = top + h + OVERSCAN;
   return (
     <div ref={ref} style={{ position: "relative", height: total }}>
@@ -150,6 +236,8 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   const act = (fn, key) => e => { e.stopPropagation(); fn(key, e); };
+  // Enter/Esc 已经了结这次重命名后,紧随的 blur 不能再触发一次提交
+  const settled = useRef(false);
 
   if (editing) {
     return (
@@ -158,13 +246,23 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
         <ToolIcon tool={r.tool} size={18} />
         <input autoFocus defaultValue={r.title}
           placeholder={t("app:prompt.renamePlaceholder")}
-          onFocus={e => e.target.select()}
-          onBlur={onRowRenameCancel}
+          onFocus={e => { settled.current = false; e.target.select(); }}
+          // 失焦即提交(对齐 Finder):点向别处不该丢掉刚输入的名字
+          onBlur={e => {
+            if (settled.current) return;
+            settled.current = true;
+            onRowRenameSubmit(r.key, e.currentTarget.value);
+          }}
           onClick={e => e.stopPropagation()}
           onKeyDown={e => {
             e.stopPropagation();
-            if (e.key === "Enter") onRowRenameSubmit(r.key, e.currentTarget.value);
-            else if (e.key === "Escape") onRowRenameCancel();
+            if (e.key === "Enter") {
+              settled.current = true;
+              onRowRenameSubmit(r.key, e.currentTarget.value);
+            } else if (e.key === "Escape") {
+              settled.current = true;
+              onRowRenameCancel();
+            }
           }}
           style={{ flex: 1, minWidth: 0, height: 20, border: "none", outline: "none",
             background: "transparent", color: "var(--tx1)", fontSize: 12, padding: 0 }} />
@@ -206,11 +304,32 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
 });
 
 // 会话库分组列表
-export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selectedId, multiSel,
+export function LibraryList({ groups, collapsed, onToggle, empty, filtered, query, scanError,
+  onClear, onRescan, onFullTextSearch,
+  selectedId, multiSel,
   renamingKey, onRowClick, onRowPin, onRowDelete, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
-  if (empty) return <PaneEmpty text={t("common:empty.library")} onClear={onClear} />;
+  if (empty) {
+    // 扫描失败优先说:列表空是故障的后果,不是筛选或首次启动
+    if (scanError) {
+      return <PaneEmpty text={t("common:empty.scanFailed")} hint={t("common:empty.scanFailedHint")}
+        detail={scanError}
+        actions={[onRescan && { label: t("common:empty.retryScan"), onClick: onRescan, primary: true }]} />;
+    }
+    if (!filtered) {
+      return <PaneEmpty text={t("common:empty.libraryNone")} hint={t("common:empty.libraryNoneHint")}
+        actions={[onRescan && { label: t("common:empty.rescan"), onClick: onRescan }]} />;
+    }
+    // 侧栏只按标题匹配,全文检索在 ⌘K 面板里。搜不到的人不该靠猜才知道还有另一条路。
+    return <PaneEmpty text={t("common:empty.library")}
+      hint={query ? t("common:empty.titleOnlyHint") : null}
+      actions={[
+        query && onFullTextSearch
+          && { label: t("common:empty.fullTextSearch"), onClick: onFullTextSearch, primary: true },
+        { label: t("common:empty.clearFilter"), onClick: onClear },
+      ]} />;
+  }
   const multiSet = new Set(multiSel);
   const items = [];
   let y = 0;
@@ -239,14 +358,20 @@ export function LibraryList({ groups, collapsed, onToggle, empty, onClear, selec
     });
     y += 3;
   });
-  return <VirtualItems items={items} total={y} />;
+  return <VirtualItems items={items} total={y} focusKey={selectedId} />;
 }
 // 迁移历史分组列表
-export function HistoryList({ groups, empty, onClear, onDelete }) {
+export function HistoryList({ groups, empty, filtered, onClear, onDelete }) {
   const { t } = useTranslation();
-  if (empty) return <PaneEmpty text={t("common:empty.history")} onClear={onClear} />;
+  if (empty) {
+    return filtered
+      ? <PaneEmpty text={t("common:empty.history")}
+          actions={[{ label: t("common:empty.clearFilter"), onClick: onClear }]} />
+      : <PaneEmpty text={t("common:empty.historyNone")} hint={t("common:empty.historyNoneHint")} />;
+  }
   const items = [];
   let y = 0;
+  let focusKey = null;
   groups.forEach(g => {
     items.push({ key: `h:${g.label}`, y, h: HEADER_H, node: (
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height: HEADER_H }}>
@@ -256,6 +381,7 @@ export function HistoryList({ groups, empty, onClear, onDelete }) {
     ) });
     y += HEADER_H;
     g.rows.forEach(h => {
+      if (h.selected) focusKey = h.id;
       items.push({ key: h.id, y, h: ROW_H, node: (
         <div onClick={h.onClick} onContextMenu={e => e.preventDefault()}
           title={`${h.from} → ${h.to} · ${h.statusLabel ?? h.status}`}
@@ -281,5 +407,5 @@ export function HistoryList({ groups, empty, onClear, onDelete }) {
     });
     y += 5;
   });
-  return <VirtualItems items={items} total={y} />;
+  return <VirtualItems items={items} total={y} focusKey={focusKey} />;
 }
