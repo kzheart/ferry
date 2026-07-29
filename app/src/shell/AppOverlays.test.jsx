@@ -223,6 +223,7 @@ test("提示条的关闭按钮接到 onDismiss", () => {
   });
 
   assert.ok(screen.getByText("已保存"));
-  fireEvent.click(screen.getByText("×"));
+  // 关闭键是图标按钮,只能按无障碍名称找——正好是它该有的定位方式
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
   assert.equal(dismissed, true);
 });

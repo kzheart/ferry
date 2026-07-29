@@ -166,6 +166,11 @@ export const CheckIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M3 8.5l3.4 3.4L13 5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
+// 失败态:与 CheckIcon 同画布同笔宽,替换时按钮里的视觉重量不跳
+export const WarnIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
+  '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.8v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.2" r=".85" fill="currentColor"/>',
+  { flex: "none" });
+
 // 手动模式:摊开的手掌。用 24 画布重画,墨迹上下都到边(2~22),重心正好落在画布中心;
 // 旧的 16 画布版本墨迹压在下半部(5.3~14.8),居中的是画布不是墨迹,并排时会掉下去
 export const ManualModeIcon = ({ size = 14 }) => svg("0 0 24 24", size, size,
