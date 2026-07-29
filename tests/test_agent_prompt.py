@@ -306,7 +306,7 @@ def test_agent_prompt_preserves_report_when_ref_refresh_fails(
     assert result["params"]["ref_refresh_failed"] is True
 
 
-def test_agent_prompt_write_invalidates_real_index_ref(tmp_path):
+def test_agent_prompt_write_keeps_stable_ref_resolvable(tmp_path):
     root = tmp_path / "sessions"
     root.mkdir()
     source = root / "session.jsonl"
@@ -332,7 +332,7 @@ def test_agent_prompt_write_invalidates_real_index_ref(tmp_path):
         "after",
     )
 
-    assert result["next_ref"] != old_ref
+    # ref 是稳定句柄:写入后重扫不换发,同一 ref 直接解析到新记录。
+    assert result["next_ref"] == old_ref
     assert index.resolve("claude", result["next_ref"]).row["id"] == "session-1"
-    with pytest.raises(AgentReferenceError):
-        index.resolve("claude", old_ref)
+    assert index.resolve("claude", old_ref).row["id"] == "session-1"

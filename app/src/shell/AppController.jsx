@@ -107,7 +107,6 @@ export default function App() {
     ready: scanReady,
     onSelect: () => selectionReset.current(),
     onFallbackLoad: doScan,
-    onStaleReference: doScan,
   });
   const {
     selectedId: selId,

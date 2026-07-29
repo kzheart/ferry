@@ -69,11 +69,12 @@ class IndexedMessage:
     editable: bool
 
 
-# 会话被写入过就会换发 ref。agent 只能看到结构化错误的 params,
-# 所以恢复办法必须以数据形式给出,否则模型只会认为这个会话读不了。
+# ref 是稳定的会话句柄,但钉内容的读取/编辑路径在会话被写入后需要重扫。
+# agent 只能看到结构化错误的 params,所以恢复办法必须以数据形式给出,
+# 否则模型只会认为这个会话读不了。
 _REF_RECOVERY_HINT = (
-    "the session changed or was re-indexed; call session_search again and use "
-    "the fresh fsr_ ref from the results"
+    "the session changed since the last scan; call session_search again to "
+    "re-index it, then retry with the ref from the results"
 )
 _DIGEST_CACHE_LIMIT = 50_000
 _PARALLEL_CANONICALIZE_THRESHOLD = 64
@@ -174,7 +175,7 @@ class AgentSessionIndex:
     def __init__(self, ports: EngineContext):
         self._ports = ports
         self._by_opaque: dict[str, IndexedSession] = {}
-        self._opaque_by_key: dict[tuple[str, str, str], str] = {}
+        self._opaque_by_key: dict[tuple[str, str], str] = {}
         self._messages_by_opaque: dict[str, IndexedMessage] = {}
         self._opaque_by_message_key: dict[tuple[str, str, str], str] = {}
         self._digest_cache: dict[tuple, str] = {}
@@ -234,7 +235,11 @@ class AgentSessionIndex:
                 if canonical is None:
                     continue
                 revision = _revision(tool_name, canonical, row, identity)
-                key = (tool_name, canonical, revision)
+                # ref 按 (tool, canonical) 签发:它是会话的稳定句柄,内容变化
+                # 只更新记录的 revision/identity,不换发 ref。UI 拿着上一轮
+                # 扫描的 ref 也永远能解析;内容一致性由 pin_content 与
+                # locator 的 revision 校验兜住,而不是靠 ref 轮换。
+                key = (tool_name, canonical)
                 opaque = self._opaque_by_key.get(key)
                 if opaque is None:
                     opaque = "fsr_" + secrets.token_urlsafe(18)
@@ -255,7 +260,7 @@ class AgentSessionIndex:
             for opaque in set(self._by_opaque) - active:
                 stale = self._by_opaque.pop(opaque)
                 self._opaque_by_key.pop(
-                    (stale.tool, stale.canonical_ref, stale.revision),
+                    (stale.tool, stale.canonical_ref),
                     None,
                 )
                 stale_messages = [
