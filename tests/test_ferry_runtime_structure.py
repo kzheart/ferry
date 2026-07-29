@@ -8,7 +8,6 @@ RUNTIME = ROOT / "ferry-runtime"
 
 def test_runtime_source_is_grouped_by_responsibility():
     expected = {
-        "agents",
         "providers",
         "roles",
         "runtime",
@@ -53,7 +52,6 @@ def test_runtime_source_is_grouped_by_responsibility():
     assert (RUNTIME / "src/roles/commands.ts").is_file()
     assert (RUNTIME / "src/runtime/event-bus.ts").is_file()
     assert (RUNTIME / "src/tools/gateway.ts").is_file()
-    assert (RUNTIME / "src/agents/delegation-runner.ts").is_file()
     runtime_session = RUNTIME / "src/sessions/runtime-session.ts"
     assert runtime_session.is_file()
     assert (RUNTIME / "src/sessions/session-store.ts").is_file()

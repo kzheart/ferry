@@ -19,17 +19,10 @@
     {"type": "session.created", "source": "runtime", "forward_to_ui": true},
     {"type": "session.model_changed", "source": "runtime", "forward_to_ui": true},
     {"type": "session.renamed", "source": "runtime", "forward_to_ui": true},
-    {"type": "task.cancelled", "source": "runtime", "forward_to_ui": true},
-    {"type": "task.completed", "source": "runtime", "forward_to_ui": true},
-    {"type": "task.failed", "source": "runtime", "forward_to_ui": true},
-    {"type": "task.skipped", "source": "runtime", "forward_to_ui": true},
-    {"type": "task.started", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.completed", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.progress", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.request", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.started", "source": "runtime", "forward_to_ui": true},
-    {"type": "user.message", "source": "runtime", "forward_to_ui": true},
-    {"type": "workflow.completed", "source": "runtime", "forward_to_ui": true},
-    {"type": "workflow.started", "source": "runtime", "forward_to_ui": true}
+    {"type": "user.message", "source": "runtime", "forward_to_ui": true}
   ]
 }

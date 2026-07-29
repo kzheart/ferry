@@ -69,9 +69,8 @@ Ferry uses two concepts that must not share the same name:
 - **Session source**: an external coding tool whose current native session
   structure Ferry can read or write. The built-in session sources are Claude
   Code, Codex CLI, OpenCode, Pi Agent, and Grok Build.
-- **Ferry agent**: an LLM-backed worker that participates in a Ferry workflow.
-  A role such as planner, researcher, coder, or reviewer configures a Ferry
-  agent; it is not an external session format.
+- **Ferry agent**: the LLM-backed assistant behind a Ferry conversation. A
+  role configures a Ferry agent; it is not an external session format.
 
 External tool versions are not part of the Ferry domain. Each session adapter
 supports exactly the current structure implemented in the repository. Readers
@@ -123,9 +122,9 @@ Tauri / Rust Host
 
 ### React UI
 
-Owns presentation, local form drafts, navigation, workflow visualization, and
-user approval interactions. It may start work and subscribe to state, but it
-does not coordinate a transaction or a workflow across processes.
+Owns presentation, local form drafts, navigation, and user approval
+interactions. It may start work and subscribe to state, but it does not
+coordinate a transaction across processes.
 
 ```text
 app/src/
@@ -215,9 +214,8 @@ engine/
 
 ### Ferry Runtime
 
-Owns providers, authentication, model selection, roles, conversations, workflow
-runs, task graphs, Ferry agent execution, tool planning, bounded scheduling,
-result artifacts, and synthesis. Its Node package identity is `@ferry/runtime`;
+Owns providers, authentication, model selection, roles, conversations, Ferry
+agent execution, and tool planning. Its Node package identity is `@ferry/runtime`;
 its source and packaged sidecar are both named `ferry-runtime` on macOS and
 Windows. Platform-specific executable suffixes remain isolated in build and
 process-launch code.
@@ -233,33 +231,19 @@ Its source packages follow the same responsibility boundaries:
 ferry-runtime/src/
   server/          JSONL server, envelopes, generated contracts
   runtime/         command routing and runtime orchestration
-  agents/          bounded scheduling, delegation, task graph
   providers/       provider configuration, authentication, model host
   sessions/        conversations and their persistence
   roles/           role definitions and repositories
   skills/          skill library, candidate discovery, skill configuration
-  tools/           Ferry tool catalog and delegation
+  tools/           Ferry tool catalog
   security/        deterministic runtime size limits
 ```
 
 Ferry Runtime cannot write an external session directly. A requested mutation
 travels through the Rust approval gateway to a Session Engine operation.
 
-The first multi-agent execution model is deliberately bounded fan-out/fan-in:
-
-```text
-planner -> parallel task nodes -> synthesizer
-```
-
-Every `WorkflowRun` has concurrency, task-count, depth, per-task timeout, and
-total persisted-output limits. A task timeout is a workflow failure, not a user
-cancellation, so failure policy and fan-in synthesis can handle it explicitly.
-Provider cost and token accounting are not yet a scheduler input. Cancellation
-propagates to running descendants. Cycles and unbounded recursive delegation
-are rejected.
-
-Ferry does not provide long-term agent memory. Workflow input, events, and
-result artifacts live only within the workflow/conversation persistence model.
+Ferry does not provide long-term agent memory. Conversation input, events, and
+result artifacts live only within the conversation persistence model.
 
 #### Skills
 

@@ -30,8 +30,6 @@ import {
   type ToolRequestContext,
 } from "../tools/catalog.js";
 import { RuntimeGateway, type ToolHandler } from "../tools/gateway.js";
-import type { TaskGraph } from "../agents/scheduler.js";
-import { runDelegatedWorkflow as runDelegation } from "../agents/delegation-runner.js";
 import { RuntimeEventBus } from "./event-bus.js";
 
 type BackendFactory = (selection?: ModelSelection) => AgentBackend;
@@ -172,11 +170,9 @@ export class AgentRuntime {
             (FERRY_TOOL_NAMES as readonly string[]).includes(name),
         ),
         record.state.resolved_apply_policy ?? "auto",
-        true,
         // 重新解析:持久化的只是 id,技能可能在上次运行之后被删掉了
         await this.skillService.resolveFor(record.state.resolved_skills ?? []),
         (id) => this.skillService.read(id),
-        await this.delegatableRoleIds(),
         // 旧记录没有 purpose 字段,一律按 general 恢复
         record.state.purpose === "session-optimization"
           ? "session-optimization"
@@ -197,16 +193,6 @@ export class AgentRuntime {
     return this.idFactory();
   }
 
-  /** 委派工具要把可用角色 id 列进描述,否则模型会自己编一个不存在的角色。 */
-  private async delegatableRoleIds() {
-    try {
-      const roles = await this.roleService.list();
-      return roles.map((role: { id: string }) => role.id);
-    } catch {
-      return [];
-    }
-  }
-
   subscribe(listener: (event: EventEnvelope) => void) {
     return this.events.subscribe(listener);
   }
@@ -219,8 +205,6 @@ export class AgentRuntime {
     requestedId?: string,
     requestedModel?: ModelSelection,
     requestedRoleId = DEFAULT_ROLE_ID,
-    canDelegate = true,
-    toolOverride?: FerryToolName[],
     purpose: SessionPurpose = "general",
   ) {
     const id = requestedId ?? this.newId();
@@ -256,13 +240,11 @@ export class AgentRuntime {
       selection,
       role.id,
       role.persona,
-      toolOverride ?? [...role.tools],
+      [...role.tools],
       // 优化会话是产品级约束:无论角色怎么配,最终写回都必须人工审批
       purpose === "session-optimization" ? "manual" : role.apply_policy,
-      canDelegate,
       await this.skillService.resolveFor(role.skills),
       (id) => this.skillService.read(id),
-      canDelegate ? await this.delegatableRoleIds() : [],
       purpose,
     );
     this.sessions.set(id, session);
@@ -392,44 +374,6 @@ export class AgentRuntime {
 
   waitForIdle(sessionId: string) {
     return this.session(sessionId).waitForIdle();
-  }
-
-  async runDelegatedWorkflow(
-    parent: RuntimeSession,
-    parentRunId: string,
-    spec: TaskGraph,
-    onUpdate: (payload: unknown) => void,
-    signal?: AbortSignal,
-  ) {
-    return runDelegation(
-      parent,
-      parentRunId,
-      spec,
-      onUpdate,
-      {
-        createTaskSession: async (roleId) => {
-          const id = `wf_${this.newId()}`.slice(0, 128);
-          await this.createSession(id, undefined, roleId, false, [
-            "session_search",
-            "session_read",
-            "usage",
-          ]);
-          return id;
-        },
-        prompt: (sessionId, instruction) =>
-          this.prompt(sessionId, instruction, [], instruction).then(
-            () => undefined,
-          ),
-        waitForIdle: (sessionId) => this.waitForIdle(sessionId),
-        finalText: (sessionId) => this.session(sessionId).finalText(),
-        abort: (sessionId) => this.session(sessionId).abort(),
-        isRunning: (sessionId) =>
-          this.sessions.get(sessionId)?.isRunning ?? false,
-        deleteSession: (sessionId) => this.deleteSession(sessionId),
-        now: () => this.now().getTime(),
-      },
-      signal,
-    );
   }
 
   async invokeTool(

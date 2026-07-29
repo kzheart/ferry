@@ -76,26 +76,6 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
-  "task.cancelled": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "task.completed": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "task.failed": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "task.skipped": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "task.started": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
   "tool.completed": {
     "source": "runtime",
     "forwardToUi": true
@@ -113,14 +93,6 @@ export const FERRY_EVENTS = {
     "forwardToUi": true
   },
   "user.message": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "workflow.completed": {
-    "source": "runtime",
-    "forwardToUi": true
-  },
-  "workflow.started": {
     "source": "runtime",
     "forwardToUi": true
   }

@@ -30,9 +30,7 @@ import {
   type FerryToolName,
   type ToolRequestContext,
 } from "../tools/catalog.js";
-import { createDelegationTool } from "../tools/delegation.js";
 import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
-import type { TaskGraph, WorkflowRunResult } from "../agents/scheduler.js";
 import type {
   PersistedSession,
   SessionPurpose,
@@ -51,7 +49,7 @@ const MIGRATION_TARGETS = AGENT_IDS.filter((tool) =>
   supportsAgentCapability(tool, "migration-target"),
 );
 
-export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${BROWSABLE_AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated into ${MIGRATION_TARGETS.join(", ")}. Use delegate_agents when independent research or review tasks benefit from bounded parallel agents, and synthesize their workflow-scoped results. Decide your own approach for each request.`;
+export const FERRY_SAFETY_PROMPT = `You are Ferry's local assistant, working over the user's unified session history from ${BROWSABLE_AGENT_LABELS.join(", ")}. Each tool documents its own contract in its description; follow it. Session attachments identify a source tool and an opaque Engine-issued fsr_ ref. Sessions can be migrated into ${MIGRATION_TARGETS.join(", ")}. Decide your own approach for each request.`;
 
 interface RuntimeSessionHost {
   readonly store: SessionStore;
@@ -63,13 +61,6 @@ interface RuntimeSessionHost {
     args: Record<string, unknown>,
     context: ToolRequestContext,
   ): Promise<unknown>;
-  runDelegatedWorkflow(
-    parent: RuntimeSession,
-    parentRunId: string,
-    spec: TaskGraph,
-    onUpdate: (payload: unknown) => void,
-    signal?: AbortSignal,
-  ): Promise<WorkflowRunResult>;
   /** 返回 null 表示当前环境没有可用于命名的模型。 */
   generateTitle(
     selection: ModelSelection,
@@ -187,10 +178,8 @@ export class RuntimeSession {
     private readonly resolvedPersona: string,
     private readonly resolvedTools: FerryToolName[],
     private readonly resolvedApplyPolicy: ApplyPolicy,
-    private readonly canDelegate: boolean,
     private readonly resolvedSkills: ResolvedSkill[] = [],
     readSkill?: (id: string) => Promise<SkillReadResult>,
-    delegatableRoleIds: readonly string[] = [],
     readonly purpose: SessionPurpose = "general",
   ) {
     this.events = events;
@@ -252,25 +241,6 @@ export class RuntimeSession {
                   readSkill,
                   this.resolvedSkills.map((skill) => skill.id),
                 ),
-              ]
-            : []),
-          ...(this.canDelegate
-            ? [
-                createDelegationTool((spec, onUpdate, signal) => {
-                  if (!this.activeRunId) {
-                    throw new ProtocolError(
-                      "no_active_run",
-                      "delegation has no active run",
-                    );
-                  }
-                  return this.runtime.runDelegatedWorkflow(
-                    this,
-                    this.activeRunId,
-                    spec,
-                    onUpdate,
-                    signal,
-                  );
-                }, delegatableRoleIds),
               ]
             : []),
         ],

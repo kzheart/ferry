@@ -6,7 +6,7 @@ import Markdown from "../../shared/ui/Markdown.jsx";
 import { CheckIcon, CloseIcon, CopyIcon, PencilIcon, SendArrowIcon, Spinner }
   from "../../shared/ui/icons.jsx";
 import { AgentToolRow } from "./AgentToolTrace.jsx";
-import { ApprovalCard, WorkflowCard } from "./AgentWorkflowCards.jsx";
+import { ApprovalCard } from "./AgentApprovalCard.jsx";
 
 function IconBtn({ title, onClick, children }) {
   return (
@@ -136,7 +136,6 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
   if (item.kind === "tool") {
     return <AgentToolRow item={item} onNavigate={onNavigate} />;
   }
-  if (item.kind === "workflow") return <WorkflowCard item={item} />;
   if (item.kind === "approval") {
     return (
       <ApprovalCard item={item}

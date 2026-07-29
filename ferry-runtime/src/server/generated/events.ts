@@ -19,18 +19,11 @@ export const FERRY_EVENT_TYPES = [
   "session.created",
   "session.model_changed",
   "session.renamed",
-  "task.cancelled",
-  "task.completed",
-  "task.failed",
-  "task.skipped",
-  "task.started",
   "tool.completed",
   "tool.progress",
   "tool.request",
   "tool.started",
   "user.message",
-  "workflow.completed",
-  "workflow.started",
 ] as const;
 export const RUNTIME_EVENT_TYPES = [
   "auth.cancelled",
@@ -48,18 +41,11 @@ export const RUNTIME_EVENT_TYPES = [
   "session.created",
   "session.model_changed",
   "session.renamed",
-  "task.cancelled",
-  "task.completed",
-  "task.failed",
-  "task.skipped",
-  "task.started",
   "tool.completed",
   "tool.progress",
   "tool.request",
   "tool.started",
   "user.message",
-  "workflow.completed",
-  "workflow.started",
 ] as const;
 export type FerryEventType = (typeof FERRY_EVENT_TYPES)[number];
 export type RuntimeEventType = (typeof RUNTIME_EVENT_TYPES)[number];

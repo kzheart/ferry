@@ -26,7 +26,6 @@
     {"code": "invalid_request", "category": "validation", "retryable": false, "sources": ["runtime"]},
     {"code": "invalid_role", "category": "validation", "retryable": false, "sources": ["runtime"]},
     {"code": "invalid_skill", "category": "validation", "retryable": false, "sources": ["runtime"]},
-    {"code": "invalid_workflow", "category": "validation", "retryable": false, "sources": ["runtime"]},
     {"code": "model_capability_mismatch", "category": "unsupported", "retryable": false, "sources": ["runtime"]},
     {"code": "model_not_found", "category": "not-found", "retryable": false, "sources": ["runtime"]},
     {"code": "no_active_run", "category": "conflict", "retryable": false, "sources": ["runtime"]},
@@ -57,7 +56,6 @@
     {"code": "unknown_method", "category": "validation", "retryable": false, "sources": ["runtime"]},
     {"code": "unknown_tool_request", "category": "not-found", "retryable": false, "sources": ["runtime"]},
     {"code": "unsupported", "category": "unsupported", "retryable": false, "sources": ["runtime"]},
-    {"code": "unsupported_protocol", "category": "unsupported", "retryable": false, "sources": ["runtime"]},
-    {"code": "workflow_already_started", "category": "conflict", "retryable": false, "sources": ["runtime"]}
+    {"code": "unsupported_protocol", "category": "unsupported", "retryable": false, "sources": ["runtime"]}
   ]
 }

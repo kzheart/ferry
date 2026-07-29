@@ -42,19 +42,16 @@ Chinese description.
 - Move native writes to one cancellable mutation job queue with durable status
   snapshots.
 
-## 6. Ferry Runtime — complete for bounded multi-agent workflows
+## 6. Ferry Runtime — complete
 
 - Split the current runtime by session, provider, tool, event, and persistence
   responsibilities; rename the package and binary if the new boundary is clear.
-- Use `WorkflowRun`, `TaskGraph`, and `TaskNode` with bounded concurrency,
-  cancellation propagation, failure aggregation, budgets, cycle/depth checks,
-  and fan-out/fan-in synthesis.
 - Do not introduce long-term memory.
 
-## 7. Backend-owned workflows and UI — complete
+## 7. Backend-owned UI state — complete
 
 - Continue thinning the application shell after workspace and overlay split.
-- Add workflow graph, parallel worker status, approval, and synthesis views.
+- Add approval views.
 - Move contracts, query/state models, and module controllers to TypeScript.
 
 ## 8. Contracts, IPC, storage, and final cleanup — complete
