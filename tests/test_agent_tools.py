@@ -708,6 +708,37 @@ def test_ui_queries_tolerate_active_session_writes(
     assert application.show_session("claude", session["ref"]) == {"ok": True}
 
 
+def test_ui_ref_survives_reindex_after_active_session_writes(
+        agent_environment, monkeypatch):
+    """活跃会话写入后被其它调用方触发重扫:UI 手里的 ref 仍要能打开。
+
+    这是「读取失败:agent.reference_invalid 闪现几秒后自愈」的根因回归:
+    过去 ref 按 revision 签发,任何一次 refresh(agent 搜索 / usage /
+    另一窗口扫描)都会把 UI 持有的 ref 换发掉。
+    """
+    scanned = scanning.scan(
+        agent_environment["ports"], agent_environment["index"],
+    )["sessions"]
+    session = next(item for item in scanned if item["tool"] == "claude")
+
+    # 模拟 CLI 持续追加 + 其它调用方反复触发重扫。
+    for round_number in range(3):
+        agent_environment["transcript"].write_text(
+            f'{{"appended": {round_number}}}\n',
+        )
+        agent_environment["index"].refresh()
+
+    monkeypatch.setattr(
+        "engine.sessions.read.show",
+        lambda _tool, _ref, _ports, **_kwargs: {"ok": True},
+    )
+    application = EngineService(
+        agent_environment["ports"], agent_environment["index"], _Operations(),
+    )
+    assert application.show_session("claude", session["ref"]) == {"ok": True}
+    assert application.resume_command("claude", session["ref"])["session_id"]
+
+
 def test_session_read_requires_engine_issued_reference(agent_environment):
     ref = _claude_ref()
     by_ref = agent_read.session_read("claude", ref=ref)
@@ -749,7 +780,7 @@ def test_id_backed_ref_rejects_changed_or_recreated_session(agent_environment):
         agent_read.get_session_context("opencode", ref)
 
 
-def test_stale_reference_is_rejected_and_reissued(agent_environment):
+def test_stale_reference_is_rejected_until_reindexed(agent_environment):
     ref = _claude_ref()
     old_stat = agent_environment["transcript"].stat()
     agent_environment["transcript"].write_text("[]\n")
@@ -757,10 +788,10 @@ def test_stale_reference_is_rejected_and_reissued(agent_environment):
              ns=(old_stat.st_atime_ns, old_stat.st_mtime_ns))
     with pytest.raises(AgentReferenceError, match="扫描后已变化"):
         agent_read.get_session_context("claude", ref)
+    # 重新搜索触发重扫:ref 是稳定句柄不换发,索引更新后同一 ref 恢复可读。
     refreshed = _claude_ref()
-    assert refreshed != ref
-    with pytest.raises(AgentReferenceError, match="扫描索引"):
-        agent_read.get_session_context("claude", ref)
+    assert refreshed == ref
+    assert agent_read.get_session_context("claude", ref)
 
 
 def test_adapter_read_scope_is_checked_before_and_after_read(

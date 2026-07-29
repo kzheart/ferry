@@ -140,7 +140,8 @@ class _DirectoryBrowser:
         return ["summary.json"]
 
 
-def test_directory_ref_expires_when_authoritative_member_changes(tmp_path):
+def test_directory_pinned_read_expires_when_authoritative_member_changes(
+        tmp_path):
     root = tmp_path / "sessions"
     bundle = root / "bundle"
     bundle.mkdir(parents=True)
@@ -172,8 +173,10 @@ def test_directory_ref_expires_when_authoritative_member_changes(tmp_path):
     with pytest.raises(AgentReferenceError, match="扫描后已变化"):
         index.resolve("grok", record.opaque_ref)
 
+    # ref 是稳定句柄:重扫后不换发,同一 ref 解析到 revision 更新后的记录。
     current = index.refresh()[0]
-    assert current.opaque_ref != record.opaque_ref
+    assert current.opaque_ref == record.opaque_ref
+    assert current.revision != record.revision
     assert index.resolve("grok", current.opaque_ref) == current
 
     sidecar = bundle / "events.jsonl"

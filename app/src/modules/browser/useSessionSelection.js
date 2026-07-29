@@ -11,7 +11,6 @@ export function useSessionSelection({
   ready,
   onSelect,
   onFallbackLoad,
-  onStaleReference,
 }) {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -37,29 +36,30 @@ export function useSessionSelection({
 
   const loadDetail = (key, session, cachedData = null) => {
     const ref = sessionRef(session);
+    // ref 是稳定句柄,不随内容轮换;revision 才是内容代际,
+    // 用它做在途响应守卫和「扫描发现内容变了就重载」的信号。
+    const revision = session.revision;
     setDetail({
       id: key,
       ref,
+      revision,
       data: cachedData,
     });
     engine("show", { tool: session.tool, ref, from_message: 1, limit: 30 })
       .then((data) => {
         cacheDetail(key, data);
         setDetail((current) =>
-          current?.id === key && current.ref === ref
-            ? { id: key, ref, data }
+          current?.id === key && current.revision === revision
+            ? { id: key, ref, revision, data }
             : current,
         );
       })
       .catch((error) => {
         setDetail((current) =>
-          current?.id === key && current.ref === ref
+          current?.id === key && current.revision === revision
             ? { ...current, error: error.message }
             : current,
         );
-        if (error?.code === "agent.reference_invalid") {
-          onStaleReference();
-        }
       });
   };
 
@@ -74,7 +74,7 @@ export function useSessionSelection({
     if (ready) {
       loadDetail(key, session, cachedData);
     } else {
-      setDetail({ id: key, ref: null, data: cachedData });
+      setDetail({ id: key, ref: null, revision: null, data: cachedData });
     }
   };
 
@@ -82,14 +82,14 @@ export function useSessionSelection({
     if (!ready || !selectedId) return;
     const session = sessionsByKey[selectedId];
     if (!session) return;
-    const ref = sessionRef(session);
-    if (detail?.id === selectedId && detail.ref === ref) return;
+    if (detail?.id === selectedId && detail.revision === session.revision)
+      return;
     loadDetail(
       selectedId,
       session,
       detailCache.current.get(selectedId) || null,
     );
-  }, [ready, selectedId, sessionsByKey, detail?.id, detail?.ref]);
+  }, [ready, selectedId, sessionsByKey, detail?.id, detail?.revision]);
 
   const loadEntitySession = (action, entity) => {
     const candidate = sessions.find(
@@ -154,7 +154,12 @@ export function useSessionSelection({
       cacheDetail(selectedId, data);
       setDetail((current) =>
         current?.id === selectedId
-          ? { id: selectedId, ref: sessionRef(session), data }
+          ? {
+              id: selectedId,
+              ref: sessionRef(session),
+              revision: session.revision,
+              data,
+            }
           : current,
       );
     } catch (error) {
@@ -163,9 +168,6 @@ export function useSessionSelection({
           ? { ...current, error: error.message }
           : current,
       );
-      if (error?.code === "agent.reference_invalid") {
-        onStaleReference();
-      }
     }
     setRefreshing(false);
   };
