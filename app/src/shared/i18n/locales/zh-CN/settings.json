@@ -134,6 +134,12 @@
     "groupTitle": "外观",
     "label": "主题"
   },
+  "experimental": {
+    "groupTitle": "测试中功能",
+    "groupDesc": "以下功能仍在打磨中,默认关闭,行为可能随版本调整",
+    "sessionOptimization": "会话优化",
+    "sessionOptimizationDesc": "在浏览界面提供魔法棒入口:由优化器角色分析会话并给出用户提问的改写候选,逐条确认后写回;会消耗模型调用"
+  },
   "writeCheck": {
     "groupTitle": "写入验收",
     "runtimeProbe": "运行时探针",

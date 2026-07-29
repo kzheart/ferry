@@ -134,6 +134,12 @@
     "groupTitle": "Appearance",
     "label": "Theme"
   },
+  "experimental": {
+    "groupTitle": "Experimental features",
+    "groupDesc": "These features are still being polished. They are off by default and may change between versions.",
+    "sessionOptimization": "Session optimization",
+    "sessionOptimizationDesc": "Adds the magic-wand entry to the browser: an optimizer role analyzes the session and proposes rewrites for user prompts, applied only after your confirmation. Consumes model calls."
+  },
   "writeCheck": {
     "groupTitle": "Write verification",
     "runtimeProbe": "Runtime probe",
