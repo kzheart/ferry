@@ -28,7 +28,7 @@ export function isAwaitingReply(status, items) {
   if (last.kind === "user") return true;
   if (last.kind === "assistant") return !last.streaming;
   if (last.kind === "tool") return last.status !== "running";
-  return false; // workflow/approval/status 各自有状态展示
+  return false; // approval/status 各自有状态展示
 }
 
 export function groupAgentTimeline(items) {

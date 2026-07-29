@@ -111,10 +111,6 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "validation",
             retryable: false,
         }),
-        "invalid_workflow" => Some(ErrorPolicy {
-            category: "validation",
-            retryable: false,
-        }),
         "model_capability_mismatch" => Some(ErrorPolicy {
             category: "unsupported",
             retryable: false,
@@ -237,10 +233,6 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
         }),
         "unsupported_protocol" => Some(ErrorPolicy {
             category: "unsupported",
-            retryable: false,
-        }),
-        "workflow_already_started" => Some(ErrorPolicy {
-            category: "conflict",
             retryable: false,
         }),
         _ => None,

@@ -182,13 +182,6 @@ export const FERRY_ERROR_POLICIES = {
       "runtime"
     ]
   },
-  "invalid_workflow": {
-    "category": "validation",
-    "retryable": false,
-    "sources": [
-      "runtime"
-    ]
-  },
   "model_capability_mismatch": {
     "category": "unsupported",
     "retryable": false,
@@ -401,13 +394,6 @@ export const FERRY_ERROR_POLICIES = {
   },
   "unsupported_protocol": {
     "category": "unsupported",
-    "retryable": false,
-    "sources": [
-      "runtime"
-    ]
-  },
-  "workflow_already_started": {
-    "category": "conflict",
     "retryable": false,
     "sources": [
       "runtime"

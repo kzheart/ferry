@@ -141,8 +141,6 @@ async function createSession(
           ...(thinking ? { thinking } : {}),
         },
     optionalString(params, "role_id", 128),
-    undefined,
-    undefined,
     parseSessionPurpose(params.purpose),
   );
 }

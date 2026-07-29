@@ -89,26 +89,6 @@ pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),
-        "task.cancelled" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "task.completed" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "task.failed" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "task.skipped" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "task.started" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
         "tool.completed" => Some(EventPolicy {
             source: EventSource::Runtime,
             forward_to_ui: true,
@@ -126,14 +106,6 @@ pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {
             forward_to_ui: true,
         }),
         "user.message" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "workflow.completed" => Some(EventPolicy {
-            source: EventSource::Runtime,
-            forward_to_ui: true,
-        }),
-        "workflow.started" => Some(EventPolicy {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),

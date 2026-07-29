@@ -214,8 +214,6 @@ describe("AgentRuntime", () => {
       "opt",
       undefined,
       "session-optimizer",
-      true,
-      undefined,
       "session-optimization",
     );
     expect(created).toMatchObject({
@@ -332,8 +330,6 @@ describe("AgentRuntime", () => {
       "opt",
       undefined,
       "custom-optimizer",
-      true,
-      undefined,
       "session-optimization",
     );
     await runtime.prompt("opt", "优化这段会话");
@@ -390,8 +386,6 @@ describe("AgentRuntime", () => {
       "opt",
       undefined,
       "session-optimizer",
-      true,
-      undefined,
       "session-optimization",
     );
     await runtime.prompt("opt", "optimize");
@@ -420,8 +414,6 @@ describe("AgentRuntime", () => {
       "opt",
       undefined,
       "auto-writer",
-      true,
-      undefined,
       "session-optimization",
     );
     expect(optimization).toMatchObject({ apply_policy: "manual" });
@@ -680,39 +672,6 @@ describe("AgentRuntime", () => {
     expect(types).toContain("tool.progress");
     expect(types).toContain("tool.completed");
     expect(types.at(-1)).toBe("run.completed");
-  });
-
-  it("delegates a bounded task graph and deletes workflow-scoped sessions", async () => {
-    const runtime = await createRuntime();
-    await runtime.createSession("parent");
-
-    await runtime.prompt("parent", "tool:delegate");
-    await runtime.waitForIdle("parent");
-
-    const events = runtime.replay("parent", 0);
-    expect(
-      events.filter((event) => event.type === "task.started"),
-    ).toHaveLength(2);
-    expect(
-      events.find((event) => event.type === "workflow.completed")?.payload,
-    ).toEqual({ status: "completed" });
-    expect(runtime.listSessions().map((session) => session.session_id)).toEqual(
-      ["parent"],
-    );
-    const completed = events.find(
-      (event) =>
-        event.type === "tool.completed" &&
-        event.payload.name === "delegate_agents",
-    );
-    expect(completed?.payload.result).toMatchObject({
-      details: {
-        status: "completed",
-        tasks: [
-          { task_id: "research", status: "completed" },
-          { task_id: "review", status: "completed" },
-        ],
-      },
-    });
   });
 
   it("preserves original bounded structured tool details across replay", async () => {

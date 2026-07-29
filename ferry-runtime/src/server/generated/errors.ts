@@ -48,10 +48,6 @@ export const RUNTIME_ERROR_POLICIES = {
     category: "validation",
     retryable: false,
   },
-  invalid_workflow: {
-    category: "validation",
-    retryable: false,
-  },
   model_capability_mismatch: {
     category: "unsupported",
     retryable: false,
@@ -114,10 +110,6 @@ export const RUNTIME_ERROR_POLICIES = {
   },
   unsupported_protocol: {
     category: "unsupported",
-    retryable: false,
-  },
-  workflow_already_started: {
-    category: "conflict",
     retryable: false,
   },
 } as const;
