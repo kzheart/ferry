@@ -110,6 +110,7 @@ export function parseReasons(text) {
 }
 
 export function useSessionOptimization({
+  enabled,
   current,
   roles,
   runtimeProbe,
@@ -359,7 +360,8 @@ export function useSessionOptimization({
   const clearError = useCallback(() => setError(null), []);
 
   return useMemo(() => ({
-    available: eligibleRoles.length > 0,
+    // 功能开关(设置里默认关闭)统一在这里收口:所有 UI 入口都以 available 为准
+    available: enabled && eligibleRoles.length > 0,
     eligibleRoles,
     roleId,
     role,

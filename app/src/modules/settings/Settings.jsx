@@ -185,6 +185,17 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
             onClick={onFirstRun}>{t("settings:guideSection.open")}</button>
         </Row>
       </Card>
+
+      <GroupTitle right={t("settings:experimental.groupDesc")}>
+        {t("settings:experimental.groupTitle")}
+      </GroupTitle>
+      <Card>
+        <Row first title={t("settings:experimental.sessionOptimization")}
+          desc={t("settings:experimental.sessionOptimizationDesc")}>
+          <Toggle on={s.sessionOptimization}
+            onChange={v => set({ sessionOptimization: v })} />
+        </Row>
+      </Card>
     </div>
   );
 }

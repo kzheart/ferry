@@ -114,7 +114,19 @@ test("回到起点仍然正常,说明工作区切换没有留下坏状态", asyn
   assert.ok(container.querySelector("[data-pane-scroll]"));
 });
 
+test("优化入口默认不渲染:测试中功能需在设置里显式打开", async () => {
+  const { container } = await mountApp();
+
+  await act(async () => { railItem(container, "library").click(); });
+  assert.ok(
+    !container.querySelector('[data-optimize="session"]'),
+    "开关默认关闭时不该出现优化入口",
+  );
+});
+
 test("优化入口:可 rewrite 来源渲染分体魔法棒,角色下拉只列合格角色", async () => {
+  localStorage.setItem("ferry-settings",
+    JSON.stringify({ sessionOptimization: true }));
   const { container } = await mountApp();
 
   await act(async () => { railItem(container, "library").click(); });
@@ -133,6 +145,8 @@ test("优化入口:可 rewrite 来源渲染分体魔法棒,角色下拉只列合
     !container.textContent.includes("通用助手"),
     "未标记 optimizer 的角色不该出现在优化器下拉里",
   );
+  // 不把开关留给后面的用例
+  localStorage.removeItem("ferry-settings");
 });
 
 test("资料库选中会话后详情区能渲染,编辑面从 Context 取到", async () => {

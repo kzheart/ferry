@@ -215,6 +215,7 @@ export default function App() {
   // 会话优化:魔法棒 → 会话绑定的优化器角色生成改写候选 → 内联 diff 取舍 →
   // 接受项作为一个批次写回;全程留在浏览界面,不跳转
   const optimization = useSessionOptimization({
+    enabled: !!settings.sessionOptimization,
     current: cur,
     roles: ferry.roles,
     runtimeProbe: !!settings.runtimeProbe,
