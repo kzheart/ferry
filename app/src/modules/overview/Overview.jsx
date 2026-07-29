@@ -384,7 +384,8 @@ export default function Overview({ sessions = [], historyRows = [],
           </div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <div data-guide="overview-kpis"
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               {kpiCard(t("overview:kpi.sessions"), fmtInt(data.kpis.sessions.value), null,
                 delta(data.kpis.sessions, fmtInt), data.trends.sessions)}
               {kpiCard(t("overview:kpi.tokens"), fmtTokens(data.kpis.tokens.value).split(" ")[0],

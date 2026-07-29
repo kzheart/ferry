@@ -2,28 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
-
-const GUIDE_STEPS = [
-  {
-    target: "rail",
-    side: "right",
-    titleKey: "onboarding:guide.step1Title",
-    bodyKey: "onboarding:guide.step1Body",
-  },
-  {
-    target: "search",
-    side: "right",
-    titleKey: "onboarding:guide.step2Title",
-    bodyKey: "onboarding:guide.step2Body",
-  },
-  {
-    target: "scope",
-    side: "top",
-    scroll: true,
-    titleKey: "onboarding:guide.step3Title",
-    bodyKey: "onboarding:guide.step3Body",
-  },
-];
+import { GUIDE_STEPS } from "./steps.js";
 
 export function Guide({ step, onGo, onFinish }) {
   const { t } = useTranslation();
@@ -79,20 +58,40 @@ export function Guide({ step, onGo, onFinish }) {
       setCard({ left: cardLeft, top: cardTop });
     };
 
-    let delay = 30;
-    if (config.scroll) {
-      const scroller = document.querySelector("[data-guide-scroll]");
+    // 步骤可能刚切换模块,锚点要等新视图渲染完;轮询等待,始终等不到
+    // (比如没有选中的会话)就不高亮,把说明卡居中展示
+    let timer = null;
+    let tries = 0;
+    const attempt = () => {
       const target = document.querySelector(
         `[data-guide="${config.target}"]`,
       );
-      if (scroller && target) {
-        const targetRect = target.getBoundingClientRect();
-        const scrollRect = scroller.getBoundingClientRect();
-        scroller.scrollTop += targetRect.top - scrollRect.top - 170;
-        delay = 80;
+      if (!target) {
+        tries += 1;
+        if (tries < 12) {
+          timer = setTimeout(attempt, 120);
+          return;
+        }
+        const rect = root.getBoundingClientRect();
+        setCard({
+          left: Math.max(12, (rect.width - 324) / 2),
+          top: Math.max(12, rect.height / 2 - 120),
+        });
+        return;
       }
-    }
-    const timer = setTimeout(measure, delay);
+      if (config.scroll) {
+        const scroller = document.querySelector("[data-guide-scroll]");
+        if (scroller) {
+          const targetRect = target.getBoundingClientRect();
+          const scrollRect = scroller.getBoundingClientRect();
+          scroller.scrollTop += targetRect.top - scrollRect.top - 170;
+        }
+        timer = setTimeout(measure, 80);
+        return;
+      }
+      measure();
+    };
+    timer = setTimeout(attempt, 30);
     return () => clearTimeout(timer);
   }, [step, config]);
 

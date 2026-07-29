@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { GUIDE_STEPS } from "./steps.js";
+
 const FIRST_RUN_KEY = "ferry-first-done";
 const GUIDE_SEEN_KEY = "ferry-guide-seen";
 
@@ -22,30 +24,37 @@ export function useOnboarding({
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // 各步骤分属不同模块,进入某一步时先切到它所在的视图
+  const goStep = (next) => {
+    const view = GUIDE_STEPS[next - 1]?.view;
+    if (view) setView(view);
+    setStep(next);
+  };
+
   const openGuide = () => {
-    setView("library");
     closeSettings();
     closeMigration();
-    setStep(1);
+    goStep(1);
   };
 
   const finishGuide = () => {
     setStep(0);
     setSeen(true);
     localStorage.setItem(GUIDE_SEEN_KEY, "1");
+    setView("library");
   };
 
   const completeFirstRun = () => {
     localStorage.setItem(FIRST_RUN_KEY, "1");
     setView("library");
     scan();
-    if (!seen) timer.current = setTimeout(() => setStep(1), 300);
+    if (!seen) timer.current = setTimeout(() => goStep(1), 300);
   };
 
   return {
     step,
     seen,
-    setStep,
+    goStep,
     openGuide,
     finishGuide,
     completeFirstRun,

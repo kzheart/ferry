@@ -229,6 +229,7 @@ export default memo(function SessionDetail({
               </div>
             </div>
             <div
+              data-guide="detail-actions"
               style={{
                 display: "flex",
                 alignItems: "center",
