@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -189,3 +191,57 @@ def test_directory_pinned_read_expires_when_authoritative_member_changes(
     summary.unlink()
     with pytest.raises(AgentReferenceError):
         index.resolve("grok", current.opaque_ref)
+
+
+def test_concurrent_refreshes_coalesce_into_one_scan(tmp_path):
+    """启动预热与 UI 首扫并发时,全量扫库只应真正执行一次。"""
+    root = tmp_path / "sessions"
+    bundle = root / "bundle"
+    bundle.mkdir(parents=True)
+    (bundle / "summary.json").write_text('{"title":"one"}\n')
+    browser = _DirectoryBrowser(root, bundle)
+    scans = []
+    gate = threading.Event()
+    original_scan = browser.scan
+
+    def slow_scan(cache):
+        scans.append(1)
+        gate.wait(timeout=5)
+        return original_scan(cache)
+
+    browser.scan = slow_scan
+    adapter = SimpleNamespace(browser=browser)
+    ports = EngineContext(
+        adapter=lambda _tool: adapter,
+        adapters=lambda: ("grok",),
+        cache_factory=_Cache,
+        resource_path=lambda *_: tmp_path,
+        snapshot_dir=lambda: tmp_path,
+        version="test",
+    )
+    index = AgentSessionIndex(ports)
+
+    results = []
+    barrier = threading.Barrier(3)
+
+    def worker_main():
+        barrier.wait(timeout=5)
+        results.append(index.refresh())
+
+    workers = [threading.Thread(target=worker_main) for _ in range(3)]
+    for worker in workers:
+        worker.start()
+    # 等首个线程真正进入扫描、其余线程加入飞行后再放行。
+    for _ in range(500):
+        if scans:
+            break
+        time.sleep(0.01)
+    time.sleep(0.1)
+    gate.set()
+    for worker in workers:
+        worker.join(timeout=5)
+
+    assert len(scans) == 1
+    assert len(results) == 3
+    refs = {records[0].opaque_ref for records in results}
+    assert len(refs) == 1

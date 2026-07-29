@@ -1,8 +1,9 @@
 """扫描进度跟踪。
 
-scan 在 serial 池中执行,同一时刻至多一个;scan_progress 走 parallel-read 池,
-可在扫描期间并发查询。单例状态由锁保护;未处于扫描中的上报调用一律忽略,
-因此内容索引预热等旁路扫描不会污染进度。
+全量刷新经 AgentSessionIndex 单飞合并,同一时刻至多一次在扫,任何来源
+(UI 扫描、启动预热、agent 搜索)都驱动同一份进度;scan_progress 走
+parallel-read 池,可在扫描期间并发查询。单例状态由锁保护;未处于扫描中
+的上报调用一律忽略。
 """
 from __future__ import annotations
 
