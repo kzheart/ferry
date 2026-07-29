@@ -3,7 +3,6 @@ import {
   LibraryFilter,
   SessionDeleteConfirm,
   SessionPeekSheet,
-  repoOf,
 } from "../modules/browser/public.js";
 import { ApplyConfirm, DiffSheet } from "../modules/editing/public.js";
 import {
@@ -12,7 +11,6 @@ import {
   MigrateSheet,
 } from "../modules/migration/public.js";
 import { FloatingAgentPanel } from "../modules/askferry/public.js";
-import { OrganizationPanel } from "../modules/organizing/public.js";
 import { Guide } from "../modules/onboarding/public.js";
 import { SettingsPage } from "../modules/settings/public.js";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
@@ -23,7 +21,6 @@ import { SearchPalette } from "./SearchPalette.jsx";
 export function AppOverlays({
   t,
   floatChat,
-  organization,
   peek,
   migration,
   editing,
@@ -51,16 +48,6 @@ export function AppOverlays({
           onNavigate={floatChat.onNavigate}
           onOpenConfig={floatChat.onOpenConfig}
           onOpenFull={floatChat.onOpenFull}
-        />
-      )}
-      {organization.open && (
-        <OrganizationPanel
-          sessions={organization.sessions.map(session => ({
-            ...session,
-            project: repoOf(session.dir),
-          }))}
-          onClose={organization.onClose}
-          onApplied={organization.onApplied}
         />
       )}
       {peek.open && (

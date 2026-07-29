@@ -98,41 +98,6 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
         }),
-        "session_backbone" => Some(EngineMethodPolicy {
-            exposure: Exposure::Internal,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::SafeRead,
-        }),
-        "session_summaries_set" => Some(EngineMethodPolicy {
-            exposure: Exposure::Internal,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-        }),
-        "organization_digest_context" => Some(EngineMethodPolicy {
-            exposure: Exposure::Internal,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::SafeRead,
-        }),
-        "organization_propose" => Some(EngineMethodPolicy {
-            exposure: Exposure::Internal,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-        }),
-        "organization_proposals_list" => Some(EngineMethodPolicy {
-            exposure: Exposure::TrustedUi,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::SafeRead,
-        }),
-        "organization_proposal_modify" => Some(EngineMethodPolicy {
-            exposure: Exposure::TrustedUi,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-        }),
-        "organization_proposal_decide" => Some(EngineMethodPolicy {
-            exposure: Exposure::TrustedUi,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-        }),
         "runtime_sessions.load_all" => Some(EngineMethodPolicy {
             exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
@@ -199,11 +164,6 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
 
 /// Ferry Runtime 允许经网关转发到 Engine 的方法白名单。
 pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[
-    "session_backbone",
-    "session_summaries_set",
-    "organization_digest_context",
-    "organization_propose",
-    "organization_proposals_list",
     "runtime_sessions.load_all",
     "runtime_sessions.commit",
     "runtime_sessions.delete",

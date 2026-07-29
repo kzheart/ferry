@@ -345,11 +345,7 @@ mod tests {
     #[test]
     fn runtime_engine_gateway_is_an_exact_allowlist() {
         for method in [
-            "session_backbone",
-            "session_summaries_set",
-            "organization_digest_context",
-            "organization_proposals_list",
-            "organization_propose",
+            "agent_prompt",
             "runtime_sessions.load_all",
             "runtime_sessions.commit",
             "runtime_sessions.delete",

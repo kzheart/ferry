@@ -15,11 +15,7 @@ export const PUBLIC_ENGINE_METHODS = [
   "session_meta_list",
   "session_search",
 ] as const;
-export const TRUSTED_UI_ENGINE_METHODS = [
-  "organization_proposals_list",
-  "organization_proposal_modify",
-  "organization_proposal_decide",
-] as const;
+export const TRUSTED_UI_ENGINE_METHODS = [] as const;
 export type PublicEngineMethod = (typeof PUBLIC_ENGINE_METHODS)[number];
 export type TrustedUiEngineMethod =
   (typeof TRUSTED_UI_ENGINE_METHODS)[number];

@@ -3,12 +3,9 @@ import { useTranslation } from "react-i18next";
 import { SidebarIcon } from "../shared/ui/icons.jsx";
 
 export function WorkspaceToolbar({
-  view,
   paneAvailable,
   collapsed,
   onToggleCollapsed,
-  organizeEnabled,
-  onOrganize,
 }) {
   const { t } = useTranslation();
   return (
@@ -37,16 +34,6 @@ export function WorkspaceToolbar({
       >
         <SidebarIcon />
       </button>
-      {view === "library" && (
-        <button
-          className="fbtn"
-          onClick={onOrganize}
-          disabled={!organizeEnabled}
-          style={{ height: 27, fontSize: 11 }}
-        >
-          {t("organizing:open")}
-        </button>
-      )}
       <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
     </>
   );

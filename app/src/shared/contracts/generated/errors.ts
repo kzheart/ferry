@@ -224,48 +224,6 @@ export const FERRY_ERROR_POLICIES = {
       "host"
     ]
   },
-  "organization.proposal_invalid": {
-    "category": "validation",
-    "retryable": false,
-    "sources": [
-      "engine"
-    ]
-  },
-  "organization.proposal_not_found": {
-    "category": "not-found",
-    "retryable": false,
-    "sources": [
-      "engine"
-    ]
-  },
-  "organization.proposal_stale": {
-    "category": "conflict",
-    "retryable": true,
-    "sources": [
-      "engine"
-    ]
-  },
-  "organization_failed": {
-    "category": "execution",
-    "retryable": false,
-    "sources": [
-      "runtime"
-    ]
-  },
-  "organization_job_not_found": {
-    "category": "not-found",
-    "retryable": false,
-    "sources": [
-      "runtime"
-    ]
-  },
-  "organizer_invalid_response": {
-    "category": "execution",
-    "retryable": false,
-    "sources": [
-      "runtime"
-    ]
-  },
   "provider_in_use": {
     "category": "conflict",
     "retryable": false,
@@ -401,13 +359,6 @@ export const FERRY_ERROR_POLICIES = {
   },
   "snapshot.invalid_source": {
     "category": "validation",
-    "retryable": false,
-    "sources": [
-      "engine"
-    ]
-  },
-  "summary.backbone_missing": {
-    "category": "not-found",
     "retryable": false,
     "sources": [
       "engine"

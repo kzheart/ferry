@@ -61,17 +61,7 @@ fn sensitive_agent_methods_are_not_generic_rpc_methods() {
     );
     assert!(validate_engine_request_exposure(r#"{"method":"scan"}"#, Exposure::Public,).is_ok());
     assert!(validate_engine_request_exposure(
-        r#"{"method":"organization_proposals_list"}"#,
-        Exposure::Public,
-    )
-    .is_err());
-    assert!(validate_engine_request_exposure(
-        r#"{"method":"organization_proposals_list"}"#,
-        Exposure::TrustedUi,
-    )
-    .is_ok());
-    assert!(validate_engine_request_exposure(
-        r#"{"method":"session_backbone"}"#,
+        r#"{"method":"agent_prompt"}"#,
         Exposure::TrustedUi,
     )
     .is_err());

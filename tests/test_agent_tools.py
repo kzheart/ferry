@@ -654,13 +654,8 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
         calls["asset"] = (tool, ref, asset_id)
         return {"ok": True}
 
-    def backbone(tool, ref, _ports):
-        calls["backbone"] = (tool, ref)
-        return {"ok": True}
-
     monkeypatch.setattr("engine.sessions.read.show", show)
     monkeypatch.setattr("engine.sessions.read.session_asset", asset)
-    monkeypatch.setattr("engine.organization.summaries.build_backbone", backbone)
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
     )
@@ -668,9 +663,6 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
     assert application.show_session("claude", session["ref"]) == {"ok": True}
     assert application.session_asset(
         "claude", session["ref"], "image-1",
-    ) == {"ok": True}
-    assert application.session_backbone(
-        "claude", session["ref"],
     ) == {"ok": True}
     assert application.resume_command("claude", session["ref"]) == {
         "session_id": "private-id",
@@ -683,7 +675,6 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
     assert calls == {
         "show": ("claude", canonical_ref),
         "asset": ("claude", canonical_ref, "image-1"),
-        "backbone": ("claude", canonical_ref),
     }
 
     with pytest.raises(AgentReferenceError):

@@ -10,7 +10,6 @@ from .system.resources import resource_path
 from .sessions.scan_cache import shared_cache
 from .system.snapshots import backup_dir, data_dir
 from .operations.service import OperationService
-from .operations import metadata as _metadata
 
 
 def create_context() -> EngineContext:
@@ -24,7 +23,6 @@ def create_context() -> EngineContext:
         data_dir=data_dir,
         version=__version__,
     )
-    context.metadata_list_all = lambda: _metadata.list_all(context)
     return context
 
 

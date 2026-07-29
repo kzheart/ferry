@@ -12,7 +12,6 @@ function closedOverlays() {
   return {
     t: key => key,
     floatChat: { mounted: false },
-    organization: { open: false, sessions: [] },
     peek: { open: false },
     migration: { open: false },
     editing: { diff: null, dirtyOps: [], confirmApply: false },

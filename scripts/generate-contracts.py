@@ -28,7 +28,6 @@ ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
-    ROOT / "ferry-runtime/src/server/generated/engine-methods.ts": "runtime",
 }
 RUNTIME_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/runtime-methods.ts": "frontend",
@@ -177,7 +176,7 @@ def load_engine_methods() -> list[dict[str, object]]:
     # consumers 是纯元数据:标注哪些下游把这个方法编进自己的白名单/联合类型，
     # 不参与 wire 协议，只驱动代码生成。
     optional = {"consumers"}
-    allowed_consumers = {"runtime-gateway", "organizing-workflow"}
+    allowed_consumers = {"runtime-gateway"}
     allowed_kinds = {"read", "index-refresh", "mutation"}
     allowed_exposures = {"public", "trusted-ui", "internal"}
     allowed_timeouts = {"normal", "lookup", "agent-run"}
@@ -622,6 +621,8 @@ def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
     ]
 
     def array(values: list[str]) -> str:
+        if not values:
+            return "[]"
         return "[\n" + "\n".join(
             f"  {json.dumps(value)}," for value in values
         ) + "\n]"
@@ -707,20 +708,6 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {",
         "    RUNTIME_GATEWAY_METHODS.contains(&method)",
         "}",
-        "",
-    ))
-
-
-def engine_methods_runtime(methods: list[dict[str, object]]) -> str:
-    organizing = methods_for_consumer(methods, "organizing-workflow")
-    values = "[\n" + "\n".join(
-        f"  {json.dumps(name)}," for name in organizing
-    ) + "\n]"
-    return "\n".join((
-        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const ORGANIZATION_ENGINE_METHODS = {values} as const;",
-        "export type OrganizationEngineMethod =",
-        "  (typeof ORGANIZATION_ENGINE_METHODS)[number];",
         "",
     ))
 
@@ -982,6 +969,8 @@ def _typescript_operation_types(contract: dict[str, object]) -> list[str]:
 
 def operations_frontend(contract: dict[str, object]) -> str:
     def array(values: list[str]) -> str:
+        if not values:
+            return "[]"
         return "[\n" + "\n".join(
             f"  {json.dumps(value)}," for value in values
         ) + "\n]"
@@ -1282,6 +1271,8 @@ def events_runtime(events: list[dict[str, object]]) -> str:
     ]
 
     def array(values: list[str]) -> str:
+        if not values:
+            return "[]"
         return "[\n" + "\n".join(
             f"  {json.dumps(value)}," for value in values
         ) + "\n]"
@@ -1540,7 +1531,6 @@ def generated_contents(
             "frontend": engine_methods_frontend,
             "rust": engine_methods_rust,
             "python": engine_methods_python,
-            "runtime": engine_methods_runtime,
         }[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }

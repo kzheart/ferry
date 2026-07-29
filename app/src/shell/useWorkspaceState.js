@@ -11,12 +11,12 @@ export function useWorkspaceState({
   detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
   histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
-  onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId, popAnchor,
-  popover, rail, railOnly, refreshing, reloadMetadata, scan,
+  onboarding, openConfig, paneCfg, peekEntity, peekId, popAnchor,
+  popover, rail, railOnly, refreshing, scan,
   scanning, searchOpen, select, selectHistory, selId, sessions,
   setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setHistDel, setHistF, setLibF, setMetaFor, setMig, setMultiSel,
-  setOrganizerOpen, setPeekId, setPopover, setSearchOpen,
+  setPeekId, setPopover, setSearchOpen,
   setSettings, setSettingsOpen, setTagFor, setToast, setView, settings,
   settingsOpen, settingsSection, tagFor, toast, updater, view,
 }) {
@@ -106,13 +106,6 @@ export function useWorkspaceState({
   );
   const operationsState = useMemo(
     () => ({
-      organization: {
-        open: organizerOpen,
-        sessions,
-        setOpen: setOrganizerOpen,
-        reloadMetadata,
-        scan: doScan,
-      },
       migration: {
         state: mig,
         current: cur,
@@ -146,7 +139,7 @@ export function useWorkspaceState({
       },
     }),
     [
-      organizerOpen, sessions, reloadMetadata, doScan, mig, cur, env, settings,
+      sessions, mig, cur, env, settings,
       loadHistory, diff, dirtyOps, confirmApply, applyEdit, view, settingsOpen,
       floatChatOpen, peekEntity, openConfig, setDiff,
       setConfirmApply,

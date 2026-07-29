@@ -26,13 +26,6 @@ AdapterResolver = Callable[[str], "AgentAdapter"]
 AdapterIds = Callable[[], tuple[str, ...]]
 CacheFactory = Callable[[], ScanCachePort]
 SnapshotDir = Callable[[], Path]
-MetadataListAll = Callable[[], dict]
-
-
-def _metadata_port_missing() -> dict:
-    raise RuntimeError(
-        "EngineContext.metadata_list_all 未组装；请经 bootstrap.create_context 构造"
-    )
 
 
 @dataclass
@@ -46,8 +39,6 @@ class EngineContext:
     # 状态库位置。缺省回落到 snapshot_dir，让直接构造 context 的测试无需改动；
     # 生产经 bootstrap 显式指向 ~/.ferry，与备份快照目录分开。
     data_dir: SnapshotDir | None = None
-    # organization 不再直接 import operations 的元数据模块，改由此端口注入。
-    metadata_list_all: MetadataListAll = _metadata_port_missing
 
     def state_dir(self) -> Path:
         """状态库（ferry-state.sqlite3）所在目录。"""

@@ -59,7 +59,6 @@ export default function App() {
 
   const [view, setView] = useState(initialWorkspace);
   const [navigationTarget, setNavigationTarget] = useState(null);
-  const [organizerOpen, setOrganizerOpen] = useState(false);
   const [peekId, setPeekId] = useState(null); // Ask Ferry 卡片就地预览的会话 id
   const [floatChatOpen, setFloatChatOpen] = useState(false); // 会话库右下角浮动 Agent 面板
 
@@ -390,12 +389,12 @@ export default function App() {
     detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
     histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
-    onboarding, openConfig, organizerOpen, paneCfg, peekEntity, peekId,
-    popAnchor, popover, rail, railOnly, refreshing, reloadMetadata,
+    onboarding, openConfig, paneCfg, peekEntity, peekId,
+    popAnchor, popover, rail, railOnly, refreshing,
     scan, scanning, searchOpen, select, selectHistory, selId,
     sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setHistDel, setHistF, setLibF, setMetaFor, setMig,
-    setMultiSel, setOrganizerOpen, setPeekId, setPopover,
+    setMultiSel, setPeekId, setPopover,
     setSearchOpen, setSettings, setSettingsOpen, setTagFor, setToast, setView,
     settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
   });
@@ -506,12 +505,9 @@ export default function App() {
         dividerTitle={t("app:drag.hint")}
         toolbar={
           <WorkspaceToolbar
-            view={view}
             paneAvailable={Boolean(paneCfg)}
             collapsed={paneLayout.collapsed}
             onToggleCollapsed={paneLayout.toggleCollapsed}
-            organizeEnabled={Boolean(sessions.length)}
-            onOrganize={() => setOrganizerOpen(true)}
           />
         }
       >

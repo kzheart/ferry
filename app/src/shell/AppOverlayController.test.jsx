@@ -41,7 +41,7 @@ const BROWSER_STATE_KEYS = [
   "peek", "search", "contextMenu", "deletion", "tags", "filters",
 ];
 const OPERATIONS_STATE_KEYS = [
-  "organization", "migration", "editing", "floatChat",
+  "migration", "editing", "floatChat",
 ];
 const APP_CHROME_KEYS = ["toast", "railTip", "settings", "guide"];
 
@@ -80,7 +80,6 @@ function baseProps(overrides = {}) {
   return {
     t: key => key,
     floatChat: { mounted: false },
-    organization: { open: false, sessions: [], setOpen: noop, reloadMetadata: noop, scan: noop },
     peek: { id: null, current: null, setId: noop, setView: noop },
     migration: { state: null, current: null, settings: {}, setState: noop, loadHistory: noop },
     editing: { diff: null, dirtyOps: [], confirmApply: false, setDiff: noop, setConfirmApply: noop, apply: noop },

@@ -13,8 +13,7 @@ export function AppOverlayController({ t }) {
   const { toast, railTip, settings, guide } = useAppChrome();
   const { peek, search, contextMenu, deletion, tags, filters } =
     useBrowserState();
-  const { organization, migration, editing, floatChat } =
-    useOperationsState();
+  const { migration, editing, floatChat } = useOperationsState();
   const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
   const contentSearch = useSessionContentSearch(
@@ -98,15 +97,6 @@ export function AppOverlayController({ t }) {
     <AppOverlays
       t={t}
       floatChat={floatChat}
-      organization={{
-        open: organization.open,
-        sessions: organization.sessions,
-        onClose: () => organization.setOpen(false),
-        onApplied: () => {
-          organization.reloadMetadata();
-          organization.scan();
-        },
-      }}
       peek={{
         open: Boolean(peek.id && peek.current),
         selectedId: peek.selectedId,
