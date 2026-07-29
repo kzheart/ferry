@@ -46,7 +46,8 @@ function writeBinding(identity, roleId) {
  * 末尾要求单独一行 REASONS: JSON,前端据此给每条候选配一句改写理由。
  */
 export function buildOptimizationInstruction(turns) {
-  const scope = Array.isArray(turns) && turns.length
+  const scoped = Array.isArray(turns) && turns.length;
+  const scope = scoped
     ? `只处理第 ${turns.join("、")} 轮的用户提问`
     : "通读全部轮次,找出表述不清、缺少上下文或容易被误解的用户提问";
   return [
@@ -54,11 +55,36 @@ export function buildOptimizationInstruction(turns) {
     "步骤:",
     "1. 用 session_read 读取目标消息(必要时用 from_message 分页),只有 editable=true 的用户消息可以改写;",
     "2. 把全部改写作为一个批次调用 session_edit(intent:\"preview\");禁止调用 execute,最终是否写回由用户在界面上逐条决定;",
-    "3. 改写必须忠实原意,不得虚构原文没有的背景、需求或约束;没有值得改写的消息就不要调用 session_edit。",
+    scoped
+      // 用户点名的轮次是明确的改写请求:不许轻易空手而归
+      ? "3. 改写必须忠实原意,不得虚构原文没有的背景、需求或约束;这些轮次是用户指定要优化的,每一轮都应给出改写候选,只有该轮不可编辑或确实无从改进时才可跳过,并在最后说明跳过原因。"
+      : "3. 改写必须忠实原意,不得虚构原文没有的背景、需求或约束;没有值得改写的消息就不要调用 session_edit,并在最后简要说明原因。",
     "全部完成后,最后单独输出一行(不要包裹代码块、不要附加其他文字):",
     'REASONS: {"reasons":[{"locator":"fml_...","reason":"一句话中文理由"}]}',
     "没有候选时输出 REASONS: {\"reasons\":[]}。",
   ].join("\n");
+}
+
+/** 去掉 REASONS 行后的 Agent 正文:空结果时把它的解释带给用户。 */
+export function stripReasonsLine(text) {
+  return String(text || "")
+    .split("\n")
+    .filter(line => !line.trim().startsWith(REASONS_PREFIX))
+    .join("\n")
+    .trim()
+    .slice(0, 300);
+}
+
+/** session_edit 失败结果转一句可读文本。 */
+function toolErrorText(result) {
+  if (typeof result === "string") return result.slice(0, 300);
+  const message = result?.message || result?.error || result?.detail;
+  if (typeof message === "string") return message.slice(0, 300);
+  try {
+    return JSON.stringify(result).slice(0, 300);
+  } catch {
+    return "";
+  }
 }
 
 /** 从 Agent 全部输出文本里解析最后一行 REASONS: JSON;解析不出就当没有理由。 */
@@ -155,7 +181,15 @@ export function useSessionOptimization({
       }));
     setCandidates(next);
     setStatus(next.length ? "reviewing" : "idle");
-    if (!next.length) setError({ kind: "empty" });
+    if (!next.length) {
+      // 区分「preview 出错」与「Agent 判断无可改」:前者是失败要露错误,
+      // 后者把 Agent 正文里的解释带给用户,而不是一句干巴巴的空结果
+      if (run.previewError) {
+        setError({ kind: "failed", message: run.previewError });
+      } else {
+        setError({ kind: "empty", detail: stripReasonsLine(run.finalText) });
+      }
+    }
   }, []);
 
   const start = useCallback(async turns => {
@@ -200,7 +234,12 @@ export function useSessionOptimization({
           case "tool.completed": {
             setProgressTool(null);
             const ops = run.pendingPreviews.get(payload.tool_call_id);
-            if (ops && !payload.is_error) run.lastPreview = ops;
+            if (ops) {
+              if (!payload.is_error) run.lastPreview = ops;
+              // preview 报错默认对用户不可见(错误只回给 Agent);
+              // 记下来,若最终一个候选都没有,就把它当失败原因露出去
+              else run.previewError = toolErrorText(payload.result);
+            }
             run.pendingPreviews.delete(payload.tool_call_id);
             break;
           }

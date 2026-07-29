@@ -5,6 +5,7 @@ import {
   buildOptimizationInstruction,
   isOptimizerRole,
   parseReasons,
+  stripReasonsLine,
 } from "./useSessionOptimization.js";
 
 test("常量与 runtime 契约一致", () => {
@@ -33,6 +34,18 @@ test("指令生成:整段与指定轮次两种口径,且只允许 preview", () =
   const scoped = buildOptimizationInstruction([3, 7]);
   expect(scoped).toContain("第 3、7 轮");
   expect(scoped).not.toContain("通读全部轮次");
+  // 点名的轮次是明确请求,指令要求每轮给出候选
+  expect(scoped).toContain("每一轮都应给出改写候选");
+});
+
+test("空结果解释:剥掉 REASONS 行,保留 Agent 正文并截断", () => {
+  const text = [
+    "各轮提问都已足够清晰,无需改写。",
+    'REASONS: {"reasons":[]}',
+  ].join("\n");
+  expect(stripReasonsLine(text)).toBe("各轮提问都已足够清晰,无需改写。");
+  expect(stripReasonsLine("")).toBe("");
+  expect(stripReasonsLine("x".repeat(500))).toHaveLength(300);
 });
 
 test("REASONS 解析:取最后一行,坏 JSON 与缺字段都安全回退", () => {
