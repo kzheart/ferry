@@ -181,8 +181,9 @@ export function OptimizationNotice({ optimization }) {
 export function InlineRewriteDiff({ original, candidate, onAccept, onReject }) {
   const { t: tt } = useTranslation();
   return (
-    <div style={{ margin: "6px 0", borderRadius: 12, overflow: "hidden",
-      border: "1px solid var(--acc-line2)" }}>
+    <div data-opt-diff="1"
+      style={{ margin: "6px 0", borderRadius: 12, overflow: "hidden",
+        border: "1px solid var(--acc-line2)" }}>
       <div className="selectable" style={{ padding: "9px 14px 9px 30px",
         fontSize: 13, lineHeight: 1.65, position: "relative",
         background: "var(--err-bg, #FDF3F3)", color: "var(--tx3)",
