@@ -10,14 +10,34 @@ const TRAFFIC_LIGHT_SPACING: f64 = 20.0;
 #[cfg(target_os = "macos")]
 const EPSILON: f64 = 0.5;
 
+#[cfg(target_os = "macos")]
+thread_local! {
+    // 重入护栏见 align_traffic_lights 文档。
+    static ALIGNING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// macOS 在窗口显示/聚焦/缩放时会把红绿灯重置回默认位置,
 /// 因此不用 tauri.conf 的 trafficLightPosition,而是自己摆:
 /// 把标题栏容器撑到 TITLEBAR_HEIGHT 高,再把三个按钮垂直居中。
 ///
 /// 本函数幂等:已就位时不写任何 frame。这既是性能考虑,
 /// 更是防递归——它会被 frame 变更通知回调调用,而写 frame 会同步再发通知。
+///
+/// 幂等挡不住 AppKit 对打:live resize 期间标题栏布局会把刚写入的按钮
+/// 位置同步弹回,每次写入又立刻重入本函数,位置永远"不达标",递归到
+/// 栈溢出(实测拖拽窗口边缘缩放时崩溃)。因此再加重入护栏:嵌套通知
+/// 一律跳过,弹回后的纠正交给下一个外部事件(Resized/Focused 等)。
 #[cfg(target_os = "macos")]
 fn align_traffic_lights(ns_window: &objc2_app_kit::NSWindow) {
+    if ALIGNING.with(|flag| flag.replace(true)) {
+        return;
+    }
+    align_traffic_lights_inner(ns_window);
+    ALIGNING.with(|flag| flag.set(false));
+}
+
+#[cfg(target_os = "macos")]
+fn align_traffic_lights_inner(ns_window: &objc2_app_kit::NSWindow) {
     use objc2_app_kit::NSWindowButton;
     unsafe {
         let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
