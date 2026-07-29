@@ -35,6 +35,8 @@ export default function HistoryDetail({ h, onDelete }) {
   const ok = status === STATUS_CODE.success;
   const fail = status === STATUS_CODE.failed;
   const rolled = h.rolled_back;
+  // 探针未通过但结构验收通过:产物留在目标端,仍可接续
+  const retained = fail && !rolled && !!h.session_id;
   const range = h.max_turn ? t("migration:history.rangeToTurn", { n: h.max_turn }) : t("migration:history.rangeFull");
   const probeDetail = probeText(h.probe);
   const probeLines = h.probe
@@ -123,7 +125,19 @@ export default function HistoryDetail({ h, onDelete }) {
           </>
         )}
 
-        {ok && h.resume && (
+        {retained && (
+          <>
+            <SectionHead>{t("migration:history.retainedTitle")}</SectionHead>
+            <div className="fcard" style={{ padding: "12px 14px", display: "flex", gap: 9,
+              fontSize: 12, color: "var(--tx2b)", lineHeight: 1.5 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--warn)",
+                flex: "none", marginTop: 6 }} />
+              <span>{t("migration:history.retainedDesc", { tool: targetName })}</span>
+            </div>
+          </>
+        )}
+
+        {(ok || retained) && h.resume && (
           <div style={{ marginTop: 14 }}>
             <CmdRow cmd={h.resume} head={t("migration:history.continueIn", { tool: targetName })} />
           </div>
