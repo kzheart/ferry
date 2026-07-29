@@ -2,7 +2,10 @@
 
 import hashlib
 import json
+import logging
 import sqlite3
+import threading
+import time
 
 from ...sessions.topology import session_roots
 from ...sessions.usage import add_tokens, dominant_model, empty_tokens, has_tokens
@@ -10,6 +13,10 @@ from ...system.paths import opencode_database_path
 
 OPENCODE_DB = opencode_database_path()
 _FINGERPRINT_INDEX: tuple | None = None
+# 全量扫描的规范化线程会并发进来;重建要全量读库,不加锁会同时重建 N 遍。
+_FINGERPRINT_LOCK = threading.Lock()
+
+log = logging.getLogger(__name__)
 
 
 def _msg_tokens(data: dict) -> dict:
@@ -64,10 +71,12 @@ def scan(_cache):
 
 
 def _database_stamp() -> tuple:
+    # 不含 -shm:它只是 WAL 的共享内存索引,连只读连接都会更新其 mtime。
+    # 把它算进戳记会让指纹缓存被自己的读取动作反复失效,每次扫描都全量
+    # 重读整个库;数据变更必然体现在 .db 或 -wal 上,排除它不损失正确性。
     paths = (
         OPENCODE_DB,
         OPENCODE_DB.with_name(OPENCODE_DB.name + "-wal"),
-        OPENCODE_DB.with_name(OPENCODE_DB.name + "-shm"),
     )
     stamp = []
     for path in paths:
@@ -152,16 +161,30 @@ def fingerprint(session_id: str) -> str | None:
     stamp = _database_stamp()
     cached = _FINGERPRINT_INDEX
     if cached is None or cached[0] != stamp:
-        current = None
-        for _attempt in range(3):
-            before = _database_stamp()
-            sessions, revisions, children = _read_fingerprint_index()
-            after = _database_stamp()
-            current = (after, sessions, revisions, children)
-            if before == after:
-                _FINGERPRINT_INDEX = current
-                break
-        cached = current
+        with _FINGERPRINT_LOCK:
+            cached = _FINGERPRINT_INDEX
+            if cached is None or cached[0] != _database_stamp():
+                current = None
+                rebuild_started = time.monotonic()
+                stable = False
+                for _attempt in range(3):
+                    before = _database_stamp()
+                    sessions, revisions, children = _read_fingerprint_index()
+                    after = _database_stamp()
+                    current = (after, sessions, revisions, children)
+                    stable = before == after
+                    if stable:
+                        _FINGERPRINT_INDEX = current
+                        break
+                # 重建要全量读库,是扫描耗时的主要来源;stamp 不稳定意味着缓存
+                # 没能写入,下一次调用还会整个重来——这正是需要被看见的信号。
+                log.info(
+                    "opencode 指纹索引重建: %d 会话 耗时=%.1fs 缓存%s",
+                    len(current[1]) if current else 0,
+                    time.monotonic() - rebuild_started,
+                    "已写入" if stable else "未写入(stamp 不稳定)",
+                )
+                cached = current
     _stamp, sessions, revisions, children = cached
     if session_id not in sessions:
         return None
