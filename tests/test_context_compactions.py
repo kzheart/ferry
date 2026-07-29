@@ -103,6 +103,41 @@ def test_claude_pairs_boundary_and_internal_summary_by_uuid(tmp_path):
     assert all(message["locator"] != "s1" for message in dto["messages"])
 
 
+def test_claude_resolves_anchor_through_system_records(tmp_path):
+    # 压缩边界的 logicalParentUuid 实际常指向 system 记录（turn_duration 等），
+    # 需沿 parentUuid 回溯到真实消息，否则 after_turn 兜底为 0、卡片错排到会话开头。
+    path = tmp_path / "claude.jsonl"
+    records = [
+        {"type": "user", "uuid": "u1", "sessionId": "session",
+         "timestamp": "2026-01-01T00:00:00Z",
+         "message": {"role": "user", "content": "before"}},
+        {"type": "assistant", "uuid": "a1", "parentUuid": "u1",
+         "timestamp": "2026-01-01T00:00:01Z",
+         "message": {"role": "assistant", "content": "answer"}},
+        {"type": "system", "subtype": "stop_hook_summary", "uuid": "sys1",
+         "parentUuid": "a1", "timestamp": "2026-01-01T00:00:02Z"},
+        {"type": "system", "subtype": "turn_duration", "uuid": "sys2",
+         "parentUuid": "sys1", "timestamp": "2026-01-01T00:00:03Z"},
+        {"type": "system", "subtype": "compact_boundary", "uuid": "b1",
+         "logicalParentUuid": "sys2", "timestamp": "2026-01-01T00:00:04Z",
+         "compactMetadata": {"trigger": "auto",
+                             "preTokens": 1000, "postTokens": 100}},
+        {"type": "user", "uuid": "s1", "parentUuid": "b1",
+         "timestamp": "2026-01-01T00:00:05Z", "isCompactSummary": True,
+         "message": {"role": "user", "content": "summary"}},
+        {"type": "user", "uuid": "u2", "parentUuid": "s1",
+         "timestamp": "2026-01-01T00:00:06Z",
+         "message": {"role": "user", "content": "after"}},
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records))
+
+    dto = session_json(claude_reader.read(str(path)))
+
+    compaction = dto["context_compactions"][0]
+    assert compaction["after_message_locator"] == "a1"
+    assert compaction["after_turn"] == 1
+
+
 def test_codex_exposes_encrypted_compaction_once(tmp_path):
     path = tmp_path / "rollout.jsonl"
     records = [
