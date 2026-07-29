@@ -417,7 +417,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           ) : section === "models" ? (
             <Models onOpenProviders={() => setSection("providers")} />
           ) : section === "roles" ? (
-            <Roles />
+            <Roles optimizerFeature={!!settings.sessionOptimization} />
           ) : section === "skills" ? (
             <Skills />
           ) : (

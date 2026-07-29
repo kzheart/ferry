@@ -17,7 +17,8 @@ import {
   buildRoleBundle, parseRoleBundle, planRoleImport, roleBundleFileName,
 } from "./roleBundle.js";
 
-export default function Roles() {
+// optimizerFeature:「会话优化」测试中功能的开关;关闭时不提供优化器标记入口
+export default function Roles({ optimizerFeature = false }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const [selectedId, setSelectedId] = useState("default");
@@ -336,20 +337,22 @@ export default function Roles() {
               right={t("settings:roles.capabilityCount", { n: enabled, total: TOOLS.length })}>
               {t("settings:roles.groupCapability")}</GroupTitle>
             <RoleToolGrid tools={draft.tools} onChange={tools => patch({ tools })} />
-            <div style={{ marginTop: 8 }}>
-              <Card>
-                <Row first title={t("settings:roles.optimizer")}
-                  desc={t("settings:roles.optimizerHint")}>
-                  <Toggle on={draft.optimizer === true}
-                    onChange={on => setDraft(current => {
-                      const next = { ...current };
-                      if (on) next.optimizer = true;
-                      else delete next.optimizer;
-                      return next;
-                    })} />
-                </Row>
-              </Card>
-            </div>
+            {optimizerFeature && (
+              <div style={{ marginTop: 8 }}>
+                <Card>
+                  <Row first title={t("settings:roles.optimizer")}
+                    desc={t("settings:roles.optimizerHint")}>
+                    <Toggle on={draft.optimizer === true}
+                      onChange={on => setDraft(current => {
+                        const next = { ...current };
+                        if (on) next.optimizer = true;
+                        else delete next.optimizer;
+                        return next;
+                      })} />
+                  </Row>
+                </Card>
+              </div>
+            )}
 
             <GroupTitle icon={glyph(GROUP_GLYPH.skill)}>
               {t("settings:skills.roleTitle")}</GroupTitle>
