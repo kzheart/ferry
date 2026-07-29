@@ -1,6 +1,7 @@
 """Codex reader: current rollout JSONL → canonical session model."""
 
 import json
+import threading
 from pathlib import Path
 
 from ...errors import AgentFormatChangedError
@@ -13,6 +14,7 @@ from ...sessions.model import (
 )
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
+from ..shared import parse_cache
 from ..shared.media import image_from_data_url
 from ..shared.scanner import iter_lines
 from . import tool_calls, tool_results, topology
@@ -321,7 +323,45 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
     return sess
 
 
+def _parse_snapshot(session: Session) -> tuple:
+    """解析刚完成时的可变派生字段基线;树装配会对它们做 append 累积。"""
+    return (
+        list(session.children),
+        list(session.agent_edges),
+        list(session.loss),
+        session.parent_id,
+        session.parent_association,
+        session.root_id,
+    )
+
+
+def _parse_restore(session: Session, baseline: tuple) -> None:
+    (children, edges, loss, parent_id, association, root_id) = baseline
+    session.children = list(children)
+    session.agent_edges = list(edges)
+    session.loss = list(loss)
+    session.parent_id = parent_id
+    session.parent_association = association
+    session.root_id = root_id
+
+
+_PARSE_CACHE = parse_cache.SessionParseCache(_parse_snapshot, _parse_restore)
+# 树装配会修改共享的缓存对象,同一根会话的并发读取必须互斥。
+_TREE_LOCKS: dict[str, threading.Lock] = {}
+_TREE_LOCKS_GUARD = threading.Lock()
+
+
+def _cached_read_one(path: Path) -> Session:
+    return _PARSE_CACHE.get_or_parse(
+        str(path),
+        lambda target: _read_one(Path(target)),
+    )
+
+
 def read(path: str, sessions_dir: str | Path | None = None) -> Session:
     """Read one rollout and recursively load its descendants from the same root."""
     rollout = Path(path).expanduser().resolve()
-    return topology.read_tree(rollout, _read_one, sessions_dir)
+    with _TREE_LOCKS_GUARD:
+        lock = _TREE_LOCKS.setdefault(str(rollout), threading.Lock())
+    with lock:
+        return topology.read_tree(rollout, _cached_read_one, sessions_dir)

@@ -167,3 +167,42 @@ def test_codex_reader_preserves_spawn_order_over_agent_path_sort(tmp_path, monke
         "/root/z-last-by-name",
         "/root/a-first-by-name",
     ]
+
+
+def test_codex_repeated_reads_reuse_parse_cache_without_duplication(
+        tmp_path, monkeypatch):
+    """重复读同一棵树:命中解析缓存,且装配的 append 不得累积重复。"""
+    sessions, _db = _store(tmp_path)
+    monkeypatch.setattr(
+        codex_topology, "_META_CACHE_PATH", tmp_path / "rollout-cache.json",
+    )
+    codex_reader._PARSE_CACHE.clear()
+
+    _root_id, path = write(_tree(tmp_path), sessions_dir=sessions)
+    first = codex_reader.read(str(path), sessions_dir=sessions)
+    second = codex_reader.read(str(path), sessions_dir=sessions)
+
+    # 命中缓存:复用同一批解析对象。
+    assert second is first
+    assert [id(child) for child in second.children] == [
+        id(child) for child in first.children
+    ]
+    # 派生字段被恢复后重新装配,不因复用而翻倍。
+    assert len(second.children) == 2
+    assert len(second.agent_edges) == 2
+    assert [edge.status for edge in second.agent_edges] == ["open", "open"]
+
+    # 子文件一变,该文件的缓存按 stat 失效并重新解析。
+    # 根对象同样来自缓存,second/third 是同一实例,必须先抓住旧子对象
+    # 的引用再触发第三次读,否则比较的是同一个列表。
+    old_child = second.children[0]
+    stale_child = second.children[1]
+    child_path = next(
+        candidate for candidate in sessions.rglob("*.jsonl")
+        if old_child.source_id in candidate.name
+    )
+    child_path.write_text(child_path.read_text() + "\n")
+    third = codex_reader.read(str(path), sessions_dir=sessions)
+    assert len(third.children) == 2
+    assert third.children[0] is not old_child
+    assert third.children[1] is stale_child
