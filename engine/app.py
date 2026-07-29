@@ -5,6 +5,7 @@ RPC/CLI 在进程边界构造此对象；各能力通过显式上下文访问依
 from __future__ import annotations
 
 import logging
+import time
 
 from .context import EngineContext
 from .contracts.ipc import FERRY_CONTRACT_HASH
@@ -46,13 +47,19 @@ class EngineService:
         """serve 启动预热:先扫库,再把内容索引的缺口交给后台线程。"""
         if self._content_index is None:
             return
+        log = logging.getLogger(__name__)
         try:
+            started = time.monotonic()
+            log.info("内容索引预热开始")
             records = self._index.refresh()
+            log.info("预热扫库完成: %d 条会话 耗时=%.1fs",
+                     len(records), time.monotonic() - started)
             self._content_index.sync(
                 self._index, records, prefer_background=True,
             )
+            log.info("内容索引预热完成 全程=%.1fs", time.monotonic() - started)
         except Exception:  # noqa: BLE001 - 预热失败不能影响 RPC 服务
-            logging.getLogger(__name__).exception("内容索引预热失败")
+            log.exception("内容索引预热失败")
 
     def health(self) -> dict:
         return {
