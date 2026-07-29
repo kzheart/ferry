@@ -294,6 +294,30 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 
 .fscroll { overscroll-behavior: contain; }
 
+/* 提示条:与右键菜单同材质的临时浮层(中性表面 + 菜单档投影),
+   状态只由 16px 图标承担。底边细线是自动消隐的唯一预告——
+   不画的话提示条就是凭空消失,带撤销的那条尤其要命。 */
+.ftoast { animation: fsheet .18s ease-out; }
+.ftoast-bar {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: var(--line-strong); transform-origin: left;
+}
+@keyframes ftoast-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* 减少动效下细线会被压成 .001s 直接抽干,那等于谎报「时间到了」,不如不画 */
+@media (prefers-reduced-motion: reduce) { .ftoast-bar { display: none; } }
+html[data-reduce="1"] .ftoast-bar { display: none; }
+
+/* 键盘焦点必须看得见:全应用只有 outline:none,Tab 走一遍不知道自己在哪。
+   用 outline 而非 box-shadow:按钮自己的描边与投影就挂在 box-shadow 上,
+   覆盖掉会让它在聚焦时塌成一块平面;outline 也不会强行改动圆角形状。
+   文本输入排除在外——浏览器对它们永远命中 :focus-visible(鼠标点进去也要
+   打字),套光圈等于鼠标一点就出框。它们本就有光标指示焦点,输入胶囊另有
+   .chat-composer:focus-within 兜底。 */
+:focus-visible:not(input):not(textarea):not([contenteditable]) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* macOS:窗口层挂 NSVisualEffectView(见 src-tauri/lib.rs),
    镶边区域(标题栏/导航轨/资源栏)改半透明让系统毛玻璃透出来 */
 html[data-platform="mac"] {
