@@ -161,9 +161,29 @@ def _compact_summary_text(record: dict) -> str:
     )
 
 
+def _anchor_resolver(lines: list[dict]):
+    # 压缩边界的 logicalParentUuid 往往指向 system 记录（turn_duration 等），
+    # 这类记录不进消息列表，需沿 parentUuid 回溯到真实的对话消息。
+    by_uuid = {record["uuid"]: record for record in lines if record.get("uuid")}
+    def resolve(uuid):
+        seen = set()
+        while uuid and uuid not in seen:
+            seen.add(uuid)
+            record = by_uuid.get(uuid)
+            if record is None:
+                return uuid
+            if record.get("type") in ("user", "assistant") and \
+                    not record.get("isCompactSummary"):
+                return uuid
+            uuid = record.get("parentUuid")
+        return uuid
+    return resolve
+
+
 def _context_compactions(lines: list[dict]) -> list[ContextCompaction]:
     compactions = []
     by_boundary = {}
+    resolve_anchor = _anchor_resolver(lines)
     for index, record in enumerate(lines):
         if record.get("type") != "system" or \
                 record.get("subtype") != "compact_boundary":
@@ -185,7 +205,7 @@ def _context_compactions(lines: list[dict]) -> list[ContextCompaction]:
         compaction = ContextCompaction(
             id=boundary_id,
             source="claude",
-            after_message_id=record.get("logicalParentUuid"),
+            after_message_id=resolve_anchor(record.get("logicalParentUuid")),
             event_locator=boundary_id,
             created_at=record.get("timestamp"),
             trigger=("automatic" if trigger == "auto"
@@ -212,7 +232,7 @@ def _context_compactions(lines: list[dict]) -> list[ContextCompaction]:
             compaction = ContextCompaction(
                 id=parent_id or record.get("uuid") or f"compact-summary:{index}",
                 source="claude",
-                after_message_id=record.get("logicalParentUuid"),
+                after_message_id=resolve_anchor(record.get("logicalParentUuid")),
                 event_locator=parent_id,
                 created_at=record.get("timestamp"),
                 state="incomplete",
