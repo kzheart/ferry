@@ -135,30 +135,6 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "internal",
             retryable: false,
         }),
-        "organization.proposal_invalid" => Some(ErrorPolicy {
-            category: "validation",
-            retryable: false,
-        }),
-        "organization.proposal_not_found" => Some(ErrorPolicy {
-            category: "not-found",
-            retryable: false,
-        }),
-        "organization.proposal_stale" => Some(ErrorPolicy {
-            category: "conflict",
-            retryable: true,
-        }),
-        "organization_failed" => Some(ErrorPolicy {
-            category: "execution",
-            retryable: false,
-        }),
-        "organization_job_not_found" => Some(ErrorPolicy {
-            category: "not-found",
-            retryable: false,
-        }),
-        "organizer_invalid_response" => Some(ErrorPolicy {
-            category: "execution",
-            retryable: false,
-        }),
         "provider_in_use" => Some(ErrorPolicy {
             category: "conflict",
             retryable: false,
@@ -237,10 +213,6 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
         }),
         "snapshot.invalid_source" => Some(ErrorPolicy {
             category: "validation",
-            retryable: false,
-        }),
-        "summary.backbone_missing" => Some(ErrorPolicy {
-            category: "not-found",
             retryable: false,
         }),
         "tool.not_allowed" => Some(ErrorPolicy {

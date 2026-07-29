@@ -15,8 +15,6 @@ from .errors import (
 )
 from .operations import history, metadata, verification
 from .operations.service import OperationService
-from .organization import proposals as organizing
-from .organization import summaries
 from .runtime import sessions as runtime_sessions
 from .sessions import agent_read
 from .sessions import search as session_search
@@ -153,35 +151,6 @@ class EngineService:
             query, index=self._index,
             content_index=self._content_index, **params,
         )
-
-    def session_backbone(self, tool: str, ref: str) -> dict:
-        require_agent_capability(
-            self._ports.adapter(tool), "browse", "browser",
-        )
-        return self._checked_query(
-            tool, ref,
-            lambda record: summaries.build_backbone(
-                tool, record.canonical_ref, self._ports,
-            ),
-        )
-
-    def set_session_summaries(self, tool: str, session_id: str, digests: dict) -> dict:
-        return summaries.set_summaries(tool, session_id, digests, self._ports)
-
-    def organization_digest_context(self, targets: list[dict]) -> dict:
-        return organizing.digest_context(targets, self._ports)
-
-    def organization_propose(self, targets: list[dict]) -> dict:
-        return organizing.propose(targets, self._ports)
-
-    def organization_proposals_list(self, status: str | None = None) -> list[dict]:
-        return organizing.list_proposals(status, self._ports)
-
-    def organization_proposal_modify(self, proposal_id: str, changes: list[dict]) -> dict:
-        return organizing.modify(proposal_id, changes, self._ports)
-
-    def organization_proposal_decide(self, proposal_id: str, decision: str) -> dict:
-        return organizing.decide(proposal_id, decision, self._ports)
 
     def load_runtime_sessions(self) -> list[dict]:
         return runtime_sessions.load_all(self._ports)

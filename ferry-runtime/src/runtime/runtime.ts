@@ -15,7 +15,6 @@ import {
   ProviderService,
   type AgentBackend,
 } from "../providers/provider-service.js";
-import { OrganizationCoordinator } from "../organizing/coordinator.js";
 import {
   DEFAULT_ROLE_ID,
   EphemeralRoleStore,
@@ -30,11 +29,7 @@ import {
   type FerryToolName,
   type ToolRequestContext,
 } from "../tools/catalog.js";
-import {
-  RuntimeGateway,
-  type EngineHandler,
-  type ToolHandler,
-} from "../tools/gateway.js";
+import { RuntimeGateway, type ToolHandler } from "../tools/gateway.js";
 import type { TaskGraph } from "../agents/scheduler.js";
 import { runDelegatedWorkflow as runDelegation } from "../agents/delegation-runner.js";
 import { RuntimeEventBus } from "./event-bus.js";
@@ -52,7 +47,6 @@ interface RuntimeOptions {
   roleStore?: RoleStore;
   skillStore?: SkillStore;
   toolHandler?: ToolHandler;
-  engineHandler?: EngineHandler;
   now?: () => Date;
   idFactory?: () => string;
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
@@ -80,7 +74,6 @@ export class AgentRuntime {
   private readonly backendInfo: AgentBackend;
   readonly providerService: ProviderService;
   private readonly gateway: RuntimeGateway;
-  private readonly organization: OrganizationCoordinator;
 
   private constructor(
     options: RuntimeOptions,
@@ -109,18 +102,9 @@ export class AgentRuntime {
           .emit("tool.request", payload, runId)
           .then(() => undefined),
       ...(options.toolHandler ? { toolHandler: options.toolHandler } : {}),
-      ...(options.engineHandler
-        ? { engineHandler: options.engineHandler }
-        : {}),
       ...(options.toolDeadlinesMs
         ? { toolDeadlinesMs: options.toolDeadlinesMs }
         : {}),
-    });
-    this.organization = new OrganizationCoordinator({
-      ...(this.providerHost ? { providerHost: this.providerHost } : {}),
-      newId: this.idFactory,
-      invokeEngine: (method, params, workflowId) =>
-        this.gateway.invokeEngine(method, params, workflowId),
     });
     this.providerService = new ProviderService({
       ...(this.providerHost ? { host: this.providerHost } : {}),
@@ -369,18 +353,6 @@ export class AgentRuntime {
     this.sessions.delete(sessionId);
     await this.store.delete(sessionId);
     return { session_id: sessionId, deleted: true };
-  }
-
-  startOrganization(input: unknown) {
-    return this.organization.start(input);
-  }
-
-  organizationStatus(jobId: string) {
-    return this.organization.status(jobId);
-  }
-
-  cancelOrganization(jobId: string) {
-    return this.organization.cancel(jobId);
   }
 
   abort(sessionId: string) {

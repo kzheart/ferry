@@ -64,18 +64,6 @@ export const RUNTIME_ERROR_POLICIES = {
     category: "conflict",
     retryable: false,
   },
-  organization_failed: {
-    category: "execution",
-    retryable: false,
-  },
-  organization_job_not_found: {
-    category: "not-found",
-    retryable: false,
-  },
-  organizer_invalid_response: {
-    category: "execution",
-    retryable: false,
-  },
   provider_in_use: {
     category: "conflict",
     retryable: false,

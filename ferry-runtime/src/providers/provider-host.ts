@@ -9,11 +9,6 @@ import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 import { dirname, join } from "node:path";
 import { FileModelsStore } from "./model-store.js";
-import {
-  organizerPrompt,
-  validateOrganizerResult,
-  type OrganizerInput,
-} from "../organizing/organizer.js";
 import type {
   CustomModelConfig,
   CustomProviderConfig,
@@ -234,34 +229,6 @@ export class ProviderHost {
       },
     );
     return title.trim();
-  }
-
-  async organize(input: OrganizerInput, selection?: ModelSelection) {
-    const selected = selection ?? (await this.defaultModel());
-    const model = this.model(selected);
-    if (!(await this.isConfigured(selected.provider))) {
-      throw new Error("provider is not configured");
-    }
-    const text = await this.completeText(
-      model,
-      {
-        systemPrompt:
-          "You return strictly validated JSON for Ferry's local session organizer.",
-        messages: [
-          {
-            role: "user",
-            content: organizerPrompt(input),
-            timestamp: Date.now(),
-          },
-        ],
-      },
-      {
-        maxTokens: 8_000,
-        timeoutMs: 120_000,
-        errorMessage: "organizer request failed",
-      },
-    );
-    return validateOrganizerResult(text, input);
   }
 
   async deleteCustomModel(providerId: string, modelId: string) {

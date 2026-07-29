@@ -197,18 +197,6 @@ static browser contract both immediately before and immediately after a read;
 it does not branch on Agent names, and a path-backed Adapter must reject any
 file that resolves outside its indexed storage root.
 
-Deterministic organization state is owned by
-`engine/organization/`: `summaries.py` manages content-addressed
-digest inputs/results and `proposals.py` manages proposal validation and
-decisions. Model execution remains in Ferry Runtime and reaches these use cases
-only through the Rust/Engine gateway.
-
-Organization generation itself is a cancellable, in-memory Ferry Runtime job.
-`organization.start` returns immediately; `organization.status` reports the
-result and `organization.cancel` is accepted until the workflow enters its
-SQLite commit phase. Jobs are bounded and pruned rather than becoming a
-long-term-memory subsystem.
-
 The target Engine packages are capability-oriented:
 
 ```text
@@ -216,7 +204,6 @@ engine/
   server/          RPC server and generated protocol
   sessions/        scan, index, read, search, assets, usage
   operations/      plan, apply, edit, migrate, metadata, delete, verify
-  organization/    summaries and organization proposals
   adapters/        current Claude, Codex, OpenCode, Pi, and Grok structures
     shared/        codec, editing, migration, scan primitives reused by adapters
   storage/         SQLite connection and exact schema composition root
@@ -252,7 +239,6 @@ ferry-runtime/src/
   roles/           role definitions and repositories
   skills/          skill library, candidate discovery, skill configuration
   tools/           Ferry tool catalog and delegation
-  organizing/      summary and organization workflows
   security/        deterministic runtime size limits
 ```
 
@@ -373,27 +359,19 @@ uses the same checked boundary. Existing bundles are not rewritten, and a
 schema mismatch fails instead of being upgraded.
 
 Python Engine is the only writer of `ferry-state.sqlite3`. Its exact schema is
-currently version 8 and owns immutable operation plans, operation audit,
-delete-recovery handles, session metadata, migration history, session summary
-backbones, organization proposals, organization signals, and Ferry Runtime
+currently version 9 and owns immutable operation plans, operation audit,
+delete-recovery handles, session metadata, migration history, and Ferry Runtime
 session/event records. Session metadata
 is identified by the exact `(tool, native_session_id)` pair, never by a bare
 native ID. Migration history has a database-generated immutable ID and is
-listed in append order from newest to oldest. Summary backbones use the same
-composite identity and retain only workflow-scoped digest cache data, not
-long-term Agent memory. Organization approval checks summary fingerprints,
-applies metadata CAS, writes the proposal state, and records its signal in one
-SQLite transaction. The
+listed in append order from newest to oldest. The
 database uses WAL plus `BEGIN IMMEDIATE` for every state transition and
 metadata CAS. A schema other than the exact current version fails at startup;
 old JSON metadata and older SQLite schemas are not read or migrated.
 
 `engine/storage/database.py` owns only the connection, exact schema, and store
-composition. Runtime sessions, operation plans/recovery, metadata, migration
-history, summaries, and organization transactions each have a named store.
-The organization store deliberately owns its cross-table transaction as one
-capability; it is not split into repository abstractions that could break
-atomic approval.
+composition. Runtime sessions, operation plans/recovery, metadata, and
+migration history each have a named store.
 
 The UI uses the same pair as its local session identity for list keys,
 selection, multi-selection, context menus, and detail caching. Native session

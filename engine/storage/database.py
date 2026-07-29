@@ -15,12 +15,10 @@ from pathlib import Path
 from ..operations.history_store import MigrationHistoryStore
 from ..operations.metadata_store import SessionMetadataStore
 from ..operations.state_store import OperationStore
-from ..organization.store import OrganizationStore
-from ..organization.summary_store import SessionSummaryStore
 from ..runtime.store import RuntimeSessionStore
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def now_ms() -> int:
@@ -52,13 +50,11 @@ class StateDatabase:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
         self.operations = OperationStore(self._connect, self._lock)
-        self.organization = OrganizationStore(self._connect, self._lock)
         self.runtime_sessions = RuntimeSessionStore(
             self._connect,
             self._lock,
         )
         self.metadata = SessionMetadataStore(self._connect, self._lock)
-        self.summaries = SessionSummaryStore(self._connect, self._lock)
         self.migration_history = MigrationHistoryStore(
             self._connect,
             self._lock,
@@ -134,47 +130,6 @@ class StateDatabase:
                         history_id TEXT NOT NULL UNIQUE,
                         entry_json TEXT NOT NULL
                     );
-                    CREATE TABLE session_summaries (
-                        tool TEXT NOT NULL,
-                        session_id TEXT NOT NULL,
-                        record_json TEXT NOT NULL,
-                        updated_at INTEGER NOT NULL,
-                        PRIMARY KEY(tool, session_id)
-                    );
-                    CREATE TABLE organization_proposals (
-                        proposal_id TEXT PRIMARY KEY,
-                        generation_key TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        proposal_json TEXT NOT NULL,
-                        created_at INTEGER NOT NULL,
-                        updated_at INTEGER NOT NULL
-                    );
-                    CREATE INDEX organization_proposals_generation
-                        ON organization_proposals(generation_key, status);
-                    CREATE TABLE organization_proposal_targets (
-                        proposal_id TEXT NOT NULL,
-                        position INTEGER NOT NULL,
-                        tool TEXT NOT NULL,
-                        session_id TEXT NOT NULL,
-                        fingerprint TEXT NOT NULL,
-                        PRIMARY KEY(proposal_id, position),
-                        UNIQUE(proposal_id, tool, session_id),
-                        FOREIGN KEY(proposal_id)
-                            REFERENCES organization_proposals(proposal_id)
-                    );
-                    CREATE INDEX organization_targets_identity
-                        ON organization_proposal_targets(
-                            tool, session_id, fingerprint
-                        );
-                    CREATE TABLE organization_signals (
-                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                        proposal_id TEXT NOT NULL,
-                        event TEXT NOT NULL,
-                        at INTEGER NOT NULL,
-                        payload_json TEXT NOT NULL,
-                        FOREIGN KEY(proposal_id)
-                            REFERENCES organization_proposals(proposal_id)
-                    );
                     CREATE TABLE runtime_sessions (
                         session_id TEXT PRIMARY KEY,
                         metadata_json TEXT NOT NULL,
@@ -201,7 +156,7 @@ class StateDatabase:
                             REFERENCES runtime_sessions(session_id)
                             ON DELETE CASCADE
                     );
-                    PRAGMA user_version = 8;
+                    PRAGMA user_version = 9;
                     COMMIT;
                 """)
 

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""守护 Engine 的分层方向：禁止 adapters/organization 反向依赖 operations。
+"""守护 Engine 的分层方向：禁止 adapters 反向依赖 operations。
 
-adapters 是被 operations 编排的下层，organization 是 operations 的同级用例层；
-两者都不该伸进 operations 内部。相对 import（`from ...operations.x import y`）
-按文件在包里的深度还原成绝对模块名后再判定。
+adapters 是被 operations 编排的下层，不该伸进 operations 内部。相对 import
+（`from ...operations.x import y`）按文件在包里的深度还原成绝对模块名后再判定。
 """
 from __future__ import annotations
 
@@ -21,12 +20,6 @@ RULES = (
         or module.startswith("engine.operations."),
         "adapters 不得依赖 engine.operations（类型走 contracts.operation_types，"
         "快照工具走 system.snapshots）",
-    ),
-    (
-        "engine/organization",
-        lambda module: module.startswith("engine.operations."),
-        "organization 不得依赖 engine.operations 的内部模块"
-        "（纯函数走 contracts.metadata，需要运行期能力就经 EngineContext 端口）",
     ),
 )
 

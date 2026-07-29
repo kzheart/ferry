@@ -1,6 +1,6 @@
 """会话元数据的纯函数原语：键编码、行解码与补丁合并。
 
-从 operations/metadata_store.py 抽出，好让 organization 不必反向依赖
+从 operations/metadata_store.py 抽出，好让下游用例不必反向依赖
 operations 的内部模块（storage/ 被结构守护限定为只放数据库组合根）。
 """
 

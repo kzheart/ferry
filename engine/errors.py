@@ -176,23 +176,3 @@ def require_agent_capability(adapter, capability: str, component: str):
         return adapter.require(capability, component)
     except ValueError as error:
         raise AgentCapabilityError(adapter.id, capability) from error
-
-
-class SummaryBackboneMissingError(DomainError, ValueError):
-    """尚未为该会话建立摘要底座，无法写回蒸馏摘要。"""
-
-    code = "summary.backbone_missing"
-
-
-class OrganizationProposalError(DomainError, ValueError):
-    """整理建议不完整、引用了过期摘要或提案状态不允许当前操作。"""
-
-    code = "organization.proposal_invalid"
-
-
-class OrganizationProposalNotFoundError(DomainError, ValueError):
-    code = "organization.proposal_not_found"
-
-
-class OrganizationProposalStaleError(DomainError, RuntimeError):
-    code = "organization.proposal_stale"

@@ -1,4 +1,3 @@
-import type { OrganizationEngineMethod } from "../organizing/organization.js";
 import type { RuntimeEngineMethod } from "../sessions/engine-store.js";
 import { ProtocolError } from "../server/messages.js";
 import type { FerryToolName, ToolRequestContext } from "./catalog.js";
@@ -8,12 +7,6 @@ export type ToolHandler = (
   name: FerryToolName,
   args: Record<string, unknown>,
   context: ToolRequestContext,
-) => Promise<unknown>;
-
-export type EngineHandler = (
-  method: OrganizationEngineMethod,
-  params: Record<string, unknown>,
-  workflowId: string,
 ) => Promise<unknown>;
 
 interface PendingRequest {
@@ -43,7 +36,6 @@ interface RuntimeGatewayOptions {
     payload: Record<string, unknown>,
   ) => Promise<void>;
   toolHandler?: ToolHandler;
-  engineHandler?: EngineHandler;
   toolDeadlinesMs?: Partial<Record<FerryToolName, number>>;
 }
 
@@ -121,17 +113,10 @@ export class RuntimeGateway {
   }
 
   invokeEngine(
-    method: OrganizationEngineMethod | RuntimeEngineMethod,
+    method: RuntimeEngineMethod,
     params: Record<string, unknown>,
     sessionId: string,
   ) {
-    if (this.options.engineHandler && !method.startsWith("runtime_sessions.")) {
-      return this.options.engineHandler(
-        method as OrganizationEngineMethod,
-        params,
-        sessionId,
-      );
-    }
     const requestId = this.options.newId();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const result = new Promise<unknown>((resolve, reject) => {
@@ -147,7 +132,7 @@ export class RuntimeGateway {
       timeout = setTimeout(() => {
         if (!this.pending.delete(requestId)) return;
         cleanup();
-        reject(new Error("organization engine gateway timed out"));
+        reject(new Error("engine gateway timed out"));
       }, 125_000);
     });
     this.options.events.emit(

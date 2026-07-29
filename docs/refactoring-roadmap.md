@@ -53,7 +53,6 @@ Chinese description.
 
 ## 7. Backend-owned workflows and UI — complete
 
-- Keep organization generation in Ferry Runtime, not React.
 - Continue thinning the application shell after workspace and overlay split.
 - Add workflow graph, parallel worker status, approval, and synthesis views.
 - Move contracts, query/state models, and module controllers to TypeScript.
