@@ -119,7 +119,7 @@ class ContentIndex:
     def __init__(self, path: Path | None = None):
         self._path = (
             Path(path) if path is not None
-            else Path.home() / ".resume-harness" / "content-index.sqlite3"
+            else Path.home() / ".ferry" / "content-index.sqlite3"
         )
         self._connection: sqlite3.Connection | None = None
         self._unavailable: str | None = None

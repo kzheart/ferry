@@ -36,7 +36,7 @@ def _merge(base: dict, incoming: dict) -> dict:
 
 class ScanCache:
     def __init__(self, path=None, version=6):
-        self.path = path or Path.home() / ".resume-harness" / "scan-cache.json"
+        self.path = path or Path.home() / ".ferry" / "scan-cache.json"
         self.version = version
         self._data = None
         # put/put_digest 会在持锁状态下再调 _load,必须可重入。

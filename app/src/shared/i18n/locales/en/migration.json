@@ -15,7 +15,7 @@
     "sourceFallback": "Discovery failed, using built-in fallback",
     "sourceCache": "Local cache",
     "sourceUser": "User config",
-    "hint": "Resumes with this model and sends a tiny probe message during verification. Leave empty to use the target tool's default model. You can also append custom ids in ~/.resume-harness/models.json.",
+    "hint": "Resumes with this model and sends a tiny probe message during verification. Leave empty to use the target tool's default model. You can also append custom ids in ~/.ferry/models.json.",
     "loadFailed": "Failed to load list: {{error}}",
     "discoverWarn": "Dynamic discovery warning: {{error}}",
     "filterPlaceholder": "Filter models…",

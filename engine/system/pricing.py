@@ -11,7 +11,7 @@ import urllib.request
 from pathlib import Path
 
 MODELS_DEV_URL = "https://models.dev/api.json"
-CACHE = Path.home() / ".resume-harness" / "models-dev.json"
+CACHE = Path.home() / ".ferry" / "models-dev.json"
 TTL_SECONDS = 7 * 24 * 3600
 
 # 离线兜底:少量常见公开模型的近似单价(USD / 百万 token)。
@@ -52,7 +52,7 @@ def _read_cache() -> dict | None:
 
 def _fetch() -> dict:
     request = urllib.request.Request(
-        MODELS_DEV_URL, headers={"User-Agent": "resume-harness/1.0"})
+        MODELS_DEV_URL, headers={"User-Agent": "ferry/1.0"})
     with urllib.request.urlopen(request, timeout=8) as response:
         return json.loads(response.read().decode())
 

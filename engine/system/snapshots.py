@@ -6,8 +6,8 @@ import shutil
 import time
 from pathlib import Path
 
-DEFAULT_BACKUP_DIR = Path.home() / ".resume-harness" / "backups"
 DEFAULT_DATA_DIR = Path.home() / ".ferry"
+DEFAULT_BACKUP_DIR = DEFAULT_DATA_DIR / "backups"
 
 
 def backup_dir() -> Path:
