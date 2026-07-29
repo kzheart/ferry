@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { writeClipboardText } from "../../platform/desktop/client.js";
@@ -17,6 +17,8 @@ import {
 import Markdown from "../../shared/ui/Markdown.jsx";
 import { ACCENT, fmtSize } from "../../shared/ui/toolDisplay.js";
 import AssistantReplyEditor from "./AssistantReplyEditor.jsx";
+import { InlineRewriteDiff } from "./OptimizationSurface.jsx";
+import UserRewriteEditor from "./UserRewriteEditor.jsx";
 
 const BIG_OUT = 4096;
 const LONG_TEXT = 800;
@@ -235,20 +237,30 @@ export default function SessionRound({
   onMigrateScope,
   scopeStats,
   onOpenImages,
+  optCandidate,
+  onOptResolve,
+  optAcceptedText,
+  optSelectable,
+  optSelecting,
+  optSelected,
+  onOptToggleSelect,
 }) {
   const { t: tt } = useTranslation();
   const [open, setOpen] = useState({});
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rewEditing, setRewEditing] = useState(false);
   const [copied, setCopied] = useState(false);
-  const textAreaRef = useRef(null);
   const userText = useMemo(
     () => withoutImagePlaceholders(r.user),
     [r.user],
   );
+  // 优化候选已接受时立即显示新文(乐观展示,批次写回后由刷新数据接管)
   const shownUserText = rewOp
     ? withoutImagePlaceholders(rewOp.text)
-    : userText;
+    : optAcceptedText !== undefined
+      ? withoutImagePlaceholders(optAcceptedText)
+      : userText;
+  const optDiffing = Boolean(optCandidate) && !rewOp;
   const images = r.images || [];
   const fullAiText = r.final || "";
   const aiText = fullAiText.slice(0, 8000);
@@ -262,23 +274,9 @@ export default function SessionRound({
       setTimeout(() => setCopied(false), 1400);
     } catch {}
   };
-  const fitTextArea = element => {
-    if (!element) return;
-    element.style.height = "auto";
-    element.style.height = (
-      `${Math.max(element.scrollHeight, 48)}px`
-    );
-  };
   const startRewrite = () => {
     onRewrite();
     setRewEditing(true);
-    setTimeout(() => {
-      const element = textAreaRef.current;
-      if (element) {
-        fitTextArea(element);
-        element.focus();
-      }
-    }, 0);
   };
 
   return (
@@ -289,7 +287,11 @@ export default function SessionRound({
     >
       {editable && (
         <div
-          className={deleted || rewOp ? undefined : "fhact"}
+          className={
+            deleted || rewOp || optSelecting || optDiffing
+              ? undefined
+              : "fhact"
+          }
           style={{
             display: "flex",
             alignItems: "center",
@@ -297,6 +299,28 @@ export default function SessionRound({
             margin: "10px 0 8px",
           }}
         >
+          {optSelectable && (
+            <button
+              title={tt("browser:optimize.selectTurn", { n: r.n })}
+              onClick={event => onOptToggleSelect(event.shiftKey)}
+              style={{
+                width: 17,
+                height: 17,
+                flex: "none",
+                borderRadius: 5,
+                border: `1.5px solid ${optSelected ? ACCENT : "var(--line2)"}`,
+                background: optSelected ? ACCENT : "transparent",
+                color: "var(--accent-fg)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 0,
+                cursor: "default",
+              }}
+            >
+              {optSelected && <CheckIcon size={11} />}
+            </button>
+          )}
           <span
             style={{
               width: 20,
@@ -386,7 +410,15 @@ export default function SessionRound({
             </button>
           </div>
         )}
-        {(shownUserText || (rewOp && rewEditing)) && (
+        {optDiffing && !deleted && (
+          <InlineRewriteDiff
+            original={userText}
+            candidate={optCandidate}
+            onAccept={() => onOptResolve(optCandidate, true)}
+            onReject={() => onOptResolve(optCandidate, false)}
+          />
+        )}
+        {!optDiffing && (shownUserText || (rewOp && rewEditing)) && (
           <div
             style={{
               display: "flex",
@@ -395,91 +427,27 @@ export default function SessionRound({
             }}
           >
             {rewOp && rewEditing && !deleted ? (
-              <div
-                style={{
-                  maxWidth: "82%",
-                  width: "82%",
-                  position: "relative",
+              <UserRewriteEditor
+                text={rewOp.text}
+                onChange={onUpdateRewrite}
+                onCancel={() => {
+                  onCancelRewrite();
+                  setRewEditing(false);
                 }}
-              >
-                <textarea
-                  ref={element => {
-                    textAreaRef.current = element;
-                    if (element) fitTextArea(element);
-                  }}
-                  className="fscroll selectable"
-                  value={rewOp.text}
-                  onChange={event => {
-                    onUpdateRewrite(event.target.value);
-                    fitTextArea(event.target);
-                  }}
-                  onKeyDown={event => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      onCancelRewrite();
-                      setRewEditing(false);
-                    }
-                    if (
-                      (event.metaKey || event.ctrlKey)
-                      && event.key === "Enter"
-                    ) {
-                      event.preventDefault();
-                      setRewEditing(false);
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    display: "block",
-                    resize: "none",
-                    overflow: "hidden",
-                    boxSizing: "border-box",
-                    background: "var(--fill4)",
-                    color: "var(--tx1b)",
-                    border: `1.5px solid ${ACCENT}`,
-                    padding: "9px 14px",
-                    borderRadius: 16,
-                    fontSize: 13,
-                    lineHeight: 1.65,
-                    userSelect: "text",
-                    fontFamily: "inherit",
-                    whiteSpace: "pre-wrap",
-                    overflowWrap: "break-word",
-                  }}
-                />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    gap: 3,
-                    marginTop: 6,
-                  }}
-                >
-                  <IconBtn
-                    title={tt("browser:round.cancelRewrite")}
-                    onClick={() => {
-                      onCancelRewrite();
-                      setRewEditing(false);
-                    }}
-                  >
-                    <CloseIcon />
-                  </IconBtn>
-                  <IconBtn
-                    title={tt("browser:round.confirmRewrite")}
-                    accent
-                    onClick={() => setRewEditing(false)}
-                  >
-                    <CheckIcon />
-                  </IconBtn>
-                </div>
-              </div>
+                onDone={() => setRewEditing(false)}
+              />
             ) : (
               <div
                 className="fdel-text selectable"
                 onClick={
-                  rewOp && !deleted ? startRewrite : undefined
+                  optSelecting && !deleted
+                    ? event => onOptToggleSelect(event.shiftKey)
+                    : rewOp && !deleted
+                      ? startRewrite
+                      : undefined
                 }
                 title={
-                  rewOp && !deleted
+                  rewOp && !deleted && !optSelecting
                     ? tt("browser:round.clickToEdit")
                     : undefined
                 }
@@ -495,6 +463,9 @@ export default function SessionRound({
                   cursor: (
                     rewOp && !deleted ? "text" : undefined
                   ),
+                  ...(optSelected
+                    ? { boxShadow: `0 0 0 2px ${ACCENT}` }
+                    : {}),
                 }}
               >
                 <Foldable

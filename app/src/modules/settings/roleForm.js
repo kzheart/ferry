@@ -40,6 +40,7 @@ export function editable(role) {
     apply_policy: role.apply_policy || "manual",
     ...(role.model ? { model: role.model } : {}),
     ...(role.thinking ? { thinking: role.thinking } : {}),
+    ...(role.optimizer === true ? { optimizer: true } : {}),
   };
 }
 

@@ -6,7 +6,7 @@ import { exportRolesFile, importRolesFile } from "../../platform/desktop/client.
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import RoleSkillPicker from "./RoleSkillPicker.jsx";
 import { CopyIcon, RoleAvatar } from "../../shared/ui/icons.jsx";
-import { Card, GroupTitle, Row, Select, inputStyle } from "./parts.jsx";
+import { Card, GroupTitle, Row, Select, Toggle, inputStyle } from "./parts.jsx";
 import RoleIconPicker from "./RoleIconPicker.jsx";
 import RoleList from "./RoleList.jsx";
 import RoleToolGrid from "./RoleToolGrid.jsx";
@@ -336,6 +336,20 @@ export default function Roles() {
               right={t("settings:roles.capabilityCount", { n: enabled, total: TOOLS.length })}>
               {t("settings:roles.groupCapability")}</GroupTitle>
             <RoleToolGrid tools={draft.tools} onChange={tools => patch({ tools })} />
+            <div style={{ marginTop: 8 }}>
+              <Card>
+                <Row first title={t("settings:roles.optimizer")}
+                  desc={t("settings:roles.optimizerHint")}>
+                  <Toggle on={draft.optimizer === true}
+                    onChange={on => setDraft(current => {
+                      const next = { ...current };
+                      if (on) next.optimizer = true;
+                      else delete next.optimizer;
+                      return next;
+                    })} />
+                </Row>
+              </Card>
+            </div>
 
             <GroupTitle icon={glyph(GROUP_GLYPH.skill)}>
               {t("settings:skills.roleTitle")}</GroupTitle>

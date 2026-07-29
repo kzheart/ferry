@@ -20,13 +20,18 @@ export function useResourcePaneConfig({
   historyTokens,
 }) {
   const needle = agentQuery.trim().toLowerCase();
+  // 优化用途的会话是浏览界面魔法棒的幕后执行体,跑完即删,不进对话列表
+  const visibleSessions = useMemo(
+    () => ferry.sessions.filter((s) => s.purpose !== "session-optimization"),
+    [ferry.sessions],
+  );
   const ferrySessions = useMemo(
     () =>
       (needle
-        ? ferry.sessions.filter((s) =>
+        ? visibleSessions.filter((s) =>
             (s.title || "").toLowerCase().includes(needle),
           )
-        : ferry.sessions
+        : visibleSessions
       )
         .slice()
         .sort(
@@ -36,14 +41,14 @@ export function useResourcePaneConfig({
               String(left.updated_at || ""),
             ),
         ),
-    [ferry.sessions, needle],
+    [visibleSessions, needle],
   );
 
   const paneConfig =
     {
       askferry: {
         title: t("askferry:pane.title"),
-        count: String(ferry.sessions.length),
+        count: String(visibleSessions.length),
         placeholder: t("askferry:pane.placeholder"),
         query: agentQuery,
         onQuery: (e) => setAgentQuery(e.target.value),

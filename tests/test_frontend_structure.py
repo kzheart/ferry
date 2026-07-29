@@ -17,7 +17,7 @@ LINE_LIMIT = 500
 # 已知超标文件及其当前规模:允许存在,但只许变小不许变大(棘轮)。
 # 降到 LINE_LIMIT 以下后必须从表中删除,避免这张表本身变成陈旧的豁免清单。
 KNOWN_OVERSIZED = {
-    "modules/browser/SessionRound.jsx": 760,
+    "modules/browser/SessionRound.jsx": 731,
     "modules/overview/Overview.jsx": 632,
     "modules/settings/Providers.jsx": 634,
     "shell/AppController.jsx": 592,
