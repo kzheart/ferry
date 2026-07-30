@@ -22,6 +22,7 @@ from .sessions import search as session_search
 from .sessions import usage as session_usage
 from .sessions.content_index import ContentIndex
 from .sessions.index import AgentSessionIndex, IndexedSession
+from .sessions.live import LiveIndexService
 from .sessions import read as sessions
 from .sessions import scan as scanning
 from .system import environment, models
@@ -37,11 +38,22 @@ class EngineService:
         self._index = index
         self._operations = operations
         self._content_index = content_index
+        self._live: LiveIndexService | None = None
 
     def close(self) -> None:
+        if self._live is not None:
+            self._live.stop()
         self._operations.shutdown()
         if self._content_index is not None:
             self._content_index.close()
+
+    def enable_live_updates(self, notifier) -> None:
+        """serve 模式专用:索引增量经 notifier 推送,并启动源变更轮询。"""
+        self._index.on_delta = (
+            lambda delta: notifier.emit("sessions.changed", delta)
+        )
+        self._live = LiveIndexService(self._index)
+        self._live.start()
 
     def warm_agent_search(self) -> None:
         """serve 启动预热:先扫库,再把内容索引的缺口交给后台线程。"""
@@ -72,7 +84,7 @@ class EngineService:
         return {"version": self._ports.version}
 
     def scan(self) -> dict:
-        return scanning.scan(self._ports, self._index)
+        return scanning.scan(self._ports, self._index, live=self._live)
 
     def scan_progress(self) -> dict:
         return scanning.scan_progress()

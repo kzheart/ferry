@@ -20,7 +20,7 @@ pub fn run() {
             use tauri::Manager;
             // 引擎预热与 webview 启动并行,首个 RPC 无需再等冷启动
             if let Ok(resource_dir) = app.path().resource_dir() {
-                engine::warm_up(resource_dir.clone());
+                engine::warm_up(app.handle().clone(), resource_dir.clone());
                 runtime::warm_up(app.handle().clone(), resource_dir);
             }
             #[cfg(target_os = "macos")]

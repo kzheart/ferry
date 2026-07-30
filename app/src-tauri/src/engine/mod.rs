@@ -2,6 +2,7 @@ mod policy;
 
 use self::policy::{request_attempts, request_timeout};
 use crate::contracts::engine_methods::{self, Exposure};
+use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::command::{bundled_sidecar_command, configure_background};
@@ -30,6 +31,28 @@ type EngineProcess = ManagedProcess<EngineClient>;
 static ENGINE: OnceLock<ProcessSupervisor<EngineClient>> = OnceLock::new();
 static ENGINE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static ENGINE_GENERATION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static ENGINE_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// 引擎主动通知(无 id 的事件帧):按契约事件策略转发给 webview。
+fn forward_engine_event(value: &Value) {
+    let Some(event_type) = value.get("type").and_then(Value::as_str) else {
+        return;
+    };
+    if value.get("protocol").and_then(Value::as_str) != Some(FERRY_IPC_PROTOCOL) {
+        return;
+    }
+    let Some(policy) = event_policy(event_type) else {
+        host_log("engine", &format!("忽略未注册的引擎事件: {event_type}"));
+        return;
+    };
+    if policy.source != EventSource::Engine || !policy.forward_to_ui {
+        return;
+    }
+    if let Some(app) = ENGINE_APP.get() {
+        use tauri::Emitter;
+        let _ = app.emit("ferry-engine-event", value.clone());
+    }
+}
 
 fn stamp_engine_request(request: &str) -> Result<(String, String), String> {
     let value: Value = serde_json::from_str(request)
@@ -137,9 +160,15 @@ fn read_engine_output(mut stdout: impl BufRead, pending: PendingResponses) {
             }
         }
         let response = line.trim_end();
-        let request_id = serde_json::from_str::<Value>(response)
-            .ok()
-            .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned));
+        let parsed = serde_json::from_str::<Value>(response).ok();
+        if let Some(value) = parsed.as_ref() {
+            if value.get("id").is_none() && value.get("type").is_some() {
+                forward_engine_event(value);
+                continue;
+            }
+        }
+        let request_id =
+            parsed.and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned));
         let Some(request_id) = request_id else {
             pending.fail_all(ProcessError::Exited("Engine 响应缺少 id".to_owned()));
             return;
@@ -168,7 +197,12 @@ pub(crate) fn engine_request_blocking(
     let (request, request_id) = stamp_engine_request(request)?;
     let method = serde_json::from_str::<Value>(&request)
         .ok()
-        .and_then(|value| value.get("method").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|value| {
+            value
+                .get("method")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .unwrap_or_default();
     let timeout = request_timeout(&request);
     let mut last_error = String::new();
@@ -241,7 +275,8 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
 
 /// 应用启动即预热常驻引擎:PyInstaller 解压与 webview 启动并行,
 /// 首个前端 RPC 到达时引擎大概率已就绪。失败静默,错误会在首个真实 RPC 上重现。
-pub(crate) fn warm_up(resource_dir: PathBuf) {
+pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
+    let _ = ENGINE_APP.set(app);
     std::thread::spawn(move || {
         let _ = engine_request_blocking(&resource_dir, r#"{"method":"health"}"#);
     });

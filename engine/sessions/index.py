@@ -22,6 +22,11 @@ from .scan_progress import TRACKER
 log = logging.getLogger(__name__)
 
 
+class _IdentityRaceError(AgentReferenceError):
+    """哈希会话内容时文件被追加写入。文件仍在,只是这一刻拍不出稳定快照;
+    扫描路径据此保留上一轮记录,而不是把活跃会话误判为已删除。"""
+
+
 def _revision(
     tool: str,
     canonical_ref: str,
@@ -114,17 +119,23 @@ def _path_identity(
                 digest_cache[key] = cached
         if cached is not None:
             return (*key, cached)
-    before = path.stat()
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    after = path.stat()
-    if (
-        (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)
-        != (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size)
-    ):
-        raise AgentReferenceError(
+    # 活跃会话随时在被 CLI 追加:哈希中途 stat 变了就整体重试,连续几次
+    # 都撞上才承认这一刻拍不出稳定快照(哈希只要几十毫秒,追加以百毫秒计,
+    # 重试几乎总能落在两次写入的间隙里)。
+    for _attempt in range(3):
+        before = path.stat()
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        after = path.stat()
+        if (
+            (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)
+            == (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size)
+        ):
+            break
+    else:
+        raise _IdentityRaceError(
             "会话在计算 revision 时发生变化",
             {"reason": "session_changed", "recovery": _REF_RECOVERY_HINT},
         )
@@ -194,6 +205,11 @@ class _RefreshFlight:
         self.error: BaseException | None = None
 
 
+def session_dto(record: IndexedSession) -> dict:
+    """会话行的 UI 出参:原始行 + opaque ref 与内容 revision。"""
+    return {**record.row, "ref": record.opaque_ref, "revision": record.revision}
+
+
 class AgentSessionIndex:
     def __init__(self, ports: EngineContext):
         self._ports = ports
@@ -205,6 +221,13 @@ class AgentSessionIndex:
         self._lock = threading.RLock()
         self._refresh_lock = threading.Lock()
         self._refresh_inflight: _RefreshFlight | None = None
+        # 活索引状态:首次全量扫描后快照常驻,之后所有索引变更都产出
+        # 带单调 generation 的增量 delta,经 on_delta 推给前端。
+        self._mutate_lock = threading.Lock()
+        self._tool_status: dict[str, dict] = {}
+        self._bootstrapped = False
+        self._generation = 0
+        self.on_delta = None
 
     @property
     def ports(self) -> EngineContext:
@@ -242,6 +265,11 @@ class AgentSessionIndex:
             flight.done.set()
 
     def _scan_all(self) -> tuple[dict, list[IndexedSession]]:
+        # 全量与单工具刷新互斥:两者交错会让旧的扫描结果覆盖新索引。
+        with self._mutate_lock:
+            return self._scan_all_locked()
+
+    def _scan_all_locked(self) -> tuple[dict, list[IndexedSession]]:
         tools: dict[str, dict] = {}
         scanned = []
         cache = self._ports.cache_factory()
@@ -294,9 +322,51 @@ class AgentSessionIndex:
                     maintenance()
                 except Exception:  # noqa: BLE001 - 维护失败不影响扫描结果
                     log.exception("扫描收尾维护失败: %s", name)
+            with self._lock:
+                self._tool_status = tools
+                self._bootstrapped = True
             return tools, records
         finally:
             TRACKER.end()
+
+    def snapshot_with_status(
+        self,
+    ) -> tuple[dict, list[IndexedSession], int] | None:
+        """当前活索引快照;首次全量扫描完成前返回 None。"""
+        with self._lock:
+            if not self._bootstrapped:
+                return None
+            return (
+                dict(self._tool_status),
+                list(self._by_opaque.values()),
+                self._generation,
+            )
+
+    @property
+    def generation(self) -> int:
+        with self._lock:
+            return self._generation
+
+    def refresh_tool(self, name: str) -> None:
+        """只重扫一个工具并增量并入索引;delta 经 on_delta 推出。"""
+        tool = self._ports.adapter(name)
+        source_path = getattr(
+            getattr(tool, "manifest", None), "source_path", None,
+        )
+        with self._mutate_lock:
+            started = time.monotonic()
+            cache = self._ports.cache_factory()
+            rows = tool.browser.scan(cache)
+            cache.flush()
+            self.index_rows(
+                [(name, tool, row) for row in rows], scope={name},
+            )
+            with self._lock:
+                self._tool_status[name] = {
+                    "ok": True, "count": len(rows), "path": source_path,
+                }
+            log.info("增量重扫 %s: %d 条会话 耗时=%.2fs",
+                     name, len(rows), time.monotonic() - started)
 
     def _digest_store(self):
         """摘要的跨进程缓存。测试与旧上下文的 cache 不一定支持,拿不到就算了。"""
@@ -318,9 +388,13 @@ class AgentSessionIndex:
             store.put_digest(target, _IdentityStat(*member[:4]), member[4])
         store.flush()
 
-    def index_rows(self, scanned) -> list[IndexedSession]:
+    def index_rows(self, scanned, scope: set[str] | None = None) -> list[IndexedSession]:
+        """把扫描行并入索引。scope 限定本次完整覆盖的工具集合:
+        只有 scope 内工具的缺失会话才会被淘汰(None = 全量扫描)。"""
         records: list[IndexedSession] = []
         active: set[str] = set()
+        upserts: list[IndexedSession] = []
+        removals: list[str] = []
         # 规范化要给每个会话文件算一遍内容摘要,几千个会话串行做会让每次
         # 搜索/用量调用固定多花两秒。摘要之间互不依赖,且 hashlib 与文件读取
         # 都会释放 GIL,所以先并行算完,再在锁内串行做签发与淘汰。
@@ -334,6 +408,19 @@ class AgentSessionIndex:
             ):
                 canonical, root, storage_kind, identity = resolved
                 if canonical is None:
+                    continue
+                if identity is None:
+                    # 身份竞态(文件正被追加):沿用上一轮记录,revision 由
+                    # 之后安静的一轮扫描收敛;首见即竞态则等下一轮再入索引。
+                    prior_ref = self._opaque_by_key.get((tool_name, canonical))
+                    prior = (
+                        self._by_opaque.get(prior_ref)
+                        if prior_ref is not None
+                        else None
+                    )
+                    if prior is not None:
+                        active.add(prior.opaque_ref)
+                        records.append(prior)
                     continue
                 revision = _revision(tool_name, canonical, row, identity)
                 # ref 按 (tool, canonical) 签发:它是会话的稳定句柄,内容变化
@@ -355,15 +442,27 @@ class AgentSessionIndex:
                     revision,
                     identity,
                 )
+                prior = self._by_opaque.get(opaque)
+                if (
+                    prior is None
+                    or prior.revision != revision
+                    or prior.row != record.row
+                ):
+                    upserts.append(record)
                 self._by_opaque[opaque] = record
                 active.add(opaque)
                 records.append(record)
             for opaque in set(self._by_opaque) - active:
-                stale = self._by_opaque.pop(opaque)
-                self._opaque_by_key.pop(
-                    (stale.tool, stale.canonical_ref),
-                    None,
-                )
+                if (
+                    scope is not None
+                    and self._by_opaque[opaque].tool not in scope
+                ):
+                    continue
+                removals.append(opaque)
+                self._by_opaque.pop(opaque)
+                # (tool, canonical) → ref 的映射保留为墓碑:同一会话哪怕被
+                # 一轮扫描误判消失(或真被删后原地重建),重新入索引时仍拿回
+                # 原 ref。ref 是稳定句柄,任何路径都不该让它轮换。
                 stale_messages = [
                     locator
                     for locator, message in self._messages_by_opaque.items()
@@ -379,6 +478,22 @@ class AgentSessionIndex:
                         ),
                         None,
                     )
+            # 首次全量扫描(bootstrap)不推增量:前端此时正拿全量快照。
+            # 在锁内推送保证 generation 与事件顺序严格一致。
+            if self._bootstrapped and (upserts or removals):
+                self._generation += 1
+                sink = self.on_delta
+                if sink is not None:
+                    try:
+                        sink({
+                            "generation": self._generation,
+                            "upserts": [
+                                session_dto(record) for record in upserts
+                            ],
+                            "removals": removals,
+                        })
+                    except Exception:  # noqa: BLE001 - 推送失败不影响索引
+                        log.exception("会话增量推送失败")
         return records
 
     def resolve(
@@ -608,6 +723,11 @@ class AgentSessionIndex:
                 )
                 if native.storage_kind == "file" and identity[1] is None:
                     return None, None, native.storage_kind, None
+            except _IdentityRaceError:
+                # 文件还在,只是这一轮拍不出稳定快照:canonical 照常返回、
+                # identity 置 None,index_rows 据此沿用上一轮记录,
+                # 而不是把活跃会话淘汰再重签发 ref。
+                return path, root, native.storage_kind, None
             except (OSError, ValueError, AgentReferenceError):
                 return None, None, native.storage_kind, None
             return path, root, native.storage_kind, identity

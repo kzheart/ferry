@@ -3,6 +3,7 @@
 pub(crate) enum EventSource {
     Runtime,
     Host,
+    Engine,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,6 +88,10 @@ pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {
         }),
         "session.renamed" => Some(EventPolicy {
             source: EventSource::Runtime,
+            forward_to_ui: true,
+        }),
+        "sessions.changed" => Some(EventPolicy {
+            source: EventSource::Engine,
             forward_to_ui: true,
         }),
         "tool.completed" => Some(EventPolicy {

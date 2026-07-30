@@ -8,6 +8,7 @@ import threading
 
 from ..bootstrap import build_engine
 from ..contracts.engine_methods import PARALLEL_READ_METHOD_NAMES
+from .notify import Notifier
 from .rpc import RpcDispatcher
 
 MAX_PARALLEL_READS = 4
@@ -21,7 +22,7 @@ def _request_method(request: str) -> str | None:
     return value.get("method") if isinstance(value, dict) else None
 
 
-def serve(input_stream=None, output_stream=None, handler=None) -> None:
+def serve(input_stream=None, output_stream=None, handler=None, notifier=None) -> None:
     """处理 JSONL RPC：安全的纯读方法有限并发，其余请求严格串行。"""
     input_stream = sys.stdin if input_stream is None else input_stream
     output_stream = sys.stdout if output_stream is None else output_stream
@@ -29,11 +30,17 @@ def serve(input_stream=None, output_stream=None, handler=None) -> None:
         raise ValueError("serve 必须使用进程范围的 RPC dispatcher")
     output_lock = threading.Lock()
 
-    def complete(request: str) -> None:
-        response = json.dumps(handler(request), ensure_ascii=False)
+    def write_line(line: str) -> None:
         with output_lock:
-            output_stream.write(response + "\n")
+            output_stream.write(line + "\n")
             output_stream.flush()
+
+    if notifier is not None:
+        # 事件帧与响应共用同一把输出锁,保证行级原子性。
+        notifier.bind(write_line)
+
+    def complete(request: str) -> None:
+        write_line(json.dumps(handler(request), ensure_ascii=False))
 
     serial = ThreadPoolExecutor(max_workers=1, thread_name_prefix="engine-serial")
     reads = ThreadPoolExecutor(
@@ -99,7 +106,10 @@ def main(argv=None):
                 target=application.warm_agent_search,
                 daemon=True, name="content-index-warmup",
             ).start()
-            serve(handler=dispatcher.handle)
+            # 活索引:源变更轮询 + 增量推送,预热完成后开始接管刷新。
+            notifier = Notifier()
+            application.enable_live_updates(notifier)
+            serve(handler=dispatcher.handle, notifier=notifier)
             return
         if cmd == "health":
             result = application.health()

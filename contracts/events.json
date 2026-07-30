@@ -19,6 +19,7 @@
     {"type": "session.created", "source": "runtime", "forward_to_ui": true},
     {"type": "session.model_changed", "source": "runtime", "forward_to_ui": true},
     {"type": "session.renamed", "source": "runtime", "forward_to_ui": true},
+    {"type": "sessions.changed", "source": "engine", "forward_to_ui": true},
     {"type": "tool.completed", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.progress", "source": "runtime", "forward_to_ui": true},
     {"type": "tool.request", "source": "runtime", "forward_to_ui": true},

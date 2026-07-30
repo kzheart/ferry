@@ -401,12 +401,12 @@ def load_events() -> list[dict[str, object]]:
             or set(event) != {"type", "source", "forward_to_ui"}
             or not isinstance(event["type"], str)
             or not event["type"]
-            or event["source"] not in {"runtime", "host"}
+            or event["source"] not in {"runtime", "host", "engine"}
             or not isinstance(event["forward_to_ui"], bool)
         ):
             raise ValueError("Event 契约字段必须精确为 type/source/forward_to_ui")
-        if event["source"] == "host" and not event["forward_to_ui"]:
-            raise ValueError("Host Event 必须面向 UI")
+        if event["source"] in {"host", "engine"} and not event["forward_to_ui"]:
+            raise ValueError("Host/Engine Event 必须面向 UI")
         names.append(event["type"])
     if len(names) != len(set(names)):
         raise ValueError("Event type 必须唯一")
@@ -1213,8 +1213,9 @@ def events_frontend(events: list[dict[str, object]]) -> str:
 
 def events_rust(events: list[dict[str, object]]) -> str:
     rows = []
+    source_variants = {"runtime": "Runtime", "host": "Host", "engine": "Engine"}
     for event in events:
-        source = "Runtime" if event["source"] == "runtime" else "Host"
+        source = source_variants[event["source"]]
         forward = str(event["forward_to_ui"]).lower()
         rows.extend((
             f'        {json.dumps(event["type"])} => Some(EventPolicy {{',
@@ -1228,6 +1229,7 @@ def events_rust(events: list[dict[str, object]]) -> str:
         "pub(crate) enum EventSource {",
         "    Runtime,",
         "    Host,",
+        "    Engine,",
         "}",
         "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
