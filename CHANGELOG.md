@@ -41,14 +41,33 @@ fails validation if its version has no section.
   command palette, including regex and multi-pattern queries.
 - **Session optimization (experimental)** — review AI-suggested rewrites of
   your prompts as inline diffs; off by default behind a test-features toggle.
+- **Automatic session titles** — Ask Ferry sessions name themselves after the
+  first reply; double-click any title to rename it inline, in place of the old
+  rename dialog.
+- **Seamless message paging** — session details load older messages
+  automatically as you scroll, instead of stopping at a page boundary.
+- **Scan progress** — data-source scanning shows live per-tool progress in
+  Settings.
 - **Expanded onboarding** — the feature tour now covers the whole app in nine
   steps.
 
 ### Changed
 
+- **Ask Ferry conversation view** — tool activity condenses into a compact
+  timeline with in-place previews, messages support copy and edit-resend, the
+  role picker moved into a header capsule, and a breathing indicator shows
+  while the assistant is thinking.
+- **Roles settings redone** — built-in roles are editable and restorable,
+  skills and shell access appear on capability cards, and importable sources
+  fold away until needed.
+- **Migration diff cards** — differences now show source-to-target call
+  mappings and name the parameters that would be lost, with clearer failure
+  reasons.
 - **Custom providers** — OpenAI- and Anthropic-compatible endpoints with
   automatic model discovery, connection testing, and API-key visibility
   toggle.
+- **Keyboard-first navigation** — the session list and command palette are
+  fully keyboard-navigable, with visible focus styles throughout.
 - **Unified diagnostics** — all three processes now log to `~/.ferry/logs`.
 - **App data location** — internal state moved to `~/.ferry`, separated from
   backup snapshots.
@@ -69,12 +88,26 @@ fails validation if its version has no section.
   preceding message instead of drifting to the top of the session.
 - **Resume feedback** — terminal-resume and copy-command failures now surface
   on the button instead of being silently swallowed.
+- **Migration resilience** — a failing post-migration probe no longer rolls
+  back output that already passed structural validation, and Unicode line
+  splitting in JSONL sessions is handled correctly.
+- **Ask Ferry reliability** — auto-approved actions no longer flash approval
+  cards, duplicate plans are deduplicated, and message sending no longer
+  fails with an internal runtime error.
+- **Visual glitches** — Grok sessions no longer show blank icon circles, the
+  sidebar no longer flashes on first frame, and a window-resize recursion
+  crash on macOS is guarded.
 
 ### Performance
 
 - **Faster busy-library scans** — per-file parse caching for Codex sessions,
-  OpenCode fingerprint rebuilds moved off the hot path, and millisecond
-  session-list loads served from the in-memory live index.
+  OpenCode fingerprint rebuilds moved off the hot path, parallel line-based
+  JSONL scanning, a shared scan cache with persisted content digests, and
+  millisecond session-list loads served from the in-memory live index.
+- **Opening sessions during scans** — read requests dispatch in parallel with
+  scanning, so session details open without queueing behind a rescan.
+- **Smoother Ask Ferry streaming** — streamed replies batch per frame and the
+  timeline memoizes, instead of re-rendering on every token.
 
 ## [0.5.0] - 2026-07-23
 
