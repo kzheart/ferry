@@ -54,7 +54,7 @@ def test_probe_requires_export_list_and_search_discovery(
     calls = []
 
     def run(command, **kwargs):
-        if command[0].endswith("/stat"):
+        if Path(command[0]).name == "stat":
             return _Result("apfs")
         calls.append((command, kwargs))
         if "export" in command:
@@ -121,7 +121,7 @@ def test_probe_uses_isolated_fallback_when_recorded_cwd_is_missing(
     cwd_exists = []
 
     def run(command, **kwargs):
-        if command[0].endswith("/stat"):
+        if Path(command[0]).name == "stat":
             return _Result("apfs")
         command_cwds.append(Path(kwargs["cwd"]))
         cwd_exists.append(Path(kwargs["cwd"]).is_dir())

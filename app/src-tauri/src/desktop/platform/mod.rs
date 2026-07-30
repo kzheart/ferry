@@ -18,12 +18,16 @@ pub(crate) fn reveal_path(path: &Path) -> Result<(), String> {
 }
 
 /// 已经由 Rust 边界验证的终端启动描述符。平台实现不能接受原始 shell 文本。
+/// args/cwd 只有 macOS 实现会读;其余平台是 fail-closed 占位,但字段属于
+/// 前端契约,不能按平台裁剪。
 #[derive(Deserialize)]
 pub(crate) struct TerminalLaunch {
     pub(crate) executable: String,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) args: Vec<String>,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) cwd: Option<String>,
 }
 

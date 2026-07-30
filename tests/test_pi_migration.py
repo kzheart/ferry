@@ -1,3 +1,7 @@
+from pathlib import Path
+
+import pytest
+
 from engine.adapters.pi.migration import PiMigrationTarget
 from engine.adapters.pi.reader import read
 from engine.adapters.pi.writer import _records, write
@@ -5,8 +9,14 @@ from engine.sessions.model import (
     Block, Message, Session, ToolCall, text_tool_result,
 )
 from engine.sessions.tool_ops import CanonicalOp
+from engine.system import executables
 
 
+# write() 会用真实 Pi RPC 验收产物,这是刻意的集成语义,不 mock。
+@pytest.mark.skipif(
+    not Path(executables.argv("pi", "--version")[0]).exists(),
+    reason="未安装 Pi Agent CLI",
+)
 def test_pi_writer_roundtrips_text_tools_and_children(tmp_path):
     call = ToolCall(
         "read", CanonicalOp.FS_READ, {"file_path": "/raw/input.txt"},
