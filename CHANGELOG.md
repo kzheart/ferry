@@ -16,8 +16,16 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-31
+
 ### Added
 
+- **Pi Agent and Grok Build support** — browse, search, resume, and migrate
+  sessions from two more coding agents, with the same read/edit/migration
+  safeguards as the existing tools.
+- **Live session library** — the engine now watches agent session stores and
+  pushes incremental updates, so the session list stays current while agents
+  are running, without pressing refresh.
 - **Native Coding Agent driving** — roles can allowlist `agent_prompt` to resume
   and actively drive Claude Code, Codex CLI, OpenCode, Pi Agent, or Grok Build
   sessions with the Agent's native high-privilege execution mode. The role
@@ -25,6 +33,48 @@ fails validation if its version has no section.
   approval; each started run returns a fresh session reference for follow-up
   calls. This is separate from Ferry Provider completions and does not change
   the existing fixed-prompt probe behavior.
+- **Jump to latest** — session details of active sessions offer a one-click
+  jump to the newest messages, loading any remaining pages on the way down.
+- **Skills for roles** — import skills from local agent skill libraries and
+  attach them to roles; shell commands run through the existing approval flow.
+- **Full-text session search** — search across session content from the
+  command palette, including regex and multi-pattern queries.
+- **Session optimization (experimental)** — review AI-suggested rewrites of
+  your prompts as inline diffs; off by default behind a test-features toggle.
+- **Expanded onboarding** — the feature tour now covers the whole app in nine
+  steps.
+
+### Changed
+
+- **Custom providers** — OpenAI- and Anthropic-compatible endpoints with
+  automatic model discovery, connection testing, and API-key visibility
+  toggle.
+- **Unified diagnostics** — all three processes now log to `~/.ferry/logs`.
+- **App data location** — internal state moved to `~/.ferry`, separated from
+  backup snapshots.
+
+### Removed
+
+- **Multi-agent delegation** — the experimental delegate-agents workflow was
+  removed.
+- **AI session organizing** — the session organizing workflow was removed.
+
+### Fixed
+
+- **Stable session references** — opening a session that its agent is actively
+  writing no longer intermittently fails with `reference_invalid`, and the
+  session list no longer shows ghost duplicate rows; session handles now stay
+  stable across rescans.
+- **Compaction markers** — context-compaction cards anchor to the real
+  preceding message instead of drifting to the top of the session.
+- **Resume feedback** — terminal-resume and copy-command failures now surface
+  on the button instead of being silently swallowed.
+
+### Performance
+
+- **Faster busy-library scans** — per-file parse caching for Codex sessions,
+  OpenCode fingerprint rebuilds moved off the hot path, and millisecond
+  session-list loads served from the in-memory live index.
 
 ## [0.5.0] - 2026-07-23
 
