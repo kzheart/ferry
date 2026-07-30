@@ -192,17 +192,34 @@ def test_codex_repeated_reads_reuse_parse_cache_without_duplication(
     assert len(second.agent_edges) == 2
     assert [edge.status for edge in second.agent_edges] == ["open", "open"]
 
-    # 子文件一变,该文件的缓存按 stat 失效并重新解析。
-    # 根对象同样来自缓存,second/third 是同一实例,必须先抓住旧子对象
-    # 的引用再触发第三次读,否则比较的是同一个列表。
+    # 子文件追加:增量解析原地更新同一对象,新消息可见且派生字段不重复。
     old_child = second.children[0]
     stale_child = second.children[1]
     child_path = next(
         candidate for candidate in sessions.rglob("*.jsonl")
         if old_child.source_id in candidate.name
     )
-    child_path.write_text(child_path.read_text() + "\n")
+    before_messages = len(old_child.messages)
+    appended = json.dumps({
+        "type": "response_item",
+        "payload": {
+            "type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "appended tail"}],
+        },
+    })
+    with child_path.open("a") as stream:
+        stream.write(appended + "\n")
     third = codex_reader.read(str(path), sessions_dir=sessions)
     assert len(third.children) == 2
-    assert third.children[0] is not old_child
+    assert third.children[0] is old_child
+    assert len(old_child.messages) == before_messages + 1
+    assert old_child.messages[-1].blocks[0].text == "appended tail"
     assert third.children[1] is stale_child
+
+    # 前缀被改写(非追加):增量前提破坏,该文件全量重解析换新对象。
+    content = child_path.read_text()
+    child_path.write_text(content.replace("appended tail", "rewritten tail"))
+    fourth = codex_reader.read(str(path), sessions_dir=sessions)
+    assert fourth.children[0] is not old_child
+    assert fourth.children[0].messages[-1].blocks[0].text == "rewritten tail"
+    assert len(fourth.children[0].messages) == before_messages + 1

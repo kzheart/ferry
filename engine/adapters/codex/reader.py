@@ -1,7 +1,15 @@
-"""Codex reader: current rollout JSONL → canonical session model."""
+"""Codex reader: current rollout JSONL → canonical session model.
+
+Rollout 是 append-only 的 JSONL。解析器把「字节偏移 + 解析器状态」一起缓存:
+文件追加时只解析新尾部并增量并入已有 Session,活跃大会话的重读从整文件
+重解析(秒级)降到只处理增量(毫秒级)。任何前缀不一致(inode 更换、
+截断、尾部窗口比对失败)都会回退全量重解析。
+"""
 
 import json
+import os
 import threading
+from collections import OrderedDict
 from pathlib import Path
 
 from ...errors import AgentFormatChangedError
@@ -14,9 +22,7 @@ from ...sessions.model import (
 )
 from ...sessions.reasoning import visible_text
 from ...sessions.tool_ops import CanonicalOp
-from ..shared import parse_cache
 from ..shared.media import image_from_data_url
-from ..shared.scanner import iter_lines
 from . import tool_calls, tool_results, topology
 
 
@@ -44,14 +50,48 @@ _SKIP_USER_PREFIX = (
     "<turn_aborted>",
 )
 
+_RESPONSE_PAYLOAD_TYPES = {
+    "message",
+    "reasoning",
+    "function_call",
+    "function_call_output",
+    "custom_tool_call",
+    "custom_tool_call_output",
+}
 
-def _load_records(path: Path) -> list[dict]:
+
+class _RestartParse(Exception):
+    """增量前提被打破(前缀变化/迟到的 session_meta),需要全量重解析。"""
+
+
+def _complete_span(data: bytes) -> int:
+    """可安全消费的字节数:最后一个换行之后若是完整 JSON 也一并消费。
+
+    写入中的半行(JSON 对象的前缀必然解析失败)留给下一轮,避免把
+    正在落盘的记录误报成 malformed。
+    """
+    end = data.rfind(b"\n") + 1
+    tail = data[end:]
+    if tail:
+        try:
+            json.loads(tail)
+        except ValueError:
+            return end
+        return len(data)
+    return end
+
+
+def _batch_records(chunk: bytes, start_line: int) -> tuple[list[dict], int]:
+    """把完整字节段切成记录;返回 (records, 行数)。"""
+    lines = chunk.split(b"\n")
+    if chunk.endswith(b"\n"):
+        lines.pop()
     records = []
-    for line_number, line in enumerate(iter_lines(path), start=1):
-        if not line.strip():
+    for line_number, raw in enumerate(lines, start=start_line):
+        if not raw.strip():
             continue
         try:
-            value = json.loads(line)
+            value = json.loads(raw)
         except json.JSONDecodeError as error:
             records.append(
                 {
@@ -71,7 +111,7 @@ def _load_records(path: Path) -> list[dict]:
                     "error": "record is not an object",
                 }
             )
-    return records
+    return records, len(lines)
 
 
 def _codex_compaction(
@@ -111,75 +151,111 @@ def _codex_compaction(
     )
 
 
-def _read_one(path: Path, meta: dict | None = None) -> Session:
-    lines = _load_records(Path(path))
-    response_payload_types = {
-        "message",
-        "reasoning",
-        "function_call",
-        "function_call_output",
-        "custom_tool_call",
-        "custom_tool_call_output",
-    }
-    for line_number, record in enumerate(lines, start=1):
-        record_type = record.get("type")
-        if record_type in response_payload_types:
-            raise AgentFormatChangedError(
-                "codex",
-                f"jsonl[{line_number}].type",
-                "response_item with payload.type",
-                record_type,
-            )
-    meta = meta or next(
-        (
-            record.get("payload") or {}
-            for record in lines
-            if record.get("type") == "session_meta"
-        ),
-        {},
-    )
-    ident = topology.identity(meta, path.stem)
-    sess = Session(source_tool="codex", source_id=ident["id"], cwd=meta.get("cwd", ""))
-    sess.root_id = ident["root_id"]
-    sess.parent_id = ident["parent_id"]
-    sess.forked_from_id = ident["forked_from_id"]
-    sess.agent_id = ident["agent_id"]
-    sess.agent_path = ident["agent_path"]
-    sess.agent_type = ident["agent_type"]
-    sess.agent_nickname = ident["agent_nickname"]
-    sess.agent_role = ident["agent_role"]
-    sess.model_provider = ident["model_provider"]
-    sess.model = ident["model"]
-    sess.depth = ident["depth"]
-    sess.parent_association = "parent-metadata" if ident["parent_id"] else None
-    for record in lines:
-        if record.get("type") in {
-            "__ferry_malformed_jsonl__",
-            "__ferry_malformed_record__",
-        }:
-            sess.lose(
-                "session.malformed_record",
-                line_number=record["line_number"],
-                error=record["error"],
-            )
-    pending: dict[str, ToolCall] = {}
-    cur_tools: list[Block] = []  # 未落消息的工具块,附到下一条 assistant
-    cur_reasoning: list[Block] = []  # 可见 reasoning 降级为 text,附到下一条 assistant
+class _RolloutParser:
+    """可增量喂入记录批次的 rollout 解析器。
 
-    def flush_pending_into(blocks, message_source_id: str | None = None):
-        nonlocal cur_tools, cur_reasoning
-        for block in cur_tools:
+    view() 返回同一个 Session 对象:先按 baseline 撤销上一次视图化
+    (合成的尾部 assistant 消息)与树装配的 append 累积,再重新视图化。
+    """
+
+    def __init__(self, path: Path):
+        self._path = Path(path)
+        self.sess: Session | None = None
+        self._saw_meta = False
+        self._pending: dict[str, ToolCall] = {}
+        self._cur_tools: list[Block] = []
+        self._cur_reasoning: list[Block] = []
+        self._ordinal = 0
+        self._line_count = 0
+        self._baseline = None
+        # 增量缓存簿记(由 _RolloutCache 维护)
+        self.offset = 0
+        self.node: tuple[int, int] | None = None
+        self.mtime_ns = 0
+        self.size = 0
+        self.window = b""
+
+    # ---- 批次喂入 ----
+
+    def feed_bytes(self, chunk: bytes, meta_override: dict | None = None) -> None:
+        records, lines = _batch_records(chunk, self._line_count + 1)
+        self._line_count += lines
+        self.feed(records, meta_override=meta_override)
+
+    def feed(self, records: list[dict], meta_override: dict | None = None) -> None:
+        for record in records:
+            if record.get("type") in _RESPONSE_PAYLOAD_TYPES:
+                raise AgentFormatChangedError(
+                    "codex",
+                    "jsonl[].type",
+                    "response_item with payload.type",
+                    record.get("type"),
+                )
+        batch_has_meta = any(
+            record.get("type") == "session_meta" for record in records
+        )
+        if self.sess is None:
+            meta = meta_override or next(
+                (
+                    record.get("payload") or {}
+                    for record in records
+                    if record.get("type") == "session_meta"
+                ),
+                {},
+            )
+            self._saw_meta = batch_has_meta or meta_override is not None
+            self._create_session(meta)
+        elif batch_has_meta and not self._saw_meta:
+            # 首批没等到 meta 却先建了会话:身份可能算错,推倒重来。
+            raise _RestartParse
+        for record in records:
+            if record.get("type") in {
+                "__ferry_malformed_jsonl__",
+                "__ferry_malformed_record__",
+            }:
+                self.sess.lose(
+                    "session.malformed_record",
+                    line_number=record["line_number"],
+                    error=record["error"],
+                )
+        for record in records:
+            self._apply(record)
+            self._ordinal += 1
+
+    def _create_session(self, meta: dict) -> None:
+        ident = topology.identity(meta, self._path.stem)
+        sess = Session(
+            source_tool="codex", source_id=ident["id"], cwd=meta.get("cwd", ""),
+        )
+        sess.root_id = ident["root_id"]
+        sess.parent_id = ident["parent_id"]
+        sess.forked_from_id = ident["forked_from_id"]
+        sess.agent_id = ident["agent_id"]
+        sess.agent_path = ident["agent_path"]
+        sess.agent_type = ident["agent_type"]
+        sess.agent_nickname = ident["agent_nickname"]
+        sess.agent_role = ident["agent_role"]
+        sess.model_provider = ident["model_provider"]
+        sess.model = ident["model"]
+        sess.depth = ident["depth"]
+        sess.parent_association = "parent-metadata" if ident["parent_id"] else None
+        self.sess = sess
+
+    def _flush_pending_into(self, blocks, message_source_id: str | None = None):
+        for block in self._cur_tools:
             if (
                 block.tool
                 and message_source_id
                 and block.tool.source_message_id is None
             ):
                 block.tool.source_message_id = message_source_id
-        blocks[:0] = cur_reasoning + cur_tools
-        cur_tools = []
-        cur_reasoning = []
+        blocks[:0] = self._cur_reasoning + self._cur_tools
+        self._cur_tools = []
+        self._cur_reasoning = []
 
-    for ordinal, record in enumerate(lines):
+    def _apply(self, record: dict) -> None:
+        sess = self.sess
+        ordinal = self._ordinal
         record_type = record.get("type")
         if record_type == "compacted":
             after_message_id = next(
@@ -193,11 +269,11 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             sess.context_compactions.append(
                 _codex_compaction(record, ordinal, after_message_id)
             )
-            continue
+            return
         if record_type == "response_item":
             p = record.get("payload") or {}
         else:
-            continue
+            return
         pt = p.get("type")
         if pt == "message":
             content = p.get("content", [])
@@ -232,11 +308,11 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                     image_blocks.append(Block("image", image=image))
             role = p.get("role")
             if role == "user" and text.strip().startswith(_SKIP_USER_PREFIX):
-                continue
-            if role == "user" and (cur_tools or cur_reasoning):
+                return
+            if role == "user" and (self._cur_tools or self._cur_reasoning):
                 pending_blocks = []
                 source_id = f"record:{ordinal}"
-                flush_pending_into(pending_blocks, source_id)
+                self._flush_pending_into(pending_blocks, source_id)
                 sess.messages.append(
                     Message(
                         role="assistant",
@@ -248,13 +324,13 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
             if (
                 not text.strip()
                 and not image_blocks
-                and not cur_tools
-                and not cur_reasoning
+                and not self._cur_tools
+                and not self._cur_reasoning
             ):
-                continue
+                return
             blocks = ([Block("text", text)] if text.strip() else []) + image_blocks
             if role == "assistant":
-                flush_pending_into(blocks, f"record:{ordinal}")
+                self._flush_pending_into(blocks, f"record:{ordinal}")
             sess.messages.append(
                 Message(
                     role=role,
@@ -286,10 +362,10 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                     ),
                     None,
                 )
-            pending[p.get("call_id")] = tc
-            cur_tools.append(Block("tool", tool=tc))
+            self._pending[p.get("call_id")] = tc
+            self._cur_tools.append(Block("tool", tool=tc))
         elif pt in ("custom_tool_call_output", "function_call_output"):
-            tc = pending.pop(p.get("call_id"), None)
+            tc = self._pending.pop(p.get("call_id"), None)
             if tc is not None:
                 tc.result = tool_results.parse_result(p.get("output", ""))
                 tc.source_result_id = p.get("id")
@@ -298,7 +374,7 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
         elif pt == "reasoning":
             text = _summary_text(p)
             if text is not None:
-                cur_reasoning.append(Block("text", text))
+                self._cur_reasoning.append(Block("text", text))
                 sess.lose(
                     "migration.reasoning_metadata_dropped",
                     metadata_kind="encrypted_content",
@@ -309,53 +385,174 @@ def _read_one(path: Path, meta: dict | None = None) -> Session:
                 )
         else:
             sess.lose("migration.unknown_block_dropped", kind=pt)
-    if cur_tools or cur_reasoning:
-        blocks = []
-        flush_pending_into(blocks)
-        sess.messages.append(Message(role="assistant", blocks=blocks))
-    candidates = [
-        compaction
-        for compaction in sess.context_compactions
-        if compaction.source_meta.get("replacement_history_present")
-    ]
-    if candidates:
-        candidates[-1].source_meta["active"] = True
-    return sess
+
+    # ---- 视图化 ----
+
+    def snapshot(self) -> None:
+        """记录纯解析基线:视图化与树装配的可变痕迹都能由此撤销。"""
+        sess = self.sess
+        self._baseline = (
+            len(sess.messages),
+            list(sess.children),
+            list(sess.agent_edges),
+            list(sess.loss),
+            sess.parent_id,
+            sess.parent_association,
+            sess.root_id,
+        )
+
+    def restore(self) -> None:
+        (
+            messages_len, children, edges, loss,
+            parent_id, association, root_id,
+        ) = self._baseline
+        sess = self.sess
+        del sess.messages[messages_len:]
+        sess.children = list(children)
+        sess.agent_edges = list(edges)
+        sess.loss = list(loss)
+        sess.parent_id = parent_id
+        sess.parent_association = association
+        sess.root_id = root_id
+
+    def view(self) -> Session:
+        """把解析状态定稿成可对外返回的 Session(可重复调用)。
+
+        尾部未落消息的工具/思考块合成一条 assistant 消息追加在末尾;
+        该消息属于视图,restore() 时会被截掉,后续增量不会重复累积。
+        """
+        sess = self.sess
+        if self._cur_tools or self._cur_reasoning:
+            sess.messages.append(
+                Message(
+                    role="assistant",
+                    blocks=list(self._cur_reasoning) + list(self._cur_tools),
+                )
+            )
+        candidates = [
+            compaction
+            for compaction in sess.context_compactions
+            if compaction.source_meta.get("replacement_history_present")
+        ]
+        for compaction in candidates:
+            compaction.source_meta.pop("active", None)
+        if candidates:
+            candidates[-1].source_meta["active"] = True
+        return sess
 
 
-def _parse_snapshot(session: Session) -> tuple:
-    """解析刚完成时的可变派生字段基线;树装配会对它们做 append 累积。"""
-    return (
-        list(session.children),
-        list(session.agent_edges),
-        list(session.loss),
-        session.parent_id,
-        session.parent_association,
-        session.root_id,
-    )
+def _read_one(path: Path, meta: dict | None = None) -> Session:
+    """单文件全量解析(无缓存):测试与回退路径使用。"""
+    path = Path(path)
+    parser = _RolloutParser(path)
+    parser.feed_bytes(path.read_bytes(), meta_override=meta)
+    return parser.view()
 
 
-def _parse_restore(session: Session, baseline: tuple) -> None:
-    (children, edges, loss, parent_id, association, root_id) = baseline
-    session.children = list(children)
-    session.agent_edges = list(edges)
-    session.loss = list(loss)
-    session.parent_id = parent_id
-    session.parent_association = association
-    session.root_id = root_id
+_WINDOW = 4096
+_CACHE_MAX_ENTRIES = 256
+_CACHE_MAX_TOTAL_BYTES = 512 * 1024 * 1024
 
 
-_PARSE_CACHE = parse_cache.SessionParseCache(_parse_snapshot, _parse_restore)
+class _RolloutCache:
+    """rollout → 增量解析器的 LRU 缓存。
+
+    命中判定基于 stat:同 inode 且只增长才走增量(追加前先比对偏移前的
+    尾部窗口,防截断重写);其余一律全量重解析。同长度的中段原地改写无法
+    从 stat 察觉,但没有已知写入方这么做,且编辑路径始终走严格指纹校验。
+    """
+
+    def __init__(self):
+        self._entries: OrderedDict[str, _RolloutParser] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+    def read(self, path: Path) -> Session:
+        key = str(path)
+        try:
+            stat = os.stat(key)
+        except OSError:
+            # 路径不可 stat(消失中/测试桩):不缓存,直接读。
+            with self._lock:
+                self._entries.pop(key, None)
+            return _read_one(path)
+        with self._lock:
+            parser = self._entries.get(key)
+        if parser is not None:
+            try:
+                return self._advance(parser, key, stat)
+            except _RestartParse:
+                pass
+        parser = self._full_parse(path, stat)
+        with self._lock:
+            self._entries[key] = parser
+            self._entries.move_to_end(key)
+            self._evict()
+        return parser.view()
+
+    def _advance(self, parser: _RolloutParser, key: str, stat) -> Session:
+        node = (stat.st_dev, stat.st_ino)
+        if node != parser.node or stat.st_size < parser.offset:
+            raise _RestartParse
+        if stat.st_size == parser.size and stat.st_mtime_ns == parser.mtime_ns:
+            parser.restore()
+            with self._lock:
+                if key in self._entries:
+                    self._entries.move_to_end(key)
+            return parser.view()
+        if stat.st_size == parser.offset:
+            # 只有 mtime 变了(touch/元数据变更),内容前提不可信。
+            raise _RestartParse
+        with open(key, "rb") as stream:
+            stream.seek(parser.offset - len(parser.window))
+            if stream.read(len(parser.window)) != parser.window:
+                raise _RestartParse
+            data = stream.read()
+        span = _complete_span(data)
+        parser.restore()
+        if span:
+            parser.feed_bytes(data[:span])
+            parser.offset += span
+            tail = data[:span][-_WINDOW:]
+            parser.window = (parser.window + tail)[-_WINDOW:]
+            parser.snapshot()
+        parser.mtime_ns = stat.st_mtime_ns
+        parser.size = stat.st_size
+        return parser.view()
+
+    def _full_parse(self, path: Path, stat) -> _RolloutParser:
+        parser = _RolloutParser(path)
+        data = Path(path).read_bytes()
+        span = _complete_span(data)
+        parser.feed_bytes(data[:span])
+        parser.offset = span
+        parser.node = (stat.st_dev, stat.st_ino)
+        parser.mtime_ns = stat.st_mtime_ns
+        parser.size = stat.st_size
+        parser.window = data[:span][-_WINDOW:]
+        parser.snapshot()
+        return parser
+
+    def _evict(self) -> None:
+        while len(self._entries) > _CACHE_MAX_ENTRIES or (
+            sum(entry.size for entry in self._entries.values())
+            > _CACHE_MAX_TOTAL_BYTES
+            and len(self._entries) > 1
+        ):
+            self._entries.popitem(last=False)
+
+
+_PARSE_CACHE = _RolloutCache()
 # 树装配会修改共享的缓存对象,同一根会话的并发读取必须互斥。
 _TREE_LOCKS: dict[str, threading.Lock] = {}
 _TREE_LOCKS_GUARD = threading.Lock()
 
 
 def _cached_read_one(path: Path) -> Session:
-    return _PARSE_CACHE.get_or_parse(
-        str(path),
-        lambda target: _read_one(Path(target)),
-    )
+    return _PARSE_CACHE.read(Path(path))
 
 
 def read(path: str, sessions_dir: str | Path | None = None) -> Session:
