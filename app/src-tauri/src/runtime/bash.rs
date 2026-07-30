@@ -301,12 +301,16 @@ mod tests {
         assert!(propose(&args(json!({}))).is_err());
     }
 
+    // 命令按平台分叉:执行器在 Windows 走 cmd /C,POSIX 写法在那里
+    // 不是错误而是完全不同的语义(; 不分隔、printf/seq 不存在)。
     #[test]
     fn oversized_output_is_truncated() {
-        let plan = propose(&args(json!({
-            "command": "printf 'x%.0s' $(seq 1 200000)"
-        })))
-        .unwrap();
+        let command = if cfg!(windows) {
+            r"for /L %i in (1,1,4000) do @echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        } else {
+            "printf 'x%.0s' $(seq 1 200000)"
+        };
+        let plan = propose(&args(json!({ "command": command }))).unwrap();
         let result = apply(plan["plan_id"].as_str().unwrap()).unwrap();
         assert_eq!(result["truncated"], true);
         assert!(result["stdout"].as_str().unwrap().len() <= MAX_OUTPUT_BYTES);
@@ -314,7 +318,12 @@ mod tests {
 
     #[test]
     fn exit_codes_and_stderr_survive() {
-        let plan = propose(&args(json!({"command": "echo oops 1>&2; exit 3"}))).unwrap();
+        let command = if cfg!(windows) {
+            "echo oops 1>&2 & exit 3"
+        } else {
+            "echo oops 1>&2; exit 3"
+        };
+        let plan = propose(&args(json!({ "command": command }))).unwrap();
         let result = apply(plan["plan_id"].as_str().unwrap()).unwrap();
         assert_eq!(result["exit_code"], 3);
         assert!(result["stderr"].as_str().unwrap().contains("oops"));
