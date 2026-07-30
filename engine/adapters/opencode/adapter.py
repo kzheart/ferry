@@ -16,6 +16,7 @@ from .migration import OpenCodeMigrationTarget
 from .models import discover, fallback
 from .probe import OpenCodeVerifier
 from .scanner import (
+    _database_stamp,
     ensure_fingerprint_index_fresh,
     fingerprint,
     scan,
@@ -54,6 +55,10 @@ class OpenCodeBrowser:
     def post_scan_maintenance(self):
         # 扫描完成后再补重建,避免重建与扫描并行互相拖慢。
         ensure_fingerprint_index_fresh()
+
+    def watch_stamp(self):
+        # 活索引轮询探针:整库变更只需 stat sqlite 的 db/-wal。
+        return _database_stamp()
 
     def canonicalize(self, row):
         return id_reference(row)

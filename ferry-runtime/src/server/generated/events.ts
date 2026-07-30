@@ -19,6 +19,7 @@ export const FERRY_EVENT_TYPES = [
   "session.created",
   "session.model_changed",
   "session.renamed",
+  "sessions.changed",
   "tool.completed",
   "tool.progress",
   "tool.request",

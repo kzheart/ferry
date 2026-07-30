@@ -76,6 +76,10 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
+  "sessions.changed": {
+    "source": "engine",
+    "forwardToUi": true
+  },
   "tool.completed": {
     "source": "runtime",
     "forwardToUi": true

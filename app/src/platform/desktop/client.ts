@@ -134,6 +134,18 @@ export async function onRuntimeEvent(
   });
 }
 
+/** 引擎主动推送(如 sessions.changed 增量):独立于 Runtime 事件通道。 */
+export async function onEngineEvent(
+  handler: (event: RuntimeEvent) => void,
+): Promise<() => void> {
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<FerryEvent>("ferry-engine-event", event => {
+    if (isFerryEventType(event.payload?.type)) {
+      handler(event.payload as RuntimeEvent);
+    }
+  });
+}
+
 export const operationPlan = (input: OperationInput) =>
   invokeOperation<OperationPlan>("operation_plan", { input });
 
