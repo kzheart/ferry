@@ -16,6 +16,7 @@ export function useSessionSelection({
   const [detail, setDetail] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreLock = useRef(false);
   const detailCache = useRef(new Map());
 
   const sessionsByKey = useMemo(
@@ -34,7 +35,8 @@ export function useSessionSelection({
       cache.delete(cache.keys().next().value);
   };
 
-  const loadDetail = (key, session, cachedData = null) => {
+  // windowLimit=null 表示整段加载(内容变更重载时保住已看到会话结尾的窗口)
+  const loadDetail = (key, session, cachedData = null, windowLimit = 30) => {
     const ref = sessionRef(session);
     // ref 是稳定句柄,不随内容轮换;revision 才是内容代际,
     // 用它做在途响应守卫和「扫描发现内容变了就重载」的信号。
@@ -45,7 +47,9 @@ export function useSessionSelection({
       revision,
       data: cachedData,
     });
-    engine("show", { tool: session.tool, ref, from_message: 1, limit: 30 })
+    const params = { tool: session.tool, ref, from_message: 1 };
+    if (windowLimit != null) params.limit = windowLimit;
+    engine("show", params)
       .then((data) => {
         cacheDetail(key, data);
         setDetail((current) =>
@@ -84,10 +88,19 @@ export function useSessionSelection({
     if (!session) return;
     if (detail?.id === selectedId && detail.revision === session.revision)
       return;
+    // 内容变更触发的重载要保住屏上已有的数据与已加载的分页窗口:
+    // 打回第一页会让内容高度骤减,正读着的用户被甩离原位。
+    // 已读到会话末尾(无下一页)时整段加载,新追加的消息才进得来。
+    const active = detail?.id === selectedId ? detail.data : null;
+    const loaded = active?.returned_message_count || 0;
+    const windowLimit = active
+      ? (active.next_from_message ? Math.max(30, loaded) : null)
+      : 30;
     loadDetail(
       selectedId,
       session,
-      detailCache.current.get(selectedId) || null,
+      active || detailCache.current.get(selectedId) || null,
+      windowLimit,
     );
   }, [ready, selectedId, sessionsByKey, detail?.id, detail?.revision]);
 
@@ -172,21 +185,25 @@ export function useSessionSelection({
     setRefreshing(false);
   };
 
-  const loadMore = async () => {
+  // all=true 一次拉完剩余全部消息("跳到最新"要看到真正的会话结尾,
+  // 逐页追会被分页哨兵拖成好几轮)。同步锁防按钮与哨兵并发重复追加。
+  const loadMore = async (all = false) => {
     const current = detail;
-    if (loadingMore || !current?.data?.next_from_message) return;
+    if (loadMoreLock.current || !current?.data?.next_from_message) return;
     const session =
       sessionsByKey[current.id] ||
       sessions.find((item) => sessionIdentity(item) === current.id);
     if (!session) return;
+    loadMoreLock.current = true;
     setLoadingMore(true);
     try {
-      const page = await engine("show", {
+      const params = {
         tool: session.tool,
         ref: sessionRef(session),
         from_message: current.data.next_from_message,
-        limit: 30,
-      });
+      };
+      if (all !== true) params.limit = 30;
+      const page = await engine("show", params);
       setDetail((active) =>
         active?.id === current.id && active.ref === current.ref
           ? {
@@ -213,6 +230,7 @@ export function useSessionSelection({
           : active,
       );
     } finally {
+      loadMoreLock.current = false;
       setLoadingMore(false);
     }
   };

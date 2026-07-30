@@ -1,29 +1,18 @@
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   supportsEditOperation,
   supportsAgentCapability,
-  TOOL_NAME,
-  resumeDescriptor,
   TOOLS,
 } from "../../shared/contracts/tools.js";
 import { useSessionEditingSurface } from "../../shared/capabilities/sessionEditing.jsx";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
-import { fmtTime, sessionRef, toRounds, toTimeline } from "./sessionModel.js";
-import { writeClipboardText } from "../../platform/desktop/client.js";
-import {
-  CheckIcon,
-  WarnIcon,
-  CopyIcon,
-  MigrateIcon,
-  RefreshIcon,
-  Spinner,
-  TerminalIcon,
-  ToolIcon,
-} from "../../shared/ui/icons.jsx";
+import { toRounds, toTimeline } from "./sessionModel.js";
+import { Spinner } from "../../shared/ui/icons.jsx";
 import PendingEditBar from "./PendingEditBar.jsx";
-import { CompactionBoundary, ContextStatusChip } from "./SessionContext.jsx";
+import { CompactionBoundary } from "./SessionContext.jsx";
+import SessionDetailHeader from "./SessionDetailHeader.jsx";
 import SessionImagePreview from "./SessionImagePreview.jsx";
 import SessionRound from "./SessionRound.jsx";
 import {
@@ -31,9 +20,9 @@ import {
   OptimizationFloatBar,
   OptimizationMinimap,
   OptimizationNotice,
-  OptimizerWandControl,
 } from "./OptimizationSurface.jsx";
 import { useOptimizationView } from "./useOptimizationView.js";
+import { JumpToLatest, useStickToBottom } from "./stickToBottom.jsx";
 
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
 export default memo(function SessionDetail({
@@ -69,9 +58,6 @@ export default memo(function SessionDetail({
   const canMigrate = TOOLS.includes(meta.tool)
     && supportsAgentCapability(meta.tool, "migration-source");
   const canResume = supportsAgentCapability(meta.tool, "resume");
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(null);
-  const [resumeError, setResumeError] = useState(null);
   const loadMoreRef = useRef(null);
 
   // 无感分页:哨兵接近视口(提前 600px)即触发加载,加载完成后 next_from_message
@@ -88,9 +74,11 @@ export default memo(function SessionDetail({
     io.observe(el);
     return () => io.disconnect();
   }, [data?.next_from_message, onLoadMore]);
-  const [resuming, setResuming] = useState(false);
   const [previewImages, setPreviewImages] = useState(null);
   const scrollRef = useRef(null);
+  const { atBottom, scrollToBottom } = useStickToBottom(
+    scrollRef, data, meta.id, Boolean(data?.next_from_message),
+  );
 
   // 会话优化的视图状态(候选映射/多选/乐观展示/跳转/快捷键)收在专用 hook
   const optView = useOptimizationView({
@@ -106,14 +94,19 @@ export default memo(function SessionDetail({
     selectedTurns, setSelectedTurns, startOptimization, jumpToTurn, navDiff,
   } = optView;
 
+  // 每个导航目标只定位一次:运行中会话每次内容重载都会换 data,
+  // 不记账会反复滚回目标轮次,把停在底部的用户周期性甩上去。
+  const handledNavRef = useRef(null);
   useEffect(() => {
     if (!data || navigationTarget?.view !== "library") return;
+    if (handledNavRef.current === navigationTarget) return;
     const round = Number(navigationTarget.turn);
     if (!Number.isFinite(round) || round < 1) return;
+    const el = document.querySelector(`[data-round="${round}"]`);
+    if (!el) return; // 目标轮次还没分页加载进来,等下次 data 变化重试
+    handledNavRef.current = navigationTarget;
     requestAnimationFrame(() =>
-      document
-        .querySelector(`[data-round="${round}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      el.scrollIntoView({ behavior: "smooth", block: "center" }),
     );
   }, [data, navigationTarget]);
 
@@ -121,34 +114,6 @@ export default memo(function SessionDetail({
     (r.user?.length || 0) +
     r.ai.join("").length +
     r.tools.reduce((a, t) => a + (t.size || 0), 0);
-
-  // 拿不到接续命令时不能先报"已复制":用户粘出来会是空的,却以为是自己操作错了。
-  // 成败都只落在按钮上——这是本模块既有的反馈方式(见 SessionRound / SessionImagePreview)。
-  const copyResume = async () => {
-    try {
-      const d = await resumeDescriptor(meta.tool, sessionRef(meta));
-      await writeClipboardText(d.display_command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch (error) {
-      setCopyError(error?.message || String(error));
-      setTimeout(() => setCopyError(null), 4000);
-    }
-  };
-
-  const resumeInTerminal = async () => {
-    if (resuming) return;
-    setResuming(true);
-    setResumeError(null);
-    try {
-      await onResume(meta);
-    } catch (error) {
-      setResumeError(error?.message || String(error));
-      setTimeout(() => setResumeError(null), 4000);
-    } finally {
-      setResuming(false);
-    }
-  };
 
   const scopeMsgs = scope
     ? rounds
@@ -167,8 +132,6 @@ export default memo(function SessionDetail({
 
   const opFor = (n, type) => ops.find((o) => o.type === type && o.n === n);
 
-  const subCount = data ? data.tree_count - 1 : 0;
-
   return (
     <div
       style={{
@@ -185,167 +148,19 @@ export default memo(function SessionDetail({
         data-guide-scroll="1"
         style={{ flex: 1, overflowY: "auto", minWidth: 0 }}
       >
-        <div
-          style={{
-            padding: "18px 26px 14px",
-            borderBottom: "1px solid var(--line5)",
-            position: "sticky",
-            top: 0,
-            background: "var(--veil)",
-            backdropFilter: "blur(6px)",
-            zIndex: 2,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
-            <ToolIcon tool={meta.tool} size={40} dot="var(--ok)" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 650,
-                  letterSpacing: "-.01em",
-                }}
-              >
-                {meta.title || tt("browser:session.untitled")}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px 14px",
-                  marginTop: 6,
-                  fontSize: 12,
-                  color: "var(--tx3b)",
-                }}
-              >
-                <span>
-                  {tt("browser:session.source")}{" "}
-                  <b style={{ color: "var(--tx2)", fontWeight: 600 }}>
-                    {TOOL_NAME[meta.tool]}
-                  </b>
-                </span>
-                <span className="mono" style={{ color: "var(--tx4)" }}>
-                  {meta.dir}
-                </span>
-                <span>
-                  {tt("browser:session.messages", {
-                    n: data ? data.count : meta.count,
-                  })}
-                </span>
-                <ContextStatusChip context={data?.context} />
-                <span>{fmtSize(meta.size)}</span>
-                <span>
-                  {tt("browser:session.active", {
-                    time: fmtTime(meta.updated, tt),
-                  })}
-                </span>
-              </div>
-            </div>
-            <div
-              data-guide="detail-actions"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                flex: "none",
-              }}
-            >
-              <button
-                className="ftool-btn"
-                title={tt("browser:session.refresh")}
-                disabled={refreshing}
-                onClick={onRefresh}
-              >
-                {refreshing ? <Spinner size={14} /> : <RefreshIcon />}
-              </button>
-              {canResume && <button
-                className="ftool-btn"
-                onClick={resumeInTerminal}
-                disabled={resuming}
-                title={
-                  resumeError
-                    ? tt("browser:session.resumeFailed", { error: resumeError })
-                    : resuming
-                      ? tt("browser:session.resumingTerminal")
-                      : tt("browser:session.resumeTerminal")
-                }
-                style={resumeError ? { color: "var(--err)" } : undefined}
-              >
-                {resuming ? <Spinner size={14} />
-                  : resumeError ? <WarnIcon size={15} /> : <TerminalIcon />}
-              </button>}
-              {canResume && <button
-                className="ftool-btn"
-                onClick={copyResume}
-                title={
-                  copyError
-                    ? tt("browser:session.copyResumeFailed", { error: copyError })
-                    : copied
-                      ? tt("browser:session.copiedResume")
-                      : tt("browser:session.copyResume")
-                }
-                style={copied ? { color: "var(--ok)" }
-                  : copyError ? { color: "var(--err)" } : undefined}
-              >
-                {copied ? <CheckIcon size={15} />
-                  : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
-              </button>}
-              {optActive && (
-                <OptimizerWandControl
-                  optimization={optimization}
-                  disabled={!data}
-                  onStart={() => startOptimization()}
-                />
-              )}
-              {canMigrate && (
-                <button
-                  data-guide="migrate"
-                  className="ftool-btn"
-                  title={tt("browser:session.migrate")}
-                  onClick={() => onOpenMigrate(null)}
-                >
-                  <MigrateIcon />
-                </button>
-              )}
-            </div>
-          </div>
-          {subCount > 0 && (
-            <div
-              className="mono"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 7,
-                marginTop: 13,
-                fontSize: 11,
-                color: "var(--tx4)",
-              }}
-            >
-              <span
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: 6,
-                  background: "var(--chip)",
-                  color: "var(--tx3b)",
-                }}
-              >
-                {tt("browser:session.subSessionsLine", {
-                  tool: TOOL_NAME[meta.tool],
-                })}
-              </span>
-              <span>{tt("browser:session.arrow")}</span>
-              <span
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: 6,
-                  color: "var(--tx3b)",
-                }}
-              >
-                {tt("browser:session.subSessions", { n: subCount })}
-              </span>
-            </div>
-          )}
-        </div>
+        <SessionDetailHeader
+          meta={meta}
+          data={data}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onResume={onResume}
+          canResume={canResume}
+          canMigrate={canMigrate}
+          onOpenMigrate={onOpenMigrate}
+          optActive={optActive}
+          optimization={optimization}
+          onStartOptimization={() => startOptimization()}
+        />
         {optActive && (
           <>
             <OptimizationAgentBar optimization={optimization} />
@@ -459,6 +274,16 @@ export default memo(function SessionDetail({
           )}
         </div>
       </div>
+      <JumpToLatest
+        visible={Boolean(data) && !atBottom}
+        raised={dirtyOps.length > 0}
+        onClick={() => {
+          // 先把剩余分页一次拉全再贴底,否则"底部"只是当前窗口的底
+          if (data?.next_from_message) onLoadMore(true);
+          scrollToBottom();
+        }}
+        title={tt("browser:session.jumpToLatest")}
+      />
       {optActive && (
         <>
           <OptimizationFloatBar
