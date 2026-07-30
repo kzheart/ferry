@@ -12,3 +12,4 @@ docs/*
 scripts/demo/
 .idea
 .plan
+node_modules/

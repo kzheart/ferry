@@ -91,7 +91,7 @@ jobs:
       - run: cargo check --locked
         working-directory: app/src-tauri
 
-  frozen-sidecar-windows:
+  frozen-sidecar:
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +100,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             binary: app/src-tauri/binaries/ferry-engine-x86_64-pc-windows-msvc.exe
             runtime-binary: app/src-tauri/binaries/ferry-runtime-x86_64-pc-windows-msvc.exe
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
+            runtime-binary: app/src-tauri/binaries/ferry-runtime-aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -138,132 +142,6 @@ jobs:
           BUILD_TARGET: ${{ matrix.target }}
         working-directory: app/src-tauri
       - run: cargo test --locked --target "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-        working-directory: app/src-tauri
-      - name: Frozen sidecar smoke
-        shell: python
-        env:
-          SIDECAR: ${{ matrix.binary }}
-        run: |
-          import json, os, subprocess
-          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
-          expected_agents = {
-              agent["id"]
-              for agent in json.load(
-                  open("contracts/agents.json", encoding="utf-8")
-              )["agents"]
-          }
-          for method in ("health", "version", "env"):
-              process = subprocess.run(
-                  [os.environ["SIDECAR"], "rpc"],
-                  input=json.dumps({
-                      "protocol": protocol,
-                      "id": f"ci-{method}",
-                      "method": method,
-                      "params": {},
-                  }) + "\n",
-                  text=True, capture_output=True, check=True, timeout=30)
-              response = json.loads(process.stdout.split("\n", 1)[0])
-              assert response["ok"], (method, response, process.stderr)
-              if method == "health":
-                  assert response["protocol"] == protocol, response
-                  assert response["result"]["status"] == "ready", response
-                  assert response["result"]["service"] == "engine", response
-              elif method == "version":
-                  assert response["result"], response
-              else:
-                  assert set(response["result"]) == expected_agents, response
-      - name: Ferry Runtime sidecar smoke
-        shell: python
-        env:
-          SIDECAR: ${{ matrix.runtime-binary }}
-        run: |
-          import json, os, queue, subprocess, tempfile, threading
-          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
-          request = {
-              "protocol": protocol, "id": "ci-health",
-              "method": "health", "params": {},
-          }
-          with tempfile.TemporaryDirectory() as data_dir:
-              env = {**os.environ, "FERRY_RUNTIME_DATA_DIR": data_dir}
-              process = subprocess.Popen(
-                  [os.environ["SIDECAR"]], stdin=subprocess.PIPE,
-                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                  text=True, env=env)
-              lines = queue.Queue()
-              threading.Thread(
-                  target=lambda: [lines.put(line) for line in process.stdout],
-                  daemon=True).start()
-              process.stdin.write(json.dumps(request) + "\n")
-              process.stdin.flush()
-              response = None
-              try:
-                  while response is None:
-                      message = json.loads(lines.get(timeout=30))
-                      if message.get("type") == "engine.request":
-                          process.stdin.write(json.dumps({
-                              "protocol": protocol,
-                              "id": "ci-engine-result",
-                              "method": "tool.result",
-                              "params": {
-                                  "request_id": message["payload"]["request_id"],
-                                  "session_id": message["session_id"],
-                                  "ok": True,
-                                  "result": [],
-                              },
-                          }) + "\n")
-                          process.stdin.flush()
-                      elif message.get("id") == "ci-health":
-                          response = message
-              finally:
-                  process.stdin.close()
-                  process.terminate()
-                  process.wait(timeout=10)
-                  stderr = process.stderr.read()
-          assert response["ok"] is True, (response, stderr)
-          assert response["protocol"] == protocol, response
-          assert response["result"]["service"] == "ferry-runtime", response
-          assert response["result"]["provider"] == "deepseek", response
-          assert response["result"]["model"] == "deepseek-v4-flash", response
-
-  # macOS 构建跑在自托管 runner(本机)。安全闸:仅 push 到 main 时触发,
-  # 任何 PR(含外部 fork)都不会在本机执行代码。停用请见 README/工作流历史。
-  frozen-sidecar-macos:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-selfhosted
-            target: aarch64-apple-darwin
-            binary: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
-            runtime-binary: app/src-tauri/binaries/ferry-runtime-aarch64-apple-darwin
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      # 自托管 runner 直接用本机预装的 Python 3.12 / Node / Rust(见 ~/actions-runner/.path)。
-      # 不用 setup-python/setup-node:那些 action 下载的是托管机(/Users/runner)专用包,在本机会失败。
-      - name: Verify local toolchain
-        run: |
-          python --version && node --version && cargo --version
-          rustup target list --installed | grep -q "$BUILD_TARGET" || rustup target add "$BUILD_TARGET"
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-      - run: python -m pip install -r requirements-build.txt
-      - run: npm ci
-        working-directory: ferry-runtime
-      - run: npm run build:sea -- "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-        working-directory: ferry-runtime
-      - run: python scripts/build-sidecar.py --clean --target "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-      - run: cargo check --locked --target "$BUILD_TARGET"
         shell: bash
         env:
           BUILD_TARGET: ${{ matrix.target }}
