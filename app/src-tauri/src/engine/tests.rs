@@ -60,11 +60,10 @@ fn sensitive_agent_methods_are_not_generic_rpc_methods() {
             .is_err()
     );
     assert!(validate_engine_request_exposure(r#"{"method":"scan"}"#, Exposure::Public,).is_ok());
-    assert!(validate_engine_request_exposure(
-        r#"{"method":"agent_prompt"}"#,
-        Exposure::TrustedUi,
-    )
-    .is_err());
+    assert!(
+        validate_engine_request_exposure(r#"{"method":"agent_prompt"}"#, Exposure::TrustedUi,)
+            .is_err()
+    );
     assert!(validate_engine_request_exposure(
         r#"{"method":"agent_session_read"}"#,
         Exposure::Public,
