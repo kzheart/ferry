@@ -104,6 +104,53 @@ pub(super) fn resolve_tool_request(
             }
             _ => return None,
         },
+        "session_cleanup" => match args.get("intent").and_then(Value::as_str) {
+            Some("inventory") => {
+                if !has_exact_keys(args, &["intent"], &["scope", "cursor"]) {
+                    return None;
+                }
+                let mut params = Map::new();
+                for key in ["scope", "cursor"] {
+                    if let Some(value) = args.get(key) {
+                        params.insert(key.to_owned(), value.clone());
+                    }
+                }
+                ToolRequestRoute {
+                    method: "agent_cleanup_inventory",
+                    params: Value::Object(params),
+                    requires_approval: false,
+                }
+            }
+            Some("triage") => {
+                if !has_exact_keys(args, &["intent", "scope_id", "verdicts"], &[]) {
+                    return None;
+                }
+                ToolRequestRoute {
+                    method: "agent_cleanup_triage",
+                    params: json!({
+                        "scope_id": args.get("scope_id")?,
+                        "verdicts": args.get("verdicts")?,
+                    }),
+                    requires_approval: false,
+                }
+            }
+            Some("preview") | Some("execute") => {
+                if !has_exact_keys(args, &["scope_id", "targets", "intent"], &[]) {
+                    return None;
+                }
+                let execute = execution_intent(args)?;
+                ToolRequestRoute {
+                    method: "operation.plan",
+                    params: json!({"input": {
+                        "kind": "cleanup",
+                        "scope_id": args.get("scope_id")?,
+                        "targets": args.get("targets")?,
+                    }}),
+                    requires_approval: execute,
+                }
+            }
+            _ => return None,
+        },
         _ => return None,
     })
 }
@@ -165,6 +212,67 @@ mod tests {
         .unwrap();
         assert!(migrate_execute.requires_approval);
         assert!(migrate_execute.params.pointer("/input/intent").is_none());
+
+        let cleanup_inventory = resolve_tool_request(
+            "session_cleanup",
+            &map(json!({
+                "intent": "inventory",
+                "scope": {"agents": ["claude"]},
+                "cursor": "cursor",
+            })),
+        )
+        .unwrap();
+        assert_eq!(cleanup_inventory.method, "agent_cleanup_inventory");
+        assert!(!cleanup_inventory.requires_approval);
+        assert_eq!(
+            cleanup_inventory.params,
+            json!({"scope": {"agents": ["claude"]}, "cursor": "cursor"})
+        );
+
+        let cleanup_triage = resolve_tool_request(
+            "session_cleanup",
+            &map(json!({
+                "intent": "triage",
+                "scope_id": "0123456789abcdef",
+                "verdicts": [{
+                    "tool": "claude", "ref": "fsr_a", "verdict": "delete",
+                }],
+            })),
+        )
+        .unwrap();
+        assert_eq!(cleanup_triage.method, "agent_cleanup_triage");
+        assert!(!cleanup_triage.requires_approval);
+        assert_eq!(
+            cleanup_triage.params,
+            json!({
+                "scope_id": "0123456789abcdef",
+                "verdicts": [{
+                    "tool": "claude", "ref": "fsr_a", "verdict": "delete",
+                }],
+            })
+        );
+
+        for intent in ["preview", "execute"] {
+            let cleanup = resolve_tool_request(
+                "session_cleanup",
+                &map(json!({
+                    "intent": intent,
+                    "scope_id": "0123456789abcdef",
+                    "targets": [{"tool": "claude", "ref": "fsr_a"}],
+                })),
+            )
+            .unwrap();
+            assert_eq!(cleanup.method, "operation.plan");
+            assert_eq!(cleanup.requires_approval, intent == "execute");
+            assert_eq!(
+                cleanup.params,
+                json!({"input": {
+                    "kind": "cleanup",
+                    "scope_id": "0123456789abcdef",
+                    "targets": [{"tool": "claude", "ref": "fsr_a"}],
+                }})
+            );
+        }
 
         let edit_preview = resolve_tool_request(
             "session_edit",
@@ -271,6 +379,39 @@ mod tests {
             None
         );
         assert_eq!(
+            resolve_tool_request(
+                "session_cleanup",
+                &map(json!({
+                    "intent": "inventory",
+                    "scope_id": "0123456789abcdef",
+                })),
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_request(
+                "session_cleanup",
+                &map(json!({
+                    "intent": "execute",
+                    "scope_id": "0123456789abcdef",
+                    "targets": [{"tool": "claude", "ref": "fsr_a"}],
+                    "verdicts": [],
+                })),
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_request(
+                "session_cleanup",
+                &map(json!({
+                    "intent": "unknown",
+                    "scope_id": "0123456789abcdef",
+                    "targets": [{"tool": "claude", "ref": "fsr_a"}],
+                })),
+            ),
+            None
+        );
+        assert_eq!(
             resolve_tool_request("operation.apply", &map(json!({}))),
             None
         );
@@ -279,10 +420,13 @@ mod tests {
 
     #[test]
     fn preview_never_requires_approval_and_execute_always_does() {
-        for name in ["migrate", "session_edit"] {
+        for name in ["migrate", "session_edit", "session_cleanup"] {
             let base = if name == "migrate" {
                 json!({"source_tool": "claude", "ref": "fsr_a",
                        "target_tool": "codex"})
+            } else if name == "session_cleanup" {
+                json!({"scope_id": "0123456789abcdef",
+                       "targets": [{"tool": "claude", "ref": "fsr_a"}]})
             } else {
                 json!({"tool": "claude", "ref": "fsr_a",
                        "ops": [{"op": "delete-turn", "turn": 1}]})
