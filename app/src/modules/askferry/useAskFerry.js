@@ -2,12 +2,13 @@
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  choiceRespond,
   onRuntimeEvent,
   operationApply,
   runtime,
   shellApply,
 } from "../../platform/desktop/client.js";
-import { applyEvent, emptyLog, operationKey, patchApproval }
+import { applyEvent, emptyLog, operationKey, patchApproval, patchChoice }
   from "./agentChatModel.js";
 import { SESSION_OPTIMIZATION_PURPOSE, normalizeSessionPurpose }
   from "./sessionOptimization.js";
@@ -122,6 +123,30 @@ export function useAskFerry() {
   const dismiss = useCallback((sessionId, item) => {
     const opId = operationKey(item.operation);
     if (opId) mutateLog(sessionId, log => patchApproval(log, opId, { status: "dismissed" }));
+  }, [mutateLog]);
+
+  const respondChoice = useCallback(async (sessionId, requestId, answer) => {
+    if (!sessionId || !requestId) return;
+    const selected = Array.isArray(answer?.selected)
+      ? answer.selected.filter(value => typeof value === "string")
+      : [];
+    const customText = typeof answer?.custom_text === "string"
+      ? answer.custom_text : "";
+    mutateLog(sessionId, log => patchChoice(log, requestId, {
+      status: answer?.answered === false ? "unanswered" : "answered",
+      answered: answer?.answered !== false,
+      selected,
+      customText,
+    }));
+    try {
+      return await choiceRespond(requestId, {
+        answered: answer?.answered !== false,
+        selected,
+        custom_text: customText,
+      });
+    } catch (error) {
+      setLastError(error);
+    }
   }, [mutateLog]);
 
   // ----- 事件订阅 -----
@@ -459,6 +484,7 @@ export function useAskFerry() {
     refresh, openSession, newChat, send, editResend, steer, abort, setMode,
     rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
+    respondChoice,
     reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
     setGlobalSkills, addSkillSource, removeSkillSource, readSkill,
@@ -471,6 +497,7 @@ export function useAskFerry() {
     refresh, openSession, newChat, send, editResend, steer, abort, setMode,
     rename, pin, deleteSession,
     approve, dismiss, selectModel, loadModels,
+    respondChoice,
     reloadRoles, createRole, updateRole, resetRole, copyRole, deleteRole,
     reloadSkills, loadSkillCandidates, importSkill, importSkillFolder, deleteSkill,
     setGlobalSkills, addSkillSource, removeSkillSource, readSkill,

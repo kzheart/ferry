@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { render } from "@testing-library/react";
 import { AgentToolTrace } from "./AgentToolTrace.jsx";
-import { applyEvent, emptyLog, patchApproval, TOOL_LEVEL } from "./agentChatModel.js";
+import { applyEvent, emptyLog, patchApproval, patchChoice, TOOL_LEVEL } from "./agentChatModel.js";
 
 test("structured tool details survive event reduction and become entities", () => {
   let log = applyEvent(emptyLog(), {
@@ -154,4 +154,76 @@ test("operation plans use plan_id as the approval identity", () => {
   });
   const updated = patchApproval(log, "op_plan", { status: "applied" });
   assert.equal(updated.items[0].status, "applied");
+});
+
+test("choice.requested creates a pending choice and choice.resolved answers it", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "choice.requested", run_id: "run-choice",
+    payload: {
+      request_id: "req-1", tool_call_id: "call-choice", question: "清理哪些会话?",
+      options: [{ label: "旧会话", recommended: true }, { label: "全部" }],
+      multi_select: false, allow_custom: true,
+    },
+  });
+  assert.deepEqual(log.items[0], {
+    kind: "choice", requestId: "req-1", callId: "call-choice",
+    question: "清理哪些会话?",
+    options: [{ label: "旧会话", recommended: true }, { label: "全部" }],
+    multiSelect: false, allowCustom: true, status: "pending", answered: false,
+    selected: [], customText: "", runId: "run-choice", requestedAt: undefined,
+  });
+  log = applyEvent(log, {
+    type: "choice.resolved", run_id: "run-choice",
+    payload: { request_id: "req-1", answered: true, selected: ["旧会话"], custom_text: "" },
+  });
+  assert.equal(log.items[0].status, "answered");
+  assert.deepEqual(log.items[0].selected, ["旧会话"]);
+});
+
+test("ask_user replay normalizes tool.started and tool.completed into one answered card", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "tool.started", run_id: "run-replay", timestamp: "2026-01-01T00:00:00Z",
+    payload: { tool_call_id: "call-replay", name: "ask_user", args: {
+      question: "继续吗?", options: [{ label: "继续" }, { label: "停止" }],
+    } },
+  });
+  log = applyEvent(log, {
+    type: "tool.completed", run_id: "run-replay", timestamp: "2026-01-01T00:00:01Z",
+    payload: { tool_call_id: "call-replay", name: "ask_user", is_error: false,
+      result: { text: "answer", details: {
+        answered: true, selected: ["继续"], custom_text: "",
+      } } },
+  });
+  const choice = log.items.find(item => item.kind === "choice");
+  assert.equal(choice.status, "answered");
+  assert.deepEqual(choice.selected, ["继续"]);
+  assert.equal(log.items.filter(item => item.kind === "choice").length, 1);
+});
+
+test("run terminal marks an unanswered choice without inventing a selection", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "choice.requested", run_id: "run-pending",
+    payload: { request_id: "req-pending", question: "选择", options: [{ label: "A" }, { label: "B" }] },
+  });
+  log = applyEvent(log, { type: "run.cancelled", run_id: "run-pending", payload: {} });
+  assert.equal(log.items[0].status, "unanswered");
+  assert.deepEqual(log.items[0].selected, []);
+});
+
+test("choice response patches only the matching timeline item", () => {
+  let log = applyEvent(emptyLog(), {
+    type: "choice.requested", payload: {
+      request_id: "req-a", question: "A", options: [{ label: "1" }, { label: "2" }],
+    },
+  });
+  log = applyEvent(log, {
+    type: "choice.requested", payload: {
+      request_id: "req-b", question: "B", options: [{ label: "x" }, { label: "y" }],
+    },
+  });
+  const updated = patchChoice(log, "req-b", {
+    status: "answered", answered: true, selected: ["y"], customText: "",
+  });
+  assert.equal(updated.items[0].status, "pending");
+  assert.equal(updated.items[1].status, "answered");
 });

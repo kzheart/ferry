@@ -66,6 +66,18 @@
     "approve": "批准并执行",
     "reject": "拒绝"
   },
+  "choice": {
+    "title": "请你选择",
+    "pending": "等待你的选择",
+    "answered": "已回答",
+    "unanswered": "未作答",
+    "recommended": "推荐",
+    "multiSelect": "可多选",
+    "customPlaceholder": "补充说明（可选）",
+    "noAnswer": "本次运行结束时未收到回答",
+    "submit": "提交选择",
+    "submitting": "提交中…"
+  },
   "composer": {
     "placeholder": "询问任何问题",
     "desktopOnly": "Ask Ferry 仅在桌面端可用",
