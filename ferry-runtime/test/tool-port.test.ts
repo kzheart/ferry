@@ -31,6 +31,12 @@ const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
 const agentPromptTool = tools.find((tool) => tool.name === "agent_prompt")!;
 const agentPromptSchema = agentPromptTool.parameters;
+const sessionCleanupTool = tools.find(
+  (tool) => tool.name === "session_cleanup",
+)!;
+const sessionCleanupSchema = sessionCleanupTool.parameters;
+const askUserTool = tools.find((tool) => tool.name === "ask_user")!;
+const askUserSchema = askUserTool.parameters;
 
 /** 一套启用了会话优化策略的工具;read/edit 共享同一次工厂调用的策略状态。 */
 function optimizationTools(
@@ -118,6 +124,136 @@ describe("Ferry mutation tool schemas", () => {
     expect(Check(migrateSchema, { ...migration, intent: "invalid" })).toBe(
       false,
     );
+  });
+
+  it("validates the four session_cleanup intent branches", () => {
+    const target = { tool: "claude", ref: "fsr_session" };
+    const scopeId = "0123456789abcdef";
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "inventory",
+        scope: { agents: ["claude"], updated_before: "now-7d" },
+        cursor: "cursor",
+      }),
+    ).toBe(true);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "triage",
+        scope_id: scopeId,
+        verdicts: [{ ...target, verdict: "delete", reason: "old" }],
+      }),
+    ).toBe(true);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "preview",
+        scope_id: scopeId,
+        targets: [target],
+      }),
+    ).toBe(true);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "execute",
+        scope_id: scopeId,
+        targets: [target],
+      }),
+    ).toBe(true);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "inventory",
+        scope_id: scopeId,
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "triage",
+        scope_id: scopeId,
+        scope: {},
+        verdicts: [{ ...target, verdict: "keep" }],
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionCleanupSchema, {
+        intent: "preview",
+        scope_id: scopeId,
+        targets: [target],
+        verdicts: [{ ...target, verdict: "delete" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("requires a matching cleanup preview before execute", async () => {
+    const invoke = vi.fn(async () => ({ ok: true }));
+    const cleanupTool = createFerryTools(
+      { invoke },
+      () => ({ sessionId: "session", runId: "run" }),
+    ).find((tool) => tool.name === "session_cleanup")!;
+    const base = {
+      scope_id: "0123456789abcdef",
+      targets: [{ tool: "claude", ref: "fsr_session" }],
+    };
+
+    await expect(
+      cleanupTool.execute(
+        "call",
+        { ...base, intent: "execute" },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("requires a successful preview");
+    await cleanupTool.execute(
+      "call",
+      { ...base, intent: "preview" },
+      undefined,
+      undefined,
+    );
+    await expect(
+      cleanupTool.execute(
+        "call",
+        {
+          ...base,
+          intent: "execute",
+          targets: [{ tool: "claude", ref: "fsr_changed" }],
+        },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("requires a successful preview");
+    await cleanupTool.execute(
+      "call",
+      { ...base, intent: "execute" },
+      undefined,
+      undefined,
+    );
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds ask_user option counts", () => {
+    const option = { label: "option" };
+    expect(
+      Check(askUserSchema, { question: "Choose", options: [option] }),
+    ).toBe(false);
+    expect(
+      Check(askUserSchema, {
+        question: "Choose",
+        options: [option, { label: "other" }],
+      }),
+    ).toBe(true);
+    expect(
+      Check(askUserSchema, {
+        question: "Choose",
+        options: Array.from({ length: 6 }, (_, index) => ({
+          label: `option-${index}`,
+        })),
+      }),
+    ).toBe(true);
+    expect(
+      Check(askUserSchema, {
+        question: "Choose",
+        options: Array.from({ length: 7 }, (_, index) => ({
+          label: `option-${index}`,
+        })),
+      }),
+    ).toBe(false);
   });
 
   it("exposes agent_prompt only for prompt-capable agents with strict bounds", () => {
@@ -491,5 +627,7 @@ describe("Ferry mutation tool schemas", () => {
       "Metadata patch does not accept intent",
     );
     expect(sessionEditTool.description).toContain(supportDescription);
+    expect(sessionCleanupTool.description).toContain("covered equals total");
+    expect(askUserTool.description).toContain("does not authorize deletion");
   });
 });
