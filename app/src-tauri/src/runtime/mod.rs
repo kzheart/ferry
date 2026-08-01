@@ -1,5 +1,6 @@
 mod approval;
 pub(crate) mod bash;
+pub(crate) mod choice;
 mod gateway;
 mod tool_routes;
 
@@ -200,6 +201,7 @@ fn read_runtime_output(
             if matches!(event_type, "run.completed" | "run.failed" | "run.cancelled") {
                 if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
                     forget_auto_policy(session_id);
+                    choice::cancel_session(session_id);
                 }
             }
             if policy.forward_to_ui {
