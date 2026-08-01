@@ -14,6 +14,7 @@ use crate::process::framing::JsonlWriter;
 
 use super::approval::{allows_auto_apply, auto_policy};
 use super::bash;
+use super::choice;
 use super::emit_host_event;
 use super::next_id;
 use super::tool_routes::{is_mutating_tool, resolve_tool_request};
@@ -50,6 +51,15 @@ pub(super) fn complete_tool_request(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    let tool_call_id = payload
+        .and_then(|value| value.get("tool_call_id"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if name == "ask_user" {
+        let outcome = choice::propose(app, session_id, run_id, request_id, tool_call_id, &args);
+        send_gateway_result(stdin, session_id, request_id, outcome);
+        return;
+    }
     // bash 不走 engine:engine 是会话历史服务,在那里执行 shell 是范畴错误。
     // 拦在 route_tool 之前,但审批分叉逻辑与迁移/编辑完全共用,不为它新开放行口子。
     let is_bash = name == "bash";

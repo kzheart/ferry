@@ -46,6 +46,7 @@ pub fn run() {
             operations::operation_status,
             operations::operation_cancel,
             runtime::agent_command,
+            runtime::choice::choice_respond,
             runtime::bash::bash_apply,
             desktop::terminal::open_terminal,
             desktop::reveal::reveal_path,
