@@ -133,6 +133,16 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
         }),
+        "agent_cleanup_inventory" => Some(EngineMethodPolicy {
+            exposure: Exposure::Internal,
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+        }),
+        "agent_cleanup_triage" => Some(EngineMethodPolicy {
+            exposure: Exposure::Internal,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+        }),
         "agent_prompt" => Some(EngineMethodPolicy {
             exposure: Exposure::Internal,
             timeout: TimeoutClass::AgentRun,

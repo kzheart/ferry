@@ -4,7 +4,7 @@ use serde_json::Value;
 
 pub(crate) const OPERATION_PLAN_ID_PREFIX: &str = "op_";
 pub(crate) const OPERATION_KINDS: &[&str] =
-    &["edit", "migration", "metadata", "delete", "restore-delete"];
+    &["edit", "migration", "metadata", "delete", "restore-delete", "cleanup"];
 pub(crate) const EDIT_OPERATION_KINDS: &[&str] =
     &["delete-turn", "rewrite", "replace-assistant-reply"];
 pub(crate) const OPERATION_STATUSES: &[&str] = &[
@@ -21,6 +21,16 @@ pub(crate) const OPERATION_TERMINAL_STATUSES: &[&str] =
 pub(crate) const OPERATION_SUCCESS_STATUS: &str = "applied";
 
 #[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CleanupTarget {
+    pub(crate) tool: String,
+    #[serde(rename = "ref")]
+    pub(crate) reference: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub(crate) enum OperationPlanInput {
     #[serde(rename = "edit")]
@@ -33,6 +43,8 @@ pub(crate) enum OperationPlanInput {
     Delete(DeleteOperationPlanInput),
     #[serde(rename = "restore-delete")]
     RestoreDelete(RestoreDeleteOperationPlanInput),
+    #[serde(rename = "cleanup")]
+    Cleanup(CleanupOperationPlanInput),
 }
 
 impl OperationPlanInput {
@@ -43,6 +55,7 @@ impl OperationPlanInput {
             Self::Metadata(_) => "metadata",
             Self::Delete(_) => "delete",
             Self::RestoreDelete(_) => "restore-delete",
+            Self::Cleanup(_) => "cleanup",
         }
     }
 }
@@ -94,6 +107,13 @@ pub(crate) struct DeleteOperationPlanInput {
 #[serde(deny_unknown_fields)]
 pub(crate) struct RestoreDeleteOperationPlanInput {
     pub(crate) recovery_id: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CleanupOperationPlanInput {
+    pub(crate) scope_id: String,
+    pub(crate) targets: Vec<CleanupTarget>,
 }
 
 #[derive(Deserialize, Serialize)]

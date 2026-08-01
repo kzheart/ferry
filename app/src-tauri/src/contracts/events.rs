@@ -34,6 +34,14 @@ pub(crate) fn event_policy(event_type: &str) -> Option<EventPolicy> {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),
+        "choice.requested" => Some(EventPolicy {
+            source: EventSource::Host,
+            forward_to_ui: true,
+        }),
+        "choice.resolved" => Some(EventPolicy {
+            source: EventSource::Host,
+            forward_to_ui: true,
+        }),
         "content.delta" => Some(EventPolicy {
             source: EventSource::Runtime,
             forward_to_ui: true,
