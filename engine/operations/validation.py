@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import json
+import re
 
+from ..contracts.session_ref import is_opaque_session_ref
 from ..errors import AgentRequestError
 from ..sessions.safety import validate_agent_edit_ops, validate_json_shape
 from .plan_store import canonical_json
 from .types import AssistantReply
+
+
+_CLEANUP_SCOPE_ID = re.compile(r"^[0-9a-f]{16}$")
 
 
 def validate_edit_input(value: dict) -> dict:
@@ -166,6 +171,53 @@ def validate_delete_input(value: dict, adapters: tuple[str, ...]) -> dict:
     ):
         raise AgentRequestError("delete ref 非法")
     return {"kind": "delete", "tool": tool, "ref": ref}
+
+
+def validate_cleanup_input(value: dict, adapters: tuple[str, ...]) -> dict:
+    allowed = {"kind", "scope_id", "targets"}
+    unknown = set(value) - allowed
+    if unknown:
+        raise AgentRequestError(
+            "cleanup operation 包含未知字段",
+            {"fields": sorted(unknown)},
+        )
+    if value.get("kind") != "cleanup":
+        raise AgentRequestError("cleanup operation kind 非法")
+    scope_id = value.get("scope_id")
+    if not isinstance(scope_id, str) or not _CLEANUP_SCOPE_ID.fullmatch(scope_id):
+        raise AgentRequestError("cleanup scope_id 非法")
+    targets = value.get("targets")
+    if not isinstance(targets, list) or not 1 <= len(targets) <= 500:
+        raise AgentRequestError("cleanup targets 必须是 1 到 500 项的数组")
+    normalized = []
+    seen = set()
+    for target in targets:
+        if not isinstance(target, dict) or not set(target) <= {"tool", "ref", "reason"}:
+            raise AgentRequestError("cleanup target 字段非法")
+        tool = target.get("tool")
+        ref = target.get("ref")
+        reason = target.get("reason")
+        if not isinstance(tool, str) or tool not in adapters:
+            raise AgentRequestError("cleanup target tool 非法")
+        if not is_opaque_session_ref(ref):
+            raise AgentRequestError("cleanup target ref 非法")
+        if "reason" in target and (
+            not isinstance(reason, str) or len(reason) > 300
+        ):
+            raise AgentRequestError("cleanup target reason 非法")
+        identity = (tool, ref)
+        if identity in seen:
+            raise AgentRequestError("cleanup targets 不允许重复")
+        seen.add(identity)
+        entry = {"tool": tool, "ref": ref}
+        if reason is not None:
+            entry["reason"] = reason
+        normalized.append(entry)
+    return json.loads(canonical_json({
+        "kind": "cleanup",
+        "scope_id": scope_id,
+        "targets": normalized,
+    }))
 
 
 def validate_restore_delete_input(value: dict) -> dict:

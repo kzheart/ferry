@@ -4,6 +4,7 @@ import pytest
 from engine.errors import AgentRequestError, InvalidReplyError
 from engine.operations.validation import (
     validate_delete_input,
+    validate_cleanup_input,
     validate_edit_input,
     validate_metadata_input,
     validate_migration_input,
@@ -14,6 +15,8 @@ from engine.operations.validation import (
 
 ADAPTERS = ("claude", "opencode", "codex")
 REF = "ref-abcdef0123456789"
+CLEANUP_SCOPE_ID = "0123456789abcdef"
+CLEANUP_REF = "fsr_0123456789abcdef"
 
 
 def _edit(**overrides):
@@ -44,6 +47,16 @@ def _metadata(**overrides):
         "tool": "claude",
         "ref": REF,
         "patch": {"name": "新名称"},
+    }
+    value.update(overrides)
+    return value
+
+
+def _cleanup(**overrides):
+    value = {
+        "kind": "cleanup",
+        "scope_id": CLEANUP_SCOPE_ID,
+        "targets": [{"tool": "claude", "ref": CLEANUP_REF, "reason": "旧会话"}],
     }
     value.update(overrides)
     return value
@@ -176,6 +189,32 @@ def test_delete_input_is_minimal_and_unnormalized():
 def test_delete_input_rejections(value, message):
     with pytest.raises(AgentRequestError, match=message):
         validate_delete_input(value, ADAPTERS)
+
+
+def test_cleanup_input_normalizes_optional_reason():
+    assert validate_cleanup_input(_cleanup(), ADAPTERS) == _cleanup()
+    assert validate_cleanup_input(_cleanup(
+        targets=[{"tool": "claude", "ref": CLEANUP_REF}],
+    ), ADAPTERS)["targets"] == [{"tool": "claude", "ref": CLEANUP_REF}]
+
+
+@pytest.mark.parametrize("value", [
+    _cleanup(scope_id="too-short"),
+    _cleanup(targets=[]),
+    _cleanup(targets=[{"tool": "missing", "ref": CLEANUP_REF}]),
+    _cleanup(targets=[{"tool": "claude", "ref": "not-opaque"}]),
+    _cleanup(targets=[{
+        "tool": "claude", "ref": CLEANUP_REF, "reason": "x" * 301,
+    }]),
+    _cleanup(targets=[
+        {"tool": "claude", "ref": CLEANUP_REF},
+        {"tool": "claude", "ref": CLEANUP_REF},
+    ]),
+    _cleanup(extra=True),
+])
+def test_cleanup_input_rejects_invalid_samples(value):
+    with pytest.raises(AgentRequestError):
+        validate_cleanup_input(value, ADAPTERS)
 
 
 def test_restore_delete_input_accepts_prefixed_id():
