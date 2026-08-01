@@ -54,6 +54,7 @@
     "kindMigration": "Migration proposal",
     "kindEdit": "Edit original session",
     "kindMetadata": "Metadata change proposal",
+    "kindCleanup": "Bulk session cleanup",
     "kindGeneric": "Write proposal",
     "applied": "Approved & applied",
     "applying": "Applying…",
@@ -65,6 +66,23 @@
     "expired": "Proposal expired — ask the agent to propose again",
     "approve": "Approve & apply",
     "reject": "Reject"
+  },
+  "cleanup": {
+    "previewTitle": "Frozen cleanup preview",
+    "totalCount": "To delete",
+    "totalSize": "Total size",
+    "undoable": "Undoable",
+    "coverage": "Triaged {{covered}} / {{total}} sessions",
+    "byTool": "By agent",
+    "toolSummary": "{{count}} sessions · {{size}}",
+    "showSessions": "Show {{n}} sessions",
+    "hideSessions": "Hide session list",
+    "excluded": "{{n}} excluded",
+    "causePinned": "Pinned",
+    "causeArchived": "Archived",
+    "causeTagged": "Has retention tag",
+    "causeNotFound": "Session not found",
+    "causeGeneric": "Not eligible for deletion"
   },
   "choice": {
     "title": "Your choice",
@@ -136,6 +154,8 @@
       "usage": "Usage",
       "migrate": "Migrate",
       "session_edit": "Edit session",
+      "session_cleanup": "Clean up sessions",
+      "ask_user": "Ask the user",
       "bash": "Run command"
     },
     "hits": "{{n}} sessions found",

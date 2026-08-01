@@ -24,7 +24,161 @@ const KIND_KEYS = {
   migration: "kindMigration",
   edit: "kindEdit",
   metadata: "kindMetadata",
+  cleanup: "kindCleanup",
 };
+
+const formatBytes = value => {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const amount = value / (1024 ** index);
+  return `${amount >= 10 || index === 0 ? Math.round(amount) : amount.toFixed(1)} ${units[index]}`;
+};
+
+const formatUpdated = value => {
+  if (value == null || value === "") return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
+};
+
+const CAUSE_KEYS = {
+  pinned: "causePinned",
+  archived: "causeArchived",
+  tagged: "causeTagged",
+  not_found: "causeNotFound",
+};
+
+function CleanupPreview({ preview, t }) {
+  const [expanded, setExpanded] = useState(false);
+  const totals = preview.totals || {};
+  const undoable = preview.undoable || {};
+  const byTool = Array.isArray(preview.by_tool) ? preview.by_tool : [];
+  const sessions = Array.isArray(preview.sessions) ? preview.sessions : [];
+  const excluded = Array.isArray(preview.excluded) ? preview.excluded : [];
+  const coverage = preview.coverage || {};
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: 9,
+      padding: "10px 11px",
+      borderRadius: 8,
+      background: "var(--inset)",
+      border: "1px solid var(--line4)",
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 650, color: "var(--tx2)" }}>
+        {t("askferry:cleanup.previewTitle")}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 7 }}>
+        <div>
+          <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
+            {t("askferry:cleanup.totalCount")}
+          </div>
+          <div style={{ color: "var(--tx1)", fontSize: 13, fontWeight: 650 }}>
+            {totals.count ?? 0}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
+            {t("askferry:cleanup.totalSize")}
+          </div>
+          <div className="mono" style={{ color: "var(--tx1)", fontSize: 12.5 }}>
+            {formatBytes(totals.size_bytes)}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
+            {t("askferry:cleanup.undoable")}
+          </div>
+          <div style={{ color: "var(--ok)", fontSize: 13, fontWeight: 650 }}>
+            {undoable.count ?? 0}/{undoable.total ?? 0}
+          </div>
+        </div>
+      </div>
+
+      {coverage.covered != null && coverage.total != null && (
+        <div style={{ color: "var(--tx4)", fontSize: 11 }}>
+          {t("askferry:cleanup.coverage", {
+            covered: coverage.covered, total: coverage.total,
+          })}
+        </div>
+      )}
+
+      {byTool.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
+            {t("askferry:cleanup.byTool")}
+          </div>
+          {byTool.map(entry => (
+            <div key={entry.tool} style={{ display: "flex", gap: 8, fontSize: 11.5 }}>
+              <span style={{ color: "var(--tx2)", minWidth: 70 }}>{entry.tool}</span>
+              <span style={{ color: "var(--tx4)" }}>
+                {t("askferry:cleanup.toolSummary", {
+                  count: entry.count, size: formatBytes(entry.size_bytes),
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sessions.length > 0 && (
+        <div>
+          <button className="fbtn" type="button" onClick={() => setExpanded(value => !value)}>
+            {t(expanded ? "askferry:cleanup.hideSessions" : "askferry:cleanup.showSessions", {
+              n: sessions.length,
+            })}
+          </button>
+          {expanded && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 7 }}>
+              {sessions.map(session => (
+                <div key={`${session.tool}:${session.ref}`} style={{
+                  padding: "7px 8px",
+                  borderRadius: 6,
+                  background: "var(--surface)",
+                  border: "1px solid var(--line5)",
+                  fontSize: 11,
+                }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <span className="selectable" style={{ color: "var(--tx1)", fontWeight: 600 }}>
+                      {session.title || session.ref || "—"}
+                    </span>
+                    <span style={{ color: "var(--tx5)" }}>{session.tool}</span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ color: "var(--tx5)" }}>
+                      {formatUpdated(session.updated)}
+                    </span>
+                  </div>
+                  <div className="selectable" style={{ color: "var(--tx4)", marginTop: 3 }}>
+                    {session.project || "—"}
+                    {session.reason ? ` · ${session.reason}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {excluded.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ color: "var(--warn-text)", fontSize: 10.5 }}>
+            {t("askferry:cleanup.excluded", { n: excluded.length })}
+          </div>
+          {excluded.map(entry => (
+            <div key={`${entry.tool}:${entry.ref}`} style={{ display: "flex", gap: 8,
+              color: "var(--tx4)", fontSize: 11 }}>
+              <span>{entry.tool}</span>
+              <span className="mono selectable">{entry.ref}</span>
+              <span style={{ flex: 1 }} />
+              <span>{t(`askferry:cleanup.${CAUSE_KEYS[entry.cause] || "causeGeneric"}`)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ApprovalCard({
   item,
@@ -34,6 +188,7 @@ export function ApprovalCard({
 }) {
   const { t } = useTranslation();
   const operation = item.operation || {};
+  const cleanup = operation.kind === "cleanup";
   const applied = item.status === "applied";
   const failed = item.status === "failed";
   const expired = item.status === "pending"
@@ -95,6 +250,7 @@ export function ApprovalCard({
           {operation.summary}
         </div>
       )}
+      {cleanup && <CleanupPreview preview={operation.preview || {}} t={t} />}
       <EntityCards entities={entities} onNavigate={onNavigate} />
       <div style={{
         display: "flex",
@@ -155,4 +311,3 @@ export function ApprovalCard({
     </div>
   );
 }
-

@@ -93,17 +93,25 @@ test("bash 是能力里的一张卡,安全区不再有占位开关", () => {
   assert.equal(screen.queryByText("settings:roles.bashLater"), null);
 });
 
-test("agent_prompt 是第七项高权限能力,勾选后可保存到角色", async () => {
+test("cleanup 与 ask_user 工具进入角色能力清单,并可与高权限能力一起保存", async () => {
   const calls = mount();
   fireEvent.click(screen.getByText("reader"));
 
-  assert.equal(TOOLS.length, 7);
+  assert.equal(TOOLS.length, 9);
+  assert.ok(TOOL_GLYPH.session_cleanup);
+  assert.ok(TOOL_GLYPH.ask_user);
+  assert.equal(zhSettings.roles.tool.session_cleanup.label, "会话清理");
+  assert.equal(enSettings.roles.tool.session_cleanup.label, "Session cleanup");
+  assert.equal(zhSettings.roles.tool.ask_user.label, "询问用户");
+  assert.equal(enSettings.roles.tool.ask_user.label, "Ask the user");
   assert.ok(TOOL_GLYPH.agent_prompt);
   assert.equal(zhSettings.roles.tool.agent_prompt.label, "驱动 Agent");
   assert.equal(enSettings.roles.tool.agent_prompt.label, "Drive Agent");
   assert.match(zhSettings.roles.tool.agent_prompt.desc, /修改工作区或会话/);
   assert.match(enSettings.roles.tool.agent_prompt.desc, /modify the workspace or session/);
 
+  fireEvent.click(screen.getByText("settings:roles.tool.session_cleanup.label"));
+  fireEvent.click(screen.getByText("settings:roles.tool.ask_user.label"));
   fireEvent.click(screen.getByText("settings:roles.tool.agent_prompt.label"));
   fireEvent.click(screen.getByText("settings:roles.save"));
   await Promise.resolve();

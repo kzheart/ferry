@@ -70,6 +70,14 @@
         "label": "Session edit",
         "desc": "Rewrite or delete turns and assistant replies"
       },
+      "session_cleanup": {
+        "label": "Session cleanup",
+        "desc": "Review, triage and bulk-delete sessions by scope; preview and approval are required"
+      },
+      "ask_user": {
+        "label": "Ask the user",
+        "desc": "Collect a choice in the conversation without authorizing deletion or other writes"
+      },
       "bash": {
         "label": "Run command",
         "desc": "Really runs shell commands on your machine; every call goes through approval"

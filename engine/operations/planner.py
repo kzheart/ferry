@@ -267,6 +267,8 @@ class OperationPlanner:
         excluded = []
         resolved_targets = []
         total_size = 0
+        by_tool = {}
+        undoable_count = 0
         for target, record, key in zip(
             operation_input["targets"], records, resolved_keys,
         ):
@@ -301,11 +303,19 @@ class OperationPlanner:
                     "title": truncate_text(
                         str(record.row.get("title") or ""), 512,
                     )[0],
+                    "project": record.row.get("project") or record.row.get("dir"),
                     "size": size,
                     "updated": record.row.get("updated"),
                     "reason": reason,
                     "undoable": lifecycle.delete_undoable,
                 })
+                summary = by_tool.setdefault(
+                    record.tool, {"tool": record.tool, "count": 0, "size_bytes": 0},
+                )
+                summary["count"] += 1
+                summary["size_bytes"] += size
+                if lifecycle.delete_undoable:
+                    undoable_count += 1
                 continue
             excluded.append({
                 "tool": record.tool,
@@ -323,6 +333,8 @@ class OperationPlanner:
             "sessions": sessions,
             "excluded": excluded,
             "totals": {"count": len(sessions), "size_bytes": total_size},
+            "by_tool": [by_tool[tool] for tool in sorted(by_tool)],
+            "undoable": {"count": undoable_count, "total": len(sessions)},
             "coverage": self._cleanup.coverage(scope_id),
         }
         return self._store_plan(
