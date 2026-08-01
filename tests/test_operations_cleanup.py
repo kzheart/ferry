@@ -116,6 +116,11 @@ def test_plan_excludes_pinned_archived_tagged(cleanup_operations, agent_environm
     plan = _plan(service, inventory)
 
     assert plan["preview"]["totals"]["count"] == 1
+    assert plan["preview"]["by_tool"] == [{
+        "tool": "claude", "count": 1, "size_bytes": plan["preview"]["totals"]["size_bytes"],
+    }]
+    assert plan["preview"]["undoable"] == {"count": 0, "total": 1}
+    assert plan["preview"]["sessions"][0]["project"] == "/Users/private/secret-project"
     assert {entry["cause"] for entry in plan["preview"]["excluded"]} == {
         "pinned", "archived", "tagged",
     }
