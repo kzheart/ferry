@@ -66,6 +66,18 @@
     "approve": "Approve & apply",
     "reject": "Reject"
   },
+  "choice": {
+    "title": "Your choice",
+    "pending": "Waiting for your choice",
+    "answered": "Answered",
+    "unanswered": "Not answered",
+    "recommended": "Recommended",
+    "multiSelect": "Select multiple",
+    "customPlaceholder": "Add a note (optional)",
+    "noAnswer": "The run ended without an answer",
+    "submit": "Submit choice",
+    "submitting": "Submitting…"
+  },
   "composer": {
     "placeholder": "Ask anything",
     "desktopOnly": "Ask Ferry is only available in the desktop app",

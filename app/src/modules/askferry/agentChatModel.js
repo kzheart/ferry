@@ -33,6 +33,11 @@ export const operationKey = operation => operation?.plan_id || null;
 
 const endRun = (log, items) => {
   sealAssistant(items);
+  for (let i = 0; i < items.length; i += 1) {
+    if (items[i].kind === "choice" && items[i].status === "pending") {
+      items[i] = { ...items[i], status: "unanswered", answered: false };
+    }
+  }
   log.status = "idle";
   log.runId = null;
 };
@@ -49,6 +54,75 @@ const upsertApproval = (items, next, pushIfMissing = true) => {
   } else if (pushIfMissing) {
     items.push(next);
   }
+};
+
+const choiceIndex = (items, requestId, callId) => items.findLastIndex(item =>
+  item.kind === "choice" &&
+  ((requestId && item.requestId === requestId) || (callId && item.callId === callId)));
+
+const normalizeSelected = value => Array.isArray(value)
+  ? value.filter(option => typeof option === "string")
+  : [];
+
+const choiceAnswer = value => {
+  if (!value || typeof value !== "object" || Array.isArray(value)
+      || typeof value.answered !== "boolean") return null;
+  return {
+    status: value.answered ? "answered" : "unanswered",
+    answered: value.answered,
+    selected: normalizeSelected(value.selected),
+    customText: typeof value.custom_text === "string" ? value.custom_text : "",
+  };
+};
+
+const answerFromToolResult = result => {
+  const details = result?.details;
+  return choiceAnswer(details?.answer || details);
+};
+
+const upsertChoice = (items, next) => {
+  const i = choiceIndex(items, next.requestId, next.callId);
+  if (i >= 0) {
+    const current = items[i];
+    items[i] = {
+      ...current,
+      ...next,
+      // resolved/tool.completed 可能早于补发的 requested,不能被 pending 覆盖。
+      ...(current.status !== "pending" && next.status === "pending"
+        ? { status: current.status, answered: current.answered,
+          selected: current.selected, customText: current.customText }
+        : {}),
+    };
+  } else {
+    items.push(next);
+  }
+};
+
+const choiceFromToolStart = (payload, ev) => {
+  const args = payload.args && typeof payload.args === "object" ? payload.args : {};
+  return {
+    kind: "choice",
+    requestId: payload.request_id || payload.tool_call_id,
+    callId: payload.tool_call_id,
+    question: typeof args.question === "string" ? args.question : "",
+    options: Array.isArray(args.options) ? args.options : [],
+    multiSelect: !!args.multi_select,
+    allowCustom: !!args.allow_custom,
+    status: "pending",
+    answered: false,
+    selected: [],
+    customText: "",
+    runId: ev.run_id,
+    startedAt: ev.timestamp,
+  };
+};
+
+const applyChoiceAnswer = (items, requestId, callId, answer) => {
+  const next = choiceAnswer(answer);
+  if (!next) return;
+  const i = choiceIndex(items, requestId, callId);
+  if (i < 0) return;
+  items[i] = { ...items[i], ...next };
 };
 
 export function applyEvent(log, ev) {
@@ -89,6 +163,7 @@ export function applyEvent(log, ev) {
       sealAssistant(items);
       items.push({ kind: "tool", callId: p.tool_call_id, name: p.name, args: p.args,
         status: "running", startedAt: ev.timestamp });
+      if (p.name === "ask_user") upsertChoice(items, choiceFromToolStart(p, ev));
       break;
     case "tool.completed": {
       const i = items.findLastIndex(it => it.kind === "tool" && it.callId === p.tool_call_id);
@@ -97,6 +172,11 @@ export function applyEvent(log, ev) {
         items[i] = { ...current, status: p.is_error ? "error" : "ok",
           endedAt: ev.timestamp, result: p.result,
           entities: p.is_error ? [] : entitiesFromToolResult(current.name, p.result, current.args) };
+        if (current.name === "ask_user") {
+          applyChoiceAnswer(items, p.request_id, p.tool_call_id,
+            p.is_error ? { answered: false, selected: [] }
+              : answerFromToolResult(p.result));
+        }
         const envelope = p.result?.details;
         const operation = envelope?.operation;
         const key = operationKey(operation);
@@ -113,6 +193,28 @@ export function applyEvent(log, ev) {
       }
       break;
     }
+    case "choice.requested": {
+      const requestId = p.request_id;
+      upsertChoice(items, {
+        kind: "choice",
+        requestId,
+        callId: p.tool_call_id,
+        question: p.question || "",
+        options: Array.isArray(p.options) ? p.options : [],
+        multiSelect: !!p.multi_select,
+        allowCustom: !!p.allow_custom,
+        status: "pending",
+        answered: false,
+        selected: [],
+        customText: "",
+        runId: ev.run_id,
+        requestedAt: ev.timestamp,
+      });
+      break;
+    }
+    case "choice.resolved":
+      applyChoiceAnswer(items, p.request_id, p.tool_call_id, p);
+      break;
     // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进。
     // 按 key 去重原地更新;自动执行不出卡(无既有卡时不新增),失败始终可见
     case "operation.proposed":
@@ -148,6 +250,14 @@ export function applyEvent(log, ev) {
 export function patchApproval(log, operationId, patch) {
   const i = log.items.findLastIndex(
     it => it.kind === "approval" && operationKey(it.operation) === operationId);
+  if (i < 0) return log;
+  const items = [...log.items];
+  items[i] = { ...items[i], ...patch };
+  return { ...log, items };
+}
+
+export function patchChoice(log, requestId, patch) {
+  const i = choiceIndex(log.items, requestId, null);
   if (i < 0) return log;
   const items = [...log.items];
   items[i] = { ...items[i], ...patch };

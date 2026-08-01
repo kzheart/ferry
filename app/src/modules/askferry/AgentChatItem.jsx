@@ -7,6 +7,7 @@ import { CheckIcon, CloseIcon, CopyIcon, PencilIcon, SendArrowIcon, Spinner }
   from "../../shared/ui/icons.jsx";
 import { AgentToolRow } from "./AgentToolTrace.jsx";
 import { ApprovalCard } from "./AgentApprovalCard.jsx";
+import { AgentChoiceCard } from "./AgentChoiceCard.jsx";
 
 function IconBtn({ title, onClick, children }) {
   return (
@@ -141,7 +142,13 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
       <ApprovalCard item={item}
         onApprove={() => ferry.approve(sessionId, item)}
         onDismiss={() => ferry.dismiss(sessionId, item)}
-        onNavigate={onNavigate} />
+      onNavigate={onNavigate} />
+    );
+  }
+  if (item.kind === "choice") {
+    return (
+      <AgentChoiceCard item={item}
+        onRespond={answer => ferry.respondChoice(sessionId, item.requestId, answer)} />
     );
   }
   if (item.kind === "status") {
