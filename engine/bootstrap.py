@@ -4,6 +4,7 @@ from . import __version__
 from .adapters.registry import create_registry
 from .sessions.content_index import ContentIndex
 from .sessions.index import AgentSessionIndex
+from .sessions.cleanup import CleanupService
 from .app import EngineService
 from .context import EngineContext
 from .system.resources import resource_path
@@ -29,5 +30,6 @@ def create_context() -> EngineContext:
 def build_engine(ports: EngineContext | None = None) -> EngineService:
     ports = ports or create_context()
     index = AgentSessionIndex(ports)
+    cleanup = CleanupService(index, ports)
     operations = OperationService(ports, index)
-    return EngineService(ports, index, operations, ContentIndex())
+    return EngineService(ports, index, operations, ContentIndex(), cleanup)
