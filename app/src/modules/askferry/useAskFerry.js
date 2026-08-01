@@ -127,23 +127,16 @@ export function useAskFerry() {
 
   const respondChoice = useCallback(async (sessionId, requestId, answer) => {
     if (!sessionId || !requestId) return;
-    const selected = Array.isArray(answer?.selected)
-      ? answer.selected.filter(value => typeof value === "string")
-      : [];
-    const customText = typeof answer?.custom_text === "string"
-      ? answer.custom_text : "";
+    const selected = Array.isArray(answer?.selected) ? answer.selected.filter(
+      value => typeof value === "string") : [];
+    const customText = typeof answer?.custom_text === "string" ? answer.custom_text : "";
     mutateLog(sessionId, log => patchChoice(log, requestId, {
       status: answer?.answered === false ? "unanswered" : "answered",
-      answered: answer?.answered !== false,
-      selected,
-      customText,
+      answered: answer?.answered !== false, selected, customText,
     }));
     try {
-      return await choiceRespond(requestId, {
-        answered: answer?.answered !== false,
-        selected,
-        custom_text: customText,
-      });
+      return await choiceRespond(requestId, { answered: answer?.answered !== false,
+        selected, custom_text: customText });
     } catch (error) {
       setLastError(error);
     }
