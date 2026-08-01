@@ -42,6 +42,7 @@ class OperationExecutor:
             "metadata": self._apply_metadata,
             "delete": self._apply_delete,
             "restore-delete": self._apply_restore_delete,
+            "cleanup": self._apply_cleanup,
         }
         handler = handlers.get(operation.kind)
         if handler is None:
@@ -184,3 +185,58 @@ class OperationExecutor:
         ):
             raise RuntimeError("删除恢复状态提交失败")
         return {**result, "recovery_id": recovery_id}
+
+    def _apply_cleanup(self, operation: OperationPlan) -> dict:
+        params = operation.input()
+        result = {
+            "succeeded": [],
+            "skipped": [],
+            "failed": [],
+            "recovery_ids": [],
+        }
+        for target in params["targets"]:
+            tool = target["tool"]
+            ref = target["ref"]
+            try:
+                try:
+                    record = self._index.resolve(tool, ref)
+                except AgentReferenceError as error:
+                    reason = error.params.get("reason")
+                    result["skipped"].append({
+                        "tool": tool,
+                        "ref": ref,
+                        "cause": "changed" if reason == "session_changed" else "not_found",
+                    })
+                    continue
+                if (
+                    record.row.get("id") != target["session_id"]
+                    or record.revision != target["revision"]
+                ):
+                    result["skipped"].append({
+                        "tool": tool,
+                        "ref": ref,
+                        "cause": "changed",
+                    })
+                    continue
+                deletion = SessionDeletionService(self._ports).delete(
+                    tool, record.canonical_ref,
+                )
+                snapshot = deletion.pop("snapshot", None)
+                success = {"tool": tool, "ref": ref}
+                if deletion.get("undoable") is True:
+                    if not isinstance(snapshot, str) or not snapshot:
+                        raise RuntimeError("可恢复删除未返回快照")
+                    recovery_id = "recovery_" + secrets.token_urlsafe(18)
+                    self._database().operations.store_recovery(
+                        recovery_id, tool, snapshot, now_ms(),
+                    )
+                    success["recovery_id"] = recovery_id
+                    result["recovery_ids"].append(recovery_id)
+                result["succeeded"].append(success)
+            except Exception as error:  # noqa: BLE001 - 单条失败继续批处理
+                result["failed"].append({
+                    "tool": tool,
+                    "ref": ref,
+                    "error": str(error)[:500],
+                })
+        return result

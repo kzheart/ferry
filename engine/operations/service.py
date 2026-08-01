@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from ..sessions.index import AgentSessionIndex
+from ..sessions.cleanup import CleanupService
 from ..context import EngineContext
 from ..errors import AgentRequestError
 from .edit import EditOperationHandler
@@ -27,7 +28,9 @@ MUTATION_WORKERS = 1
 
 class OperationService:
     def __init__(self, ports: EngineContext,
-                 index: AgentSessionIndex):
+                 index: AgentSessionIndex,
+                 cleanup: CleanupService | None = None):
+        cleanup = cleanup or CleanupService(index, ports)
         migration = MigrationService(ports)
         edit = EditOperationHandler(ports, index)
         self._lock = threading.RLock()
@@ -46,6 +49,7 @@ class OperationService:
             edit,
             self._store_plan,
             self._database,
+            cleanup,
         )
         self._operation_executor = OperationExecutor(
             ports,

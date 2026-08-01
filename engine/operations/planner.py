@@ -12,6 +12,7 @@ from ..errors import (
     require_agent_capability,
 )
 from ..sessions import agent_read
+from ..sessions.cleanup import CleanupService
 from ..sessions.index import AgentSessionIndex
 from ..sessions.safety import record_session_id, truncate_text
 from .metadata_store import metadata_key
@@ -20,6 +21,7 @@ from .edit import EditOperationHandler
 from .migrate import MigrationService
 from .validation import (
     validate_delete_input,
+    validate_cleanup_input,
     validate_edit_input,
     validate_metadata_input,
     validate_migration_input,
@@ -36,6 +38,7 @@ class OperationPlanner:
         edit: EditOperationHandler,
         store_plan: Callable[..., dict],
         database: Callable,
+        cleanup: CleanupService | None = None,
     ):
         self._ports = ports
         self._index = index
@@ -43,6 +46,7 @@ class OperationPlanner:
         self._edit = edit
         self._store_plan = store_plan
         self._database = database
+        self._cleanup = cleanup or CleanupService(index, ports)
 
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
@@ -56,6 +60,7 @@ class OperationPlanner:
             "metadata": self._plan_metadata,
             "delete": self._plan_delete,
             "restore-delete": self._plan_restore_delete,
+            "cleanup": self._plan_cleanup,
         }
         handler = handlers.get(kind)
         if handler is None:
@@ -227,5 +232,102 @@ class OperationPlanner:
                 "tool": recovery["tool"],
             },
             base_revision="available",
+            document_revision=None,
+        )
+
+    def _plan_cleanup(self, value: dict) -> dict:
+        operation_input = validate_cleanup_input(
+            value, self._ports.adapters(),
+        )
+        scope_id = operation_input["scope_id"]
+        if self._cleanup.stale(scope_id):
+            raise AgentRequestError(
+                "cleanup scope 已过期，请重新 inventory",
+                {"scope_id": scope_id, "reason": "stale_generation", "recovery": "inventory"},
+            )
+
+        records = []
+        resolved_keys = []
+        for target in operation_input["targets"]:
+            try:
+                record = self._index.resolve(target["tool"], target["ref"])
+            except AgentReferenceError as error:
+                raise ConcurrentModificationError(
+                    "cleanup 会话在 inventory 后已变化，请重新 inventory"
+                ) from error
+            session_id = record.row.get("id")
+            if not isinstance(session_id, str) or not session_id:
+                raise AgentRequestError("cleanup 会话缺少可用的原生 ID")
+            records.append(record)
+            resolved_keys.append((record.tool, session_id))
+
+        self._cleanup.check_nomination(scope_id, resolved_keys)
+        metadata_rows = metadata.list_all(self._ports)
+        sessions = []
+        excluded = []
+        resolved_targets = []
+        total_size = 0
+        for target, record, key in zip(
+            operation_input["targets"], records, resolved_keys,
+        ):
+            lifecycle = require_agent_capability(
+                self._ports.adapter(record.tool), "delete", "lifecycle",
+            )
+            reason = target.get("reason")
+            verdict = self._cleanup.verdict(scope_id, key) or {}
+            if reason is None:
+                reason = verdict.get("reason")
+            resolved_targets.append({
+                "tool": record.tool,
+                "canonical_ref": record.canonical_ref,
+                "ref": record.opaque_ref,
+                "session_id": key[1],
+                "revision": record.revision,
+                "reason": reason,
+            })
+            metadata_row = metadata_rows.get(metadata_key(record.tool, key[1]), {})
+            if metadata_row.get("pinned") is True:
+                cause = "pinned"
+            elif metadata_row.get("archived") is True:
+                cause = "archived"
+            elif metadata_row.get("tags"):
+                cause = "tagged"
+            else:
+                size = int(record.row.get("size") or 0)
+                total_size += size
+                sessions.append({
+                    "tool": record.tool,
+                    "ref": record.opaque_ref,
+                    "title": truncate_text(
+                        str(record.row.get("title") or ""), 512,
+                    )[0],
+                    "size": size,
+                    "updated": record.row.get("updated"),
+                    "reason": reason,
+                    "undoable": lifecycle.delete_undoable,
+                })
+                continue
+            excluded.append({
+                "tool": record.tool,
+                "ref": record.opaque_ref,
+                "cause": cause,
+            })
+
+        if self._cleanup.stale(scope_id):
+            raise AgentRequestError(
+                "cleanup scope 在计划生成期间已变化，请重新 inventory",
+                {"scope_id": scope_id, "reason": "stale_generation", "recovery": "inventory"},
+            )
+        operation_input["targets"] = resolved_targets
+        preview = {
+            "sessions": sessions,
+            "excluded": excluded,
+            "totals": {"count": len(sessions), "size_bytes": total_size},
+            "coverage": self._cleanup.coverage(scope_id),
+        }
+        return self._store_plan(
+            operation_input,
+            preview,
+            base_revision="batch",
             document_revision=None,
         )

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import re
@@ -65,7 +66,7 @@ def _decode_cursor(cursor: str) -> tuple[int, str, str]:
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         value = json.loads(base64.urlsafe_b64decode(padded).decode())
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (binascii.Error, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AgentRequestError("cleanup cursor 无效", {"field": "cursor"}) from error
     if (
         not isinstance(value, list)
@@ -296,7 +297,7 @@ class CleanupService:
                     {"field": "verdicts.verdict"},
                 )
             reason = item.get("reason")
-            if reason is not None and (
+            if "reason" in item and (
                 not isinstance(reason, str) or len(reason) > 300
             ):
                 raise AgentRequestError(
@@ -316,9 +317,10 @@ class CleanupService:
                     "triage ref 不在当前 inventory scope",
                     {"tool": tool, "ref": ref, "reason": "out_of_scope"},
                 )
+            prior = ledger.verdicts.get(key, {})
             ledger.verdicts[key] = {
                 "verdict": verdict,
-                "reason": reason,
+                "reason": reason if "reason" in item else prior.get("reason"),
             }
         remaining = [
             {
@@ -334,3 +336,61 @@ class CleanupService:
             "total": len(ledger.ordered),
             "remaining_sample": remaining,
         }
+
+    def check_nomination(self, scope_id: str, resolved: list[tuple]) -> None:
+        ledger = self._ledger(scope_id)
+        if self.stale(scope_id):
+            raise AgentRequestError(
+                "cleanup scope 在 inventory 后已变化，请重新 inventory",
+                {"scope_id": scope_id, "reason": "stale_generation", "recovery": "inventory"},
+            )
+        missing = len(ledger.rows) - len(ledger.verdicts)
+        if missing:
+            raise AgentRequestError(
+                f"cleanup triage 尚有 {missing} 条会话未裁决",
+                {
+                    "scope_id": scope_id,
+                    "covered": len(ledger.verdicts),
+                    "total": len(ledger.rows),
+                    "missing": missing,
+                    "recovery": "triage_remaining",
+                },
+            )
+        if not isinstance(resolved, list):
+            raise AgentRequestError("cleanup targets 解析结果非法")
+        seen = set()
+        for item in resolved:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 2
+                or not all(isinstance(value, str) and value for value in item)
+            ):
+                raise AgentRequestError("cleanup target 解析结果非法")
+            if item in seen:
+                raise AgentRequestError("cleanup targets 不允许重复")
+            seen.add(item)
+            if item not in ledger.rows:
+                raise AgentRequestError(
+                    "cleanup target 不在当前 inventory scope",
+                    {"tool": item[0], "session_id": item[1], "reason": "out_of_scope"},
+                )
+            verdict = ledger.verdicts.get(item, {}).get("verdict")
+            if verdict != "delete":
+                raise AgentRequestError(
+                    "cleanup target 没有 delete 裁决",
+                    {"tool": item[0], "session_id": item[1], "verdict": verdict},
+                )
+
+    def coverage(self, scope_id: str) -> dict:
+        ledger = self._ledger(scope_id)
+        return {
+            "covered": len(ledger.verdicts),
+            "total": len(ledger.rows),
+            "scope": scope_id,
+        }
+
+    def verdict(self, scope_id: str, key: tuple[str, str]) -> dict | None:
+        ledger = self._ledger(scope_id)
+        with self._lock:
+            value = ledger.verdicts.get(key)
+            return dict(value) if value is not None else None
