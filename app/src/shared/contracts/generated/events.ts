@@ -20,6 +20,14 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
+  "choice.requested": {
+    "source": "host",
+    "forwardToUi": true
+  },
+  "choice.resolved": {
+    "source": "host",
+    "forwardToUi": true
+  },
   "content.delta": {
     "source": "runtime",
     "forwardToUi": true

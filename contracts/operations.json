@@ -5,7 +5,8 @@
     "migration",
     "metadata",
     "delete",
-    "restore-delete"
+    "restore-delete",
+    "cleanup"
   ],
   "edit_operations": [
     "delete-turn",
@@ -54,7 +55,16 @@
     },
     "restore-delete": {
       "recovery_id": "string"
+    },
+    "cleanup": {
+      "scope_id": "string",
+      "targets": "cleanup-target[]"
     }
+  },
+  "cleanup_target_fields": {
+    "tool": "agent-id",
+    "ref": "session-ref",
+    "reason": "string?"
   },
   "edit_operation_fields": {
     "delete-turn": {

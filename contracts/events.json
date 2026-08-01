@@ -5,6 +5,8 @@
     {"type": "auth.event", "source": "runtime", "forward_to_ui": true},
     {"type": "auth.failed", "source": "runtime", "forward_to_ui": true},
     {"type": "auth.prompt", "source": "runtime", "forward_to_ui": true},
+    {"type": "choice.requested", "source": "host", "forward_to_ui": true},
+    {"type": "choice.resolved", "source": "host", "forward_to_ui": true},
     {"type": "content.delta", "source": "runtime", "forward_to_ui": true},
     {"type": "engine.request", "source": "runtime", "forward_to_ui": false},
     {"type": "operation.applied", "source": "host", "forward_to_ui": true},

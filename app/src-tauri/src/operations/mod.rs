@@ -226,6 +226,9 @@ pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Resul
         OperationPlanInput::RestoreDelete(restore) => {
             validate_restore_delete_operation_input(restore)
         }
+        OperationPlanInput::Cleanup(_) => {
+            Err("Cleanup Operation 仅允许 Agent Runtime 路由".to_owned())
+        }
     }
 }
 
@@ -511,5 +514,16 @@ mod tests {
                 "{recovery_id} 应被拒绝"
             );
         }
+    }
+
+    #[test]
+    fn cleanup_is_rejected_at_the_frontend_operation_boundary() {
+        let error = validate(json!({
+            "kind": "cleanup",
+            "scope_id": "scope_123",
+            "targets": [],
+        }))
+        .expect_err("cleanup must stay on the Agent Runtime route");
+        assert!(error.contains("Agent Runtime"));
     }
 }

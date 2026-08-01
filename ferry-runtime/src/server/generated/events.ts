@@ -5,6 +5,8 @@ export const FERRY_EVENT_TYPES = [
   "auth.event",
   "auth.failed",
   "auth.prompt",
+  "choice.requested",
+  "choice.resolved",
   "content.delta",
   "engine.request",
   "operation.applied",

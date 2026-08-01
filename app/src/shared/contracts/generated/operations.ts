@@ -25,6 +25,12 @@ export interface MetadataPatch {
   tags?: string[];
 }
 
+export interface CleanupTarget {
+  tool: AgentId;
+  ref: string;
+  reason?: string;
+}
+
 export interface DeleteTurnOperation {
   op: "delete-turn";
   turn: number;
@@ -83,12 +89,19 @@ export interface RestoreDeleteOperationInput {
   recovery_id: string;
 }
 
+export interface CleanupOperationInput {
+  kind: "cleanup";
+  scope_id: string;
+  targets: CleanupTarget[];
+}
+
 export type OperationInput =
   | EditOperationInput
   | MigrationOperationInput
   | MetadataOperationInput
   | DeleteOperationInput
-  | RestoreDeleteOperationInput;
+  | RestoreDeleteOperationInput
+  | CleanupOperationInput;
 export const OPERATION_PLAN_ID_PREFIX = "op_" as const;
 export const OPERATION_KINDS = [
   "edit",
@@ -96,6 +109,7 @@ export const OPERATION_KINDS = [
   "metadata",
   "delete",
   "restore-delete",
+  "cleanup",
 ] as const;
 export const EDIT_OPERATION_KINDS = [
   "delete-turn",
