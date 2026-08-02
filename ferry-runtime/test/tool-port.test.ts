@@ -183,10 +183,10 @@ describe("Ferry mutation tool schemas", () => {
 
   it("requires a matching cleanup preview before execute", async () => {
     const invoke = vi.fn(async () => ({ ok: true }));
-    const cleanupTool = createFerryTools(
-      { invoke },
-      () => ({ sessionId: "session", runId: "run" }),
-    ).find((tool) => tool.name === "session_cleanup")!;
+    const cleanupTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_cleanup")!;
     const base = {
       scope_id: "0123456789abcdef",
       targets: [{ tool: "claude", ref: "fsr_session" }],
@@ -225,6 +225,101 @@ describe("Ferry mutation tool schemas", () => {
       undefined,
     );
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("burns the cleanup preview once execute succeeds", async () => {
+    const invoke = vi.fn(async () => ({ ok: true }));
+    const cleanupTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_cleanup")!;
+    const base = {
+      scope_id: "0123456789abcdef",
+      targets: [{ tool: "claude", ref: "fsr_session" }],
+    };
+
+    await cleanupTool.execute(
+      "call",
+      { ...base, intent: "preview" },
+      undefined,
+      undefined,
+    );
+    await cleanupTool.execute(
+      "call",
+      { ...base, intent: "execute" },
+      undefined,
+      undefined,
+    );
+    // 同一批不能凭一次预览删两次
+    await expect(
+      cleanupTool.execute(
+        "call",
+        { ...base, intent: "execute" },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow("requires a successful preview");
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects malformed cleanup targets and verdicts at the execution boundary", async () => {
+    const invoke = vi.fn(async () => ({ ok: true }));
+    const cleanupTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_cleanup")!;
+    const scopeId = "0123456789abcdef";
+    const run = (input: Record<string, unknown>) =>
+      cleanupTool.execute("call", input, undefined, undefined);
+
+    // Provider 未必真的执行 function schema:删除入口不能只靠 schema 兜底
+    await expect(
+      run({
+        intent: "preview",
+        scope_id: scopeId,
+        targets: [{ tool: "nope", ref: "fsr_session" }],
+      }),
+    ).rejects.toThrow("require a known tool");
+    await expect(
+      run({
+        intent: "preview",
+        scope_id: scopeId,
+        targets: [{ tool: "claude", ref: 123 }],
+      }),
+    ).rejects.toThrow("require a non-empty ref");
+    await expect(
+      run({
+        intent: "triage",
+        scope_id: scopeId,
+        verdicts: [{ tool: "claude", ref: "fsr_session", verdict: "burn" }],
+      }),
+    ).rejects.toThrow("require verdict");
+    await expect(
+      run({
+        intent: "triage",
+        scope_id: scopeId,
+        verdicts: [
+          {
+            tool: "claude",
+            ref: "fsr_session",
+            verdict: "keep",
+            reason: "x".repeat(301),
+          },
+        ],
+      }),
+    ).rejects.toThrow("at most 300 characters");
+    await expect(
+      run({ intent: "preview", scope_id: scopeId, targets: ["fsr_session"] }),
+    ).rejects.toThrow("entries must be objects");
+    expect(invoke).not.toHaveBeenCalled();
+
+    // 合法批次照常放行
+    await run({
+      intent: "triage",
+      scope_id: scopeId,
+      verdicts: [{ tool: "claude", ref: "fsr_session", verdict: "delete" }],
+    });
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it("bounds ask_user option counts", () => {

@@ -74,7 +74,7 @@
     "undoable": "Undoable",
     "coverage": "Triaged {{covered}} / {{total}} sessions",
     "byTool": "By agent",
-    "toolSummary": "{{count}} sessions · {{size}}",
+    "toolSummary": "{{n}} sessions · {{size}}",
     "showSessions": "Show {{n}} sessions",
     "hideSessions": "Hide session list",
     "excluded": "{{n}} excluded",
@@ -86,7 +86,7 @@
   },
   "choice": {
     "title": "Your choice",
-    "pending": "Waiting for your choice",
+    "skip": "Skip",
     "answered": "Answered",
     "unanswered": "Not answered",
     "recommended": "Recommended",

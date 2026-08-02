@@ -114,7 +114,7 @@ function CleanupPreview({ preview, t }) {
               <span style={{ color: "var(--tx2)", minWidth: 70 }}>{entry.tool}</span>
               <span style={{ color: "var(--tx4)" }}>
                 {t("askferry:cleanup.toolSummary", {
-                  count: entry.count, size: formatBytes(entry.size_bytes),
+                  n: entry.count, size: formatBytes(entry.size_bytes),
                 })}
               </span>
             </div>

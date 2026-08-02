@@ -33,6 +33,10 @@ const sealAssistant = items => {
 
 export const operationKey = operation => operation?.plan_id || null;
 
+// run 终态后没有任何提问还能被回答:宿主的挂起表已经清空,再点提交只会换来
+// request_not_found。一个会话同一时刻只有一个活跃 run,所以此刻仍是 pending 的卡
+// 一律是孤儿——包括终态事件之后才补到的那张(Rust 在 run 终态会直接返回
+// answered:false 且不发 choice.requested)。不按 runId 过滤,才兜得住这些孤儿。
 const endRun = (log, items) => {
   sealAssistant(items);
   for (let i = 0; i < items.length; i += 1) {
@@ -100,31 +104,38 @@ const upsertChoice = (items, next) => {
   }
 };
 
-const choiceFromToolStart = (payload, ev) => {
-  const args = payload.args && typeof payload.args === "object" ? payload.args : {};
-  return {
-    kind: "choice",
-    requestId: payload.request_id || payload.tool_call_id,
-    callId: payload.tool_call_id,
-    question: typeof args.question === "string" ? args.question : "",
-    options: Array.isArray(args.options) ? args.options : [],
-    multiSelect: !!args.multi_select,
-    allowCustom: !!args.allow_custom,
-    status: "pending",
-    answered: false,
-    selected: [],
-    customText: "",
-    runId: ev.run_id,
-    startedAt: ev.timestamp,
-  };
-};
+// 三个来源(tool.started / tool.request 的 args、choice.requested 的 payload)归一成
+// 同一张卡:回放与实时两条路径必须产出形状一致的 item,否则同一张卡会被建两次。
+// tool.started 不带 request_id,回放时先用 tool_call_id 顶着,紧随其后的
+// tool.request(进事件日志,回放拿得到)会把真正的 request_id 补上。
+const choiceCard = (fields, payload, ev) => ({
+  kind: "choice",
+  requestId: payload.request_id || payload.tool_call_id,
+  callId: payload.tool_call_id,
+  question: typeof fields.question === "string" ? fields.question : "",
+  options: Array.isArray(fields.options) ? fields.options : [],
+  multiSelect: !!fields.multi_select,
+  allowCustom: !!fields.allow_custom,
+  status: "pending",
+  answered: false,
+  selected: [],
+  customText: "",
+  runId: ev.run_id,
+  requestedAt: ev.timestamp,
+});
 
-const applyChoiceAnswer = (items, requestId, callId, answer) => {
+const choiceFromToolArgs = (payload, ev) => choiceCard(
+  payload.args && typeof payload.args === "object" ? payload.args : {},
+  payload, ev);
+
+const applyChoiceAnswer = (items, payload, answer, ev) => {
   const next = choiceAnswer(answer);
   if (!next) return;
-  const i = choiceIndex(items, requestId, callId);
-  if (i < 0) return;
-  items[i] = { ...items[i], ...next };
+  const i = choiceIndex(items, payload.request_id, payload.tool_call_id);
+  // 答案早于卡片到达时不能丢:先落一张只有答案的卡,后到的 requested/tool.request
+  // 会把问题和选项补齐(upsertChoice 不让 pending 覆盖已有答案)
+  if (i < 0) items.push({ ...choiceCard({}, payload, ev), ...next });
+  else items[i] = { ...items[i], ...next };
 };
 
 export function applyEvent(log, ev) {
@@ -165,7 +176,12 @@ export function applyEvent(log, ev) {
       sealAssistant(items);
       items.push({ kind: "tool", callId: p.tool_call_id, name: p.name, args: p.args,
         status: "running", startedAt: ev.timestamp });
-      if (p.name === "ask_user") upsertChoice(items, choiceFromToolStart(p, ev));
+      if (p.name === "ask_user") upsertChoice(items, choiceFromToolArgs(p, ev));
+      break;
+    // 回放里唯一带 request_id 的一条:host 的 choice.requested 不进事件日志,
+    // 重载后全靠它把应答用的 request_id 补回卡片上
+    case "tool.request":
+      if (p.name === "ask_user") upsertChoice(items, choiceFromToolArgs(p, ev));
       break;
     case "tool.completed": {
       const i = items.findLastIndex(it => it.kind === "tool" && it.callId === p.tool_call_id);
@@ -175,9 +191,9 @@ export function applyEvent(log, ev) {
           endedAt: ev.timestamp, result: p.result,
           entities: p.is_error ? [] : entitiesFromToolResult(current.name, p.result, current.args) };
         if (current.name === "ask_user") {
-          applyChoiceAnswer(items, p.request_id, p.tool_call_id,
+          applyChoiceAnswer(items, p,
             p.is_error ? { answered: false, selected: [] }
-              : answerFromToolResult(p.result));
+              : answerFromToolResult(p.result), ev);
         }
         const envelope = p.result?.details;
         const operation = envelope?.operation;
@@ -195,27 +211,11 @@ export function applyEvent(log, ev) {
       }
       break;
     }
-    case "choice.requested": {
-      const requestId = p.request_id;
-      upsertChoice(items, {
-        kind: "choice",
-        requestId,
-        callId: p.tool_call_id,
-        question: p.question || "",
-        options: Array.isArray(p.options) ? p.options : [],
-        multiSelect: !!p.multi_select,
-        allowCustom: !!p.allow_custom,
-        status: "pending",
-        answered: false,
-        selected: [],
-        customText: "",
-        runId: ev.run_id,
-        requestedAt: ev.timestamp,
-      });
+    case "choice.requested":
+      upsertChoice(items, choiceCard(p, p, ev));
       break;
-    }
     case "choice.resolved":
-      applyChoiceAnswer(items, p.request_id, p.tool_call_id, p);
+      applyChoiceAnswer(items, p, p, ev);
       break;
     // Rust 可信边界补发,无 seq,不进事件日志;审批状态由前端本地推进。
     // 按 key 去重原地更新;自动执行不出卡(无既有卡时不新增),失败始终可见

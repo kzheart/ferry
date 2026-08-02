@@ -106,7 +106,8 @@ export default function AskFerry({ scanSessions, onOpenConfig,
               {groups.map((g, i) => (
                 g.kind === "trace"
                   ? <AgentToolTrace key={`trace-${i}`} rows={g.rows} onNavigate={onNavigate} />
-                  : <AgentChatItem key={`item-${i}`} item={g} sessionId={activeId}
+                  : <AgentChatItem key={g.callId || g.requestId || `item-${i}`}
+                      item={g} sessionId={activeId}
                       onNavigate={onNavigate} />))}
               {isAwaitingReply(activeLog?.status, items) && <ThinkingIndicator />}
             </div>

@@ -23,7 +23,8 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   migrate: 125_000,
   session_edit: 125_000,
   session_cleanup: 300_000,
-  ask_user: 86_400_000,
+  // 略大于 Rust 侧 24h 的挂起超时,让那边先触发、把 answered:false 作为结构化结果送回来
+  ask_user: 86_400_000 + 30_000,
   agent_prompt: 400_000,
   // 略大于 Rust 侧 120s 的执行超时,让那边先触发、把进程组杀干净
   bash: 125_000,

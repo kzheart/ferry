@@ -142,7 +142,7 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
       <ApprovalCard item={item}
         onApprove={() => ferry.approve(sessionId, item)}
         onDismiss={() => ferry.dismiss(sessionId, item)}
-      onNavigate={onNavigate} />
+        onNavigate={onNavigate} />
     );
   }
   if (item.kind === "choice") {
