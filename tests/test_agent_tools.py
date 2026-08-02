@@ -22,6 +22,7 @@ from engine.sessions import content_index as session_content
 from engine.sessions import search as session_search
 from engine.sessions import usage as session_usage
 from engine.sessions.content_index import ContentIndex
+from engine.sessions.cleanup import CleanupService
 from engine.sessions.index import AgentSessionIndex
 from engine.sessions.safety import bounded_json, truncate_text
 from engine.sessions import scan as scanning
@@ -658,6 +659,9 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
     monkeypatch.setattr("engine.sessions.read.session_asset", asset)
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
+        cleanup=CleanupService(
+            agent_environment["index"], agent_environment["ports"],
+        ),
     )
 
     assert application.show_session("claude", session["ref"]) == {"ok": True}
@@ -704,6 +708,9 @@ def test_ui_queries_tolerate_active_session_writes(
     )
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
+        cleanup=CleanupService(
+            agent_environment["index"], agent_environment["ports"],
+        ),
     )
     assert application.show_session("claude", session["ref"]) == {"ok": True}
 
@@ -734,6 +741,9 @@ def test_ui_ref_survives_reindex_after_active_session_writes(
     )
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
+        cleanup=CleanupService(
+            agent_environment["index"], agent_environment["ports"],
+        ),
     )
     assert application.show_session("claude", session["ref"]) == {"ok": True}
     assert application.resume_command("claude", session["ref"])["session_id"]

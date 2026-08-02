@@ -11,6 +11,7 @@ from engine.operations import metadata
 from engine.operations import executor as operation_executor
 from engine.operations import plan_store
 from engine.operations import service as operations
+from engine.sessions.cleanup import CleanupService
 from engine.operations.types import AssistantReply
 from engine.errors import (
     AgentCapabilityError,
@@ -32,6 +33,9 @@ def operation_service(monkeypatch, agent_environment):
             state["service"].shutdown()
         state["service"] = operations.OperationService(
             agent_environment["ports"], agent_environment["index"],
+            CleanupService(
+                agent_environment["index"], agent_environment["ports"],
+            ),
         )
         for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
             monkeypatch.setattr(

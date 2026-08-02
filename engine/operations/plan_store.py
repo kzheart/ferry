@@ -148,6 +148,12 @@ def public_plan(operation: OperationPlan) -> dict:
         summary = "批量清理会话（执行前创建逐条恢复快照）"
     else:
         summary = "修改原始会话（执行前自动创建可恢复快照）"
+    if "ref" in params:
+        affected_refs = [params["ref"]]
+    elif operation.kind == "cleanup":
+        affected_refs = [target["ref"] for target in params["targets"]]
+    else:
+        affected_refs = []
     return {
         "plan_id": operation.plan_id,
         "kind": operation.kind,
@@ -155,7 +161,7 @@ def public_plan(operation: OperationPlan) -> dict:
         "preview": operation.preview(),
         "summary": summary,
         "risk": "low" if operation.kind == "metadata" else "high",
-        "affected_refs": [params["ref"]] if "ref" in params else [],
+        "affected_refs": affected_refs,
         "base_revision": operation.base_revision,
         "document_revision": operation.document_revision,
         "input_digest": operation.input_digest,

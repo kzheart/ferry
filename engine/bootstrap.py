@@ -32,4 +32,6 @@ def build_engine(ports: EngineContext | None = None) -> EngineService:
     index = AgentSessionIndex(ports)
     cleanup = CleanupService(index, ports)
     operations = OperationService(ports, index, cleanup)
-    return EngineService(ports, index, operations, ContentIndex(), cleanup)
+    return EngineService(
+        ports, index, operations, ContentIndex(), cleanup=cleanup,
+    )

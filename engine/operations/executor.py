@@ -15,6 +15,7 @@ from ..sessions import agent_read
 from ..sessions.index import AgentSessionIndex
 from . import metadata, verification as probe_mod
 from .delete import SessionDeletionService
+from .metadata_store import metadata_key
 from .edit import EditOperationHandler
 from .migrate import MigrationService
 from .plan_store import OperationPlan, now_ms
@@ -186,8 +187,21 @@ class OperationExecutor:
             raise RuntimeError("删除恢复状态提交失败")
         return {**result, "recovery_id": recovery_id}
 
+    @staticmethod
+    def _protected_cause(metadata_row: dict) -> str | None:
+        if metadata_row.get("pinned") is True:
+            return "pinned"
+        if metadata_row.get("archived") is True:
+            return "archived"
+        if metadata_row.get("tags"):
+            return "tagged"
+        return None
+
     def _apply_cleanup(self, operation: OperationPlan) -> dict:
         params = operation.input()
+        # 计划期的资格审查挡不住批准前才被 pin/archive/打标签的会话:元数据
+        # 与会话内容 revision 无关,逐条 revision 比对不可能发现这种变化。
+        metadata_rows = metadata.list_all(self._ports)
         result = {
             "succeeded": [],
             "skipped": [],
@@ -198,6 +212,19 @@ class OperationExecutor:
             tool = target["tool"]
             ref = target["ref"]
             try:
+                protected = self._protected_cause(
+                    metadata_rows.get(
+                        metadata_key(tool, target["session_id"]), {},
+                    ),
+                )
+                if protected is not None:
+                    result["skipped"].append({
+                        "tool": tool,
+                        "ref": ref,
+                        "cause": "protected",
+                        "protection": protected,
+                    })
+                    continue
                 try:
                     record = self._index.resolve(tool, ref)
                 except AgentReferenceError as error:

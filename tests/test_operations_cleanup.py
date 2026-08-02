@@ -1,8 +1,11 @@
+import json
 from pathlib import Path
 
 import pytest
 
+from engine.app import EngineService
 from engine.errors import AgentRequestError
+from engine.server.rpc import PROTOCOL, RpcDispatcher
 from engine.operations import metadata
 from engine.operations import executor as operation_executor
 from engine.operations.service import OperationService
@@ -238,3 +241,170 @@ def test_restore_each_recovery_roundtrip(
         restored = _apply(service, restore_plan)
         assert restored["result"]["recovery_id"] == recovery_id
         assert service._database().operations.get_recovery(recovery_id)["status"] == "restored"
+
+
+def _record_deletions(agent_environment, monkeypatch, tool="claude"):
+    deleted = []
+    lifecycle = agent_environment["ports"].adapter(tool).lifecycle
+    monkeypatch.setattr(
+        lifecycle, "delete",
+        lambda _adapter, ref: deleted.append(ref) or {
+            "ok": True, "undoable": False,
+        },
+    )
+    return deleted
+
+
+def test_excluded_sessions_never_reach_plan_input_or_apply(
+        cleanup_operations, agent_environment, monkeypatch):
+    """预览说"已保护"就必须真的不删:H1 的回归护栏。"""
+    _add_claude_candidates(agent_environment)
+    service, cleanup = cleanup_operations
+    inventory = _inventory_and_triage(service, cleanup, agents=["claude"])
+    deleted = _record_deletions(agent_environment, monkeypatch)
+
+    plan = _plan(service, inventory)
+    stored, _state = service._plans.get(plan["plan_id"])
+    targets = stored.input()["targets"]
+
+    assert [target["session_id"] for target in targets] == ["private-id"]
+    assert {entry["cause"] for entry in plan["preview"]["excluded"]} == {
+        "pinned", "archived", "tagged",
+    }
+    assert plan["affected_refs"] == [targets[0]["ref"]]
+
+    result = _apply(service, plan)
+
+    assert [entry["ref"] for entry in result["result"]["succeeded"]] == [
+        targets[0]["ref"],
+    ]
+    survivor = agent_environment["index"].resolve(
+        "claude", targets[0]["ref"],
+    )
+    assert deleted == [survivor.canonical_ref]
+
+
+def test_apply_skips_sessions_protected_after_planning(
+        cleanup_operations, agent_environment, monkeypatch):
+    service, cleanup = cleanup_operations
+    inventory = _inventory_and_triage(service, cleanup)
+    plan = _plan(service, inventory)
+    deleted = _record_deletions(agent_environment, monkeypatch)
+    metadata.set_entry(
+        "claude", "private-id", {"pinned": True}, agent_environment["ports"],
+    )
+
+    result = _apply(service, plan)
+
+    assert result["result"]["skipped"] == [{
+        "tool": "claude",
+        "ref": next(
+            row["ref"] for row in inventory["page"] if row["tool"] == "claude"
+        ),
+        "cause": "protected",
+        "protection": "pinned",
+    }]
+    assert [entry["tool"] for entry in result["result"]["succeeded"]] == [
+        "opencode",
+    ]
+    assert deleted == []
+
+
+def test_apply_skips_when_indexed_revision_moved_after_plan(
+        cleanup_operations, agent_environment):
+    """走 revision 逐条比对分支,而不是 resolve 抛 session_changed 那条路。"""
+    service, cleanup = cleanup_operations
+    inventory = _inventory_and_triage(service, cleanup)
+    plan = _plan(service, inventory)
+    stored, _state = service._plans.get(plan["plan_id"])
+    planned = {
+        target["tool"]: target["revision"] for target in stored.input()["targets"]
+    }
+    agent_environment["claude_browser"].fingerprint_value = "changed"
+    agent_environment["index"].refresh()
+    record = agent_environment["index"].resolve(
+        "claude",
+        next(row["ref"] for row in inventory["page"] if row["tool"] == "claude"),
+    )
+
+    assert record.revision != planned["claude"]
+
+    result = _apply(service, plan)
+
+    assert [entry["cause"] for entry in result["result"]["skipped"]] == ["changed"]
+    assert [entry["tool"] for entry in result["result"]["succeeded"]] == [
+        "opencode",
+    ]
+
+
+def test_relative_scope_survives_pagination_and_reaches_plan(
+        cleanup_operations, agent_environment):
+    """"now-7d" 这类相对时间每次调用解析都不同,续页必须认账本而不是重算 scope。"""
+    service, cleanup = cleanup_operations
+    first = cleanup.inventory({"updated_before": "now-7d"}, page_size=1)
+    second = cleanup.inventory(cursor=first["next_cursor"], page_size=1)
+
+    assert first["scope_id"] == second["scope_id"]
+    assert first["total"] == second["total"] == 2
+    assert isinstance(first["scope"]["updated_before"], int)
+    assert second["next_cursor"] is None
+    rows = first["page"] + second["page"]
+    assert {row["id"] for row in rows} == {"private-id", "oc-1"}
+
+    cleanup.triage(first["scope_id"], [
+        {"tool": row["tool"], "ref": row["ref"], "verdict": "delete"}
+        for row in rows
+    ])
+    plan = _plan(service, {"scope_id": first["scope_id"]}, rows)
+
+    assert plan["preview"]["coverage"] == {
+        "covered": 2, "total": 2, "scope": first["scope_id"],
+    }
+
+
+def test_engine_service_and_rpc_share_one_cleanup_ledger(agent_environment):
+    """端到端跑 rpc 分发,守住 EngineService 与 planner 必须用同一个账本。"""
+    cleanup = CleanupService(
+        agent_environment["index"], agent_environment["ports"],
+    )
+    service = OperationService(
+        agent_environment["ports"], agent_environment["index"], cleanup,
+    )
+    application = EngineService(
+        agent_environment["ports"], agent_environment["index"], service,
+        cleanup=cleanup,
+    )
+    dispatcher = RpcDispatcher(application)
+
+    def call(method, params):
+        response = json.loads(json.dumps(dispatcher.handle(json.dumps({
+            "protocol": PROTOCOL, "id": "cleanup-1",
+            "method": method, "params": params,
+        }))))
+        assert response["ok"] is True, response
+        return response["result"]
+
+    try:
+        inventory = call("agent_cleanup_inventory", {"scope": {"agents": ["claude"]}})
+        assert [row["id"] for row in inventory["page"]] == ["private-id"]
+
+        triaged = call("agent_cleanup_triage", {
+            "scope_id": inventory["scope_id"],
+            "verdicts": [{
+                "tool": "claude",
+                "ref": inventory["page"][0]["ref"],
+                "verdict": "delete",
+            }],
+        })
+        assert triaged == {"covered": 1, "total": 1, "remaining_sample": []}
+
+        plan = service.plan({
+            "kind": "cleanup",
+            "scope_id": inventory["scope_id"],
+            "targets": [{
+                "tool": "claude", "ref": inventory["page"][0]["ref"],
+            }],
+        })
+        assert plan["preview"]["totals"]["count"] == 1
+    finally:
+        service.shutdown()

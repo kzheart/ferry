@@ -35,12 +35,13 @@ class EngineService:
                  index: AgentSessionIndex,
                  operations: OperationService,
                  content_index: ContentIndex | None = None,
-                 cleanup: CleanupService | None = None):
+                 *,
+                 cleanup: CleanupService):
         self._ports = ports
         self._index = index
         self._operations = operations
         self._content_index = content_index
-        self._cleanup = cleanup or CleanupService(index, ports)
+        self._cleanup = cleanup
         self._live: LiveIndexService | None = None
 
     def close(self) -> None:
@@ -217,8 +218,9 @@ class EngineService:
         scope: dict | None = None,
         cursor: str | None = None,
         page_size: int = 100,
+        scope_id: str | None = None,
     ) -> dict:
-        return self._cleanup.inventory(scope, cursor, page_size)
+        return self._cleanup.inventory(scope, cursor, page_size, scope_id)
 
     def agent_cleanup_triage(
         self,
