@@ -47,6 +47,22 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "unsupported",
             retryable: false,
         }),
+        "choice.invalid_answer" => Some(ErrorPolicy {
+            category: "validation",
+            retryable: false,
+        }),
+        "choice.request_closed" => Some(ErrorPolicy {
+            category: "internal",
+            retryable: false,
+        }),
+        "choice.request_id_in_use" => Some(ErrorPolicy {
+            category: "conflict",
+            retryable: false,
+        }),
+        "choice.request_not_found" => Some(ErrorPolicy {
+            category: "not-found",
+            retryable: false,
+        }),
         "edit.invalid_reply" => Some(ErrorPolicy {
             category: "validation",
             retryable: false,
@@ -208,6 +224,10 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             retryable: false,
         }),
         "snapshot.invalid_source" => Some(ErrorPolicy {
+            category: "validation",
+            retryable: false,
+        }),
+        "tool.invalid_args" => Some(ErrorPolicy {
             category: "validation",
             retryable: false,
         }),

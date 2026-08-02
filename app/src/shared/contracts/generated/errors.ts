@@ -70,6 +70,34 @@ export const FERRY_ERROR_POLICIES = {
       "runtime"
     ]
   },
+  "choice.invalid_answer": {
+    "category": "validation",
+    "retryable": false,
+    "sources": [
+      "host"
+    ]
+  },
+  "choice.request_closed": {
+    "category": "internal",
+    "retryable": false,
+    "sources": [
+      "host"
+    ]
+  },
+  "choice.request_id_in_use": {
+    "category": "conflict",
+    "retryable": false,
+    "sources": [
+      "host"
+    ]
+  },
+  "choice.request_not_found": {
+    "category": "not-found",
+    "retryable": false,
+    "sources": [
+      "host"
+    ]
+  },
   "edit.invalid_reply": {
     "category": "validation",
     "retryable": false,
@@ -355,6 +383,13 @@ export const FERRY_ERROR_POLICIES = {
     "retryable": false,
     "sources": [
       "engine"
+    ]
+  },
+  "tool.invalid_args": {
+    "category": "validation",
+    "retryable": false,
+    "sources": [
+      "host"
     ]
   },
   "tool.not_allowed": {
