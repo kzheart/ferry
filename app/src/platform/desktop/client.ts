@@ -179,9 +179,10 @@ export const shellApply = (planId: string) =>
 
 /** ask_user 的选择卡应答:请求由 Rust 宿主挂起,页面只提交结构化答案。 */
 export const choiceRespond = (
+  sessionId: string,
   requestId: string,
   answer: Record<string, unknown>,
-) => invoke<void>("choice_respond", { request_id: requestId, answer });
+) => invoke<void>("choice_respond", { sessionId, requestId, answer });
 
 /** 技能目录选择:路径由系统对话框产生,webview 不能指定任意路径;取消返回 null。 */
 export const pickSkillDirectory = () =>

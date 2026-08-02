@@ -12,7 +12,9 @@ export function AgentChoiceCard({ item, onRespond }) {
   const [selected, setSelected] = useState(item.selected || []);
   const [customText, setCustomText] = useState(item.customText || "");
   const [submitting, setSubmitting] = useState(false);
-  const pending = item.status === "pending" && !submitting;
+  const open = item.status === "pending";
+  // 提交中不卸载按钮区(否则点一下按钮就消失、零反馈),只锁输入
+  const pending = open && !submitting;
   const optionValues = useMemo(
     () => new Set((item.options || []).map(option => option?.label).filter(Boolean)),
     [item.options],
@@ -36,19 +38,22 @@ export function AgentChoiceCard({ item, onRespond }) {
   };
 
   const canSubmit = selected.length > 0 || (item.allowCustom && customText.trim());
-  const submit = async () => {
-    if (!canSubmit || submitting) return;
+  const respond = async answer => {
+    if (submitting) return;
     setSubmitting(true);
     try {
-      await onRespond({
-        answered: true,
-        selected: selected.filter(value => optionValues.has(value)),
-        custom_text: customText.trim(),
-      });
+      await onRespond(answer);
     } finally {
       setSubmitting(false);
     }
   };
+  const submit = () => canSubmit && respond({
+    answered: true,
+    selected: selected.filter(value => optionValues.has(value)),
+    custom_text: customText.trim(),
+  });
+  // 「跳过」走 answered:false:契约里这是一等公民,不能只留干等 24 小时这一条路
+  const skip = () => respond({ answered: false, selected: [], custom_text: "" });
 
   const title = item.status === "answered"
     ? t("askferry:choice.answered")
@@ -113,11 +118,11 @@ export function AgentChoiceCard({ item, onRespond }) {
         }}>
           {item.question}
         </legend>
-        {(item.options || []).map(option => {
+        {(item.options || []).map((option, index) => {
           const value = option?.label || "";
           const checked = selected.includes(value);
           return (
-            <label key={value} style={{
+            <label key={`${index}-${value}`} style={{
               display: "flex",
               alignItems: "flex-start",
               gap: 9,
@@ -187,8 +192,11 @@ export function AgentChoiceCard({ item, onRespond }) {
         </div>
       )}
 
-      {pending && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 1 }}>
+      {open && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 1 }}>
+          <button className="fbtn" disabled={submitting} onClick={skip}>
+            {t("askferry:choice.skip")}
+          </button>
           <button className="fbtn fbtn-primary" disabled={!canSubmit || submitting}
             onClick={submit}>
             {submitting ? t("askferry:choice.submitting") : t("askferry:choice.submit")}

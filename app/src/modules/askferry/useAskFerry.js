@@ -1,15 +1,11 @@
 // Ask Ferry 状态中枢:订阅 ferry-runtime-event,维护会话列表与每会话时间线,
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  choiceRespond,
-  onRuntimeEvent,
-  operationApply,
-  runtime,
-  shellApply,
-} from "../../platform/desktop/client.js";
-import { applyEvent, emptyLog, operationKey, patchApproval, patchChoice }
+import { onRuntimeEvent, operationApply, runtime, shellApply }
+  from "../../platform/desktop/client.js";
+import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
+import { submitChoice } from "./choiceResponse.js";
 import { SESSION_OPTIMIZATION_PURPOSE, normalizeSessionPurpose }
   from "./sessionOptimization.js";
 import { useAskFerrySkills } from "./useAskFerrySkills.js";
@@ -127,16 +123,8 @@ export function useAskFerry() {
 
   const respondChoice = useCallback(async (sessionId, requestId, answer) => {
     if (!sessionId || !requestId) return;
-    const selected = Array.isArray(answer?.selected) ? answer.selected.filter(
-      value => typeof value === "string") : [];
-    const customText = typeof answer?.custom_text === "string" ? answer.custom_text : "";
-    mutateLog(sessionId, log => patchChoice(log, requestId, {
-      status: answer?.answered === false ? "unanswered" : "answered",
-      answered: answer?.answered !== false, selected, customText,
-    }));
     try {
-      return await choiceRespond(requestId, { answered: answer?.answered !== false,
-        selected, custom_text: customText });
+      return await submitChoice(mutateLog, sessionId, requestId, answer);
     } catch (error) {
       setLastError(error);
     }

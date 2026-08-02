@@ -82,9 +82,7 @@ const agentEnum = (values: readonly string[]) =>
 
 const cleanupScope = Type.Object(
   {
-    agents: Type.Optional(
-      Type.Array(agentEnum(AGENT_IDS), { maxItems: 32 }),
-    ),
+    agents: Type.Optional(Type.Array(agentEnum(AGENT_IDS), { maxItems: 32 })),
     projects: Type.Optional(
       Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
         maxItems: 20,
@@ -412,7 +410,9 @@ function enforceSessionEditPolicy(
   }
 }
 
-function sessionCleanupBatchFingerprint(input: Record<string, unknown>): string {
+function sessionCleanupBatchFingerprint(
+  input: Record<string, unknown>,
+): string {
   const targets = (input.targets as Array<Record<string, unknown>>)
     .map((target) => [target.tool, target.ref])
     .sort(([leftTool, leftRef], [rightTool, rightRef]) => {
@@ -421,6 +421,54 @@ function sessionCleanupBatchFingerprint(input: Record<string, unknown>): string 
       return left < right ? -1 : left > right ? 1 : 0;
     });
   return JSON.stringify([input.scope_id, targets]);
+}
+
+const CLEANUP_VERDICTS = ["delete", "keep", "ask_user"];
+
+/**
+ * 逐条校验 targets/verdicts 的元素形状。schema 里已经写过一遍,这里再写一遍是因为
+ * 执行边界不能假设 Provider 真的执行了 function schema——删除入口尤其不能。
+ */
+function validateCleanupEntries(
+  entries: unknown[],
+  field: "targets" | "verdicts",
+): void {
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`session_cleanup ${field} entries must be objects`);
+    }
+    const item = entry as Record<string, unknown>;
+    if (
+      typeof item.tool !== "string" ||
+      !(AGENT_IDS as readonly string[]).includes(item.tool)
+    ) {
+      throw new Error(
+        `session_cleanup ${field} require a known tool: ${AGENT_IDS.join(", ")}`,
+      );
+    }
+    if (typeof item.ref !== "string" || item.ref.length === 0) {
+      throw new Error(
+        `session_cleanup ${field} require a non-empty ref string`,
+      );
+    }
+    if (
+      field === "verdicts" &&
+      (typeof item.verdict !== "string" ||
+        !CLEANUP_VERDICTS.includes(item.verdict))
+    ) {
+      throw new Error(
+        `session_cleanup verdicts require verdict ${CLEANUP_VERDICTS.join(", ")}`,
+      );
+    }
+    if (
+      item.reason !== undefined &&
+      (typeof item.reason !== "string" || item.reason.length > 300)
+    ) {
+      throw new Error(
+        `session_cleanup ${field} reason must be a string of at most 300 characters`,
+      );
+    }
+  }
 }
 
 function validateSessionCleanupInput(input: Record<string, unknown>): void {
@@ -432,11 +480,15 @@ function validateSessionCleanupInput(input: Record<string, unknown>): void {
     intent !== "preview" &&
     intent !== "execute"
   ) {
-    throw new Error("session_cleanup requires intent inventory, triage, preview or execute");
+    throw new Error(
+      "session_cleanup requires intent inventory, triage, preview or execute",
+    );
   }
   if (intent === "inventory") {
     if (has("scope_id") || has("verdicts") || has("targets")) {
-      throw new Error("session_cleanup inventory only accepts scope and cursor");
+      throw new Error(
+        "session_cleanup inventory only accepts scope and cursor",
+      );
     }
     return;
   }
@@ -455,6 +507,7 @@ function validateSessionCleanupInput(input: Record<string, unknown>): void {
         "session_cleanup triage requires scope_id and 1-100 verdicts only",
       );
     }
+    validateCleanupEntries(input.verdicts, "verdicts");
     return;
   }
   if (
@@ -471,6 +524,7 @@ function validateSessionCleanupInput(input: Record<string, unknown>): void {
       `session_cleanup ${intent} requires scope_id and 1-500 targets only`,
     );
   }
+  validateCleanupEntries(input.targets, "targets");
 }
 
 function validateAskUserInput(input: Record<string, unknown>): void {
@@ -721,8 +775,13 @@ export function createFerryTools(
           previewedBatches.add(sessionEditBatchFingerprint(input));
         }
       }
-      if (name === "session_cleanup" && input.intent === "preview") {
-        previewedCleanupBatches.add(sessionCleanupBatchFingerprint(input));
+      if (name === "session_cleanup") {
+        // 预览授权只兑现一次:execute 成功后立刻作废,重放同一批必须重新 preview
+        if (input.intent === "preview") {
+          previewedCleanupBatches.add(sessionCleanupBatchFingerprint(input));
+        } else if (input.intent === "execute") {
+          previewedCleanupBatches.delete(sessionCleanupBatchFingerprint(input));
+        }
       }
       return {
         content: [{ type: "text", text: JSON.stringify(details) }],

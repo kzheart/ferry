@@ -151,7 +151,8 @@ export default function FloatingAgentPanel({ open, onToggle, session, scanSessio
                   group.kind === "trace"
                     ? <AgentToolTrace key={`trace-${index}`} rows={group.rows}
                         onNavigate={onNavigate} />
-                    : <AgentChatItem key={`item-${index}`} item={group}
+                    : <AgentChatItem key={group.callId || group.requestId || `item-${index}`}
+                        item={group}
                         sessionId={ferry.activeId} onNavigate={onNavigate} />))}
                 {isAwaitingReply(log?.status, items) && <ThinkingIndicator />}
               </div>

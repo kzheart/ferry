@@ -3,6 +3,9 @@ import { act, render } from "@testing-library/react";
 import { useEffect, useState } from "react";
 
 const applied = { operation: [], shell: [] };
+// 选择应答:记录调用参数,并允许用例让宿主拒收这次应答
+const choiceCalls = [];
+let choiceRespondFails = false;
 // 事件订阅的回调:测试里直接调它来模拟 runtime 推事件
 let emit = () => {};
 let sessionList = [];
@@ -35,6 +38,10 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
   shellApply: async (planId) => {
     applied.shell.push(planId);
     return { exit_code: 0, stdout: "hello\n" };
+  },
+  choiceRespond: async (sessionId, requestId, answer) => {
+    choiceCalls.push({ sessionId, requestId, answer });
+    if (choiceRespondFails) throw new Error("choice.request_not_found");
   },
 }));
 
@@ -286,4 +293,85 @@ test("连续 delta 按帧合并成一次更新，非 delta 事件到达时立即
   } finally {
     vi.useRealTimers();
   }
+});
+
+// 选择卡应答:成功要把卡片推进到已回答,失败必须退回 pending——
+// 否则卡片停在「已回答」而 Runtime 一无所知,用户既看不出失败也没法重试。
+async function mountWithPendingChoice() {
+  sessionList = [{ session_id: "s1", title: "chat" }];
+  const harness = mount();
+  await act(async () => {});
+  await act(async () => harness.get().openSession("s1"));
+  await act(async () => emit({
+    type: "choice.requested", session_id: "s1", run_id: "run-1",
+    payload: { request_id: "req-1", tool_call_id: "call-1", question: "选哪个?",
+      options: [{ label: "A" }, { label: "B" }], allow_custom: true },
+  }));
+  return harness;
+}
+const choiceItem = harness =>
+  harness.get().activeLog.items.find((item) => item.kind === "choice");
+
+test("respondChoice 成功后卡片变成已回答,并带上 sessionId 调用宿主", async () => {
+  choiceRespondFails = false;
+  choiceCalls.length = 0;
+  const harness = await mountWithPendingChoice();
+  expect(choiceItem(harness).status).toBe("pending");
+
+  await act(async () => {
+    await harness.get().respondChoice("s1", "req-1",
+      { answered: true, selected: ["A"], custom_text: "备注" });
+  });
+
+  expect(choiceCalls).toEqual([{
+    sessionId: "s1", requestId: "req-1",
+    answer: { answered: true, selected: ["A"], custom_text: "备注" },
+  }]);
+  expect(choiceItem(harness)).toMatchObject({
+    status: "answered", answered: true, selected: ["A"], customText: "备注",
+  });
+  harness.unmount();
+});
+
+test("respondChoice 失败回滚成 pending,并原样留下已选项与自由输入", async () => {
+  choiceRespondFails = true;
+  choiceCalls.length = 0;
+  const harness = await mountWithPendingChoice();
+
+  await act(async () => {
+    await harness.get().respondChoice("s1", "req-1",
+      { answered: true, selected: ["B"], custom_text: "写了一半" });
+  });
+
+  expect(choiceItem(harness)).toMatchObject({
+    status: "pending", answered: false, selected: ["B"], customText: "写了一半",
+  });
+  expect(harness.get().lastError).toBeTruthy();
+  choiceRespondFails = false;
+
+  // 回到 pending 之后必须能重试,并且这次真的推进到已回答
+  await act(async () => {
+    await harness.get().respondChoice("s1", "req-1",
+      { answered: true, selected: ["B"], custom_text: "写了一半" });
+  });
+  expect(choiceItem(harness).status).toBe("answered");
+  expect(choiceCalls).toHaveLength(2);
+  harness.unmount();
+});
+
+test("跳过(answered:false)记成未作答,不写入任何选择", async () => {
+  choiceRespondFails = false;
+  choiceCalls.length = 0;
+  const harness = await mountWithPendingChoice();
+
+  await act(async () => {
+    await harness.get().respondChoice("s1", "req-1",
+      { answered: false, selected: [], custom_text: "" });
+  });
+
+  expect(choiceItem(harness)).toMatchObject({
+    status: "unanswered", answered: false, selected: [],
+  });
+  expect(choiceCalls[0].answer.answered).toBe(false);
+  harness.unmount();
 });

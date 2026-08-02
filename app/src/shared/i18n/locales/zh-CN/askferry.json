@@ -74,7 +74,7 @@
     "undoable": "可恢复",
     "coverage": "已裁决 {{covered}} / {{total}} 条",
     "byTool": "按 Agent 分布",
-    "toolSummary": "{{count}} 条 · {{size}}",
+    "toolSummary": "{{n}} 条 · {{size}}",
     "showSessions": "展开 {{n}} 条会话",
     "hideSessions": "收起会话列表",
     "excluded": "已排除 {{n}} 条",
@@ -86,7 +86,7 @@
   },
   "choice": {
     "title": "请你选择",
-    "pending": "等待你的选择",
+    "skip": "跳过",
     "answered": "已回答",
     "unanswered": "未作答",
     "recommended": "推荐",
