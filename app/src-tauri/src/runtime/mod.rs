@@ -201,7 +201,8 @@ fn read_runtime_output(
             if matches!(event_type, "run.completed" | "run.failed" | "run.cancelled") {
                 if let Some(session_id) = value.get("session_id").and_then(Value::as_str) {
                     forget_auto_policy(session_id);
-                    choice::cancel_session(session_id);
+                    let run_id = value.get("run_id").and_then(Value::as_str).unwrap_or("");
+                    choice::finish_run(session_id, run_id);
                 }
             }
             if policy.forward_to_ui {
@@ -224,6 +225,8 @@ fn read_runtime_output(
     pending.fail_all(crate::process::error::ProcessError::Exited(
         "Ferry Runtime 进程已退出".to_owned(),
     ));
+    // 进程没了就不会再有 run 终态事件,挂起的选择要在这里了结。
+    choice::cancel_all();
     emit_host_event(
         &app,
         json!({
