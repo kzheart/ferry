@@ -1008,8 +1008,14 @@ def operations_frontend(contract: dict[str, object]) -> str:
 
 
 def operations_rust(contract: dict[str, object]) -> str:
+    # rustfmt 的 array_width(max_width 的 60%)一超,数组就会被拆成一行一个元素。
+    # 生成物必须直接过 cargo fmt --check,所以这里按同一个阈值决定排布。
+    RUST_ARRAY_WIDTH = 60
+
     def compact_declaration(name: str, values: list[str]) -> str:
         items = ", ".join(json.dumps(value) for value in values)
+        if len(items) + len("[]") > RUST_ARRAY_WIDTH:
+            return expanded_declaration(name, values)
         return f"pub(crate) const {name}: &[&str] =\n    &[{items}];"
 
     def expanded_declaration(name: str, values: list[str]) -> str:
