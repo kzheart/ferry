@@ -29,8 +29,7 @@ MUTATION_WORKERS = 1
 class OperationService:
     def __init__(self, ports: EngineContext,
                  index: AgentSessionIndex,
-                 cleanup: CleanupService | None = None):
-        cleanup = cleanup or CleanupService(index, ports)
+                 cleanup: CleanupService):
         migration = MigrationService(ports)
         edit = EditOperationHandler(ports, index)
         self._lock = threading.RLock()

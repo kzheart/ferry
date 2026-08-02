@@ -14,6 +14,7 @@ from engine.errors import (
     ConcurrentModificationError,
 )
 from engine.operations import service as operations
+from engine.sessions.cleanup import CleanupService
 from test_agent_tools import _claude_ref, agent_environment
 
 
@@ -21,6 +22,9 @@ from test_agent_tools import _claude_ref, agent_environment
 def operation_service(monkeypatch, agent_environment):
     service = operations.OperationService(
         agent_environment["ports"], agent_environment["index"],
+        CleanupService(
+            agent_environment["index"], agent_environment["ports"],
+        ),
     )
     for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
         monkeypatch.setattr(

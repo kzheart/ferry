@@ -2,16 +2,13 @@
 from __future__ import annotations
 
 import json
-import re
 
 from ..contracts.session_ref import is_opaque_session_ref
+from ..sessions.cleanup import is_cleanup_scope_id
 from ..errors import AgentRequestError
 from ..sessions.safety import validate_agent_edit_ops, validate_json_shape
 from .plan_store import canonical_json
 from .types import AssistantReply
-
-
-_CLEANUP_SCOPE_ID = re.compile(r"^[0-9a-f]{16}$")
 
 
 def validate_edit_input(value: dict) -> dict:
@@ -184,7 +181,7 @@ def validate_cleanup_input(value: dict, adapters: tuple[str, ...]) -> dict:
     if value.get("kind") != "cleanup":
         raise AgentRequestError("cleanup operation kind 非法")
     scope_id = value.get("scope_id")
-    if not isinstance(scope_id, str) or not _CLEANUP_SCOPE_ID.fullmatch(scope_id):
+    if not is_cleanup_scope_id(scope_id):
         raise AgentRequestError("cleanup scope_id 非法")
     targets = value.get("targets")
     if not isinstance(targets, list) or not 1 <= len(targets) <= 500:

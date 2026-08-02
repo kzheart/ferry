@@ -211,6 +211,10 @@ def test_cleanup_input_normalizes_optional_reason():
         {"tool": "claude", "ref": CLEANUP_REF},
     ]),
     _cleanup(extra=True),
+    _cleanup(targets=[
+        {"tool": "claude", "ref": f"{CLEANUP_REF}{index:04d}"}
+        for index in range(501)
+    ]),
 ])
 def test_cleanup_input_rejects_invalid_samples(value):
     with pytest.raises(AgentRequestError):

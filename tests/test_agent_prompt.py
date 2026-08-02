@@ -8,6 +8,7 @@ from engine.app import EngineService
 from engine.context import EngineContext
 from engine.errors import AgentReferenceError, AgentRequestError
 from engine.server.rpc import PROTOCOL, RpcDispatcher
+from engine.sessions.cleanup import CleanupService
 from engine.sessions.index import AgentSessionIndex
 
 
@@ -151,7 +152,10 @@ def _application(tmp_path, *, supports=True):
     )
     index = _Index()
     return (
-        EngineService(ports, index, _Operations()),
+        EngineService(
+            ports, index, _Operations(),
+            cleanup=CleanupService(index, ports),
+        ),
         verifier,
         index,
     )
@@ -324,7 +328,9 @@ def test_agent_prompt_write_keeps_stable_ref_resolvable(tmp_path):
     )
     index = AgentSessionIndex(ports)
     old_ref = index.refresh()[0].opaque_ref
-    application = EngineService(ports, index, _Operations())
+    application = EngineService(
+        ports, index, _Operations(), cleanup=CleanupService(index, ports),
+    )
 
     result = application.agent_prompt(
         "claude",

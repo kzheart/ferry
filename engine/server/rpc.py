@@ -78,6 +78,7 @@ class RpcDispatcher:
             "agent_cleanup_inventory": lambda p: application.agent_cleanup_inventory(
                 scope=p.get("scope"), cursor=p.get("cursor"),
                 page_size=p.get("page_size", 100),
+                scope_id=p.get("scope_id"),
             ),
             "agent_cleanup_triage": lambda p: application.agent_cleanup_triage(
                 p["scope_id"], p["verdicts"],

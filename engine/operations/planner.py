@@ -38,7 +38,7 @@ class OperationPlanner:
         edit: EditOperationHandler,
         store_plan: Callable[..., dict],
         database: Callable,
-        cleanup: CleanupService | None = None,
+        cleanup: CleanupService,
     ):
         self._ports = ports
         self._index = index
@@ -46,7 +46,7 @@ class OperationPlanner:
         self._edit = edit
         self._store_plan = store_plan
         self._database = database
-        self._cleanup = cleanup or CleanupService(index, ports)
+        self._cleanup = cleanup
 
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
@@ -279,14 +279,7 @@ class OperationPlanner:
             verdict = self._cleanup.verdict(scope_id, key) or {}
             if reason is None:
                 reason = verdict.get("reason")
-            resolved_targets.append({
-                "tool": record.tool,
-                "canonical_ref": record.canonical_ref,
-                "ref": record.opaque_ref,
-                "session_id": key[1],
-                "revision": record.revision,
-                "reason": reason,
-            })
+            title = truncate_text(str(record.row.get("title") or ""), 512)[0]
             metadata_row = metadata_rows.get(metadata_key(record.tool, key[1]), {})
             if metadata_row.get("pinned") is True:
                 cause = "pinned"
@@ -295,15 +288,22 @@ class OperationPlanner:
             elif metadata_row.get("tags"):
                 cause = "tagged"
             else:
+                # resolved_targets 只收未被排除的会话:它就是 apply 的删除名单,
+                # 被资格审查剔除的会话一旦混进来,预览说"已保护"而执行照删。
+                resolved_targets.append({
+                    "tool": record.tool,
+                    "ref": record.opaque_ref,
+                    "session_id": key[1],
+                    "revision": record.revision,
+                    "reason": reason,
+                })
                 size = int(record.row.get("size") or 0)
                 total_size += size
                 sessions.append({
                     "tool": record.tool,
                     "ref": record.opaque_ref,
-                    "title": truncate_text(
-                        str(record.row.get("title") or ""), 512,
-                    )[0],
-                    "project": record.row.get("project") or record.row.get("dir"),
+                    "title": title,
+                    "project": record.row.get("dir"),
                     "size": size,
                     "updated": record.row.get("updated"),
                     "reason": reason,
@@ -320,6 +320,7 @@ class OperationPlanner:
             excluded.append({
                 "tool": record.tool,
                 "ref": record.opaque_ref,
+                "title": title,
                 "cause": cause,
             })
 
