@@ -463,21 +463,7 @@ class AgentSessionIndex:
                 # (tool, canonical) → ref 的映射保留为墓碑:同一会话哪怕被
                 # 一轮扫描误判消失(或真被删后原地重建),重新入索引时仍拿回
                 # 原 ref。ref 是稳定句柄,任何路径都不该让它轮换。
-                stale_messages = [
-                    locator
-                    for locator, message in self._messages_by_opaque.items()
-                    if message.session_ref == opaque
-                ]
-                for locator in stale_messages:
-                    message = self._messages_by_opaque.pop(locator)
-                    self._opaque_by_message_key.pop(
-                        (
-                            message.session_ref,
-                            message.native_locator,
-                            message.role,
-                        ),
-                        None,
-                    )
+                self._drop_message_locators_locked(opaque)
             # 首次全量扫描(bootstrap)不推增量:前端此时正拿全量快照。
             # 在锁内推送保证 generation 与事件顺序严格一致。
             if self._bootstrapped and (upserts or removals):
@@ -495,6 +481,48 @@ class AgentSessionIndex:
                     except Exception:  # noqa: BLE001 - 推送失败不影响索引
                         log.exception("会话增量推送失败")
         return records
+
+    def _drop_message_locators_locked(self, opaque: str) -> None:
+        stale_messages = [
+            locator
+            for locator, message in self._messages_by_opaque.items()
+            if message.session_ref == opaque
+        ]
+        for locator in stale_messages:
+            message = self._messages_by_opaque.pop(locator)
+            self._opaque_by_message_key.pop(
+                (
+                    message.session_ref,
+                    message.native_locator,
+                    message.role,
+                ),
+                None,
+            )
+
+    def evict(self, tool: str, canonical_ref: str) -> None:
+        """删除会话后的定点摘除:立刻移出索引并推 removal delta,
+        UI 不必等下一轮重扫。(tool, canonical) → ref 映射保留为墓碑,
+        恢复删除后重新入索引仍拿回原 ref。"""
+        with self._lock:
+            opaque = self._opaque_by_key.get((tool, canonical_ref))
+            if opaque is None or opaque not in self._by_opaque:
+                return
+            self._by_opaque.pop(opaque)
+            self._drop_message_locators_locked(opaque)
+            if not self._bootstrapped:
+                return
+            self._generation += 1
+            sink = self.on_delta
+            if sink is None:
+                return
+            try:
+                sink({
+                    "generation": self._generation,
+                    "upserts": [],
+                    "removals": [opaque],
+                })
+            except Exception:  # noqa: BLE001 - 推送失败不影响索引
+                log.exception("会话增量推送失败")
 
     def resolve(
         self,
