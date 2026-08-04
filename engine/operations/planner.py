@@ -12,7 +12,6 @@ from ..errors import (
     require_agent_capability,
 )
 from ..sessions import agent_read
-from ..sessions.cleanup import CleanupService
 from ..sessions.index import AgentSessionIndex
 from ..sessions.safety import record_session_id, truncate_text
 from .metadata_store import metadata_key
@@ -21,11 +20,9 @@ from .edit import EditOperationHandler
 from .migrate import MigrationService
 from .validation import (
     validate_delete_input,
-    validate_cleanup_input,
     validate_edit_input,
     validate_metadata_input,
     validate_migration_input,
-    validate_restore_delete_input,
 )
 
 
@@ -38,7 +35,6 @@ class OperationPlanner:
         edit: EditOperationHandler,
         store_plan: Callable[..., dict],
         database: Callable,
-        cleanup: CleanupService,
     ):
         self._ports = ports
         self._index = index
@@ -46,7 +42,6 @@ class OperationPlanner:
         self._edit = edit
         self._store_plan = store_plan
         self._database = database
-        self._cleanup = cleanup
 
     def plan(self, value: dict) -> dict:
         if not isinstance(value, dict):
@@ -59,8 +54,6 @@ class OperationPlanner:
             "migration": self._plan_migration,
             "metadata": self._plan_metadata,
             "delete": self._plan_delete,
-            "restore-delete": self._plan_restore_delete,
-            "cleanup": self._plan_cleanup,
         }
         handler = handlers.get(kind)
         if handler is None:
@@ -182,105 +175,24 @@ class OperationPlanner:
         operation_input = validate_delete_input(
             value, self._ports.adapters(),
         )
-        adapter = self._ports.adapter(operation_input["tool"])
-        lifecycle = require_agent_capability(
-            adapter, "delete", "lifecycle",
-        )
-        record = self._index.resolve(
-            operation_input["tool"], operation_input["ref"],
-        )
-        preview = {
-            "tool": record.tool,
-            "ref": record.opaque_ref,
-            "session_id": record_session_id(record),
-            "title": truncate_text(
-                str(record.row.get("title") or ""), 512,
-            )[0],
-            "undoable": lifecycle.delete_undoable,
-        }
-        after = self._index.resolve(
-            operation_input["tool"], operation_input["ref"],
-        )
-        if record.revision != after.revision:
-            raise ConcurrentModificationError(
-                "会话在生成删除计划时已变化，请重新计划"
-            )
-        return self._store_plan(
-            operation_input,
-            preview,
-            base_revision=after.revision,
-            document_revision=None,
-        )
-
-    def _plan_restore_delete(self, value: dict) -> dict:
-        operation_input = validate_restore_delete_input(value)
-        recovery = self._database().operations.get_recovery(
-            operation_input["recovery_id"],
-        )
-        if recovery is None or recovery["status"] != "available":
-            raise AgentRequestError(
-                "删除恢复记录不可用",
-                {"recovery_id": operation_input["recovery_id"]},
-            )
+        tool = operation_input["tool"]
         require_agent_capability(
-            self._ports.adapter(recovery["tool"]), "delete", "lifecycle",
+            self._ports.adapter(tool), "delete", "lifecycle",
         )
-        return self._store_plan(
-            operation_input,
-            {
-                "recovery_id": recovery["recovery_id"],
-                "tool": recovery["tool"],
-            },
-            base_revision="available",
-            document_revision=None,
-        )
-
-    def _plan_cleanup(self, value: dict) -> dict:
-        operation_input = validate_cleanup_input(
-            value, self._ports.adapters(),
-        )
-        scope_id = operation_input["scope_id"]
-        if self._cleanup.stale(scope_id):
-            raise AgentRequestError(
-                "cleanup scope 已过期，请重新 inventory",
-                {"scope_id": scope_id, "reason": "stale_generation", "recovery": "inventory"},
-            )
-
-        records = []
-        resolved_keys = []
-        for target in operation_input["targets"]:
-            try:
-                record = self._index.resolve(target["tool"], target["ref"])
-            except AgentReferenceError as error:
-                raise ConcurrentModificationError(
-                    "cleanup 会话在 inventory 后已变化，请重新 inventory"
-                ) from error
-            session_id = record.row.get("id")
-            if not isinstance(session_id, str) or not session_id:
-                raise AgentRequestError("cleanup 会话缺少可用的原生 ID")
-            records.append(record)
-            resolved_keys.append((record.tool, session_id))
-
-        self._cleanup.check_nomination(scope_id, resolved_keys)
         metadata_rows = metadata.list_all(self._ports)
         sessions = []
         excluded = []
-        resolved_targets = []
+        targets = []
         total_size = 0
-        by_tool = {}
-        undoable_count = 0
-        for target, record, key in zip(
-            operation_input["targets"], records, resolved_keys,
-        ):
-            lifecycle = require_agent_capability(
-                self._ports.adapter(record.tool), "delete", "lifecycle",
-            )
-            reason = target.get("reason")
-            verdict = self._cleanup.verdict(scope_id, key) or {}
-            if reason is None:
-                reason = verdict.get("reason")
+        for ref in operation_input["refs"]:
+            record = self._index.resolve(tool, ref)
+            session_id = record.row.get("id")
+            if not isinstance(session_id, str) or not session_id:
+                raise AgentRequestError("会话缺少可用的原生 ID")
             title = truncate_text(str(record.row.get("title") or ""), 512)[0]
-            metadata_row = metadata_rows.get(metadata_key(record.tool, key[1]), {})
+            metadata_row = metadata_rows.get(
+                metadata_key(tool, session_id), {},
+            )
             if metadata_row.get("pinned") is True:
                 cause = "pinned"
             elif metadata_row.get("archived") is True:
@@ -288,55 +200,39 @@ class OperationPlanner:
             elif metadata_row.get("tags"):
                 cause = "tagged"
             else:
-                # resolved_targets 只收未被排除的会话:它就是 apply 的删除名单,
-                # 被资格审查剔除的会话一旦混进来,预览说"已保护"而执行照删。
-                resolved_targets.append({
-                    "tool": record.tool,
+                # targets 只收未被排除的会话:它就是 apply 的删除名单,被
+                # 保护规则剔除的会话一旦混进来,预览说"已保护"而执行照删。
+                targets.append({
                     "ref": record.opaque_ref,
-                    "session_id": key[1],
+                    "session_id": session_id,
                     "revision": record.revision,
-                    "reason": reason,
                 })
                 size = int(record.row.get("size") or 0)
                 total_size += size
                 sessions.append({
-                    "tool": record.tool,
+                    "tool": tool,
                     "ref": record.opaque_ref,
+                    "session_id": record_session_id(record),
                     "title": title,
                     "project": record.row.get("dir"),
                     "size": size,
                     "updated": record.row.get("updated"),
-                    "reason": reason,
-                    "undoable": lifecycle.delete_undoable,
                 })
-                summary = by_tool.setdefault(
-                    record.tool, {"tool": record.tool, "count": 0, "size_bytes": 0},
-                )
-                summary["count"] += 1
-                summary["size_bytes"] += size
-                if lifecycle.delete_undoable:
-                    undoable_count += 1
                 continue
             excluded.append({
-                "tool": record.tool,
+                "tool": tool,
                 "ref": record.opaque_ref,
                 "title": title,
                 "cause": cause,
             })
-
-        if self._cleanup.stale(scope_id):
-            raise AgentRequestError(
-                "cleanup scope 在计划生成期间已变化，请重新 inventory",
-                {"scope_id": scope_id, "reason": "stale_generation", "recovery": "inventory"},
-            )
-        operation_input["targets"] = resolved_targets
+        operation_input["targets"] = targets
         preview = {
+            "tool": tool,
             "sessions": sessions,
             "excluded": excluded,
             "totals": {"count": len(sessions), "size_bytes": total_size},
-            "by_tool": [by_tool[tool] for tool in sorted(by_tool)],
-            "undoable": {"count": undoable_count, "total": len(sessions)},
-            "coverage": self._cleanup.coverage(scope_id),
+            # 删除不可恢复:预览必须明说,审批卡靠它渲染永久删除警示
+            "permanent": True,
         }
         return self._store_plan(
             operation_input,

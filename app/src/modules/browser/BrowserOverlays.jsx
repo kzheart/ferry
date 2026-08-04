@@ -13,10 +13,7 @@ import {
 } from "../../shared/ui/FilterPopover.jsx";
 import { ToolIcon } from "../../shared/ui/icons.jsx";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
-import {
-  deleteIsUndoable,
-  summarizePreparedDeletions,
-} from "./sessionDeletionModel.js";
+import { summarizePreparedDeletions } from "./sessionDeletionModel.js";
 
 const BROWSABLE_TOOLS = agentsWithCapability("browse");
 
@@ -24,20 +21,12 @@ export function SessionDeleteConfirm({ prepared, onCancel, onConfirm }) {
   const { t } = useTranslation();
   const sess = prepared.session;
   const subCount = (sess.tree_count || 1) - 1;
-  const undoable = deleteIsUndoable(prepared);
   const bullets = [
     subCount > 0 && [
       "var(--warn)",
       t("overlays:delete.bulletSub", { n: subCount }),
     ],
-    undoable && [
-      "var(--accent)",
-      t("overlays:delete.bulletUndoable"),
-    ],
-    !undoable && [
-      "var(--err)",
-      t("overlays:delete.bulletIrreversible"),
-    ],
+    ["var(--err)", t("overlays:delete.bulletIrreversible")],
   ].filter(Boolean);
   return (
     <DangerConfirm
@@ -48,9 +37,7 @@ export function SessionDeleteConfirm({ prepared, onCancel, onConfirm }) {
         tool: TOOL_NAME[sess.tool],
       })}
       bullets={bullets}
-      confirmLabel={undoable
-        ? t("overlays:delete.confirmUndoable")
-        : t("overlays:delete.confirmIrreversible")}
+      confirmLabel={t("overlays:delete.confirmIrreversible")}
       onCancel={onCancel}
       onConfirm={onConfirm}
     />
@@ -61,20 +48,12 @@ export function BatchDeleteConfirm({ prepared, onCancel, onConfirm }) {
   const { t } = useTranslation();
   const summary = summarizePreparedDeletions(prepared);
   const bullets = [
-    summary.undoable > 0 && [
-      "var(--accent)",
-      t("overlays:delete.bulletBatchUndoable", {
-        n: summary.undoable,
-      }),
-    ],
-    summary.irreversible > 0 && [
+    [
       "var(--err)",
-      t("overlays:delete.bulletBatchIrreversible", {
-        n: summary.irreversible,
-      }),
+      t("overlays:delete.bulletBatchIrreversible", { n: summary.total }),
     ],
     ["var(--warn)", t("overlays:delete.bulletBatchPartial")],
-  ].filter(Boolean);
+  ];
   return (
     <DangerConfirm
       width={430}

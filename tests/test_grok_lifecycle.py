@@ -11,4 +11,3 @@ def test_grok_resume_descriptor_uses_structured_id_argument():
     assert descriptor["args"] == [
         "--resume", "019f0000-0000-7000-8000-000000000000",
     ]
-    assert lifecycle.delete_undoable is False

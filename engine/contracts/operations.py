@@ -24,11 +24,6 @@ class MetadataPatch(TypedDict):
     archived: NotRequired[bool]
     tags: NotRequired[list[str]]
 
-class CleanupTarget(TypedDict):
-    tool: str
-    ref: str
-    reason: NotRequired[str]
-
 class DeleteTurnOperation(TypedDict):
     op: Literal['delete-turn']
     turn: int
@@ -70,21 +65,12 @@ class MetadataOperationInput(TypedDict):
 class DeleteOperationInput(TypedDict):
     kind: Literal['delete']
     tool: str
-    ref: str
+    refs: list[str]
 
-class RestoreDeleteOperationInput(TypedDict):
-    kind: Literal['restore-delete']
-    recovery_id: str
-
-class CleanupOperationInput(TypedDict):
-    kind: Literal['cleanup']
-    scope_id: str
-    targets: list[CleanupTarget]
-
-OperationInput = EditOperationInput | MigrationOperationInput | MetadataOperationInput | DeleteOperationInput | RestoreDeleteOperationInput | CleanupOperationInput
+OperationInput = EditOperationInput | MigrationOperationInput | MetadataOperationInput | DeleteOperationInput
 
 OPERATION_PLAN_ID_PREFIX = 'op_'
-OPERATION_KINDS = frozenset(('edit', 'migration', 'metadata', 'delete', 'restore-delete', 'cleanup'))
+OPERATION_KINDS = frozenset(('edit', 'migration', 'metadata', 'delete'))
 EDIT_OPERATION_KINDS = frozenset(('delete-turn', 'rewrite', 'replace-assistant-reply'))
 OPERATION_STATUSES = frozenset(('planned', 'queued', 'applying', 'applied', 'failed', 'cancelled', 'expired'))
 OPERATION_TERMINAL_STATUSES = frozenset(('applied', 'failed', 'cancelled', 'expired'))

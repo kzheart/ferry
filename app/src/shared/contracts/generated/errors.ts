@@ -378,13 +378,6 @@ export const FERRY_ERROR_POLICIES = {
       "runtime"
     ]
   },
-  "snapshot.invalid_source": {
-    "category": "validation",
-    "retryable": false,
-    "sources": [
-      "engine"
-    ]
-  },
   "tool.invalid_args": {
     "category": "validation",
     "retryable": false,

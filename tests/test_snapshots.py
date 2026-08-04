@@ -1,7 +1,7 @@
 """快照作为内部安全网的契约。
 
-快照页面已移除，快照对用户不再可见，但两条保护路径仍必须成立：
-编辑前留底(写失败可回滚)、删除前留底(Toast 可撤销)。
+快照页面已移除，快照对用户不再可见。编辑前留底(写失败可回滚)仍必须成立；
+删除是永久性的，不再落快照。
 """
 import json
 
@@ -51,69 +51,11 @@ def test_edit_leaves_a_recovery_copy_of_the_pre_edit_session(session, ports):
     assert session.read_bytes() != before          # 编辑确实生效了
 
 
-def test_delete_is_undoable(session, ports):
-    """Toast 的「撤销」依赖这条链路。"""
-    original = session.read_bytes()
-    service = SessionDeletionService(ports)
-    result = service.delete("claude", str(session))
+def test_delete_is_permanent_and_leaves_no_snapshot(session, ports):
+    """删除就是删除:不落快照,快照目录保持干净。"""
+    result = SessionDeletionService(ports).delete("claude", str(session))
 
-    assert result["undoable"] is True
+    assert result["ok"] is True
+    assert "snapshot" not in result
     assert not session.exists()
-
-    service.restore(result["snapshot"])
-    assert session.exists()
-    assert session.read_bytes() == original
-
-
-def test_undelete_refuses_to_overwrite_a_live_session(session, ports):
-    from engine.errors import SnapshotInvalidSourceError
-    service = SessionDeletionService(ports)
-    result = service.delete("claude", str(session))
-    service.restore(result["snapshot"])
-    with pytest.raises(SnapshotInvalidSourceError):
-        service.restore(result["snapshot"])   # 源已回来，不得覆盖
-
-
-def test_undelete_refuses_paths_outside_the_snapshot_dir(tmp_path, ports):
-    from engine.errors import SnapshotInvalidSourceError
-    stray = tmp_path / "stray.jsonl"
-    stray.write_text("{}\n")
-    with pytest.raises(SnapshotInvalidSourceError):
-        SessionDeletionService(ports).restore(str(stray))
-
-
-def test_undelete_routes_snapshot_to_its_adapter_lifecycle(monkeypatch):
-    root = backup_dir()
-    root.mkdir(parents=True)
-    snapshot = root / "session.jsonl"
-    snapshot.write_text("{}\n")
-    snapshot.with_suffix(".meta.json").write_text(json.dumps({
-        "tool": "fake", "source": "/work/session.jsonl",
-    }))
-    calls = []
-
-    class Lifecycle:
-        def restore_delete(self, snap, meta):
-            calls.append((snap, meta))
-            return {"ok": True, "target": meta["source"]}
-
-    class Plugin:
-        id = "fake"
-        lifecycle = Lifecycle()
-
-        def supports(self, capability):
-            return capability == "delete"
-
-        def require(self, capability, component):
-            if not self.supports(capability):
-                raise ValueError(capability)
-            return getattr(self, component)
-
-    ports = type("Ports", (), {
-        "snapshot_dir": lambda _self: root,
-        "adapter": lambda _self, tool: Plugin() if tool == "fake" else None,
-    })()
-
-    assert SessionDeletionService(ports).restore(str(snapshot)) == {
-        "ok": True, "target": "/work/session.jsonl"}
-    assert calls == [(snapshot, {"tool": "fake", "source": "/work/session.jsonl"})]
+    assert _snapshots() == []

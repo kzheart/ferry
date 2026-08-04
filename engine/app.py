@@ -21,7 +21,6 @@ from .sessions import agent_read
 from .sessions import search as session_search
 from .sessions import usage as session_usage
 from .sessions.content_index import ContentIndex
-from .sessions.cleanup import CleanupService
 from .sessions.index import AgentSessionIndex, IndexedSession
 from .sessions.live import LiveIndexService
 from .sessions import read as sessions
@@ -34,14 +33,11 @@ class EngineService:
     def __init__(self, ports: EngineContext,
                  index: AgentSessionIndex,
                  operations: OperationService,
-                 content_index: ContentIndex | None = None,
-                 *,
-                 cleanup: CleanupService):
+                 content_index: ContentIndex | None = None):
         self._ports = ports
         self._index = index
         self._operations = operations
         self._content_index = content_index
-        self._cleanup = cleanup
         self._live: LiveIndexService | None = None
 
     def close(self) -> None:
@@ -212,22 +208,6 @@ class EngineService:
 
     def agent_get_usage(self, **params) -> dict:
         return session_usage.get_usage(index=self._index, **params)
-
-    def agent_cleanup_inventory(
-        self,
-        scope: dict | None = None,
-        cursor: str | None = None,
-        page_size: int = 100,
-        scope_id: str | None = None,
-    ) -> dict:
-        return self._cleanup.inventory(scope, cursor, page_size, scope_id)
-
-    def agent_cleanup_triage(
-        self,
-        scope_id: str,
-        verdicts: list[dict],
-    ) -> dict:
-        return self._cleanup.triage(scope_id, verdicts)
 
     def agent_prompt(
         self,

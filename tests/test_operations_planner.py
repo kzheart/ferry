@@ -1,6 +1,6 @@
 """operations/planner.py 的计划生成回归网。
 
-覆盖五种 operation kind 的正常路径，以及分发、引用、能力、并发四类拒绝路径。
+覆盖四种 operation kind 的正常路径，以及分发、引用、能力、并发四类拒绝路径。
 """
 from dataclasses import replace
 
@@ -14,7 +14,6 @@ from engine.errors import (
     ConcurrentModificationError,
 )
 from engine.operations import service as operations
-from engine.sessions.cleanup import CleanupService
 from test_agent_tools import _claude_ref, agent_environment
 
 
@@ -22,9 +21,6 @@ from test_agent_tools import _claude_ref, agent_environment
 def operation_service(monkeypatch, agent_environment):
     service = operations.OperationService(
         agent_environment["ports"], agent_environment["index"],
-        CleanupService(
-            agent_environment["index"], agent_environment["ports"],
-        ),
     )
     for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
         monkeypatch.setattr(
@@ -70,17 +66,16 @@ def _metadata_plan(**overrides):
 
 
 def _delete_plan(**overrides):
-    value = {"kind": "delete", "tool": "claude", "ref": _claude_ref()}
+    ref = overrides.pop("ref", None) or _claude_ref()
+    value = {"kind": "delete", "tool": "claude", "refs": [ref]}
     value.update(overrides)
     return operations.plan(value)
 
 
-def _attach_lifecycle(monkeypatch, ports, *, undoable=True):
+def _attach_lifecycle(monkeypatch, ports):
     class Lifecycle:
-        delete_undoable = undoable
-
         def delete(self, _adapter, ref):
-            return {"ok": True, "snapshot": "snap", "undoable": undoable}
+            return {"ok": True}
 
     original_adapter = ports.adapter
     adapter = replace(original_adapter("claude"), lifecycle=Lifecycle())
@@ -101,15 +96,15 @@ def test_migration_plan_previews_without_writing(agent_environment):
     assert plan["preview"]["loss"] == {"events": [], "lossless": True}
 
 
-def test_delete_plan_preview_exposes_undoable_and_truncated_title(
+def test_delete_plan_preview_lists_sessions_and_marks_permanent(
         agent_environment, monkeypatch):
     _attach_lifecycle(monkeypatch, agent_environment["ports"])
 
     plan = _delete_plan()
 
     assert plan["preview"]["tool"] == "claude"
-    assert plan["preview"]["undoable"] is True
-    assert plan["preview"]["title"] == "支付重构"
+    assert plan["preview"]["permanent"] is True
+    assert [row["title"] for row in plan["preview"]["sessions"]] == ["支付重构"]
 
 
 def test_planner_rejects_non_object_input(agent_environment):
@@ -129,7 +124,7 @@ def test_planner_rejects_unknown_kind(agent_environment, kind):
 def test_planner_rejects_reference_not_issued_by_index(
         agent_environment, plan_factory):
     with pytest.raises(AgentReferenceError):
-        plan_factory(ref="ref-not-issued-by-index")
+        plan_factory(ref="fsr_not-issued-by-index")
 
 
 def test_edit_plan_requires_probe_capability_only_when_requested(
@@ -199,57 +194,4 @@ def test_metadata_plan_rejects_revision_change_during_preview(
             "tool": "claude",
             "ref": ref,
             "patch": {"name": "新名称"},
-        })
-
-
-def test_delete_plan_rejects_revision_change_during_preview(
-        agent_environment, monkeypatch):
-    _attach_lifecycle(monkeypatch, agent_environment["ports"])
-    ref = _claude_ref()
-    _drift_revision_after_first_resolve(monkeypatch, agent_environment["index"])
-
-    with pytest.raises(ConcurrentModificationError, match="请重新计划"):
-        operations.plan({"kind": "delete", "tool": "claude", "ref": ref})
-
-
-def test_restore_delete_plan_rejects_unknown_recovery(agent_environment):
-    with pytest.raises(AgentRequestError, match="删除恢复记录不可用"):
-        operations.plan({
-            "kind": "restore-delete",
-            "recovery_id": "recovery_0123456789abcdef",
-        })
-
-
-def test_restore_delete_plan_accepts_available_recovery(
-        agent_environment, monkeypatch, operation_service):
-    _attach_lifecycle(monkeypatch, agent_environment["ports"])
-    database = operation_service._database()
-    database.operations.store_recovery(
-        "recovery_0123456789abcdef", "claude", "snapshot-body", 1_000,
-    )
-
-    plan = operations.plan({
-        "kind": "restore-delete",
-        "recovery_id": "recovery_0123456789abcdef",
-    })
-
-    assert plan["kind"] == "restore-delete"
-    assert plan["preview"] == {
-        "recovery_id": "recovery_0123456789abcdef", "tool": "claude",
-    }
-    assert plan["base_revision"] == "available"
-
-
-def test_restore_delete_plan_rejects_already_restored_recovery(
-        agent_environment, monkeypatch, operation_service):
-    _attach_lifecycle(monkeypatch, agent_environment["ports"])
-    database = operation_service._database()
-    database.operations.store_recovery("recovery_x0123456789abc", "claude", "s", 1)
-    assert database.operations.claim_recovery("recovery_x0123456789abc", 2)
-    assert database.operations.complete_recovery("recovery_x0123456789abc", 3)
-
-    with pytest.raises(AgentRequestError, match="删除恢复记录不可用"):
-        operations.plan({
-            "kind": "restore-delete",
-            "recovery_id": "recovery_x0123456789abc",
         })

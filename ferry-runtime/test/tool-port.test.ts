@@ -31,10 +31,10 @@ const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
 const agentPromptTool = tools.find((tool) => tool.name === "agent_prompt")!;
 const agentPromptSchema = agentPromptTool.parameters;
-const sessionCleanupTool = tools.find(
-  (tool) => tool.name === "session_cleanup",
+const sessionDeleteTool = tools.find(
+  (tool) => tool.name === "session_delete",
 )!;
-const sessionCleanupSchema = sessionCleanupTool.parameters;
+const sessionDeleteSchema = sessionDeleteTool.parameters;
 const askUserTool = tools.find((tool) => tool.name === "ask_user")!;
 const askUserSchema = askUserTool.parameters;
 
@@ -126,200 +126,80 @@ describe("Ferry mutation tool schemas", () => {
     );
   });
 
-  it("validates the four session_cleanup intent branches", () => {
-    const target = { tool: "claude", ref: "fsr_session" };
-    const scopeId = "0123456789abcdef";
+  it("validates session_delete tool, refs and intent shape", () => {
     expect(
-      Check(sessionCleanupSchema, {
-        intent: "inventory",
-        scope: { agents: ["claude"], updated_before: "now-7d" },
-        cursor: "cursor",
-      }),
-    ).toBe(true);
-    expect(
-      Check(sessionCleanupSchema, {
-        intent: "triage",
-        scope_id: scopeId,
-        verdicts: [{ ...target, verdict: "delete", reason: "old" }],
-      }),
-    ).toBe(true);
-    expect(
-      Check(sessionCleanupSchema, {
+      Check(sessionDeleteSchema, {
+        tool: "claude",
+        refs: ["fsr_session"],
         intent: "preview",
-        scope_id: scopeId,
-        targets: [target],
       }),
     ).toBe(true);
     expect(
-      Check(sessionCleanupSchema, {
+      Check(sessionDeleteSchema, {
+        tool: "claude",
+        refs: ["fsr_session_a", "fsr_session_b"],
         intent: "execute",
-        scope_id: scopeId,
-        targets: [target],
       }),
     ).toBe(true);
     expect(
-      Check(sessionCleanupSchema, {
-        intent: "inventory",
-        scope_id: scopeId,
-      }),
-    ).toBe(false);
-    expect(
-      Check(sessionCleanupSchema, {
-        intent: "triage",
-        scope_id: scopeId,
-        scope: {},
-        verdicts: [{ ...target, verdict: "keep" }],
-      }),
-    ).toBe(false);
-    expect(
-      Check(sessionCleanupSchema, {
+      Check(sessionDeleteSchema, {
+        tool: "claude",
+        refs: [],
         intent: "preview",
-        scope_id: scopeId,
-        targets: [target],
-        verdicts: [{ ...target, verdict: "delete" }],
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionDeleteSchema, {
+        tool: "claude",
+        ref: "fsr_session",
+        intent: "preview",
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionDeleteSchema, {
+        tool: "claude",
+        refs: ["fsr_session"],
       }),
     ).toBe(false);
   });
 
-  it("requires a matching cleanup preview before execute", async () => {
+  it("gates session_delete on a per-batch preview burned by execute", async () => {
     const invoke = vi.fn(async () => ({ ok: true }));
-    const cleanupTool = createFerryTools({ invoke }, () => ({
+    const deleteTool = createFerryTools({ invoke }, () => ({
       sessionId: "session",
       runId: "run",
-    })).find((tool) => tool.name === "session_cleanup")!;
-    const base = {
-      scope_id: "0123456789abcdef",
-      targets: [{ tool: "claude", ref: "fsr_session" }],
-    };
-
-    await expect(
-      cleanupTool.execute(
-        "call",
-        { ...base, intent: "execute" },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow("requires a successful preview");
-    await cleanupTool.execute(
-      "call",
-      { ...base, intent: "preview" },
-      undefined,
-      undefined,
-    );
-    await expect(
-      cleanupTool.execute(
-        "call",
-        {
-          ...base,
-          intent: "execute",
-          targets: [{ tool: "claude", ref: "fsr_changed" }],
-        },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow("requires a successful preview");
-    await cleanupTool.execute(
-      "call",
-      { ...base, intent: "execute" },
-      undefined,
-      undefined,
-    );
-    expect(invoke).toHaveBeenCalledTimes(2);
-  });
-
-  it("burns the cleanup preview once execute succeeds", async () => {
-    const invoke = vi.fn(async () => ({ ok: true }));
-    const cleanupTool = createFerryTools({ invoke }, () => ({
-      sessionId: "session",
-      runId: "run",
-    })).find((tool) => tool.name === "session_cleanup")!;
-    const base = {
-      scope_id: "0123456789abcdef",
-      targets: [{ tool: "claude", ref: "fsr_session" }],
-    };
-
-    await cleanupTool.execute(
-      "call",
-      { ...base, intent: "preview" },
-      undefined,
-      undefined,
-    );
-    await cleanupTool.execute(
-      "call",
-      { ...base, intent: "execute" },
-      undefined,
-      undefined,
-    );
-    // 同一批不能凭一次预览删两次
-    await expect(
-      cleanupTool.execute(
-        "call",
-        { ...base, intent: "execute" },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow("requires a successful preview");
-    expect(invoke).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects malformed cleanup targets and verdicts at the execution boundary", async () => {
-    const invoke = vi.fn(async () => ({ ok: true }));
-    const cleanupTool = createFerryTools({ invoke }, () => ({
-      sessionId: "session",
-      runId: "run",
-    })).find((tool) => tool.name === "session_cleanup")!;
-    const scopeId = "0123456789abcdef";
+    })).find((tool) => tool.name === "session_delete")!;
     const run = (input: Record<string, unknown>) =>
-      cleanupTool.execute("call", input, undefined, undefined);
+      deleteTool.execute("call", input, undefined, undefined);
 
     // Provider 未必真的执行 function schema:删除入口不能只靠 schema 兜底
     await expect(
-      run({
-        intent: "preview",
-        scope_id: scopeId,
-        targets: [{ tool: "nope", ref: "fsr_session" }],
-      }),
-    ).rejects.toThrow("require a known tool");
+      run({ tool: "nope", refs: ["fsr_session"], intent: "preview" }),
+    ).rejects.toThrow("requires a known tool");
     await expect(
-      run({
-        intent: "preview",
-        scope_id: scopeId,
-        targets: [{ tool: "claude", ref: 123 }],
-      }),
-    ).rejects.toThrow("require a non-empty ref");
+      run({ tool: "codex", refs: ["fsr_a", "fsr_a"], intent: "preview" }),
+    ).rejects.toThrow("unique non-empty refs");
     await expect(
-      run({
-        intent: "triage",
-        scope_id: scopeId,
-        verdicts: [{ tool: "claude", ref: "fsr_session", verdict: "burn" }],
-      }),
-    ).rejects.toThrow("require verdict");
+      run({ tool: "codex", refs: ["fsr_session"] }),
+    ).rejects.toThrow("intent preview or execute");
     await expect(
-      run({
-        intent: "triage",
-        scope_id: scopeId,
-        verdicts: [
-          {
-            tool: "claude",
-            ref: "fsr_session",
-            verdict: "keep",
-            reason: "x".repeat(301),
-          },
-        ],
-      }),
-    ).rejects.toThrow("at most 300 characters");
-    await expect(
-      run({ intent: "preview", scope_id: scopeId, targets: ["fsr_session"] }),
-    ).rejects.toThrow("entries must be objects");
-    expect(invoke).not.toHaveBeenCalled();
+      run({ tool: "codex", refs: ["fsr_session"], intent: "execute" }),
+    ).rejects.toThrow("requires a successful preview");
 
-    // 合法批次照常放行
-    await run({
-      intent: "triage",
-      scope_id: scopeId,
-      verdicts: [{ tool: "claude", ref: "fsr_session", verdict: "delete" }],
-    });
-    expect(invoke).toHaveBeenCalledTimes(1);
+    await run({ tool: "codex", refs: ["fsr_a", "fsr_b"], intent: "preview" });
+    await expect(
+      run({ tool: "codex", refs: ["fsr_a"], intent: "execute" }),
+    ).rejects.toThrow("requires a successful preview");
+    await expect(
+      run({ tool: "claude", refs: ["fsr_a", "fsr_b"], intent: "execute" }),
+    ).rejects.toThrow("requires a successful preview");
+    // 顺序无关:指纹按排序后的 ref 集合计算
+    await run({ tool: "codex", refs: ["fsr_b", "fsr_a"], intent: "execute" });
+    // 同一批不能凭一次预览删两次
+    await expect(
+      run({ tool: "codex", refs: ["fsr_a", "fsr_b"], intent: "execute" }),
+    ).rejects.toThrow("requires a successful preview");
+    expect(invoke).toHaveBeenCalledTimes(2);
   });
 
   it("bounds ask_user option counts", () => {
@@ -722,7 +602,7 @@ describe("Ferry mutation tool schemas", () => {
       "Metadata patch does not accept intent",
     );
     expect(sessionEditTool.description).toContain(supportDescription);
-    expect(sessionCleanupTool.description).toContain("covered equals total");
+    expect(sessionDeleteTool.description).toContain("NO undo");
     expect(askUserTool.description).toContain("does not authorize deletion");
   });
 });

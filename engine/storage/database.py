@@ -18,7 +18,7 @@ from ..operations.state_store import OperationStore
 from ..runtime.store import RuntimeSessionStore
 
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def now_ms() -> int:
@@ -77,10 +77,18 @@ class StateDatabase:
     def _initialize(self) -> None:
         with self._lock, self._connect() as connection:
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, SCHEMA_VERSION):
+            if version not in (0, 9, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Ferry state schema 不受支持: {version}"
                 )
+            if version == 9:
+                # v10:删除恢复系统移除,deletion_recoveries 随之退役
+                connection.executescript("""
+                    BEGIN IMMEDIATE;
+                    DROP TABLE IF EXISTS deletion_recoveries;
+                    PRAGMA user_version = 10;
+                    COMMIT;
+                """)
             if version == 0:
                 connection.executescript("""
                     BEGIN IMMEDIATE;
@@ -110,14 +118,6 @@ class StateDatabase:
                     );
                     CREATE INDEX operation_audit_plan
                         ON operation_audit(plan_id, sequence);
-                    CREATE TABLE deletion_recoveries (
-                        recovery_id TEXT PRIMARY KEY,
-                        tool TEXT NOT NULL,
-                        snapshot TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        created_at INTEGER NOT NULL,
-                        updated_at INTEGER NOT NULL
-                    );
                     CREATE TABLE session_metadata (
                         tool TEXT NOT NULL,
                         session_id TEXT NOT NULL,
@@ -156,7 +156,7 @@ class StateDatabase:
                             REFERENCES runtime_sessions(session_id)
                             ON DELETE CASCADE
                     );
-                    PRAGMA user_version = 9;
+                    PRAGMA user_version = 10;
                     COMMIT;
                 """)
 

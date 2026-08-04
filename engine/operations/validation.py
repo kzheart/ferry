@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 
 from ..contracts.session_ref import is_opaque_session_ref
-from ..sessions.cleanup import is_cleanup_scope_id
 from ..errors import AgentRequestError
 from ..sessions.safety import validate_agent_edit_ops, validate_json_shape
 from .plan_store import canonical_json
@@ -150,7 +149,7 @@ def validate_metadata_input(value: dict) -> dict:
 
 
 def validate_delete_input(value: dict, adapters: tuple[str, ...]) -> dict:
-    allowed = {"kind", "tool", "ref"}
+    allowed = {"kind", "tool", "refs"}
     unknown = set(value) - allowed
     if unknown:
         raise AgentRequestError(
@@ -158,83 +157,23 @@ def validate_delete_input(value: dict, adapters: tuple[str, ...]) -> dict:
             {"fields": sorted(unknown)},
         )
     tool = value.get("tool")
-    ref = value.get("ref")
+    refs = value.get("refs")
     if tool not in adapters:
         raise AgentRequestError("delete tool 非法")
-    if (
-        not isinstance(ref, str)
-        or not 1 <= len(ref) <= 512
-        or any(ord(character) < 33 for character in ref)
-    ):
-        raise AgentRequestError("delete ref 非法")
-    return {"kind": "delete", "tool": tool, "ref": ref}
-
-
-def validate_cleanup_input(value: dict, adapters: tuple[str, ...]) -> dict:
-    allowed = {"kind", "scope_id", "targets"}
-    unknown = set(value) - allowed
-    if unknown:
-        raise AgentRequestError(
-            "cleanup operation 包含未知字段",
-            {"fields": sorted(unknown)},
-        )
-    if value.get("kind") != "cleanup":
-        raise AgentRequestError("cleanup operation kind 非法")
-    scope_id = value.get("scope_id")
-    if not is_cleanup_scope_id(scope_id):
-        raise AgentRequestError("cleanup scope_id 非法")
-    targets = value.get("targets")
-    if not isinstance(targets, list) or not 1 <= len(targets) <= 500:
-        raise AgentRequestError("cleanup targets 必须是 1 到 500 项的数组")
-    normalized = []
+    if not isinstance(refs, list) or not 1 <= len(refs) <= 100:
+        raise AgentRequestError("delete refs 必须是 1 到 100 项的数组")
     seen = set()
-    for target in targets:
-        if not isinstance(target, dict) or not set(target) <= {"tool", "ref", "reason"}:
-            raise AgentRequestError("cleanup target 字段非法")
-        tool = target.get("tool")
-        ref = target.get("ref")
-        reason = target.get("reason")
-        if not isinstance(tool, str) or tool not in adapters:
-            raise AgentRequestError("cleanup target tool 非法")
+    for ref in refs:
         if not is_opaque_session_ref(ref):
-            raise AgentRequestError("cleanup target ref 非法")
-        if "reason" in target and (
-            not isinstance(reason, str) or len(reason) > 300
-        ):
-            raise AgentRequestError("cleanup target reason 非法")
-        identity = (tool, ref)
-        if identity in seen:
-            raise AgentRequestError("cleanup targets 不允许重复")
-        seen.add(identity)
-        entry = {"tool": tool, "ref": ref}
-        if reason is not None:
-            entry["reason"] = reason
-        normalized.append(entry)
+            raise AgentRequestError("delete ref 非法")
+        if ref in seen:
+            raise AgentRequestError("delete refs 不允许重复")
+        seen.add(ref)
     return json.loads(canonical_json({
-        "kind": "cleanup",
-        "scope_id": scope_id,
-        "targets": normalized,
+        "kind": "delete",
+        "tool": tool,
+        "refs": refs,
     }))
-
-
-def validate_restore_delete_input(value: dict) -> dict:
-    if set(value) != {"kind", "recovery_id"}:
-        raise AgentRequestError("restore-delete operation 参数非法")
-    recovery_id = value.get("recovery_id")
-    if (
-        not isinstance(recovery_id, str)
-        or not recovery_id.startswith("recovery_")
-        or not 16 <= len(recovery_id) <= 128
-        or not all(
-            character.isalnum() or character in "_-"
-            for character in recovery_id
-        )
-    ):
-        raise AgentRequestError("recovery_id 非法")
-    return {
-        "kind": "restore-delete",
-        "recovery_id": recovery_id,
-    }
 
 
 def validate_ops(ops) -> list[dict]:

@@ -147,10 +147,6 @@ class SubagentNotSupportedError(DomainError, ValueError):
     code = "edit.subagent_not_supported"
 
 
-class SnapshotInvalidSourceError(DomainError, ValueError):
-    code = "snapshot.invalid_source"
-
-
 class AgentReferenceError(DomainError, ValueError):
     """Agent 只能使用当前 Engine 扫描索引签发的 opaque ref。"""
 

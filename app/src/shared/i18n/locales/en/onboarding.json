@@ -18,7 +18,7 @@
     "searchTitle": "Press ⌘K to search anywhere",
     "searchBody": "Jump to any session by title, project directory, or command — full-text search over session content works too. Search and filter controls keep the same spot in the resource pane across modules.",
     "filterTitle": "Filter and organize sessions",
-    "filterBody": "Narrow the list by source agent, time range, project directory, or tags. Inline actions let you pin, rename, and tag; deletion backs up first and can be undone. This metadata stays local and never touches the original session files.",
+    "filterBody": "Narrow the list by source agent, time range, project directory, or tags. Inline actions let you pin, rename, and tag; pinned or archived sessions are protected from deletion. This metadata stays local and never touches the original session files.",
     "detailTitle": "Session detail and resume",
     "detailBody": "The detail view renders the full session tree, including subagent conversations and image previews. From here you can refresh, resume the conversation in your terminal, or copy the resume command; edits show a diff first, back up before applying, and can always be rolled back.",
     "scopeTitle": "Migrate up to here",

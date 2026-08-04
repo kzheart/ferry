@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
 import { Caret, Spinner } from "../../shared/ui/icons.jsx";
-import { TOOL_LEVEL } from "./agentChatModel.js";
+import { TOOL_LEVEL, toolLevel } from "./agentChatModel.js";
 import EntityCards from "./EntityCards.jsx";
 
 const formatDuration = (startedAt, endedAt) => {
@@ -182,19 +182,26 @@ function ShellResult({ result, t }) {
 export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const level = TOOL_LEVEL[item.name] || "read";
+  const level = toolLevel(item);
   const running = item.status === "running";
   const error = item.status === "error";
   const merged = item.merged;
   const count = merged ? merged.length : 1;
   const resultText = item.result?.text ? prettyJson(item.result.text) : "";
   const shell = item.name === "bash" ? shellResult(item.result?.text) : null;
+  const fallbackVerb = t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
+  const intent = typeof item.args?.intent === "string" ? item.args.intent : null;
   const verb = item.name === "agent_prompt"
     ? t("settings:roles.tool.agent_prompt.label")
-    : t(`askferry:trace.verb.${item.name}`, { defaultValue: item.name });
+    // 分阶段工具按阶段命名:盘点显示成「清理会话」会让用户以为已经删了
+    : intent
+      ? t(`askferry:trace.verbIntent.${item.name}.${intent}`,
+          { defaultValue: fallbackVerb })
+      : fallbackVerb;
   const summary = toolSummary(item, t);
+  // 实体卡的自动展示仍按工具类别(预览的编辑卡要直接可见),徽章才按阶段
   const showCards = !error && !merged && item.entities?.length > 0
-    && (level === "mutate" || open);
+    && (TOOL_LEVEL[item.name] === "mutate" || open);
 
   return (
     <div style={{ position: "relative", paddingLeft: 24 }}>

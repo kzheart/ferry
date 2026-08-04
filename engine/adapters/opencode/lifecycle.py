@@ -29,8 +29,5 @@ class OpenCodeLifecycle(BaseLifecycle):
         return session_id
 
     def delete(self, adapter, ref: str) -> dict:
-        editor = adapter.editor
-        doc = editor.load(ref)
-        snap = editor.snapshot(doc, reason_code="snapshot.before_delete")
         self.cleanup(ref, None)
-        return {"ok": True, "snapshot": str(snap), "undoable": False}
+        return {"ok": True}

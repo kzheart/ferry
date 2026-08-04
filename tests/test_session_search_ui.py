@@ -21,7 +21,6 @@ from engine.context import EngineContext
 from engine.contracts.agents import AGENT_CAPABILITIES
 from engine.errors import AgentRequestError
 from engine.server.rpc import PROTOCOL, RpcDispatcher
-from engine.sessions.cleanup import CleanupService
 from engine.sessions.content_index import ContentIndex
 from engine.sessions.index import AgentSessionIndex
 from engine.sessions.model import Block, Message, Session
@@ -204,7 +203,6 @@ def _rpc(environment, params, request_id="ui-search-1"):
     application = EngineService(
         environment["ports"], environment["index"], _Operations(),
         environment["content_index"],
-        cleanup=CleanupService(environment["index"], environment["ports"]),
     )
     return RpcDispatcher(application).handle(json.dumps({
         "protocol": PROTOCOL,

@@ -80,114 +80,6 @@ const metadataPatch = Type.Object(
 const agentEnum = (values: readonly string[]) =>
   Type.Unsafe({ type: "string", enum: [...values] });
 
-const cleanupScope = Type.Object(
-  {
-    agents: Type.Optional(Type.Array(agentEnum(AGENT_IDS), { maxItems: 32 })),
-    projects: Type.Optional(
-      Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
-        maxItems: 20,
-      }),
-    ),
-    updated_before: Type.Optional(timePoint),
-  },
-  { additionalProperties: false },
-);
-
-const cleanupScopeId = Type.String({
-  minLength: 16,
-  maxLength: 16,
-  pattern: "^[0-9a-f]{16}$",
-});
-
-const cleanupTarget = Type.Object(
-  {
-    tool: agentEnum(AGENT_IDS),
-    ref: opaqueSessionRef,
-    reason: Type.Optional(Type.String({ maxLength: 300 })),
-  },
-  { additionalProperties: false },
-);
-
-const cleanupVerdict = Type.Object(
-  {
-    tool: agentEnum(AGENT_IDS),
-    ref: opaqueSessionRef,
-    verdict: Type.Union([
-      Type.Literal("delete"),
-      Type.Literal("keep"),
-      Type.Literal("ask_user"),
-    ]),
-    reason: Type.Optional(Type.String({ maxLength: 300 })),
-  },
-  { additionalProperties: false },
-);
-
-// Function-tool providers require an object root. Intent-specific field
-// constraints are repeated at the execution boundary below.
-const sessionCleanupSchema = Type.Unsafe({
-  type: "object",
-  properties: {
-    intent: Type.Union([
-      Type.Literal("inventory"),
-      Type.Literal("triage"),
-      Type.Literal("preview"),
-      Type.Literal("execute"),
-    ]),
-    scope: cleanupScope,
-    cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
-    scope_id: cleanupScopeId,
-    verdicts: Type.Array(cleanupVerdict, { minItems: 1, maxItems: 100 }),
-    targets: Type.Array(cleanupTarget, { minItems: 1, maxItems: 500 }),
-  },
-  required: ["intent"],
-  additionalProperties: false,
-  oneOf: [
-    {
-      properties: { intent: Type.Literal("inventory") },
-      not: {
-        anyOf: [
-          { required: ["scope_id"] },
-          { required: ["verdicts"] },
-          { required: ["targets"] },
-        ],
-      },
-    },
-    {
-      properties: { intent: Type.Literal("triage") },
-      required: ["scope_id", "verdicts"],
-      not: {
-        anyOf: [
-          { required: ["scope"] },
-          { required: ["cursor"] },
-          { required: ["targets"] },
-        ],
-      },
-    },
-    {
-      properties: { intent: Type.Literal("preview") },
-      required: ["scope_id", "targets"],
-      not: {
-        anyOf: [
-          { required: ["scope"] },
-          { required: ["cursor"] },
-          { required: ["verdicts"] },
-        ],
-      },
-    },
-    {
-      properties: { intent: Type.Literal("execute") },
-      required: ["scope_id", "targets"],
-      not: {
-        anyOf: [
-          { required: ["scope"] },
-          { required: ["cursor"] },
-          { required: ["verdicts"] },
-        ],
-      },
-    },
-  ],
-});
-
 const askUserSchema = Type.Object(
   {
     question: Type.String({ minLength: 1, maxLength: 500 }),
@@ -246,6 +138,9 @@ const migrationSources = AGENT_IDS.filter((tool) =>
 const promptAgents = AGENT_IDS.filter((tool) =>
   supportsAgentCapability(tool, "prompt"),
 );
+const deleteAgents = AGENT_IDS.filter((tool) =>
+  supportsAgentCapability(tool, "delete"),
+);
 
 function supportedSessionEditOperations(tool: AgentId): string[] {
   return AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
@@ -301,7 +196,7 @@ export const FERRY_TOOL_NAMES = [
   "usage",
   "migrate",
   "session_edit",
-  "session_cleanup",
+  "session_delete",
   "ask_user",
   "agent_prompt",
   "bash",
@@ -410,121 +305,9 @@ function enforceSessionEditPolicy(
   }
 }
 
-function sessionCleanupBatchFingerprint(
-  input: Record<string, unknown>,
-): string {
-  const targets = (input.targets as Array<Record<string, unknown>>)
-    .map((target) => [target.tool, target.ref])
-    .sort(([leftTool, leftRef], [rightTool, rightRef]) => {
-      const left = `${String(leftTool)}\u0000${String(leftRef)}`;
-      const right = `${String(rightTool)}\u0000${String(rightRef)}`;
-      return left < right ? -1 : left > right ? 1 : 0;
-    });
-  return JSON.stringify([input.scope_id, targets]);
-}
-
-const CLEANUP_VERDICTS = ["delete", "keep", "ask_user"];
-
-/**
- * 逐条校验 targets/verdicts 的元素形状。schema 里已经写过一遍,这里再写一遍是因为
- * 执行边界不能假设 Provider 真的执行了 function schema——删除入口尤其不能。
- */
-function validateCleanupEntries(
-  entries: unknown[],
-  field: "targets" | "verdicts",
-): void {
-  for (const entry of entries) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error(`session_cleanup ${field} entries must be objects`);
-    }
-    const item = entry as Record<string, unknown>;
-    if (
-      typeof item.tool !== "string" ||
-      !(AGENT_IDS as readonly string[]).includes(item.tool)
-    ) {
-      throw new Error(
-        `session_cleanup ${field} require a known tool: ${AGENT_IDS.join(", ")}`,
-      );
-    }
-    if (typeof item.ref !== "string" || item.ref.length === 0) {
-      throw new Error(
-        `session_cleanup ${field} require a non-empty ref string`,
-      );
-    }
-    if (
-      field === "verdicts" &&
-      (typeof item.verdict !== "string" ||
-        !CLEANUP_VERDICTS.includes(item.verdict))
-    ) {
-      throw new Error(
-        `session_cleanup verdicts require verdict ${CLEANUP_VERDICTS.join(", ")}`,
-      );
-    }
-    if (
-      item.reason !== undefined &&
-      (typeof item.reason !== "string" || item.reason.length > 300)
-    ) {
-      throw new Error(
-        `session_cleanup ${field} reason must be a string of at most 300 characters`,
-      );
-    }
-  }
-}
-
-function validateSessionCleanupInput(input: Record<string, unknown>): void {
-  const intent = input.intent;
-  const has = (field: string) => input[field] !== undefined;
-  if (
-    intent !== "inventory" &&
-    intent !== "triage" &&
-    intent !== "preview" &&
-    intent !== "execute"
-  ) {
-    throw new Error(
-      "session_cleanup requires intent inventory, triage, preview or execute",
-    );
-  }
-  if (intent === "inventory") {
-    if (has("scope_id") || has("verdicts") || has("targets")) {
-      throw new Error(
-        "session_cleanup inventory only accepts scope and cursor",
-      );
-    }
-    return;
-  }
-  if (intent === "triage") {
-    if (
-      typeof input.scope_id !== "string" ||
-      !/^[0-9a-f]{16}$/.test(input.scope_id) ||
-      !Array.isArray(input.verdicts) ||
-      input.verdicts.length < 1 ||
-      input.verdicts.length > 100 ||
-      has("scope") ||
-      has("cursor") ||
-      has("targets")
-    ) {
-      throw new Error(
-        "session_cleanup triage requires scope_id and 1-100 verdicts only",
-      );
-    }
-    validateCleanupEntries(input.verdicts, "verdicts");
-    return;
-  }
-  if (
-    typeof input.scope_id !== "string" ||
-    !/^[0-9a-f]{16}$/.test(input.scope_id) ||
-    !Array.isArray(input.targets) ||
-    input.targets.length < 1 ||
-    input.targets.length > 500 ||
-    has("scope") ||
-    has("cursor") ||
-    has("verdicts")
-  ) {
-    throw new Error(
-      `session_cleanup ${intent} requires scope_id and 1-500 targets only`,
-    );
-  }
-  validateCleanupEntries(input.targets, "targets");
+function sessionDeleteFingerprint(input: Record<string, unknown>): string {
+  const refs = [...(input.refs as string[])].sort();
+  return JSON.stringify([input.tool, refs]);
 }
 
 function validateAskUserInput(input: Record<string, unknown>): void {
@@ -644,7 +427,14 @@ const schemas = {
   // Function-tool providers require an object root. Conditional constraints
   // live inside oneOf while the execution boundary validates them again.
   session_edit: sessionEditSchema,
-  session_cleanup: sessionCleanupSchema,
+  session_delete: Type.Object(
+    {
+      tool: agentEnum(deleteAgents),
+      refs: Type.Array(opaqueSessionRef, { minItems: 1, maxItems: 100 }),
+      intent: operationIntent,
+    },
+    { additionalProperties: false },
+  ),
   ask_user: askUserSchema,
   agent_prompt: Type.Object(
     {
@@ -677,8 +467,7 @@ const descriptions: Record<FerryToolName, string> = {
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
-  session_cleanup:
-    "Clean up sessions through a mandatory workflow: first call intent inventory (paginate until next_cursor is null), then triage every row in the returned scope exactly once or in idempotent batches. Engine rejects preview/execute until covered equals total; use ask_user or verdict ask_user when uncertain. Call preview with the exact delete targets before execute. execute is the only deletion authorization point and may require approval; it returns recovery_ids for individually reversible deletions. Report the covered/total counts from Engine and never claim the scope was fully reviewed without those numbers. A changed scope_id or generation requires a fresh inventory.",
+  session_delete: `PERMANENTLY delete whole sessions (targets: ${deleteAgents.join(", ")}). There is NO undo and NO recovery snapshot — once executed the sessions are gone. intent is required: preview lists exactly what would be removed (title, session id, size) plus protected sessions that will be excluded (pinned/archived/tagged), without changing anything; execute creates an approval-gated permanent deletion of that list. refs takes 1-100 fsr_ refs from one tool — batch every session the user confirmed into a single call instead of deleting one by one. Always preview the exact same tool+refs first — execute without a matching successful preview is rejected. Only delete sessions the user explicitly identified or confirmed; for questions like "how many old sessions do I have", answer with session_search/usage instead of starting a deletion. To remove individual turns inside a session use session_edit.`,
   ask_user:
     "Ask the user to choose among 2-6 options or provide custom text. This tool only collects information and does not authorize deletion or any other mutation. The user may not answer; when answered is false, do not assume a selection and continue safely.",
   agent_prompt: `Resume and actively drive a native Coding Agent session (${promptAgents.join(", ")}). This is a high-privilege mutation: the target Agent may run commands, use its configured tools, and modify the workspace and native session without a separate Ferry approval. Pass an fsr_ ref from session_search and the prompt to execute. The returned next_ref replaces the old ref after every started run; always use next_ref for the next call because the previous ref becomes stale. Calls execute sequentially and are never safe to retry automatically.`,
@@ -694,7 +483,7 @@ export function createFerryTools(
   // 策略状态只活在这一次工厂调用里:Runtime 重启即清空,宁可重读也不复用过期凭据
   const readUserLocators = new Set<string>();
   const previewedBatches = new Set<string>();
-  const previewedCleanupBatches = new Set<string>();
+  const previewedDeletes = new Set<string>();
   return allowedTools.map((name) => ({
     name,
     label: name,
@@ -735,15 +524,32 @@ export function createFerryTools(
           enforceSessionEditPolicy(input, readUserLocators, previewedBatches);
         }
       }
-      if (name === "session_cleanup") {
-        validateSessionCleanupInput(input);
+      if (name === "session_delete") {
         if (
-          input.intent === "execute" &&
-          !previewedCleanupBatches.has(sessionCleanupBatchFingerprint(input))
+          typeof input.tool !== "string" ||
+          !(deleteAgents as readonly string[]).includes(input.tool) ||
+          !Array.isArray(input.refs) ||
+          input.refs.length < 1 ||
+          input.refs.length > 100 ||
+          input.refs.some(
+            (ref) => typeof ref !== "string" || ref.length === 0,
+          ) ||
+          new Set(input.refs).size !== input.refs.length
         ) {
           throw new Error(
-            "session_cleanup execute requires a successful preview of this exact target set first; " +
-              'run session_cleanup with intent "preview" before execute',
+            `session_delete requires a known tool (${deleteAgents.join(", ")}) and 1-100 unique non-empty refs`,
+          );
+        }
+        if (input.intent !== "preview" && input.intent !== "execute") {
+          throw new Error("session_delete requires intent preview or execute");
+        }
+        if (
+          input.intent === "execute" &&
+          !previewedDeletes.has(sessionDeleteFingerprint(input))
+        ) {
+          throw new Error(
+            "session_delete execute requires a successful preview of this exact tool+refs batch first; " +
+              'run session_delete with intent "preview" before execute',
           );
         }
       }
@@ -775,12 +581,13 @@ export function createFerryTools(
           previewedBatches.add(sessionEditBatchFingerprint(input));
         }
       }
-      if (name === "session_cleanup") {
+      if (name === "session_delete") {
         // 预览授权只兑现一次:execute 成功后立刻作废,重放同一批必须重新 preview
+        const fingerprint = sessionDeleteFingerprint(input);
         if (input.intent === "preview") {
-          previewedCleanupBatches.add(sessionCleanupBatchFingerprint(input));
+          previewedDeletes.add(fingerprint);
         } else if (input.intent === "execute") {
-          previewedCleanupBatches.delete(sessionCleanupBatchFingerprint(input));
+          previewedDeletes.delete(fingerprint);
         }
       }
       return {

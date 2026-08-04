@@ -297,7 +297,6 @@ def load_operations() -> dict[str, object]:
         "terminal_statuses",
         "success_status",
         "input_fields",
-        "cleanup_target_fields",
         "edit_operation_fields",
         "assistant_reply_item_fields",
         "metadata_patch_fields",
@@ -331,7 +330,6 @@ def load_operations() -> dict[str, object]:
         "agent-id",
         "assistant-reply",
         "boolean?",
-        "cleanup-target[]",
         "edit-operation[]",
         "json-object|string",
         "metadata-patch",
@@ -339,6 +337,7 @@ def load_operations() -> dict[str, object]:
         "positive-integer?",
         "positive-integer|string",
         "session-ref",
+        "session-ref[]",
         "string",
         "string?",
         "string[]?",
@@ -382,12 +381,6 @@ def load_operations() -> dict[str, object]:
         raise ValueError(
             "Operation edit_operation_fields 必须按 edit_operations 精确声明"
         )
-    if document["cleanup_target_fields"] != {
-        "tool": "agent-id",
-        "ref": "session-ref",
-        "reason": "string?",
-    }:
-        raise ValueError("Operation cleanup_target_fields 字段不完整")
     if set(document["assistant_reply_item_fields"]) != {"text", "tool"}:
         raise ValueError("Operation assistant reply item 只支持 text/tool")
     if set(document["metadata_patch_fields"]) != {
@@ -899,13 +892,13 @@ def _typescript_field(field: str, descriptor: str) -> str:
         "agent-id": "AgentId",
         "assistant-reply": "AssistantReply",
         "boolean": "boolean",
-        "cleanup-target[]": "CleanupTarget[]",
         "edit-operation[]": "EditOperation[]",
         "json-object|string": "Record<string, unknown> | string",
         "metadata-patch": "MetadataPatch",
         "positive-integer": "number",
         "positive-integer|string": "number | string",
         "session-ref": "string",
+        "session-ref[]": "string[]",
         "string": "string",
         "string[]": "string[]",
     }[base]
@@ -935,11 +928,6 @@ def _typescript_operation_types(contract: dict[str, object]) -> list[str]:
         "export interface MetadataPatch {",
         *(_typescript_field(field, descriptor)
           for field, descriptor in contract["metadata_patch_fields"].items()),
-        "}",
-        "",
-        "export interface CleanupTarget {",
-        *(_typescript_field(field, descriptor)
-          for field, descriptor in contract["cleanup_target_fields"].items()),
         "}",
         "",
     ))
@@ -1040,11 +1028,11 @@ def operations_rust(contract: dict[str, object]) -> str:
             rust_type = {
                 "agent-id": "String",
                 "boolean": "bool",
-                "cleanup-target[]": "Vec<CleanupTarget>",
                 "edit-operation[]": "Vec<Value>",
                 "metadata-patch": "MetadataPatch",
                 "positive-integer": "u32",
                 "session-ref": "String",
+                "session-ref[]": "Vec<String>",
                 "string": "String",
                 "string[]": "Vec<String>",
             }[base]
@@ -1081,29 +1069,6 @@ def operations_rust(contract: dict[str, object]) -> str:
             '    #[serde(skip_serializing_if = "Option::is_none")]',
             f"    pub(crate) {field}: Option<{rust_type}>,",
         ))
-    cleanup_target_fields = []
-    for field, descriptor in contract["cleanup_target_fields"].items():
-        optional = descriptor.endswith("?")
-        base = descriptor[:-1] if optional else descriptor
-        rust_type = {
-            "agent-id": "String",
-            "session-ref": "String",
-            "string": "String",
-        }[base]
-        if optional:
-            rust_type = f"Option<{rust_type}>"
-            cleanup_target_fields.append(
-                '    #[serde(skip_serializing_if = "Option::is_none")]'
-            )
-        if field == "ref":
-            cleanup_target_fields.append('    #[serde(rename = "ref")]')
-            rust_field = "reference"
-        else:
-            rust_field = field
-        cleanup_target_fields.append(
-            f"    pub(crate) {rust_field}: {rust_type},"
-        )
-
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         "use serde::{Deserialize, Serialize};",
@@ -1117,12 +1082,6 @@ def operations_rust(contract: dict[str, object]) -> str:
             "OPERATION_TERMINAL_STATUSES", contract["terminal_statuses"],
         ),
         f'pub(crate) const OPERATION_SUCCESS_STATUS: &str = "{contract["success_status"]}";',
-        "",
-        "#[derive(Deserialize, Serialize)]",
-        "#[serde(deny_unknown_fields)]",
-        "pub(crate) struct CleanupTarget {",
-        *cleanup_target_fields,
-        "}",
         "",
         "#[derive(Deserialize, Serialize)]",
         '#[serde(tag = "kind")]',
@@ -1156,13 +1115,13 @@ def operations_python(contract: dict[str, object]) -> str:
             "agent-id": "str",
             "assistant-reply": "AssistantReply",
             "boolean": "bool",
-            "cleanup-target[]": "list[CleanupTarget]",
             "edit-operation[]": "list[EditOperation]",
             "json-object|string": "dict[str, object] | str",
             "metadata-patch": "MetadataPatch",
             "positive-integer": "int",
             "positive-integer|string": "int | str",
             "session-ref": "str",
+            "session-ref[]": "list[str]",
             "string": "str",
             "string[]": "list[str]",
         }[base]
@@ -1189,17 +1148,6 @@ def operations_python(contract: dict[str, object]) -> str:
         "class MetadataPatch(TypedDict):",
         *(f"    {field}: NotRequired[{python_field(descriptor)[0]}]"
           for field, descriptor in contract["metadata_patch_fields"].items()),
-        "",
-    ))
-    cleanup_fields = []
-    for field, descriptor in contract["cleanup_target_fields"].items():
-        value_type, optional = python_field(descriptor)
-        if optional:
-            value_type = f"NotRequired[{value_type}]"
-        cleanup_fields.append(f"    {field}: {value_type}")
-    definitions.extend((
-        "class CleanupTarget(TypedDict):",
-        *cleanup_fields,
         "",
     ))
     edit_names = []

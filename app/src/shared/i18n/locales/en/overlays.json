@@ -26,15 +26,12 @@
     "title": "Delete this session?",
     "batchTitle": "Delete {{n}} selected sessions?",
     "cancel": "Cancel",
-    "confirmUndoable": "Back up and delete",
     "confirmIrreversible": "Delete permanently",
     "confirmBatch": "Delete selected sessions",
     "desc": "Session \"{{title}}\" ({{tool}}) will be removed from this machine.",
     "bulletSub": "This session contains {{n}} sub-sessions, which will also be deleted.",
-    "bulletUndoable": "You can undo the deletion from the toast.",
-    "bulletIrreversible": "This source does not support one-click recovery, so the deletion cannot be undone.",
-    "bulletBatchUndoable": "{{n}} sessions support recovery after deletion.",
-    "bulletBatchIrreversible": "{{n}} sessions cannot be restored after deletion.",
+    "bulletIrreversible": "Deletion is permanent — there is no recovery snapshot and it cannot be undone.",
+    "bulletBatchIrreversible": "{{n}} sessions will be permanently deleted and cannot be restored.",
     "bulletBatchPartial": "Sessions are deleted one by one; completed deletions are not rolled back if a later one fails."
   },
   "prompt": {

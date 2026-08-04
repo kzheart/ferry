@@ -8,7 +8,7 @@ export const TOOLS = [
   "usage",
   "migrate",
   "session_edit",
-  "session_cleanup",
+  "session_delete",
   "ask_user",
   "bash",
   "agent_prompt",

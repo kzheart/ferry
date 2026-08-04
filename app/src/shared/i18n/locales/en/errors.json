@@ -26,9 +26,6 @@
     "invalid_reply": "Reply content is structurally invalid",
     "subagent_not_supported": "Assistant reply editing cannot add or replace sub-agent tasks"
   },
-  "snapshot": {
-    "invalid_source": "Invalid backup source; cannot undo"
-  },
   "migration": {
     "tool_degraded": "Tool {{tool_name}} degraded to narration text",
     "content_dropped": "Some content was dropped during migration",

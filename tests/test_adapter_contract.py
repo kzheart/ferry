@@ -127,7 +127,6 @@ class _FakeVerifier:
 
 class _FakeLifecycle:
     executable = "fake"
-    delete_undoable = False
 
     def resume_descriptor(self, session_id, cwd):
         return {"session_id": session_id, "cwd": cwd}
@@ -144,8 +143,6 @@ class _FakeLifecycle:
     def delete(self, _adapter, _ref):
         raise AssertionError("fake lifecycle 不应删除")
 
-    def restore_delete(self, _snapshot, _meta):
-        raise AssertionError("fake lifecycle 不应恢复")
 
 
 class _FakeModels:

@@ -70,9 +70,9 @@
         "label": "Session edit",
         "desc": "Rewrite or delete turns and assistant replies"
       },
-      "session_cleanup": {
-        "label": "Session cleanup",
-        "desc": "Review, triage and bulk-delete sessions by scope; preview and approval are required"
+      "session_delete": {
+        "label": "Session delete",
+        "desc": "Permanently delete whole sessions in batch; preview and approval are required, no recovery"
       },
       "ask_user": {
         "label": "Ask the user",

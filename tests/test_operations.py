@@ -11,10 +11,10 @@ from engine.operations import metadata
 from engine.operations import executor as operation_executor
 from engine.operations import plan_store
 from engine.operations import service as operations
-from engine.sessions.cleanup import CleanupService
 from engine.operations.types import AssistantReply
 from engine.errors import (
     AgentCapabilityError,
+    AgentReferenceError,
     AgentRequestError,
     ConcurrentModificationError,
     InvalidReplyError,
@@ -33,9 +33,6 @@ def operation_service(monkeypatch, agent_environment):
             state["service"].shutdown()
         state["service"] = operations.OperationService(
             agent_environment["ports"], agent_environment["index"],
-            CleanupService(
-                agent_environment["index"], agent_environment["ports"],
-            ),
         )
         for name in ("plan", "apply", "status", "cancel", "wait", "audit"):
             monkeypatch.setattr(
@@ -90,7 +87,7 @@ def _delete_plan(**overrides):
     value = {
         "kind": "delete",
         "tool": "claude",
-        "ref": _claude_ref(),
+        "refs": [_claude_ref()],
     }
     value.update(overrides)
     return operations.plan(value)
@@ -116,19 +113,13 @@ def _attach_reply_editing(monkeypatch, ports, *, inplace=True):
 
 def _attach_lifecycle(monkeypatch, transcript, ports):
     class Lifecycle:
-        delete_undoable = True
-
         def __init__(self):
             self.calls = []
 
         def delete(self, _adapter, ref):
             self.calls.append(ref)
             transcript.unlink()
-            return {
-                "ok": True,
-                "snapshot": "snapshot-before-delete",
-                "undoable": True,
-            }
+            return {"ok": True}
 
     original_adapter = ports.adapter
     lifecycle = Lifecycle()
@@ -355,65 +346,77 @@ def test_metadata_plan_rejects_invalid_patch(agent_environment, patch):
         _metadata_plan(patch=patch)
 
 
-def test_delete_plan_is_read_only_and_apply_uses_lifecycle_snapshot(
+def test_delete_plan_is_read_only_and_apply_deletes_permanently(
         agent_environment, monkeypatch):
     lifecycle = _attach_lifecycle(
         monkeypatch, agent_environment["transcript"], agent_environment["ports"],
     )
+    ref = _claude_ref()
 
     plan = _delete_plan()
 
     assert plan["kind"] == "delete"
     assert plan["risk"] == "high"
-    assert plan["preview"]["undoable"] is True
-    assert plan["preview"]["session_id"] == "private-id"
+    assert plan["preview"]["permanent"] is True
+    assert plan["preview"]["totals"]["count"] == 1
+    assert plan["preview"]["excluded"] == []
+    assert plan["affected_refs"] == [ref]
     assert agent_environment["transcript"].exists()
     assert lifecycle.calls == []
 
+    deltas = []
+    agent_environment["index"].on_delta = deltas.append
     applied = _apply(plan["plan_id"])
 
-    assert applied["result"]["recovery_id"].startswith("recovery_")
-    assert "snapshot" not in applied["result"]
+    result = applied["result"]
+    assert [entry["ref"] for entry in result["succeeded"]] == [ref]
+    assert result["skipped"] == []
+    assert result["failed"] == []
+    assert "recovery_id" not in json.dumps(result)
     assert lifecycle.calls == [str(agent_environment["transcript"])]
     assert not agent_environment["transcript"].exists()
-
-    restored = []
-    monkeypatch.setattr(
-        operation_executor.SessionDeletionService,
-        "restore",
-        lambda _self, snapshot: restored.append(snapshot) or {
-            "ok": True,
-            "target": str(agent_environment["transcript"]),
-        },
-    )
-    restore_plan = operations.plan({
-        "kind": "restore-delete",
-        "recovery_id": applied["result"]["recovery_id"],
-    })
-    restore_result = _apply(restore_plan["plan_id"])
-
-    assert restore_plan["preview"]["tool"] == "claude"
-    assert restore_result["result"]["recovery_id"] == \
-        applied["result"]["recovery_id"]
-    assert restored == ["snapshot-before-delete"]
-    with pytest.raises(AgentRequestError):
-        operations.plan({
-            "kind": "restore-delete",
-            "recovery_id": applied["result"]["recovery_id"],
-        })
+    # 删除后索引被定点摘除并推 removal,不必等下一轮重扫
+    assert [delta["removals"] for delta in deltas] == [[ref]]
+    with pytest.raises(AgentReferenceError):
+        agent_environment["index"].resolve("claude", ref, pin_content=False)
 
 
-def test_delete_plan_rejects_revision_change(
+def test_delete_apply_skips_sessions_changed_after_plan(
         agent_environment, monkeypatch):
     lifecycle = _attach_lifecycle(
         monkeypatch, agent_environment["transcript"], agent_environment["ports"],
     )
+    ref = _claude_ref()
     plan = _delete_plan()
     agent_environment["claude_browser"].fingerprint_value = "changed"
 
-    with pytest.raises(ConcurrentModificationError):
-        _apply(plan["plan_id"])
+    applied = _apply(plan["plan_id"])
 
+    result = applied["result"]
+    assert result["succeeded"] == []
+    assert [entry["cause"] for entry in result["skipped"]] == ["changed"]
+    assert result["skipped"][0]["ref"] == ref
+    assert lifecycle.calls == []
+    assert agent_environment["transcript"].exists()
+
+
+def test_delete_plan_excludes_protected_sessions(
+        agent_environment, monkeypatch):
+    lifecycle = _attach_lifecycle(
+        monkeypatch, agent_environment["transcript"], agent_environment["ports"],
+    )
+    metadata.set_entry(
+        "claude", "private-id", {"pinned": True}, agent_environment["ports"],
+    )
+
+    plan = _delete_plan()
+
+    assert plan["preview"]["totals"]["count"] == 0
+    assert [entry["cause"] for entry in plan["preview"]["excluded"]] == [
+        "pinned",
+    ]
+    applied = _apply(plan["plan_id"])
+    assert applied["result"]["succeeded"] == []
     assert lifecycle.calls == []
     assert agent_environment["transcript"].exists()
 

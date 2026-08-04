@@ -98,30 +98,20 @@ test("右键菜单的禁用项不触发动作", () => {
   assert.deepEqual(calls, []);
 });
 
-test("单会话删除确认按可撤销与否切换确认按钮语义", () => {
+test("单会话删除确认永远是永久删除语义", () => {
   const calls = [];
   const bag = {
     prepared: {
       session: { id: "s1", title: "会话", tool: "claude", tree_count: 1 },
-      plan: { preview: { undoable: true } },
+      plan: { preview: { excluded: [] } },
     },
     onCancel: () => calls.push("cancel"),
     onConfirm: () => calls.push("confirm"),
   };
-  const { rerender } = renderOverlays({ sessionDelete: bag });
-  fireEvent.click(screen.getByText("overlays:delete.confirmUndoable"));
+  renderOverlays({ sessionDelete: bag });
+  assert.ok(screen.getByText("overlays:delete.bulletIrreversible"));
+  fireEvent.click(screen.getByText("overlays:delete.confirmIrreversible"));
   assert.deepEqual(calls, ["confirm"]);
-
-  rerender(
-    <AppOverlays
-      {...closedOverlays()}
-      sessionDelete={{
-        ...bag,
-        prepared: { ...bag.prepared, plan: { preview: { undoable: false } } },
-      }}
-    />,
-  );
-  assert.ok(screen.getByText("overlays:delete.confirmIrreversible"));
 });
 
 test("批量删除与单条删除是两个独立弹层", () => {
@@ -129,8 +119,8 @@ test("批量删除与单条删除是两个独立弹层", () => {
   renderOverlays({
     batchDelete: {
       prepared: [
-        { session: { id: "a" }, plan: { preview: { undoable: true } } },
-        { session: { id: "b" }, plan: { preview: { undoable: false } } },
+        { session: { id: "a" }, plan: { preview: {} } },
+        { session: { id: "b" }, plan: { preview: {} } },
       ],
       onCancel: () => calls.push("cancel"),
       onConfirm: () => calls.push("confirm"),

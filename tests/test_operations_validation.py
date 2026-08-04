@@ -4,19 +4,16 @@ import pytest
 from engine.errors import AgentRequestError, InvalidReplyError
 from engine.operations.validation import (
     validate_delete_input,
-    validate_cleanup_input,
     validate_edit_input,
     validate_metadata_input,
     validate_migration_input,
     validate_ops,
-    validate_restore_delete_input,
 )
 
 
 ADAPTERS = ("claude", "opencode", "codex")
 REF = "ref-abcdef0123456789"
-CLEANUP_SCOPE_ID = "0123456789abcdef"
-CLEANUP_REF = "fsr_0123456789abcdef"
+DELETE_REF = "fsr_0123456789abcdef"
 
 
 def _edit(**overrides):
@@ -47,16 +44,6 @@ def _metadata(**overrides):
         "tool": "claude",
         "ref": REF,
         "patch": {"name": "新名称"},
-    }
-    value.update(overrides)
-    return value
-
-
-def _cleanup(**overrides):
-    value = {
-        "kind": "cleanup",
-        "scope_id": CLEANUP_SCOPE_ID,
-        "targets": [{"tool": "claude", "ref": CLEANUP_REF, "reason": "旧会话"}],
     }
     value.update(overrides)
     return value
@@ -171,74 +158,37 @@ def test_metadata_input_rejects_oversized_patch():
         }))
 
 
-def test_delete_input_is_minimal_and_unnormalized():
+def test_delete_input_accepts_unique_opaque_refs():
     assert validate_delete_input(
-        {"kind": "delete", "tool": "claude", "ref": REF}, ADAPTERS,
-    ) == {"kind": "delete", "tool": "claude", "ref": REF}
+        {"kind": "delete", "tool": "claude", "refs": [DELETE_REF]}, ADAPTERS,
+    ) == {"kind": "delete", "tool": "claude", "refs": [DELETE_REF]}
 
 
 @pytest.mark.parametrize("value, message", [
-    ({"kind": "delete", "tool": "nope", "ref": REF}, "tool 非法"),
-    ({"kind": "delete", "tool": "claude", "ref": ""}, "ref 非法"),
-    ({"kind": "delete", "tool": "claude", "ref": "a b"}, "ref 非法"),
+    ({"kind": "delete", "tool": "nope", "refs": [DELETE_REF]}, "tool 非法"),
+    ({"kind": "delete", "tool": "claude", "refs": []}, "1 到 100 项"),
+    ({"kind": "delete", "tool": "claude", "refs": [""]}, "ref 非法"),
+    ({"kind": "delete", "tool": "claude", "refs": ["not-opaque"]}, "ref 非法"),
     (
-        {"kind": "delete", "tool": "claude", "ref": REF, "force": True},
+        {"kind": "delete", "tool": "claude", "refs": [DELETE_REF, DELETE_REF]},
+        "不允许重复",
+    ),
+    (
+        {
+            "kind": "delete",
+            "tool": "claude",
+            "refs": [f"{DELETE_REF}{index:04d}" for index in range(101)],
+        },
+        "1 到 100 项",
+    ),
+    (
+        {"kind": "delete", "tool": "claude", "refs": [DELETE_REF], "force": True},
         "未知字段",
     ),
 ])
 def test_delete_input_rejections(value, message):
     with pytest.raises(AgentRequestError, match=message):
         validate_delete_input(value, ADAPTERS)
-
-
-def test_cleanup_input_normalizes_optional_reason():
-    assert validate_cleanup_input(_cleanup(), ADAPTERS) == _cleanup()
-    assert validate_cleanup_input(_cleanup(
-        targets=[{"tool": "claude", "ref": CLEANUP_REF}],
-    ), ADAPTERS)["targets"] == [{"tool": "claude", "ref": CLEANUP_REF}]
-
-
-@pytest.mark.parametrize("value", [
-    _cleanup(scope_id="too-short"),
-    _cleanup(targets=[]),
-    _cleanup(targets=[{"tool": "missing", "ref": CLEANUP_REF}]),
-    _cleanup(targets=[{"tool": "claude", "ref": "not-opaque"}]),
-    _cleanup(targets=[{
-        "tool": "claude", "ref": CLEANUP_REF, "reason": "x" * 301,
-    }]),
-    _cleanup(targets=[
-        {"tool": "claude", "ref": CLEANUP_REF},
-        {"tool": "claude", "ref": CLEANUP_REF},
-    ]),
-    _cleanup(extra=True),
-    _cleanup(targets=[
-        {"tool": "claude", "ref": f"{CLEANUP_REF}{index:04d}"}
-        for index in range(501)
-    ]),
-])
-def test_cleanup_input_rejects_invalid_samples(value):
-    with pytest.raises(AgentRequestError):
-        validate_cleanup_input(value, ADAPTERS)
-
-
-def test_restore_delete_input_accepts_prefixed_id():
-    recovery_id = "recovery_0123456789abcdef"
-
-    assert validate_restore_delete_input(
-        {"kind": "restore-delete", "recovery_id": recovery_id},
-    ) == {"kind": "restore-delete", "recovery_id": recovery_id}
-
-
-@pytest.mark.parametrize("value", [
-    {"kind": "restore-delete"},
-    {"kind": "restore-delete", "recovery_id": "recovery_1", "tool": "claude"},
-    {"kind": "restore-delete", "recovery_id": "plan_0123456789abcdef"},
-    {"kind": "restore-delete", "recovery_id": "recovery_short"},
-    {"kind": "restore-delete", "recovery_id": "recovery_bad/chars/here!!"},
-])
-def test_restore_delete_input_rejections(value):
-    with pytest.raises(AgentRequestError):
-        validate_restore_delete_input(value)
 
 
 def test_validate_ops_normalizes_assistant_reply():

@@ -54,7 +54,7 @@
     "kindMigration": "Migration proposal",
     "kindEdit": "Edit original session",
     "kindMetadata": "Metadata change proposal",
-    "kindCleanup": "Bulk session cleanup",
+    "kindDelete": "Permanently delete sessions",
     "kindGeneric": "Write proposal",
     "applied": "Approved & applied",
     "applying": "Applying…",
@@ -67,21 +67,18 @@
     "approve": "Approve & apply",
     "reject": "Reject"
   },
-  "cleanup": {
-    "previewTitle": "Frozen cleanup preview",
+  "deletion": {
+    "previewTitle": "Deletion list preview",
     "totalCount": "To delete",
     "totalSize": "Total size",
-    "undoable": "Undoable",
-    "coverage": "Triaged {{covered}} / {{total}} sessions",
-    "byTool": "By agent",
-    "toolSummary": "{{n}} sessions · {{size}}",
+    "tool": "Source agent",
+    "permanent": "Permanent deletion — no recovery snapshot; sessions cannot be brought back.",
     "showSessions": "Show {{n}} sessions",
     "hideSessions": "Hide session list",
-    "excluded": "{{n}} excluded",
+    "excluded": "{{n}} excluded (protected, will not be deleted)",
     "causePinned": "Pinned",
     "causeArchived": "Archived",
     "causeTagged": "Has retention tag",
-    "causeNotFound": "Session not found",
     "causeGeneric": "Not eligible for deletion"
   },
   "choice": {
@@ -154,9 +151,19 @@
       "usage": "Usage",
       "migrate": "Migrate",
       "session_edit": "Edit session",
-      "session_cleanup": "Clean up sessions",
+      "session_delete": "Delete sessions",
       "ask_user": "Ask the user",
       "bash": "Run command"
+    },
+    "verbIntent": {
+      "session_delete": {
+        "preview": "Preview deletion",
+        "execute": "Delete sessions"
+      },
+      "session_edit": {
+        "preview": "Preview edit",
+        "execute": "Apply edit"
+      }
     },
     "hits": "{{n}} sessions found",
     "usage": "{{n}} tokens · {{s}} sessions"

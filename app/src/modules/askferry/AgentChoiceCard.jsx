@@ -12,6 +12,7 @@ export function AgentChoiceCard({ item, onRespond }) {
   const [selected, setSelected] = useState(item.selected || []);
   const [customText, setCustomText] = useState(item.customText || "");
   const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const open = item.status === "pending";
   // 提交中不卸载按钮区(否则点一下按钮就消失、零反馈),只锁输入
   const pending = open && !submitting;
@@ -24,6 +25,8 @@ export function AgentChoiceCard({ item, onRespond }) {
     if (item.status !== "pending") {
       setSelected(item.selected || []);
       setCustomText(item.customText || "");
+      // 作答落地即收起,长选项列表答完就不该继续占满整条时间线
+      setExpanded(false);
     }
   }, [item.status, item.selected, item.customText]);
 

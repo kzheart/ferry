@@ -18,10 +18,20 @@ export const TOOL_LEVEL = {
   usage: "read",
   migrate: "mutate",
   session_edit: "mutate",
-  session_cleanup: "mutate",
+  session_delete: "mutate",
   ask_user: "read",
   bash: "mutate",
   agent_prompt: "mutate",
+};
+
+// 分阶段工具(edit/delete)只有 execute 才真正落盘,preview 是只读;
+// 徽章按实际阶段着色,不然预览也顶着「修改」误导用户
+export const toolLevel = item => {
+  const level = TOOL_LEVEL[item?.name] || "read";
+  const intent = item?.args?.intent;
+  return level === "mutate" && typeof intent === "string" && intent !== "execute"
+    ? "read"
+    : level;
 };
 
 const sealAssistant = items => {
@@ -81,10 +91,7 @@ const choiceAnswer = value => {
   };
 };
 
-const answerFromToolResult = result => {
-  const details = result?.details;
-  return choiceAnswer(details?.answer || details);
-};
+const answerFromToolResult = result => choiceAnswer(result?.details);
 
 const upsertChoice = (items, next) => {
   const i = choiceIndex(items, next.requestId, next.callId);

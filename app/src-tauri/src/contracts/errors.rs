@@ -223,10 +223,6 @@ pub(crate) fn error_policy(code: &str) -> Option<ErrorPolicy> {
             category: "not-found",
             retryable: false,
         }),
-        "snapshot.invalid_source" => Some(ErrorPolicy {
-            category: "validation",
-            retryable: false,
-        }),
         "tool.invalid_args" => Some(ErrorPolicy {
             category: "validation",
             retryable: false,

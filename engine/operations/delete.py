@@ -1,11 +1,8 @@
-"""会话删除与恢复用例。"""
+"""会话删除用例:永久删除,不留恢复快照。"""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from ..context import EngineContext
-from ..errors import SnapshotInvalidSourceError, require_agent_capability
+from ..errors import require_agent_capability
 
 
 class SessionDeletionService:
@@ -16,21 +13,3 @@ class SessionDeletionService:
         adapter = self._ports.adapter(tool)
         lifecycle = require_agent_capability(adapter, "delete", "lifecycle")
         return lifecycle.delete(adapter, reference)
-
-    def restore(self, snapshot: str) -> dict:
-        path = Path(snapshot)
-        if path.parent != Path(self._ports.snapshot_dir()):
-            raise SnapshotInvalidSourceError(
-                "只允许从快照目录恢复", {"snapshot": snapshot})
-        try:
-            metadata = json.loads(path.with_suffix(".meta.json").read_text())
-        except (OSError, json.JSONDecodeError) as error:
-            raise SnapshotInvalidSourceError(
-                "快照缺少元数据,无法撤销", {"snapshot": snapshot}) from error
-        tool = metadata.get("tool")
-        if not isinstance(tool, str) or not tool:
-            raise SnapshotInvalidSourceError(
-                "快照缺少来源 Agent", {"snapshot": snapshot})
-        adapter = self._ports.adapter(tool)
-        lifecycle = require_agent_capability(adapter, "delete", "lifecycle")
-        return lifecycle.restore_delete(path, metadata)
