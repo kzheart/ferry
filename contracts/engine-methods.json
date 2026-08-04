@@ -181,22 +181,6 @@
       "dispatch": "serial"
     },
     {
-      "name": "agent_cleanup_inventory",
-      "kind": "read",
-      "exposure": "internal",
-      "timeout": "lookup",
-      "retry": "never",
-      "dispatch": "serial"
-    },
-    {
-      "name": "agent_cleanup_triage",
-      "kind": "mutation",
-      "exposure": "internal",
-      "timeout": "normal",
-      "retry": "never",
-      "dispatch": "serial"
-    },
-    {
       "name": "agent_prompt",
       "kind": "mutation",
       "exposure": "internal",

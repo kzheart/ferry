@@ -22,7 +22,6 @@ from engine.sessions import content_index as session_content
 from engine.sessions import search as session_search
 from engine.sessions import usage as session_usage
 from engine.sessions.content_index import ContentIndex
-from engine.sessions.cleanup import CleanupService
 from engine.sessions.index import AgentSessionIndex
 from engine.sessions.safety import bounded_json, truncate_text
 from engine.sessions import scan as scanning
@@ -179,7 +178,6 @@ class Verifier:
 
 class Lifecycle:
     executable = "fake"
-    delete_undoable = False
 
     def resume_descriptor(self, session_id, cwd):
         return {"session_id": session_id, "cwd": cwd,
@@ -196,10 +194,8 @@ class Lifecycle:
         return cwd
 
     def delete(self, _adapter, _ref):
-        return {"ok": True, "undoable": False}
-
-    def restore_delete(self, _snapshot, _meta):
         return {"ok": True}
+
 
 
 class Models:
@@ -659,9 +655,6 @@ def test_engine_queries_resolve_opaque_refs_before_adapter(
     monkeypatch.setattr("engine.sessions.read.session_asset", asset)
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
-        cleanup=CleanupService(
-            agent_environment["index"], agent_environment["ports"],
-        ),
     )
 
     assert application.show_session("claude", session["ref"]) == {"ok": True}
@@ -708,9 +701,6 @@ def test_ui_queries_tolerate_active_session_writes(
     )
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
-        cleanup=CleanupService(
-            agent_environment["index"], agent_environment["ports"],
-        ),
     )
     assert application.show_session("claude", session["ref"]) == {"ok": True}
 
@@ -741,9 +731,6 @@ def test_ui_ref_survives_reindex_after_active_session_writes(
     )
     application = EngineService(
         agent_environment["ports"], agent_environment["index"], _Operations(),
-        cleanup=CleanupService(
-            agent_environment["index"], agent_environment["ports"],
-        ),
     )
     assert application.show_session("claude", session["ref"]) == {"ok": True}
     assert application.resume_command("claude", session["ref"])["session_id"]

@@ -3,7 +3,7 @@ import { operationRef } from "./sessionModel.js";
 const deleteInput = session => ({
   kind: "delete",
   tool: session.tool,
-  ref: operationRef(session),
+  refs: [operationRef(session)],
 });
 
 export async function prepareSessionDeletion(session, operationClient) {
@@ -24,21 +24,13 @@ export async function prepareSessionDeletions(sessions, operationClient) {
   }
 }
 
-export const deleteIsUndoable = prepared =>
-  prepared?.plan?.preview?.undoable === true;
+// 会话被钉住/归档/打标签时,计划期会把它挪进 excluded,删除名单为空
+export const deleteIsBlocked = prepared =>
+  (prepared?.plan?.preview?.excluded?.length || 0) > 0;
 
-export const deleteNeedsConfirmation = prepared =>
-  !deleteIsUndoable(prepared)
-  || Number(prepared?.session?.tree_count || 1) > 1;
-
-export const summarizePreparedDeletions = prepared => {
-  const undoable = prepared.filter(deleteIsUndoable).length;
-  return {
-    total: prepared.length,
-    undoable,
-    irreversible: prepared.length - undoable,
-  };
-};
+export const summarizePreparedDeletions = prepared => ({
+  total: prepared.length,
+});
 
 export const applyPreparedDeletion = (prepared, operationClient) =>
   operationClient.apply(prepared.plan);

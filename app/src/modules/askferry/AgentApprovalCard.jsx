@@ -24,7 +24,7 @@ const KIND_KEYS = {
   migration: "kindMigration",
   edit: "kindEdit",
   metadata: "kindMetadata",
-  cleanup: "kindCleanup",
+  delete: "kindDelete",
 };
 
 const formatBytes = value => {
@@ -45,17 +45,13 @@ const CAUSE_KEYS = {
   pinned: "causePinned",
   archived: "causeArchived",
   tagged: "causeTagged",
-  not_found: "causeNotFound",
 };
 
-function CleanupPreview({ preview, t }) {
+function DeletePreview({ preview, t }) {
   const [expanded, setExpanded] = useState(false);
   const totals = preview.totals || {};
-  const undoable = preview.undoable || {};
-  const byTool = Array.isArray(preview.by_tool) ? preview.by_tool : [];
   const sessions = Array.isArray(preview.sessions) ? preview.sessions : [];
   const excluded = Array.isArray(preview.excluded) ? preview.excluded : [];
-  const coverage = preview.coverage || {};
   return (
     <div style={{
       display: "flex",
@@ -67,12 +63,12 @@ function CleanupPreview({ preview, t }) {
       border: "1px solid var(--line4)",
     }}>
       <div style={{ fontSize: 11, fontWeight: 650, color: "var(--tx2)" }}>
-        {t("askferry:cleanup.previewTitle")}
+        {t("askferry:deletion.previewTitle")}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 7 }}>
         <div>
           <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
-            {t("askferry:cleanup.totalCount")}
+            {t("askferry:deletion.totalCount")}
           </div>
           <div style={{ color: "var(--tx1)", fontSize: 13, fontWeight: 650 }}>
             {totals.count ?? 0}
@@ -80,7 +76,7 @@ function CleanupPreview({ preview, t }) {
         </div>
         <div>
           <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
-            {t("askferry:cleanup.totalSize")}
+            {t("askferry:deletion.totalSize")}
           </div>
           <div className="mono" style={{ color: "var(--tx1)", fontSize: 12.5 }}>
             {formatBytes(totals.size_bytes)}
@@ -88,44 +84,22 @@ function CleanupPreview({ preview, t }) {
         </div>
         <div>
           <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
-            {t("askferry:cleanup.undoable")}
+            {t("askferry:deletion.tool")}
           </div>
-          <div style={{ color: "var(--ok)", fontSize: 13, fontWeight: 650 }}>
-            {undoable.count ?? 0}/{undoable.total ?? 0}
+          <div style={{ color: "var(--tx1)", fontSize: 12.5, fontWeight: 650 }}>
+            {preview.tool || "—"}
           </div>
         </div>
       </div>
 
-      {coverage.covered != null && coverage.total != null && (
-        <div style={{ color: "var(--tx4)", fontSize: 11 }}>
-          {t("askferry:cleanup.coverage", {
-            covered: coverage.covered, total: coverage.total,
-          })}
-        </div>
-      )}
-
-      {byTool.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
-            {t("askferry:cleanup.byTool")}
-          </div>
-          {byTool.map(entry => (
-            <div key={entry.tool} style={{ display: "flex", gap: 8, fontSize: 11.5 }}>
-              <span style={{ color: "var(--tx2)", minWidth: 70 }}>{entry.tool}</span>
-              <span style={{ color: "var(--tx4)" }}>
-                {t("askferry:cleanup.toolSummary", {
-                  n: entry.count, size: formatBytes(entry.size_bytes),
-                })}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ color: "var(--err-text)", fontSize: 11, fontWeight: 600 }}>
+        {t("askferry:deletion.permanent")}
+      </div>
 
       {sessions.length > 0 && (
         <div>
           <button className="fbtn" type="button" onClick={() => setExpanded(value => !value)}>
-            {t(expanded ? "askferry:cleanup.hideSessions" : "askferry:cleanup.showSessions", {
+            {t(expanded ? "askferry:deletion.hideSessions" : "askferry:deletion.showSessions", {
               n: sessions.length,
             })}
           </button>
@@ -143,7 +117,6 @@ function CleanupPreview({ preview, t }) {
                     <span className="selectable" style={{ color: "var(--tx1)", fontWeight: 600 }}>
                       {session.title || session.ref || "—"}
                     </span>
-                    <span style={{ color: "var(--tx5)" }}>{session.tool}</span>
                     <span style={{ flex: 1 }} />
                     <span style={{ color: "var(--tx5)" }}>
                       {formatUpdated(session.updated)}
@@ -151,7 +124,6 @@ function CleanupPreview({ preview, t }) {
                   </div>
                   <div className="selectable" style={{ color: "var(--tx4)", marginTop: 3 }}>
                     {session.project || "—"}
-                    {session.reason ? ` · ${session.reason}` : ""}
                   </div>
                 </div>
               ))}
@@ -163,15 +135,14 @@ function CleanupPreview({ preview, t }) {
       {excluded.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ color: "var(--warn-text)", fontSize: 10.5 }}>
-            {t("askferry:cleanup.excluded", { n: excluded.length })}
+            {t("askferry:deletion.excluded", { n: excluded.length })}
           </div>
           {excluded.map(entry => (
             <div key={`${entry.tool}:${entry.ref}`} style={{ display: "flex", gap: 8,
               color: "var(--tx4)", fontSize: 11 }}>
-              <span>{entry.tool}</span>
-              <span className="mono selectable">{entry.ref}</span>
+              <span className="selectable">{entry.title || entry.ref}</span>
               <span style={{ flex: 1 }} />
-              <span>{t(`askferry:cleanup.${CAUSE_KEYS[entry.cause] || "causeGeneric"}`)}</span>
+              <span>{t(`askferry:deletion.${CAUSE_KEYS[entry.cause] || "causeGeneric"}`)}</span>
             </div>
           ))}
         </div>
@@ -188,7 +159,7 @@ export function ApprovalCard({
 }) {
   const { t } = useTranslation();
   const operation = item.operation || {};
-  const cleanup = operation.kind === "cleanup";
+  const deletion = operation.kind === "delete";
   const applied = item.status === "applied";
   const failed = item.status === "failed";
   const expired = item.status === "pending"
@@ -250,7 +221,7 @@ export function ApprovalCard({
           {operation.summary}
         </div>
       )}
-      {cleanup && <CleanupPreview preview={operation.preview || {}} t={t} />}
+      {deletion && <DeletePreview preview={operation.preview || {}} t={t} />}
       <EntityCards entities={entities} onNavigate={onNavigate} />
       <div style={{
         display: "flex",

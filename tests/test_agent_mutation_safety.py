@@ -237,9 +237,7 @@ def test_successful_grok_delete_is_permanent_and_clears_index(
 
     result = grok_lifecycle.GrokLifecycle().delete(adapter, session_id)
 
-    assert result == {
-        "ok": True, "undoable": False, "session_id": session_id,
-    }
+    assert result == {"ok": True, "session_id": session_id}
     assert not destination.exists()
     assert _index_ids(sessions) == set()
 
@@ -265,6 +263,6 @@ def test_current_grok_cli_permanently_deletes_isolated_bundle(
 
     result = grok_lifecycle.GrokLifecycle().delete(adapter, session_id)
 
-    assert result["undoable"] is False
+    assert result["ok"] is True
     assert not destination.exists()
     assert _index_ids(sessions) == set()

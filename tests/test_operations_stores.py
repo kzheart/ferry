@@ -92,37 +92,6 @@ def test_recover_interrupted_fails_queued_and_applying_on_reopen(tmp_path):
     assert reopened.get("plan_cccccccccccccccc")["status"] == "planned"
 
 
-def test_deletion_recovery_round_trips_and_transitions(tmp_path):
-    database = _open(tmp_path)
-    database.operations.store_recovery(
-        "recovery_0123456789abcdef", "claude", "snapshot-body", 2_000,
-    )
-
-    reopened = _open(tmp_path).operations
-    recovery = reopened.get_recovery("recovery_0123456789abcdef")
-    assert recovery["tool"] == "claude"
-    assert recovery["snapshot"] == "snapshot-body"
-    assert recovery["status"] == "available"
-
-    assert reopened.claim_recovery("recovery_0123456789abcdef", 2_100)
-    assert reopened.claim_recovery("recovery_0123456789abcdef", 2_200) is False
-    assert reopened.complete_recovery("recovery_0123456789abcdef", 2_300)
-    assert _open(tmp_path).operations.get_recovery(
-        "recovery_0123456789abcdef",
-    )["status"] == "restored"
-
-
-def test_released_recovery_returns_to_available(tmp_path):
-    database = _open(tmp_path)
-    database.operations.store_recovery("recovery_x", "claude", "snap", 1)
-    assert database.operations.claim_recovery("recovery_x", 2)
-
-    assert database.operations.release_recovery("recovery_x", 3)
-    assert _open(tmp_path).operations.get_recovery("recovery_x")["status"] == (
-        "available"
-    )
-
-
 def test_migration_history_round_trips_newest_first(tmp_path):
     database = _open(tmp_path)
     database.migration_history.append("history-1", {"tool": "claude", "at": 1})

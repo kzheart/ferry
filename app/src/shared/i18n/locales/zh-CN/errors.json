@@ -26,9 +26,6 @@
     "invalid_reply": "回复内容结构非法",
     "subagent_not_supported": "助手回复编辑不能新增或替换子 Agent 任务"
   },
-  "snapshot": {
-    "invalid_source": "备份来源非法,无法撤销"
-  },
   "migration": {
     "tool_degraded": "工具 {{tool_name}} 已降级为叙述文本",
     "content_dropped": "部分内容在迁移中被丢弃",

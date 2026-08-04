@@ -141,16 +141,12 @@ def public_plan(operation: OperationPlan) -> dict:
     elif operation.kind == "metadata":
         summary = "修改会话元数据"
     elif operation.kind == "delete":
-        summary = "删除原始会话（执行前创建恢复快照）"
-    elif operation.kind == "restore-delete":
-        summary = "恢复已删除的会话"
-    elif operation.kind == "cleanup":
-        summary = "批量清理会话（执行前创建逐条恢复快照）"
+        summary = "永久删除原始会话（不可恢复）"
     else:
         summary = "修改原始会话（执行前自动创建可恢复快照）"
     if "ref" in params:
         affected_refs = [params["ref"]]
-    elif operation.kind == "cleanup":
+    elif operation.kind == "delete":
         affected_refs = [target["ref"] for target in params["targets"]]
     else:
         affected_refs = []

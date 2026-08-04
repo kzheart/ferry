@@ -1,7 +1,6 @@
 """已审批操作的原生写入执行。"""
 from __future__ import annotations
 
-import secrets
 from collections.abc import Callable
 
 from ..context import EngineContext
@@ -18,7 +17,7 @@ from .delete import SessionDeletionService
 from .metadata_store import metadata_key
 from .edit import EditOperationHandler
 from .migrate import MigrationService
-from .plan_store import OperationPlan, now_ms
+from .plan_store import OperationPlan
 
 
 class OperationExecutor:
@@ -42,8 +41,6 @@ class OperationExecutor:
             "migration": self._apply_migration,
             "metadata": self._apply_metadata,
             "delete": self._apply_delete,
-            "restore-delete": self._apply_restore_delete,
-            "cleanup": self._apply_cleanup,
         }
         handler = handlers.get(operation.kind)
         if handler is None:
@@ -134,59 +131,6 @@ class OperationExecutor:
         )
         return {"metadata": result}
 
-    def _apply_delete(self, operation: OperationPlan) -> dict:
-        params = operation.input()
-        try:
-            record = self._index.resolve(params["tool"], params["ref"])
-        except AgentReferenceError as error:
-            raise ConcurrentModificationError(
-                "会话在删除计划生成后已变化，请重新计划"
-            ) from error
-        if record.revision != operation.base_revision:
-            raise ConcurrentModificationError(
-                "会话在删除计划生成后已变化，请重新计划"
-            )
-        result = SessionDeletionService(self._ports).delete(
-            params["tool"], record.canonical_ref,
-        )
-        snapshot = result.pop("snapshot", None)
-        if result.get("undoable") is True:
-            if not isinstance(snapshot, str) or not snapshot:
-                raise RuntimeError("可恢复删除未返回快照")
-            recovery_id = "recovery_" + secrets.token_urlsafe(18)
-            self._database().operations.store_recovery(
-                recovery_id, params["tool"], snapshot, now_ms(),
-            )
-            result["recovery_id"] = recovery_id
-        return result
-
-    def _apply_restore_delete(self, operation: OperationPlan) -> dict:
-        recovery_id = operation.input()["recovery_id"]
-        recovery = self._database().operations.get_recovery(recovery_id)
-        if recovery is None or recovery["status"] != "available":
-            raise ConcurrentModificationError("删除恢复记录已使用或不可用")
-        require_agent_capability(
-            self._ports.adapter(recovery["tool"]), "delete", "lifecycle",
-        )
-        if not self._database().operations.claim_recovery(
-            recovery_id, now_ms(),
-        ):
-            raise ConcurrentModificationError("删除恢复记录已使用或不可用")
-        try:
-            result = SessionDeletionService(self._ports).restore(
-                recovery["snapshot"],
-            )
-        except Exception:
-            self._database().operations.release_recovery(
-                recovery_id, now_ms(),
-            )
-            raise
-        if not self._database().operations.complete_recovery(
-            recovery_id, now_ms(),
-        ):
-            raise RuntimeError("删除恢复状态提交失败")
-        return {**result, "recovery_id": recovery_id}
-
     @staticmethod
     def _protected_cause(metadata_row: dict) -> str | None:
         if metadata_row.get("pinned") is True:
@@ -197,19 +141,15 @@ class OperationExecutor:
             return "tagged"
         return None
 
-    def _apply_cleanup(self, operation: OperationPlan) -> dict:
+    def _apply_delete(self, operation: OperationPlan) -> dict:
         params = operation.input()
-        # 计划期的资格审查挡不住批准前才被 pin/archive/打标签的会话:元数据
+        tool = params["tool"]
+        # 计划期的保护审查挡不住批准前才被 pin/archive/打标签的会话:元数据
         # 与会话内容 revision 无关,逐条 revision 比对不可能发现这种变化。
         metadata_rows = metadata.list_all(self._ports)
-        result = {
-            "succeeded": [],
-            "skipped": [],
-            "failed": [],
-            "recovery_ids": [],
-        }
+        deletion = SessionDeletionService(self._ports)
+        result = {"succeeded": [], "skipped": [], "failed": []}
         for target in params["targets"]:
-            tool = target["tool"]
             ref = target["ref"]
             try:
                 protected = self._protected_cause(
@@ -245,21 +185,9 @@ class OperationExecutor:
                         "cause": "changed",
                     })
                     continue
-                deletion = SessionDeletionService(self._ports).delete(
-                    tool, record.canonical_ref,
-                )
-                snapshot = deletion.pop("snapshot", None)
-                success = {"tool": tool, "ref": ref}
-                if deletion.get("undoable") is True:
-                    if not isinstance(snapshot, str) or not snapshot:
-                        raise RuntimeError("可恢复删除未返回快照")
-                    recovery_id = "recovery_" + secrets.token_urlsafe(18)
-                    self._database().operations.store_recovery(
-                        recovery_id, tool, snapshot, now_ms(),
-                    )
-                    success["recovery_id"] = recovery_id
-                    result["recovery_ids"].append(recovery_id)
-                result["succeeded"].append(success)
+                deletion.delete(tool, record.canonical_ref)
+                self._index.evict(tool, record.canonical_ref)
+                result["succeeded"].append({"tool": tool, "ref": ref})
             except Exception as error:  # noqa: BLE001 - 单条失败继续批处理
                 result["failed"].append({
                     "tool": tool,

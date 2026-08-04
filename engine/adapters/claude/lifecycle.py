@@ -21,7 +21,7 @@ class ClaudeLifecycle(FileSessionLifecycle):
             Path(hit).unlink(missing_ok=True)
             shutil.rmtree(Path(hit).with_suffix(""), ignore_errors=True)
 
-    def _archive_sidecar(self, path: Path, snap: Path) -> None:
+    def _delete_sidecar(self, path: Path) -> None:
         sidecar = path.with_suffix("")
         if sidecar.is_dir():
-            shutil.move(str(sidecar), str(snap.with_suffix("")))
+            shutil.rmtree(sidecar, ignore_errors=True)

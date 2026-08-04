@@ -25,15 +25,14 @@ def test_pi_resume_uses_absolute_file(tmp_path):
     assert descriptor["args"] == ["--session", str(path.resolve())]
 
 
-def test_pi_delete_is_snapshot_recoverable(tmp_path, monkeypatch):
+def test_pi_delete_is_permanent(tmp_path, monkeypatch):
     path = tmp_path / "session.jsonl"
     shutil.copy(FIXTURE, path)
     backup = tmp_path / "backups"
     monkeypatch.setenv("FERRY_BACKUP_DIR", str(backup))
     lifecycle = PiLifecycle()
     result = lifecycle.delete(Adapter(), str(path))
-    assert result["undoable"] is True
+    assert result["ok"] is True
+    assert "snapshot" not in result
     assert not path.exists()
-    meta = {"source": str(path)}
-    restored = lifecycle.restore_delete(Path(result["snapshot"]), meta)
-    assert restored["ok"] is True and path.exists()
+    assert not backup.exists()

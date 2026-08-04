@@ -391,10 +391,14 @@ html[data-platform="mac"][data-theme="dark"] {
   background: var(--btn-disabled); color: var(--bg); cursor: default; opacity: .7;
   box-shadow: 0 0 0 .5px rgba(0,0,0,.1); filter: none;
 }
+/* 悬停态必须跟着禁用态一起覆写:.fbtn:disabled:hover 比 .fbtn-primary:disabled
+   特异性高,不挡住就会把主按钮刷成白底白字 */
+.fbtn-primary:disabled:hover { background: var(--btn-disabled); }
 [data-theme="dark"] .fbtn-primary:disabled {
   background: rgba(255,255,255,.07); color: var(--tx4); opacity: 1;
   box-shadow: 0 0 0 .5px rgba(0,0,0,.4);
 }
+[data-theme="dark"] .fbtn-primary:disabled:hover { background: rgba(255,255,255,.07); }
 
 /* macOS 设置式分组卡片:面板底 + 半像素描边投影 */
 .fcard {

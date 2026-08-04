@@ -5,7 +5,7 @@ import { sessionIdentity } from "./sessionAttachment.js";
 import {
   applyPreparedDeletion,
   cancelPreparedDeletions,
-  deleteNeedsConfirmation,
+  deleteIsBlocked,
   prepareSessionDeletion,
   prepareSessionDeletions,
 } from "./sessionDeletionModel.js";
@@ -22,33 +22,6 @@ export function useSessionDeletion({
   const [sessionConfirmation, setSessionConfirmation] = useState(null);
   const [batchConfirmation, setBatchConfirmation] = useState(null);
 
-  const restoreSession = useCallback(async recoveryId => {
-    setToast({
-      kind: "run",
-      title: t("app:toast.restoring"),
-      desc: t("app:toast.restoringDesc"),
-    });
-    try {
-      const plan = await operations.plan({
-        kind: "restore-delete",
-        recovery_id: recoveryId,
-      });
-      await operations.apply(plan);
-      doScan();
-      setToast({
-        kind: "ok",
-        title: t("app:toast.restoreDone"),
-        desc: t("app:toast.restoreDoneDesc"),
-      });
-    } catch (error) {
-      setToast({
-        kind: "fail",
-        title: t("app:toast.restoreFail"),
-        desc: error.message,
-      });
-    }
-  }, [doScan, setToast, t]);
-
   const applySessionDeletion = useCallback(async prepared => {
     const { session } = prepared;
     setToast({
@@ -64,21 +37,20 @@ export function useSessionDeletion({
       discardCachedDetail(session);
       if (selectedId === key) clearSelection();
       doScan();
-      const canRestore = result.undoable && result.recovery_id;
+      if (!result.succeeded?.length) {
+        setToast({
+          kind: "fail",
+          title: t("app:toast.deleteFail"),
+          desc: t("app:toast.deleteSkippedDesc"),
+        });
+        return;
+      }
       setToast({
         kind: "ok",
         title: t("app:toast.deleteDone"),
-        desc: t(canRestore
-          ? "app:toast.deleteDoneDescUndoable"
-          : "app:toast.deleteDoneDescFinal", {
+        desc: t("app:toast.deleteDoneDescFinal", {
           title: session.title || session.id,
         }),
-        action: canRestore
-          ? {
-              label: t("app:toast.undo"),
-              onClick: () => restoreSession(result.recovery_id),
-            }
-          : undefined,
       });
     } catch (error) {
       setToast({
@@ -91,7 +63,6 @@ export function useSessionDeletion({
     clearSelection,
     discardCachedDetail,
     doScan,
-    restoreSession,
     selectedId,
     setToast,
     t,
@@ -105,12 +76,18 @@ export function useSessionDeletion({
     });
     try {
       const prepared = await prepareSessionDeletion(session, operations);
-      if (deleteNeedsConfirmation(prepared)) {
-        setSessionConfirmation(prepared);
-        setToast(null);
+      if (deleteIsBlocked(prepared)) {
+        void cancelPreparedDeletions([prepared], operations);
+        setToast({
+          kind: "fail",
+          title: t("app:toast.deleteFail"),
+          desc: t("app:toast.deleteProtectedDesc"),
+        });
         return;
       }
-      await applySessionDeletion(prepared);
+      // 删除不可恢复,永远弹确认,不再有"可撤销就直删"的快捷路径
+      setSessionConfirmation(prepared);
+      setToast(null);
     } catch (error) {
       setToast({
         kind: "fail",
@@ -118,7 +95,7 @@ export function useSessionDeletion({
         desc: error.message,
       });
     }
-  }, [applySessionDeletion, setToast, t]);
+  }, [setToast, t]);
 
   const cancelSessionDeletion = useCallback(() => {
     const prepared = sessionConfirmation;
@@ -181,9 +158,12 @@ export function useSessionDeletion({
         }),
       });
       try {
-        await applyPreparedDeletion(target, operations);
+        const result = (
+          await applyPreparedDeletion(target, operations)
+        ).result;
         discardCachedDetail(target.session);
-        done += 1;
+        if (result.succeeded?.length) done += 1;
+        else fail += 1;
       } catch {
         fail += 1;
       }

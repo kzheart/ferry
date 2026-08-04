@@ -54,7 +54,7 @@
     "kindMigration": "迁移提议",
     "kindEdit": "修改原始会话",
     "kindMetadata": "元数据修改提议",
-    "kindCleanup": "批量清理会话",
+    "kindDelete": "永久删除会话",
     "kindGeneric": "写操作提议",
     "applied": "已批准并执行",
     "applying": "执行中…",
@@ -67,21 +67,18 @@
     "approve": "批准并执行",
     "reject": "拒绝"
   },
-  "cleanup": {
-    "previewTitle": "冻结的清理预览",
-    "totalCount": "待清理",
+  "deletion": {
+    "previewTitle": "删除清单预览",
+    "totalCount": "待删除",
     "totalSize": "合计大小",
-    "undoable": "可恢复",
-    "coverage": "已裁决 {{covered}} / {{total}} 条",
-    "byTool": "按 Agent 分布",
-    "toolSummary": "{{n}} 条 · {{size}}",
+    "tool": "来源 Agent",
+    "permanent": "永久删除,无恢复快照,执行后无法找回。",
     "showSessions": "展开 {{n}} 条会话",
     "hideSessions": "收起会话列表",
-    "excluded": "已排除 {{n}} 条",
+    "excluded": "已排除 {{n}} 条(受保护,不会删除)",
     "causePinned": "已置顶",
     "causeArchived": "已归档",
     "causeTagged": "带保留标签",
-    "causeNotFound": "会话不存在",
     "causeGeneric": "不符合删除资格"
   },
   "choice": {
@@ -152,9 +149,19 @@
       "usage": "统计用量",
       "migrate": "迁移会话",
       "session_edit": "编辑会话",
-      "session_cleanup": "清理会话",
+      "session_delete": "删除会话",
       "ask_user": "询问用户",
       "bash": "执行命令"
+    },
+    "verbIntent": {
+      "session_delete": {
+        "preview": "预览删除",
+        "execute": "删除会话"
+      },
+      "session_edit": {
+        "preview": "预览编辑",
+        "execute": "写入编辑"
+      }
     },
     "hits": "命中 {{n}} 个会话",
     "usage": "{{n}} tokens · {{s}} 会话"

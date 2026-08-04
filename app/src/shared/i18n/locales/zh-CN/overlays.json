@@ -26,15 +26,12 @@
     "title": "删除此会话?",
     "batchTitle": "删除选中的 {{n}} 个会话?",
     "cancel": "取消",
-    "confirmUndoable": "备份并删除",
     "confirmIrreversible": "确认永久删除",
     "confirmBatch": "确认批量删除",
     "desc": "会话「{{title}}」({{tool}})将从本机移除。",
     "bulletSub": "该会话含 {{n}} 个子会话,将一并删除。",
-    "bulletUndoable": "删除后可通过 Toast 撤销恢复。",
-    "bulletIrreversible": "该来源不支持一键恢复,删除完成后无法撤销。",
-    "bulletBatchUndoable": "其中 {{n}} 个会话支持删除后恢复。",
-    "bulletBatchIrreversible": "其中 {{n}} 个会话删除后无法撤销。",
+    "bulletIrreversible": "删除是永久性的,没有恢复快照,完成后无法撤销。",
+    "bulletBatchIrreversible": "{{n}} 个会话将被永久删除,无法撤销。",
     "bulletBatchPartial": "会话将逐一删除;若中途失败,已完成的删除不会自动回滚。"
   },
   "prompt": {

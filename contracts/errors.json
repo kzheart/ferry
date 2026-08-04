@@ -54,7 +54,6 @@
     {"code": "session_exists", "category": "conflict", "retryable": false, "sources": ["runtime"]},
     {"code": "session_not_found", "category": "not-found", "retryable": false, "sources": ["runtime"]},
     {"code": "skill_not_found", "category": "not-found", "retryable": false, "sources": ["runtime"]},
-    {"code": "snapshot.invalid_source", "category": "validation", "retryable": false, "sources": ["engine"]},
     {"code": "tool.invalid_args", "category": "validation", "retryable": false, "sources": ["host"]},
     {"code": "tool.not_allowed", "category": "permission", "retryable": false, "sources": ["host"]},
     {"code": "tool.unknown", "category": "not-found", "retryable": false, "sources": ["engine"]},

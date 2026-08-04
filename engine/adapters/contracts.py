@@ -208,9 +208,7 @@ class ModelCatalog(Protocol):
 
 @runtime_checkable
 class SessionLifecycle(Protocol):
-    """会话生命周期策略：resume/清理/校验引用/删除与恢复。"""
-
-    delete_undoable: bool
+    """会话生命周期策略：resume/清理/校验引用/永久删除。"""
 
     def resume_descriptor(self, session_id: str, cwd: str) -> dict: ...
 
@@ -221,8 +219,6 @@ class SessionLifecycle(Protocol):
     def probe_cwd(self, cwd): ...
 
     def delete(self, adapter: "AgentAdapter", ref: str) -> dict: ...
-
-    def restore_delete(self, snapshot, meta: dict) -> dict: ...
 
 
 @dataclass(frozen=True)

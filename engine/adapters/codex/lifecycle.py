@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...system.snapshots import snapshot_file
 from ..shared.lifecycle import FileSessionLifecycle
 from ..shared.scanner import iter_lines
 from .native import CodexCloneError, CodexStore, discover_closure
@@ -50,15 +49,13 @@ class CodexLifecycle(FileSessionLifecycle):
         # codex resume 从 rollout 记录恢复工作目录，探针不额外传 cwd。
         return None
 
-    def _delete_children(self, doc, path: Path) -> list[dict]:
-        children = []
+    def _delete_children(self, doc, path: Path) -> int:
+        deleted = 0
         closure = getattr(doc, "context", None)
         if closure is not None and hasattr(closure, "nodes"):
             for node in closure.nodes.values():
                 child = Path(node.path)
                 if child != path and child.exists():
-                    child_snap = snapshot_file(child, "snapshot.before_delete", self.tool)
-                    children.append({"snapshot": str(child_snap),
-                                     "source": str(child)})
                     child.unlink()
-        return children
+                    deleted += 1
+        return deleted

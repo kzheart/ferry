@@ -6,7 +6,7 @@ use super::{
 use crate::contracts::engine_methods::{is_runtime_gateway_method, Exposure};
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
-    MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
+    MigrationOperationPlanInput, OperationPlanInput,
 };
 use crate::operations::request::{
     operation_plan_id_request, operation_plan_request, validate_plan_id,
@@ -250,7 +250,7 @@ fn operation_accepts_strict_tagged_metadata_input() {
 fn operation_accepts_strict_tagged_delete_input() {
     let input = OperationPlanInput::Delete(DeleteOperationPlanInput {
         tool: "claude".to_owned(),
-        reference: "fsr_fixture".to_owned(),
+        refs: vec!["fsr_fixture".to_owned()],
     });
     assert!(validate_operation_plan_input(&input).is_ok());
 
@@ -262,33 +262,14 @@ fn operation_accepts_strict_tagged_delete_input() {
             .and_then(serde_json::Value::as_str),
         Some("delete")
     );
-    assert!(value.pointer("/params/input/ref").is_some());
+    assert!(value.pointer("/params/input/refs/0").is_some());
     assert!(value.pointer("/params/input/ops").is_none());
 
     let unknown = OperationPlanInput::Delete(DeleteOperationPlanInput {
         tool: "unknown".to_owned(),
-        reference: "fsr_fixture".to_owned(),
+        refs: vec!["fsr_fixture".to_owned()],
     });
     assert!(validate_operation_plan_input(&unknown).is_err());
-}
-
-#[test]
-fn operation_accepts_strict_restore_delete_input() {
-    let input = OperationPlanInput::RestoreDelete(RestoreDeleteOperationPlanInput {
-        recovery_id: "recovery_fixture-123".to_owned(),
-    });
-    assert!(validate_operation_plan_input(&input).is_ok());
-
-    let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
-    let value: serde_json::Value = serde_json::from_str(&request).unwrap();
-    assert_eq!(
-        value
-            .pointer("/params/input/kind")
-            .and_then(serde_json::Value::as_str),
-        Some("restore-delete")
-    );
-    assert!(value.pointer("/params/input/recovery_id").is_some());
-    assert!(value.pointer("/params/input/ref").is_none());
 }
 
 #[test]

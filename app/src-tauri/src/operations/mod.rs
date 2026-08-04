@@ -10,7 +10,7 @@ use self::request::{operation_plan_id_request, operation_plan_request};
 use self::validation::{agent_has_capability, is_known_agent, validate_opaque_ref, validate_reply};
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
-    MigrationOperationPlanInput, OperationPlanInput, RestoreDeleteOperationPlanInput,
+    MigrationOperationPlanInput, OperationPlanInput,
 };
 use crate::contracts::operations::{EDIT_OPERATION_KINDS, OPERATION_KINDS};
 use crate::engine::engine_request_blocking;
@@ -195,21 +195,15 @@ fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(
     if !agent_has_capability(&input.tool, "delete") {
         return Err("Delete Operation Agent 不支持删除".to_owned());
     }
-    validate_opaque_ref(&input.reference, "Delete Operation")?;
-    Ok(())
-}
-
-fn validate_restore_delete_operation_input(
-    input: &RestoreDeleteOperationPlanInput,
-) -> Result<(), String> {
-    if !(16..=128).contains(&input.recovery_id.len())
-        || !input.recovery_id.starts_with("recovery_")
-        || !input
-            .recovery_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    {
-        return Err("Restore Delete Operation recovery_id 无效".to_owned());
+    if input.refs.is_empty() || input.refs.len() > 100 {
+        return Err("Delete Operation refs 必须是 1 到 100 项".to_owned());
+    }
+    let mut seen = std::collections::HashSet::new();
+    for reference in &input.refs {
+        validate_opaque_ref(reference, "Delete Operation")?;
+        if !seen.insert(reference) {
+            return Err("Delete Operation refs 不允许重复".to_owned());
+        }
     }
     Ok(())
 }
@@ -223,12 +217,6 @@ pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Resul
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
         OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
         OperationPlanInput::Delete(delete) => validate_delete_operation_input(delete),
-        OperationPlanInput::RestoreDelete(restore) => {
-            validate_restore_delete_operation_input(restore)
-        }
-        OperationPlanInput::Cleanup(_) => {
-            Err("Cleanup Operation 仅允许 Agent Runtime 路由".to_owned())
-        }
     }
 }
 
@@ -482,48 +470,20 @@ mod tests {
     #[test]
     fn delete_accepts_every_agent_declaring_the_delete_capability() {
         for tool in crate::contracts::agents::AGENT_IDS {
-            assert!(validate(json!({"kind": "delete", "tool": tool, "ref": REF})).is_ok());
+            assert!(validate(json!({"kind": "delete", "tool": tool, "refs": [REF]})).is_ok());
         }
     }
 
     #[test]
-    fn delete_rejects_unknown_agent_and_non_opaque_reference() {
-        assert!(validate(json!({"kind": "delete", "tool": "unknown", "ref": REF})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "ref": ""})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "ref": "a b"})).is_err());
-    }
-
-    #[test]
-    fn restore_delete_accepts_prefixed_recovery_id() {
-        assert!(validate(json!({
-            "kind": "restore-delete", "recovery_id": "recovery_0123456789abcdef",
-        }))
-        .is_ok());
-    }
-
-    #[test]
-    fn restore_delete_rejects_bad_prefix_length_or_charset() {
-        for recovery_id in [
-            "plan_0123456789abcdef",
-            "recovery_short",
-            "recovery_bad/chars/here!!",
-            &"recovery_".to_owned().repeat(20),
-        ] {
-            assert!(
-                validate(json!({"kind": "restore-delete", "recovery_id": recovery_id})).is_err(),
-                "{recovery_id} 应被拒绝"
-            );
-        }
-    }
-
-    #[test]
-    fn cleanup_is_rejected_at_the_frontend_operation_boundary() {
-        let error = validate(json!({
-            "kind": "cleanup",
-            "scope_id": "scope_123",
-            "targets": [],
-        }))
-        .expect_err("cleanup must stay on the Agent Runtime route");
-        assert!(error.contains("Agent Runtime"));
+    fn delete_rejects_unknown_agent_and_invalid_refs() {
+        assert!(validate(json!({"kind": "delete", "tool": "unknown", "refs": [REF]})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": []})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [""]})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": ["a b"]})).is_err());
+        assert!(
+            validate(json!({"kind": "delete", "tool": "claude", "refs": [REF, REF]})).is_err()
+        );
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": vec![REF; 101]}))
+            .is_err());
     }
 }

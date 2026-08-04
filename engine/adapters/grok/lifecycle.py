@@ -75,4 +75,4 @@ class GrokLifecycle(BaseLifecycle):
                 f"{result.stderr or result.stdout}".strip()
             )
         delete_index_rows((session_id,), path.parents[1])
-        return {"ok": True, "undoable": False, "session_id": session_id}
+        return {"ok": True, "session_id": session_id}
