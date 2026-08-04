@@ -38,9 +38,9 @@ function translateError(code: string, params: ErrorParams) {
     }
     return i18n.t("errors:probe.process_failed", { exit_code: "" });
   }
+  // returnNull: false 配置下缺失 key 时 t() 返回 key 本身,不能用返回值判缺失
   const key = `errors:${code}`;
-  const fallback = i18n.t(key, { ...params, defaultValue: null });
-  if (fallback != null) return fallback;
+  if (i18n.exists(key)) return i18n.t(key, params as never);
   return i18n.t("errors:fallback", { code });
 }
 

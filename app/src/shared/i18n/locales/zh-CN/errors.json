@@ -8,6 +8,11 @@
     "unknown": "未知工具: {{tool}}",
     "not_installed": "{{tool}} 未安装"
   },
+  "agent": {
+    "reference_invalid": "会话引用已失效（会话可能已被修改或删除），请刷新或重新搜索",
+    "request_invalid": "请求参数非法",
+    "format_changed": "会话格式无法识别，可能是 Agent 版本更新所致"
+  },
   "session": {
     "not_found": "找不到 {{tool}} 会话 {{ref}}",
     "concurrent_modification": "会话在预览后已变化，请重新预览",

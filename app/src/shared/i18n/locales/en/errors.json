@@ -8,6 +8,11 @@
     "unknown": "Unknown tool: {{tool}}",
     "not_installed": "{{tool}} is not installed"
   },
+  "agent": {
+    "reference_invalid": "Session reference is no longer valid (the session may have changed or been deleted); refresh or search again",
+    "request_invalid": "Invalid request parameters",
+    "format_changed": "Unrecognized session format, possibly due to an agent version update"
+  },
   "session": {
     "not_found": "{{tool}} session {{ref}} not found",
     "concurrent_modification": "Session changed after preview, please preview again",
