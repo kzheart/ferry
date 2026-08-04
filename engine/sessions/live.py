@@ -23,6 +23,9 @@ _POLL_INTERVAL = 2.5
 _RECONCILE_INTERVAL = 300.0
 # 手动刷新(nudge)触发的全量对账最小间隔:防止 UI 连点造成扫描风暴。
 _NUDGE_MIN_GAP = 5.0
+# 高频写入源(agent 流式落库、批量删除)的令牌每轮都在变,逐轮全库重扫
+# 是纯浪费;变更落定(连续两轮令牌相同)才重扫,持续变动按此上限兜底。
+_MAX_PENDING = 15.0
 
 
 def _tree_stamp(root: str) -> str | None:
@@ -67,16 +70,20 @@ class LiveIndexService:
         poll_interval: float = _POLL_INTERVAL,
         reconcile_interval: float = _RECONCILE_INTERVAL,
         nudge_min_gap: float = _NUDGE_MIN_GAP,
+        max_pending: float = _MAX_PENDING,
     ):
         self._index = index
         self._poll_interval = poll_interval
         self._reconcile_interval = reconcile_interval
         self._nudge_min_gap = nudge_min_gap
+        self._max_pending = max_pending
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._nudge_lock = threading.Lock()
         self._nudged = False
         self._tokens: dict[str, object] = {}
+        self._synced: dict[str, object] = {}
+        self._pending_since: dict[str, float] = {}
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -127,19 +134,37 @@ class LiveIndexService:
                     self._index.refresh_with_status()
                 except Exception:  # noqa: BLE001 - 对账失败等下一轮
                     log.exception("周期对账失败")
+                else:
+                    # 对账已覆盖到此刻的世界;把观测令牌记为已同步,
+                    # 避免紧接着的轮询对同一批变化再重扫一遍。
+                    self._synced.update(self._tokens)
+                    self._pending_since.clear()
                 last_reconcile = time.monotonic()
 
     def _changed_tools(self) -> list[str]:
         changed: list[str] = []
+        now = time.monotonic()
         for name in self._index.ports.adapters():
             token = self._probe(name)
             if token is None:
                 continue
-            known = self._tokens.get(name)
+            previous = self._tokens.get(name)
             self._tokens[name] = token
             # 首次观测只记基线:快照刚由全量扫描建立,无需重扫。
-            if known is not None and known != token:
-                changed.append(name)
+            if previous is None:
+                self._synced[name] = token
+                continue
+            if token == self._synced.get(name):
+                self._pending_since.pop(name, None)
+                continue
+            started = self._pending_since.setdefault(name, now)
+            # 变更落定(连续两轮令牌相同)才重扫;源头持续被写入时,
+            # 最多欠账 max_pending 秒就强制重扫一次兜底。
+            if token != previous and now - started < self._max_pending:
+                continue
+            changed.append(name)
+            self._synced[name] = token
+            self._pending_since.pop(name, None)
         return changed
 
     def _probe(self, name: str):

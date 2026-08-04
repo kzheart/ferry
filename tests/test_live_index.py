@@ -10,6 +10,7 @@ import pytest
 
 from engine.adapters.contracts import filesystem_reference
 from engine.context import EngineContext
+from engine.errors import AgentReferenceError
 from engine.server.notify import Notifier
 from engine.sessions import scan as scanning
 from engine.sessions.index import AgentSessionIndex
@@ -240,6 +241,100 @@ def test_live_service_polls_sources_and_pushes_deltas(tmp_path):
     finally:
         live.stop()
     assert [row["id"] for row in deltas[0]["upserts"]] == ["two"]
+
+
+def test_evict_removes_record_and_pushes_removal_delta(tmp_path):
+    """删除执行后的定点摘除:不等下一轮重扫,索引立即移除并推 removal;
+    墓碑保证恢复删除后重新入索引拿回原 ref。"""
+    root = tmp_path / "claude"
+    path = _session_file(root, "doomed")
+    index = AgentSessionIndex(_ports(tmp_path, {"claude": root}))
+    deltas = []
+    index.on_delta = deltas.append
+    record = index.refresh()[0]
+
+    path.unlink()  # 模拟删除服务已移除原生文件
+    index.evict("claude", record.canonical_ref)
+
+    assert deltas == [{
+        "generation": 1,
+        "upserts": [],
+        "removals": [record.opaque_ref],
+    }]
+    with pytest.raises(AgentReferenceError):
+        index.resolve("claude", record.opaque_ref, pin_content=False)
+    index.evict("claude", record.canonical_ref)
+    assert len(deltas) == 1  # 重复摘除幂等,不再推增量
+
+    _session_file(root, "doomed")
+    assert index.refresh()[0].opaque_ref == record.opaque_ref
+
+
+def _stub_index(ports, refreshed):
+    return SimpleNamespace(
+        ports=ports,
+        snapshot_with_status=lambda: ({}, [], 0),
+        refresh_tool=refreshed.append,
+        refresh_with_status=lambda: ({}, []),
+    )
+
+
+def _churning_stamp(ports, tool):
+    stamp = {"value": 0, "frozen": False}
+
+    def watch_stamp():
+        if not stamp["frozen"]:
+            stamp["value"] += 1
+        return stamp["value"]
+
+    ports.adapter(tool).browser.watch_stamp = watch_stamp
+    return stamp
+
+
+def test_live_service_waits_for_churning_source_to_settle(tmp_path):
+    """令牌每轮都在变的源(agent 流式落库、批量删除)不逐轮重扫:
+    变更落定(连续两轮令牌相同)后才重扫一次。"""
+    root = tmp_path / "opencode"
+    _session_file(root, "one")
+    ports = _ports(tmp_path, {"opencode": root})
+    stamp = _churning_stamp(ports, "opencode")
+    refreshed = []
+    live = LiveIndexService(
+        _stub_index(ports, refreshed),
+        poll_interval=0.02, reconcile_interval=9999, max_pending=9999,
+    )
+    live.start()
+    try:
+        time.sleep(0.3)
+        assert refreshed == []  # 持续变动期间一次都不该重扫
+        stamp["frozen"] = True
+        deadline = time.monotonic() + 5
+        while not refreshed and time.monotonic() < deadline:
+            time.sleep(0.02)
+    finally:
+        live.stop()
+    assert refreshed == ["opencode"]
+
+
+def test_live_service_forces_rescan_when_churn_outlasts_max_pending(tmp_path):
+    """源头一直被写入也不能无限欠账:超过 max_pending 强制重扫兜底。"""
+    root = tmp_path / "opencode"
+    _session_file(root, "one")
+    ports = _ports(tmp_path, {"opencode": root})
+    _churning_stamp(ports, "opencode")
+    refreshed = []
+    live = LiveIndexService(
+        _stub_index(ports, refreshed),
+        poll_interval=0.02, reconcile_interval=9999, max_pending=0.1,
+    )
+    live.start()
+    try:
+        deadline = time.monotonic() + 5
+        while not refreshed and time.monotonic() < deadline:
+            time.sleep(0.02)
+    finally:
+        live.stop()
+    assert refreshed, "持续变动的源应在 max_pending 后被强制重扫"
 
 
 def test_live_service_prefers_adapter_watch_stamp(tmp_path):
