@@ -86,7 +86,10 @@ class CodexBackend(EditBackend):
             if subtype == "message":
                 role = payload.get("role")
                 allowed = ({"input_text", "input_image"} if role == "user"
-                           else {"output_text"} if role == "assistant" else set())
+                           else {"output_text"} if role == "assistant"
+                           # Codex rollout 用 developer/system 消息携带系统指令
+                           else {"input_text"} if role in ("developer", "system")
+                           else set())
                 if not allowed or any(block.get("type") not in allowed
                                       for block in payload.get("content", [])):
                     raise ValueError(f"Codex {payload.get('role')} 消息内容类型错误")
