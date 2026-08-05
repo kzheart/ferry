@@ -1002,6 +1002,10 @@ def operations_rust(contract: dict[str, object]) -> str:
 
     def compact_declaration(name: str, values: list[str]) -> str:
         items = ", ".join(json.dumps(value) for value in values)
+        # 与 rustfmt 对齐:整行不超 100 列时保持单行,避免生成即漂移
+        single = f"pub(crate) const {name}: &[&str] = &[{items}];"
+        if len(single) <= 100:
+            return single
         if len(items) + len("[]") > RUST_ARRAY_WIDTH:
             return expanded_declaration(name, values)
         return f"pub(crate) const {name}: &[&str] =\n    &[{items}];"
