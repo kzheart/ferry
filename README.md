@@ -58,7 +58,7 @@ Ferry solves three problems:
 
 - **Unified library** — All agent sessions side by side, searchable by title, directory, or command, with tool calls, reasoning summaries, and session trees rendered in a single consistent view.
 - **Cross-agent migration** — Move a conversation between agents with a migration impact preview upfront: see what maps natively, what gets downgraded, and what can't come along. Source sessions are never modified.
-- **Usage insights** — Year-round activity view, cost by model and project, migration summaries, and insight cards that surface notable changes in your coding habits.
+- **Usage stats** — Year-round activity view, cost by model and project, and migration summaries.
 
 ## Supported Agents
 
@@ -111,7 +111,7 @@ Understand your coding-agent habits over time:
 
 - **Overview dashboard** — Total sessions, tokens consumed, estimated cost, and current streak.
 - **Model breakdown** — Which models you've gravitated toward month over month.
-- **Project breakdown** — Cost per project, with insight cards that surface notable changes (e.g., a repo whose spend jumped, a streak worth maintaining).
+- **Project breakdown** — Cost per project at a glance.
 - **Activity heatmap** — A 52-week view of your daily coding activity.
 
 <div align="center">

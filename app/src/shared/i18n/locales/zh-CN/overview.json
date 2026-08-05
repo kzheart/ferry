@@ -24,8 +24,7 @@
   "sec": {
     "habits": "使用习惯",
     "tokens": "Token 与成本",
-    "projects": "项目与迁移",
-    "insights": "洞察"
+    "projects": "项目与迁移"
   },
   "bump": {
     "title": "主力模型变迁",
@@ -73,58 +72,5 @@
     "title": "迁移流向",
     "sub": "全部迁移记录",
     "empty": "还没有迁移记录"
-  },
-  "ins": {
-    "cost": {
-      "eyebrow": "成本",
-      "title": "{{repo}} 的开销涨了",
-      "body": "近 7 天 {{repo}} 花掉 {{cost}},比上一周多 {{pct}}%。多出来的多半在那几次长会话里,同样的活早点开新会话能省一截。",
-      "chartLabel": "近 5 周 · {{repo}}"
-    },
-    "pingpong": {
-      "eyebrow": "迁移",
-      "title": "来回 {{n}} 次",
-      "body": "「{{title}}」在两个工具之间搬了 {{n}} 趟,可能哪边都还没真正收尾。"
-    },
-    "night": {
-      "eyebrow": "作息",
-      "title": "深夜党",
-      "body": "{{pct}}% 的会话开在深夜,高峰在 {{hour}} 点。手感是不错,但也记得歇。"
-    },
-    "weekend": {
-      "eyebrow": "节奏",
-      "title": "整个周末",
-      "body": "上个周末一次都没开,难得停了下来。希望你是去玩了。"
-    },
-    "streak": {
-      "eyebrow": "节奏",
-      "title": "连续 {{days}} 天",
-      "body": "已经连着 {{days}} 天有活动,这股手感值得保持。"
-    },
-    "idle": {
-      "eyebrow": "闲置",
-      "title": "{{repo}} 停了 {{days}} 天",
-      "body": "这个仓库有一定体量,但已经 {{days}} 天没动过了。要么捡起来,要么放心归档。"
-    },
-    "snapshot": {
-      "eyebrow": "空间",
-      "title": "快照占了 {{gb}} GB",
-      "body": "「{{title}}」的快照有 {{gb}} GB,已经 {{days}} 天没碰过,可以考虑清一清。"
-    },
-    "topRepo": {
-      "eyebrow": "项目",
-      "title": "{{repo}}",
-      "body": "当前区间里最活跃的仓库,共 {{n}} 个会话。"
-    },
-    "topModel": {
-      "eyebrow": "模型",
-      "title": "{{model}}",
-      "body": "当前区间的主力模型,占了 {{pct}}% 的 token。"
-    },
-    "avgDaily": {
-      "eyebrow": "节奏",
-      "title": "日均 {{n}} 个会话",
-      "body": "按有活动的天数算,平均每天开 {{n}} 个会话。"
-    }
   }
 }

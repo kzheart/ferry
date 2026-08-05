@@ -1,4 +1,4 @@
-// 总览页:KPI + 使用习惯 + Token/成本 + 项目/迁移 + 洞察。
+// 总览页:KPI + 使用习惯 + Token/成本 + 项目/迁移。
 // 数据全部由 computeOverview 从真实扫描结果聚合;图表手写内联 SVG,随主题变量着色。
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -209,28 +209,6 @@ function Heatmap({ heatmap, locale, label }) {
   );
 }
 
-function MiniBars({ weeks, label }) {
-  const W = 150, H = 86, B = 16, T = 6;
-  const max = Math.max(1, ...weeks), bw = W / weeks.length;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="150" height="86" aria-label={label}>
-      {weeks.map((v, i) => {
-        const last = i === weeks.length - 1, hh = (v / max) * (H - T - B);
-        return (
-          <g key={i}>
-            <rect x={i * bw + 4} y={H - B - hh} width={bw - 8} height={hh} rx="2"
-              fill={last ? "var(--warn)" : "var(--accent)"} opacity={last ? 0.95 : 0.18} />
-            {last && <text x={i * bw + bw / 2} y={H - B - hh - 5} textAnchor="middle" fill="var(--warn)"
-              fontSize="10" fontWeight="600" fontFamily="var(--font-ui)">{fmtCost(v)}</text>}
-          </g>
-        );
-      })}
-      <line x1="2" x2={W - 2} y1={H - B} y2={H - B} stroke="var(--line2)" strokeWidth="1" />
-      <text x={W / 2} y={H - 3} textAnchor="middle" fill="var(--tx5)" fontSize="9.5" fontFamily="var(--font-ui)">{label}</text>
-    </svg>
-  );
-}
-
 // Agent 筛选:产品图标下拉,清单来自引擎 tools RPC,新增 agent 自动出现
 function ToolFilter({ tool, setTool, t }) {
   const [open, setOpen] = useState(false);
@@ -281,15 +259,6 @@ function ToolFilter({ tool, setTool, t }) {
   );
 }
 
-function insightCopy(ins, t) {
-  const p = ins.params;
-  return {
-    eyebrow: t(`overview:ins.${ins.kind}.eyebrow`),
-    title: t(`overview:ins.${ins.kind}.title`, p),
-    body: t(`overview:ins.${ins.kind}.body`, { ...p, cost: fmtCost(p.cost || 0), prev: fmtCost(p.prev || 0) }),
-  };
-}
-
 export default function Overview({ sessions = [], historyRows = [],
   prices = {}, scanning = false, navigationTarget }) {
   const { t, i18n } = useTranslation();
@@ -324,14 +293,6 @@ export default function Overview({ sessions = [], historyRows = [],
       {up ? "+" : "−"}{fmt(Math.abs(kpi.delta))} {t("overview:kpi.thisPeriod")}
     </span>;
   };
-
-  // 洞察按日轮换选取(无感,不写轮换文案):成本预警占主推,其余轮换成小卡
-  const featured = data.insights.find(i => i.featured) || null;
-  const rest = data.insights.filter(i => i !== featured);
-  const offset = rest.length ? Math.floor(Date.now() / 864e5) % rest.length : 0;
-  const smalls = rest.length
-    ? rest.slice(offset).concat(rest.slice(0, offset)).slice(0, featured ? 3 : 4)
-    : [];
 
   const segBtn = (label, active, onClick, dot) => (
     <button key={label} onClick={onClick} aria-pressed={active}
@@ -569,50 +530,9 @@ export default function Overview({ sessions = [], historyRows = [],
                 </Card>
               </div>
             </div>
-
-            {(featured || smalls.length) && (
-              <>
-                <Section title={t("overview:sec.insights")} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {featured && <FeaturedInsight ins={featured} t={t} />}
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, smalls.length)}, 1fr)`, gap: 12 }}>
-                  {smalls.map((ins, i) => {
-                    const c = insightCopy(ins, t);
-                    return (
-                      <div key={i} style={{ ...card, padding: "15px 16px", display: "flex", flexDirection: "column", gap: 7 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tx4b)" }}>{c.eyebrow}</span>
-                        <span style={{ fontSize: 21, fontWeight: 600, letterSpacing: "-0.025em", textWrap: "balance" }}>{c.title}</span>
-                        <p style={{ margin: 0, fontSize: 12, color: "var(--tx3)", lineHeight: 1.6 }}>{c.body}</p>
-                      </div>
-                    );
-                  })}
-                  </div>
-                </div>
-              </>
-            )}
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function FeaturedInsight({ ins, t }) {
-  const c = insightCopy(ins, t);
-  const weeks = ins.params?.weeks;
-  const warn = ins.kind === "cost";
-  return (
-    <div style={{ ...card, display: "flex", flexDirection: "row", gap: 22,
-      alignItems: "center", flexWrap: "wrap",
-      background: warn ? "linear-gradient(100deg, var(--warn-bg), var(--surface) 62%)" : "var(--surface)",
-      borderColor: warn ? "var(--warn-line)" : "var(--line)", padding: "15px 16px" }}>
-      <div style={{ flex: "1 1 260px", minWidth: 0, display: "flex", flexDirection: "column", gap: 7 }}>
-        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase",
-          color: warn ? "var(--warn)" : "var(--tx4b)" }}>{c.eyebrow}</span>
-        <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", textWrap: "balance" }}>{c.title}</span>
-        <p style={{ margin: 0, fontSize: 12, color: "var(--tx3)", lineHeight: 1.6, maxWidth: "54ch" }}>{c.body}</p>
-      </div>
-      {weeks?.length ? <MiniBars weeks={weeks} label={t("overview:ins.cost.chartLabel", { repo: ins.params.repo })} /> : null}
     </div>
   );
 }

@@ -24,8 +24,7 @@
   "sec": {
     "habits": "Habits",
     "tokens": "Tokens & cost",
-    "projects": "Projects & migrations",
-    "insights": "Insights"
+    "projects": "Projects & migrations"
   },
   "bump": {
     "title": "Model rankings over time",
@@ -73,58 +72,5 @@
     "title": "Migration flows",
     "sub": "All migrations",
     "empty": "No migrations yet"
-  },
-  "ins": {
-    "cost": {
-      "eyebrow": "Cost",
-      "title": "{{repo}} spend is up",
-      "body": "{{repo}} cost {{cost}} in the last 7 days, {{pct}}% more than the week before — mostly in a few long sessions. Starting fresh sooner would save a chunk.",
-      "chartLabel": "Last 5 weeks · {{repo}}"
-    },
-    "pingpong": {
-      "eyebrow": "Migration",
-      "title": "{{n}} round trips",
-      "body": "“{{title}}” bounced between tools {{n}} times — maybe neither side truly wrapped it up."
-    },
-    "night": {
-      "eyebrow": "Rhythm",
-      "title": "Night owl",
-      "body": "{{pct}}% of sessions start late at night, peaking around {{hour}}:00. Nice momentum — but rest too."
-    },
-    "weekend": {
-      "eyebrow": "Rhythm",
-      "title": "A full weekend",
-      "body": "Not a single session last weekend — a rare break. Hope you were out having fun."
-    },
-    "streak": {
-      "eyebrow": "Rhythm",
-      "title": "{{days}}-day streak",
-      "body": "{{days}} days of activity in a row now — that flow is worth keeping."
-    },
-    "idle": {
-      "eyebrow": "Idle",
-      "title": "{{repo}} quiet for {{days}} days",
-      "body": "This repo has some history, but nothing has moved in {{days}} days. Pick it back up — or archive it guilt-free."
-    },
-    "snapshot": {
-      "eyebrow": "Storage",
-      "title": "Snapshot using {{gb}} GB",
-      "body": "The snapshot for “{{title}}” takes {{gb}} GB and hasn't been touched in {{days}} days — worth cleaning up."
-    },
-    "topRepo": {
-      "eyebrow": "Project",
-      "title": "{{repo}}",
-      "body": "Most active repo in this range, {{n}} sessions total."
-    },
-    "topModel": {
-      "eyebrow": "Model",
-      "title": "{{model}}",
-      "body": "Top model in this range, {{pct}}% of all tokens."
-    },
-    "avgDaily": {
-      "eyebrow": "Rhythm",
-      "title": "{{n}} sessions / day",
-      "body": "Averaged over active days, you start about {{n}} sessions a day."
-    }
   }
 }
