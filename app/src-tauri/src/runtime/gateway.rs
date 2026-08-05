@@ -64,12 +64,7 @@ pub(super) fn complete_tool_request(
     // 拦在 route_tool 之前,但审批分叉逻辑与迁移/编辑完全共用,不为它新开放行口子。
     let is_bash = name == "bash";
     let mutation = is_bash || is_mutating_tool(name, &args);
-    // 不可逆的 shell 命令不吃 Auto 这条捷径:编辑和迁移落地前有快照,shell 没有。
-    let forced_approval = is_bash
-        && args
-            .get("command")
-            .and_then(Value::as_str)
-            .is_some_and(bash::needs_explicit_approval);
+    let forced_approval = forces_explicit_approval(name, &args);
     let mut outcome = if is_bash {
         bash::propose(&args)
     } else {
@@ -158,6 +153,18 @@ pub(super) fn complete_tool_request(
         }
     }
     send_gateway_result(stdin, session_id, request_id, outcome);
+}
+
+/// 无恢复手段的操作不吃 Auto 捷径:会话删除没有快照,不可逆 shell 命令同理。
+fn forces_explicit_approval(name: &str, args: &Map<String, Value>) -> bool {
+    match name {
+        "session_delete" => true,
+        "bash" => args
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(bash::needs_explicit_approval),
+        _ => false,
+    }
 }
 
 fn send_gateway_result(
@@ -373,6 +380,37 @@ mod tests {
         }
         assert!(!is_runtime_gateway_method("operation.apply"));
         assert!(!is_runtime_gateway_method("session_delete"));
+    }
+
+    #[test]
+    fn permanent_deletion_never_takes_the_auto_apply_shortcut() {
+        let delete_args = json!({
+            "tool": "claude", "refs": ["fsr_session_a"], "intent": "execute"
+        });
+        assert!(forces_explicit_approval(
+            "session_delete",
+            delete_args.as_object().unwrap()
+        ));
+
+        let edit_args = json!({
+            "tool": "claude", "ref": "fsr_session_a",
+            "ops": [{"op": "delete-turn", "turn": 1}], "intent": "execute"
+        });
+        assert!(!forces_explicit_approval(
+            "session_edit",
+            edit_args.as_object().unwrap()
+        ));
+
+        let bash_args = json!({"command": "rm -rf /tmp/fixture"});
+        assert!(forces_explicit_approval(
+            "bash",
+            bash_args.as_object().unwrap()
+        ));
+        let safe_bash = json!({"command": "ls"});
+        assert!(!forces_explicit_approval(
+            "bash",
+            safe_bash.as_object().unwrap()
+        ));
     }
 
     #[test]
