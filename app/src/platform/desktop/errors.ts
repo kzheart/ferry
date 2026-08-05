@@ -7,7 +7,7 @@ import type { IpcError } from "../../shared/contracts/generated/ipc.js";
 
 type ErrorParams = Record<string, unknown>;
 
-function translateError(code: string, params: ErrorParams) {
+function translateError(code: string, params: ErrorParams): string {
   if (code === "edit.operation_unsupported") {
     if (params.capability) {
       return i18n.t("errors:edit.operation_unsupported_with_capability", {
@@ -40,7 +40,7 @@ function translateError(code: string, params: ErrorParams) {
   }
   // returnNull: false 配置下缺失 key 时 t() 返回 key 本身,不能用返回值判缺失
   const key = `errors:${code}`;
-  if (i18n.exists(key)) return i18n.t(key, params as never);
+  if (i18n.exists(key)) return String(i18n.t(key, params as never));
   return i18n.t("errors:fallback", { code });
 }
 
