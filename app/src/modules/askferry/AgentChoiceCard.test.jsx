@@ -90,12 +90,37 @@ test("跳过按钮提交 answered:false,不夹带任何选择", () => {
   });
 });
 
+test("作答后卡片折叠成一行摘要,点标题行才展开", () => {
+  render(<AgentChoiceCard
+    item={card({ status: "answered", answered: true, selected: ["全部"],
+      customText: "备注", allowCustom: true })}
+    onRespond={vi.fn()} />);
+
+  // 折叠态只留标题 + 答案摘要,问题和选项都不渲染
+  expect(screen.getByText("全部 · 备注")).toBeTruthy();
+  expect(screen.queryAllByText("清理哪些会话?")).toHaveLength(0);
+  expect(screen.queryByText("旧会话")).toBe(null);
+
+  fireEvent.click(screen.getByText("askferry:choice.answered"));
+  expect(screen.queryAllByText("清理哪些会话?").length).toBeGreaterThan(0);
+  expect(screen.getByText("旧会话")).toBeTruthy();
+});
+
+test("pending 卡片不折叠,也没有展开开关", () => {
+  render(<AgentChoiceCard item={card()} onRespond={vi.fn()} />);
+
+  expect(screen.queryAllByText("清理哪些会话?").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("button", { expanded: false })).toBe(null);
+});
+
 test("已作答的卡片只读:没有按钮,输入被禁用,回显既有答案", () => {
   const onRespond = vi.fn(async () => {});
   render(<AgentChoiceCard
     item={card({ status: "answered", answered: true, selected: ["全部"],
       customText: "备注", allowCustom: true })}
     onRespond={onRespond} />);
+
+  fireEvent.click(screen.getByText("askferry:choice.answered"));
 
   expect(screen.queryByText("askferry:choice.submit")).toBe(null);
   expect(screen.queryByText("askferry:choice.skip")).toBe(null);
@@ -113,6 +138,7 @@ test("未作答态给出运行已结束的说明,同样不可再操作", () => {
     onRespond={vi.fn()} />);
 
   expect(screen.getByText("askferry:choice.unanswered")).toBeTruthy();
+  fireEvent.click(screen.getByText("askferry:choice.unanswered"));
   expect(screen.getByText("askferry:choice.noAnswer")).toBeTruthy();
   expect(screen.queryByText("askferry:choice.submit")).toBe(null);
 });
