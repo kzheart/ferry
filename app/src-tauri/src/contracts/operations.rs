@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub(crate) const OPERATION_PLAN_ID_PREFIX: &str = "op_";
-pub(crate) const OPERATION_KINDS: &[&str] =
-    &["edit", "migration", "metadata", "delete"];
+pub(crate) const OPERATION_KINDS: &[&str] = &["edit", "migration", "metadata", "delete"];
 pub(crate) const EDIT_OPERATION_KINDS: &[&str] =
     &["delete-turn", "rewrite", "replace-assistant-reply"];
 pub(crate) const OPERATION_STATUSES: &[&str] = &[

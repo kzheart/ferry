@@ -31,9 +31,7 @@ const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
 const agentPromptTool = tools.find((tool) => tool.name === "agent_prompt")!;
 const agentPromptSchema = agentPromptTool.parameters;
-const sessionDeleteTool = tools.find(
-  (tool) => tool.name === "session_delete",
-)!;
+const sessionDeleteTool = tools.find((tool) => tool.name === "session_delete")!;
 const sessionDeleteSchema = sessionDeleteTool.parameters;
 const askUserTool = tools.find((tool) => tool.name === "ask_user")!;
 const askUserSchema = askUserTool.parameters;
@@ -179,9 +177,9 @@ describe("Ferry mutation tool schemas", () => {
     await expect(
       run({ tool: "codex", refs: ["fsr_a", "fsr_a"], intent: "preview" }),
     ).rejects.toThrow("unique non-empty refs");
-    await expect(
-      run({ tool: "codex", refs: ["fsr_session"] }),
-    ).rejects.toThrow("intent preview or execute");
+    await expect(run({ tool: "codex", refs: ["fsr_session"] })).rejects.toThrow(
+      "intent preview or execute",
+    );
     await expect(
       run({ tool: "codex", refs: ["fsr_session"], intent: "execute" }),
     ).rejects.toThrow("requires a successful preview");

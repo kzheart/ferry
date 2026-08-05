@@ -480,10 +480,9 @@ mod tests {
         assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": []})).is_err());
         assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [""]})).is_err());
         assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": ["a b"]})).is_err());
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [REF, REF]})).is_err());
         assert!(
-            validate(json!({"kind": "delete", "tool": "claude", "refs": [REF, REF]})).is_err()
+            validate(json!({"kind": "delete", "tool": "claude", "refs": vec![REF; 101]})).is_err()
         );
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": vec![REF; 101]}))
-            .is_err());
     }
 }
