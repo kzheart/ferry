@@ -36,9 +36,6 @@ const session = overrides => ({
   ...overrides,
 });
 
-const insight = (result, kind) =>
-  result.insights.find(item => item.kind === kind);
-
 test("token 求和与累加忽略缺失字段", () => {
   assert.deepEqual(sumTokens(undefined), 0);
   assert.deepEqual(sumTokens(tokens(1, 2, 3, 4)), 10);
@@ -202,77 +199,6 @@ test("连续活跃天数从今天往回数，并记录历史最长", () => {
 
   assert.equal(result.kpis.streak.value, 3);
   assert.equal(result.kpis.streak.longest, 3);
-  assert.ok(insight(result, "streak") === undefined);
-});
-
-test("costSpike 在近 7 天开销显著高于前一周时触发并附周序列", () => {
-  const sessions = [
-    session({ updated: dayStart(1), tokens: tokens(10_000_000) }),
-    session({ updated: dayStart(8), tokens: tokens(5_000_000) }),
-  ];
-
-  const spike = insight(
-    computeOverview({ sessions, prices: PRICES, now: NOW }), "cost",
-  );
-
-  assert.equal(spike.params.repo, "ferry");
-  assert.equal(spike.params.cost, 30);
-  assert.equal(spike.params.prev, 15);
-  assert.equal(spike.params.pct, 100);
-  // weeklyCost 近 5 周：最后一格是本周，倒数第二格是上一周。
-  assert.deepEqual(spike.params.weeks, [0, 0, 0, 15, 30]);
-});
-
-test("costSpike 在上周无开销、涨幅不足或金额过小时都不触发", () => {
-  const noBaseline = [
-    session({ updated: dayStart(1), tokens: tokens(10_000_000) }),
-  ];
-  const flat = [
-    session({ updated: dayStart(1), tokens: tokens(10_000_000) }),
-    session({ updated: dayStart(8), tokens: tokens(9_000_000) }),
-  ];
-  const tiny = [
-    session({ updated: dayStart(1), tokens: tokens(1_000_000) }),
-    session({ updated: dayStart(8), tokens: tokens(100_000) }),
-  ];
-
-  for (const sessions of [noBaseline, flat, tiny]) {
-    assert.equal(
-      insight(computeOverview({ sessions, prices: PRICES, now: NOW }), "cost"),
-      undefined,
-    );
-  }
-});
-
-test("weekendSilent 只看最近一个完整周末是否有会话", () => {
-  const silent = computeOverview({
-    sessions: [session({ updated: dayStart(1) })],
-    prices: PRICES,
-    now: NOW,
-  });
-  // 2026-01-15 是周四，最近一个完整周末是 1 月 10（六）与 11（日）。
-  const active = computeOverview({
-    sessions: [session({ updated: new Date(2026, 0, 10).getTime() })],
-    prices: PRICES,
-    now: NOW,
-  });
-
-  assert.ok(insight(silent, "weekend"));
-  assert.equal(insight(active, "weekend"), undefined);
-});
-
-test("洞察池按优先级排序且兜底卡在数据稀薄时补位", () => {
-  const result = computeOverview({
-    sessions: [session({ updated: dayStart(1) })],
-    prices: PRICES,
-    now: NOW,
-  });
-
-  const priorities = result.insights.map(item => item.priority);
-  assert.deepEqual(priorities, [...priorities].sort((a, b) => b - a));
-  assert.ok(insight(result, "topRepo"));
-  assert.ok(insight(result, "topModel"));
-  assert.ok(insight(result, "avgDaily"));
 });
 
 test("空数据集给出 empty 标记且不产生 NaN", () => {

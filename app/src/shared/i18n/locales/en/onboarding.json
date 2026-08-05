@@ -14,7 +14,7 @@
     "railTitle": "Switch modules via the navigation rail",
     "railBody": "The rail on the far left switches between Overview, Sessions, Migrations, and Ask Ferry; drag the icons to reorder them. Rescan and Settings sit at the bottom, and the layout stays put in every module.",
     "overviewTitle": "Overview: know your habits",
-    "overviewBody": "Session count, token usage, estimated cost, and active-day streaks at a glance, switchable by tool and time range. Below: how your go-to model shifts over time, a 52-week activity heatmap, and auto-generated insight cards flagging notable changes.",
+    "overviewBody": "Session count, token usage, estimated cost, and active-day streaks at a glance, switchable by tool and time range. Below: how your go-to model shifts over time and a 52-week activity heatmap.",
     "searchTitle": "Press ⌘K to search anywhere",
     "searchBody": "Jump to any session by title, project directory, or command — full-text search over session content works too. Search and filter controls keep the same spot in the resource pane across modules.",
     "filterTitle": "Filter and organize sessions",
