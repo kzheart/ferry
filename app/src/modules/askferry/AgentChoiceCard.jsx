@@ -58,6 +58,13 @@ export function AgentChoiceCard({ item, onRespond }) {
   // 「跳过」走 answered:false:契约里这是一等公民,不能只留干等 24 小时这一条路
   const skip = () => respond({ answered: false, selected: [], custom_text: "" });
 
+  // 已作答/未作答默认折叠成一行摘要,点标题行展开看完整选项
+  const collapsed = !open && !expanded;
+  const summary = [
+    ...(item.selected || []),
+    ...((item.customText || "").trim() ? [(item.customText || "").trim()] : []),
+  ].join(" · ");
+
   const title = item.status === "answered"
     ? t("askferry:choice.answered")
     : item.status === "unanswered"
@@ -73,7 +80,25 @@ export function AgentChoiceCard({ item, onRespond }) {
       maxWidth: 560,
       borderLeft: `3px solid ${statusColor[item.status] || statusColor.pending}`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        role={open ? undefined : "button"}
+        tabIndex={open ? undefined : 0}
+        aria-expanded={open ? undefined : expanded}
+        onClick={open ? undefined : () => setExpanded(value => !value)}
+        onKeyDown={open ? undefined : event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setExpanded(value => !value);
+          }
+        }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          cursor: open ? "default" : "pointer",
+          minWidth: 0,
+        }}
+      >
         <span style={{
           width: 7,
           height: 7,
@@ -81,16 +106,43 @@ export function AgentChoiceCard({ item, onRespond }) {
           background: statusColor[item.status] || statusColor.pending,
           flex: "none",
         }} />
-        <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx1)" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx1)", flex: "none" }}>
           {title}
         </span>
-        {item.multiSelect && (
+        {item.multiSelect && open && (
           <span style={{ fontSize: 11, color: "var(--tx5)" }}>
             {t("askferry:choice.multiSelect")}
           </span>
         )}
+        {collapsed && summary && (
+          <span style={{
+            fontSize: 11.5,
+            color: "var(--tx4)",
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {summary}
+          </span>
+        )}
+        {!open && (
+          <span style={{
+            marginLeft: "auto",
+            flex: "none",
+            fontSize: 9,
+            color: "var(--tx5)",
+            transform: expanded ? "rotate(90deg)" : "none",
+            transition: "transform .12s ease",
+          }}>
+            ▶
+          </span>
+        )}
       </div>
 
+      {collapsed ? null : (
+      <>
       <div className="selectable" style={{
         color: "var(--tx2)",
         fontSize: 13,
@@ -205,6 +257,8 @@ export function AgentChoiceCard({ item, onRespond }) {
             {submitting ? t("askferry:choice.submitting") : t("askferry:choice.submit")}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
