@@ -16,6 +16,50 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-05
+
+### Added
+
+- **Choice cards in Ask Ferry** — the assistant can now ask multiple-choice
+  questions directly in the conversation; pick an option (with optional notes)
+  to answer inline. Answered cards collapse into a one-line summary and can be
+  expanded again on click.
+- **Batch session deletion** — delete up to 100 sessions in one operation: the
+  preview freezes the full list, a single approval executes it, and each
+  session reports back as succeeded, skipped, or failed.
+
+### Changed
+
+- **Permanent deletion always asks** — deleting sessions now always shows an
+  approval card, even when an automatic approval policy is active, since
+  deletion is irreversible.
+
+### Removed
+
+- **Overview insight cards** — the auto-generated insight section (cost
+  spikes, idle repos, streaks, and similar cards) has been removed from the
+  Overview page.
+- **Deletion recovery snapshots** — deleted sessions are no longer snapshotted
+  for undo; deletion is final. The separate cleanup pipeline was folded into
+  the atomic batch deletion above.
+
+### Fixed
+
+- **Readable engine errors** — unmapped engine error codes no longer surface
+  as raw identifiers in the UI; agent reference errors now come with clear
+  messages and recovery hints in both languages.
+- **Codex session editing** — editing no longer fails on sessions that contain
+  developer or system messages, which most Codex sessions do.
+- **Disabled button hover** — the disabled primary button in Ask Ferry no
+  longer turns into an unreadable white block on hover in the light theme.
+
+### Performance
+
+- **Calmer live indexing** — session-store rescans now wait for changes to
+  settle instead of re-scanning on every write, cutting rescan work during
+  heavy activity to a fraction; deletions are evicted from the index instantly
+  so the UI reflects them without a full rescan.
+
 ## [0.6.0] - 2026-07-31
 
 ### Added
