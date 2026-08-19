@@ -70,12 +70,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "models",
         ],
     ),
-    (
-        "cursor",
-        &[
-            "browse",
-            "migration-source",
-        ],
-    ),
+    ("cursor", &["browse", "migration-source"]),
 ];
-pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];
+pub(crate) const ALLOWED_EXECUTABLES: &[&str] =
+    &["claude", "codex", "opencode", "pi", "grok", "cursor"];

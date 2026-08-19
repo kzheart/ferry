@@ -489,12 +489,31 @@ def frontend(agents: list[dict[str, object]]) -> str:
     ))
 
 
+def rust_const_str_slice(name: str, values: list[str]) -> list[str]:
+    # 输出必须是 rustfmt（max_width=100）的稳定形态，逐级回落：单行 → `=` 后换行 → 逐项竖排。
+    items = ", ".join(f'"{value}"' for value in values)
+    single = f"pub(crate) const {name}: &[&str] = &[{items}];"
+    if len(single) <= 100:
+        return [single]
+    wrapped = f"    &[{items}];"
+    if len(wrapped) <= 100:
+        return [f"pub(crate) const {name}: &[&str] =", wrapped]
+    return [
+        f"pub(crate) const {name}: &[&str] = &[",
+        *(f'    "{value}",' for value in values),
+        "];",
+    ]
+
+
 def rust(agents: list[dict[str, object]]) -> str:
-    ids = ", ".join(f'\"{agent["id"]}\"' for agent in agents)
     executables = [executable for agent in agents for executable in agent["executables"]]
-    allowed = ", ".join(f'\"{executable}\"' for executable in executables)
     capability_rows = []
     for agent in agents:
+        inline = ", ".join(f'"{capability}"' for capability in agent["capabilities"])
+        single = f'    ("{agent["id"]}", &[{inline}]),'
+        if len(single) <= 100:
+            capability_rows.append(single)
+            continue
         capabilities = "\n".join(
             f'            "{capability}",' for capability in agent["capabilities"]
         )
@@ -508,11 +527,11 @@ def rust(agents: list[dict[str, object]]) -> str:
         ))
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"pub(crate) const AGENT_IDS: &[&str] = &[{ids}];",
+        *rust_const_str_slice("AGENT_IDS", [agent["id"] for agent in agents]),
         "pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[",
         *capability_rows,
         "];",
-        f"pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &[{allowed}];",
+        *rust_const_str_slice("ALLOWED_EXECUTABLES", executables),
         "",
     ))
 def runtime(agents: list[dict[str, object]]) -> str:

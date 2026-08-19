@@ -470,7 +470,11 @@ mod tests {
     #[test]
     fn delete_accepts_every_agent_declaring_the_delete_capability() {
         for tool in crate::contracts::agents::AGENT_IDS {
-            assert!(validate(json!({"kind": "delete", "tool": tool, "refs": [REF]})).is_ok());
+            let accepted = validate(json!({"kind": "delete", "tool": tool, "refs": [REF]})).is_ok();
+            assert_eq!(
+                accepted,
+                crate::operations::validation::agent_has_capability(tool, "delete")
+            );
         }
     }
 
