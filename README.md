@@ -152,23 +152,26 @@ Ferry reads your agents' local session stores directly. Nothing is uploaded, and
 
 ## Development
 
-**Prerequisites**: Node.js 22.19+, Rust (stable), Python 3.12
+**Prerequisites**: Node.js 22.19+, Rust (stable). Python 3.12 is still needed
+for the repository test suite and the migration-period Python engine fallback.
 
 The Session Engine and Ferry Runtime ship as native sidecars alongside the
 Tauri shell.
 
 ```bash
-# Development uses the Python source process and compiled TypeScript runtime
-python -m pip install -r requirements-test.txt
+# Development builds the native engine and the compiled TypeScript runtime
+cargo build --manifest-path crates/ferry-engine/Cargo.toml
 cd ferry-runtime && npm ci
 cd ../app && npm ci
 npm run desktop
 ```
 
+A debug host uses `crates/ferry-engine/target/{debug,release}/ferry-engine`
+when it exists and falls back to `python3 -m engine.server.cli` otherwise.
+
 Build a complete native release from the repository root:
 
 ```bash
-python -m pip install -r requirements-build.txt
 python scripts/build.py
 ```
 
@@ -180,8 +183,8 @@ python scripts/build.py --skip-install
 
 The root build validates the native target and toolchain, creates both
 sidecars, then invokes Tauri. Sidecars are built natively for
-`aarch64-apple-darwin` or `x86_64-pc-windows-msvc`; cross-building a frozen
-sidecar is intentionally rejected.
+`aarch64-apple-darwin` or `x86_64-pc-windows-msvc`; cross-building a sidecar is
+intentionally rejected.
 
 For frontend-only development:
 
@@ -196,10 +199,10 @@ npm run dev
 | --- | --- | --- |
 | **Desktop host** | Tauri v2 (Rust) | Native capabilities, process supervision, IPC, approval, and event routing |
 | **Frontend** | React 18 + Vite 6 | Presentation, local interaction state, workflow progress, and approvals |
-| **Session Engine** | Python 3.12 (PyInstaller sidecar) | Current native session formats, queries, operations, snapshots, and validation |
+| **Session Engine** | Rust (native sidecar) | Current native session formats, queries, operations, snapshots, and validation |
 | **Ferry Runtime** | Node.js 22 + TypeScript | Providers, roles, conversations, LLM workflows, and Ferry agent execution |
 
-The Rust host supervises the Python Session Engine and Node.js Ferry Runtime as
+The Rust host supervises the Session Engine and Node.js Ferry Runtime as
 separate sidecars. External coding tools are session sources; Ferry agents are
 LLM workers and are modeled separately.
 

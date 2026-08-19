@@ -144,20 +144,23 @@ Ferry 直接读取本机 Agent 的会话存储，不上传任何数据，也不�
 
 ## 开发
 
-**环境要求**：Node.js 22.19+、Rust（stable）、Python 3.12
+**环境要求**：Node.js 22.19+、Rust（stable）；Python 3.12 仅用于仓库测试与迁移期的
+Python 引擎回退。
 
-引擎以 PyInstaller sidecar 的形式与 Tauri 外壳一起分发。
+引擎以原生 Rust sidecar 的形式与 Tauri 外壳一起分发。
 
 ```bash
-# 1. 构建 Python 引擎 sidecar
-python -m pip install -r requirements-build.txt
-python scripts/build-sidecar.py --clean
+# 1. 构建引擎 sidecar
+cargo build --manifest-path crates/ferry-engine/Cargo.toml
 
 # 2. 安装前端依赖并运行
 cd app
 npm ci
 npm run tauri dev
 ```
+
+> debug 宿主会优先使用 `crates/ferry-engine/target/{debug,release}/ferry-engine`，
+> 找不到才回退 `python3 -m engine.server.cli`。
 
 打包正式版本：
 
@@ -173,10 +176,10 @@ cd app && npm run tauri build
 | --- | --- | --- |
 | **桌面宿主** | Tauri v2 (Rust) | 原生能力、进程监督、IPC、审批与事件路由 |
 | **前端** | React 18 + Vite 6 | 展示、局部交互状态、工作流进度与用户审批 |
-| **会话引擎** | Python 3.12 (PyInstaller sidecar) | 当前原生会话格式、查询、操作、快照与校验 |
+| **会话引擎** | Rust（原生 sidecar） | 当前原生会话格式、查询、操作、快照与校验 |
 | **Ferry Runtime** | Node.js 22 + TypeScript | Provider、角色、对话、LLM 工作流与 Ferry Agent 执行 |
 
-Rust 宿主分别监督 Python Session Engine 和 Node.js Ferry Runtime 两个
+Rust 宿主分别监督 Session Engine 和 Node.js Ferry Runtime 两个
 sidecar。外部 Coding Agent 是会话来源，Ferry Agent 是 LLM Worker，两者使用
 不同的领域模型。
 

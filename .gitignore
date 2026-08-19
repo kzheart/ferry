@@ -13,3 +13,5 @@ scripts/demo/
 .idea
 .plan
 node_modules/
+!docs/rust-engine-refactor-plan.md
+!docs/bench-report.md
