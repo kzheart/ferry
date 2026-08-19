@@ -21,9 +21,40 @@ def test_node_version_requirement_is_compared_numerically():
         build.parse_node_version("current")
 
 
+def test_engine_binary_keeps_the_external_bin_naming_rule():
+    source, destination = build.engine_binary_paths("aarch64-apple-darwin")
+    assert source == (
+        build.ENGINE_CRATE
+        / "target/aarch64-apple-darwin/release/ferry-engine"
+    )
+    assert destination == (
+        build.BINARIES / "ferry-engine-aarch64-apple-darwin"
+    )
+
+    source, destination = build.engine_binary_paths("x86_64-pc-windows-msvc")
+    assert source.name == "ferry-engine.exe"
+    assert destination == (
+        build.BINARIES / "ferry-engine-x86_64-pc-windows-msvc.exe"
+    )
+
+
+def test_engine_is_built_from_its_own_manifest():
+    assert build.engine_build_command("aarch64-apple-darwin") == [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--target",
+        "aarch64-apple-darwin",
+        "--manifest-path",
+        str(build.ENGINE_MANIFEST),
+    ]
+
+
 def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
     calls = []
     monkeypatch.setattr(build, "verify_toolchain", lambda target: None)
+    monkeypatch.setattr(build, "install_engine_binary", lambda target: None)
     monkeypatch.setattr(
         build,
         "run",
@@ -41,13 +72,7 @@ def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
             build.RUNTIME,
         ),
         (
-            [
-                build.sys.executable,
-                str(build.ROOT / "scripts/build-sidecar.py"),
-                "--clean",
-                "--target",
-                "aarch64-apple-darwin",
-            ],
+            build.engine_build_command("aarch64-apple-darwin"),
             build.ROOT,
         ),
         (

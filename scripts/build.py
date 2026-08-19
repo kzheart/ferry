@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import platform
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "ferry-runtime"
 APP = ROOT / "app"
+# Rust 引擎是独立 package（自带 Cargo.lock），产物落在自己的 target/ 下。
+ENGINE_CRATE = ROOT / "crates/ferry-engine"
+ENGINE_MANIFEST = ENGINE_CRATE / "Cargo.toml"
+BINARIES = APP / "src-tauri/binaries"
 TARGETS = {
     ("Darwin", "arm64"): "aarch64-apple-darwin",
     ("Windows", "AMD64"): "x86_64-pc-windows-msvc",
@@ -37,8 +42,62 @@ def parse_node_version(value: str) -> tuple[int, int, int]:
     return tuple(map(int, match.groups()))
 
 
+def executable_suffix(target: str) -> str:
+    return ".exe" if target.endswith("windows-msvc") else ""
+
+
+def engine_build_command(target: str) -> list[str]:
+    return [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--target",
+        target,
+        "--manifest-path",
+        str(ENGINE_MANIFEST),
+    ]
+
+
+def engine_binary_paths(target: str) -> tuple[Path, Path]:
+    """Rust 引擎产物路径与 Tauri externalBin 要求的落地路径。"""
+    suffix = executable_suffix(target)
+    source = ENGINE_CRATE / "target" / target / "release" / f"ferry-engine{suffix}"
+    destination = BINARIES / f"ferry-engine-{target}{suffix}"
+    return source, destination
+
+
+def install_engine_binary(target: str) -> Path:
+    """命名必须是 ferry-engine-<target>[.exe]：tauri.conf.json 的 externalBin 依赖它。"""
+    source, destination = engine_binary_paths(target)
+    if not source.is_file():
+        raise ValueError(f"未找到引擎产物: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    print(destination)
+    return destination
+
+
 def run(command: list[str], *, cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def verify_rust_target(target: str) -> None:
+    """rustup 缺目标会在 cargo build 阶段才报错，提前给出可执行的修复提示。"""
+    try:
+        installed = subprocess.run(
+            ["rustup", "target", "list", "--installed"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        # 非 rustup 管理的工具链（发行版 cargo）无法枚举，交给 cargo 自己报错。
+        return
+    if target not in installed.split():
+        raise ValueError(
+            f"缺少 Rust target {target}: 请先运行 rustup target add {target}"
+        )
 
 
 def verify_toolchain(target: str) -> None:
@@ -47,8 +106,6 @@ def verify_toolchain(target: str) -> None:
         raise ValueError(
             f"sidecar 必须原生构建: 请求 {target}, 当前主机 {host}"
         )
-    if sys.version_info[:2] != (3, 12):
-        raise ValueError("Python 3.12 is required")
     node = subprocess.run(
         ["node", "--version"],
         check=True,
@@ -63,6 +120,7 @@ def verify_toolchain(target: str) -> None:
         capture_output=True,
         text=True,
     )
+    verify_rust_target(target)
 
 
 def build(target: str, *, install: bool = True) -> None:
@@ -71,13 +129,8 @@ def build(target: str, *, install: bool = True) -> None:
         run(["npm", "ci"], cwd=RUNTIME)
         run(["npm", "ci"], cwd=APP)
     run(["npm", "run", "build:sea", "--", target], cwd=RUNTIME)
-    run([
-        sys.executable,
-        str(ROOT / "scripts/build-sidecar.py"),
-        "--clean",
-        "--target",
-        target,
-    ])
+    run(engine_build_command(target))
+    install_engine_binary(target)
     run(["npm", "run", "tauri", "--", "build"], cwd=APP)
 
 
