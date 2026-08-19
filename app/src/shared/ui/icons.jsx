@@ -20,6 +20,7 @@ const AGENT_FALLBACK_COLOR = {
   opencode: "#4C7EDB",
   pi: "#9268C9",
   grok: "#6B7682",
+  cursor: "#3F444C",
 };
 // 工具图标:圆角方底 + 品牌形 + 可选状态点。
 // 单色资源由渲染端补底色；未提供资源的 Agent 用首字母占位。

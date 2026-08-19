@@ -30,6 +30,11 @@ tests/golden/
 `<agent>` ∈ {claude, codex, opencode, pi, grok}，`<case>` 与
 `tests/fixtures/agent_formats/<agent>/` 下的目录同名，共 13 个 case。
 
+cursor 是 Rust-only agent（只在 `crates/ferry-engine/` 里实现，Python 参考
+引擎经 `RUST_ONLY_AGENTS` 豁免），因此这里没有它的黄金基线——黄金文件的作用
+是对照两套实现，只有一套实现时无从对照。cursor 的读取语义由 Rust 侧自己的
+适配器测试守住。
+
 | agent | case | 覆盖点 |
 | --- | --- | --- |
 | claude | case-01-plain / case-02-tools | parentUuid 链、tool_use/tool_result 配对 |

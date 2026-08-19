@@ -94,10 +94,19 @@ export const AGENTS = {
       "models"
     ],
     "editOperations": []
+  },
+  "cursor": {
+    "displayName": "Cursor",
+    "icon": "cursor",
+    "capabilities": [
+      "browse",
+      "migration-source"
+    ],
+    "editOperations": []
   }
 } as const;
 export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
-export const ALLOWED_EXECUTABLES = ["claude", "codex", "opencode", "pi", "grok"] as const;
+export const ALLOWED_EXECUTABLES = ["claude", "codex", "opencode", "pi", "grok", "cursor"] as const;
 export const AGENT_SKILL_PATHS = {
   "claude": [
     "~/.claude/skills"
@@ -109,7 +118,8 @@ export const AGENT_SKILL_PATHS = {
     "~/.config/opencode/skills"
   ],
   "pi": [],
-  "grok": []
+  "grok": [],
+  "cursor": []
 } as const;
 export const SHARED_SKILL_PATHS = ["~/.agents/skills"] as const;
 export type AgentId = keyof typeof AGENTS;

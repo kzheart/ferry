@@ -11,8 +11,9 @@
 </p>
 
 <p align="center">
-Ferry brings together the conversation history of Claude Code, Codex CLI, and OpenCode
-into a single library. Browse thousands of sessions, migrate context between agents
+Ferry brings together the conversation history of Claude Code, Codex CLI, OpenCode,
+Pi Agent, Grok Build, and Cursor into a single library.
+Browse thousands of sessions, migrate context between agents
 with an impact preview, and understand your token usage — privacy-first, no account required.
 </p>
 
@@ -51,8 +52,8 @@ Tool output remains opt-in, and oversized values are deterministically truncated
 ## Why Ferry
 
 Coding agents keep their sessions in private stores — `~/.claude`, `~/.codex`,
-OpenCode's local database. They can't see each other's history, and browsing them
-means digging through JSONL files by hand.
+OpenCode's local database, Cursor's `state.vscdb`. They can't see each other's
+history, and browsing them means digging through JSONL files by hand.
 
 Ferry solves three problems:
 
@@ -67,6 +68,12 @@ Ferry solves three problems:
 | Claude Code | ✓ | ✓ |
 | Codex CLI | ✓ | ✓ |
 | OpenCode | ✓ | ✓ |
+| Pi Agent | ✓ | ✓ |
+| Grok Build | ✓ | ✓ |
+| Cursor | ✓ | source only |
+
+Cursor is a migration source only: sessions can be moved out of Cursor into
+another agent, not into Cursor.
 
 
 ## Features

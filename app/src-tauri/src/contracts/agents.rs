@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-pub(crate) const AGENT_IDS: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];
+pub(crate) const AGENT_IDS: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];
 pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
     (
         "claude",
@@ -70,5 +70,12 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "models",
         ],
     ),
+    (
+        "cursor",
+        &[
+            "browse",
+            "migration-source",
+        ],
+    ),
 ];
-pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];
+pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];

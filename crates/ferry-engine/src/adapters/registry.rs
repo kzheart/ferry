@@ -14,13 +14,14 @@ use crate::errors::{DomainError, DomainResult};
 /// Adapter 装配函数：失败返回装配错误文本（对齐 Python 的 `ValueError`）。
 pub type AdapterBuilder = fn() -> Result<AgentAdapter, String>;
 
-/// 五个内置 adapter 的装配入口，顺序与 `AGENT_IDS` 一致。
+/// 内置 adapter 的装配入口，顺序与 `AGENT_IDS` 一致。
 pub const ADAPTER_BUILDERS: &[(&str, AdapterBuilder)] = &[
     ("claude", crate::adapters::claude::adapter::build),
     ("codex", crate::adapters::codex::adapter::build),
     ("opencode", crate::adapters::opencode::adapter::build),
     ("pi", crate::adapters::pi::adapter::build),
     ("grok", crate::adapters::grok::adapter::build),
+    ("cursor", crate::adapters::cursor::adapter::build),
 ];
 
 /// Immutable adapter lookup owned by the Engine composition root.

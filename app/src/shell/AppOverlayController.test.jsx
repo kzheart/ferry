@@ -105,7 +105,7 @@ function baseProps(overrides = {}) {
       library: { value: null, onChange: noop, counts: {}, dirs: [], tags: [], onClear: noop },
       history: {
         value: null,
-        tools: ["claude", "codex", "opencode", "pi", "grok"],
+        tools: ["claude", "codex", "opencode", "pi", "grok", "cursor"],
         onChange: noop,
         onClear: noop,
       },

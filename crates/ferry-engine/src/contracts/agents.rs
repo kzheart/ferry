@@ -126,10 +126,20 @@ pub const AGENTS: &[AgentContract] = &[
         executables: &["grok"],
         fallback_bin_dirs: &["~/.local/bin"],
     },
+    AgentContract {
+        id: "cursor",
+        display_name: "Cursor",
+        icon: "cursor",
+        source_path: "~/Library/Application Support/Cursor/User/globalStorage",
+        capabilities: &["browse", "migration-source"],
+        edit_operations: &[],
+        executables: &["cursor"],
+        fallback_bin_dirs: &[],
+    },
 ];
 
-pub const AGENT_IDS: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];
-pub const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];
+pub const AGENT_IDS: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];
+pub const ALLOWED_EXECUTABLES: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];
 
 pub fn agent(id: &str) -> Option<&'static AgentContract> {
     AGENTS.iter().find(|agent| agent.id == id)

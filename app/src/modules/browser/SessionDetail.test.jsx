@@ -108,3 +108,12 @@ test("失败态会自行退去,按钮可以再试一次", async () => {
   await act(async () => { vi.advanceTimersByTime(4100); });
   expect(screen.getByTitle("browser:session.copyResume")).toBeTruthy();
 });
+
+// 没有 resume 能力的 Agent(如 cursor)点下去只会拿到 agent.request_invalid,
+// 按钮就不该出现在头部。
+test("Agent 不支持接续时,接续与复制按钮都不渲染", () => {
+  renderDetail({ meta: { ...meta, tool: "cursor" } });
+
+  assert.equal(screen.queryByTitle("browser:session.resumeTerminal"), null);
+  assert.equal(screen.queryByTitle("browser:session.copyResume"), null);
+});

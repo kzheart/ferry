@@ -122,6 +122,46 @@ pub fn opencode_database_path(platform: OsFamily, environ: &Environ, home: &Path
     data_home.join("opencode").join("opencode.db")
 }
 
+/// Cursor 的只读会话库位置（`state.vscdb`）。
+///
+/// Cursor 是 VS Code 分支，globalStorage 的落位随桌面平台不同；[`OsFamily`] 只
+/// 区分 nt / posix，分不开 macOS 与 Linux，所以 posix 下按 macOS、Linux 两种
+/// 布局依次探测，取第一个存在的；都不存在时按当前编译目标给默认值，让
+/// `session.store_unavailable` 的提示指向本平台的正确位置。
+pub fn cursor_database_path(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+    if let Some(override_path) = env_value(environ, "FERRY_CURSOR_DB") {
+        return expanduser(override_path);
+    }
+    let leaf = |base: PathBuf| {
+        base.join("Cursor")
+            .join("User")
+            .join("globalStorage")
+            .join("state.vscdb")
+    };
+    if platform == OsFamily::Windows {
+        let roaming = env_value(environ, "APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData").join("Roaming"));
+        return leaf(roaming);
+    }
+    let macos = leaf(home.join("Library").join("Application Support"));
+    let linux = leaf(
+        env_value(environ, "XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config")),
+    );
+    for candidate in [&macos, &linux] {
+        if candidate.exists() {
+            return candidate.clone();
+        }
+    }
+    if cfg!(target_os = "macos") {
+        macos
+    } else {
+        linux
+    }
+}
+
 /// Return Pi session roots in runtime lookup order.
 ///
 /// Pi 的显式 session 目录优先；否则读 `settings.json` 里的 `sessionDir`，
@@ -161,7 +201,8 @@ pub fn grok_home(environ: &Environ, home: &Path) -> PathBuf {
 /// 单测辅助：**crate 级**的进程环境互斥。
 ///
 /// `HOME` / `PATH` / `GROK_HOME` / `PI_CODING_AGENT_SESSION_DIR` /
-/// `FERRY_DATA_DIR` / `FERRY_BACKUP_DIR` 都是进程级状态，而 lib 测试默认多线程
+/// `FERRY_CURSOR_DB` / `FERRY_DATA_DIR` / `FERRY_BACKUP_DIR` 都是进程级状态，
+/// 而 lib 测试默认多线程
 /// 跑在**同一个进程**里。各模块各自持一把锁只能挡住自己模块内的并发：claude
 /// 的用例把 `HOME` 指向沙箱时，grok / opencode / snapshots 里任何一个读
 /// `home_dir()` 的用例都会读到那个沙箱。所以改写进程环境的测试必须共用**这一把**
@@ -278,6 +319,52 @@ mod tests {
             PathBuf::from("C:\\Local")
                 .join("opencode")
                 .join("opencode.db")
+        );
+    }
+
+    #[test]
+    fn cursor_path_probes_both_posix_layouts() {
+        let home = PathBuf::from("/home/u");
+        assert_eq!(
+            cursor_database_path(
+                OsFamily::Posix,
+                &environ(&[("FERRY_CURSOR_DB", "/custom/state.vscdb")]),
+                &home
+            ),
+            PathBuf::from("/custom/state.vscdb")
+        );
+        // 两种 posix 布局都不存在时按编译目标给默认值。
+        let expected = if cfg!(target_os = "macos") {
+            "/home/u/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        } else {
+            "/home/u/.config/Cursor/User/globalStorage/state.vscdb"
+        };
+        assert_eq!(
+            cursor_database_path(OsFamily::Posix, &environ(&[]), &home),
+            PathBuf::from(expected)
+        );
+        assert_eq!(
+            cursor_database_path(
+                OsFamily::Windows,
+                &environ(&[("APPDATA", "C:\\Roaming")]),
+                &home
+            ),
+            PathBuf::from("C:\\Roaming")
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+                .join("state.vscdb")
+        );
+        // 真实存在的 macOS 布局优先于 XDG 回落。
+        let root = tempfile::tempdir().unwrap();
+        let macos = root
+            .path()
+            .join("Library/Application Support/Cursor/User/globalStorage");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::write(macos.join("state.vscdb"), b"").unwrap();
+        assert_eq!(
+            cursor_database_path(OsFamily::Posix, &environ(&[]), root.path()),
+            macos.join("state.vscdb")
         );
     }
 

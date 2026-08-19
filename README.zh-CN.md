@@ -11,7 +11,8 @@
 </p>
 
 <p align="center">
-  Ferry 将 Claude Code、Codex CLI 和 OpenCode 的对话历史汇入同一个会话库。
+  Ferry 将 Claude Code、Codex CLI、OpenCode、Pi Agent、Grok Build 和 Cursor
+  的对话历史汇入同一个会话库。
   浏览上千条会话、跨 Agent 迁移上下文并预览迁移影响、掌握 Token 用量 ——
   隐私优先，无需注册账号。
 </p>
@@ -47,7 +48,8 @@
 ## 为什么需要 Ferry
 
 各个 Coding Agent 把会话锁在自己的私有存储里 —— `~/.claude`、`~/.codex`、
-OpenCode 的本地数据库。它们彼此看不见对方的历史，想查看就得手动翻 JSONL 文件。
+OpenCode 的本地数据库、Cursor 的 `state.vscdb`。它们彼此看不见对方的历史，
+想查看就得手动翻 JSONL 文件。
 
 Ferry 解决三个问题：
 
@@ -62,6 +64,11 @@ Ferry 解决三个问题：
 | Claude Code | ✓ | ✓ |
 | Codex CLI | ✓ | ✓ |
 | OpenCode | ✓ | ✓ |
+| Pi Agent | ✓ | ✓ |
+| Grok Build | ✓ | ✓ |
+| Cursor | ✓ | 仅作为迁移来源 |
+
+Cursor 只能作为迁移来源：会话可以从 Cursor 搬到别的 Agent，不能反向搬入。
 
 
 ## 功能

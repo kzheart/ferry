@@ -10,7 +10,9 @@ from engine.adapters.contracts import (
     SessionEditor, SessionLifecycle, SessionVerifier, AgentManifest, AgentAdapter,
     NativeSessionReference, id_reference,
 )
-from engine.adapters.registry import AdapterRegistry, create_registry
+from engine.adapters.registry import (
+    AdapterRegistry, PYTHON_AGENT_IDS, create_registry,
+)
 from engine.adapters.claude.adapter import ClaudeBrowser
 from engine.adapters.codex.adapter import CodexBrowser
 from engine.adapters.opencode.adapter import OpenCodeBrowser
@@ -211,9 +213,10 @@ def test_registry_reports_unknown_adapter():
 
 
 def test_registry_explicitly_composes_all_bundled_adapters():
+    # cursor 之类的只读 Agent 只有 Rust 实现，Python 侧整体豁免。
     registry = create_registry()
-    assert registry.ids() == AGENT_IDS
-    for agent_id in AGENT_IDS:
+    assert registry.ids() == PYTHON_AGENT_IDS
+    for agent_id in PYTHON_AGENT_IDS:
         adapter = registry.get(agent_id)
         assert (
             adapter.manifest.edit_operations
@@ -229,11 +232,11 @@ def test_prompt_capability_has_callable_verifier_implementation():
     registry = create_registry()
     prompt_agents = [
         agent_id
-        for agent_id in AGENT_IDS
+        for agent_id in PYTHON_AGENT_IDS
         if "prompt" in AGENTS[agent_id]["capabilities"]
     ]
 
-    assert prompt_agents == list(AGENT_IDS)
+    assert prompt_agents == list(PYTHON_AGENT_IDS)
     for agent_id in prompt_agents:
         adapter = registry.get(agent_id)
         verifier = adapter.require("prompt", "verifier")
@@ -367,13 +370,13 @@ def test_lifecycle_can_support_resume_without_delete():
     ("builders", "missing", "extra"),
     [
         (
-            {AGENT_IDS[0]: lambda: None},
-            sorted(set(AGENT_IDS[1:])),
+            {PYTHON_AGENT_IDS[0]: lambda: None},
+            sorted(set(PYTHON_AGENT_IDS[1:])),
             [],
         ),
         (
             {
-                **{agent_id: (lambda: None) for agent_id in AGENT_IDS},
+                **{agent_id: (lambda: None) for agent_id in PYTHON_AGENT_IDS},
                 "extra": lambda: None,
             },
             [],

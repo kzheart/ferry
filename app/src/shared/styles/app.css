@@ -126,6 +126,7 @@ html, body, #root { height: 100%; }
   --t-claude: #D97757;
   --t-codex: #10A37F;
   --t-opencode: #4C7EDB;
+  --t-cursor: #3F444C;
 
   --hov: #E4E9EE;
   --hov-rail: #DDE3E9;
@@ -252,6 +253,7 @@ html, body, #root { height: 100%; }
   --t-claude: #E08B6D;
   --t-codex: #34C29A;
   --t-opencode: #6B96E8;
+  --t-cursor: #C2C8D0;
 
   --hov: #2C2D33;
   --hov-rail: #202127;

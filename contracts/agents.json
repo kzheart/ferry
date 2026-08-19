@@ -148,6 +148,22 @@
       "fallback_bin_dirs": [
         "~/.local/bin"
       ]
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "icon": "cursor",
+      "source_path": "~/Library/Application Support/Cursor/User/globalStorage",
+      "skill_paths": [],
+      "capabilities": [
+        "browse",
+        "migration-source"
+      ],
+      "edit_operations": [],
+      "executables": [
+        "cursor"
+      ],
+      "fallback_bin_dirs": []
     }
   ],
   "shared_skill_paths": [

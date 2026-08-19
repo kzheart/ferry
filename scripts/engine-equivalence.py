@@ -51,7 +51,12 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 DEFAULT_RUST_BINARY = ROOT / "crates" / "ferry-engine" / "target" / "debug" / "ferry-engine"
+
+# 只有 Rust 引擎实现的 Agent：Python 侧根本不装配它们，两侧 env / scan 出参
+# 必然不同，对照前整体剔除。常量与 engine.adapters.registry 同源，避免漂移。
+from engine.adapters.registry import RUST_ONLY_AGENTS  # noqa: E402
 
 SANDBOX_MARKER = "<home>"
 # 每次调用都会变、且与语义无关的字段。
@@ -319,7 +324,31 @@ def _sort_scan_rows(rows: list) -> None:
     )
 
 
+def _drop_rust_only(name: str, value) -> None:
+    """就地剔除 Rust-only Agent 的出参（env 的键、scan 的工具状态与会话行）。"""
+    result = value.get("result") if isinstance(value, dict) else None
+    if not isinstance(result, dict):
+        return
+    if name == "env":
+        for agent_id in RUST_ONLY_AGENTS:
+            result.pop(agent_id, None)
+        return
+    if name != "scan":
+        return
+    tools = result.get("tools")
+    if isinstance(tools, dict):
+        for agent_id in RUST_ONLY_AGENTS:
+            tools.pop(agent_id, None)
+    sessions = result.get("sessions")
+    if isinstance(sessions, list):
+        result["sessions"] = [
+            row for row in sessions
+            if not (isinstance(row, dict) and row.get("tool") in RUST_ONLY_AGENTS)
+        ]
+
+
 def canonicalize_method(name: str, value):
+    _drop_rust_only(name, value)
     if name == "scan" and isinstance(value, dict):
         result = value.get("result")
         if isinstance(result, dict):
@@ -381,8 +410,9 @@ def main() -> int:
         print(
             "物化 case: "
             + ", ".join(f"{agent}={count}" for agent, count in counts.items())
-            + f"（共 {total}）\n"
+            + f"（共 {total}）"
         )
+        print(f"已豁免（Rust-only，无 Python 实现）：{sorted(RUST_ONLY_AGENTS)}\n")
 
         environ = sandbox_environ(dump, sandbox)
         python_engine = Engine(

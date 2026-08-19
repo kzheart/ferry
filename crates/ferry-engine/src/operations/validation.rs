@@ -374,7 +374,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    const ADAPTERS: &[&str] = &["claude", "codex", "opencode", "pi", "grok"];
+    const ADAPTERS: &[&str] = &["claude", "codex", "opencode", "pi", "grok", "cursor"];
 
     fn adapters() -> Vec<String> {
         ADAPTERS.iter().map(|id| (*id).to_string()).collect()

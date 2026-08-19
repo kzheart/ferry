@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from engine.adapters.registry import PYTHON_AGENT_IDS
 from engine.contracts.agents import AGENTS, AGENT_IDS
 
 
@@ -9,7 +10,8 @@ ENGINE = ROOT / "engine"
 
 def test_adapter_contract_has_no_plugin_layer():
     assert (ENGINE / "adapters/contracts.py").is_file()
-    for agent in AGENT_IDS:
+    # Rust-only 的 Agent 在 Python 侧没有 adapter 包。
+    for agent in PYTHON_AGENT_IDS:
         assert (ENGINE / f"adapters/{agent}/adapter.py").is_file()
         assert not (ENGINE / f"adapters/{agent}/plugin.py").exists()
     assert not (ENGINE / "adapters/base/plugin.py").exists()
@@ -171,7 +173,7 @@ CAPABILITY_MODULES = {
 
 
 def test_every_adapter_provides_modules_required_by_its_capabilities():
-    for agent in AGENT_IDS:
+    for agent in PYTHON_AGENT_IDS:
         package = ENGINE / f"adapters/{agent}"
         modules = {path.stem for path in package.glob("*.py")} - {"__init__"}
         required = {"adapter"}

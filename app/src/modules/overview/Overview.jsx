@@ -12,6 +12,7 @@ const TOOL_COLOR = {
   opencode: "var(--t-opencode)",
   pi: "var(--c4)",
   grok: "var(--tx2)",
+  cursor: "var(--t-cursor)",
 };
 const COMP_OPACITY = { cache_read: 0.92, input: 0.6, cache_write: 0.38, output: 0.2 };
 const CHART = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];

@@ -20,6 +20,18 @@ ADAPTER_BUILDERS = {
     "grok": build_grok,
 }
 
+#: 只有 Rust 引擎实现的 Agent。
+#:
+#: contracts/agents.json 同时喂两个引擎，但 Python 引擎已进入维护期，只读型的
+#: 新 Agent 不再补 Python 实现。这些 id 在 Python 侧整体跳过：不装配 adapter，
+#: 也不参与 AGENT_IDS 一致性校验，否则 create_registry 会直接 ValueError。
+RUST_ONLY_AGENTS = frozenset({"cursor"})
+
+#: Python 引擎实际装配的 Agent id（保持 AGENT_IDS 的顺序）。
+PYTHON_AGENT_IDS = tuple(
+    agent_id for agent_id in AGENT_IDS if agent_id not in RUST_ONLY_AGENTS
+)
+
 
 class AdapterRegistry:
     """Immutable adapter lookup owned by the Engine composition root."""
@@ -43,7 +55,7 @@ class AdapterRegistry:
 
 
 def create_registry() -> AdapterRegistry:
-    expected = set(AGENT_IDS)
+    expected = set(PYTHON_AGENT_IDS)
     actual = set(ADAPTER_BUILDERS)
     if expected != actual:
         missing = sorted(expected - actual)
@@ -53,5 +65,5 @@ def create_registry() -> AdapterRegistry:
             f"missing={missing}, extra={extra}"
         )
     return AdapterRegistry(
-        ADAPTER_BUILDERS[agent_id]() for agent_id in AGENT_IDS
+        ADAPTER_BUILDERS[agent_id]() for agent_id in PYTHON_AGENT_IDS
     )
