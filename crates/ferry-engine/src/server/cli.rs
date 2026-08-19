@@ -1,7 +1,5 @@
 //! 引擎命令行入口。
 //!
-//! 语义事实源：`engine/server/cli.py` 的 `main()`（86-131 行）。
-//!
 //! 子命令：`serve` / `rpc` / `health` / `version`(`--version`) / `scan` / `show` /
 //! `history` / `env` / `extract-format`。除 `serve` 与 `rpc` 外都直接打印
 //! `indent=2` 的 JSON。
@@ -22,7 +20,7 @@ use crate::server::notify::Notifier;
 use crate::server::rpc::{EngineService, RpcDispatcher};
 use crate::server::serve::{enable_stderr_logging, serve, ServeHandler};
 
-/// CLI 子命令；与 Python `main()` 的分支集合逐字对齐。
+/// CLI 子命令。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Command {
     Rpc,
@@ -87,10 +85,9 @@ impl std::fmt::Debug for CliDeps {
     }
 }
 
-/// 等价 `engine.server.cli.main(argv)`。
+/// CLI 入口：解析子命令、装配组合根、执行、收尾。
 ///
-/// `build` 对应 Python 的 `build_engine()`；放在参数上是为了让 WP-E 在不改本文件
-/// 的前提下接线真实组合根。
+/// `build` 放在参数上，测试可以在不拉起真实环境探测的前提下驱动整条分支。
 pub fn main(
     argv: &[String],
     build: impl FnOnce() -> Result<CliDeps, String>,
@@ -98,8 +95,8 @@ pub fn main(
     let Some(raw) = argv.first() else {
         return Err("缺少命令".to_string());
     };
-    // 未知命令要在 build_engine 之前就否掉？——不，Python 是先 build 再分支，
-    // 这里保持一致：环境探测失败的报错顺序也是 wire 行为的一部分。
+    // 未知命令刻意不在装配之前否掉：环境探测失败要先于「未知命令」报出来，
+    // 报错顺序本身是宿主依赖的行为。
     let deps = build()?;
     let outcome = run(Command::parse(raw), raw, &argv[1..], &deps);
     if let Some(close) = &deps.close {
@@ -232,7 +229,7 @@ fn serve_forever(dispatcher: RpcDispatcher, deps: &CliDeps) -> Result<(), String
     )
 }
 
-/// 能力门面的异常在 CLI 直接落成退出信息（Python 侧是未捕获异常的 traceback）。
+/// 能力门面的错误在 CLI 直接落成退出信息，不走 RPC 的错误包络。
 fn cli_error(error: EngineError) -> String {
     format!("{}: {}", error.error_type(), error.message())
 }
@@ -267,7 +264,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn command_table_matches_the_python_branches() {
+    fn command_table_covers_every_subcommand() {
         let cases = [
             ("rpc", Command::Rpc),
             ("serve", Command::Serve),
@@ -318,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_command_reports_the_python_message() {
+    fn missing_command_reports_a_clear_message() {
         let error = main(&[], || Err("不该走到这里".to_string())).unwrap_err();
         assert_eq!(error, "缺少命令");
     }

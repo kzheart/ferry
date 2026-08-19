@@ -1,7 +1,5 @@
 //! OpenCode 工具方言。
 //!
-//! 语义事实源：`engine/adapters/opencode/dialect.py`。
-//!
 //! 宽松模式（`strict_input=false`）：入参不是对象时保留已识别的 op、原样透传，
 //! 与 claude 一致；`tool_canon::canonical_tool_input` 的探测顺序依赖这一点。
 

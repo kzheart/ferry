@@ -1,6 +1,4 @@
 //! Pi 模型清单：只读配置与 CLI 自述，不碰任何凭证。
-//!
-//! 语义事实源：`engine/adapters/pi/models.py`。
 
 use std::path::PathBuf;
 use std::time::Duration;

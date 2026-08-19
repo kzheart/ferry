@@ -1,6 +1,4 @@
 //! 结构化事件：code + params，渲染语言由 UI 决定。
-//!
-//! 语义事实源：`engine/events.py`。
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

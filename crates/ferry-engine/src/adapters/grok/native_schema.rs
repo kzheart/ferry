@@ -1,7 +1,5 @@
 //! 当前 Grok summary/update/chat v1 的结构模板。
 //!
-//! 语义事实源：`engine/adapters/grok/native_schema.py`。
-//!
 //! 模板是「格式漂移探测器」：抽取器要求 capture 里必须出现当前格式的全部代表性
 //! 记录，缺一条就说明 fixture（或 Grok 本身）已经不是当前形态。
 
@@ -63,10 +61,9 @@ pub fn extract_templates(capture: &Value) -> Result<Templates, String> {
         .copied()
         .filter(|key| !templates.contains_key(*key))
         .collect();
-    // 对齐 Python 的 `", ".join(sorted(required - set(templates)))`。
     missing.sort_unstable();
     if !missing.is_empty() {
-        // 文案与 Python 逐字一致（键已按字典序）。
+        // 缺失键按字典序列出，文案本身是维护者读的诊断信息。
         return Err(format!(
             "Grok fixture is missing current template records: {}",
             missing.join(", ")

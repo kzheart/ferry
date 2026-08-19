@@ -1,7 +1,5 @@
 //! 目标会话文件的落盘原语，以及与 Python `json.dumps` 逐字节一致的序列化。
 //!
-//! 语义事实源：`engine/adapters/shared/writing.py`。
-//!
 //! 注意本模块的 [`write_jsonl`] 与 [`super::editing::write_jsonl`] 是**两套**实现：
 //! 迁移写入面向"目标 Agent 可能正在扫描该目录"，必须建父目录 + fsync；
 //! 就地编辑写入是同目录带 pid 的临时文件、不 fsync。两者的临时文件命名、
@@ -46,7 +44,8 @@ fn temp_path(path: &Path) -> PathBuf {
 /// 等价 `json.dumps(value, ensure_ascii=False)`：**默认分隔符带空格**（`, ` 与 `: `）。
 ///
 /// 这不是 canonical_json（那套排序 key 且无空格，用于摘要）。写进目标 Agent
-/// 会话文件的每一行都必须用这套形状，否则与 Python 引擎产出的文件不同字节。
+/// 会话文件的每一行都必须用这套形状：原生 agent 按字节读回这些文件，
+/// 分隔符或缩进一变就是另一份文件。
 pub fn python_json_dumps(value: &Value) -> String {
     let mut out = String::new();
     write_compact(&mut out, value);

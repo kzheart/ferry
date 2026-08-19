@@ -1,7 +1,5 @@
 //! Engine 独占的会话元数据读写门面。
 //!
-//! 语义事实源：`engine/operations/metadata.py`。
-//!
 //! 走 `state_database`（**不**触发崩溃恢复）：元数据查询绝不能把正在执行的
 //! Operation 标为中断（§2.3 第 20 条）。
 

@@ -1,7 +1,5 @@
 //! EngineService 门面：把 26 个 RPC 方法映射到能力包。
 //!
-//! 语义事实源：`engine/app.py`。
-//!
 //! 分发层（`server::rpc`）只做信封校验与默认值填充，把**原始 JSON 值**交到这里
 //! ——与 Python 的 `lambda p: application.xxx(p["tool"], ...)` 完全一致。因此本
 //! 模块里所有的 `&Value` → 具体类型的转换都必须复刻 Python 在同一位置的行为
@@ -135,7 +133,7 @@ impl SessionResolver for IndexResolver {
 // 门面
 // ---------------------------------------------------------------------------
 
-/// 等价 `engine.app.EngineService`。
+/// 能力门面：RPC 分发层之下、各能力包之上的那一层。
 pub struct Engine {
     ports: Arc<EngineContext>,
     op_ports: Ports,

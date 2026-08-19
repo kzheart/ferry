@@ -1,23 +1,22 @@
 # 黄金基线（canonical + scan）
 
-本目录是 **Python 引擎产出的行为基准**，供 Rust 引擎重写
-（`docs/rust-engine-refactor-plan.md` §WP-G / §4）逐字段对照。迁移期内
-`engine/` 保持原样、保持绿灯，这里的 JSON 就是「正确答案」。
+本目录是**冻结的会话读取基线**：每个 fixture case 一份 canonical Session 快照
+和一份 scanner 扫描行快照。适配器改动一旦改变读取语义，这里就会出现 diff——
+要么是有意的行为变更（连同基线一起更新并在评审里说明），要么是回归。
 
-文件全部由脚本生成，**不要手工编辑**。
+文件全部由测试生成，**不要手工编辑**。
 
 ## 生成与校验
 
 ```bash
-# 重新生成（覆盖写入 tests/golden/**）
-python3 scripts/dump-canonical-fixtures.py
+# 只校验（默认；CI 跑的就是这条）
+cargo test -p ferry-engine --test golden_regen
 
-# 只校验现有文件是否仍与当前 Python 引擎一致（CI 友好，退出码非 0 表示漂移）
-python3 scripts/dump-canonical-fixtures.py --check
+# 重新生成（覆盖写入 tests/golden/**）
+FERRY_GOLDEN_REGEN=1 cargo test -p ferry-engine --test golden_regen
 ```
 
-脚本是幂等的：连续运行两次 `git diff` 必须为空。若出现 diff，说明 Python 引擎
-的读取语义发生了变化——要么是有意的行为变更（连同 Rust 侧一起更新），要么是回归。
+再生是幂等的：连续跑两次 `git diff tests/golden/` 必须为空。
 
 ## 目录
 
@@ -30,10 +29,9 @@ tests/golden/
 `<agent>` ∈ {claude, codex, opencode, pi, grok}，`<case>` 与
 `tests/fixtures/agent_formats/<agent>/` 下的目录同名，共 13 个 case。
 
-cursor 是 Rust-only agent（只在 `crates/ferry-engine/` 里实现，Python 参考
-引擎经 `RUST_ONLY_AGENTS` 豁免），因此这里没有它的黄金基线——黄金文件的作用
-是对照两套实现，只有一套实现时无从对照。cursor 的读取语义由 Rust 侧自己的
-适配器测试守住。
+cursor 没有黄金基线：它的会话存储是 Cursor 自己的 SQLite 库，离线物化成本远高
+于其余五家。新增 agent 一律靠自身适配器测试守语义，黄金基线只覆盖这五家的
+存量 fixture。
 
 | agent | case | 覆盖点 |
 | --- | --- | --- |
@@ -45,25 +43,19 @@ cursor 是 Rust-only agent（只在 `crates/ferry-engine/` 里实现，Python �
 
 ## canonical 文件格式约定
 
-Rust 侧黄金测试按下面这套约定对照：
-
-* **无包裹层**：文件顶层就是 `Session`，可直接反序列化成 Rust 的 `Session`
-  struct。
-* **全字段**：dataclass 的每个字段都出现，值为 `None` 的写成 `null`，不省略。
-  转换是通用的（走 `dataclasses.fields()`），不维护字段白名单，因此 Python 侧
-  新增字段会自动出现在黄金文件里并在 diff 中暴露。
+* **无包裹层**：文件顶层就是 `Session`，可直接反序列化成
+  `crates/ferry-engine/src/model.rs` 里的 `Session`。
+* **全字段**：每个字段都出现，值为 `None` 的写成 `null`，不省略。转换走 serde
+  的整体序列化，不维护字段白名单，因此新增字段会自动出现在基线里并在 diff 中
+  暴露。
 * **递归**：`children`（子会话树）、`messages[].blocks[].tool` / `.image`、
   `tool.result`、`result.blocks[]`、`agent_edges[]`、`context_compactions[]`
   都按同样规则递归展开。
 * **自由字典原样输出**：`loss[]`（事件字典）、`ToolCall.input`、
   `ToolResultBlock.data`、`ContextCompaction.metrics` / `source_meta`
   不做任何结构化改写。
-* **序列化参数**：`sort_keys=True`、`ensure_ascii=False`、`indent=2`、末尾一个
-  换行。键序按字典序，不表达语义；非 ASCII 保留字面量，按 UTF-8 读取。
-
-对应的 Python 结构定义在 `engine/sessions/model.py`（`Session` / `Message` /
-`Block` / `ToolCall` / `ToolResult` / `ToolResultBlock` / `ImageAsset` /
-`AgentEdge` / `ContextCompaction`）。
+* **序列化参数**：键按字典序、非 ASCII 不转义、缩进 2 空格、末尾一个换行。
+  键序不表达语义。
 
 ## scan 文件格式约定
 
@@ -75,7 +67,7 @@ Rust 侧黄金测试按下面这套约定对照：
     "environment_dependent_fields": ["path", "updated", "own_updated", "size", "own_size"],
     "note": "..."
   },
-  "rows": [ /* scanner 返回的行，已经过 sessions.topology.session_roots 装配 */ ]
+  "rows": [ /* scanner 返回的行，已经过 session_roots 树装配 */ ]
 }
 ```
 
@@ -83,30 +75,27 @@ Rust 侧黄金测试按下面这套约定对照：
   `own_size` / `own_updated` / `child_count` / `tree_count` 等由
   `session_roots` 补出的派生字段。
 * `_normalized.environment_dependent_fields` 列出**由运行环境而非 fixture 内容
-  决定**的字段。Rust 侧在真实环境对照时，这些字段应按各自环境重新计算，不要
-  硬编码这里的值；其余字段应当逐字段相等。
+  决定**的字段。对照时这些字段应按各自环境重新计算，不要硬编码这里的值；其余
+  字段应当逐字段相等。
 * `path` 中的沙箱根被替换成字面量 `<home>`，保留了各家 agent 的真实存储布局，
   例如 `<home>/.claude/projects/<case>/<id>.jsonl`。
-* `updated` / `own_updated` 之所以是稳定值，是因为生成脚本把物化 fixture 的
-  mtime 统一钉到 `fixed_mtime_seconds`，而不是事后抹掉；grok 的 `updated`
-  优先取 `summary.updated_at`，只有缺失时才回落 mtime。
+* `updated` / `own_updated` 之所以是稳定值，是因为物化 fixture 时把 mtime 统一
+  钉到 `fixed_mtime_seconds`，而不是事后抹掉；grok 的 `updated` 优先取
+  `summary.updated_at`，只有缺失时才回落 mtime。
 * opencode 的扫描行不带文件路径（`path` 恒为 `""`、`size` 恒为 `0`），
   `updated` / `created` 来自 SQLite 的时间列，fixture 未提供时为 `0` / `null`。
 
-## Rust 侧如何消费
+## 谁在消费这份基线
 
-1. 把 `tests/golden/**` 作为 crate 的测试数据读入（`include_str!` 或运行时按
-   路径读均可），用 `serde_json::Value` 或直接反序列化成 canonical struct。
-2. 用与 Python 同源的 fixture（`tests/fixtures/agent_formats/<agent>/<case>/`）
-   跑 Rust 侧 reader，把结果序列化成同一形状后与黄金文件比对：
-   * 序列化参数保持一致（键排序、UTF-8 不转义、`None` 显式为 `null`）；
-   * 比对建议用 `serde_json::Value` 的相等性而不是字符串相等，避免浮点格式与
-     缩进差异干扰。
-3. scan 对照：先按 `_normalized.environment_dependent_fields` 把双方对应字段
-   抹平（或按本机环境重算），再比对剩余字段。
-4. 适配器工作包 C1..C5 各自只需关心 `canonical/<自己的 agent>/` 与
-   `scan/<自己的 agent>/`，彼此无耦合。
+| 消费者 | 覆盖 |
+| --- | --- |
+| `crates/ferry-engine/tests/golden_regen.rs` | 全部 26 个文件，逐字节；也是唯一的再生入口 |
+| `crates/ferry-engine/tests/claude_golden.rs` | claude 的 canonical + scan |
+| `crates/ferry-engine/tests/codex_golden.rs` | codex 的 canonical + scan |
+| `crates/ferry-engine/tests/grok_golden.rs` | grok 的 canonical + scan |
+| `crates/ferry-engine/src/adapters/pi/adapter.rs` | pi 的 canonical + scan（模块内单测）|
+| `crates/ferry-engine/src/adapters/opencode/{reader,scanner}.rs` | opencode 的 canonical / scan（模块内单测）|
+| `crates/ferry-engine/src/sessions/index.rs::golden_tests` | 物化 `scan/**` 供索引、搜索、agent_read 复用 |
 
 fixture 的原生形态（各家的文件布局、opencode 的 SQLite 列、codex 的
-`registration.json`）与脚本的物化方式，都写在
-`scripts/dump-canonical-fixtures.py` 的 docstring 里。
+`registration.json`）与物化方式，写在 `tests/golden_regen.rs` 里。

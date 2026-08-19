@@ -1,7 +1,5 @@
 //! Explicit composition of Ferry's built-in session adapters.
 //!
-//! 语义事实源：`engine/adapters/registry.py`。
-//!
 //! WP-A 只落地骨架：5 个 builder 槽位都指向占位实现，C1..C5 各自把自己的
 //! `build()` 接进来（只改本文件里对应的一行，互不冲突）。
 

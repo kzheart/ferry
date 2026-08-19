@@ -1,7 +1,5 @@
 //! Claude 会话验收探针：真实探测与编辑后的影子副本探测。
 //!
-//! 语义事实源：`engine/adapters/claude/probe.py`。
-//!
 //! `probe_edited` 在报告顶层追加 `isolation`（`ProbeReport::isolation`），与
 //! Python 的 `rep["isolation"] = {...}` 及前端 `events.js::probeText` 读的
 //! `p.isolation` 对齐。

@@ -1,6 +1,4 @@
 //! 会话删除用例：永久删除，不留恢复快照。
-//!
-//! 语义事实源：`engine/operations/delete.py`。
 
 use serde_json::{Map, Value};
 

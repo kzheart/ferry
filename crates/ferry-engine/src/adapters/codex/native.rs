@@ -1,7 +1,5 @@
 //! Codex 原生 rollout 树闭包。
 //!
-//! 语义事实源：`engine/adapters/codex/native.py`。
-//!
 //! 只重映射线程身份字段，未知记录和模型历史保持原样。迁移 writer 不参与此流程。
 
 use std::collections::{HashMap, HashSet};

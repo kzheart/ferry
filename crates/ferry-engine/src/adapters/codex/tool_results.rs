@@ -1,6 +1,4 @@
 //! Codex 工具结果包络解析。
-//!
-//! 语义事实源：`engine/adapters/codex/tool_results.py`。
 
 use std::sync::LazyLock;
 

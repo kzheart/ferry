@@ -1,7 +1,5 @@
 //! OpenCode 会话生命周期：数据库型删除（快照后经 CLI 清理，不可撤销）。
 //!
-//! 语义事实源：`engine/adapters/opencode/lifecycle.py`。
-//!
 //! OpenCode 不是文件型会话，所以**不能**复用 `delete_file_session`：删除必须走
 //! 官方 `opencode session delete`，且要按子树自底向上逐个删。
 

@@ -1,7 +1,5 @@
 //! 格式无关的生命周期基类：文件型会话的永久删除策略。
 //!
-//! 语义事实源：`engine/adapters/shared/lifecycle.py`。
-//!
 //! Python 的 `BaseLifecycle` 是基类；Rust 用 [`BaseLifecycle`] trait 的默认方法
 //! 表达同一件事，实现它即自动满足 `contracts::SessionLifecycle`（见文件末尾的
 //! blanket impl），**不要**再手写一份 `impl SessionLifecycle`。

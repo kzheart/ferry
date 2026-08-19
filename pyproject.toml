@@ -1,6 +1,2 @@
 [tool.ruff]
 target-version = "py312"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/test_operations.py" = ["F401", "F811"]
-"tests/test_operations_planner.py" = ["F401", "F811"]

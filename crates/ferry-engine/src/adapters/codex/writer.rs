@@ -1,7 +1,5 @@
 //! Codex writer：规范化中间格式 → rollout JSONL（可被 `codex exec resume` 加载）。
 //!
-//! 语义事实源：`engine/adapters/codex/writer.py`。
-//!
 //! - 结构模板来自声明式格式配置档（`native_schema`），真实 CLI 样本仅用于测试
 //!   配置档与原生格式保持一致。
 //! - `shell.exec` 原生映射为 `exec_command`；`fs.write` 映射为 `apply_patch`

@@ -1,7 +1,5 @@
 //! 用官方 export/list/search 命令验收 Grok bundle。
 //!
-//! 语义事实源：`engine/adapters/grok/probe.py`。
-//!
 //! 验收在一个**临时 GROK_HOME 沙箱**里做：把待验收的 bundle 拷进去、建好索引，
 //! 再让真实的 `grok` CLI 导出、列出、检索一遍。三条命令全过才算通过。
 

@@ -1,7 +1,5 @@
 //! Pi 文件型会话生命周期。
 //!
-//! 语义事实源：`engine/adapters/pi/lifecycle.py`。
-//!
 //! 实现 `BaseLifecycle` 即自动满足 `contracts::SessionLifecycle`；
 //! 删除走 `FileSessionLifecycle` 的通用算法（`delete_file_session`），
 //! pi 没有子会话文件也没有 sidecar，两个钩子都用默认值。

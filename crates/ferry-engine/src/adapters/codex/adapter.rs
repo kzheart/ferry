@@ -1,6 +1,4 @@
 //! `adapters::codex::adapter` 的组装入口。
-//!
-//! 语义事实源：`engine/adapters/codex/adapter.py`。
 
 use std::path::Path;
 use std::sync::Arc;

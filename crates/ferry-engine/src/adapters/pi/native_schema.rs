@@ -1,7 +1,5 @@
 //! Ferry 支持的唯一当前 Pi 会话结构。
 //!
-//! 语义事实源：`engine/adapters/pi/native_schema.py`。
-//!
 //! 这份模板既是文档也是断言：真实 capture 一旦缺少任一必需模板记录，
 //! [`extract_templates`] 就会失败，提示 pi 的原生格式已经变了。
 

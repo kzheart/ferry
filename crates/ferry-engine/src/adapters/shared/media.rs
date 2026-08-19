@@ -1,6 +1,4 @@
 //! 适配器图片输入到规范 `ImageAsset` 的统一归一化。
-//!
-//! 语义事实源：`engine/adapters/shared/media.py`。
 
 use base64::alphabet;
 use base64::engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig};

@@ -1,7 +1,5 @@
 //! 事务式 Pi v3 文件编辑器。
 //!
-//! 语义事实源：`engine/adapters/pi/editor.py`。
-//!
 //! `commit` 有三道闸：字节级 revision 复核（源文件在预览后被改过就拒写）、
 //! [`PiBackend::validate`] 的结构自检、以及落盘后用 reader 复读一遍。
 

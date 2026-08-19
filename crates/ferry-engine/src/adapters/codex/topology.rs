@@ -1,6 +1,4 @@
 //! Codex rollout 索引与子 Agent 拓扑恢复。
-//!
-//! 语义事实源：`engine/adapters/codex/topology.py`。
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -17,7 +15,7 @@ use crate::model::{tool_result_text, AgentEdge, BlockKind, Session, ToolCall};
 use crate::system::paths::home_dir;
 use crate::tool_ops::CanonicalOp;
 
-/// rollout 身份的磁盘缓存；与 Python 的 `ScanCache(version=2)` 格式互认。
+/// rollout 身份的磁盘缓存；条目格式版本固定为 2，改形状必须升版本。
 fn meta_cache_path() -> PathBuf {
     home_dir().join(".ferry").join("rollout-meta-cache.json")
 }

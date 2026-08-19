@@ -1,7 +1,5 @@
 //! Claude Code 工具方言。
 //!
-//! 语义事实源：`engine/adapters/claude/dialect.py`。
-//!
 //! `strict_input` 保持默认的宽松档：入参不是对象时保留已识别的 op、原样透传。
 
 use std::sync::LazyLock;

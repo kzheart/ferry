@@ -1,8 +1,7 @@
-//! Ferry Session Engine 的 Rust 实现。
+//! Ferry Session Engine：宿主通过 `ferry-ipc/1` 驱动的 sidecar。
 //!
-//! 与 Python 引擎（`engine/`）是协议兼容的两套实现：同一个 `ferry-ipc/1`
-//! 协议、同一个 `FERRY_CONTRACT_HASH`、同一组事件帧。迁移期内 Python 侧是
-//! 行为基准（golden oracle），任何语义分歧都以 Python 源码为准。
+//! 协议面（`ferry-ipc/1` 版本号、`FERRY_CONTRACT_HASH`、方法表、事件帧）由
+//! `contracts/` 生成，本 crate 只实现它；改协议要先改契约再重新生成。
 
 pub mod adapters;
 pub mod app;

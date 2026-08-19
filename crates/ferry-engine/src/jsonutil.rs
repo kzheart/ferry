@@ -1,9 +1,5 @@
 //! 规范化 JSON 与摘要。
 //!
-//! 语义事实源：`engine/storage/database.py`（canonical_json / digest_*）、
-//! `engine/adapters/shared/editing.py`（hash_bytes）、
-//! `engine/adapters/shared/scanner.py`（stat_digest）。
-//!
 //! 三套摘要**不可混用**：
 //! - `digest_value` / `digest_json`：sha256 小写 hex，**无前缀**（操作计划摘要）；
 //! - `hash_bytes`：`"sha256:" + hex`（编辑 revision）；
@@ -33,10 +29,10 @@ impl std::fmt::Display for CanonicalJsonError {
 
 impl std::error::Error for CanonicalJsonError {}
 
-/// 与 `engine.storage.database.canonical_json` 逐字节一致的序列化。
+/// 摘要用的规范化序列化：同一份数据必须永远得到同一串字节。
 ///
 /// 规则：key 递归排序（按 code point）、分隔符 `,` 与 `:` 无空格、
-/// 非 ASCII 原样输出（等价 `ensure_ascii=False`）、拒绝 NaN/Inf。
+/// 非 ASCII 原样输出（不转义）、拒绝 NaN/Inf。
 pub fn canonical_json(value: &Value) -> Result<String, CanonicalJsonError> {
     let mut out = String::new();
     write_value(&mut out, value)?;
@@ -216,11 +212,9 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// 期望值由 Python 侧生成：
-    /// `python3 -c "from engine.storage.database import canonical_json; ..."`
-    /// 逐字节比对，任何差异都意味着 wire/摘要不兼容。
+    /// 冻结的字节形状：任何差异都意味着已落盘的摘要整体失效。
     #[test]
-    fn canonical_json_matches_python_byte_for_byte() {
+    fn canonical_json_keeps_its_frozen_byte_shape() {
         let cases: &[(Value, &str)] = &[
             (json!({}), "{}"),
             (json!([]), "[]"),

@@ -1,7 +1,5 @@
 //! 递归扫描 Grok 的 summary.json。
 //!
-//! 语义事实源：`engine/adapters/grok/scanner.py`。
-//!
 //! grok 是目录型存储，扫描单元是 `~/.grok/sessions/**/summary.json`，缓存键与
 //! stat 都取 summary.json 自己（bundle 的其余文件不参与扫描判定）。
 

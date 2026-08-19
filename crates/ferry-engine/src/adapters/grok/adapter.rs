@@ -1,6 +1,4 @@
 //! Grok Build 当前格式的 adapter 组装。
-//!
-//! 语义事实源：`engine/adapters/grok/adapter.py`。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

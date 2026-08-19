@@ -1,7 +1,5 @@
 //! 把当前 Grok 的 ACP `session/update` 信封流聚合成 prompt 轮次。
 //!
-//! 语义事实源：`engine/adapters/grok/updates.py`。
-//!
 //! 一条 prompt 由「用户输入 + 助手块序列 + 工具调用表」构成；信封流里同一个
 //! prompt 的记录可能被 chunk 打散、可能只带 `promptIndex` 而没有 `promptId`，
 //! 也可能出现归属不明的工具事件，这里逐条对齐 Python 的兜底顺序。

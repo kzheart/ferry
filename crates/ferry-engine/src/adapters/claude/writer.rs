@@ -1,7 +1,5 @@
 //! Claude Code writer：规范化会话树 → 主会话与 subagent JSONL。
 //!
-//! 语义事实源：`engine/adapters/claude/writer.py`。
-//!
 //! 与 Python 的一处可见差异：Python 的 `write()` 直接往调用方的 `Session` 上
 //! `lose(...)`，因此写入阶段产生的 `migration.tool_degraded` /
 //! `migration.fork_parent_fallback` 会被随后的 `plan()` 再数一遍。WP-A 定型的

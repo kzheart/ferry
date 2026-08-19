@@ -1,12 +1,9 @@
 //! Ferry 会话元数据的 SQLite 存储 + 键编码 / 行解码 / 补丁合并三个纯函数。
 //!
-//! 语义事实源：`engine/contracts/metadata.py` 与
-//! `engine/operations/metadata_store.py`。
-//!
-//! 硬约束（§2.2 第 13 条 / §2.4 第 26 条）：
+//! 硬约束：
 //! - `metadata_key` = `tool + "\0" + session_id`，NUL 分隔不可换；
-//! - `merge_metadata` 剔除假值（`None/False/""/[]`，Python 里 `0 == False`
-//!   所以数值 0 同样被剔除），`pinned: false` 等价删键；
+//! - `merge_metadata` 剔除假值（null/false/空串/空数组，数值 0 同样算假值），
+//!   `pinned: false` 等价删键；
 //! - 批量 CAS 两阶段、all-or-nothing：任一 expected 不匹配就整体 rollback 返回 None。
 
 use std::sync::Arc;

@@ -1,7 +1,5 @@
 //! Ferry Runtime 会话、消息与事件的 SQLite 存储。
 //!
-//! 语义事实源：`engine/runtime/store.py`。
-//!
 //! 这里只搬运 Runtime 已经做过体积约束的不透明 JSON，不解释 Provider / Role /
 //! AgentMessage。写入按键不可变：同一 `(session_id, ordinal|seq)` 重复提交但
 //! 载荷不同即冲突（先 rollback 再报错）。

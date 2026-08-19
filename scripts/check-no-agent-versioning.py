@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = (
-    ROOT / "engine",
+    ROOT / "crates" / "ferry-engine" / "src",
     ROOT / "app" / "src",
     ROOT / "app" / "src-tauri" / "src",
     ROOT / "ferry-runtime" / "src",

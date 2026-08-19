@@ -1,6 +1,4 @@
 //! Cross-platform locations for external session stores.
-//!
-//! 语义事实源：`engine/system/paths.py`。
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};

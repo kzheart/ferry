@@ -1,7 +1,5 @@
 //! Pi v3 活动分支投影到 canonical 会话模型。
 //!
-//! 语义事实源：`engine/adapters/pi/reader.py`。
-//!
 //! pi 的会话文件是 append-only 树：每条 entry 用 `parentId` 指向上一条，重放
 //! （rewind / 重问）会在同一个文件里长出新分支。读取时只投影**活动分支**：
 //! 从最后一条有效 entry 沿 `parentId` 回溯到根、反转即得；非活动分支原样留在

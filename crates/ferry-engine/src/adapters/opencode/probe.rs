@@ -1,7 +1,5 @@
 //! OpenCode 会话验收探针：编辑后克隆影子副本探测并清理。
 //!
-//! 语义事实源：`engine/adapters/opencode/probe.py`。
-//!
 //! `probe_edited` 不在原会话上跑探针：探针会真的向模型发一次请求并写回会话，
 //! 因此先把编辑后的 payload 原样 import 成一份影子会话，探完无论成败都删掉。
 //!

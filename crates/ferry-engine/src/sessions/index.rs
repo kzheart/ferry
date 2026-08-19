@@ -1,14 +1,12 @@
 //! Opaque 会话引用、消息 locator 与 revision 索引。
 //!
-//! 语义事实源：`engine/sessions/index.py`。
-//!
 //! 三条不可动摇的语义：
 //! 1. `fsr_` 是**随机签发**的稳定句柄（不从内容派生），按 `(tool, canonical_ref)`
 //!    墓碑复用；内容变化只改 revision，不换发 ref。
 //! 2. revision 是 `{tool,ref,updated,size,file_identity}` 的
-//!    **`ensure_ascii=True` 紧凑 JSON** 的 sha256——注意与 `jsonutil::canonical_json`
-//!    （`ensure_ascii=False`）不是同一套，非 ASCII 路径会分叉，故本模块自带
-//!    [`stable_json`]。
+//!    **非 ASCII 转义成 `\uXXXX` 的紧凑 JSON** 的 sha256——与
+//!    `jsonutil::canonical_json`（非 ASCII 原样输出）不是同一套，非 ASCII 路径
+//!    上两者会分叉，故本模块自带 [`stable_json`]。
 //! 3. `sessions.changed` 的 generation 严格 +1 且在索引锁内推送；bootstrap
 //!    首扫不推增量。
 
@@ -1163,9 +1161,9 @@ impl AgentSessionIndex {
         };
         let kind = native.storage_kind();
         if kind == StorageKind::Id {
-            // 与 Python 一致：resolve_ref 必须恒等，否则该行不入索引。
-            // 差异（刻意）：Python 让 adapter 异常穿透并炸掉整轮扫描，这里
-            // 按「本行不可用」降级，扫描不因单行缺陷全废。
+            // resolve_ref 必须恒等，否则该行不入索引：引用解析不稳定的行，
+            // 后续任何按引用回查都会指向别处。adapter 抛错时按「本行不可用」
+            // 降级，扫描不因单行缺陷全废。
             let round_trip = browser.resolve_ref(native.canonical_ref());
             if round_trip.as_deref() != Ok(native.canonical_ref()) {
                 return Ok(Canonicalized::dropped(Some(StorageKind::Id)));

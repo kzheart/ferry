@@ -1,6 +1,4 @@
 //! Codex 会话生命周期：清理、删除（含原生子会话树）策略。
-//!
-//! 语义事实源：`engine/adapters/codex/lifecycle.py`。
 
 use std::collections::BTreeSet;
 use std::fs;

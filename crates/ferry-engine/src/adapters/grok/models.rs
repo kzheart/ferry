@@ -1,6 +1,4 @@
 //! Grok 模型目录。
-//!
-//! 语义事实源：`engine/adapters/grok/models.py`。
 
 use std::path::Path;
 use std::time::Duration;

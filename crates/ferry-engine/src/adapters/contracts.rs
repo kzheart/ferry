@@ -1,7 +1,5 @@
 //! 内置 Adapter 的静态能力契约。
 //!
-//! 语义事实源：`engine/adapters/contracts.py`。
-//!
 //! Python 的 `Protocol` 在 Rust 里落成 trait；5 个「鸭子类型可选方法」
 //! （`scan_fingerprint` / `post_scan_maintenance` / `watch_stamp` /
 //! `authoritative_members` / `load_preview`）建模为返回 `Option` 的默认方法，
@@ -336,8 +334,7 @@ pub trait SessionEditor: Send + Sync {
 
     fn load(&self, reference: &str) -> DomainResult<EditDocument>;
     /// 返回的 change 记录会原样进 `preview.changes` / `result.changes` 下发宿主，
-    /// 形状是 `events.event(...)` 的结构化事件（Python 的 `list[str]` 注解是错的，
-    /// 实现返回的是 dict，见 `engine/adapters/claude/editor.py:23-40`）。
+    /// 形状是 `events.event(...)` 的结构化事件，不是纯文本列表。
     fn apply_ops(&self, doc: &mut EditDocument, ops: &[Value]) -> DomainResult<Vec<Event>>;
 
     /// 默认拒绝：对齐 `EditBackend.replace_reply` 抛 `OperationUnsupportedError`。
@@ -534,11 +531,10 @@ impl AgentAdapter {
         }
     }
 
-    /// 等价 Python `require(capability, component)` 的校验部分：
     /// 能力未知 / 组件未知 / 能力与组件不匹配 / 未声明能力 / 组件缺席都失败。
     ///
-    /// 失败一律折成 `AgentCapabilityError`，对齐
-    /// `engine.errors.require_agent_capability` 对 `ValueError` 的兜底转换。
+    /// 五种失败一律折成 `AgentCapabilityError`：调用方只需要知道「这个 agent
+    /// 干不了这件事」，具体是哪一种不构成不同的处理路径。
     pub fn require(&self, capability: &str, component: Component) -> DomainResult<()> {
         let known = AGENT_CAPABILITIES.contains(&capability);
         let mapped = capabilities_for(component).contains(&capability);

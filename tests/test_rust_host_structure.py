@@ -79,15 +79,17 @@ def test_engine_and_runtime_share_one_process_supervisor():
         assert "Mutex<Option<" not in source
 
 
-def test_engine_development_prefers_the_native_rust_binary():
+def test_engine_development_uses_the_repository_engine_build_only():
     command = (HOST / "process/command.rs").read_text()
     assert "fn local_engine_command" in command
+    assert "fn missing_local_engine_message" in command
     assert "crates/ferry-engine/target" in command
 
     engine = (HOST / "engine/mod.rs").read_text()
     assert "local_engine_command" in engine
-    # 迁移期保留 Python 引擎回退，等等价性验证通过后再删。
-    assert "engine.server.cli" in engine
+    # 引擎只有一个实现：找不到产物就报错，不存在任何回退路径。
+    assert "missing_local_engine_message" in engine
+    assert "python" not in engine.lower()
 
 
 def test_runtime_gateway_and_approval_are_separate_capabilities():

@@ -1,7 +1,5 @@
 //! Claude Code 会话文件原语：解析、快照、原子写入与结构校验。
 //!
-//! 语义事实源：`engine/adapters/claude/editing.py`。
-//!
 //! 轮次/编辑语义统一由 [`super::codec`] 持有；跨工具编排由 `operations` 负责。
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -1,11 +1,7 @@
 //! 会话编辑操作类型 + operations 能力包对外的窄端口。
 //!
-//! 语义事实源：`engine/contracts/operation_types.py`（AssistantReply 家族）、
-//! `engine/operations/*.py`（对 `EngineContext` / `AgentSessionIndex` 的使用面）。
-//!
-//! Python 侧 operations 直接吃 `EngineContext` 与 `AgentSessionIndex` 两个胖对象。
-//! Rust 侧把它们收窄成本文件里的两个 trait，好让 WP-B1 与 WP-D/WP-E 解耦：
-//! operations 只声明「我需要什么」，具体实现由 WP-E 在组合根接线。
+//! operations 不直接吃运行上下文那种胖对象：它需要的能力收窄成本文件里的两个
+//! trait，只声明「我需要什么」，具体实现由组合根接线。
 
 use std::path::PathBuf;
 use std::sync::Arc;

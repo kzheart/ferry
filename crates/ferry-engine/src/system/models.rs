@@ -1,6 +1,4 @@
 //! 模型发现与用户扩展合并。
-//!
-//! 语义事实源：`engine/system/models.py`。
 
 use std::path::PathBuf;
 

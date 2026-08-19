@@ -279,8 +279,8 @@ pub(crate) async fn operation_cancel(
     .await
 }
 
-/// 这道关卡与 Python `engine/operations/validation.py` 是同一判定的两侧实现，
-/// 非法输入样例与 `tests/test_operations_validation.py` 取同一组字面量。
+/// 这道关卡与 `crates/ferry-engine/src/operations/validation.rs` 是同一判定的
+/// 两侧实现：host 先挡一道，引擎再挡一道，非法输入的字面量两边保持一致。
 #[cfg(test)]
 mod tests {
     use super::*;

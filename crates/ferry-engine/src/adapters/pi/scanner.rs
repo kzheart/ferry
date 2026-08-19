@@ -1,7 +1,5 @@
 //! Pi v3 JSONL 会话发现。
 //!
-//! 语义事实源：`engine/adapters/pi/scanner.py`。
-//!
 //! 与 claude/codex 不同，pi 的 scanner **不走** `shared::scanner::scan_jsonl`：
 //! 它有多个扫描根（环境变量 / settings.json / 默认目录），需要跨根按 realpath
 //! 去重，且返回的是**扁平行**（不做 `session_roots` 树装配——pi 没有父子会话，

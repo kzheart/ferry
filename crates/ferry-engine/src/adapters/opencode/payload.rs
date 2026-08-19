@@ -1,7 +1,5 @@
 //! Canonical Session 到 OpenCode 当前 payload 的编译与重映射。
 //!
-//! 语义事实源：`engine/adapters/opencode/payload.py`。
-//!
 //! 三个不变量：
 //! 1. 同一父记录内的 part id 必须能按**字典序**恢复原顺序（`new_ordered_id`），
 //!    否则 opencode 会按随机 id 重排 part；

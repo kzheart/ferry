@@ -1,6 +1,4 @@
 //! Codex 会话验收探针：真实探测与临时 `CODEX_HOME` 完整树探测。
-//!
-//! 语义事实源：`engine/adapters/codex/probe.py`。
 
 use std::fs;
 use std::path::PathBuf;

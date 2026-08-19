@@ -1,6 +1,4 @@
 //! Claude 会话生命周期：resume、迁移清理、永久删除与 sidecar 归档策略。
-//!
-//! 语义事实源：`engine/adapters/claude/lifecycle.py`。
 
 use std::path::Path;
 

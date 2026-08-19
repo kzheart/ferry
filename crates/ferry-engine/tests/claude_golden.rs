@@ -1,9 +1,8 @@
 //! Claude 适配器的黄金对照（WP-C1 / WP-G）。
 //!
-//! `tests/golden/canonical/claude/*.json` 与 `tests/golden/scan/claude/*.json`
-//! 由 Python 引擎 dump（见 `scripts/dump-canonical-fixtures.py`）。这里把
-//! `tests/fixtures/agent_formats/claude/<case>` 物化到临时 HOME 沙箱，跑 Rust 的
-//! scanner / reader，再与黄金文件逐字段比对。
+//! 把 `tests/fixtures/agent_formats/claude/<case>` 物化到临时 HOME 沙箱，跑
+//! scanner / reader，再与 `tests/golden/{canonical,scan}/claude/*.json` 逐字段
+//! 比对。基线的再生入口是 `tests/golden_regen.rs`。
 //!
 //! 环境相关字段按黄金文件 `_normalized.environment_dependent_fields` 清单处理：
 //! `path` 把沙箱根替换成 `<home>` 后仍然逐字比对（存储布局是契约），
@@ -19,7 +18,7 @@ use ferry_engine::jsonutil::FileStat;
 use serde_json::Value;
 
 const CASES: &[&str] = &["case-01-plain", "case-02-tools"];
-/// 物化 fixture 时钉死的 mtime（与 dump 脚本的 `FIXED_MTIME` 一致）。
+/// 物化 fixture 时钉死的 mtime（与 `tests/golden_regen.rs` 一致）。
 const FIXED_MTIME: i64 = 1_784_937_600;
 /// 与运行时刻绑定、不参与比对的字段。
 const VOLATILE: &[&str] = &["updated", "own_updated"];
@@ -189,7 +188,7 @@ fn drop_volatile(value: &Value) -> Value {
 }
 
 #[test]
-fn claude_canonical_sessions_match_the_python_baseline() {
+fn claude_canonical_sessions_match_the_golden_baseline() {
     adapter::build().expect("claude adapter 可装配（同时注册方言）");
     let sandbox = HomeSandbox::enter();
     for case in CASES {
@@ -202,7 +201,7 @@ fn claude_canonical_sessions_match_the_python_baseline() {
 }
 
 #[test]
-fn claude_scan_rows_match_the_python_baseline() {
+fn claude_scan_rows_match_the_golden_baseline() {
     adapter::build().expect("claude adapter 可装配");
     let sandbox = HomeSandbox::enter();
     let home = sandbox.path().to_string_lossy().into_owned();

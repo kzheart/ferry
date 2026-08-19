@@ -1,7 +1,5 @@
 //! Claude 原生会话的唯一轮次解析与编辑编解码。
 //!
-//! 语义事实源：`engine/adapters/claude/codec.py`。
-//!
 //! reader DTO、delete-turn、rewrite、replace-reply 全部消费本模块的
 //! [`TURN_INDEX`]；轮次定义：非 sidechain、非 isMeta、非 tool_result 载体、
 //! 且含可见内容的用户消息，到下一条这样的消息之前。

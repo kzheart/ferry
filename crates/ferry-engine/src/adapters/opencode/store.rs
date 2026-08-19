@@ -1,7 +1,5 @@
 //! OpenCode 当前 SQLite 存储与官方 CLI 边界。
 //!
-//! 语义事实源：`engine/adapters/opencode/store.py`。
-//!
 //! 三条写路径全部经过本模块的 [`NativeCli`]：导入走 `opencode import <file>`、
 //! 删除走 `opencode session delete`、导出走 `opencode export`。单测通过
 //! [`install_cli`] 换成假实现，等价 Python 侧对 `import_payload` /
@@ -590,7 +588,7 @@ pub(crate) mod tests {
     }
 
     /// 按 fixture 的三张表行还原一个只读库（对齐
-    /// `scripts/dump-canonical-fixtures.py:prepare_opencode`）。
+    /// `tests/golden_regen.rs` 的 opencode 分支）。
     pub(crate) fn materialize(path: &Path, fixture: &Value) {
         let session_columns: Vec<&str> = CURRENT_DB_COLUMNS[0].1.to_vec();
         let columns = session_columns

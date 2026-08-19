@@ -1,6 +1,4 @@
 //! Installed session-source executable inspection.
-//!
-//! 语义事实源：`engine/system/environment.py`。
 
 use std::time::Duration;
 

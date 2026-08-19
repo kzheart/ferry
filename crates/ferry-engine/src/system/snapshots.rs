@@ -1,6 +1,4 @@
 //! Filesystem snapshot store shared by native session implementations.
-//!
-//! 语义事实源：`engine/system/snapshots.py`。
 
 use std::io;
 use std::path::{Path, PathBuf};

@@ -1,7 +1,5 @@
 //! 会话查询与操作返回值的输入边界和体积限制。
 //!
-//! 语义事实源：`engine/sessions/safety.py`。
-//!
 //! 两条容易踩空的口径必须记牢：
 //! - `truncate_text` 按**字符**计数（Python `len(str)`）；
 //! - `_take`（agent_read）按 **UTF-8 字节**计数。

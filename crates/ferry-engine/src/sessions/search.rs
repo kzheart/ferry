@@ -1,7 +1,5 @@
 //! 跨 Agent 会话索引搜索。
 //!
-//! 语义事实源：`engine/sessions/search.py`。
-//!
 //! 覆盖度必须如实上报：`partially_indexed_messages`（16 KB 盲区）、
 //! `clipped_sessions_not_scanned`（预过滤跳过的截断会话）、`regex_scan.*`
 //! （扫描/跳过/失败与 skip_reason）、`content_index.*`（索引就绪度）。

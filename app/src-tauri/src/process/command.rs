@@ -9,15 +9,6 @@ fn executable_name_for(stem: &str, windows: bool) -> String {
     }
 }
 
-#[cfg(debug_assertions)]
-pub(crate) fn python_program() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "python"
-    } else {
-        "python3"
-    }
-}
-
 pub(crate) fn sidecar_candidates(resource_dir: &Path, stem: &str) -> Vec<PathBuf> {
     let name = executable_name_for(stem, cfg!(target_os = "windows"));
     let mut candidates = Vec::new();
@@ -89,7 +80,7 @@ pub(crate) fn local_engine_candidates(root: &Path, windows: bool) -> Vec<PathBuf
     candidates
 }
 
-/// 迁移期的开发入口：有原生引擎产物就直接用，没有再回退 Python 引擎。
+/// 开发模式的引擎入口：只认仓库内构建出来的引擎产物，没有就报错。
 ///
 /// 多个产物并存时取**最新构建**的那个：debug 引擎对真实会话库做全量 sha256
 /// 规范化会慢一个数量级（首扫可超过 host 的 120s 超时），偶尔构建的 release
@@ -108,6 +99,22 @@ pub(crate) fn local_engine_command() -> Option<Command> {
         .map(Command::new)
 }
 
+/// 开发模式找不到引擎产物时的报错：直接给出构建命令与找过的位置。
+#[cfg(debug_assertions)]
+pub(crate) fn missing_local_engine_message() -> String {
+    let root = repository_root();
+    let tried = local_engine_candidates(&root, cfg!(target_os = "windows"))
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!(
+        "未找到 Session Engine 产物,先构建:\n  \
+         cargo build --manifest-path {}/crates/ferry-engine/Cargo.toml\n已尝试: {tried}",
+        root.display()
+    )
+}
+
 /// Sidecar 是后台进程；平台边界统一决定是否隐藏控制台窗口。
 #[cfg(target_os = "windows")]
 pub(crate) fn configure_background(command: &mut Command) {
@@ -124,7 +131,7 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[test]
-    fn development_prefers_the_native_engine_build_over_python() {
+    fn development_looks_for_the_engine_build_in_both_profiles() {
         use super::local_engine_candidates;
         use std::path::{Path, PathBuf};
 

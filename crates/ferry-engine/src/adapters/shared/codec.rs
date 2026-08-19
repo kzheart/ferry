@@ -1,7 +1,5 @@
 //! 统一轮次解析契约：`TurnIndex`（读侧）与 `NativeEditCodec`（写侧）。
 //!
-//! 语义事实源：`engine/adapters/shared/codec.py`。
-//!
 //! 每个 Agent 只允许存在一份原生会话解析实现；reader、delete-turn、rewrite、
 //! replace-reply 全部消费同一个 `TurnIndex`，避免语义漂移。
 

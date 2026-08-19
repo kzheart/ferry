@@ -4,7 +4,7 @@
 //! `~/.codex` 布局（含由 `registration.json` 合成的 `state_5.sqlite`），跑 Rust 侧
 //! reader / scanner，再与 `tests/golden/{canonical,scan}/codex/*.json` 逐字段比对。
 //!
-//! 物化方式与 `scripts/dump-canonical-fixtures.py` 一致：
+//! 物化方式与 `tests/golden_regen.rs` 一致：
 //! - rollout 落到 `<home>/.codex/sessions/2026/07/25/<manifest stem>.jsonl`；
 //! - 所有物化产物的 mtime 钉死在 `FIXED_MTIME`，扫描行里的 `updated` 才稳定；
 //! - 输出里的沙箱绝对路径替换成字面量 `<home>`，与黄金文件同形。
@@ -19,11 +19,11 @@ use ferry_engine::adapters::contracts::{ScanCache, ScanRow};
 use ferry_engine::jsonutil::FileStat;
 use serde_json::{Map, Value};
 
-/// 与 `scripts/dump-canonical-fixtures.py` 的 `FIXED_MTIME` 一致。
+/// 与 `tests/golden_regen.rs` 的 `FIXED_MTIME` 一致。
 const FIXED_MTIME: u64 = 1_784_937_600;
 const SANDBOX_MARKER: &str = "<home>";
 
-/// codex `state_5.sqlite` 的当前结构（与 dump 脚本的 `CODEX_STATE_SCHEMA` 一致）。
+/// codex `state_5.sqlite` 的当前结构（与 `tests/golden_regen.rs` 一致）。
 const CODEX_STATE_SCHEMA: &str = "
 CREATE TABLE threads (
     id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL,
@@ -333,15 +333,14 @@ fn codex_reader_and_scanner_match_the_golden_baseline() {
     }
 }
 
-/// JS 词法扫描器与 `parse_custom_call` 的 Python 对照表。
+/// JS 词法扫描器与 `parse_custom_call` 的冻结对照表。
 ///
-/// `tests/data/codex_js_oracle.json` 由 Python 引擎直接产出（逐条调用
-/// `engine.adapters.codex.tool_calls._scan_tool_invocations` 与
-/// `parse_custom_call`），覆盖字符串/注释遮蔽、嵌套括号、未闭合括号与注释、
+/// `tests/data/codex_js_oracle.json` 是逐条冻结的期望值，覆盖字符串/注释遮蔽、
+/// 嵌套括号、未闭合括号与注释、
 /// 反引号与单引号字面量、标识符前缀、`apply_patch` 的四条候选取值路径、
 /// `exec_command` 的列表命令与非对象实参、以及非 ASCII 源码（字符索引）。
 #[test]
-fn codex_js_scanner_matches_the_python_oracle() {
+fn codex_js_scanner_matches_the_frozen_oracle() {
     let oracle =
         read_json(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/codex_js_oracle.json"));
     let cases = oracle.as_array().expect("对照表是数组");
@@ -393,14 +392,14 @@ fn codex_js_scanner_matches_the_python_oracle() {
     }
 }
 
-/// 工具结果包络解析的 Python 对照表。
+/// 工具结果包络解析的冻结对照表。
 ///
-/// `tests/data/codex_result_oracle.json` 由 `engine.adapters.codex.tool_results
-/// .parse_result` 逐条产出，覆盖：内嵌 JSON 信封判定、`stdout` 键优先于 `output`、
+/// `tests/data/codex_result_oracle.json` 逐条冻结了 `parse_result` 的期望输出，
+/// 覆盖：内嵌 JSON 信封判定、`stdout` 键优先于 `output`、
 /// 显式/未知 status、exit_code 推导链、stderr 兜底、`Script completed` 包装块的
 /// 剔除条件、unified-exec 头部恢复 exit_code 与 running、图片/文件/未知块透传。
 #[test]
-fn codex_tool_results_match_the_python_oracle() {
+fn codex_tool_results_match_the_frozen_oracle() {
     let oracle = read_json(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/codex_result_oracle.json"),
     );
@@ -414,14 +413,14 @@ fn codex_tool_results_match_the_python_oracle() {
     }
 }
 
-/// `state_5.sqlite` 闭包指纹（`_registry_revision`）的 Python 对照。
+/// `state_5.sqlite` 闭包指纹（`registry_revision`）的冻结对照。
 ///
-/// `tests/data/codex_registry_oracle.json` 记录了建表/插入语句与 Python 侧算出的
-/// sha256；Rust 侧用同一份 DDL 重建库再逐个 id 集合比对。这条断言同时锁住三件事：
-/// `PRAGMA table_xinfo` 的可见列过滤、`sorted(rows, key=repr)` 的 Python 元组
-/// repr 排序，以及 `json.dumps(sort_keys=True, ensure_ascii=False)` 的字节形态。
+/// `tests/data/codex_registry_oracle.json` 记录了建表/插入语句与冻结的 sha256；
+/// 测试用同一份 DDL 重建库再逐个 id 集合比对。这条断言同时锁住三件事：
+/// `PRAGMA table_xinfo` 的可见列过滤、行排序的键序，以及摘要前那次序列化的
+/// 字节形态（键排序 + 非 ASCII 不转义）。
 #[test]
-fn codex_registry_revision_matches_the_python_oracle() {
+fn codex_registry_revision_matches_the_frozen_oracle() {
     let oracle = read_json(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/codex_registry_oracle.json"),
     );

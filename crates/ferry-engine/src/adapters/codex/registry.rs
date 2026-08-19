@@ -1,6 +1,4 @@
 //! Codex `state_5.sqlite` 会话注册。
-//!
-//! 语义事实源：`engine/adapters/codex/registry.py`。
 
 use std::collections::BTreeSet;
 use std::path::Path;

@@ -1,11 +1,7 @@
 //! Operation 输入的严格形状校验与规范化。
 //!
-//! 语义事实源：`engine/operations/validation.py`（限额表逐条对齐，§2.4 第 27 条）
-//! 与 `engine/sessions/safety.py` 的 `validate_json_shape` /
-//! `validate_agent_edit_ops`。
-//!
-//! 后两个函数在 Python 里住在 `sessions.safety`，Rust 侧同样只有一份实现
-//! （`crate::sessions::safety`），本模块直接复用，不再自带副本。
+//! `validate_json_shape` / `validate_agent_edit_ops` 只有一份实现（住在
+//! `crate::sessions::safety`），本模块直接复用，不自带副本。
 
 use serde_json::{Map, Value};
 

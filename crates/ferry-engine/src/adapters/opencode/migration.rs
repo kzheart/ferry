@@ -1,7 +1,5 @@
 //! OpenCode 作为迁移目标的写入与规划能力。
 //!
-//! 语义事实源：`engine/adapters/opencode/migration.py`。
-//!
 //! OpenCode 是**唯一**保留工具结果附件的目标端，且原生支持 running / pending
 //! 两个中间状态，因此结果侧的降级判定比其它目标宽松。
 

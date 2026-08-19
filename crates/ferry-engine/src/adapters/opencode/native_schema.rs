@@ -1,7 +1,5 @@
 //! Ferry 支持的唯一一套 OpenCode export/import 结构。
 //!
-//! 语义事实源：`engine/adapters/opencode/native_schema.py`。
-//!
 //! `templates()` 返回的模板是 writer 组装 payload 的骨架：所有原生记录都从
 //! 模板 clone 出来再覆盖字段，因此 OpenCode 一旦改结构，只需要换这份模板。
 

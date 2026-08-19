@@ -1,10 +1,7 @@
 //! Grok 搜索索引的 BLAKE3 内容摘要。
 //!
-//! 语义事实源：`engine/adapters/grok/blake3.py`。
-//!
-//! Python 侧为了避开 PyInstaller onefile 的跨平台成本，手写了一份纯 Python
-//! BLAKE3；Rust 侧没有这个约束，直接用 `blake3` crate。两者必须逐字节一致，
-//! 由本模块的单测（官方向量 + 与 Python 实现的实跑对照）守住。
+//! 摘要写进 Grok 自己的 `session_search.sqlite`，值必须与 Grok 认的一致，
+//! 由本模块的单测（官方向量 + 跨 chunk 边界的冻结向量）守住。
 
 /// `blake3_hex(value)`：32 字节摘要的小写 hex。
 pub fn blake3_hex(value: &[u8]) -> String {
@@ -15,7 +12,7 @@ pub fn blake3_hex(value: &[u8]) -> String {
 mod tests {
     use super::*;
 
-    /// BLAKE3 官方测试向量（与 `tests/test_grok_writer.py` 的断言同源）。
+    /// BLAKE3 官方测试向量。
     #[test]
     fn matches_the_official_vectors() {
         assert_eq!(
@@ -28,67 +25,44 @@ mod tests {
         );
     }
 
-    /// 与 `engine/adapters/grok/blake3.py` 的纯 Python 实现实跑对照。
+    /// 跨 chunk 边界的冻结向量。
     ///
     /// 覆盖 1 chunk 以内、正好 1024 字节、跨 chunk（触发 parent 归并）与含 NUL
-    /// 的 content_hash 形态；没有 python3 时跳过（CI 与本机都有）。
+    /// 的 content_hash 形态。这几个值是冻结基线：升级 `blake3` crate 时，任何
+    /// 一条对不上都说明摘要口径变了，Grok 的搜索索引会整体失配。
     #[test]
-    fn matches_the_pure_python_implementation() {
-        // 从 crate 目录上溯找到带 `engine/` 的仓库根；找不到（例如在隔离沙箱里
-        // 编译）就跳过，官方向量那条用例仍然守住算法本身。
-        let mut cursor = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-        let root = loop {
-            if cursor.join("engine/adapters/grok/blake3.py").is_file() {
-                break cursor;
-            }
-            if !cursor.pop() {
-                eprintln!("跳过：找不到 Python 参照实现");
-                return;
-            }
-        };
-        // 长度覆盖 chunk 边界：1023/1024/1025 与 4096（三层 parent 归并）。
-        let script = r#"
-import sys
-sys.path.insert(0, sys.argv[1])
-from engine.adapters.grok.blake3 import blake3_hex
-cases = [b"", b"abc", b"title\x00content", bytes(range(256)) * 4,
-         b"x" * 1023, b"x" * 1024, b"x" * 1025, b"y" * 4096]
-print("\n".join(blake3_hex(case) for case in cases))
-"#;
-        let output = std::process::Command::new("python3")
-            .arg("-c")
-            .arg(script)
-            .arg(&root)
-            .output();
-        let Ok(output) = output else {
-            eprintln!("跳过：本机没有 python3");
-            return;
-        };
-        assert!(
-            output.status.success(),
-            "python3 参照实现执行失败: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let expected: Vec<String> = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect();
+    fn matches_the_frozen_chunk_boundary_vectors() {
         let mut bytes_256: Vec<u8> = Vec::new();
         for _ in 0..4 {
             bytes_256.extend(0u8..=255);
         }
-        let cases: Vec<Vec<u8>> = vec![
-            Vec::new(),
-            b"abc".to_vec(),
-            b"title\0content".to_vec(),
-            bytes_256,
-            vec![b'x'; 1023],
-            vec![b'x'; 1024],
-            vec![b'x'; 1025],
-            vec![b'y'; 4096],
+        let cases: Vec<(Vec<u8>, &str)> = vec![
+            (
+                b"title\0content".to_vec(),
+                "e145d4463ac2b66b19d3ba46968e795a4a450b21fce38906306d2f7c64ee919d",
+            ),
+            (
+                bytes_256,
+                "882179b8dbccd285cda241d968cfcccb3156c5edac2fa3761bb6eda7ff8cb172",
+            ),
+            (
+                vec![b'x'; 1023],
+                "69a383ad7b84f18e71ef579ff9a766ce75eb90b9e62484dc2a1a01c78f55f03a",
+            ),
+            (
+                vec![b'x'; 1024],
+                "71c7a224be567fb9acd2c32f87359835322cf9241b9c01f247fff2b4bdabf644",
+            ),
+            (
+                vec![b'x'; 1025],
+                "71b7ce25ca2144dcf4d7ed561d8a526bb7f7adaf8d10a124540d82bf113678c9",
+            ),
+            (
+                vec![b'y'; 4096],
+                "90c03fdf2b6c840486a695e15109e1fa77556a38b1afab41518aee66c54f3c9a",
+            ),
         ];
-        assert_eq!(expected.len(), cases.len());
-        for (case, want) in cases.iter().zip(&expected) {
+        for (case, want) in &cases {
             assert_eq!(&blake3_hex(case), want, "长度 {}", case.len());
         }
     }

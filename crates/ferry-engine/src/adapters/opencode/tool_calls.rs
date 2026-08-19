@@ -1,7 +1,5 @@
 //! Canonical ToolCall 到 OpenCode 当前原生工具 part 的转换。
 //!
-//! 语义事实源：`engine/adapters/opencode/tool_calls.py`。
-//!
 //! 每个 writer 返回 `false` 表示「这次调用没有原生形态」，调用方据此降级成
 //! 历史叙述（`narrate`）并记一条 `migration.tool_degraded`。
 

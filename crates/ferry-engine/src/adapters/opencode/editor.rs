@@ -1,7 +1,5 @@
 //! OpenCode 会话编辑后端：经官方 HTTP API 原地更新。
 //!
-//! 语义事实源：`engine/adapters/opencode/editor.py`。
-//!
 //! 三条硬约束：
 //! 1. 读取只走只读 SQLite（`load` / `load_preview` 都不碰 CLI）；
 //! 2. 写入只允许 `patch_part`——消息集合与 part 集合前后必须完全一致，

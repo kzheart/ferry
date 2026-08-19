@@ -1,7 +1,5 @@
 //! OpenCode 当前原生结构的静态 Adapter 装配。
 //!
-//! 语义事实源：`engine/adapters/opencode/adapter.py`。
-//!
 //! OpenCode 是五个 adapter 里**唯一** `storage_kind == "id"` 的：会话不落文件，
 //! 引用就是 SQLite 里的原生 id，因此 `canonicalize` 走 `id_reference`
 //! （`root` 恒为 `None`）。

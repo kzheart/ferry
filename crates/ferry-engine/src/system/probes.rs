@@ -1,7 +1,5 @@
 //! CLI probing primitives shared by adapter-owned verifiers.
 //!
-//! 语义事实源：`engine/system/probes.py`。
-//!
 //! 返回结构化报告：status/code/params 承载业务判定；
 //! stdout/stderr 是 opaque diagnostic，不翻译、不参与判定。
 

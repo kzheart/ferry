@@ -1,7 +1,5 @@
 //! Grok 工具方言。
 //!
-//! 语义事实源：`engine/adapters/grok/dialect.py`。
-//!
 //! 本机实测（2026-07 会话）Grok 有两代工具集：
 //! - 当前代（小写）：run_terminal_command / read_file / write / search_replace /
 //!   grep / web_fetch / web_search，参数值一律是字符串（`"limit": "150"`）。

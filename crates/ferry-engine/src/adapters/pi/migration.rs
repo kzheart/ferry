@@ -1,7 +1,5 @@
 //! Pi 迁移目标。
 //!
-//! 语义事实源：`engine/adapters/pi/migration.py`。
-//!
 //! 实现 `MigrationTargetBase` 即自动获得 `contracts::MigrationTarget`
 //! （shared 的 blanket impl），因此这里只声明四个类级差异点 + `write`。
 

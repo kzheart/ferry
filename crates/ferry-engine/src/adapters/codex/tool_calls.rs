@@ -1,7 +1,5 @@
 //! Codex 当前工具调用联合类型的输入解析。
 //!
-//! 语义事实源：`engine/adapters/codex/tool_calls.py`。
-//!
 //! 两种子类型的入参形态完全不同：
 //! - `function_call.arguments` 是 JSON 字符串（`spawn_agent` 特判 → 方言归一 →
 //!   兜底 `tool.invoke`）；

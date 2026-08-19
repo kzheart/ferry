@@ -1,7 +1,5 @@
 //! OpenCode SQLite 存储扫描与会话级指纹索引。
 //!
-//! 语义事实源：`engine/adapters/opencode/scanner.py`。
-//!
 //! 指纹必须是**会话级**的：所有 OpenCode 会话同住一个库，若把整库 stat 混进
 //! 指纹，任何其它会话的写入都会让本会话的引用与迁移计划失效。会话级指纹要整库
 //! 逐行哈希（上千会话约数秒），所以做三层缓存：
@@ -893,7 +891,7 @@ mod tests {
         store::set_database_path_override(None);
     }
 
-    /// 黄金对照：扫描行必须与 Python 引擎 dump 的基线逐字段一致。
+    /// 黄金对照：扫描行必须与 `tests/golden/scan/opencode/` 的基线逐字段一致。
     ///
     /// `_normalized.environment_dependent_fields` 里的字段由运行环境决定
     /// （opencode 只有 `updated` / `own_updated`），对照前先抹掉。

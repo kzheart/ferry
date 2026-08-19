@@ -26,7 +26,7 @@ static ENVIRONMENT: Mutex<()> = Mutex::new(());
 
 const APPLY_TIMEOUT: Duration = Duration::from_secs(120);
 /// 迁移的两条组合。只选 writer 无外部 CLI 依赖的方向：pi/grok/opencode 的写路径
-/// 都要拉起各自的真实 CLI 做验收（Python 同构），沙箱与 CI 都不能依赖它们。
+/// 都要拉起各自的真实 CLI 做验收，沙箱与 CI 都不能依赖它们。
 const COMBOS: &[(&str, &str)] = &[("claude", "codex"), ("codex", "claude")];
 
 struct Sandbox {
@@ -57,8 +57,8 @@ impl Sandbox {
         sandbox.set("FERRY_OPENCODE_DB", &home.join("opencode/storage.db"));
         sandbox.set("GROK_HOME", &home.join(".grok"));
         sandbox.set("PI_CODING_AGENT_SESSION_DIR", &home.join("pi-sessions"));
-        // 与 `scripts/dump-canonical-fixtures.py` 的沙箱一致：这两个变量只要存在
-        // 就会把 codex / pi 的探测拽回运行者的真实目录，必须显式清掉。
+        // 这两个变量只要存在，就会把 codex / pi 的探测拽回运行者的真实目录，
+        // 必须显式清掉。
         sandbox.unset("CODEX_HOME");
         sandbox.unset("PI_CODING_AGENT_DIR");
         std::fs::create_dir_all(home.join(".ferry")).expect("状态目录可创建");
@@ -109,8 +109,8 @@ fn repository_root() -> PathBuf {
 /// 把 claude 黄金 fixture 物化成真实存储布局：
 /// `<home>/.claude/projects/<case>/<session-id>.jsonl`。
 /// 预建 codex 的 `state_5.sqlite`：真实 codex 环境必有该库，register_tree 对缺库
-/// 是抛错（与 Python 一致），所以沙箱必须补齐。schema 与
-/// `scripts/dump-canonical-fixtures.py` 的 CODEX_STATE_SCHEMA 一致。
+/// 直接报错，所以沙箱必须补齐。schema 与 `tests/golden_regen.rs` 的
+/// `CODEX_STATE_SCHEMA` 一致。
 fn seed_codex_state(home: &Path) {
     let codex_dir = home.join(".codex");
     std::fs::create_dir_all(&codex_dir).expect("codex 目录可创建");

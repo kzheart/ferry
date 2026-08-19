@@ -1,7 +1,5 @@
 //! Codex 作为迁移目标的写入与规划能力。
 //!
-//! 语义事实源：`engine/adapters/codex/migration.py`。
-//!
 //! Codex 是唯一**不走方言渲染**的迁移目标：写端是记录信封级的定制渲染，
 //! 因此 `preview_tool` 逐个操作手写映射。
 

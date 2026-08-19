@@ -124,7 +124,7 @@ fn function_names(body: &str) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
-// canonical 模型边界（移植自 scripts/check-canonical-*.py）
+// canonical 模型边界
 // ---------------------------------------------------------------------------
 
 fn model_source() -> String {

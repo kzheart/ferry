@@ -1,7 +1,5 @@
 //! 常驻模式：stdin 每行一个请求，stdout 每行一个响应或事件帧。
 //!
-//! 语义事实源：`engine/server/cli.py` 的 `serve()`。
-//!
 //! 硬约束（§2.1 第 3 / 7 条）：
 //! - `PARALLEL_READ_METHOD_NAMES` 的 9 个方法进 4-worker 只读池，可乱序完成；
 //!   其余请求一律进单 worker 池，严格保序；

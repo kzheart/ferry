@@ -1,13 +1,11 @@
 //! 跨会话正文的持久化全文索引。
 //!
-//! 语义事实源：`engine/sessions/content_index.py`。
-//!
 //! SQLite FTS5 + trigram 分词：中英文与代码都按任意子串命中。索引以 revision
 //! 对账做增量——每次搜索只重建内容真正变过的会话，其余零 IO；首次全量构建在
 //! 后台线程完成，期间搜索返回部分结果并如实上报覆盖度。
 //!
-//! schema 与 `~/.ferry/content-index.sqlite3` 的表结构逐字对齐 Python 版
-//! （`user_version = 2`），两个引擎可以读同一个库。
+//! `~/.ferry/content-index.sqlite3` 的表结构由 `user_version` 标识（当前是 2），
+//! 改 schema 必须同时升它，否则旧库会被当成新库读。
 
 use std::collections::HashMap;
 use std::path::PathBuf;

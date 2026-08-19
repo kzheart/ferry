@@ -1,6 +1,4 @@
 //! Claude 当前原生结构的静态 Adapter 装配。
-//!
-//! 语义事实源：`engine/adapters/claude/adapter.py`。
 
 use std::path::Path;
 use std::sync::Arc;
@@ -29,8 +27,8 @@ use super::scanner;
 
 /// claude 没有私有的损耗 code：reader 产生的 `session.malformed_record` /
 /// `session.orphan_tool_result` / `session.subagent_unlinked` 与 writer 的
-/// `migration.tool_degraded` 在 Python 侧同样**未声明**，因此不计入迁移差异。
-/// 这里保留显式声明点，新增私有 code 时往表里加即可。
+/// `migration.tool_degraded` 都是读取期告警，**刻意不声明后果**，因此不计入
+/// 迁移差异。这里保留显式声明点，新增私有 code 时往表里加即可。
 pub const LOSS_OUTCOMES: &[(&str, Outcome)] = &[];
 
 /// Claude 扫描与读取实现。

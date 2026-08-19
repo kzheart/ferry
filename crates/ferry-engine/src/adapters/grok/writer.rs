@@ -1,7 +1,5 @@
 //! 生成当前形态的 Grok bundle，并维护它的 schema v4 搜索索引。
 //!
-//! 语义事实源：`engine/adapters/grok/writer.py`。
-//!
 //! 两件事被严格分开：
 //! - **写 bundle**：每个节点先写进 `.{sid}.{pid}.tmp`，自读一遍 + 真实 grok CLI
 //!   验收通过后才逆序 `rename` 发布并 fsync 父目录；任何一步失败都把临时目录与

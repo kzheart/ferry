@@ -1,7 +1,5 @@
 //! models.dev 模型单价：抓取 + 磁盘缓存，供前端估算成本。
 //!
-//! 语义事实源：`engine/system/pricing.py`。
-//!
 //! 返回扁平表 `{model_id: {input, output, cache_read, cache_write}}`，单位为每
 //! 百万 token 的美元价。抓不到时退回上次缓存，再退回内置兜底表——始终返回可用
 //! 的表，不因离线而报错（匹配不上的模型前端只记 token、不计价）。

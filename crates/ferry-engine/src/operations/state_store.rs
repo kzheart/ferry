@@ -1,7 +1,5 @@
 //! `operation_plans` / `operation_audit` 的 CAS 状态机与审计流水。
 //!
-//! 语义事实源：`engine/operations/state_store.py`。
-//!
 //! 硬约束：
 //! - 所有多语句写事务都是 `BEGIN IMMEDIATE`，状态变更与审计同一个事务（§2.3 第 17 条）；
 //! - CAS 一律「条件 UPDATE + rowcount 判定」，一次性批准靠

@@ -1,7 +1,5 @@
 //! 跨平台 CLI 定位：PATH（`shutil.which` 等价物）优先，常见安装目录兜底。
 //!
-//! 语义事实源：`engine/system/executables.py`。
-//!
 //! macOS 上 GUI 启动的进程只继承 launchd 最小 PATH，Tauri 层已用 fix-path-env
 //! 恢复登录 shell PATH；此处兜底覆盖 shell 配置异常与非标准安装位置。
 //! Windows 上 npm 装的 CLI 是 `.cmd` 垫片，CreateProcess 对裸命令名不查 PATHEXT，

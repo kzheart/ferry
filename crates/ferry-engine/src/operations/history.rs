@@ -1,7 +1,5 @@
 //! 迁移历史：由 Engine 独占的 SQLite 状态持久化。
 //!
-//! 语义事实源：`engine/operations/history.py`。
-//!
 //! history_id = `history_` + `token_urlsafe(18)`（§2.2 第 14 条）。
 
 use serde_json::Value;

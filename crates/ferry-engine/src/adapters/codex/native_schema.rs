@@ -1,6 +1,4 @@
 //! Ferry 支持的唯一一种 Codex rollout 结构。
-//!
-//! 语义事实源：`engine/adapters/codex/native_schema.py`。
 
 use serde_json::{json, Map, Value};
 
@@ -182,7 +180,7 @@ pub fn templates() -> Map<String, Value> {
 mod tests {
     use super::*;
 
-    /// 语义事实源里的 `extract_templates(fixture) == templates()` 断言移植。
+    /// 抽取器与声明式模板必须互为逆运算：`extract_templates(fixture) == templates()`。
     #[test]
     fn extracted_templates_match_the_declared_ones() {
         let declared = templates();

@@ -1,7 +1,5 @@
 //! 供 Ferry Agent 使用的限量会话读取。
 //!
-//! 语义事实源：`engine/sessions/agent_read.py`。
-//!
 //! 预算口径：DTO 上限 64 KiB，默认上下文预算 24 KiB；`take` 按 **UTF-8 字节**
 //! 计数（与 `safety::truncate_text` 的字符口径相对）。
 //!

@@ -1,7 +1,5 @@
 //! Codex reader：rollout JSONL → canonical session model。
 //!
-//! 语义事实源：`engine/adapters/codex/reader.py`。
-//!
 //! Rollout 是 append-only 的 JSONL。解析器把「字节偏移 + 解析器状态」一起缓存：
 //! 文件追加时只解析新尾部并增量并入已有 Session。任何前缀不一致（inode 更换、
 //! 截断、尾部窗口比对失败）都会回退全量重解析。

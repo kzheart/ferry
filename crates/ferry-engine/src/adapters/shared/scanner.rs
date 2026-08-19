@@ -1,14 +1,10 @@
 //! 行分隔会话存储的共享扫描机制。
 //!
-//! 语义事实源：`engine/adapters/shared/scanner.py` + `engine/sessions/topology.py`。
-//!
-//! 分层说明：Python 的 scanner 反向 import 了 `sessions.topology.session_roots`
-//! 与 `sessions.scan_progress.TRACKER`。Rust 的 `adapters` 不得引用 `sessions`
-//! （见 `adapters/mod.rs`），因此：
-//! - [`session_roots`] 树装配**下沉到本模块**，由 `sessions` 复用；
-//! - 扫描进度改成注册式回调 [`install_scan_progress`]，`sessions::scan_progress`
-//!   在装配时把自己的 TRACKER 注册进来；没注册时全部上报是空操作
-//!   （与 Python「未处于扫描中的上报一律忽略」同义）。
+//! 分层说明：`adapters` 不得引用 `sessions`（见 `adapters/mod.rs`），因此扫描
+//! 需要的两样东西都落在本层：
+//! - [`session_roots`] 树装配住在本模块，由 `sessions` 复用；
+//! - 扫描进度是注册式回调 [`install_scan_progress`]，`sessions::scan_progress`
+//!   在装配时把自己的 TRACKER 注册进来；没注册时全部上报是空操作。
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -266,7 +262,7 @@ fn scan_one(
 }
 
 // ---------------------------------------------------------------------------
-// 会话树规则（Python: engine/sessions/topology.py）
+// 会话树规则
 // ---------------------------------------------------------------------------
 
 struct TreeNode {
@@ -281,11 +277,11 @@ struct TreeNode {
     tree_count: i64,
 }
 
-/// Python 数值的最小模型：`int` 与 `float` 是两种类型，加法与 `max` 都保留类型。
+/// 保留整数/浮点之分的最小数值模型：加法与 `max` 都不改变类型。
 ///
 /// 扫描行的 `count` / `size` / `updated` 由各 adapter 产出，**允许是 float**
-/// （grok 的 `num_chat_messages`、opencode 的时间戳都可能落成浮点）。截断成
-/// `i64` 会让树汇总值与 Python 分叉，而这几个字段直接进 `scan` 的 wire 出参。
+/// （grok 的 `num_chat_messages`、opencode 的时间戳都可能落成浮点）。统一截断成
+/// `i64` 会改掉树汇总值，而这几个字段直接进 `scan` 的 wire 出参。
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Num {
     Int(i64),
@@ -532,7 +528,7 @@ fn materialize(nodes: &mut [TreeNode], index: usize) -> ScanRow {
 }
 
 // ---------------------------------------------------------------------------
-// 扫描行的 token 与时间归一化（Python: engine/sessions/usage.py）
+// 扫描行的 token 与时间归一化
 // ---------------------------------------------------------------------------
 //
 // 这几个纯函数在 Python 侧由 `adapters/**/scanner.py` 反向 import
@@ -976,8 +972,8 @@ mod tests {
 
     #[test]
     fn float_counters_are_not_truncated() {
-        // Python 侧 `count`/`size`/`updated` 是原样搬运的数值，可能是浮点；
-        // 截断成整数会让树汇总与 Python 分叉，而这些字段直接进 scan 的出参。
+        // `count`/`size`/`updated` 是原样搬运的数值，可能是浮点；截断成整数
+        // 会改掉树汇总，而这些字段直接进 scan 的出参。
         let rows = vec![
             row(json!({"id": "root", "updated": 10.5, "count": 1.5, "size": 2})),
             row(json!({"id": "child", "parent_id": "root", "updated": 20.25,

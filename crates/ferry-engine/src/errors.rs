@@ -1,7 +1,5 @@
 //! 跨能力包共享的结构化错误：code + params，供 RPC 下发。
 //!
-//! 语义事实源：`engine/errors.py`。
-//!
 //! `code` 是稳定的机器码（如 `session.concurrent_modification`），`params` 只放
 //! 语义字段；`message` 会经 RPC envelope 的 `params.message` 下发给 agent 作恢复
 //! 指引，文案按「模型读得懂、知道下一步」来写，中文原样保留（测试逐字断言）。

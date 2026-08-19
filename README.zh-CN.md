@@ -151,8 +151,8 @@ Ferry 直接读取本机 Agent 的会话存储，不上传任何数据，也不�
 
 ## 开发
 
-**环境要求**：Node.js 22.19+、Rust（stable）；Python 3.12 仅用于仓库测试与迁移期的
-Python 引擎回退。
+**环境要求**：Node.js 22.19+、Rust（stable）；Python 3.12 仅用于仓库的构建与契约
+生成脚本。
 
 引擎以原生 Rust sidecar 的形式与 Tauri 外壳一起分发。
 
@@ -166,8 +166,8 @@ npm ci
 npm run tauri dev
 ```
 
-> debug 宿主会优先使用 `crates/ferry-engine/target/{debug,release}/ferry-engine`，
-> 找不到才回退 `python3 -m engine.server.cli`。
+> debug 宿主运行 `crates/ferry-engine/target/{debug,release}/ferry-engine`；
+> 没有产物时直接报错并提示构建命令，不存在回退路径。
 
 打包正式版本：
 

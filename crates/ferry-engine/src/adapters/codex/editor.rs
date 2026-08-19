@@ -1,6 +1,4 @@
 //! Codex 会话编辑后端：delete-turn / rewrite / replace-assistant-reply。
-//!
-//! 语义事实源：`engine/adapters/codex/editor.py`。
 
 use std::collections::BTreeSet;
 use std::fs;

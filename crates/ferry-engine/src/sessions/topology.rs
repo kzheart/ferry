@@ -1,7 +1,5 @@
 //! 会话树规则。
 //!
-//! 语义事实源：`engine/sessions/topology.py`。
-//!
 //! 分层备注：Python 侧 `adapters/shared/scanner` 反向 import 了本模块，形成
 //! `adapters → sessions` 的倒置。Rust 的结构测试禁止这个方向（`tests/structure.rs`），
 //! 方案 §1.1 因此把 `session_roots` 下沉到 `adapters/shared/scanner`（WP-B2 已落地）。

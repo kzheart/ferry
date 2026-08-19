@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Python 引擎 vs Rust 引擎性能对比基准。
+"""Session Engine 大语料性能基准。
 
 在隔离沙箱 HOME 里合成大规模 Claude 会话库（默认 2000 个会话，每个 40 条记录，
-另加 5 个 400 条记录的大会话），然后分别以 serve 模式驱动两个引擎，对同一批
-RPC 请求计时（多轮取中位数）：
+另加 5 个 400 条记录的大会话），然后以 serve 模式驱动引擎，对同一批 RPC 请求
+计时（多轮取中位数）：
 
   - startup      进程启动 + health 握手
   - scan_cold    首次全量扫描（空扫描缓存）
@@ -14,9 +14,9 @@ RPC 请求计时（多轮取中位数）：
   - show_large   show 读取 400 条记录的大会话（5 轮）
   - usage        agent_get_usage 全量聚合（3 轮）
 
-说明：内容 FTS 索引（content-index.sqlite3）的构建不在计时面内——两引擎共用
-同一套 SQLite FTS5 机制，且后台同步的完成时机不可确定；search 请求命中的是
-元数据与正则路径。用法：python3 scripts/engine-bench.py [--sessions N]
+说明：内容 FTS 索引（content-index.sqlite3）的构建不在计时面内——后台同步的
+完成时机不可确定；search 请求命中的是元数据与正则路径。
+用法：python3 scripts/engine-bench.py [--sessions N]
 """
 
 from __future__ import annotations
@@ -191,32 +191,20 @@ def main() -> None:
         print(f"合成 {args.sessions} + 5 个会话到 {sandbox} ...", flush=True)
         synthesize(sandbox, args.sessions)
 
-        engines = {
-            "python": ([sys.executable, "-m", "engine.server.cli", "serve"], ROOT),
-            "rust": ([str(RUST_BIN), "serve"], ROOT),
-        }
-        results: dict[str, dict] = {}
-        for name, (argv, cwd) in engines.items():
-            print(f"—— {name} ——", flush=True)
-            results[name] = bench_engine(name, argv, sandbox, cwd)
-            for key, value in results[name].items():
-                print(f"  {key:14s} {value * 1000:10.1f} ms", flush=True)
+        results = bench_engine("engine", [str(RUST_BIN), "serve"], sandbox, ROOT)
+        for key, value in results.items():
+            print(f"  {key:14s} {value * 1000:10.1f} ms", flush=True)
 
-        rows = ["| 指标 | Python (ms) | Rust (ms) | 加速比 |",
-                "| --- | ---: | ---: | ---: |"]
-        for key in results["python"]:
-            py = results["python"][key] * 1000
-            rs = results["rust"][key] * 1000
-            ratio = py / rs if rs > 0 else float("inf")
-            rows.append(f"| {key} | {py:.1f} | {rs:.1f} | {ratio:.1f}x |")
+        rows = ["| 指标 | 耗时 (ms) |", "| --- | ---: |"]
+        rows.extend(f"| {key} | {value * 1000:.1f} |" for key, value in results.items())
         corpus = (f"语料：{args.sessions} 个常规会话（40 条记录）+ 5 个大会话"
                   f"（400 条记录），Claude JSONL 格式，单机 macOS。")
         report = "\n".join([
-            "# Ferry 引擎性能对比（Python vs Rust）", "",
+            "# Ferry Session Engine 性能基准", "",
             corpus, "",
             *rows, "",
             "- 多轮取中位数；scan_cold 为空缓存首扫。",
-            "- 内容 FTS 索引构建不在计时面内（两引擎共用同一 SQLite FTS5 机制）。",
+            "- 内容 FTS 索引构建不在计时面内。",
         ]) + "\n"
         target = args.report or (sandbox / "bench-report.md")
         target.write_text(report, encoding="utf-8")

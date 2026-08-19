@@ -1,7 +1,5 @@
 //! Grok 的 resume 与永久删除。
 //!
-//! 语义事实源：`engine/adapters/grok/lifecycle.py`。
-//!
 //! grok 是目录型存储，删除不是 unlink 一个文件：
 //! - `cleanup`（迁移回滚）先把整棵子树 `rename` 到隔离名，删索引行成功后才真删；
 //!   任一步失败就把隔离目录换回去，保证迁移失败不会吃掉别人的会话。

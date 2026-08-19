@@ -1,7 +1,5 @@
 //! 受控启动 OpenCode 官方 server，并调用会话编辑 API。
 //!
-//! 语义事实源：`engine/adapters/opencode/api.py`。
-//!
 //! 编辑路径不碰 SQLite：OpenCode 的写入必须过官方 API，否则索引/缓存会与库不一致。
 //! server 用随机 basic-auth 起在 `127.0.0.1` 的随机端口上，URL 从 stdout 抓。
 

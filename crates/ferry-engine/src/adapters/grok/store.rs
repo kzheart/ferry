@@ -1,7 +1,5 @@
 //! Grok bundle 的安全装载与指纹。
 //!
-//! 语义事实源：`engine/adapters/grok/store.py`。
-//!
 //! bundle 是一个目录：`summary.json`（必需）+ `updates.jsonl`（权威历史）
 //! + `chat_history.jsonl`（仅在没有 updates 时作为回退）。
 

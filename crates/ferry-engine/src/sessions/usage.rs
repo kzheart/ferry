@@ -1,7 +1,5 @@
 //! 扫描阶段的 token 用量归一化辅助。
 //!
-//! 语义事实源：`engine/sessions/usage.py`。
-//!
 //! 三个工具的原始 token 字段口径不同，统一成
 //! `{"input", "output", "cache_read", "cache_write"}`；其中 input 只计未命中
 //! 缓存的输入（缓存读取单独放 cache_read），便于前端按 models.dev 单价分档估算。
@@ -458,7 +456,7 @@ mod tests {
         .clone()
     }
 
-    /// 期望值现场取自 Python `engine.sessions.usage._match_price`。
+    /// 前缀匹配必须落在边界上，否则 `gpt-4` 会吃掉 `gpt-4o` 的单价。
     #[test]
     fn match_price_uses_boundary_aligned_prefixes() {
         let prices = prices();
@@ -485,7 +483,7 @@ mod tests {
         );
     }
 
-    /// 期望值现场取自 Python `engine.sessions.usage.iso_ms`。
+    /// 不带时区的时间戳按 UTC 解释——原生会话里这种写法很常见。
     #[test]
     fn iso_ms_treats_naive_datetimes_as_utc() {
         assert_eq!(iso_ms(&json!("2024-01-01T00:00:00Z")), Some(1704067200000));

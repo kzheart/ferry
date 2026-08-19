@@ -1,8 +1,7 @@
 //! 运行时只读资源定位。
 //!
-//! 语义事实源：`engine/system/resources.py`。Python 侧要兼容 PyInstaller 的
-//! `sys._MEIPASS`；Rust sidecar 是单文件可执行，资源根取「可执行文件所在目录」，
-//! 并保留 `FERRY_RESOURCE_ROOT` 覆盖以便开发期指向仓库根。
+//! sidecar 是单文件可执行，资源根取「可执行文件所在目录」，并保留
+//! `FERRY_RESOURCE_ROOT` 覆盖以便开发期指向仓库根。
 
 use std::path::{Path, PathBuf};
 

@@ -1,9 +1,9 @@
 //! 扫描进度的端到端接线验证（WP-D ↔ WP-B2）。
 //!
-//! Python 里 `adapters/shared/scanner.py` 在模块加载时就 import 了
-//! `sessions.scan_progress.TRACKER`，进度上报永远接通。Rust 把方向反转成注册式
-//! （B2 定义 `ScanProgress` trait + `install_scan_progress`，sessions 实现并注册），
-//! 所以「到底有没有注册上」必须真的跑一遍 `scan_jsonl` 才算数。
+//! 进度上报是注册式的：`adapters::shared::scanner` 定义 `ScanProgress` trait 与
+//! `install_scan_progress`，`sessions::scan_progress` 实现并注册。没注册上时全部
+//! 上报都是空操作且不报错，所以「到底有没有注册上」必须真的跑一遍 `scan_jsonl`
+//! 才算数。
 //!
 //! 放在集成测试里而不是单测里：`TRACKER` 是进程级单例，单测二进制里被并发跑的
 //! 索引测试反复 `begin/end`，对它做数值断言必然 flaky；集成测试各有自己的进程。

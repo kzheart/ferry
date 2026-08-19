@@ -1,7 +1,5 @@
 //! OpenCode 导出负载的唯一轮次解析与编辑编解码。
 //!
-//! 语义事实源：`engine/adapters/opencode/codec.py`。
-//!
 //! 轮次定义：含可见内容（text / tool / 可见 reasoning）的用户消息到下一条之前。
 
 use serde_json::{Map, Value};

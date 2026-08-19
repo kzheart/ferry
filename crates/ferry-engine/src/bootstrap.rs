@@ -1,10 +1,7 @@
 //! 组合根：装配 AdapterRegistry / 索引 / 内容索引 / 操作服务 / EngineService。
 //!
-//! 语义事实源：`engine/bootstrap.py`。
-//!
-//! 装配顺序与 Python 逐行对应：
-//! `create_registry()`（5 个 adapter 依 `AGENT_IDS` 顺序 build）→ `EngineContext`
-//! → `AgentSessionIndex` → `OperationService` → `EngineService`。
+//! 装配顺序固定：`create_registry()`（各 adapter 依 `AGENT_IDS` 顺序 build）→
+//! `EngineContext` → `AgentSessionIndex` → `OperationService` → `EngineService`。
 
 use std::sync::Arc;
 

@@ -1,7 +1,5 @@
 //! Pi v3 线性活动分支编辑 codec。
 //!
-//! 语义事实源：`engine/adapters/pi/codec.py`。
-//!
 //! 编辑面只作用在**活动分支**上：轮次划分、删除、替换回复都先算一遍
 //! [`active_indexes`]（与 `reader::active_branch` 同一算法），非活动分支的记录
 //! 原样留在文件里。删除轮次时除了重连 `parentId`，还必须修复三个交叉引用

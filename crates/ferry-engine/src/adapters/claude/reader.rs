@@ -1,6 +1,4 @@
 //! Claude Code reader：JSONL 会话文件 → 规范化会话树。
-//!
-//! 语义事实源：`engine/adapters/claude/reader.py`。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

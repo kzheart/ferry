@@ -1,7 +1,5 @@
 //! 常驻活索引：文件系统轮询探测 + 增量重扫 + 周期全量对账。
 //!
-//! 语义事实源：`engine/sessions/live.py`。
-//!
 //! 引擎不再等 UI 拉取才知道世界变了：后台线程每个周期对各 adapter 的会话存储
 //! 做一轮廉价的 stat 扫描，源头一变就只重扫那个工具，delta 经
 //! `AgentSessionIndex::set_on_delta` 推给前端。周期性的全量对账兜住轮询窗口内
@@ -351,8 +349,8 @@ mod tests {
         assert_eq!(tree_stamp("/definitely/not/here"), None);
     }
 
-    /// 令牌行的字节形状必须与 Python 一致，否则两个引擎交替运行会互相
-    /// 判定“世界变了”。
+    /// 令牌行的字节形状是稳定面：形状一变，所有已缓存的令牌都会被判定成
+    /// “世界变了”，触发一次无谓的全量重扫。
     #[test]
     fn tree_stamp_line_format_is_nul_separated() {
         let temp = tempfile::tempdir().unwrap();

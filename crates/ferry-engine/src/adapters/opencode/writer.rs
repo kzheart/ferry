@@ -1,7 +1,5 @@
 //! OpenCode 当前原生结构的 import 与失败回滚。
 //!
-//! 语义事实源：`engine/adapters/opencode/writer.py`。
-//!
 //! 写入顺序：先给整棵树分配 `ses_*` id（子会话的 task 链接要用到），再逐节点
 //! `opencode import`。任何一次 import 失败都要把**已登记**的会话按逆序删掉——
 //! import 可能先插入 session 再因消息 schema 失败，所以是「调用前登记」。

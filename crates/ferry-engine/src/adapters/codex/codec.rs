@@ -1,7 +1,5 @@
 //! Codex 原生 rollout 的唯一轮次解析与编辑编解码。
 //!
-//! 语义事实源：`engine/adapters/codex/codec.py`。
-//!
 //! 轮次定义：非环境上下文前缀、正文非空的用户 message 到下一条之前。
 
 use serde_json::{Map, Value};

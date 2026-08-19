@@ -15,6 +15,10 @@ PACKAGE = ROOT / "app/package.json"
 PACKAGE_LOCK = ROOT / "app/package-lock.json"
 CARGO = ROOT / "app/src-tauri/Cargo.toml"
 CARGO_LOCK = ROOT / "app/src-tauri/Cargo.lock"
+# ferry-engine 是独立 package（自带 Cargo.lock），版本必须跟着 app 一起走，
+# 否则打包出的 sidecar 与外壳自称的版本对不上。
+ENGINE_CARGO = ROOT / "crates/ferry-engine/Cargo.toml"
+ENGINE_CARGO_LOCK = ROOT / "crates/ferry-engine/Cargo.lock"
 CHANGELOG = ROOT / "CHANGELOG.md"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 
@@ -46,15 +50,21 @@ def replace_cargo_package_version(path: Path, version: str) -> None:
     path.write_text(updated, encoding="utf-8")
 
 
-def replace_cargo_lock_version(path: Path, version: str) -> None:
+def replace_cargo_lock_version(path: Path, version: str, name: str = "ferry") -> None:
     text = path.read_text(encoding="utf-8")
     updated, count = re.subn(
-        r'(?ms)(^\[\[package\]\]\s+name\s*=\s*"ferry"\s+version\s*=\s*)"[^"]+"',
+        rf'(?ms)(^\[\[package\]\]\s+name\s*=\s*"{re.escape(name)}"\s+version\s*=\s*)"[^"]+"',
         rf'\g<1>"{version}"', text, count=1,
     )
     if count != 1:
-        raise ValueError(f"cannot locate ferry package version in {path}")
+        raise ValueError(f"cannot locate {name} package version in {path}")
     path.write_text(updated, encoding="utf-8")
+
+
+def cargo_lock_version(path: Path, name: str) -> str | None:
+    lock = tomllib.loads(path.read_text(encoding="utf-8"))
+    entry = next((p for p in lock["package"] if p["name"] == name), None)
+    return entry["version"] if entry else None
 
 
 def check(tag: str | None = None) -> None:
@@ -64,10 +74,13 @@ def check(tag: str | None = None) -> None:
     actual = cargo_version()
     if actual != expected:
         raise ValueError(f"Cargo.toml version {actual} != package.json version {expected}")
-    lock = tomllib.loads(CARGO_LOCK.read_text(encoding="utf-8"))
-    own = next((p for p in lock["package"] if p["name"] == "ferry"), None)
-    if not own or own["version"] != expected:
+    if cargo_lock_version(CARGO_LOCK, "ferry") != expected:
         raise ValueError("Cargo.lock ferry version is not synchronized")
+    engine = cargo_version(ENGINE_CARGO)
+    if engine != expected:
+        raise ValueError(f"ferry-engine Cargo.toml version {engine} != package.json version {expected}")
+    if cargo_lock_version(ENGINE_CARGO_LOCK, "ferry-engine") != expected:
+        raise ValueError("crates/ferry-engine/Cargo.lock version is not synchronized")
     package_lock = json.loads(PACKAGE_LOCK.read_text(encoding="utf-8"))
     if package_lock["version"] != expected or package_lock["packages"][""]["version"] != expected:
         raise ValueError("package-lock.json version is not synchronized")
@@ -84,6 +97,8 @@ def bump(version: str) -> None:
     replace_package_version(PACKAGE_LOCK, version)
     replace_cargo_package_version(CARGO, version)
     replace_cargo_lock_version(CARGO_LOCK, version)
+    replace_cargo_package_version(ENGINE_CARGO, version)
+    replace_cargo_lock_version(ENGINE_CARGO_LOCK, version, name="ferry-engine")
     check()
 
 

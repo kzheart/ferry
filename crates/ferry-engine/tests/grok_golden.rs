@@ -1,7 +1,7 @@
 //! Grok 适配器的黄金对照（WP-C5）。
 //!
 //! 把 `tests/fixtures/agent_formats/grok/**` 物化到临时 `GROK_HOME`（mtime 统一
-//! 钉到 `FIXED_MTIME`），跑 Rust 侧 scanner / reader，再与 Python 引擎产出的
+//! 钉到 `FIXED_MTIME`），跑 scanner / reader，再与
 //! `tests/golden/{canonical,scan}/grok/*.json` 逐字段比对。
 //!
 //! 对照口径与 `tests/golden/README.md` 一致：
@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use ferry_engine::adapters::grok::{reader, scanner};
 use serde_json::Value;
 
-/// 与 `scripts/dump-canonical-fixtures.py` 的 `FIXED_MTIME` 一致。
+/// 与 `tests/golden_regen.rs` 的 `FIXED_MTIME` 一致。
 const FIXED_MTIME: i64 = 1_784_937_600;
 const SANDBOX_MARKER: &str = "<home>";
 const CASES: [&str; 4] = [
@@ -123,7 +123,7 @@ fn golden(kind: &str, case: &str) -> Value {
 }
 
 #[test]
-fn grok_canonical_sessions_match_the_python_baseline() {
+fn grok_canonical_sessions_match_the_golden_baseline() {
     let _lock = ENVIRONMENT
         .lock()
         .unwrap_or_else(|error| error.into_inner());
@@ -141,7 +141,7 @@ fn grok_canonical_sessions_match_the_python_baseline() {
 }
 
 #[test]
-fn grok_scan_rows_match_the_python_baseline() {
+fn grok_scan_rows_match_the_golden_baseline() {
     let _lock = ENVIRONMENT
         .lock()
         .unwrap_or_else(|error| error.into_inner());

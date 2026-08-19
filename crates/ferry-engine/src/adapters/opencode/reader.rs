@@ -1,7 +1,5 @@
 //! OpenCode 当前原生结构到 Canonical Session 的读取转换。
 //!
-//! 语义事实源：`engine/adapters/opencode/reader.py`。
-//!
 //! 读取全程只走只读 SQLite：官方 `opencode export` CLI **不参与**读路径
 //! （预览也一样），避免读会话时拉起外部进程。
 
@@ -843,12 +841,12 @@ mod tests {
     }
 
     /// 黄金对照：完整 read 链路（SQLite → export → canonical Session）必须与
-    /// Python 引擎 dump 的基线逐字段一致。
+    /// `tests/golden/canonical/opencode/` 的基线逐字段一致。
     ///
     /// fixture 的 `session.json` 是三张表的导出行，按 `store` 声明的当前列集合
-    /// 还原成只读库后走真实读路径（对齐 `scripts/dump-canonical-fixtures.py`）。
+    /// 还原成只读库后走真实读路径（物化方式与 `tests/golden_regen.rs` 一致）。
     #[test]
-    fn canonical_sessions_match_the_python_golden_baseline() {
+    fn canonical_sessions_match_the_golden_baseline() {
         register();
         let _guard = super::store::tests::exclusive();
         for case in ["case-01-plain", "case-02-tools"] {

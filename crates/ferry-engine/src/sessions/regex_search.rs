@@ -1,7 +1,5 @@
 //! 正则检索：必然字面量预过滤 + 原始转录扫描。
 //!
-//! 语义事实源：`engine/sessions/regex_search.py`。
-//!
 //! trigram 索引无法加速任意正则，但绝大多数实用正则含有必然出现的字面片段
 //! （`ghp_[A-Za-z0-9]{36}` 必含 `ghp_`）。提取这些片段打到 FTS 索引缩小候选集，
 //! 再对候选会话的**原始转录**跑正则引擎——原文没有 16 KB 截断。
@@ -123,10 +121,10 @@ fn visit(node: &Hir, run: &mut String, literals: &mut Vec<String>) {
 /// 扫描。（无 `(?i)` 的单字符类如 `[c]` 在 `Hir::class` 构造期就已塌成 Literal，
 /// 走不到这里。）
 ///
-/// **与 Python 同源的已知漏报面**：折叠闭包可能含非 ASCII 成员（`k` 的闭包含
-/// U+212A KELVIN SIGN），而 FTS5 trigram 只折叠 ASCII 大小写，含这些字符的文档
-/// 会被预过滤挡掉。Python 侧有完全相同的缺口，这里逐条复刻而不"修得更对"——
-/// 预过滤口径一旦与 Python 分叉，覆盖度字段就再也对不上了。
+/// **已知漏报面**：折叠闭包可能含非 ASCII 成员（`k` 的闭包含 U+212A KELVIN
+/// SIGN），而 FTS5 trigram 只折叠 ASCII 大小写，含这些字符的文档会被预过滤
+/// 挡掉。这里刻意不"修得更对"：预过滤口径与索引口径一旦分叉，搜索上报的
+/// 覆盖度字段就不再成立。
 fn folded_char(class: &Class) -> Option<char> {
     let Class::Unicode(unicode) = class else {
         // 字节类只在 `(?-u)` 字节模式下出现，不参与 trigram 预过滤。
@@ -251,22 +249,16 @@ mod tests {
     }
 
     /// `(?i)` 下的字符在 HIR 里是折叠类；不还原的话所有大小写不敏感的正则都
-    /// 退化成全量扫描。期望值取自 Python：
-    /// ```text
-    /// python3 -c "import sys; sys.path.insert(0,'.')
-    /// from engine.sessions.regex_search import required_literals as rl
-    /// print(rl('(?i)abcdef'), rl('(?i:abcdef)'), rl('(?i)ABC_def'),
-    ///       rl(r'(?i)\d{3}abcdef'))"
-    /// ```
+    /// 退化成全量扫描。
     #[test]
     fn case_insensitive_literals_survive_the_hir_class_encoding() {
-        // Python 给 ['abcdef']；这里统一取小写形态（下游 trigram 大小写不敏感）。
+        // 统一取小写形态（下游 trigram 大小写不敏感）。
         assert_eq!(required_literals("(?i)abcdef"), vec!["abcdef"]);
         assert_eq!(required_literals("(?i:abcdef)"), vec!["abcdef"]);
-        // Python 保留 pattern 的书写形态 'ABC_def'，等价。
+        // 大小写不敏感时书写形态无关，统一折成小写。
         assert_eq!(required_literals("(?i)ABC_def"), vec!["abc_def"]);
         assert_eq!(required_literals(r"(?i)\d{3}abcdef"), vec!["abcdef"]);
-        // 折叠闭包含非 ASCII 成员的字符（k → U+212A）同样还原，与 Python 一致。
+        // 折叠闭包含非 ASCII 成员的字符（k → U+212A）同样还原成字面量。
         assert_eq!(required_literals("(?i)task_key"), vec!["task_key"]);
         // 真正的字符类仍是边界，不会被误当字面量。
         assert!(required_literals("ab[0-9]cd").is_empty());

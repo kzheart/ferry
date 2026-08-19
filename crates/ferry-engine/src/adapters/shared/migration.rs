@@ -1,7 +1,5 @@
 //! 格式无关的迁移能力基类与会话树装配。
 //!
-//! 语义事实源：`engine/adapters/shared/migration.py`。
-//!
 //! Python 的 `MigrationTargetBase` 是「基类 + 类属性可覆写」；Rust 用
 //! [`MigrationTargetBase`] trait 的**默认方法**表达同一件事：
 //! - 类属性（`tool_fidelity` / `tool_result_statuses` / `tool_result_native_blocks`
@@ -1728,9 +1726,9 @@ mod tests {
         assert_eq!(codes(&decision), ["tool_result_truncated"]);
     }
 
-    /// 判定顺序是 wire 面：reason code 的先后必须与 Python 逐条一致。
+    /// 判定顺序是 wire 面：宿主按 reason code 的先后渲染，顺序不可重排。
     #[test]
-    fn stacked_degradations_keep_pythons_reason_order() {
+    fn stacked_degradations_keep_the_declared_reason_order() {
         let mut result = ToolResult::new(ToolResultStatus::Success);
         let mut json_block = ToolResultBlock::new(ToolResultBlockKind::Json);
         json_block.data = json!({"a": 1});

@@ -1,6 +1,4 @@
 //! Pi 工具调用归一与结果配对。
-//!
-//! 语义事实源：`engine/adapters/pi/tool_calls.py`。
 
 use serde_json::{Map, Value};
 

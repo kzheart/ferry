@@ -16,6 +16,26 @@ fails validation if its version has no section.
 
 ## [Unreleased]
 
+### Changed
+
+- **One session engine** — Ferry now ships a single, native session engine.
+  The original Python engine, which the native one was validated against
+  during the rewrite, has been removed along with its packaging and
+  cross-checking tooling.
+
+### Performance
+
+- **Native engine speedups** — measured on 2000 regular sessions (40 records
+  each) plus 5 large sessions (400 records each) in the Claude JSONL format on
+  macOS, median of multiple runs, against the previous Python engine: startup
+  216 ms → 18 ms (11.9x), cold scan 3099 ms → 366 ms (8.5x), metadata search
+  2345 ms → 402 ms (5.8x), agent search 2393 ms → 326 ms (7.3x), regex search
+  3916 ms → 336 ms (11.7x), opening a large session 327 ms → 38 ms (8.6x),
+  usage aggregation 2370 ms → 256 ms (9.3x). Warm scan was already dominated
+  by cache reads and is unchanged (22 ms → 33 ms). Content index construction
+  is outside the measured window; both engines used the same SQLite FTS5
+  mechanism.
+
 ## [0.6.1] - 2026-08-05
 
 ### Added

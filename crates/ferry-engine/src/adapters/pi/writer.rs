@@ -1,7 +1,5 @@
 //! 把 canonical 会话写成当前 Pi v3 JSONL。
 //!
-//! 语义事实源：`engine/adapters/pi/writer.py`。
-//!
 //! 写入前有三道验收，缺一不可：先写 `.tmp` → reader 复读 → **用真实 pi RPC
 //! 加载验证**（`probe::probe_path`）→ 再复读 → `os.replace` 到正式文件名。
 //! 探针不过就删掉临时文件并报错，绝不把半成品留在 pi 的会话目录里。

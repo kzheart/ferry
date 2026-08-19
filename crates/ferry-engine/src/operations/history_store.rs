@@ -1,7 +1,5 @@
 //! Ferry 迁移历史的 SQLite 存储。
 //!
-//! 语义事实源：`engine/operations/history_store.py`。
-//!
 //! `delete` 的 DELETE 与 COUNT 必须在同一个 `BEGIN IMMEDIATE` 事务里，
 //! 否则 `remaining` 会读到别的写入者提交后的数字（§2.3 第 17 条）。
 

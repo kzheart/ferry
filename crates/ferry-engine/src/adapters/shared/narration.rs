@@ -1,7 +1,5 @@
 //! 版本化 narration 模板：降级工具调用写入目标 Agent 上下文的叙述文本。
 //!
-//! 语义事实源：`engine/adapters/shared/narration.py`。
-//!
 //! `content_locale` 属于迁移请求（决定生成内容的语言），与 UI locale 无关；
 //! 已生成的目标会话内容不随 UI 切换而变化。
 //!

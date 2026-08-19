@@ -2,8 +2,8 @@
 
 These fixtures are captured from real agent CLIs and are test-only contracts.
 Production writers use the single current structure in
-`engine/adapters/<agent>/native_schema.py`; the sidecar does not bundle this
-directory.
+`crates/ferry-engine/src/adapters/<agent>/native_schema.rs`; the sidecar does
+not bundle this directory.
 
 ## Refreshing an agent format
 
@@ -14,7 +14,8 @@ directory.
 3. Extract the candidate production templates:
 
    ```bash
-   python scripts/extract-agent-format.py <agent> \
+   cargo build --manifest-path crates/ferry-engine/Cargo.toml
+   ./crates/ferry-engine/target/debug/ferry-engine extract-format <agent> \
      tests/fixtures/agent_formats/<agent>/case-02-tools/session.jsonl
    ```
 
@@ -23,11 +24,14 @@ directory.
    active leaf and inactive branches remain byte-for-byte in the capture.
    Grok captures pass the bundle directory and include only summary, updates,
    and current v1 chat history—not terminals, snapshots, signals, or prompts.
-4. Compare the output with `engine/adapters/<agent>/native_schema.py`. If the
-   required structure changed, replace the current templates, reader, writer,
-   and fixtures together. Do not add a version branch.
-5. Run
-   `python -m pytest tests/test_current_native_formats.py tests/test_reply_editing.py`.
+4. Compare the output with
+   `crates/ferry-engine/src/adapters/<agent>/native_schema.rs`. If the required
+   structure changed, replace the current templates, reader, writer, and
+   fixtures together. Do not add a version branch.
+5. Run `cargo test --manifest-path crates/ferry-engine/Cargo.toml`, then
+   regenerate the golden baseline with
+   `FERRY_GOLDEN_REGEN=1 cargo test -p ferry-engine --test golden_regen` and
+   review the resulting diff under `tests/golden/`.
 
 The extractor intentionally only prints a candidate. Updating a production
 structure remains an explicit, reviewable code change. The previous structure

@@ -1,17 +1,14 @@
 //! 会话编辑计划与写入处理。
 //!
-//! 语义事实源：`engine/operations/edit.py`。
-//!
 //! 编辑事务顺序是硬约束（§2.4 第 23 条）：
 //! `load → 比 expected_revision → mutate → validate → snapshot（无快照拒写）
 //!  → commit → saved_revision`；`ConcurrentModificationError` **不**还原快照，
 //! 其他任何异常都必须还原。
 //!
-//! `bounded_json` / `finalize_dto` / `truncate_text` / `python_json` 在 Python
-//! 里住在 `sessions.safety`，Rust 侧同样只有一份实现（`crate::sessions::safety`），
-//! 本模块直接复用。注意 `python_json` 用 Python 的**默认**分隔符（`", "` / `": "`），
-//! 与 `jsonutil::canonical_json` 的无空格分隔符不是一回事，体积判定与摘要都
-//! 只能用前者。
+//! `bounded_json` / `finalize_dto` / `truncate_text` / `python_json` 只有一份
+//! 实现（`crate::sessions::safety`），本模块直接复用。注意 `python_json` 用的是
+//! **带空格**的分隔符（`", "` / `": "`），与 `jsonutil::canonical_json` 的无空格
+//! 分隔符不是一回事：体积判定用前者，摘要用后者，两者不可互换。
 
 use std::path::{Path, PathBuf};
 

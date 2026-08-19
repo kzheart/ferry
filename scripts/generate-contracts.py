@@ -26,14 +26,12 @@ AGENT_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/agents.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
     ENGINE_RUST_CONTRACTS / "agents.rs": "engine-rust",
-    ROOT / "engine/contracts/agents.py": "python",
     ROOT / "ferry-runtime/src/server/generated/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
     ENGINE_RUST_CONTRACTS / "engine_methods.rs": "engine-rust",
-    ROOT / "engine/contracts/engine_methods.py": "python",
 }
 RUNTIME_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/runtime-methods.ts": "frontend",
@@ -44,34 +42,29 @@ IPC_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/ipc.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
     ENGINE_RUST_CONTRACTS / "ipc.rs": "engine-rust",
-    ROOT / "engine/contracts/ipc.py": "python",
     ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
 }
 SESSION_REF_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/session-ref.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
     ENGINE_RUST_CONTRACTS / "session_ref.rs": "engine-rust",
-    ROOT / "engine/contracts/session_ref.py": "python",
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
 }
 OPERATIONS_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/operations.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
     ENGINE_RUST_CONTRACTS / "operations.rs": "engine-rust",
-    ROOT / "engine/contracts/operations.py": "python",
 }
 EVENT_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/events.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
     ENGINE_RUST_CONTRACTS / "events.rs": "engine-rust",
-    ROOT / "engine/contracts/events.py": "python",
     ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
 }
 ERROR_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/errors.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/errors.rs": "rust",
     ENGINE_RUST_CONTRACTS / "errors.rs": "engine-rust",
-    ROOT / "engine/contracts/errors.py": "python",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
 }
 AGENT_CAPABILITIES = (
@@ -522,35 +515,6 @@ def rust(agents: list[dict[str, object]]) -> str:
         f"pub(crate) const ALLOWED_EXECUTABLES: &[&str] = &[{allowed}];",
         "",
     ))
-
-
-def python(agents: list[dict[str, object]]) -> str:
-    lines = [
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"AGENT_CAPABILITIES = {AGENT_CAPABILITIES!r}",
-        "",
-        "AGENTS = {",
-    ]
-    for agent in agents:
-        lines.append(f'    {agent["id"]!r}: {{')
-        for key in ("display_name", "icon", "source_path"):
-            lines.append(f"        {key!r}: {agent[key]!r},")
-        lines.append(
-            f"        'capabilities': {tuple(agent['capabilities'])!r},"
-        )
-        lines.append(
-            f"        'edit_operations': {tuple(agent['edit_operations'])!r},"
-        )
-        # skill_paths 只服务 ferry-runtime 的技能发现，Python engine 不消费，故不下发
-        lines.append(f"        'executables': {tuple(agent['executables'])!r},")
-        lines.append(f"        'fallback_bin_dirs': {tuple(agent['fallback_bin_dirs'])!r},")
-        lines.append("    },")
-    lines.extend(("}", "AGENT_IDS = tuple(AGENTS)", ""))
-    return "\n".join(lines)
-
-
 def runtime(agents: list[dict[str, object]]) -> str:
     identifiers = [agent["id"] for agent in agents]
     labels = [agent["display_name"] for agent in agents]
@@ -722,30 +686,6 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "}",
         "",
     ))
-
-
-def engine_methods_python(methods: list[dict[str, object]]) -> str:
-    policies = {
-        method["name"]: {
-            key: method[key]
-            for key in ("kind", "exposure", "timeout", "retry", "dispatch")
-        }
-        for method in methods
-    }
-    parallel = tuple(
-        method["name"] for method in methods if method["dispatch"] == "parallel-read"
-    )
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"ENGINE_METHOD_POLICIES = {policies!r}",
-        "ENGINE_METHOD_NAMES = frozenset(ENGINE_METHOD_POLICIES)",
-        f"PARALLEL_READ_METHOD_NAMES = frozenset({parallel!r})",
-        "",
-    ))
-
-
 def runtime_methods_frontend(methods: list[dict[str, object]]) -> str:
     public = [method["name"] for method in methods if method["exposure"] == "public"]
     values = "[\n" + "\n".join(
@@ -842,29 +782,6 @@ def session_ref_rust(contract: dict[str, object]) -> str:
         "}",
         "",
     ))
-
-
-def session_ref_python(contract: dict[str, object]) -> str:
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"OPAQUE_SESSION_REF_PREFIX = {contract['opaque_prefix']!r}",
-        f"OPAQUE_SESSION_REF_MIN_LENGTH = {contract['minimum_length']}",
-        f"OPAQUE_SESSION_REF_MAX_LENGTH = {contract['maximum_length']}",
-        "",
-        "def is_opaque_session_ref(value: object) -> bool:",
-        "    return (",
-        "        isinstance(value, str)",
-        "        and OPAQUE_SESSION_REF_MIN_LENGTH <= len(value) <= OPAQUE_SESSION_REF_MAX_LENGTH",
-        "        and value.startswith(OPAQUE_SESSION_REF_PREFIX)",
-        "        and all(character.isascii() and (character.isalnum() or character in '_-')",
-        "                for character in value)",
-        "    )",
-        "",
-    ))
-
-
 def session_ref_runtime(contract: dict[str, object]) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
@@ -1146,100 +1063,6 @@ def operations_rust(contract: dict[str, object]) -> str:
         "}",
         "",
     ))
-
-
-def operations_python(contract: dict[str, object]) -> str:
-    def python_field(descriptor: str) -> tuple[str, bool]:
-        optional = descriptor.endswith("?")
-        base = descriptor[:-1] if optional else descriptor
-        value_type = {
-            "agent-id": "str",
-            "assistant-reply": "AssistantReply",
-            "boolean": "bool",
-            "edit-operation[]": "list[EditOperation]",
-            "json-object|string": "dict[str, object] | str",
-            "metadata-patch": "MetadataPatch",
-            "positive-integer": "int",
-            "positive-integer|string": "int | str",
-            "session-ref": "str",
-            "session-ref[]": "list[str]",
-            "string": "str",
-            "string[]": "list[str]",
-        }[base]
-        return value_type, optional
-
-    definitions = []
-    reply_names = []
-    for item, fields in contract["assistant_reply_item_fields"].items():
-        name = f"{_pascal_case(item)}ReplyItem"
-        reply_names.append(name)
-        definitions.extend((
-            f"class {name}(TypedDict):",
-            f"    kind: Literal[{item!r}]",
-            *(f"    {field}: {python_field(descriptor)[0]}"
-              for field, descriptor in fields.items()),
-            "",
-        ))
-    definitions.extend((
-        f"AssistantReplyItem = {' | '.join(reply_names)}",
-        "",
-        "class AssistantReply(TypedDict):",
-        "    items: list[AssistantReplyItem]",
-        "",
-        "class MetadataPatch(TypedDict):",
-        *(f"    {field}: NotRequired[{python_field(descriptor)[0]}]"
-          for field, descriptor in contract["metadata_patch_fields"].items()),
-        "",
-    ))
-    edit_names = []
-    for operation, fields in contract["edit_operation_fields"].items():
-        name = f"{_pascal_case(operation)}Operation"
-        edit_names.append(name)
-        definitions.extend((
-            f"class {name}(TypedDict):",
-            f"    op: Literal[{operation!r}]",
-            *(f"    {field}: {python_field(descriptor)[0]}"
-              for field, descriptor in fields.items()),
-            "",
-        ))
-    definitions.extend((f"EditOperation = {' | '.join(edit_names)}", ""))
-    input_names = []
-    for kind, fields in contract["input_fields"].items():
-        name = f"{_pascal_case(kind)}OperationInput"
-        input_names.append(name)
-        field_lines = []
-        for field, descriptor in fields.items():
-            value_type, optional = python_field(descriptor)
-            if optional:
-                value_type = f"NotRequired[{value_type}]"
-            field_lines.append(f"    {field}: {value_type}")
-        definitions.extend((
-            f"class {name}(TypedDict):",
-            f"    kind: Literal[{kind!r}]",
-            *field_lines,
-            "",
-        ))
-    definitions.append(f"OperationInput = {' | '.join(input_names)}")
-
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        "from typing import Literal, NotRequired, TypedDict",
-        "",
-        *definitions,
-        "",
-        f"OPERATION_PLAN_ID_PREFIX = {contract['plan_id_prefix']!r}",
-        f"OPERATION_KINDS = frozenset({tuple(contract['kinds'])!r})",
-        f"EDIT_OPERATION_KINDS = frozenset({tuple(contract['edit_operations'])!r})",
-        f"OPERATION_STATUSES = frozenset({tuple(contract['statuses'])!r})",
-        "OPERATION_TERMINAL_STATUSES = "
-        f"frozenset({tuple(contract['terminal_statuses'])!r})",
-        f"OPERATION_SUCCESS_STATUS = {contract['success_status']!r}",
-        "",
-    ))
-
-
 def events_frontend(events: list[dict[str, object]]) -> str:
     policies = {
         event["type"]: {
@@ -1296,26 +1119,6 @@ def events_rust(events: list[dict[str, object]]) -> str:
         "}",
         "",
     ))
-
-
-def events_python(events: list[dict[str, object]]) -> str:
-    policies = {
-        event["type"]: {
-            "source": event["source"],
-            "forward_to_ui": event["forward_to_ui"],
-        }
-        for event in events
-    }
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"FERRY_EVENT_POLICIES = {policies!r}",
-        "FERRY_EVENT_TYPES = frozenset(FERRY_EVENT_POLICIES)",
-        "",
-    ))
-
-
 def events_runtime(events: list[dict[str, object]]) -> str:
     all_types = [event["type"] for event in events]
     runtime_types = [
@@ -1396,22 +1199,6 @@ def errors_rust(errors: list[dict[str, object]]) -> str:
         "}",
         "",
     ))
-
-
-def errors_python(errors: list[dict[str, object]]) -> str:
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"FERRY_ERROR_POLICIES = {error_policies(errors)!r}",
-        "FERRY_ERROR_CODES = frozenset(FERRY_ERROR_POLICIES)",
-        "",
-        "def error_policy(code: str) -> dict:",
-        "    return FERRY_ERROR_POLICIES[code]",
-        "",
-    ))
-
-
 def errors_runtime(errors: list[dict[str, object]]) -> str:
     runtime = [
         error for error in errors if "runtime" in error["sources"]
@@ -1503,19 +1290,6 @@ def ipc_rust(contract: dict[str, object], digest: str) -> str:
         f'    "{digest}";',
         "",
     ))
-
-
-def ipc_python(contract: dict[str, object], digest: str) -> str:
-    return "\n".join((
-        '"""此文件由 scripts/generate-contracts.py 生成，请勿手改。"""',
-        "from __future__ import annotations",
-        "",
-        f"FERRY_IPC_PROTOCOL = {contract['protocol']!r}",
-        f"FERRY_CONTRACT_HASH = {digest!r}",
-        "",
-    ))
-
-
 def ipc_runtime(contract: dict[str, object], digest: str) -> str:
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
@@ -1939,7 +1713,6 @@ def generated_contents(
             "frontend": frontend,
             "rust": rust,
             "engine-rust": agents_engine_rust,
-            "python": python,
             "runtime": runtime,
         }[kind](agents)
         for path, kind in AGENT_OUTPUTS.items()
@@ -1949,7 +1722,6 @@ def generated_contents(
             "frontend": engine_methods_frontend,
             "rust": engine_methods_rust,
             "engine-rust": engine_methods_engine_rust,
-            "python": engine_methods_python,
         }[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
     }
@@ -1966,7 +1738,6 @@ def generated_contents(
             "frontend": session_ref_frontend,
             "rust": session_ref_rust,
             "engine-rust": session_ref_engine_rust,
-            "python": session_ref_python,
             "runtime": session_ref_runtime,
         }[kind](session_ref)
         for path, kind in SESSION_REF_OUTPUTS.items()
@@ -1976,7 +1747,6 @@ def generated_contents(
             "frontend": operations_frontend,
             "rust": operations_rust,
             "engine-rust": operations_engine_rust,
-            "python": operations_python,
         }[kind](operations)
         for path, kind in OPERATIONS_OUTPUTS.items()
     }
@@ -1985,7 +1755,6 @@ def generated_contents(
             "frontend": events_frontend,
             "rust": events_rust,
             "engine-rust": events_engine_rust,
-            "python": events_python,
             "runtime": events_runtime,
         }[kind](events)
         for path, kind in EVENT_OUTPUTS.items()
@@ -1995,7 +1764,6 @@ def generated_contents(
             "frontend": errors_frontend,
             "rust": errors_rust,
             "engine-rust": errors_engine_rust,
-            "python": errors_python,
             "runtime": errors_runtime,
         }[kind](errors)
         for path, kind in ERROR_OUTPUTS.items()
@@ -2009,7 +1777,6 @@ def generated_contents(
             "frontend": ipc_frontend,
             "rust": ipc_rust,
             "engine-rust": ipc_engine_rust,
-            "python": ipc_python,
             "runtime": ipc_runtime,
         }[kind](ipc, digest)
         for path, kind in IPC_OUTPUTS.items()

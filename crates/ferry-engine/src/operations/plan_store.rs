@@ -1,7 +1,5 @@
 //! Operation plan 的模型、摘要与 SQLite 装载。
 //!
-//! 语义事实源：`engine/operations/plan_store.py`。
-//!
 //! 硬约束：
 //! - frozen plan：`input` / `preview` 落盘时先 `canonical_json`，摘要是对**该串**
 //!   取的 sha256（§2.4 第 16 条），批准后一律只认 plan_id；

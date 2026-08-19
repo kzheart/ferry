@@ -513,7 +513,7 @@ fn default_ops() -> Value {
 /// 超时会让 `wait` 静默回落到当前状态，把真实断言变成时序噪声。
 const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// 断言 apply 已入队，并等待终态（对齐 Python 的 `_apply`）。
+/// 断言 apply 已入队，并等待终态。
 fn apply_and_wait(service: &OperationService, plan_id: &Value) -> EngineResult<Value> {
     let accepted = service.apply(plan_id)?;
     assert!(

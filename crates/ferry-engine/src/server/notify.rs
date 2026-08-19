@@ -1,7 +1,5 @@
 //! 引擎主动通知：与 RPC 响应共用 stdout 的事件帧。
 //!
-//! 语义事实源：`engine/server/notify.py`。
-//!
 //! 事件帧遵循 IPC 契约的 event 信封（`protocol` / `type` / `payload`，**无 `id`**，
 //! §2.1 第 3 条），宿主按契约中的事件策略转发给前端。未绑定输出（一次性 rpc /
 //! 测试）时静默丢弃。

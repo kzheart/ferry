@@ -1,7 +1,5 @@
 //! Claude 会话编辑后端：delete-turn / rewrite / replace-assistant-reply。
 //!
-//! 语义事实源：`engine/adapters/claude/editor.py`。
-//!
 //! 三个操作的轮次语义全部消费 [`super::codec`]，与 reader 共用同一份定义。
 
 use std::path::{Path, PathBuf};

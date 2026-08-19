@@ -1,7 +1,5 @@
 //! 扫描进度跟踪。
 //!
-//! 语义事实源：`engine/sessions/scan_progress.py`。
-//!
 //! 全量刷新经 `AgentSessionIndex` 单飞合并，同一时刻至多一次在扫，任何来源
 //! （UI 扫描、启动预热、agent 搜索）都驱动同一份进度；`scan_progress` 走
 //! parallel-read 池，可在扫描期间并发查询。单例状态由锁保护；未处于扫描中的

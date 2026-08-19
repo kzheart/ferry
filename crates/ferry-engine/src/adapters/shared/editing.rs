@@ -1,7 +1,5 @@
 //! 格式无关的会话编辑契约与通用事务工具。
 //!
-//! 语义事实源：`engine/adapters/shared/editing.py`。
-//!
 //! 通用层只编排 preview/apply；每个 Agent 包内实现自己的 [`EditBackend`]，
 //! 公共模块不引用任何具体 Agent 实现。
 

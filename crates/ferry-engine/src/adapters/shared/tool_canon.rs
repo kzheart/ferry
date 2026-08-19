@@ -1,7 +1,5 @@
 //! 工具调用规范化的兼容入口：实现已收敛到各 adapter 的 dialect 声明。
 //!
-//! 语义事实源：`engine/adapters/shared/tool_canon.py`。
-//!
 //! 映射的唯一事实源是各 adapter 的 `dialect.rs`；本模块保留原有函数签名，
 //! 供仍按旧接口调用的 reader 与测试使用。[`canonical_tool_input`] 的历史签名
 //! 不带 adapter 参数（claude 与 opencode 工具名天然不冲突），按

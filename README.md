@@ -159,8 +159,8 @@ Ferry reads your agents' local session stores directly. Nothing is uploaded, and
 
 ## Development
 
-**Prerequisites**: Node.js 22.19+, Rust (stable). Python 3.12 is still needed
-for the repository test suite and the migration-period Python engine fallback.
+**Prerequisites**: Node.js 22.19+, Rust (stable). Python 3.12 is used by the
+repository's build and contract-generation scripts.
 
 The Session Engine and Ferry Runtime ship as native sidecars alongside the
 Tauri shell.
@@ -173,8 +173,8 @@ cd ../app && npm ci
 npm run desktop
 ```
 
-A debug host uses `crates/ferry-engine/target/{debug,release}/ferry-engine`
-when it exists and falls back to `python3 -m engine.server.cli` otherwise.
+A debug host runs `crates/ferry-engine/target/{debug,release}/ferry-engine`;
+if no build is present it reports how to produce one instead of falling back.
 
 Build a complete native release from the repository root:
 

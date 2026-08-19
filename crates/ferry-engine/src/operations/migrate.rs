@@ -1,7 +1,5 @@
 //! 迁移用例：预览、写入后的结构校验、可选影子探针、回滚与历史审计。
 //!
-//! 语义事实源：`engine/operations/migrate.py`。
-//!
 //! 硬约束（§2.4 第 25 条）：
 //! `write → validate_written_tree（re-read 验收）→ 结构失败才回滚（探针失败不回滚）
 //!  → history.append（回滚也写）`；executor 侧还有第二道门禁。

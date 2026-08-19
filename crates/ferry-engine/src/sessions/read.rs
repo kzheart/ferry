@@ -1,7 +1,5 @@
 //! 规范会话读取、树装配与 RPC DTO。
 //!
-//! 语义事实源：`engine/sessions/read.py`。
-//!
 //! 树装配复用 `adapters::shared::migration::assemble_tree`（WP-B2），本模块只
 //! 提供 `read_tree`（按 tool 名解析 adapter + 缓存）这一层门面。
 

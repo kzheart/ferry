@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = (
-    ROOT / "engine",
+    ROOT / "crates" / "ferry-engine" / "src",
     ROOT / "app" / "src",
     ROOT / "app" / "src-tauri" / "src",
     ROOT / "ferry-runtime" / "src",
@@ -30,13 +30,7 @@ FORBIDDEN = (
     "/api/" + "rpc",
     "engine" + "Bridge",
 )
-FORBIDDEN_PATHS = (
-    ROOT / "app/scripts/check-tool-contract.mjs",
-    ROOT / "engine/adapters/base/plugin.py",
-    ROOT / "engine/adapters/claude/plugin.py",
-    ROOT / "engine/adapters/codex/plugin.py",
-    ROOT / "engine/adapters/opencode/plugin.py",
-)
+FORBIDDEN_PATHS = (ROOT / "app/scripts/check-tool-contract.mjs",)
 
 
 def violations() -> list[str]:

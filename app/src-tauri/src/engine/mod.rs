@@ -260,14 +260,9 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
         let _ = candidates;
-        // 开发模式优先跑仓库内的原生引擎产物，找不到才回退迁移期的 Python 引擎。
-        if let Some(command) = crate::process::command::local_engine_command() {
-            return Ok(command);
-        }
-        let mut command = Command::new(crate::process::command::python_program());
-        command.args(["-m", "engine.server.cli"]);
-        command.current_dir(crate::process::command::repository_root());
-        Ok(command)
+        // 开发模式跑仓库内的引擎产物；没有产物就是没有引擎,不存在回退路径。
+        crate::process::command::local_engine_command()
+            .ok_or_else(crate::process::command::missing_local_engine_message)
     }
 
     #[cfg(not(debug_assertions))]

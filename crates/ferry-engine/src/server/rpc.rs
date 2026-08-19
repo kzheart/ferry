@@ -1,7 +1,5 @@
 //! `ferry-ipc/1` RPC 契约与调度：结构化错误 envelope。
 //!
-//! 语义事实源：`engine/server/rpc.py`。
-//!
 //! 硬约束（§2.1）：
 //! 1. 请求信封字段集合**精确等于** `{protocol,id,method,params}`，多一个即
 //!    `rpc.invalid_request`；`id` ≤128；`request_id` 提取先于 protocol 校验，
@@ -29,8 +27,7 @@ pub const PROTOCOL: &str = FERRY_IPC_PROTOCOL;
 
 /// `agent_session_read` 的 `max_bytes` 默认值。
 ///
-/// 权威定义在 `engine/sessions/agent_read.py:DEFAULT_CONTEXT_BYTES`；WP-D 填好
-/// `sessions::agent_read` 后应改为引用那里的常量。
+/// 分发层在这里兜底，`sessions::agent_read` 自己也认这个上限。
 pub const DEFAULT_CONTEXT_BYTES: i64 = 24 * 1024;
 
 /// `agent_prompt` 的默认超时（秒）。

@@ -1,7 +1,5 @@
 //! 把当前 Grok 的 ACP/update bundle 读成 canonical session。
 //!
-//! 语义事实源：`engine/adapters/grok/reader.py`。
-//!
 //! 读取管线：`filter_rewind_updates` → `aggregate_updates` → canonical；
 //! 只有在完全没有 updates 时才回退到 `chat_history.jsonl`。
 

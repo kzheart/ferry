@@ -1,7 +1,7 @@
 //! `ferry-engine` 二进制入口。
 //!
-//! 子命令解析与分支实现都在 [`ferry_engine::server::cli`]（与
-//! `engine/server/cli.py::main` 一一对应），这里只负责把组合根交给它。
+//! 子命令解析与分支实现都在 [`ferry_engine::server::cli`]，这里只负责把组合根
+//! 交给它。
 
 use std::process::ExitCode;
 

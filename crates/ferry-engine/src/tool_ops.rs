@@ -1,7 +1,5 @@
 //! Canonical tool-operation contract shared by every agent adapter.
 //!
-//! 语义事实源：`engine/sessions/tool_ops.py`。
-//!
 //! Adapter 把原生调用归一到这些操作；Writer 声明自己能原生保留还是只能降级渲染，
 //! 迁移预览与实际写入共用同一套词表。
 

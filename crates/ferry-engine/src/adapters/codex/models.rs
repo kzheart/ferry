@@ -1,6 +1,4 @@
 //! Codex CLI 模型发现。
-//!
-//! 语义事实源：`engine/adapters/codex/models.py`。
 
 use std::time::Duration;
 

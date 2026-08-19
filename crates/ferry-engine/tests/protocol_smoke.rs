@@ -380,7 +380,7 @@ fn session_changes_are_pushed_as_id_less_event_frames() {
     assert_eq!(scan["ok"], json!(true));
 
     // 等活索引的首轮探测（poll 2.5s）把当前状态记为基线令牌之后再改文件：
-    // 首轮之前的变更会被折进基线（与 Python live.py 同构的竞态），那样就只能
+    // 首轮之前的变更会被折进基线，那样就只能
     // 靠 300s 的全量对账兜底，测试会等满五分钟。
     std::thread::sleep(Duration::from_secs(4));
 

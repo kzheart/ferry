@@ -1,7 +1,5 @@
 //! 已审批操作的原生写入执行。
 //!
-//! 语义事实源：`engine/operations/executor.py`。
-//!
 //! 硬约束：
 //! - 每条分支都要在写之前重新解析索引并比 `base_revision`（§2.4）；
 //! - 探针失败还原快照、`result.ok=false`，但 operation 仍算 `applied`（§2.4 第 24 条）；

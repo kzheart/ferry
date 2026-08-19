@@ -1,7 +1,5 @@
 //! Ferry Runtime 会话事件的 Engine 侧门面。
 //!
-//! 语义事实源：`engine/runtime/sessions.py`。
-//!
 //! 只做形状校验（`session_id` 是 str、`timestamp` 是 str、`messages`/`events`
 //! 是数组），不解释载荷内容；底层走 `cached_state_database`（不触发崩溃恢复）。
 

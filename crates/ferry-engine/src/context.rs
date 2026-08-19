@@ -1,4 +1,4 @@
-//! 能力包共享的端口集合（`engine/context.py::EngineContext` 的等价物）。
+//! 能力包共享的端口集合。
 //!
 //! Python 侧 `EngineContext` 是一个装了五个可调用对象的 dataclass；Rust 侧
 //! 各能力包只依赖自己那份窄 trait（`sessions::index::SessionPorts` 与
@@ -23,9 +23,8 @@ use crate::system::snapshots::data_dir;
 
 /// 引擎对外自称的版本号。
 ///
-/// **必须逐字等于 `engine/__init__.py::__version__`**：`version` RPC 是宿主与
-/// 等价性脚本的对照面，Rust crate 自己的 `CARGO_PKG_VERSION`（跟随 app 版本）
-/// 与它无关。
+/// 这是历史契约值，与 crate 版本正交：`version` RPC 是宿主的对照面，
+/// `CARGO_PKG_VERSION`（跟随 app 版本）不参与其中，两者不要互相同步。
 pub const ENGINE_VERSION: &str = "0.1.0";
 
 /// 组合根持有的运行上下文。
@@ -84,8 +83,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn engine_version_tracks_the_python_engine_not_the_crate() {
-        // crate 版本跟随 app（0.6.x），引擎自称版本跟随 engine/__init__.py。
+    fn engine_version_is_independent_of_the_crate_version() {
+        // crate 版本跟随 app（0.6.x），引擎自称版本是独立的历史契约值。
         assert_eq!(ENGINE_VERSION, "0.1.0");
         assert_ne!(ENGINE_VERSION, env!("CARGO_PKG_VERSION"));
     }

@@ -1,7 +1,5 @@
 //! 统一写操作计划：plan / apply / status / cancel 的门面与单 worker 队列。
 //!
-//! 语义事实源：`engine/operations/service.py`。
-//!
 //! 硬约束：
 //! - 所有写操作在**同一个单 worker 队列**里串行执行（`MUTATION_WORKERS = 1`），
 //!   IPC 请求立即返回，不放宽 adapter 的写并发假设；

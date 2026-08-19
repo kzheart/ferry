@@ -1,7 +1,5 @@
 //! Ferry 自有状态 SQLite 的连接与 schema 组合根。
 //!
-//! 语义事实源：`engine/storage/database.py`。
-//!
 //! 只有 Engine 打开并写入此数据库。schema 版本白名单 `(0, 9, 10)`，v9→v10 是
 //! 单跳迁移（DROP `deletion_recoveries`），v0 直接建 v10 全量表（§2.3 第 18 条）。
 
@@ -50,7 +48,7 @@ impl Clock for SystemClock {
     }
 }
 
-/// 与 `engine.storage.database.canonical_json` 同义；NaN/Inf 折成 `ValueError`。
+/// [`crate::jsonutil::canonical_json`] 的能力包包装；NaN/Inf 折成校验错误。
 pub fn canonical_json(value: &Value) -> EngineResult<String> {
     Ok(crate::jsonutil::canonical_json(value)?)
 }

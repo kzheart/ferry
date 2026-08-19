@@ -1,9 +1,8 @@
 //! Agent 适配器：把各 Agent 的原生会话格式收敛到 canonical 模型。
 //!
-//! 分层规则（替代 `scripts/check-engine-layering.py`）：`adapters` 不得引用
-//! `crate::operations` 与 `crate::sessions`。Python 现状里 adapters →
-//! sessions.usage / sessions.topology 的倒置依赖，在 Rust 侧由
-//! `adapters::shared` 提供并由 sessions 复用，方向反转。
+//! 分层规则（由 `tests/structure.rs` 守住）：`adapters` 不得引用
+//! `crate::operations` 与 `crate::sessions`。两边都要用的助手（用量归一、
+//! 会话树装配等）住在 `adapters::shared`，由 sessions 复用，依赖单向向下。
 
 pub mod contracts;
 pub mod registry;

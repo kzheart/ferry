@@ -1,7 +1,5 @@
 //! 会话保真度损耗目录：谁产生 loss code，谁声明它的后果。
 //!
-//! 语义事实源：`engine/sessions/loss.py`。
-//!
 //! 共享迁移层不持有任何 Agent 私有 code。某个 Adapter 独有的降级/丢弃语义在
 //! 产生它的模块里 [`declare`]；Rust 没有 import 副作用，各 adapter 必须在自己的
 //! 装配入口（`build()`）里调用一次 `declare`。重复声明必须一致，避免同一 code

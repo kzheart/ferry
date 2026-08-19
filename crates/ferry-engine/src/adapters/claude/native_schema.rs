@@ -1,7 +1,5 @@
 //! Ferry 支持的唯一一套 Claude Code 原生结构。
 //!
-//! 语义事实源：`engine/adapters/claude/native_schema.py`。
-//!
 //! `templates()` 是 writer 生成记录的骨架；键序即写盘时的 JSON 键序，
 //! 因此这里用 `json!` 字面量（`serde_json` 开了 `preserve_order`）而不是 Map 拼装。
 

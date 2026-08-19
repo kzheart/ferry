@@ -1,7 +1,5 @@
 //! Claude 文件存储扫描。
 //!
-//! 语义事实源：`engine/adapters/claude/scanner.py`。
-//!
 //! token 归一化与 `iso_ms` 在 Python 侧来自 `sessions.usage`；Rust 禁止
 //! `adapters → sessions`（见 `adapters/mod.rs`），这几个纯函数由
 //! `adapters::shared::scanner` 提供，`sessions::usage` 反过来复用它们。

@@ -1,7 +1,5 @@
 //! Operation 探针入口；具体 CLI 执行由 adapter verifier 持有。
 //!
-//! 语义事实源：`engine/operations/verification.py`。
-//!
 //! Python 的 `ProbeTimeout` 是裸 `RuntimeError` 子类，靠 `error.__class__.__name__`
 //! 做鸭子类型识别。Rust 侧统一走 `DomainError::probe_timeout` 的幽灵错误码
 //! （`probe.timeout` 未注册在契约里，方案 §2.1 第 4 条 / §5），

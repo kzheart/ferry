@@ -1,7 +1,5 @@
 //! Pi 工具方言。
 //!
-//! 语义事实源：`engine/adapters/pi/dialect.py`。
-//!
 //! pi 的守卫语义是混合的：bash/grep/find 遇到表外字段整体退回 `tool.invoke`
 //! （`extras=fallback`），read/write 只取已知字段（`extras=ignore`）。edit 的
 //! 原生形态是 `edits` 列表，只有「单元素且仅含 oldText/newText」时才能无损归一，

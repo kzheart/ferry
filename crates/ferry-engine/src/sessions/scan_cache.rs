@@ -1,9 +1,7 @@
 //! 基于文件修订信息的扫描缓存。
 //!
-//! 语义事实源：`engine/sessions/scan_cache.py`。
-//!
-//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 6`）与 Python 引擎**互认**：
-//! 同一个文件两个引擎可以交替读写，字段名与取值口径逐个对齐。
+//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 6`）是**兼容面**：`version`
+//! 不变就必须能读旧文件，字段名与取值口径不可悄悄改；改口径就得升 `version`。
 //!
 //! ```jsonc
 //! {
@@ -24,7 +22,7 @@ use crate::jsonutil::FileStat;
 use crate::system::paths::home_dir;
 
 const DIGESTS_KEY: &str = "digests";
-/// 缓存条目格式版本；与 Python 侧的默认值必须一致。
+/// 缓存条目格式版本；改条目形状必须升它，否则旧条目会被当成新条目读。
 pub const SCAN_CACHE_VERSION: i64 = 6;
 
 /// 条目合并规则：同一个 key 取 mtime 较新的那份。
@@ -295,7 +293,7 @@ mod tests {
         assert_eq!(cache.get_digest(path, &other), None);
     }
 
-    /// 磁盘格式必须与 Python 引擎互认：字段名与形状逐个对齐。
+    /// 磁盘格式是兼容面：字段名与形状固定，改动必须伴随 `version` 升级。
     #[test]
     fn disk_format_matches_the_python_layout() {
         let temp = tempfile::tempdir().unwrap();

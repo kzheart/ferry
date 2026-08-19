@@ -1,6 +1,4 @@
 //! Codex rollout 文件扫描。
-//!
-//! 语义事实源：`engine/adapters/codex/scanner.py`。
 
 use std::fs;
 use std::path::Path;

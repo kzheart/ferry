@@ -1,7 +1,5 @@
 //! Codex 工具方言（读端归一）。
 //!
-//! 语义事实源：`engine/adapters/codex/dialect.py`。
-//!
 //! Codex 的写端是记录信封级的定制渲染（exec 事件对），不走 render；
 //! 这份方言只负责把 rollout 里的 function_call 归一成规范操作。
 //! shell 家族四个名字共享一个解码钩子：command 可能是字符串或

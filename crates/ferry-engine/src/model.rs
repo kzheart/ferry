@@ -1,7 +1,5 @@
 //! 会话规范化中间格式（canonical model）。
 //!
-//! 语义事实源：`engine/sessions/model.py`。
-//!
 //! Canonical Model 只保存 Ferry 使用的明确语义；原生记录由各 Adapter 在边界内
 //! 处理，无法表达的内容通过迁移损失报告（`Session::lose`）。
 

@@ -1,6 +1,4 @@
 //! Pi 适配器组装。
-//!
-//! 语义事实源：`engine/adapters/pi/adapter.py`。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -170,7 +168,7 @@ pub fn build() -> Result<AgentAdapter, String> {
     let contract = agent("pi").ok_or_else(|| "pi 未在生成契约里".to_string())?;
     let manifest = AgentManifest::from_contract(contract);
     // pi 没有私有 loss code：reader 产出的 `session.malformed_record` /
-    // `session.orphan_tool_result` 在 Python 侧同样未声明（不计入迁移差异），
+    // `session.orphan_tool_result` 是读取期告警，刻意不声明后果；
     // `migration.unknown_block_dropped` / `session.unpaired_tool_use` 由共享目录
     // 声明，因此这里不需要 `loss::declare`。
     register_dialect("pi", &DIALECT);
@@ -241,7 +239,7 @@ mod tests {
         fn flush(&self) {}
     }
 
-    /// 按 `scripts/dump-canonical-fixtures.py` 的 `prepare_pi` 物化一个 case：
+    /// 按 `tests/golden_regen.rs` 的 pi 分支物化一个 case：
     /// `<root>/<case>/<v3 头部 id>.jsonl`，mtime 钉死。
     fn materialize(root: &Path, case: &str) -> PathBuf {
         let source = PathBuf::from(FIXTURES).join(case).join("session.jsonl");

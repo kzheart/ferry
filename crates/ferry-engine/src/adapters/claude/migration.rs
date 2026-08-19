@@ -1,7 +1,5 @@
 //! Claude 作为迁移目标的写入与规划能力。
 //!
-//! 语义事实源：`engine/adapters/claude/migration.py`。
-//!
 //! 只覆写 `preview_tool` 与类级声明；`evaluate_tool` / `plan` / `preview` 一律
 //! 走 [`MigrationTargetBase`] 的默认实现（blanket impl 会把它接成
 //! `contracts::MigrationTarget`）。
