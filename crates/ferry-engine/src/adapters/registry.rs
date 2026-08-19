@@ -58,10 +58,12 @@ impl AdapterRegistry {
     }
 }
 
-/// 装配全部内置 adapter；builder 集合必须与 `AGENT_IDS` 精确一致。
-pub fn create_registry() -> Result<AdapterRegistry, String> {
-    let declared: Vec<&str> = ADAPTER_BUILDERS.iter().map(|(id, _)| *id).collect();
-    let mut missing: Vec<&str> = AGENT_IDS
+/// builder 集合与契约声明的 agent 集合必须精确一致。
+///
+/// 单独抽出来是为了能在测试里喂入不匹配的两组 id：真实的
+/// `ADAPTER_BUILDERS` / `AGENT_IDS` 都是常量，正常路径永远走不到报错分支。
+fn check_builder_coverage(declared: &[&str], agent_ids: &[&str]) -> Result<(), String> {
+    let mut missing: Vec<&str> = agent_ids
         .iter()
         .copied()
         .filter(|id| !declared.contains(id))
@@ -69,15 +71,22 @@ pub fn create_registry() -> Result<AdapterRegistry, String> {
     let mut extra: Vec<&str> = declared
         .iter()
         .copied()
-        .filter(|id| !AGENT_IDS.contains(id))
+        .filter(|id| !agent_ids.contains(id))
         .collect();
-    if !missing.is_empty() || !extra.is_empty() {
-        missing.sort_unstable();
-        extra.sort_unstable();
-        return Err(format!(
-            "Adapter builders 与 AGENT_IDS 不一致: missing={missing:?}, extra={extra:?}"
-        ));
+    if missing.is_empty() && extra.is_empty() {
+        return Ok(());
     }
+    missing.sort_unstable();
+    extra.sort_unstable();
+    Err(format!(
+        "Adapter builders 与 AGENT_IDS 不一致: missing={missing:?}, extra={extra:?}"
+    ))
+}
+
+/// 装配全部内置 adapter；builder 集合必须与 `AGENT_IDS` 精确一致。
+pub fn create_registry() -> Result<AdapterRegistry, String> {
+    let declared: Vec<&str> = ADAPTER_BUILDERS.iter().map(|(id, _)| *id).collect();
+    check_builder_coverage(&declared, AGENT_IDS)?;
     let mut adapters = Vec::with_capacity(AGENT_IDS.len());
     for agent_id in AGENT_IDS {
         let build = ADAPTER_BUILDERS
@@ -98,6 +107,26 @@ mod tests {
     fn builders_cover_exactly_the_generated_agent_ids() {
         let declared: Vec<&str> = ADAPTER_BUILDERS.iter().map(|(id, _)| *id).collect();
         assert_eq!(declared, AGENT_IDS);
+    }
+
+    #[test]
+    fn duplicate_adapter_ids_are_rejected() {
+        // 同一个 builder 跑两次就得到两个 id 相同的 adapter：注册表必须拒绝，
+        // 否则后装配的那个会静默盖掉前一个。
+        let first = crate::adapters::claude::adapter::build().expect("claude adapter 可装配");
+        let second = crate::adapters::claude::adapter::build().expect("claude adapter 可装配");
+        let error = AdapterRegistry::new([first, second]).unwrap_err();
+        assert_eq!(error, "重复的 adapter id: claude");
+    }
+
+    #[test]
+    fn builder_coverage_reports_both_directions() {
+        assert!(check_builder_coverage(&["a", "b"], &["b", "a"]).is_ok());
+        let error = check_builder_coverage(&["claude", "ghost"], &["claude", "codex"]).unwrap_err();
+        assert_eq!(
+            error,
+            "Adapter builders 与 AGENT_IDS 不一致: missing=[\"codex\"], extra=[\"ghost\"]"
+        );
     }
 
     #[test]

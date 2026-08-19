@@ -3,7 +3,11 @@
 //! 语义事实源：`engine/server/cli.py` 的 `main()`（86-131 行）。
 //!
 //! 子命令：`serve` / `rpc` / `health` / `version`(`--version`) / `scan` / `show` /
-//! `history` / `env`。除 `serve` 与 `rpc` 外都直接打印 `indent=2` 的 JSON。
+//! `history` / `env` / `extract-format`。除 `serve` 与 `rpc` 外都直接打印
+//! `indent=2` 的 JSON。
+//!
+//! `extract-format` 是维护者工具，不在 `ferry-ipc/1` 方法表里：它只读一份原生
+//! capture，产出 `native_schema` 的结构模板，用来核对 fixture 是否还是当前格式。
 //!
 //! `serve` 分支的三件事顺序固定：stderr logging → 后台预热线程 → notifier 绑定
 //! （`enable_live_updates`），然后才进 [`crate::server::serve::serve`] 主循环。
@@ -29,6 +33,7 @@ pub enum Command {
     Show,
     History,
     Env,
+    ExtractFormat,
 }
 
 impl Command {
@@ -42,6 +47,7 @@ impl Command {
             "show" => Self::Show,
             "history" => Self::History,
             "env" => Self::Env,
+            "extract-format" => Self::ExtractFormat,
             _ => return None,
         })
     }
@@ -137,7 +143,68 @@ fn run(command: Option<Command>, raw: &str, rest: &[String], deps: &CliDeps) -> 
         }
         Command::History => print_pretty(&deps.service.migration_history().map_err(cli_error)?),
         Command::Env => print_pretty(&deps.service.environment().map_err(cli_error)?),
+        Command::ExtractFormat => {
+            let agent = positional(rest, 0)?;
+            let capture = positional(rest, 1)?;
+            print_pretty(&extract_format(agent, std::path::Path::new(capture))?)
+        }
     }
+}
+
+/// 从一份原生 capture 抽取结构模板。
+///
+/// 各家的 capture 形态不同：claude / codex / pi 是 JSONL 记录流，opencode 是单个
+/// JSON（三张表的导出），grok 是一个 bundle 目录。
+fn extract_format(agent: &str, capture: &std::path::Path) -> Result<Value, String> {
+    use crate::adapters::{claude, codex, grok, opencode, pi};
+
+    if !capture.exists() {
+        return Err(format!("capture 不存在: {}", capture.display()));
+    }
+    let read_json = |path: &std::path::Path| -> Result<Value, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|error| format!("读取 {} 失败: {error}", path.display()))?;
+        serde_json::from_str(&text)
+            .map_err(|error| format!("{} 不是合法 JSON: {error}", path.display()))
+    };
+    let read_jsonl = |path: &std::path::Path| -> Result<Vec<Value>, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|error| format!("读取 {} 失败: {error}", path.display()))?;
+        crate::adapters::shared::scanner::split_jsonl_lines(&text)
+            .into_iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                serde_json::from_str(line).map_err(|error| format!("JSONL 行非法: {error}"))
+            })
+            .collect()
+    };
+    let templates = match agent {
+        "claude" => claude::native_schema::extract_templates(&read_jsonl(capture)?)
+            .map_err(|error| error.message().to_string())?,
+        "codex" => codex::native_schema::extract_templates(&read_jsonl(capture)?)?,
+        "pi" => pi::native_schema::extract_templates(&read_jsonl(capture)?)?,
+        "opencode" => opencode::native_schema::extract_templates(&read_json(capture)?)
+            .map_err(|error| error.message().to_string())?,
+        "grok" => {
+            let mut bundle = serde_json::Map::new();
+            bundle.insert("summary".into(), read_json(&capture.join("summary.json"))?);
+            bundle.insert(
+                "updates".into(),
+                Value::Array(read_jsonl(&capture.join("updates.jsonl"))?),
+            );
+            bundle.insert(
+                "chat".into(),
+                Value::Array(read_jsonl(&capture.join("chat_history.jsonl"))?),
+            );
+            return Ok(Value::Object(
+                grok::native_schema::extract_templates(&Value::Object(bundle))?
+                    .into_iter()
+                    .collect(),
+            ));
+        }
+        other => return Err(format!("不支持的 agent: {other}")),
+    };
+    Ok(Value::Object(templates))
 }
 
 fn serve_forever(dispatcher: RpcDispatcher, deps: &CliDeps) -> Result<(), String> {
@@ -211,12 +278,43 @@ mod tests {
             ("show", Command::Show),
             ("history", Command::History),
             ("env", Command::Env),
+            ("extract-format", Command::ExtractFormat),
         ];
         for (raw, expected) in cases {
             assert_eq!(Command::parse(raw), Some(expected), "raw={raw}");
         }
         assert_eq!(Command::parse("nope"), None);
         assert_eq!(Command::parse("-v"), None);
+    }
+
+    /// `extract-format` 只是维护者工具，不得混进 `ferry-ipc/1` 的方法表。
+    #[test]
+    fn extract_format_is_not_an_rpc_method() {
+        use crate::contracts::engine_methods::ENGINE_METHOD_NAMES;
+        assert!(!ENGINE_METHOD_NAMES.contains(&"extract-format"));
+        assert!(!ENGINE_METHOD_NAMES.contains(&"extract_format"));
+    }
+
+    #[test]
+    fn extract_format_reads_each_native_capture_shape() {
+        let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/agent_formats");
+        for (agent, case, member) in [
+            ("claude", "case-02-tools", "session.jsonl"),
+            ("codex", "case-02-tools", "session.jsonl"),
+            ("pi", "case-02-tools", "session.jsonl"),
+            ("opencode", "case-02-tools", "session.json"),
+            ("grok", "case-02-tools", ""),
+        ] {
+            let capture = fixtures.join(agent).join(case).join(member);
+            let templates = extract_format(agent, &capture)
+                .unwrap_or_else(|error| panic!("{agent} 抽取失败: {error}"));
+            assert!(
+                templates.as_object().is_some_and(|map| !map.is_empty()),
+                "{agent} 的模板不应为空"
+            );
+        }
+        assert!(extract_format("nope", &fixtures).is_err());
     }
 
     #[test]
