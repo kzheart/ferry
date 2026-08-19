@@ -126,7 +126,7 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
 }
 
 /// 协议握手作为常驻进程的首条请求完成:独立的一次性 health 子进程
-/// 在 release 下会让 PyInstaller onefile 多解压一整次,冷启动时间翻倍。
+/// 会让打包 sidecar 多付一整次冷启动成本。
 fn handshake(engine: &EngineClient) -> Result<(), String> {
     let (request, request_id) = stamp_engine_request(r#"{"method":"health"}"#)?;
     let line = engine
@@ -260,6 +260,10 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
         let _ = candidates;
+        // 开发模式优先跑仓库内的原生引擎产物，找不到才回退迁移期的 Python 引擎。
+        if let Some(command) = crate::process::command::local_engine_command() {
+            return Ok(command);
+        }
         let mut command = Command::new(crate::process::command::python_program());
         command.args(["-m", "engine.server.cli"]);
         command.current_dir(crate::process::command::repository_root());
@@ -273,7 +277,7 @@ fn engine_command(resource_dir: &Path) -> Result<Command, String> {
     ))
 }
 
-/// 应用启动即预热常驻引擎:PyInstaller 解压与 webview 启动并行,
+/// 应用启动即预热常驻引擎:引擎冷启动与 webview 启动并行,
 /// 首个前端 RPC 到达时引擎大概率已就绪。失败静默,错误会在首个真实 RPC 上重现。
 pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
     let _ = ENGINE_APP.set(app);

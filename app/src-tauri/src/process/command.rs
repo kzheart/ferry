@@ -66,6 +66,48 @@ pub(crate) fn repository_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// 开发模式下的原生引擎产物：`crates/ferry-engine` 是独立 package，
+/// 产物落在自己的 `target/<profile>/` 下（含 `--target <triple>` 的变体）。
+/// 选择交给 [`local_engine_command`] 按最新 mtime 决定，这里只列候选。
+#[cfg(debug_assertions)]
+pub(crate) fn local_engine_candidates(root: &Path, windows: bool) -> Vec<PathBuf> {
+    let name = executable_name_for("ferry-engine", windows);
+    let target = root.join("crates/ferry-engine/target");
+    let mut candidates = vec![
+        target.join("debug").join(&name),
+        target.join("release").join(&name),
+    ];
+    // `cargo build --release --target <triple>`（构建脚本用的形态）落在三层目录。
+    if let Ok(entries) = std::fs::read_dir(&target) {
+        for entry in entries.flatten() {
+            let path = entry.path().join("release").join(&name);
+            if entry.file_name().to_string_lossy().contains('-') && path.is_file() {
+                candidates.push(path);
+            }
+        }
+    }
+    candidates
+}
+
+/// 迁移期的开发入口：有原生引擎产物就直接用，没有再回退 Python 引擎。
+///
+/// 多个产物并存时取**最新构建**的那个：debug 引擎对真实会话库做全量 sha256
+/// 规范化会慢一个数量级（首扫可超过 host 的 120s 超时），偶尔构建的 release
+/// 不该被恒定压在 debug 之后；而引擎开发者刚 `cargo build` 出的 debug 产物
+/// 又必须立即生效。按 mtime 取最新即可两全。
+#[cfg(debug_assertions)]
+pub(crate) fn local_engine_command() -> Option<Command> {
+    local_engine_candidates(&repository_root(), cfg!(target_os = "windows"))
+        .into_iter()
+        .filter(|path| path.is_file())
+        .max_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        })
+        .map(Command::new)
+}
+
 /// Sidecar 是后台进程；平台边界统一决定是否隐藏控制台窗口。
 #[cfg(target_os = "windows")]
 pub(crate) fn configure_background(command: &mut Command) {
@@ -79,6 +121,28 @@ pub(crate) fn configure_background(_command: &mut Command) {}
 #[cfg(test)]
 mod tests {
     use super::executable_name_for;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn development_prefers_the_native_engine_build_over_python() {
+        use super::local_engine_candidates;
+        use std::path::{Path, PathBuf};
+
+        // 固定的两个 profile 候选必在（`--target <triple>` 变体按磁盘现状追加，
+        // 用 /repo 这种不存在的根时不会出现）。
+        let candidates = local_engine_candidates(Path::new("/repo"), false);
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from("/repo/crates/ferry-engine/target/debug/ferry-engine"),
+                PathBuf::from("/repo/crates/ferry-engine/target/release/ferry-engine"),
+            ],
+        );
+        assert_eq!(
+            local_engine_candidates(Path::new("/repo"), true)[0],
+            PathBuf::from("/repo/crates/ferry-engine/target/debug/ferry-engine.exe"),
+        );
+    }
 
     #[test]
     fn sidecar_names_keep_the_windows_executable_boundary() {
