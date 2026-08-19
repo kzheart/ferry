@@ -1,0 +1,41 @@
+{
+  "_normalized": {
+    "environment_dependent_fields": [
+      "path",
+      "updated",
+      "own_updated",
+      "size",
+      "own_size"
+    ],
+    "fixed_mtime_seconds": 1784937600,
+    "note": "path 中的沙箱根已替换为 <home>；updated/own_updated 之所以稳定，是因为物化 fixture 时把 mtime 统一设成 fixed_mtime_seconds。Rust 侧对照真实环境时，这些字段应按各自环境重新计算。",
+    "sandbox_root_marker": "<home>"
+  },
+  "rows": [
+    {
+      "authoritative_members": [
+        "summary.json",
+        "chat_history.jsonl"
+      ],
+      "child_count": 0,
+      "children": [],
+      "count": 2,
+      "created": 1784991600000,
+      "dir": "/fixture/grok/chat",
+      "id": "fixture-grok-chat",
+      "model": "grok-code-fast-1",
+      "own_count": 2,
+      "own_size": 270,
+      "own_updated": 1784991602000,
+      "parent_id": null,
+      "path": "<home>/.grok/sessions/case-04-chat-fallback/fixture-grok-chat",
+      "root_id": "fixture-grok-chat",
+      "size": 270,
+      "title": "Chat fallback",
+      "tokens": null,
+      "tool": "grok",
+      "tree_count": 1,
+      "updated": 1784991602000
+    }
+  ]
+}

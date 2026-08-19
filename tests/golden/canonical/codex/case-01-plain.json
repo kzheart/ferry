@@ -1,0 +1,56 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/codex/plain",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "record:2",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "FORMAT_FIXTURE_PLAIN_OK",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "assistant",
+      "source_id": "record:3",
+      "turn_id": null
+    }
+  ],
+  "model": null,
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": "fixture-codex-plain",
+  "source_id": "fixture-codex-plain",
+  "source_tool": "codex",
+  "title": ""
+}

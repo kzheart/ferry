@@ -1,0 +1,36 @@
+{
+  "_normalized": {
+    "environment_dependent_fields": [
+      "path",
+      "updated",
+      "own_updated",
+      "size",
+      "own_size"
+    ],
+    "fixed_mtime_seconds": 1784937600,
+    "note": "path 中的沙箱根已替换为 <home>；updated/own_updated 之所以稳定，是因为物化 fixture 时把 mtime 统一设成 fixed_mtime_seconds。Rust 侧对照真实环境时，这些字段应按各自环境重新计算。",
+    "sandbox_root_marker": "<home>"
+  },
+  "rows": [
+    {
+      "count": 2,
+      "created": 1784970000000,
+      "dir": "/fixture/pi/plain",
+      "id": "fixture-pi-plain",
+      "model": "fixture-model",
+      "parent_id": null,
+      "path": "<home>/pi-sessions/case-01-plain/fixture-pi-plain.jsonl",
+      "root_id": "fixture-pi-plain",
+      "size": 774,
+      "title": "Keep /fixture/pi/plain and token sk-test-fixture unchanged.",
+      "tokens": {
+        "cache_read": 0,
+        "cache_write": 0,
+        "input": 7,
+        "output": 4
+      },
+      "tool": "pi",
+      "updated": 1784937600000
+    }
+  ]
+}

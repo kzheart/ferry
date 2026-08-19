@@ -1,0 +1,203 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/claude/tools",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Run the fixture shell, write, and read operations.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "fixture-message-user-tools",
+      "turn_id": "fixture-prompt-tools"
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "command": "echo format-fixture-shell-test"
+            },
+            "name": "Bash",
+            "op": "shell.exec",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "format-fixture-shell-test",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "success",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "fixture-tool-shell",
+            "source_message_id": null,
+            "source_result_id": "fixture-message-result-shell",
+            "started_at": null
+          }
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [
+        "fixture-message-user-tools"
+      ],
+      "role": "assistant",
+      "source_id": "fixture-message-assistant-shell",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "content": "hello fixture",
+              "file_path": "/fixture/claude/tools/format-fixture.txt"
+            },
+            "name": "Write",
+            "op": "fs.write",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "File created.",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "success",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "fixture-tool-write",
+            "source_message_id": null,
+            "source_result_id": "fixture-message-result-write",
+            "started_at": null
+          }
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [
+        "fixture-message-result-shell"
+      ],
+      "role": "assistant",
+      "source_id": "fixture-message-assistant-write",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "file_path": "/fixture/claude/tools/format-fixture.txt"
+            },
+            "name": "Read",
+            "op": "fs.read",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "hello fixture",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "success",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "fixture-tool-read",
+            "source_message_id": null,
+            "source_result_id": "fixture-message-result-read",
+            "started_at": null
+          }
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [
+        "fixture-message-result-write"
+      ],
+      "role": "assistant",
+      "source_id": "fixture-message-assistant-read",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Fixture operations completed.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [
+        "fixture-message-result-read"
+      ],
+      "role": "assistant",
+      "source_id": "fixture-message-assistant-final",
+      "turn_id": null
+    }
+  ],
+  "model": null,
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": "fixture-claude-tools",
+  "source_id": "fixture-claude-tools",
+  "source_tool": "claude",
+  "title": ""
+}

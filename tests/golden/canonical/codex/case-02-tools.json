@@ -1,0 +1,204 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/codex/tools",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Run the fixture shell, write, and read operations.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "record:2",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "command": "echo format-fixture-shell-test",
+              "workdir": "/fixture/codex/tools"
+            },
+            "name": "exec",
+            "op": "shell.exec",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "format-fixture-shell-test\n",
+                  "uri": null
+                }
+              ],
+              "exit_code": 0,
+              "status": "success",
+              "stderr": null,
+              "stdout": "format-fixture-shell-test\n",
+              "truncated": null
+            },
+            "source_call_id": "fixture-call-shell",
+            "source_message_id": "record:11",
+            "source_result_id": null,
+            "started_at": null
+          }
+        },
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "operations": [],
+              "raw_patch": "*** Begin Patch\\n*** Add File: /fixture/codex/tools/format-fixture.txt\\n+hello fixture\\n*** End Patch"
+            },
+            "name": "apply_patch",
+            "op": "fs.patch",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "{}",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "unknown",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "fixture-call-write",
+            "source_message_id": "record:11",
+            "source_result_id": null,
+            "started_at": null
+          }
+        },
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "command": "cat format-fixture.txt",
+              "workdir": "/fixture/codex/tools"
+            },
+            "name": "exec",
+            "op": "shell.exec",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "hello fixture\n",
+                  "uri": null
+                }
+              ],
+              "exit_code": 0,
+              "status": "success",
+              "stderr": null,
+              "stdout": "hello fixture\n",
+              "truncated": null
+            },
+            "source_call_id": "fixture-call-read",
+            "source_message_id": "record:11",
+            "source_result_id": null,
+            "started_at": null
+          }
+        },
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "command": "pwd",
+              "workdir": "/fixture/codex/tools"
+            },
+            "name": "exec_command",
+            "op": "shell.exec",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": null,
+                  "filename": null,
+                  "kind": "text",
+                  "mime_type": null,
+                  "text": "/fixture/codex/tools",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "unknown",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "fixture-function-shell",
+            "source_message_id": "record:11",
+            "source_result_id": null,
+            "started_at": null
+          }
+        },
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Fixture operations completed.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "assistant",
+      "source_id": "record:11",
+      "turn_id": null
+    }
+  ],
+  "model": null,
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": "fixture-codex-tools",
+  "source_id": "fixture-codex-tools",
+  "source_tool": "codex",
+  "title": ""
+}

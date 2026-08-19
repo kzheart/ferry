@@ -1,0 +1,41 @@
+{
+  "_normalized": {
+    "environment_dependent_fields": [
+      "path",
+      "updated",
+      "own_updated",
+      "size",
+      "own_size"
+    ],
+    "fixed_mtime_seconds": 1784937600,
+    "note": "path 中的沙箱根已替换为 <home>；updated/own_updated 之所以稳定，是因为物化 fixture 时把 mtime 统一设成 fixed_mtime_seconds。Rust 侧对照真实环境时，这些字段应按各自环境重新计算。",
+    "sandbox_root_marker": "<home>"
+  },
+  "rows": [
+    {
+      "authoritative_members": [
+        "summary.json",
+        "updates.jsonl"
+      ],
+      "child_count": 0,
+      "children": [],
+      "count": 4,
+      "created": 1784984400000,
+      "dir": "/fixture/grok/tools",
+      "id": "fixture-grok-tools",
+      "model": "grok-code-fast-1",
+      "own_count": 4,
+      "own_size": 306,
+      "own_updated": 1784984404000,
+      "parent_id": null,
+      "path": "<home>/.grok/sessions/case-02-tools/fixture-grok-tools",
+      "root_id": "fixture-grok-tools",
+      "size": 306,
+      "title": "Tools fixture",
+      "tokens": null,
+      "tool": "grok",
+      "tree_count": 1,
+      "updated": 1784984404000
+    }
+  ]
+}

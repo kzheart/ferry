@@ -1,0 +1,40 @@
+{
+  "_normalized": {
+    "environment_dependent_fields": [
+      "path",
+      "updated",
+      "own_updated",
+      "size",
+      "own_size"
+    ],
+    "fixed_mtime_seconds": 1784937600,
+    "note": "path 中的沙箱根已替换为 <home>；updated/own_updated 之所以稳定，是因为物化 fixture 时把 mtime 统一设成 fixed_mtime_seconds。Rust 侧对照真实环境时，这些字段应按各自环境重新计算。",
+    "sandbox_root_marker": "<home>"
+  },
+  "rows": [
+    {
+      "agent_id": null,
+      "agent_path": null,
+      "agent_type": null,
+      "child_count": 0,
+      "children": [],
+      "count": 2,
+      "created": null,
+      "dir": "/fixture/codex/tools",
+      "id": "fixture-codex-tools",
+      "model": "",
+      "own_count": 2,
+      "own_size": 2502,
+      "own_updated": 1784937600000,
+      "parent_id": null,
+      "path": "<home>/.codex/sessions/2026/07/25/rollout-fixture-codex-tools.jsonl",
+      "root_id": "fixture-codex-tools",
+      "size": 2502,
+      "title": "Run the fixture shell, write, and read operations.",
+      "tokens": null,
+      "tool": "codex",
+      "tree_count": 1,
+      "updated": 1784937600000
+    }
+  ]
+}

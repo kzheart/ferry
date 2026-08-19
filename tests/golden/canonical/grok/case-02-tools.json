@@ -1,0 +1,102 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/grok/tools",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Read /fixture/grok/tools/input.txt.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "p1:user",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Inspecting now.",
+          "tool": null
+        },
+        {
+          "image": null,
+          "kind": "tool",
+          "text": "",
+          "tool": {
+            "agent_id": null,
+            "ended_at": null,
+            "input": {
+              "input": {
+                "path": "/fixture/grok/tools/input.txt"
+              },
+              "name": "read",
+              "namespace": "grok"
+            },
+            "name": "read",
+            "op": "tool.invoke",
+            "result": {
+              "attachments": [],
+              "blocks": [
+                {
+                  "data": {
+                    "FileContent": {
+                      "absolute_path": "/fixture/grok/tools/input.txt",
+                      "content": "sk-test-fixture",
+                      "total_lines": 1
+                    }
+                  },
+                  "filename": null,
+                  "kind": "json",
+                  "mime_type": null,
+                  "text": "",
+                  "uri": null
+                }
+              ],
+              "exit_code": null,
+              "status": "success",
+              "stderr": null,
+              "stdout": null,
+              "truncated": null
+            },
+            "source_call_id": "tool-1",
+            "source_message_id": null,
+            "source_result_id": null,
+            "started_at": null
+          }
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "assistant",
+      "source_id": "p1:assistant",
+      "turn_id": null
+    }
+  ],
+  "model": "grok-code-fast-1",
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": null,
+  "source_id": "fixture-grok-tools",
+  "source_tool": "grok",
+  "title": "Tools fixture"
+}

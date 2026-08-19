@@ -1,0 +1,110 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [
+    {
+      "after_message_id": "summary",
+      "created_at": "2026-07-25T11:00:04.000Z",
+      "event_locator": "compact",
+      "id": "compact",
+      "metrics": {
+        "tokens_before": 42
+      },
+      "source": "pi",
+      "source_meta": {
+        "from_hook": false
+      },
+      "state": "completed",
+      "summary_message_id": null,
+      "summary_status": "available",
+      "summary_text": "Active context summary.",
+      "tail_start_locator": "u1",
+      "tail_start_message_index": 1,
+      "tail_status": "located",
+      "trigger": "unknown"
+    }
+  ],
+  "cwd": "/fixture/pi/branch",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [
+    {
+      "code": "migration.unknown_block_dropped",
+      "params": {
+        "block_type": "inactive_branch",
+        "entry_ids": [
+          "dead"
+        ],
+        "source": "pi"
+      },
+      "severity": "warning"
+    }
+  ],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Choose the active branch.",
+          "tool": null
+        }
+      ],
+      "created_at": "2026-07-25T11:00:01.000Z",
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "u1",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "The abandoned branch was summarized.",
+          "tool": null
+        }
+      ],
+      "created_at": "2026-07-25T11:00:03.000Z",
+      "parent_ids": [
+        "u1"
+      ],
+      "role": "user",
+      "source_id": "summary",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Continue after compaction.",
+          "tool": null
+        }
+      ],
+      "created_at": "2026-07-25T11:00:05.000Z",
+      "parent_ids": [
+        "compact"
+      ],
+      "role": "user",
+      "source_id": "u2",
+      "turn_id": null
+    }
+  ],
+  "model": null,
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": null,
+  "source_id": "fixture-pi-branch",
+  "source_tool": "pi",
+  "title": "Branch fixture"
+}

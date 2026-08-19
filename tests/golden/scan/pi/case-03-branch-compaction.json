@@ -1,0 +1,31 @@
+{
+  "_normalized": {
+    "environment_dependent_fields": [
+      "path",
+      "updated",
+      "own_updated",
+      "size",
+      "own_size"
+    ],
+    "fixed_mtime_seconds": 1784937600,
+    "note": "path 中的沙箱根已替换为 <home>；updated/own_updated 之所以稳定，是因为物化 fixture 时把 mtime 统一设成 fixed_mtime_seconds。Rust 侧对照真实环境时，这些字段应按各自环境重新计算。",
+    "sandbox_root_marker": "<home>"
+  },
+  "rows": [
+    {
+      "count": 2,
+      "created": 1784977200000,
+      "dir": "/fixture/pi/branch",
+      "id": "fixture-pi-branch",
+      "model": "",
+      "parent_id": null,
+      "path": "<home>/pi-sessions/case-03-branch-compaction/fixture-pi-branch.jsonl",
+      "root_id": "fixture-pi-branch",
+      "size": 1362,
+      "title": "Branch fixture",
+      "tokens": null,
+      "tool": "pi",
+      "updated": 1784937600000
+    }
+  ]
+}

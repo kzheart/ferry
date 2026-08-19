@@ -1,0 +1,58 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/claude/plain",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "fixture-message-user-plain",
+      "turn_id": "fixture-prompt-plain"
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "FORMAT_FIXTURE_PLAIN_OK",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [
+        "fixture-message-user-plain"
+      ],
+      "role": "assistant",
+      "source_id": "fixture-message-assistant-plain",
+      "turn_id": null
+    }
+  ],
+  "model": null,
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": "fixture-claude-plain",
+  "source_id": "fixture-claude-plain",
+  "source_tool": "claude",
+  "title": ""
+}

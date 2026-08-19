@@ -1,0 +1,56 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/grok/rewind",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "first",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "p1:user",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "live",
+          "tool": null
+        }
+      ],
+      "created_at": null,
+      "parent_ids": [],
+      "role": "assistant",
+      "source_id": "p1:assistant",
+      "turn_id": null
+    }
+  ],
+  "model": "grok-code-fast-1",
+  "model_provider": null,
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": null,
+  "source_id": "fixture-grok-rewind",
+  "source_tool": "grok",
+  "title": "Rewind fixture"
+}

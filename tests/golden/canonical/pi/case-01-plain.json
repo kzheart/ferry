@@ -1,0 +1,58 @@
+{
+  "agent_edges": [],
+  "agent_id": null,
+  "agent_nickname": null,
+  "agent_path": null,
+  "agent_role": null,
+  "agent_type": null,
+  "children": [],
+  "context_compactions": [],
+  "cwd": "/fixture/pi/plain",
+  "depth": null,
+  "forked_from_id": null,
+  "loss": [],
+  "messages": [
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Keep /fixture/pi/plain and token sk-test-fixture unchanged.",
+          "tool": null
+        }
+      ],
+      "created_at": "2026-07-25T09:00:01.000Z",
+      "parent_ids": [],
+      "role": "user",
+      "source_id": "u1",
+      "turn_id": null
+    },
+    {
+      "agent_id": null,
+      "blocks": [
+        {
+          "image": null,
+          "kind": "text",
+          "text": "Both values remain unchanged.",
+          "tool": null
+        }
+      ],
+      "created_at": "2026-07-25T09:00:02.000Z",
+      "parent_ids": [
+        "u1"
+      ],
+      "role": "assistant",
+      "source_id": "a1",
+      "turn_id": null
+    }
+  ],
+  "model": "fixture-model",
+  "model_provider": "fixture",
+  "parent_association": null,
+  "parent_id": null,
+  "root_id": null,
+  "source_id": "fixture-pi-plain",
+  "source_tool": "pi",
+  "title": "Keep /fixture/pi/plain and token sk-test-fixture unchanged."
+}
