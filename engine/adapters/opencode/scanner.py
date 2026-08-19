@@ -252,17 +252,19 @@ def _rebuild_index_locked(trigger: str = "unknown") -> tuple | None:
         after = _database_stamp()
         current = (after, sessions, revisions, children)
         stable = before == after
+        # 不稳定的结果同样发布:库若被持续写入(多个 opencode 进程同时开着
+        # 就是这样),稳定永远等不到,不发布就等于缓存恒空,于是扫描的每一行
+        # 都会再触发一次整库重建。stamp 记 after,扫描路径本就容忍旧快照,
+        # 严格路径见 stamp 不匹配仍会同步重建,语义安全。
+        _FINGERPRINT_INDEX = current
+        _save_fingerprint_store(current)
         if stable:
-            _FINGERPRINT_INDEX = current
-            _save_fingerprint_store(current)
             break
-    # 重建要全量读库;stamp 不稳定意味着缓存没能写入,下一次调用还会
-    # 整个重来——这正是需要被看见的信号。
     log.info(
-        "opencode 指纹索引重建: %d 会话 耗时=%.1fs 缓存%s",
+        "opencode 指纹索引重建: %d 会话 耗时=%.1fs 缓存已写入%s",
         len(current[1]) if current else 0,
         time.monotonic() - rebuild_started,
-        "已写入" if stable else "未写入(stamp 不稳定)",
+        "" if stable else "(stamp 不稳定)",
     )
     return current
 

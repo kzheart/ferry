@@ -1119,6 +1119,7 @@ def test_opencode_fingerprint_survives_process_restart_via_store(
 
     # 模拟进程重启:内存缓存清空;此时重建路径必须不被走到。
     monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
+    real_read_index = opencode_scanner._read_fingerprint_index
 
     def forbidden_rebuild():
         raise AssertionError("库未变化时不应触发全量重建")
@@ -1129,8 +1130,11 @@ def test_opencode_fingerprint_survives_process_restart_via_store(
     assert opencode_scanner.fingerprint("s1") == first
 
     # 库变化后缓存按 stamp 失效,恢复重建路径后能得到新指纹。
-    monkeypatch.undo()
-    monkeypatch.setattr(opencode_scanner, "OPENCODE_DB", database_path)
+    # 只还原这一项:monkeypatch.undo() 会把 conftest 的 ~/.ferry 隔离一并撤掉,
+    # 指纹快照就会落进用户真实目录。
+    monkeypatch.setattr(
+        opencode_scanner, "_read_fingerprint_index", real_read_index,
+    )
     monkeypatch.setattr(opencode_scanner, "_FINGERPRINT_INDEX", None)
     with sqlite3.connect(database_path) as database:
         database.execute("INSERT INTO message VALUES ('m2', 's1', 2, '{}')")

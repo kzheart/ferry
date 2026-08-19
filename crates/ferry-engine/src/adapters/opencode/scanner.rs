@@ -523,8 +523,10 @@ fn save_fingerprint_store(index: &FingerprintIndex) {
 
 /// 全量重建；调用方必须持有 [`rebuild_lock`]。
 ///
-/// 三次尝试：重建期间库若被写入（前后戳记不一致），结果不写缓存，
-/// 下一次调用还会整个重来——这正是需要被看见的信号。
+/// 三次尝试拿一份前后戳记一致的快照。**不稳定的结果同样发布**：库若被持续写入
+/// （多个 opencode 进程同时开着就是这样），稳定永远等不到，不发布就等于缓存恒空，
+/// 于是扫描的每一行都会再触发一次整库重建。发布时 stamp 记 `after`，扫描路径本就
+/// 容忍旧快照，严格路径见 stamp 不匹配仍会同步重建，语义安全。
 fn rebuild_index_locked() -> Option<FingerprintIndex> {
     let mut current = None;
     for _ in 0..3 {
@@ -541,9 +543,9 @@ fn rebuild_index_locked() -> Option<FingerprintIndex> {
         };
         let stable = before == after;
         current = Some(index.clone());
+        state().current = Some(index.clone());
+        save_fingerprint_store(&index);
         if stable {
-            state().current = Some(index.clone());
-            save_fingerprint_store(&index);
             break;
         }
     }
