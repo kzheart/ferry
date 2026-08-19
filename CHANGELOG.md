@@ -14,7 +14,17 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
-## [Unreleased]
+## [0.7.0] - 2026-08-19
+
+### Added
+
+- **Cursor sessions** — Ferry now reads Cursor IDE's chat history alongside
+  the other agents: browse and search every conversation (including subagent
+  trees, tool calls, and edit patches), and migrate them to Claude Code,
+  Codex CLI, or OpenCode. Cursor is a read-only source — Ferry never writes
+  to Cursor's database, and change detection is content-derived so Cursor's
+  own background writes don't trigger needless rescans. Token usage is not
+  available in Cursor's store and shows as empty.
 
 ### Changed
 
@@ -35,6 +45,14 @@ fails validation if its version has no section.
   by cache reads and is unchanged (22 ms → 33 ms). Content index construction
   is outside the measured window; both engines used the same SQLite FTS5
   mechanism.
+
+### Fixed
+
+- **Fingerprint rebuilds on a busy OpenCode database** — when another program
+  was writing OpenCode's database continuously, a scan could rebuild the
+  fingerprint index once per session and never finish. Rebuild results are now
+  published even when the database moved underneath, so a scan pays for at
+  most one rebuild.
 
 ## [0.6.1] - 2026-08-05
 
