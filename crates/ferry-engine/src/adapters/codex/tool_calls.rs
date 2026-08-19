@@ -53,12 +53,10 @@ fn is_word(character: char) -> bool {
 }
 
 fn starts_with(source: &[char], index: usize, needle: &str) -> bool {
-    let mut cursor = index;
-    for expected in needle.chars() {
+    for (cursor, expected) in (index..).zip(needle.chars()) {
         if source.get(cursor) != Some(&expected) {
             return false;
         }
-        cursor += 1;
     }
     true
 }

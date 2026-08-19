@@ -153,6 +153,23 @@ impl FileStat {
             size: metadata.size(),
         }
     }
+
+    /// Windows 没有稳定 API 能拿到 `dev`/`ino`：`volume_serial_number()` /
+    /// `file_index()` 属于 by-handle 元数据，至今仍是 nightly-only。这里把两位
+    /// 置 0，身份判定在 Windows 上退化为 `mtime + size` 的组合——同一次扫描内
+    /// 仍能识别文件被追加/重写，只是无法再区分「同名不同 inode」的替换。
+    #[cfg(windows)]
+    pub fn from_metadata(metadata: &std::fs::Metadata) -> Self {
+        use std::os::windows::fs::MetadataExt;
+        // FILETIME 是 1601-01-01 起的 100ns 间隔，先减去到 1970 的偏移再换算纳秒。
+        const FILETIME_EPOCH_OFFSET: i128 = 116_444_736_000_000_000;
+        Self {
+            dev: 0,
+            ino: 0,
+            mtime_ns: (i128::from(metadata.last_write_time()) - FILETIME_EPOCH_OFFSET) * 100,
+            size: metadata.file_size(),
+        }
+    }
 }
 
 /// `st_dev` 的 Python 文本形式。

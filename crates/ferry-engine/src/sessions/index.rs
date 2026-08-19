@@ -756,7 +756,7 @@ impl AgentSessionIndex {
         let mut upserts: Vec<IndexedSession> = Vec::new();
         let mut removals: Vec<String> = Vec::new();
         let mut state = self.locked();
-        for ((tool_name, row), resolved) in scanned.iter().zip(canonical_rows.into_iter()) {
+        for ((tool_name, row), resolved) in scanned.iter().zip(canonical_rows) {
             let Some(canonical) = resolved.canonical else {
                 continue;
             };

@@ -156,7 +156,7 @@ fn scan_regex(
     clipped_by_session: &HashMap<SessionKey, i64>,
 ) -> (HashMap<SessionKey, ContentHit>, Map<String, Value>) {
     let mut ordered: Vec<&Candidate> = filtered.iter().collect();
-    ordered.sort_by(|left, right| right.updated.cmp(&left.updated));
+    ordered.sort_by_key(|candidate| std::cmp::Reverse(candidate.updated));
     let deadline = Instant::now() + SCAN_TIME_BUDGET;
     let (mut scanned, mut skipped, mut read_failures, mut bytes_read) = (0i64, 0i64, 0i64, 0i64);
     let mut skip_reason: Option<&'static str> = None;
@@ -540,7 +540,7 @@ pub fn search_sessions(
                 .then(left.rank.2.cmp(&right.rank.2))
         });
     } else {
-        matches.sort_by(|left, right| right.updated.cmp(&left.updated));
+        matches.sort_by_key(|scored| std::cmp::Reverse(scored.updated));
     }
 
     // 摘要只为最终返回页生成，避免为未返回结果做额外读取。

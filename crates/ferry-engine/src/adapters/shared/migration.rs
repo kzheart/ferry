@@ -923,9 +923,8 @@ pub fn default_preview<T: MigrationTargetBase + ?Sized>(
                 match (block.kind, block.tool.as_ref()) {
                     (BlockKind::Text, _) => exact += 1,
                     (BlockKind::Tool, Some(tool)) => {
-                        if target.evaluate_tool(tool, node, Some(message))?.fidelity
-                            == Fidelity::Exact
-                        {
+                        let fidelity = target.evaluate_tool(tool, node, Some(message))?.fidelity;
+                        if fidelity == Fidelity::Exact {
                             exact += 1;
                         }
                     }
