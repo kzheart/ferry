@@ -1,0 +1,492 @@
+[
+  {
+    "name": "plain_exec",
+    "native_name": "exec",
+    "source": "const r = await tools.exec_command({\"cmd\":\"ls -la\",\"workdir\":\"/w\"});\ntext(JSON.stringify(r));\n",
+    "calls": [
+      [
+        "exec_command",
+        "{\"cmd\":\"ls -la\",\"workdir\":\"/w\"}"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "shell.exec",
+    "input": {
+      "command": "ls -la",
+      "workdir": "/w"
+    },
+    "loss": []
+  },
+  {
+    "name": "string_hides_call",
+    "native_name": "exec",
+    "source": "const s = \"tools.exec_command({\\\"cmd\\\":\\\"rm -rf /\\\"})\";\nconsole.log(s);\n",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "const s = \"tools.exec_command({\\\"cmd\\\":\\\"rm -rf /\\\"})\";\nconsole.log(s);\n"
+    },
+    "loss": []
+  },
+  {
+    "name": "line_comment",
+    "native_name": "exec",
+    "source": "// tools.exec_command({\"cmd\":\"x\"})\nconsole.log(1);\n",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "// tools.exec_command({\"cmd\":\"x\"})\nconsole.log(1);\n"
+    },
+    "loss": []
+  },
+  {
+    "name": "block_comment",
+    "native_name": "exec",
+    "source": "/* tools.exec_command({\"cmd\":\"x\"}) */ console.log(1);",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "/* tools.exec_command({\"cmd\":\"x\"}) */ console.log(1);"
+    },
+    "loss": []
+  },
+  {
+    "name": "unterminated_block_comment",
+    "native_name": "exec",
+    "source": "tools.a(1); /* never closed",
+    "calls": [
+      [
+        "a",
+        "1"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "tools.a(1); /* never closed",
+      "structure_summary": {
+        "kind": "single",
+        "invocation_count": 1,
+        "tool_names": [
+          "a"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "a",
+          "input_kind": "int",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "nested_parens",
+    "native_name": "exec",
+    "source": "await tools.run({\"cmd\": \"a(b)\", \"n\": f(1)});",
+    "calls": [
+      [
+        "run",
+        "{\"cmd\": \"a(b)\", \"n\": f(1)}"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "await tools.run({\"cmd\": \"a(b)\", \"n\": f(1)});",
+      "structure_summary": {
+        "kind": "single",
+        "invocation_count": 1,
+        "tool_names": [
+          "run"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "run",
+          "input_kind": "string",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "backtick_arg",
+    "native_name": "exec",
+    "source": "tools.note(`line1\\nline2`);",
+    "calls": [
+      [
+        "note",
+        "`line1\\nline2`"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "tools.note(`line1\\nline2`);",
+      "structure_summary": {
+        "kind": "single",
+        "invocation_count": 1,
+        "tool_names": [
+          "note"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "note",
+          "input_kind": "string",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "single_quote_arg",
+    "native_name": "exec",
+    "source": "tools.note('it\\'s ok');",
+    "calls": [
+      [
+        "note",
+        "'it\\'s ok'"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "tools.note('it\\'s ok');",
+      "structure_summary": {
+        "kind": "single",
+        "invocation_count": 1,
+        "tool_names": [
+          "note"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "note",
+          "input_kind": "string",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "identifier_prefix",
+    "native_name": "exec",
+    "source": "mytools.exec_command({\"cmd\":\"x\"});",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "mytools.exec_command({\"cmd\":\"x\"});"
+    },
+    "loss": []
+  },
+  {
+    "name": "dollar_prefix",
+    "native_name": "exec",
+    "source": "$tools.exec_command({\"cmd\":\"x\"});",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "$tools.exec_command({\"cmd\":\"x\"});"
+    },
+    "loss": []
+  },
+  {
+    "name": "whitespace_before_paren",
+    "native_name": "exec",
+    "source": "tools.exec_command\n\t({\"cmd\":\"x\"});",
+    "calls": [
+      [
+        "exec_command",
+        "{\"cmd\":\"x\"}"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "shell.exec",
+    "input": {
+      "command": "x"
+    },
+    "loss": []
+  },
+  {
+    "name": "unbalanced",
+    "native_name": "exec",
+    "source": "tools.exec_command({\"cmd\":\"x\"}",
+    "calls": [],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "tools.exec_command({\"cmd\":\"x\"}"
+    },
+    "loss": []
+  },
+  {
+    "name": "two_calls",
+    "native_name": "script",
+    "source": "tools.a({\"x\":1});\ntools.b('y');\ntools.c(3);\n",
+    "calls": [
+      [
+        "a",
+        "{\"x\":1}"
+      ],
+      [
+        "b",
+        "'y'"
+      ],
+      [
+        "c",
+        "3"
+      ]
+    ],
+    "tool_name": "script",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "script",
+      "input": "tools.a({\"x\":1});\ntools.b('y');\ntools.c(3);\n",
+      "structure_summary": {
+        "kind": "composite",
+        "invocation_count": 3,
+        "tool_names": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "a",
+          "input_kind": "object",
+          "input_fields": [
+            "x"
+          ]
+        },
+        {
+          "native_name": "b",
+          "input_kind": "string",
+          "input_fields": []
+        },
+        {
+          "native_name": "c",
+          "input_kind": "int",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "zero_calls",
+    "native_name": "script",
+    "source": "console.log(1);",
+    "calls": [],
+    "tool_name": "script",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "script",
+      "input": "console.log(1);"
+    },
+    "loss": []
+  },
+  {
+    "name": "apply_patch_var",
+    "native_name": "exec",
+    "source": "const patch = \"*** Begin Patch\\n*** Add File: /a.txt\\n+hi\\n*** End Patch\";\ntext(await tools.apply_patch(patch));\n",
+    "calls": [
+      [
+        "apply_patch",
+        "patch"
+      ]
+    ],
+    "tool_name": "apply_patch",
+    "op": "fs.patch",
+    "input": {
+      "operations": [],
+      "raw_patch": "*** Begin Patch\\n*** Add File: /a.txt\\n+hi\\n*** End Patch"
+    },
+    "loss": []
+  },
+  {
+    "name": "apply_patch_inline_real_newlines",
+    "native_name": "apply_patch",
+    "source": "*** Begin Patch\n*** Update File: a.txt\n*** Move to: b.txt\n@@\n-x\n+y\n*** Delete File: c.txt\n*** End Patch",
+    "calls": [],
+    "tool_name": "apply_patch",
+    "op": "fs.patch",
+    "input": {
+      "operations": [
+        {
+          "operation": "move",
+          "path": "a.txt",
+          "hunk_count": 1,
+          "destination": "b.txt"
+        },
+        {
+          "operation": "delete",
+          "path": "c.txt",
+          "hunk_count": 0
+        }
+      ],
+      "raw_patch": "*** Begin Patch\n*** Update File: a.txt\n*** Move to: b.txt\n@@\n-x\n+y\n*** Delete File: c.txt\n*** End Patch"
+    },
+    "loss": []
+  },
+  {
+    "name": "apply_patch_unparsed",
+    "native_name": "apply_patch",
+    "source": "no patch here",
+    "calls": [],
+    "tool_name": "apply_patch",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "apply_patch",
+      "input": "no patch here"
+    },
+    "loss": [
+      "migration.apply_patch_unparsed"
+    ]
+  },
+  {
+    "name": "apply_patch_object_arg",
+    "native_name": "exec",
+    "source": "tools.apply_patch({\"patch_text\": \"*** Begin Patch\\n*** Add File: z\\n+1\\n*** End Patch\"});",
+    "calls": [
+      [
+        "apply_patch",
+        "{\"patch_text\": \"*** Begin Patch\\n*** Add File: z\\n+1\\n*** End Patch\"}"
+      ]
+    ],
+    "tool_name": "apply_patch",
+    "op": "fs.patch",
+    "input": {
+      "operations": [
+        {
+          "operation": "add",
+          "path": "z",
+          "hunk_count": 0
+        }
+      ],
+      "raw_patch": "*** Begin Patch\n*** Add File: z\n+1\n*** End Patch"
+    },
+    "loss": []
+  },
+  {
+    "name": "exec_command_list_cmd",
+    "native_name": "exec",
+    "source": "tools.exec_command({\"cmd\":[\"bash\",\"-lc\",\"echo hi\"],\"timeout\":500});",
+    "calls": [
+      [
+        "exec_command",
+        "{\"cmd\":[\"bash\",\"-lc\",\"echo hi\"],\"timeout\":500}"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "shell.exec",
+    "input": {
+      "command": "echo hi",
+      "timeout_ms": 500
+    },
+    "loss": []
+  },
+  {
+    "name": "exec_command_bad_arg",
+    "native_name": "exec",
+    "source": "tools.exec_command(\"not-an-object\");",
+    "calls": [
+      [
+        "exec_command",
+        "\"not-an-object\""
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "tool.invoke",
+    "input": {
+      "namespace": "codex",
+      "name": "exec",
+      "input": "tools.exec_command(\"not-an-object\");",
+      "structure_summary": {
+        "kind": "single",
+        "invocation_count": 1,
+        "tool_names": [
+          "exec_command"
+        ]
+      },
+      "children": [
+        {
+          "native_name": "exec_command",
+          "input_kind": "string",
+          "input_fields": []
+        }
+      ]
+    },
+    "loss": []
+  },
+  {
+    "name": "no_end_patch",
+    "native_name": "apply_patch",
+    "source": "*** Begin Patch\n*** Add File: a\n+1",
+    "calls": [],
+    "tool_name": "apply_patch",
+    "op": "fs.patch",
+    "input": {
+      "operations": [
+        {
+          "operation": "add",
+          "path": "a",
+          "hunk_count": 0
+        }
+      ],
+      "raw_patch": "*** Begin Patch\n*** Add File: a\n+1"
+    },
+    "loss": []
+  },
+  {
+    "name": "unicode",
+    "native_name": "exec",
+    "source": "tools.exec_command({\"cmd\":\"echo 中文\"});",
+    "calls": [
+      [
+        "exec_command",
+        "{\"cmd\":\"echo 中文\"}"
+      ]
+    ],
+    "tool_name": "exec",
+    "op": "shell.exec",
+    "input": {
+      "command": "echo 中文"
+    },
+    "loss": []
+  }
+]

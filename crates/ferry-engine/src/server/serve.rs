@@ -1,0 +1,439 @@
+//! 常驻模式：stdin 每行一个请求，stdout 每行一个响应或事件帧。
+//!
+//! 语义事实源：`engine/server/cli.py` 的 `serve()`。
+//!
+//! 硬约束（§2.1 第 3 / 7 条）：
+//! - `PARALLEL_READ_METHOD_NAMES` 的 9 个方法进 4-worker 只读池，可乱序完成；
+//!   其余请求一律进单 worker 池，严格保序；
+//! - stdout 只有一把写锁，响应与事件帧共用，保证行级原子；
+//! - 日志只能走 stderr——stdout 上任何杂质都会打死连接；
+//! - EOF 后必须等全部在途请求完成再退出；worker 里的失败不能被吞掉。
+
+use std::io::{BufRead, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::Value;
+
+use crate::contracts::engine_methods::is_parallel_read;
+use crate::server::notify::{LineWriter, Notifier};
+
+/// 只读池的 worker 数（`MAX_PARALLEL_READS`）。
+pub const MAX_PARALLEL_READS: usize = 4;
+
+/// 一次请求的处理函数：拿到原始请求行，返回要写回的 JSON 值。
+///
+/// `Err` 对齐 Python 里 handler 抛异常的情形：`serve` 收集后在 EOF 处重抛。
+pub type ServeHandler = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+/// 固定大小的线程池（对齐 `ThreadPoolExecutor`）。
+struct Pool {
+    sender: Option<Sender<Job>>,
+    workers: Vec<JoinHandle<()>>,
+}
+
+impl Pool {
+    fn new(size: usize, name: &str) -> Self {
+        let (sender, receiver) = channel::<Job>();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(size);
+        for index in 0..size {
+            let receiver: Arc<Mutex<Receiver<Job>>> = Arc::clone(&receiver);
+            workers.push(
+                std::thread::Builder::new()
+                    .name(format!("{name}-{index}"))
+                    .spawn(move || loop {
+                        let job = {
+                            let guard = receiver.lock().unwrap_or_else(|error| error.into_inner());
+                            guard.recv()
+                        };
+                        match job {
+                            Ok(job) => job(),
+                            Err(_) => break,
+                        }
+                    })
+                    .expect("无法启动 serve worker 线程"),
+            );
+        }
+        Self {
+            sender: Some(sender),
+            workers,
+        }
+    }
+
+    fn submit(&self, job: Job) {
+        if let Some(sender) = &self.sender {
+            let _ = sender.send(job);
+        }
+    }
+
+    /// 等价 `shutdown(wait=True)`：不再接新任务，等在途任务跑完。
+    fn shutdown(mut self) {
+        self.sender.take();
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
+        }
+    }
+}
+
+fn request_method(request: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(request).ok()?;
+    value
+        .get("method")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// 处理 JSONL RPC：安全的纯读方法有限并发，其余请求严格串行。
+pub fn serve<R: BufRead>(
+    input: R,
+    output: Box<dyn Write + Send>,
+    handler: ServeHandler,
+    notifier: Option<&Notifier>,
+) -> Result<(), String> {
+    let output = Arc::new(Mutex::new(output));
+    let write_line: LineWriter = {
+        let output = Arc::clone(&output);
+        Arc::new(move |line: &str| {
+            let mut stream = output.lock().unwrap_or_else(|error| error.into_inner());
+            // 写失败（宿主已断开）不能把引擎主流程打崩，只记 stderr。
+            if stream
+                .write_all(line.as_bytes())
+                .and_then(|()| stream.write_all(b"\n"))
+                .and_then(|()| stream.flush())
+                .is_err()
+            {
+                log_warning("stdout 写入失败，宿主可能已断开");
+            }
+        })
+    };
+    if let Some(notifier) = notifier {
+        // 事件帧与响应共用同一把输出锁，保证行级原子性。
+        notifier.bind(Arc::clone(&write_line));
+    }
+
+    let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let serial = Pool::new(1, "engine-serial");
+    let reads = Pool::new(MAX_PARALLEL_READS, "engine-read");
+
+    for line in input.lines() {
+        let Ok(line) = line else { break };
+        let request = line.trim().to_string();
+        if request.is_empty() {
+            continue;
+        }
+        let parallel = request_method(&request)
+            .as_deref()
+            .is_some_and(is_parallel_read);
+        let handler = Arc::clone(&handler);
+        let write_line = Arc::clone(&write_line);
+        let failures = Arc::clone(&failures);
+        let job: Job = Box::new(move || match handler(&request) {
+            Ok(response) => write_line(&response.to_string()),
+            Err(error) => failures
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .push(error),
+        });
+        if parallel {
+            reads.submit(job);
+        } else {
+            serial.submit(job);
+        }
+    }
+
+    // EOF：先关只读池再关串行池，两者都等在途请求结束。
+    reads.shutdown();
+    serial.shutdown();
+
+    let failures = failures.lock().unwrap_or_else(|error| error.into_inner());
+    match failures.first() {
+        Some(error) => Err(error.clone()),
+        None => Ok(()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// stderr 日志
+// ---------------------------------------------------------------------------
+
+static STDERR_LOGGING: AtomicBool = AtomicBool::new(false);
+
+/// 常驻模式的 `logging.basicConfig(level=INFO, stream=stderr)`。
+///
+/// 一次性 `rpc` 模式下 Python 没有配置 logging，`lastResort` handler 的阈值是
+/// WARNING，所以 INFO 会被丢弃、WARNING 仍进 stderr——这里逐条复刻。
+pub fn enable_stderr_logging() {
+    STDERR_LOGGING.store(true, Ordering::SeqCst);
+}
+
+pub fn stderr_logging_enabled() -> bool {
+    STDERR_LOGGING.load(Ordering::SeqCst)
+}
+
+pub fn log_info(message: &str) {
+    if stderr_logging_enabled() {
+        emit_log("INFO", message);
+    }
+}
+
+pub fn log_warning(message: &str) {
+    emit_log("WARNING", message);
+}
+
+pub fn log_error(message: &str) {
+    emit_log("ERROR", message);
+}
+
+fn emit_log(level: &str, message: &str) {
+    let _ = writeln!(
+        std::io::stderr(),
+        "{} {level} ferry_engine.server {message}",
+        asctime()
+    );
+}
+
+/// `%(asctime)s` 的等价物：`YYYY-MM-DD HH:MM:SS,mmm`（UTC）。
+fn asctime() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let seconds = now.as_secs() as i64;
+    let millis = now.subsec_millis();
+    let days = seconds.div_euclid(86_400);
+    let time_of_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02},{millis:03}",
+        time_of_day / 3600,
+        (time_of_day % 3600) / 60,
+        time_of_day % 60
+    )
+}
+
+/// Howard Hinnant 的 `civil_from_days`。
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    } as u32;
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::time::Duration;
+
+    /// 可跨线程共享的内存输出。
+    #[derive(Clone, Default)]
+    struct SharedBuffer(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for SharedBuffer {
+        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SharedBuffer {
+        fn lines(&self) -> Vec<Value> {
+            let raw = self.0.lock().unwrap().clone();
+            String::from_utf8(raw)
+                .unwrap()
+                // 只按 \n 分行：U+0085 / U+2028 / U+2029 必须原样穿透。
+                .split('\n')
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        }
+    }
+
+    fn request(id: &str, method: &str) -> String {
+        format!(r#"{{"protocol":"ferry-ipc/1","id":"{id}","method":"{method}","params":{{}}}}"#)
+    }
+
+    #[test]
+    fn jsonl_response_preserves_unicode_line_separators() {
+        let content = "alpha\u{85}beta\u{2028}gamma\u{2029}omega";
+        let output = SharedBuffer::default();
+        let handler: ServeHandler = {
+            let content = content.to_string();
+            Arc::new(move |_request: &str| {
+                Ok(serde_json::json!({
+                    "protocol": "ferry-ipc/1",
+                    "id": "unicode",
+                    "ok": true,
+                    "result": {"content": content},
+                }))
+            })
+        };
+
+        serve(
+            format!("{}\n", request("unicode", "health")).as_bytes(),
+            Box::new(output.clone()),
+            handler,
+            None,
+        )
+        .unwrap();
+
+        let records = output.lines();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["result"]["content"], Value::from(content));
+    }
+
+    #[test]
+    fn parallel_read_requests_can_finish_out_of_input_order() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let output = SharedBuffer::default();
+        let handler: ServeHandler = {
+            let active = Arc::clone(&active);
+            let peak = Arc::clone(&peak);
+            Arc::new(move |request: &str| {
+                let value: Value = serde_json::from_str(request).unwrap();
+                let id = value["id"].as_str().unwrap().to_string();
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(current, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_millis(if id == "slow" { 80 } else { 10 }));
+                active.fetch_sub(1, Ordering::SeqCst);
+                Ok(serde_json::json!({
+                    "protocol": "ferry-ipc/1", "id": id, "ok": true, "result": null,
+                }))
+            })
+        };
+
+        serve(
+            format!(
+                "{}\n{}\n",
+                request("slow", "health"),
+                request("fast", "version")
+            )
+            .as_bytes(),
+            Box::new(output.clone()),
+            handler,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(peak.load(Ordering::SeqCst), 2);
+        let ids: Vec<String> = output
+            .lines()
+            .iter()
+            .map(|line| line["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids, ["fast", "slow"]);
+    }
+
+    #[test]
+    fn non_parallel_requests_stay_on_the_ordered_lane() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let output = SharedBuffer::default();
+        let handler: ServeHandler = {
+            let active = Arc::clone(&active);
+            let peak = Arc::clone(&peak);
+            Arc::new(move |request: &str| {
+                let value: Value = serde_json::from_str(request).unwrap();
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(current, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_millis(20));
+                active.fetch_sub(1, Ordering::SeqCst);
+                Ok(serde_json::json!({
+                    "protocol": "ferry-ipc/1", "id": value["id"], "ok": true, "result": null,
+                }))
+            })
+        };
+
+        serve(
+            format!(
+                "{}\n{}\n",
+                request("first", "scan"),
+                request("second", "scan")
+            )
+            .as_bytes(),
+            Box::new(output.clone()),
+            handler,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        let ids: Vec<String> = output
+            .lines()
+            .iter()
+            .map(|line| line["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids, ["first", "second"]);
+    }
+
+    #[test]
+    fn worker_failures_are_not_swallowed() {
+        let handler: ServeHandler = Arc::new(|_request: &str| Err("worker failed".to_string()));
+        let error = serve(
+            format!("{}\n", request("failure", "health")).as_bytes(),
+            Box::new(SharedBuffer::default()),
+            handler,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(error, "worker failed");
+    }
+
+    #[test]
+    fn event_frames_share_the_output_lock() {
+        let output = SharedBuffer::default();
+        let notifier = Notifier::new();
+        let handler: ServeHandler = Arc::new(|_request: &str| {
+            Ok(serde_json::json!({
+                "protocol": "ferry-ipc/1", "id": "x", "ok": true, "result": null,
+            }))
+        });
+        serve(
+            format!("{}\n", request("x", "health")).as_bytes(),
+            Box::new(output.clone()),
+            handler,
+            Some(&notifier),
+        )
+        .unwrap();
+        // serve 结束后 notifier 仍绑着同一把锁，事件帧照样成行写出。
+        notifier
+            .emit("sessions.changed", serde_json::json!({"generation": 1}))
+            .unwrap();
+
+        let lines = output.lines();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].get("id").is_none());
+        assert_eq!(lines[1]["type"], Value::from("sessions.changed"));
+    }
+
+    #[test]
+    fn asctime_formats_like_python_logging() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
+        let stamp = asctime();
+        assert_eq!(stamp.len(), 23, "{stamp}");
+        assert_eq!(&stamp[4..5], "-");
+        assert_eq!(&stamp[19..20], ",");
+    }
+}

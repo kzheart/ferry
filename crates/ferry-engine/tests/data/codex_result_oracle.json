@@ -1,0 +1,528 @@
+[
+  {
+    "name": "plain_string",
+    "raw": "/fixture/codex/tools",
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "/fixture/codex/tools",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "json_number_string",
+    "raw": "0",
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "0",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope_exit_zero",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"exit_code\":0,\"output\":\"hi\\n\"}"
+      }
+    ],
+    "result": {
+      "status": "success",
+      "stdout": "hi\n",
+      "stderr": null,
+      "exit_code": 0,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "hi\n",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope_exit_nonzero",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"exit_code\":2,\"output\":\"bad\"}"
+      }
+    ],
+    "result": {
+      "status": "error",
+      "stdout": "bad",
+      "stderr": null,
+      "exit_code": 2,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "bad",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope_explicit_status",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"status\":\"interrupted\",\"exit_code\":1}"
+      }
+    ],
+    "result": {
+      "status": "interrupted",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": 1,
+      "truncated": null,
+      "attachments": [],
+      "blocks": []
+    }
+  },
+  {
+    "name": "envelope_unknown_status",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"status\":\"weird\",\"exit_code\":3}"
+      }
+    ],
+    "result": {
+      "status": "error",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": 3,
+      "truncated": null,
+      "attachments": [],
+      "blocks": []
+    }
+  },
+  {
+    "name": "envelope_stderr_only",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"stderr\":\"boom\"}"
+      }
+    ],
+    "result": {
+      "status": "error",
+      "stdout": null,
+      "stderr": "boom",
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": []
+    }
+  },
+  {
+    "name": "envelope_empty_output",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"output\":\"\",\"status\":\"success\"}"
+      }
+    ],
+    "result": {
+      "status": "success",
+      "stdout": "",
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "json",
+          "text": "",
+          "data": "",
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope_object_output",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"output\":{\"a\":1},\"status\":\"success\"}"
+      }
+    ],
+    "result": {
+      "status": "success",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "json",
+          "text": "",
+          "data": {
+            "a": 1
+          },
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope_truncated_attachments",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"output\":\"x\",\"truncated\":true,\"attachments\":[{\"id\":\"a\"}],\"status\":\"success\"}"
+      }
+    ],
+    "result": {
+      "status": "success",
+      "stdout": "x",
+      "stderr": null,
+      "exit_code": null,
+      "truncated": true,
+      "attachments": [
+        {
+          "id": "a"
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "x",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "wrapper_dropped_with_envelope",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+      },
+      {
+        "type": "input_text",
+        "text": "{\"output\":\"done\"}"
+      }
+    ],
+    "result": {
+      "status": "unknown",
+      "stdout": "done",
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "done",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "wrapper_kept_without_envelope",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+      }
+    ],
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "unified_exec_exited",
+    "raw": "Chunk ID: abc\nWall time: 0.0000 seconds\nProcess exited with code 128\nboom",
+    "result": {
+      "status": "error",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": 128,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "Chunk ID: abc\nWall time: 0.0000 seconds\nProcess exited with code 128\nboom",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "unified_exec_running",
+    "raw": "Chunk ID: abc\nWall time: 0.5 seconds\nProcess running with session ID s1\n",
+    "result": {
+      "status": "running",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "Chunk ID: abc\nWall time: 0.5 seconds\nProcess running with session ID s1\n",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "unified_exec_negative",
+    "raw": "Chunk ID: a\nWall time: 1.0 seconds\nProcess exited with code -9\n",
+    "result": {
+      "status": "error",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": -9,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "Chunk ID: a\nWall time: 1.0 seconds\nProcess exited with code -9\n",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "rich_blocks",
+    "raw": [
+      {
+        "type": "image",
+        "image_url": "data:image/png;base64,QQ==",
+        "mime_type": "image/png"
+      },
+      {
+        "type": "file",
+        "url": "file:///a",
+        "filename": "a.txt",
+        "mime_type": "text/plain"
+      },
+      {
+        "type": "weird",
+        "x": 1
+      },
+      42
+    ],
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "image",
+          "text": "",
+          "data": null,
+          "mime_type": "image/png",
+          "filename": null,
+          "uri": "data:image/png;base64,QQ=="
+        },
+        {
+          "kind": "file",
+          "text": "",
+          "data": null,
+          "mime_type": "text/plain",
+          "filename": "a.txt",
+          "uri": "file:///a"
+        },
+        {
+          "kind": "json",
+          "text": "",
+          "data": {
+            "type": "weird",
+            "x": 1
+          },
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        },
+        {
+          "kind": "json",
+          "text": "",
+          "data": 42,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "dict_output",
+    "raw": {
+      "type": "input_text",
+      "text": "solo"
+    },
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "solo",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty_text_blocks",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": ""
+      }
+    ],
+    "result": {
+      "status": "unknown",
+      "stdout": null,
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": []
+    }
+  },
+  {
+    "name": "bool_exit_code",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"exit_code\":true,\"output\":\"x\"}"
+      }
+    ],
+    "result": {
+      "status": "unknown",
+      "stdout": "x",
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "x",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "stdout_key_wins",
+    "raw": [
+      {
+        "type": "input_text",
+        "text": "{\"stdout\":\"S\",\"output\":\"O\",\"status\":\"success\"}"
+      }
+    ],
+    "result": {
+      "status": "success",
+      "stdout": "S",
+      "stderr": null,
+      "exit_code": null,
+      "truncated": null,
+      "attachments": [],
+      "blocks": [
+        {
+          "kind": "text",
+          "text": "O",
+          "data": null,
+          "mime_type": null,
+          "filename": null,
+          "uri": null
+        }
+      ]
+    }
+  }
+]

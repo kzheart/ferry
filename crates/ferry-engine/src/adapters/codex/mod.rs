@@ -1,0 +1,19 @@
+//! Codex 适配器（WP-C2）。
+
+pub mod adapter;
+pub mod codec;
+pub mod dialect;
+pub mod editor;
+pub mod lifecycle;
+pub mod migration;
+pub mod models;
+pub mod native;
+pub mod native_schema;
+pub mod probe;
+pub mod reader;
+pub mod registry;
+pub mod scanner;
+pub mod tool_calls;
+pub mod tool_results;
+pub mod topology;
+pub mod writer;

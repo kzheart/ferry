@@ -1,0 +1,46 @@
+[package]
+name = "ferry-engine"
+version = "0.6.1"
+edition = "2021"
+publish = false
+description = "Ferry Session Engine（ferry-ipc/1 sidecar）"
+
+[lib]
+name = "ferry_engine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ferry-engine"
+path = "src/main.rs"
+
+# 依赖在 WP-A 一次性声明完毕，后续工作包不再改动本文件，避免并行冲突。
+# 不引入 tokio：并发模型是两个固定线程池（1 串行 + 4 并行读），std::thread 足够，
+# 且必须与 Python 引擎的调度语义逐条一致。
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+# preserve_order：原生会话记录改写必须逐字节对齐 Python（`json.dumps` 保留 dict
+# 插入序），所以 Value 的 object 必须保序。canonical_json 自己显式排序，两者不冲突。
+serde_json = { version = "1", features = ["preserve_order"] }
+# bundled：不依赖宿主 libsqlite3，保证 sidecar 单文件分发。
+rusqlite = { version = "0.37", features = ["bundled"] }
+sha2 = "0.10"
+# grok session_search.sqlite 的 content_hash 用 BLAKE3。
+blake3 = "1"
+# JSONL 并行扫描（对齐 Python 侧 ThreadPoolExecutor 的分片阈值）。
+rayon = "1"
+regex = "1"
+# 检索的「必然字面量」提取：Python 用 re._parser，Rust 走 regex-syntax 的 HIR。
+regex-syntax = "0.8"
+percent-encoding = "2"
+base64 = "0.22"
+rand = "0.9"
+walkdir = "2"
+glob = "0.3"
+tempfile = "3"
+thiserror = "2"
+# models.dev 单价抓取（Python 侧用 urllib）；rustls 后端，避免依赖系统 OpenSSL。
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+# 探针超时要终止整个进程组（setsid + killpg），标准库没有对应封装。
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

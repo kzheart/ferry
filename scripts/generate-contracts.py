@@ -18,15 +18,21 @@ SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
 OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 EVENTS_SOURCE = ROOT / "contracts" / "events.json"
 ERRORS_SOURCE = ROOT / "contracts" / "errors.json"
+# engine-rust 是 Rust Session Engine（crates/ferry-engine）的生成目标：与 host
+# 的 rust 目标同源不同形——可见性用 pub（跨模块消费），且引擎侧需要 host 用不到
+# 的分发元数据（kind/dispatch、方法名全集、并发只读方法集）。
+ENGINE_RUST_CONTRACTS = ROOT / "crates/ferry-engine/src/contracts"
 AGENT_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/agents.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/agents.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "agents.rs": "engine-rust",
     ROOT / "engine/contracts/agents.py": "python",
     ROOT / "ferry-runtime/src/server/generated/agents.ts": "runtime",
 }
 ENGINE_METHOD_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/engine-methods.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/engine_methods.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "engine_methods.rs": "engine-rust",
     ROOT / "engine/contracts/engine_methods.py": "python",
 }
 RUNTIME_METHOD_OUTPUTS = {
@@ -37,29 +43,34 @@ RUNTIME_METHOD_OUTPUTS = {
 IPC_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/ipc.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/ipc.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "ipc.rs": "engine-rust",
     ROOT / "engine/contracts/ipc.py": "python",
     ROOT / "ferry-runtime/src/server/generated/ipc.ts": "runtime",
 }
 SESSION_REF_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/session-ref.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/session_ref.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "session_ref.rs": "engine-rust",
     ROOT / "engine/contracts/session_ref.py": "python",
     ROOT / "ferry-runtime/src/server/generated/session-ref.ts": "runtime",
 }
 OPERATIONS_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/operations.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/operations.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "operations.rs": "engine-rust",
     ROOT / "engine/contracts/operations.py": "python",
 }
 EVENT_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/events.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/events.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "events.rs": "engine-rust",
     ROOT / "engine/contracts/events.py": "python",
     ROOT / "ferry-runtime/src/server/generated/events.ts": "runtime",
 }
 ERROR_OUTPUTS = {
     ROOT / "app/src/shared/contracts/generated/errors.ts": "frontend",
     ROOT / "app/src-tauri/src/contracts/errors.rs": "rust",
+    ENGINE_RUST_CONTRACTS / "errors.rs": "engine-rust",
     ROOT / "engine/contracts/errors.py": "python",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
 }
@@ -885,6 +896,47 @@ def _pascal_case(value: str) -> str:
     return "".join(part.capitalize() for part in value.replace("_", "-").split("-"))
 
 
+# rustfmt 的 array_width(max_width 的 60%)一超,数组就会被拆成一行一个元素。
+# 生成物必须直接过 cargo fmt --check,所以这里按同一个阈值决定排布。
+RUST_ARRAY_WIDTH = 60
+RUST_MAX_WIDTH = 100
+
+
+def rust_expanded_declaration(
+    name: str, values: list[str], visibility: str = "pub(crate)",
+) -> str:
+    body = "\n".join(f"    {json.dumps(value)}," for value in values)
+    return f"{visibility} const {name}: &[&str] = &[\n{body}\n];"
+
+
+def rust_compact_declaration(
+    name: str, values: list[str], visibility: str = "pub(crate)",
+) -> str:
+    items = ", ".join(json.dumps(value) for value in values)
+    # 与 rustfmt 对齐:整行不超 100 列时保持单行,避免生成即漂移
+    single = f"{visibility} const {name}: &[&str] = &[{items}];"
+    if len(single) <= RUST_MAX_WIDTH:
+        return single
+    if len(items) + len("[]") > RUST_ARRAY_WIDTH:
+        return rust_expanded_declaration(name, values, visibility)
+    return f"{visibility} const {name}: &[&str] =\n    &[{items}];"
+
+
+def rust_inline_array(values: list[str], indent: int) -> list[str]:
+    """结构体字段里的 &[&str] 字面量：按 rustfmt 的 array_width 决定是否展开。"""
+    if not values:
+        return ["&[]"]
+    items = ", ".join(json.dumps(value) for value in values)
+    if len(items) + len("&[]") <= RUST_ARRAY_WIDTH:
+        return [f"&[{items}]"]
+    pad = " " * indent
+    return [
+        "&[",
+        *(f"{pad}    {json.dumps(value)}," for value in values),
+        f"{pad}]",
+    ]
+
+
 def _typescript_field(field: str, descriptor: str) -> str:
     optional = descriptor.endswith("?")
     base = descriptor[:-1] if optional else descriptor
@@ -996,23 +1048,8 @@ def operations_frontend(contract: dict[str, object]) -> str:
 
 
 def operations_rust(contract: dict[str, object]) -> str:
-    # rustfmt 的 array_width(max_width 的 60%)一超,数组就会被拆成一行一个元素。
-    # 生成物必须直接过 cargo fmt --check,所以这里按同一个阈值决定排布。
-    RUST_ARRAY_WIDTH = 60
-
-    def compact_declaration(name: str, values: list[str]) -> str:
-        items = ", ".join(json.dumps(value) for value in values)
-        # 与 rustfmt 对齐:整行不超 100 列时保持单行,避免生成即漂移
-        single = f"pub(crate) const {name}: &[&str] = &[{items}];"
-        if len(single) <= 100:
-            return single
-        if len(items) + len("[]") > RUST_ARRAY_WIDTH:
-            return expanded_declaration(name, values)
-        return f"pub(crate) const {name}: &[&str] =\n    &[{items}];"
-
-    def expanded_declaration(name: str, values: list[str]) -> str:
-        body = "\n".join(f"    {json.dumps(value)}," for value in values)
-        return f"pub(crate) const {name}: &[&str] = &[\n{body}\n];"
+    compact_declaration = rust_compact_declaration
+    expanded_declaration = rust_expanded_declaration
 
     input_structs = []
     variants = []
@@ -1527,6 +1564,366 @@ def ipc_runtime(contract: dict[str, object], digest: str) -> str:
     ))
 
 
+GENERATED_RUST_HEADER = "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。"
+
+
+def agents_engine_rust(agents: list[dict[str, object]]) -> str:
+    rows: list[str] = []
+    for agent in agents:
+        rows.append("    AgentContract {")
+        for key in ("id", "display_name", "icon", "source_path"):
+            rows.append(f"        {key}: {json.dumps(agent[key])},")
+        for key in (
+            "capabilities", "edit_operations", "executables",
+            "fallback_bin_dirs",
+        ):
+            value = rust_inline_array(list(agent[key]), 8)
+            rows.append(f"        {key}: {value[0]}")
+            rows.extend(value[1:])
+            rows[-1] += ","
+        rows.append("    },")
+    executables = [
+        executable for agent in agents for executable in agent["executables"]
+    ]
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        "/// Agent 能力词表；manifest 里的 capabilities 必须是它的有序子集。",
+        rust_compact_declaration(
+            "AGENT_CAPABILITIES", list(AGENT_CAPABILITIES), "pub",
+        ),
+        "",
+        "/// 单个内置 Agent 的静态契约（AgentManifest 的事实源）。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub struct AgentContract {",
+        "    pub id: &'static str,",
+        "    pub display_name: &'static str,",
+        "    pub icon: &'static str,",
+        "    pub source_path: &'static str,",
+        "    pub capabilities: &'static [&'static str],",
+        "    pub edit_operations: &'static [&'static str],",
+        "    pub executables: &'static [&'static str],",
+        "    pub fallback_bin_dirs: &'static [&'static str],",
+        "}",
+        "",
+        "pub const AGENTS: &[AgentContract] = &[",
+        *rows,
+        "];",
+        "",
+        rust_compact_declaration(
+            "AGENT_IDS", [agent["id"] for agent in agents], "pub",
+        ),
+        rust_compact_declaration("ALLOWED_EXECUTABLES", executables, "pub"),
+        "",
+        "pub fn agent(id: &str) -> Option<&'static AgentContract> {",
+        "    AGENTS.iter().find(|agent| agent.id == id)",
+        "}",
+        "",
+    ))
+
+
+def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
+    kind_variants = {
+        "read": "Read",
+        "index-refresh": "IndexRefresh",
+        "mutation": "Mutation",
+    }
+    exposure_variants = {
+        "public": "Public",
+        "trusted-ui": "TrustedUi",
+        "internal": "Internal",
+    }
+    timeout_variants = {
+        "normal": "Normal",
+        "lookup": "Lookup",
+        "agent-run": "AgentRun",
+    }
+    retry_variants = {"safe-read": "SafeRead", "never": "Never"}
+    dispatch_variants = {"parallel-read": "ParallelRead", "serial": "Serial"}
+    rows: list[str] = []
+    for method in methods:
+        rows.extend((
+            f'        {json.dumps(method["name"])} => Some(EngineMethodPolicy {{',
+            f'            kind: MethodKind::{kind_variants[method["kind"]]},',
+            f'            exposure: Exposure::{exposure_variants[method["exposure"]]},',
+            f'            timeout: TimeoutClass::{timeout_variants[method["timeout"]]},',
+            f'            retry: RetryPolicy::{retry_variants[method["retry"]]},',
+            f'            dispatch: Dispatch::{dispatch_variants[method["dispatch"]]},',
+            "        }),",
+        ))
+    names = [method["name"] for method in methods]
+    parallel = [
+        method["name"] for method in methods
+        if method["dispatch"] == "parallel-read"
+    ]
+
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum MethodKind {",
+        *(f"    {kind_variants[kind]}," for kind in kind_variants
+          if any(method["kind"] == kind for method in methods)),
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum Exposure {",
+        *(f"    {exposure_variants[exposure]}," for exposure in exposure_variants
+          if any(method["exposure"] == exposure for method in methods)),
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum TimeoutClass {",
+        *(f"    {timeout_variants[timeout]}," for timeout in timeout_variants
+          if any(method["timeout"] == timeout for method in methods)),
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum RetryPolicy {",
+        *(f"    {retry_variants[retry]}," for retry in retry_variants
+          if any(method["retry"] == retry for method in methods)),
+        "}",
+        "",
+        "/// 分发池归属：parallel-read 走 4-worker 只读池（可乱序），",
+        "/// 其余方法一律单 worker 串行保序。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum Dispatch {",
+        *(f"    {dispatch_variants[dispatch]}," for dispatch in dispatch_variants
+          if any(method["dispatch"] == dispatch for method in methods)),
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub struct EngineMethodPolicy {",
+        "    pub kind: MethodKind,",
+        "    pub exposure: Exposure,",
+        "    pub timeout: TimeoutClass,",
+        "    pub retry: RetryPolicy,",
+        "    pub dispatch: Dispatch,",
+        "}",
+        "",
+        "/// RPC 方法全集；启动自检要求分发表与它逐字相等。",
+        rust_expanded_declaration("ENGINE_METHOD_NAMES", names, "pub"),
+        "",
+        "/// 允许进并发只读池的方法。",
+        rust_expanded_declaration(
+            "PARALLEL_READ_METHOD_NAMES", parallel, "pub",
+        ),
+        "",
+        "pub fn policy(method: &str) -> Option<EngineMethodPolicy> {",
+        "    match method {",
+        *rows,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+        "pub fn is_parallel_read(method: &str) -> bool {",
+        "    PARALLEL_READ_METHOD_NAMES.contains(&method)",
+        "}",
+        "",
+    ))
+
+
+def ipc_engine_rust(contract: dict[str, object], digest: str) -> str:
+    request = contract["request"]
+    response = contract["response"]
+    error = contract["error"]
+    event = contract["event"]
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        f'pub const FERRY_IPC_PROTOCOL: &str = "{contract["protocol"]}";',
+        "pub const FERRY_CONTRACT_HASH: &str =",
+        f'    "{digest}";',
+        "",
+        "/// 请求信封的字段集合必须精确相等：多一个字段即 rpc.invalid_request。",
+        rust_compact_declaration(
+            "REQUEST_REQUIRED_FIELDS", request["required"], "pub",
+        ),
+        rust_compact_declaration(
+            "RESPONSE_SUCCESS_REQUIRED_FIELDS",
+            response["success_required"],
+            "pub",
+        ),
+        rust_compact_declaration(
+            "RESPONSE_FAILURE_REQUIRED_FIELDS",
+            response["failure_required"],
+            "pub",
+        ),
+        rust_compact_declaration(
+            "ERROR_REQUIRED_FIELDS", error["required"], "pub",
+        ),
+        rust_compact_declaration(
+            "EVENT_REQUIRED_FIELDS", event["required"], "pub",
+        ),
+        rust_compact_declaration(
+            "EVENT_OPTIONAL_FIELDS", event["optional"], "pub",
+        ),
+        "",
+    ))
+
+
+def session_ref_engine_rust(contract: dict[str, object]) -> str:
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        f'pub const OPAQUE_SESSION_REF_PREFIX: &str = "{contract["opaque_prefix"]}";',
+        f"pub const OPAQUE_SESSION_REF_MIN_LENGTH: usize = {contract['minimum_length']};",
+        f"pub const OPAQUE_SESSION_REF_MAX_LENGTH: usize = {contract['maximum_length']};",
+        "",
+        "pub fn is_opaque_session_ref(value: &str) -> bool {",
+        "    (OPAQUE_SESSION_REF_MIN_LENGTH..=OPAQUE_SESSION_REF_MAX_LENGTH).contains(&value.len())",
+        "        && value.starts_with(OPAQUE_SESSION_REF_PREFIX)",
+        "        && value",
+        "            .bytes()",
+        "            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))",
+        "}",
+        "",
+    ))
+
+
+def _rust_field_table(
+    name: str, groups: dict[str, dict[str, str]], comment: str,
+) -> list[str]:
+    rows = [
+        f"    ({json.dumps(group)}, {json.dumps(field)}, {json.dumps(descriptor)}),"
+        for group, fields in groups.items()
+        for field, descriptor in fields.items()
+    ]
+    return [
+        comment,
+        f"pub const {name}: &[(&str, &str, &str)] = &[",
+        *rows,
+        "];",
+    ]
+
+
+def operations_engine_rust(contract: dict[str, object]) -> str:
+    metadata_rows = [
+        f"    ({json.dumps(field)}, {json.dumps(descriptor)}),"
+        for field, descriptor in contract["metadata_patch_fields"].items()
+    ]
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        f'pub const OPERATION_PLAN_ID_PREFIX: &str = "{contract["plan_id_prefix"]}";',
+        rust_compact_declaration("OPERATION_KINDS", contract["kinds"], "pub"),
+        rust_compact_declaration(
+            "EDIT_OPERATION_KINDS", contract["edit_operations"], "pub",
+        ),
+        rust_expanded_declaration(
+            "OPERATION_STATUSES", contract["statuses"], "pub",
+        ),
+        rust_compact_declaration(
+            "OPERATION_TERMINAL_STATUSES", contract["terminal_statuses"], "pub",
+        ),
+        f'pub const OPERATION_SUCCESS_STATUS: &str = "{contract["success_status"]}";',
+        "",
+        *_rust_field_table(
+            "OPERATION_INPUT_FIELDS",
+            contract["input_fields"],
+            "/// 每行 = (kind, 字段名, 类型描述符)，顺序与契约声明一致。",
+        ),
+        "",
+        *_rust_field_table(
+            "EDIT_OPERATION_FIELDS",
+            contract["edit_operation_fields"],
+            "/// 每行 = (op, 字段名, 类型描述符)。",
+        ),
+        "",
+        *_rust_field_table(
+            "ASSISTANT_REPLY_ITEM_FIELDS",
+            contract["assistant_reply_item_fields"],
+            "/// 每行 = (item kind, 字段名, 类型描述符)。",
+        ),
+        "",
+        "/// 每行 = (字段名, 类型描述符)；`?` 结尾表示可选。",
+        "pub const METADATA_PATCH_FIELDS: &[(&str, &str)] = &[",
+        *metadata_rows,
+        "];",
+        "",
+    ))
+
+
+def events_engine_rust(events: list[dict[str, object]]) -> str:
+    rows = []
+    source_variants = {"runtime": "Runtime", "host": "Host", "engine": "Engine"}
+    for event in events:
+        source = source_variants[event["source"]]
+        forward = str(event["forward_to_ui"]).lower()
+        rows.extend((
+            f'        {json.dumps(event["type"])} => Some(EventPolicy {{',
+            f"            source: EventSource::{source},",
+            f"            forward_to_ui: {forward},",
+            "        }),",
+        ))
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub enum EventSource {",
+        "    Runtime,",
+        "    Host,",
+        "    Engine,",
+        "}",
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub struct EventPolicy {",
+        "    pub source: EventSource,",
+        "    pub forward_to_ui: bool,",
+        "}",
+        "",
+        rust_expanded_declaration(
+            "FERRY_EVENT_TYPES", [event["type"] for event in events], "pub",
+        ),
+        "",
+        "pub fn event_policy(event_type: &str) -> Option<EventPolicy> {",
+        "    match event_type {",
+        *rows,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+    ))
+
+
+def errors_engine_rust(errors: list[dict[str, object]]) -> str:
+    rows = []
+    for error in errors:
+        sources = rust_inline_array(list(error["sources"]), 12)
+        rows.extend((
+            f'        {json.dumps(error["code"])} => Some(ErrorPolicy {{',
+            f'            category: {json.dumps(error["category"])},',
+            f'            retryable: {str(error["retryable"]).lower()},',
+            f"            sources: {sources[0]}",
+        ))
+        rows.extend(sources[1:])
+        rows[-1] += ","
+        rows.append("        }),")
+    return "\n".join((
+        GENERATED_RUST_HEADER,
+        "",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub struct ErrorPolicy {",
+        "    pub category: &'static str,",
+        "    pub retryable: bool,",
+        "    pub sources: &'static [&'static str],",
+        "}",
+        "",
+        "/// 契约里注册的全部错误码（字典序）。",
+        rust_expanded_declaration(
+            "FERRY_ERROR_CODES", [error["code"] for error in errors], "pub",
+        ),
+        "",
+        "pub fn error_policy(code: &str) -> Option<ErrorPolicy> {",
+        "    match code {",
+        *rows,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+    ))
+
+
 def generated_contents(
     agents: list[dict[str, object]],
     engine_methods: list[dict[str, object]],
@@ -1538,13 +1935,20 @@ def generated_contents(
     errors: list[dict[str, object]],
 ) -> dict[Path, str]:
     agent_contents = {
-        path: {"frontend": frontend, "rust": rust, "python": python, "runtime": runtime}[kind](agents)
+        path: {
+            "frontend": frontend,
+            "rust": rust,
+            "engine-rust": agents_engine_rust,
+            "python": python,
+            "runtime": runtime,
+        }[kind](agents)
         for path, kind in AGENT_OUTPUTS.items()
     }
     engine_contents = {
         path: {
             "frontend": engine_methods_frontend,
             "rust": engine_methods_rust,
+            "engine-rust": engine_methods_engine_rust,
             "python": engine_methods_python,
         }[kind](engine_methods)
         for path, kind in ENGINE_METHOD_OUTPUTS.items()
@@ -1561,6 +1965,7 @@ def generated_contents(
         path: {
             "frontend": session_ref_frontend,
             "rust": session_ref_rust,
+            "engine-rust": session_ref_engine_rust,
             "python": session_ref_python,
             "runtime": session_ref_runtime,
         }[kind](session_ref)
@@ -1570,6 +1975,7 @@ def generated_contents(
         path: {
             "frontend": operations_frontend,
             "rust": operations_rust,
+            "engine-rust": operations_engine_rust,
             "python": operations_python,
         }[kind](operations)
         for path, kind in OPERATIONS_OUTPUTS.items()
@@ -1578,6 +1984,7 @@ def generated_contents(
         path: {
             "frontend": events_frontend,
             "rust": events_rust,
+            "engine-rust": events_engine_rust,
             "python": events_python,
             "runtime": events_runtime,
         }[kind](events)
@@ -1587,6 +1994,7 @@ def generated_contents(
         path: {
             "frontend": errors_frontend,
             "rust": errors_rust,
+            "engine-rust": errors_engine_rust,
             "python": errors_python,
             "runtime": errors_runtime,
         }[kind](errors)
@@ -1600,6 +2008,7 @@ def generated_contents(
         path: {
             "frontend": ipc_frontend,
             "rust": ipc_rust,
+            "engine-rust": ipc_engine_rust,
             "python": ipc_python,
             "runtime": ipc_runtime,
         }[kind](ipc, digest)

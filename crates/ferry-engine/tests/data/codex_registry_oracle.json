@@ -1,0 +1,31 @@
+{
+  "schema": "CREATE TABLE threads (id TEXT PRIMARY KEY, title TEXT, tokens INTEGER, ratio REAL, note TEXT);\nCREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT PRIMARY KEY, status TEXT);\nCREATE TABLE thread_dynamic_tools (thread_id TEXT, name TEXT);\nCREATE TABLE unrelated (x TEXT);",
+  "rows": "INSERT INTO threads VALUES ('b', 'Beta', 2, 1.5, NULL), ('a', '中文', 10, 0.25, 'n'), ('z', 'Zed', 0, 0.0, '');\nINSERT INTO thread_spawn_edges VALUES ('a', 'b', 'closed'), ('b', 'z', 'open');\nINSERT INTO thread_dynamic_tools VALUES ('a', 't1'), ('a', 't2'), ('b', 't3');",
+  "cases": [
+    {
+      "ids": [
+        "a",
+        "b"
+      ],
+      "revision": "sha256:6eaa359b0d1aa4ab0d62ab5f15cf194a7810ef5b93797cbec6260354a524f192"
+    },
+    {
+      "ids": [
+        "a"
+      ],
+      "revision": "sha256:87a027eece72e2f1449d77c3e6522f240ffcce66c58960ef6dd77a4bf2e7caa9"
+    },
+    {
+      "ids": [
+        "a",
+        "b",
+        "z"
+      ],
+      "revision": "sha256:f2b27356aec5872457c2d538dae25b7a589197195da183724730e9b864c7ecf5"
+    },
+    {
+      "ids": [],
+      "revision": null
+    }
+  ]
+}
