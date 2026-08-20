@@ -131,7 +131,7 @@ pub const AGENTS: &[AgentContract] = &[
         display_name: "Cursor",
         icon: "cursor",
         source_path: "~/Library/Application Support/Cursor/User/globalStorage",
-        capabilities: &["browse", "migration-source"],
+        capabilities: &["browse", "resume", "migration-source", "migration-target"],
         edit_operations: &[],
         executables: &["cursor"],
         fallback_bin_dirs: &[],

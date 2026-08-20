@@ -88,6 +88,25 @@ fn decode_shell(raw: &Map<String, Value>) -> Option<Map<String, Value>> {
     Some(canonical)
 }
 
+/// 写端：把 `timeout` 收进 Cursor 的嵌套 `options`，并补齐它恒有的形态。
+///
+/// 字段表只能做平铺改名，`options.timeout` 这层嵌套装不进去，只能靠后处理。
+/// 超时缺省填 30000：真实 `run_terminal_command_v2` 的 `params` 里 `options`
+/// 恒存在，缺它的形态没有观察到过。
+fn encode_shell(
+    _canonical: &Map<String, Value>,
+    mut native: Map<String, Value>,
+) -> Map<String, Value> {
+    let timeout = native
+        .remove("timeout")
+        .and_then(|value| value.as_i64())
+        .unwrap_or(30_000);
+    let mut options = Map::new();
+    options.insert("timeout".into(), Value::from(timeout));
+    native.insert("options".into(), Value::Object(options));
+    native
+}
+
 /// task_v2 的三个字段都有兜底值，缺任何一个都不该让子 Agent 边丢失。
 fn decode_task(raw: &Map<String, Value>) -> Option<Map<String, Value>> {
     let mut canonical = Map::new();
@@ -108,7 +127,12 @@ fn decode_task(raw: &Map<String, Value>) -> Option<Map<String, Value>> {
     Some(canonical)
 }
 
-/// Cursor 只作为迁移源：全部绑定都是读端归一，没有写回形态。
+/// Cursor 方言。
+///
+/// 读端覆盖全部已知原生工具；**写端只有 `shell.exec` 一个**——迁入 v1 的原生范围
+/// 就是纯文本消息 + 终端/Shell 类工具，其余操作在两层都降级成历史叙述文本
+/// （`docs/cursor-migration-target.md` §8 与「Ferry 实现说明」）。因此除 shell 外
+/// 的绑定一律 `readonly()`。
 pub static DIALECT: LazyLock<ToolDialect> = LazyLock::new(|| {
     ToolDialect::new(
         "cursor",
@@ -118,15 +142,15 @@ pub static DIALECT: LazyLock<ToolDialect> = LazyLock::new(|| {
                 CanonicalOp::SHELL_EXEC,
                 "run_terminal_command_v2",
                 vec![
-                    FieldMap::new("command"),
-                    FieldMap::new("workdir"),
-                    FieldMap::new("timeout_ms"),
-                    FieldMap::new("description"),
+                    FieldMap::new("command").write_default(""),
+                    FieldMap::new("workdir").native("cwd").write_default(""),
+                    FieldMap::new("timeout_ms").native("timeout"),
+                    FieldMap::new("description").native("commandDescription"),
                 ],
             )
             .read_names(["run_terminal_command", "Shell", "AwaitShell"])
             .decode_hook(decode_shell)
-            .readonly(),
+            .encode_post(encode_shell, Vec::<String>::new()),
             OpBinding::new(
                 CanonicalOp::FS_READ,
                 "read_file_v2",
@@ -370,8 +394,67 @@ mod tests {
     }
 
     #[test]
-    fn the_dialect_declares_no_write_form() {
-        assert!(DIALECT.write_ops().is_empty());
-        assert!(DIALECT.render(CanonicalOp::FS_READ, &json!({})).is_none());
+    fn shell_is_the_only_writable_operation() {
+        assert_eq!(
+            DIALECT.write_ops().into_iter().collect::<Vec<_>>(),
+            [CanonicalOp::SHELL_EXEC]
+        );
+        // 迁入 v1 只原生化终端类调用，其余操作没有写回形态。
+        for op in [
+            CanonicalOp::FS_READ,
+            CanonicalOp::FS_PATCH,
+            CanonicalOp::FS_SEARCH,
+            CanonicalOp::FS_GLOB,
+            CanonicalOp::WEB_FETCH,
+            CanonicalOp::WEB_SEARCH,
+            CanonicalOp::AGENT_SPAWN,
+        ] {
+            assert!(DIALECT.render(op, &json!({})).is_none(), "{op}");
+        }
+    }
+
+    #[test]
+    fn shell_renders_back_into_the_native_nested_params() {
+        let (name, native) = DIALECT
+            .render(
+                CanonicalOp::SHELL_EXEC,
+                &json!({"command": "ls /tmp", "workdir": "/w", "timeout_ms": 45_000,
+                        "description": "list"}),
+            )
+            .unwrap();
+        assert_eq!(name, "run_terminal_command_v2");
+        assert_eq!(
+            Value::Object(native),
+            json!({"command": "ls /tmp", "cwd": "/w", "commandDescription": "list",
+                   "options": {"timeout": 45000}})
+        );
+
+        // 缺省：cwd 恒存在、超时回落 30000、无描述就不写该键。
+        let (_, native) = DIALECT
+            .render(CanonicalOp::SHELL_EXEC, &json!({"command": "ls"}))
+            .unwrap();
+        assert_eq!(
+            Value::Object(native),
+            json!({"command": "ls", "cwd": "", "options": {"timeout": 30000}})
+        );
+    }
+
+    #[test]
+    fn shell_round_trips_through_parse_and_render() {
+        let native = json!({"command": "ls /tmp", "cwd": "/w", "options": {"timeout": 30000},
+                            "commandDescription": "list"});
+        let (op, canonical) = DIALECT.parse("run_terminal_command_v2", &native).unwrap();
+        let (_, rendered) = DIALECT.render(op, &canonical).unwrap();
+        assert_eq!(Value::Object(rendered), native);
+    }
+
+    #[test]
+    fn every_shell_input_field_is_declared_supported() {
+        // decode_hook 在场时 supported_fields 取全部声明字段：迁移层据此判定
+        // 「有没有字段被丢弃」，漏声明会让 shell 调用无谓地掉到 lossy。
+        let supported = DIALECT.supported_fields(CanonicalOp::SHELL_EXEC);
+        for field in ["command", "workdir", "timeout_ms", "description"] {
+            assert!(supported.contains(field), "{field}");
+        }
     }
 }

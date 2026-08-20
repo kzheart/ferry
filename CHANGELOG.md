@@ -14,6 +14,34 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [Unreleased]
+
+### Added
+
+- **Migrate into Cursor** — Cursor is now a migration target, not just a
+  source. Ferry writes a native Cursor chat that the model can actually read:
+  both the visible conversation and the model-facing context are written, so
+  Cursor picks up where the other agent left off instead of starting cold.
+  Plain messages and terminal/shell tool calls migrate natively; every other
+  tool call becomes history narration, exactly like the other targets.
+  Subagent conversations keep their parent/child topology. Two prerequisites:
+  quit Cursor completely before migrating (a running Cursor overwrites its
+  database from memory, and Ferry refuses to write while it is up), and open
+  the destination folder in Cursor at least once so the chat is filed under
+  the right workspace. Failed migrations roll back the chat and its subagents
+  and touch nothing else in Cursor's database.
+
+### Fixed
+
+- **Session titles survive migration** — a Claude Code session that never got
+  an AI-generated title now carries the same title everywhere. Ferry's session
+  list already fell back to the opening question, but migration did not, so
+  such sessions arrived at the destination unnamed.
+- **Honest migration reports** — the migration impact report no longer lists
+  input fields as dropped for tool calls that get rewritten as history text.
+  Those calls keep their name, input, and result inside the text that is
+  written; only calls dropped outright list their fields now.
+
 ## [0.7.0] - 2026-08-19
 
 ### Added

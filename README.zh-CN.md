@@ -66,9 +66,13 @@ Ferry 解决三个问题：
 | OpenCode | ✓ | ✓ |
 | Pi Agent | ✓ | ✓ |
 | Grok Build | ✓ | ✓ |
-| Cursor | ✓ | 仅作为迁移来源 |
+| Cursor | ✓ | ✓ |
 
-Cursor 只能作为迁移来源：会话可以从 Cursor 搬到别的 Agent，不能反向搬入。
+迁入 Cursor 会直接在它的 `state.vscdb` 里写出一条原生会话，续聊时模型能看见迁进去
+的历史。两个前提：先完全退出 Cursor（运行中的 Cursor 会用内存态覆盖数据库），
+以及目标文件夹至少在 Cursor 里打开过一次（会话按 Cursor 自己的工作区 id 归档）。
+纯文本消息与终端/Shell 类工具调用原生迁移，其余工具调用与其它目标端一样写成历史
+叙述文本。
 
 
 ## 功能

@@ -100,7 +100,9 @@ export const AGENTS = {
     "icon": "cursor",
     "capabilities": [
       "browse",
-      "migration-source"
+      "resume",
+      "migration-source",
+      "migration-target"
     ],
     "editOperations": []
   }

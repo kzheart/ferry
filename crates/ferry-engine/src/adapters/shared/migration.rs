@@ -669,6 +669,26 @@ pub fn default_dialect_preview<T: MigrationTargetBase + ?Sized>(
     Some(rendered)
 }
 
+/// 没有原生形态时的判定。
+///
+/// `ignored_fields` 的语义是**真的没能进目标端的字段**，它会原样出现在
+/// `plan.degrade_details` 与 preview 差异卡上，所以必须与实际写入一致：
+/// - `narrated`：writer 会写一段 narration（`narration.rs` 的模板里含工具名、入参
+///   JSON 与结果），字段一个都没丢，丢的是"这是一次工具调用"这个结构——那已经由
+///   `fidelity` 与 reason code 表达，再列一遍字段就是谎报；
+/// - `dropped`：整条调用不写入目标端，入参确实全部消失，如实列出。
+fn unrendered_decision(
+    tool: &ToolCall,
+    fidelity: Fidelity,
+    reason: &str,
+) -> DomainResult<RenderDecision> {
+    let decision = RenderDecision::new(fidelity).reason_codes(&[reason]);
+    if fidelity == Fidelity::Dropped {
+        return decision.ignored_fields(input_field_names(tool)).validated();
+    }
+    decision.validated()
+}
+
 /// [`MigrationTargetBase::evaluate_tool`] 的默认实现体。
 pub fn default_evaluate_tool<T: MigrationTargetBase + ?Sized>(
     target: &T,
@@ -677,10 +697,7 @@ pub fn default_evaluate_tool<T: MigrationTargetBase + ?Sized>(
     message: Option<&Message>,
 ) -> DomainResult<RenderDecision> {
     if !has_valid_tool_input(tool.op.as_deref(), &tool.input) {
-        return RenderDecision::new(Fidelity::Narrated)
-            .reason_codes(&["invalid_tool_input"])
-            .ignored_fields(input_field_names(tool))
-            .validated();
+        return unrendered_decision(tool, Fidelity::Narrated, "invalid_tool_input");
     }
     let verdict = target.classify_tool_call(tool);
     let Some(rendered) = target.preview_tool(tool, session, message) else {
@@ -694,10 +711,7 @@ pub fn default_evaluate_tool<T: MigrationTargetBase + ?Sized>(
         } else {
             "tool_to_history"
         };
-        return RenderDecision::new(fidelity)
-            .reason_codes(&[reason])
-            .ignored_fields(input_field_names(tool))
-            .validated();
+        return unrendered_decision(tool, fidelity, reason);
     };
 
     let RenderedTool {
@@ -756,16 +770,10 @@ pub fn default_with_result_fidelity<T: MigrationTargetBase + ?Sized>(
         return Ok(decision);
     }
     if result.status == ToolResultStatus::Unknown {
-        return RenderDecision::new(Fidelity::Narrated)
-            .reason_codes(&["unknown_result_status"])
-            .ignored_fields(input_field_names(tool))
-            .validated();
+        return unrendered_decision(tool, Fidelity::Narrated, "unknown_result_status");
     }
     if !target.tool_result_statuses().contains(&result.status) {
-        return RenderDecision::new(Fidelity::Narrated)
-            .reason_codes(&["unsupported_result_status"])
-            .ignored_fields(input_field_names(tool))
-            .validated();
+        return unrendered_decision(tool, Fidelity::Narrated, "unsupported_result_status");
     }
     let mut reasons = decision.reason_codes.clone();
     let mut fidelity = decision.fidelity;
@@ -1612,8 +1620,9 @@ mod tests {
         ));
         assert_eq!(decision.fidelity, Fidelity::Narrated);
         assert_eq!(codes(&decision), ["invalid_tool_input"]);
-        assert_eq!(fields(&decision.ignored_fields), ["command"]);
         assert!(decision.rendered.is_none());
+        // 降级成叙述文本时入参会原样写进 narration，不能记成"被忽略的字段"。
+        assert!(decision.ignored_fields.is_empty());
     }
 
     #[test]
@@ -1637,7 +1646,25 @@ mod tests {
         ));
         assert_eq!(narrated.fidelity, Fidelity::Narrated);
         assert_eq!(codes(&narrated), ["tool_to_history"]);
-        assert_eq!(fields(&narrated.ignored_fields), ["pattern"]);
+        // dropped 的入参真的没进目标端，narrated 的还在 narration 里。
+        assert!(narrated.ignored_fields.is_empty());
+    }
+
+    #[test]
+    fn narrated_decisions_do_not_claim_fields_that_narration_keeps() {
+        // 报告与实际写入必须一致：narration 模板会把入参 JSON 原样写进目标会话，
+        // 所以 ignored_fields 必须为空——否则 plan/preview 会谎报字段丢失。
+        let tool = call(
+            "Glob",
+            CanonicalOp::FS_GLOB,
+            json!({"pattern": "*.rs"}),
+            Some(text_result("out")),
+        );
+        let decision = decide(&tool);
+        assert_eq!(decision.fidelity, Fidelity::Narrated);
+        assert!(decision.ignored_fields.is_empty());
+        assert!(decision.consumed_fields.is_empty());
+        assert!(narrate(&tool).contains("\"pattern\": \"*.rs\""));
     }
 
     #[test]
@@ -1652,9 +1679,9 @@ mod tests {
         ));
         assert_eq!(decision.fidelity, Fidelity::Narrated);
         assert_eq!(codes(&decision), ["unknown_result_status"]);
-        // 状态判定会丢掉整份 rendered，并把入参全部记成 ignored。
+        // 状态判定会丢掉整份 rendered，改走 narration；入参不算被忽略。
         assert!(decision.rendered.is_none());
-        assert_eq!(fields(&decision.ignored_fields), ["command"]);
+        assert!(decision.ignored_fields.is_empty());
 
         let interrupted = ToolResult::new(ToolResultStatus::Interrupted);
         let decision = decide(&call(

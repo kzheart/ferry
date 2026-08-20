@@ -157,7 +157,9 @@
       "skill_paths": [],
       "capabilities": [
         "browse",
-        "migration-source"
+        "resume",
+        "migration-source",
+        "migration-target"
       ],
       "edit_operations": [],
       "executables": [

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Value};
 
 use crate::adapters::shared::media::image_from_base64;
-use crate::adapters::shared::scanner::iter_lines;
+use crate::adapters::shared::scanner::{clip_text_default, iter_lines};
 use crate::adapters::shared::tool_canon::{canonical_tool_input, canonical_tool_op};
 use crate::errors::{DomainError, DomainResult};
 use crate::model::{
@@ -180,6 +180,32 @@ fn agent_id_of(lines: &[Value], path: &Path) -> Option<String> {
 
 fn record_type(record: &Value) -> Option<&str> {
     record.get("type").and_then(Value::as_str)
+}
+
+/// 没有 `ai-title` 记录时的标题：首条纯文本 user 消息的开头。
+///
+/// 口径必须与 scanner 逐条一致（同一条件、同一截断长度）：列表用的是 scanner 的
+/// 标题、迁移写入用的是 reader 的标题，两边分叉就会出现「在 Ferry 里有标题、迁到
+/// 别的 Agent 就没有」。`<` 开头的是 `<command-name>` 一类的系统注入，不是提问。
+fn derived_title(lines: &[Value]) -> String {
+    for record in lines {
+        if record_type(record) != Some("user") {
+            continue;
+        }
+        let content = record
+            .get("message")
+            .filter(|message| message.is_object())
+            .and_then(|message| message.get("content"));
+        let Some(Value::String(text)) = content else {
+            continue;
+        };
+        let trimmed = text.trim();
+        if trimmed.is_empty() || trimmed.starts_with('<') {
+            continue;
+        }
+        return clip_text_default(text);
+    }
+    String::new()
 }
 
 fn truthy(value: Option<&Value>) -> bool {
@@ -462,6 +488,9 @@ fn decode_transcript(path: &Path, is_child: bool) -> DomainResult<DecodeResult> 
             session.forked_from_id = text_field(record, "parentLastUuid");
             session.parent_id = text_field(record, "parentSessionId");
         }
+    }
+    if session.title.is_empty() {
+        session.title = derived_title(&lines);
     }
 
     let mut pending: HashMap<Option<String>, PendingTool> = HashMap::new();

@@ -511,18 +511,19 @@ def rust(agents: list[dict[str, object]]) -> str:
     for agent in agents:
         inline = ", ".join(f'"{capability}"' for capability in agent["capabilities"])
         single = f'    ("{agent["id"]}", &[{inline}]),'
-        if len(single) <= 100:
+        # `(id, &[...])` 这种「元组末位溢出数组」的形态，rustfmt 不按 max_width 判，
+        # 而是按一条更紧的行宽：实测 67 列仍单行、68 列就竖排（与 id 长短无关）。
+        if len(single) <= RUST_TUPLE_ROW_WIDTH:
             capability_rows.append(single)
             continue
-        capabilities = "\n".join(
-            f'            "{capability}",' for capability in agent["capabilities"]
-        )
+        # 元组拆行之后，里面那个数组按 array_width 单独再判一次。
+        array = rust_inline_array(list(agent["capabilities"]), 8)
+        nested = [f"        {array[0]}", *array[1:]]
+        nested[-1] += ","
         capability_rows.extend((
             "    (",
             f'        "{agent["id"]}",',
-            "        &[",
-            capabilities,
-            "        ],",
+            *nested,
             "    ),",
         ))
     return "\n".join((
@@ -836,6 +837,8 @@ def _pascal_case(value: str) -> str:
 # 生成物必须直接过 cargo fmt --check,所以这里按同一个阈值决定排布。
 RUST_ARRAY_WIDTH = 60
 RUST_MAX_WIDTH = 100
+# `    ("id", &["a", "b"]),` 这类元组行的实测单行上限（含缩进与行尾逗号）。
+RUST_TUPLE_ROW_WIDTH = 67
 
 
 def rust_expanded_declaration(
@@ -859,11 +862,15 @@ def rust_compact_declaration(
 
 
 def rust_inline_array(values: list[str], indent: int) -> list[str]:
-    """结构体字段里的 &[&str] 字面量：按 rustfmt 的 array_width 决定是否展开。"""
+    """结构体字段里的 &[&str] 字面量：按 rustfmt 的 array_width 决定是否展开。
+
+    array_width 量的是**方括号内的内容**宽度，不含 `&[` 与 `]`：实测 60 个字符仍
+    保持单行，61 个才竖排。多算那三个字符会让恰好卡在边界的数组生成即漂移。
+    """
     if not values:
         return ["&[]"]
     items = ", ".join(json.dumps(value) for value in values)
-    if len(items) + len("&[]") <= RUST_ARRAY_WIDTH:
+    if len(items) <= RUST_ARRAY_WIDTH:
         return [f"&[{items}]"]
     pad = " " * indent
     return [

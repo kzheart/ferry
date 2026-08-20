@@ -54,5 +54,5 @@
   "root_id": "fixture-claude-plain",
   "source_id": "fixture-claude-plain",
   "source_tool": "claude",
-  "title": ""
+  "title": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools."
 }

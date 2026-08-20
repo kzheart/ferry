@@ -199,5 +199,5 @@
   "root_id": "fixture-claude-tools",
   "source_id": "fixture-claude-tools",
   "source_tool": "claude",
-  "title": ""
+  "title": "Run the fixture shell, write, and read operations."
 }

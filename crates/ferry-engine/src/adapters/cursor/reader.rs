@@ -12,6 +12,12 @@
 //! `conversationState` / `agentKv:blob:` 是「发给模型的 prompt 消息数组」的并行
 //! 一层，不是 bubble 的替代（本机 113 个有 blob 链的会话 100% 同时有 bubble
 //! 链）。要完整会话内容取 bubble 就够，所以这里不解析它，也就不需要 protobuf。
+//!
+//! [`read`] 会把子代理会话装配成子树：判定口径与 scanner 完全一致（只认
+//! `subagentInfo.parentComposerId`），两处不可分叉——迁移的写后验收直接用
+//! `browser.read` 比对树形，口径不一致会让合法的迁移被判失败并回滚。
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::Connection;
 use serde_json::{Map, Value};
@@ -248,10 +254,78 @@ fn error_text(details: &Value) -> Option<String> {
     Some(text).filter(|text| !text.is_empty())
 }
 
-/// 读一个会话成 canonical session（不装配子会话树）。
+/// 全库的「父 composerId → 子 composerId 列表」。
+///
+/// 口径与 scanner 的 `parent_id()` 一致：只认 `subagentInfo.parentComposerId`。
+/// 先做一次字符串预筛再解析 JSON——本机 269 行 header 里只有个位数是子代理。
+pub fn child_map(connection: &Connection) -> BTreeMap<String, Vec<String>> {
+    let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let Ok(mut statement) = connection.prepare("SELECT composerId, value FROM composerHeaders")
+    else {
+        return map;
+    };
+    let Ok(mut rows) = statement.query([]) else {
+        return map;
+    };
+    while let Ok(Some(row)) = rows.next() {
+        let Ok(id) = row.get_ref(0).map(store::text_cell) else {
+            continue;
+        };
+        let Ok(raw) = row.get_ref(1).map(store::text_cell) else {
+            continue;
+        };
+        if id.is_empty() || !raw.contains("parentComposerId") {
+            continue;
+        }
+        let head: Head = match serde_json::from_str(&raw) {
+            Ok(head) => head,
+            Err(_) => continue,
+        };
+        let parent = head
+            .subagent_info
+            .as_ref()
+            .and_then(|info| info.parent_composer_id.as_deref())
+            .filter(|value| !value.is_empty());
+        if let Some(parent) = parent {
+            map.entry(parent.to_string()).or_default().push(id);
+        }
+    }
+    map
+}
+
+/// 读一个会话及其整棵子代理子树。
 pub fn read(session_id: &str) -> DomainResult<Session> {
     let connection = store::open_database()?;
-    let native = load(&connection, session_id)?;
+    let children = child_map(&connection);
+    let mut visited: BTreeSet<String> = BTreeSet::new();
+    visited.insert(session_id.to_string());
+    assemble(&connection, session_id, session_id, &children, &mut visited)
+}
+
+/// 递归装配；`visited` 同时兜住父子指向成环的脏数据。
+fn assemble(
+    connection: &Connection,
+    session_id: &str,
+    root_id: &str,
+    children: &BTreeMap<String, Vec<String>>,
+    visited: &mut BTreeSet<String>,
+) -> DomainResult<Session> {
+    let mut session = read_one(connection, session_id)?;
+    session.root_id = Some(root_id.to_string());
+    for child_id in children.get(session_id).map(Vec::as_slice).unwrap_or(&[]) {
+        if !visited.insert(child_id.clone()) {
+            continue;
+        }
+        session
+            .children
+            .push(assemble(connection, child_id, root_id, children, visited)?);
+    }
+    Ok(session)
+}
+
+/// 读一个会话成 canonical session（不装配子会话树）。
+fn read_one(connection: &Connection, session_id: &str) -> DomainResult<Session> {
+    let native = load(connection, session_id)?;
 
     let mut session = Session::new("cursor", session_id, workspace_path(&native));
     session.title = native
@@ -583,6 +657,27 @@ mod tests {
             ToolResultStatus::Running
         );
         assert!(pending.result.as_ref().unwrap().blocks.is_empty());
+    }
+
+    #[test]
+    fn reading_a_root_assembles_its_subagent_subtree() {
+        let (_root, _guard) = with_fixture();
+        let session = read("s-main").unwrap();
+        // 直接读子代理时它自己就是根。
+        let alone = read("s-sub").unwrap();
+        store::set_database_path_override(None);
+
+        // 子代理挂在父会话下，root_id 指向真正的根——写后验收按树形比对，
+        // 这里少一层就会把合法的迁移判成失败。
+        assert_eq!(session.root_id.as_deref(), Some("s-main"));
+        assert_eq!(session.children.len(), 1);
+        let child = &session.children[0];
+        assert_eq!(child.source_id, "s-sub");
+        assert_eq!(child.parent_id.as_deref(), Some("s-main"));
+        assert_eq!(child.root_id.as_deref(), Some("s-main"));
+        assert!(child.children.is_empty());
+        assert_eq!(alone.root_id.as_deref(), Some("s-sub"));
+        assert!(alone.children.is_empty());
     }
 
     #[test]

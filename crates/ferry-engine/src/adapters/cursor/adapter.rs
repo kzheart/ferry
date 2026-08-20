@@ -1,9 +1,13 @@
 //! Cursor 当前原生结构的静态 Adapter 装配。
 //!
-//! Cursor 只提供 `browse` + `migration-source`：Ferry 对它的存储严格只读，不做
-//! 编辑、删除、接续与写回。它与 opencode 一样是 `storage_kind == "id"`——会话不
-//! 落文件，引用就是 `state.vscdb` 里的原生 composerId，因此 `canonicalize` 走
-//! `id_reference`（`root` 恒为 `None`）。
+//! Cursor 提供 `browse` + `migration-source` + `migration-target` + `resume`：
+//! 浏览与迁出对它的存储严格只读；迁入是唯一的写路径，且只新增本次迁移生成的键
+//! （见 `store::open_writable` 与 `writer`）。仍然没有 edit / delete / probe：
+//! 就地编辑与永久删除会改写 Cursor 自己的记录，探针需要一个跑得起来的 CLI Agent。
+//!
+//! 它与 opencode 一样是 `storage_kind == "id"`——会话不落文件，引用就是
+//! `state.vscdb` 里的原生 composerId，因此 `canonicalize` 走 `id_reference`
+//! （`root` 恒为 `None`）。
 
 use std::sync::Arc;
 
@@ -19,6 +23,8 @@ use crate::model::Session;
 use serde_json::Value;
 
 use super::dialect::DIALECT;
+use super::lifecycle::CursorLifecycle;
+use super::migration::CursorMigrationTarget;
 use super::{reader, scanner};
 
 /// Cursor 的读侧组件。
@@ -72,10 +78,17 @@ pub fn build() -> Result<AgentAdapter, String> {
 
     let contract = agent("cursor").ok_or("cursor 不在生成契约里")?;
     let manifest = AgentManifest::from_contract(contract);
+    let executable = manifest
+        .executables
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "cursor".to_string());
     let browser: Arc<dyn SessionBrowser> = Arc::new(CursorBrowser);
     AgentAdapter::builder()
         .browser(browser.clone())
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
+        .migration_target(Arc::new(CursorMigrationTarget))
+        .lifecycle(Arc::new(CursorLifecycle::new(executable)))
         .build(manifest)
 }
 
@@ -86,30 +99,31 @@ mod tests {
     use crate::adapters::shared::dialect::get_dialect;
 
     #[test]
-    fn build_registers_the_dialect_and_only_the_read_side_components() {
+    fn build_registers_the_dialect_and_the_declared_components() {
         let adapter = build().expect("cursor adapter 可装配");
         assert_eq!(adapter.id(), "cursor");
         assert!(get_dialect("cursor").is_some());
         assert_eq!(
             adapter.manifest.capabilities,
-            ["browse", "migration-source"]
+            ["browse", "resume", "migration-source", "migration-target"]
         );
         assert!(adapter.manifest.edit_operations.is_empty());
-        for component in [Component::Browser, Component::MigrationSource] {
+        for component in [
+            Component::Browser,
+            Component::MigrationSource,
+            Component::MigrationTarget,
+            Component::Lifecycle,
+        ] {
             assert!(adapter.has_component(component), "缺少组件 {component:?}");
         }
-        // 只读 agent：写侧组件一个都不装，能力门禁会挡住相关请求。
-        for component in [
-            Component::MigrationTarget,
-            Component::Editor,
-            Component::Verifier,
-            Component::Lifecycle,
-            Component::Models,
-        ] {
+        // 就地编辑、永久删除与探针都会改写或拉起 Cursor 自己的东西，一律不装。
+        for component in [Component::Editor, Component::Verifier, Component::Models] {
             assert!(!adapter.has_component(component), "多出组件 {component:?}");
         }
         assert!(adapter.require_editor().is_err());
-        assert!(adapter.require_lifecycle("resume").is_err());
+        assert!(adapter.require_lifecycle("resume").is_ok());
+        assert!(adapter.require_lifecycle("delete").is_err());
+        assert!(adapter.require_migration_target().is_ok());
     }
 
     #[test]

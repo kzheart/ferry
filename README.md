@@ -70,10 +70,15 @@ Ferry solves three problems:
 | OpenCode | ✓ | ✓ |
 | Pi Agent | ✓ | ✓ |
 | Grok Build | ✓ | ✓ |
-| Cursor | ✓ | source only |
+| Cursor | ✓ | ✓ |
 
-Cursor is a migration source only: sessions can be moved out of Cursor into
-another agent, not into Cursor.
+Migrating **into** Cursor writes a native chat straight into Cursor's
+`state.vscdb`, so the model sees the imported history when you keep chatting.
+Two requirements: quit Cursor completely first (a running Cursor overwrites the
+database from memory), and open the target folder in Cursor at least once
+(sessions are filed under Cursor's own workspace id). Plain messages and
+terminal/shell tool calls migrate natively; other tool calls are written as
+history narration, same as every other target.
 
 
 ## Features
