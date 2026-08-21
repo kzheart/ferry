@@ -1,4 +1,4 @@
-// 资源栏宿主:同一个外壳(标题/搜索/筛选/令牌)套三种列表。这里守的是外壳与列表
+// 资源栏宿主:同一个外壳(范围标题/常驻搜索/显示选项)套三种列表。这里守的是外壳与列表
 // 的接线,以及"折叠只是宽度归零、内容仍在"这一点——折叠时如果卸载了列表,
 // 展开会丢滚动位置和展开态。
 import { test } from "vitest";
@@ -23,7 +23,8 @@ function baseProps(overrides = {}) {
     view: "library",
     pane: {
       title: "资料库", count: 2, placeholder: "搜索会话",
-      query: "", onQuery: noop, filterCount: 0, tokens: [],
+      query: "", onQuery: noop, filterCount: 0,
+      displayLabel: "app:display.menu",
     },
     collapsed: false,
     width: 260,
@@ -33,6 +34,12 @@ function baseProps(overrides = {}) {
     onFilter: noop,
     library: {
       scanning: false, sessions: [], scanningLabel: "扫描中",
+      navCollapsed: false,
+      scope: { kind: "all" },
+      scopeCounts: { total: 2, pinned: 0, agents: [], tags: [] },
+      projects: [], toolNames: {}, onSelectScope: noop,
+      display: { group: "project", time: "all", subOnly: false, migOnly: false, sort: "updated" },
+      onDisplayChange: noop, groupMode: "project",
       groups: [], collapsedGroups: {}, onToggleGroup: noop, onClear: noop,
       selectedId: null, multiSel: [],
       onRowClick: noop, onRowPin: noop, onRowDelete: noop, onRowMore: noop,
@@ -43,25 +50,73 @@ function baseProps(overrides = {}) {
   };
 }
 
-test("外壳渲染标题与计数,并把搜索、筛选按钮接到各自的回调", () => {
+test("外壳渲染范围名与计数,搜索按钮接到全文面板", () => {
   const calls = [];
   render(
     <ResourcePaneHost
-      {...baseProps({
-        onOpenSearch: () => calls.push("search"),
-        onFilter: () => calls.push("filter"),
-      })}
+      {...baseProps({ onOpenSearch: () => calls.push("search") })}
     />,
   );
 
   assert.ok(screen.getByText("资料库"));
   assert.ok(screen.getByText("2"));
   fireEvent.click(screen.getByTitle("app:pane.search"));
-  fireEvent.click(screen.getByTitle("app:pane.filterButton"));
-  assert.deepEqual(calls, ["search", "filter"]);
+  assert.deepEqual(calls, ["search"]);
 });
 
-test("已有查询词时展示可清除的查询条,清除走的是 pane.onQuery", () => {
+// 会话库的筛选浮层已删除:那个按钮现在开的是本地的「显示选项」菜单,
+// 只有迁移历史还走 onFilter 的老弹层。
+test("会话库的显示选项就地开菜单,不再调 onFilter", () => {
+  const calls = [];
+  render(
+    <ResourcePaneHost {...baseProps({ onFilter: () => calls.push("filter") })} />,
+  );
+
+  fireEvent.click(screen.getByTitle("app:display.menu"));
+  assert.deepEqual(calls, []);
+  assert.ok(screen.getByText("app:display.groupProject"));
+});
+
+test("迁移历史的筛选按钮仍然接到 onFilter 弹层", () => {
+  const calls = [];
+  render(
+    <ResourcePaneHost
+      {...baseProps({
+        view: "history",
+        pane: { ...baseProps().pane, displayLabel: "app:pane.filterButton" },
+        onFilter: () => calls.push("filter"),
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByTitle("app:pane.filterButton"));
+  assert.deepEqual(calls, ["filter"]);
+});
+
+test("导航栏展开时标题不是菜单,折叠后才成为范围入口", () => {
+  const { unmount } = render(<ResourcePaneHost {...baseProps()} />);
+  assert.equal(screen.queryByRole("button", { name: /资料库/ }), null);
+  unmount();
+
+  render(
+    <ResourcePaneHost
+      {...baseProps({
+        library: {
+          ...baseProps().library,
+          navCollapsed: true,
+          scopeCounts: { total: 2, pinned: 1, agents: [{ tool: "claude", count: 2 }], tags: [] },
+          toolNames: { claude: "Claude Code" },
+        },
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /资料库/ }));
+  assert.ok(screen.getByText("app:nav.allSessions"));
+  assert.ok(screen.getByText("Claude Code"));
+});
+
+test("会话库的搜索框常驻,清除走的是 pane.onQuery", () => {
   const queries = [];
   render(
     <ResourcePaneHost
@@ -71,29 +126,9 @@ test("已有查询词时展示可清除的查询条,清除走的是 pane.onQuery
     />,
   );
 
-  assert.ok(screen.getByText("重构"));
+  assert.equal(screen.getByPlaceholderText("搜索会话").value, "重构");
   fireEvent.click(screen.getByTitle("common:empty.clearFilter"));
   assert.deepEqual(queries, [""]);
-});
-
-test("筛选令牌逐个可移除", () => {
-  const removed = [];
-  render(
-    <ResourcePaneHost
-      {...baseProps({
-        pane: {
-          ...baseProps().pane,
-          tokens: [
-            { label: "仅 Claude", onRemove: () => removed.push("tool") },
-            { label: "近 7 天", onRemove: () => removed.push("time") },
-          ],
-        },
-      })}
-    />,
-  );
-
-  fireEvent.click(screen.getByText("近 7 天").querySelector("a"));
-  assert.deepEqual(removed, ["time"]);
 });
 
 test("资料库首扫且尚无会话时占位,扫完有会话就换成列表", () => {

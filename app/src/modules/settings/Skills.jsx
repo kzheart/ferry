@@ -9,7 +9,7 @@ import SkillDetail from "./SkillDetail.jsx";
 import { decorateCandidates, isGlobal, toggleGlobal } from "./skillModel.js";
 
 const sectionTitle = {
-  fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--tx5)",
+  fontSize: 10.5, fontWeight: 600, letterSpacing: ".05em", color: "var(--tx5)",
   padding: "10px 8px 5px",
 };
 

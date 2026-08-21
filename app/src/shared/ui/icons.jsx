@@ -75,7 +75,7 @@ export function ProviderIcon({ provider, size = 16 }) {
       <span style={{ width: size, height: size, borderRadius: 4, flex: "none",
         background: "var(--fill3)", color: "var(--tx3b)", display: "inline-flex",
         alignItems: "center", justifyContent: "center",
-        fontSize: Math.round(size * 0.6), fontWeight: 700, lineHeight: 1 }}>
+        fontSize: Math.round(size * 0.6), fontWeight: 600, lineHeight: 1 }}>
         {String(provider || "?")[0].toUpperCase()}</span>
     );
   }
@@ -123,6 +123,10 @@ export const RescanIcon = ({ size = 13, color = "var(--tx2)" } = {}) => svg("0 0
 
 export const SidebarIcon = () => svg("0 0 18 18", 16, 16,
   '<rect x="2" y="3.5" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="6.8" y1="3.5" x2="6.8" y2="14.5" stroke="currentColor" stroke-width="1.4"/><rect x="3.4" y="5.4" width="2" height="1.2" rx=".4" fill="currentColor"/><rect x="3.4" y="7.6" width="2" height="1.2" rx=".4" fill="currentColor"/>');
+
+// 导航栏开关:最左侧那一栏被填实,与资源栏开关(SidebarIcon)区分开
+export const NavToggleIcon = () => svg("0 0 18 18", 16, 16,
+  '<rect x="2" y="3.5" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7 3.9v10.2" stroke="currentColor" stroke-width="1.4"/><rect x="2.9" y="4.4" width="3.2" height="9.2" rx="1.1" fill="currentColor" opacity=".55"/>');
 
 export const CheckBadge = ({ size = 18 }) => (
   <span style={{ width: size, height: size, borderRadius: "50%", background: "var(--ok)",
@@ -244,4 +248,19 @@ export const StopFillIcon = ({ size = 11 }) => svg("0 0 16 16", size, size,
 
 export const PlusIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M8 2.8v10.4M2.8 8h10.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  { flex: "none" });
+
+// 收藏(Finder 侧栏式):空心 = 未收藏,实心 = 已收藏
+export const StarIcon = ({ size = 13, filled = false }) => svg("0 0 16 16", size, size,
+  `<path d="M8 1.9l1.85 3.75 4.15.6-3 2.93.71 4.12L8 11.35l-3.71 1.95.71-4.12-3-2.93 4.15-.6z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>`,
+  { flex: "none" });
+
+// 只看此项目 / 进入范围
+export const ArrowRightIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
+  '<path d="M3 8h9.4M9 4.6 12.4 8 9 11.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
+// 返回上一层范围(资源栏标题左侧)
+export const ChevronLeftIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
+  '<path d="M10 3.4 5.4 8l4.6 4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });

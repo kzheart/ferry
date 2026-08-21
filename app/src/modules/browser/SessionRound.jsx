@@ -332,7 +332,7 @@ export default function SessionRound({
               alignItems: "center",
               justifyContent: "center",
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: 600,
               color: "var(--tx4b)",
             }}
           >
@@ -457,8 +457,8 @@ export default function SessionRound({
                   color: "var(--tx1b)",
                   padding: "9px 14px",
                   borderRadius: 16,
-                  fontSize: 13,
-                  lineHeight: 1.65,
+                  fontSize: "var(--fs-md)",
+                  lineHeight: "var(--lh-md)",
                   overflowWrap: "break-word",
                   cursor: (
                     rewOp && !deleted ? "text" : undefined

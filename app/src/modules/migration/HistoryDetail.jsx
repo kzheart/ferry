@@ -57,7 +57,7 @@ export default function HistoryDetail({ h, onDelete }) {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 13, maxWidth: 720, margin: "0 auto" }}>
           <ToolIcon tool={h.src} size={40} dot={stColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 650, letterSpacing: "-.01em" }}>{h.title || h.source_id}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-.01em" }}>{h.title || h.source_id}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 6,
               fontSize: 12, color: "var(--tx3b)" }}>
               <span className="mono" style={{ color: "var(--tx4)" }}>{h.session_id || h.source_id}</span>

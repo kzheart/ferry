@@ -62,7 +62,7 @@ function DeletePreview({ preview, t }) {
       background: "var(--inset)",
       border: "1px solid var(--line4)",
     }}>
-      <div style={{ fontSize: 11, fontWeight: 650, color: "var(--tx2)" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx2)" }}>
         {t("askferry:deletion.previewTitle")}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 7 }}>
@@ -70,7 +70,7 @@ function DeletePreview({ preview, t }) {
           <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
             {t("askferry:deletion.totalCount")}
           </div>
-          <div style={{ color: "var(--tx1)", fontSize: 13, fontWeight: 650 }}>
+          <div style={{ color: "var(--tx1)", fontSize: 13, fontWeight: 600 }}>
             {totals.count ?? 0}
           </div>
         </div>
@@ -86,7 +86,7 @@ function DeletePreview({ preview, t }) {
           <div style={{ color: "var(--tx5)", fontSize: 10.5 }}>
             {t("askferry:deletion.tool")}
           </div>
-          <div style={{ color: "var(--tx1)", fontSize: 12.5, fontWeight: 650 }}>
+          <div style={{ color: "var(--tx1)", fontSize: 12.5, fontWeight: 600 }}>
             {preview.tool || "—"}
           </div>
         </div>

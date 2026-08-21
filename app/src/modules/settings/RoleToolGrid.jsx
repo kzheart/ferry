@@ -25,7 +25,7 @@ export default function RoleToolGrid({ tools, onChange }) {
               {glyph(TOOL_GLYPH[name], 15)}
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontSize: 12.5, fontWeight: 650,
+              <span style={{ display: "block", fontSize: 12.5, fontWeight: 600,
                 color: "var(--tx1)" }}>
                 {t(`settings:roles.tool.${name}.label`)}</span>
               <span style={{ display: "block", marginTop: 3, fontSize: 10.5,

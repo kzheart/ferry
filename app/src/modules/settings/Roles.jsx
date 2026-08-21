@@ -170,7 +170,7 @@ export default function Roles({ optimizerFeature = false }) {
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", padding: 32 }}>
         <div style={{ maxWidth: 340, textAlign: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 650, color: "var(--tx2)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>
             {loading ? t("settings:roles.loading") : t("settings:roles.unavailable")}</div>
           <div style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.6, color: "var(--tx5)" }}>
             {loading ? t("settings:roles.loadingDesc")
@@ -233,11 +233,11 @@ export default function Roles({ optimizerFeature = false }) {
                     onPick={patch} onClose={() => setPickerOpen(false)} />)}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 17, fontWeight: 680, color: "var(--tx1)",
+                <div style={{ fontSize: 17, fontWeight: 600, color: "var(--tx1)",
                   display: "flex", alignItems: "center", gap: 8, letterSpacing: "-.01em" }}>
                   {draft.name || t("settings:roles.create")}
                   {builtinSelected && (
-                    <span style={{ fontSize: 10.5, fontWeight: 650, padding: "2px 7px",
+                    <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 7px",
                       borderRadius: 5, background: "var(--acc-soft3)", color: "var(--acc-text)",
                       border: "1px solid var(--acc-line)" }}>
                       {t("settings:roles.builtin")}</span>)}
@@ -444,7 +444,7 @@ export default function Roles({ optimizerFeature = false }) {
                 padding: "13px 15px", borderRadius: 12,
                 border: "1px solid var(--line4)", background: "var(--fill3)" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx2)" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx2)" }}>
                     {t("settings:roles.resetTitle")}</div>
                   <div style={{ fontSize: 11, marginTop: 2, color: "var(--tx2)",
                     opacity: .82, lineHeight: 1.55 }}>
@@ -453,7 +453,7 @@ export default function Roles({ optimizerFeature = false }) {
                 <button className="fbtn" disabled={busy}
                   onClick={confirming ? restore : () => setConfirming(true)}
                   style={{ flex: "none", height: 30, color: "var(--tx2)",
-                    borderColor: "var(--line4)", fontWeight: 650 }}>
+                    borderColor: "var(--line4)", fontWeight: 600 }}>
                   {t(`settings:roles.${confirming ? "resetConfirm" : "reset"}`)}
                 </button>
               </div>

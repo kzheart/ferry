@@ -90,7 +90,7 @@ function EditCard({ entity, onNavigate }) {
   return (
     <button type="button" style={{ ...shell, alignItems: "flex-start" }}
       onClick={() => onNavigate?.(navigationActionFor(entity), entity)}>
-      <span style={{ fontFamily: "monospace", fontSize: 13, color: "var(--warn-deep)",
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--warn-deep)",
         flex: "none" }}>±</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>

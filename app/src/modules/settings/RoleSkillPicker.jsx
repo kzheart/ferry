@@ -66,7 +66,7 @@ export default function RoleSkillPicker({ skills, global, value, onChange }) {
                   whiteSpace: "nowrap" }}>{skill.description}</span>)}
             </span>
             {locked && (
-              <span style={{ flex: "none", fontSize: 9.5, fontWeight: 650, padding: "1px 6px",
+              <span style={{ flex: "none", fontSize: 9.5, fontWeight: 600, padding: "1px 6px",
                 borderRadius: 4, background: "var(--acc-soft3)", color: "var(--acc-text)" }}>
                 {t("settings:skills.globalBadge")}</span>)}
           </button>
@@ -78,7 +78,7 @@ export default function RoleSkillPicker({ skills, global, value, onChange }) {
           <Check on />
           <span style={{ minWidth: 0, flex: 1, fontSize: 13, fontWeight: 600,
             color: "var(--tx4)" }}>{id}</span>
-          <span style={{ flex: "none", fontSize: 9.5, fontWeight: 650, padding: "1px 6px",
+          <span style={{ flex: "none", fontSize: 9.5, fontWeight: 600, padding: "1px 6px",
             borderRadius: 4, background: "var(--err-bg)", color: "var(--err-text)" }}>
             {t("settings:skills.roleMissing")}</span>
         </button>

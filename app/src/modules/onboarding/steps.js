@@ -32,11 +32,11 @@ const GUIDE_STEPS = [
     bodyKey: "onboarding:guide.searchBody",
   },
   {
-    target: "filter",
+    target: "display",
     view: "library",
     side: "right",
-    titleKey: "onboarding:guide.filterTitle",
-    bodyKey: "onboarding:guide.filterBody",
+    titleKey: "onboarding:guide.displayTitle",
+    bodyKey: "onboarding:guide.displayBody",
   },
   {
     target: "detail-actions",

@@ -5,10 +5,32 @@ html, body, #root { height: 100%; }
 :root {
   --accent: #1C2530;
   --accent-fg: #FFFFFF;
-  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
-  --font-size: 13px;
+  /* 拉丁走打包的 Geist,CJK 回退系统字(PingFang SC / 微软雅黑) */
+  --font-ui: "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --win-bg: var(--bg);
   color-scheme: light;
+
+  /* ---- 密度(:root = standard「标准/大气」,html[data-density="compact"] 覆盖为紧凑) ----
+     行高类变量在 JS 侧 shared/ui/density.js 里维护同一份数值:资源栏是虚拟列表,
+     必须拿到数字才能算 y 偏移与 contain-intrinsic-size,CSS 变量在 JS 里读不到。
+     刻意不放大的:半像素描边、圆角、阴影——放大装饰只会显糊。 */
+  --fs-body: 14px;          /* 正文 / 控件基准 */
+  --fs-meta: 12px;          /* 元信息、计数 */
+  --fs-title: 16px;         /* 资源栏标题、卡片标题 */
+  --fs-detail-title: 18px;  /* 主区会话标题 */
+  --fs-md: 15px;            /* 主区正文(.fmd) */
+  --lh-md: 1.7;
+  --read-max: 760px;        /* 阅读区最大宽度 */
+  --nav-w: 240px;
+  --pane-w: 300px;
+  --nav-row-h: 32px;
+  --folder-row-h: 34px;
+  --lib-row-h: 48px;
+  --section-gap: 18px;      /* 导航栏分区标题上方间距 */
+  --main-pad: 32px;         /* 主区内边距 */
+  --icon-md: 17px;
+  --font-size: var(--fs-body);
 
   /* 背景 / 表面 */
   --bg: #FBFCFD;
@@ -266,6 +288,25 @@ html, body, #root { height: 100%; }
   --sb-thumb-hov: #4E4F57;
 }
 
+/* 紧凑密度:改版前的一整套数值,留给想在一屏里塞更多的人 */
+html[data-density="compact"] {
+  --fs-body: 13px;
+  --fs-meta: 11px;
+  --fs-title: 14px;
+  --fs-detail-title: 16px;
+  --fs-md: 13px;
+  --lh-md: 1.65;
+  --read-max: 720px;
+  --nav-w: 208px;
+  --pane-w: 250px;
+  --nav-row-h: 28px;
+  --folder-row-h: 30px;
+  --lib-row-h: 40px;
+  --section-gap: 12px;
+  --main-pad: 24px;
+  --icon-md: 15px;
+}
+
 body {
   margin: 0;
   font-family: var(--font-ui);
@@ -275,6 +316,9 @@ body {
   background: var(--win-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  text-spacing-trim: space-first;
   cursor: default;
   overflow: hidden;
   overscroll-behavior: none;
@@ -289,7 +333,9 @@ html, body {
 img, svg { -webkit-user-drag: none; }
 .agent-icon-svg > svg { display: block; width: 100%; height: 100%; }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
-.mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
+.mono { font-family: var(--font-mono); font-feature-settings: "liga" 0, "calt" 0; }
+/* 等宽数字:表格/计数场景避免数字跳动 */
+.tnum { font-variant-numeric: tabular-nums; }
 .selectable { -webkit-user-select: text; user-select: text; cursor: text; }
 input, button, textarea { font-family: inherit; }
 input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
@@ -459,18 +505,18 @@ html[data-platform="mac"][data-theme="dark"] {
 .fdel .fdel-text { text-decoration: line-through; }
 
 /* AI 回复正文排版(marked 渲染输出) */
-.fmd { font-size: 13px; line-height: 1.75; color: var(--tx1b); overflow-wrap: break-word; }
+.fmd { font-size: var(--fs-md); line-height: var(--lh-md); color: var(--tx1b); overflow-wrap: break-word; }
 .fmd > :first-child { margin-top: 0; }
 .fmd > :last-child { margin-bottom: 0; }
 .fmd p { margin: .55em 0; }
 .fmd h1, .fmd h2 { font-size: 15px; font-weight: 700; margin: 1em 0 .35em; letter-spacing: -.01em; }
-.fmd h3 { font-size: 14px; font-weight: 650; margin: .9em 0 .3em; }
-.fmd h4, .fmd h5, .fmd h6 { font-size: 13px; font-weight: 650; margin: .8em 0 .25em; }
+.fmd h3 { font-size: 14px; font-weight: 600; margin: .9em 0 .3em; }
+.fmd h4, .fmd h5, .fmd h6 { font-size: 13px; font-weight: 600; margin: .8em 0 .25em; }
 .fmd ul, .fmd ol { margin: .45em 0; padding-left: 1.5em; }
 .fmd li { margin: .28em 0; }
 .fmd li > p { margin: .2em 0; }
 .fmd code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size: 12px;
 }
 .fmd pre {
@@ -484,7 +530,7 @@ html[data-platform="mac"][data-theme="dark"] {
 }
 .fmd table { border-collapse: collapse; margin: .7em 0; font-size: 12px; }
 .fmd th, .fmd td { border: none; border-bottom: 1px solid var(--line5); padding: 6px 18px 6px 0; text-align: left; }
-.fmd th { font-weight: 650; color: var(--tx2); border-bottom: 1.5px solid var(--line2); }
+.fmd th { font-weight: 600; color: var(--tx2); border-bottom: 1.5px solid var(--line2); }
 .fmd a { color: var(--accent); }
 .fmd img { max-width: 100%; }
 
@@ -621,3 +667,30 @@ html[data-reduce="1"] .update-progress.indeterminate > span { animation: none; w
   .settings-sheet > div:first-child button { flex: none; }
   .update-actions { width: 100%; }
 }
+
+/* 会话库双行行:虚拟列表的占位高度要跟上行高,否则视口外的行估高偏小。
+   行高由密度决定,占位高度跟着 --lib-row-h 走 */
+.lib-row-tall { contain-intrinsic-size: auto var(--lib-row-h); }
+
+/* ---- Wake 式导航栏 ---- */
+.nav-row:hover { background: var(--hov-rail); }
+.nav-row[aria-current="true"]:hover { background: var(--acc-soft2); }
+.nav-section:hover { color: var(--tx3); }
+
+/* 导航栏滚动条:常驻的细条在一列短文本旁边太吵,只在鼠标进入导航栏时显形 */
+.nav-scroll { scrollbar-width: none; }
+.nav-scroll::-webkit-scrollbar { width: 8px; }
+.nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.nav-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+[data-guide="rail"]:hover .nav-scroll { scrollbar-width: thin; }
+[data-guide="rail"]:hover .nav-scroll::-webkit-scrollbar-thumb { background: var(--sb-thumb); }
+[data-guide="rail"]:hover .nav-scroll::-webkit-scrollbar-thumb:hover { background: var(--sb-thumb-hov); }
+
+/* 资源栏文件夹头:悬停时右侧浮现 ☆ / → 两个动作,计数让位 */
+.folder-row .row-act { display: none; }
+.folder-row:hover .row-act { display: inline-flex; }
+.folder-row:hover .row-meta { display: none; }
+
+/* ---- 资源栏:范围标题与常驻搜索框 ---- */
+.lib-scope-title:hover { background: var(--fill4); }
+.lib-search:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }

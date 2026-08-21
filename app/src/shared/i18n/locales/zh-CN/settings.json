@@ -358,5 +358,12 @@
       "stopDone": "daemon 已停止",
       "stopAppMode": "App 引擎不能从这里停止;退出 Ferry App 即可释放"
     }
+  },
+  "density": {
+    "groupTitle": "密度",
+    "label": "界面密度",
+    "desc": "标准更疏朗,紧凑在一屏里塞更多",
+    "compact": "紧凑",
+    "standard": "标准"
   }
 }

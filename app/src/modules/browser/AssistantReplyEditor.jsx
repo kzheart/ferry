@@ -92,7 +92,7 @@ export default function AssistantReplyEditor({ op, onChange, onCancel }) {
     <div style={{ marginTop: 10, border: `1.5px solid ${ACCENT}`, borderRadius: 10,
       background: "var(--acc-soft5)", padding: 10 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 9 }}>
-        <span style={{ fontSize: 12, fontWeight: 650, color: "var(--acc-text)" }}>{t("browser:replyEditor.panelTitle")}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--acc-text)" }}>{t("browser:replyEditor.panelTitle")}</span>
         <span style={{ marginLeft: 8, fontSize: 10, color: "var(--tx4)" }}>{t("browser:replyEditor.panelHint")}</span>
         <button className="ficon-btn" title={t("browser:replyEditor.cancel")} onClick={onCancel}
           style={{ marginLeft: "auto" }}><CloseIcon size={11} /></button>

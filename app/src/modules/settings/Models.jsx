@@ -102,7 +102,7 @@ export default function Models({ onOpenProviders }) {
           <div key={g.id} style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 2px 8px" }}>
               <ProviderIcon provider={g.id} size={16} />
-              <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx1)" }}>{g.name}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)" }}>{g.name}</span>
               <span style={{ fontSize: 11, color: "var(--tx5)" }}>
                 {shownIds.length}/{g.all.length}</span>
               <span style={{ flex: 1 }} />

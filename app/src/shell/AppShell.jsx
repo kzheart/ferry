@@ -24,6 +24,7 @@ export function AppShell({
             background: resizing ? ACCENT : "var(--line)" }} />
         </div>
       )}
+      {/* 主区最小宽度:导航栏 200 + 资源栏 232 之外剩下的都归它,不允许被挤没 */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
         <div data-tauri-drag-region style={{ height: 44, flex: "none", display: "flex", alignItems: "center",
           gap: 12, padding: "0 12px" }}>

@@ -102,7 +102,6 @@ function baseProps(overrides = {}) {
     settings: { open: false, value: {}, setOpen: noop, setView: noop, openGuide: noop },
     filters: {
       popover: null, anchor: null, onClose: noop,
-      library: { value: null, onChange: noop, counts: {}, dirs: [], tags: [], onClear: noop },
       history: {
         value: null,
         tools: ["claude", "codex", "opencode", "pi", "grok", "cursor"],
@@ -431,18 +430,16 @@ test("就地预览要同时有 id 和已加载的会话才打开", () => {
   assert.notEqual(container.innerHTML, "");
 });
 
-test("筛选弹层由 popover 的取值区分资料库与历史", () => {
-  const props = baseProps();
+test("筛选弹层只剩迁移历史一个,由 popover 的取值决定", () => {
   const filters = {
-    ...props.filters,
-    library: { ...props.filters.library, value: { src: [], time: "all", dir: null, mig: false, sub: false, tag: null } },
-    history: { ...props.filters.history, value: { src: [], time: "all" } },
+    ...baseProps().filters,
+    history: { ...baseProps().filters.history, value: { src: [], time: "all" } },
   };
   const { rerender } = render(
-    <AppOverlayController {...baseProps({ filters: { ...filters, popover: "lib" } })} />,
+    <AppOverlayController {...baseProps({ filters: { ...filters, popover: "hist" } })} />,
   );
-  assert.ok(screen.getByText("overlays:filter.projectDir"));
+  assert.ok(screen.getByText("overlays:filter.targetTool"));
 
-  rerender(<AppOverlayController {...baseProps({ filters: { ...filters, popover: "hist" } })} />);
-  assert.equal(screen.queryByText("overlays:filter.projectDir"), null);
+  rerender(<AppOverlayController {...baseProps({ filters: { ...filters, popover: null } })} />);
+  assert.equal(screen.queryByText("overlays:filter.targetTool"), null);
 });

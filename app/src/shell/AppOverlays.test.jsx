@@ -24,7 +24,6 @@ function closedOverlays() {
     toast: { value: null },
     railTip: { value: null },
     settings: { open: false },
-    libraryFilter: { open: false },
     historyFilter: { open: false },
     guide: { step: 0 },
   };
@@ -157,22 +156,21 @@ test("搜索面板缺少 pane 配置时不渲染", () => {
   assert.equal(container.innerHTML, "");
 });
 
-test("筛选弹层按各自的开关独立出现", () => {
+// 会话库的筛选浮层已整体删除(范围进导航栏、显示选项进资源栏菜单),
+// 这一层只剩迁移历史那一个
+test("迁移历史的筛选弹层按自己的开关出现", () => {
   const { container, rerender } = renderOverlays({
-    libraryFilter: {
+    historyFilter: {
       open: true,
-      value: { src: [], time: "all", dir: null, mig: false, sub: false, tag: null },
-      onChange: () => {},
-      counts: {},
-      dirs: [],
-      tags: [],
+      value: { src: [], time: "all" },
+      tools: ["claude", "codex"],
       anchor: null,
+      onChange: () => {},
       onClose: () => {},
       onClear: () => {},
     },
   });
-  assert.ok(screen.getByText("overlays:filter.source"));
-  assert.equal(screen.queryByText("overlays:filter.timeRange") !== null, true);
+  assert.ok(screen.getByText("overlays:filter.sourceTools"));
 
   rerender(<AppOverlays {...closedOverlays()} />);
   assert.equal(container.innerHTML, "");

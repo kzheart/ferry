@@ -66,7 +66,10 @@
     "deleteSession": "删除会话…",
     "onlyDesktop": "仅桌面版可用",
     "noSessionFile": "该来源没有独立会话文件",
-    "more": "更多"
+    "more": "更多",
+    "favoriteProject": "收藏到导航栏",
+    "unfavoriteProject": "取消收藏",
+    "onlyThisProject": "只看此项目"
   },
   "drag": {
     "hint": "拖动调整宽度 · 双击复位"
@@ -77,11 +80,8 @@
     "untitled": "(无标题会话)",
     "archived": "已归档",
     "hasMig": "含迁移记录",
-    "tokenDir": "目录 {{dir}}",
-    "tokenOnlyMigrated": "仅含迁移",
-    "tokenOnlySub": "仅含子会话",
-    "tokenIncludeArchived": "含已归档",
-    "tokenTag": "标签 {{tag}}"
+    "project": "项目",
+    "metaCount": "{{n}} 条"
   },
   "historyToken": {
     "target": "目标 {{tool}}",
@@ -112,5 +112,32 @@
     "fullText": "全文匹配",
     "contentHit": "正文命中",
     "indexing": "内容索引构建中,建好后这里会出现全文匹配结果。"
+  },
+  "nav": {
+    "allSessions": "全部会话",
+    "agents": "AGENTS",
+    "projects": "项目",
+    "tags": "标签",
+    "scopeMenu": "范围",
+    "collapse": "收起导航栏 ⌘⇧S",
+    "expand": "展开导航栏 ⌘⇧S",
+    "favorites": "收藏",
+    "favoritesEmpty": "在文件夹上点 ☆ 可收藏到这里",
+    "otherProjects": "其他项目",
+    "backToAll": "返回全部会话"
+  },
+  "display": {
+    "menu": "显示选项",
+    "group": "分组",
+    "groupProject": "按项目",
+    "groupTime": "按时间",
+    "groupNone": "不分组",
+    "time": "时间",
+    "timeAll": "全部",
+    "timeLast7": "最近 7 天",
+    "timeLast30": "最近 30 天",
+    "onlySub": "仅含子会话",
+    "onlyMigrated": "仅有迁移记录",
+    "sortUpdated": "按更新时间"
   }
 }

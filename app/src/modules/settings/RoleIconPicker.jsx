@@ -35,7 +35,7 @@ export default function RoleIconPicker({ anchorRef, value, color, onPick, onClos
       <div style={{ position: "fixed", top: position.top, left: position.left, width: 268,
         background: "var(--surface)", borderRadius: 12, boxShadow: "var(--shadow-menu)",
         padding: 10, zIndex: 70, animation: "fpop .14s ease" }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--tx5)",
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--tx5)",
           letterSpacing: ".05em", marginBottom: 7 }}>{t("settings:roles.colorPickerTitle")}</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 11 }}>
           {ROLE_COLORS.map(name => (
@@ -51,7 +51,7 @@ export default function RoleIconPicker({ anchorRef, value, color, onPick, onClos
         <div className="fscroll" style={{ maxHeight: 246, overflowY: "auto" }}>
           {ROLE_ICON_GROUPS.map(group => (
             <div key={group.key} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--tx5)",
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--tx5)",
                 letterSpacing: ".05em", margin: "0 0 5px 2px" }}>
                 {t(`settings:roles.iconGroup.${group.key}`)}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 3 }}>

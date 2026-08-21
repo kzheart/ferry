@@ -66,7 +66,10 @@
     "deleteSession": "Delete session…",
     "onlyDesktop": "Desktop only",
     "noSessionFile": "This source has no standalone session file",
-    "more": "More"
+    "more": "More",
+    "favoriteProject": "Add to favorites",
+    "unfavoriteProject": "Remove from favorites",
+    "onlyThisProject": "Only this project"
   },
   "drag": {
     "hint": "Drag to adjust width · double-click to reset"
@@ -77,11 +80,8 @@
     "untitled": "(Untitled session)",
     "archived": "Archived",
     "hasMig": "Has migration record",
-    "tokenDir": "Dir {{dir}}",
-    "tokenOnlyMigrated": "Only migrated",
-    "tokenOnlySub": "Only with sub-sessions",
-    "tokenIncludeArchived": "Include archived",
-    "tokenTag": "Tag {{tag}}"
+    "project": "Project",
+    "metaCount": "{{n}} msgs"
   },
   "historyToken": {
     "target": "Target {{tool}}",
@@ -112,5 +112,32 @@
     "fullText": "Full-text matches",
     "contentHit": "in content",
     "indexing": "Building the content index — full-text matches will appear once it is ready."
+  },
+  "nav": {
+    "allSessions": "All sessions",
+    "agents": "AGENTS",
+    "projects": "PROJECTS",
+    "tags": "TAGS",
+    "scopeMenu": "Scope",
+    "collapse": "Collapse sidebar ⌘⇧S",
+    "expand": "Expand sidebar ⌘⇧S",
+    "favorites": "Favorites",
+    "favoritesEmpty": "Click ☆ on a folder to add it here",
+    "otherProjects": "Other projects",
+    "backToAll": "Back to all sessions"
+  },
+  "display": {
+    "menu": "Display options",
+    "group": "Group by",
+    "groupProject": "Project",
+    "groupTime": "Time",
+    "groupNone": "None",
+    "time": "Time",
+    "timeAll": "All",
+    "timeLast7": "Last 7 days",
+    "timeLast30": "Last 30 days",
+    "onlySub": "Only with sub-sessions",
+    "onlyMigrated": "Only with migration records",
+    "sortUpdated": "By updated time"
   }
 }

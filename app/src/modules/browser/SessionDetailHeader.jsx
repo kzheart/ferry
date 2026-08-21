@@ -69,7 +69,7 @@ export default function SessionDetailHeader({
   return (
     <div
       style={{
-        padding: "18px 26px 14px",
+        padding: "18px var(--main-pad) 14px",
         borderBottom: "1px solid var(--line5)",
         position: "sticky",
         top: 0,
@@ -83,8 +83,8 @@ export default function SessionDetailHeader({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontSize: 16,
-              fontWeight: 650,
+              fontSize: "var(--fs-detail-title)",
+              fontWeight: 600,
               letterSpacing: "-.01em",
             }}
           >
@@ -96,7 +96,7 @@ export default function SessionDetailHeader({
               flexWrap: "wrap",
               gap: "6px 14px",
               marginTop: 6,
-              fontSize: 12,
+              fontSize: "var(--fs-meta)",
               color: "var(--tx3b)",
             }}
           >

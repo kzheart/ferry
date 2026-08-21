@@ -13,7 +13,7 @@ export default function FirstRun({ env, scan, onStart }) {
         boxShadow: "var(--shadow-sheet)", padding: "30px 30px 26px",
          }}>
         <img className="noinvert" src={appIcon} alt="Ferry" width={44} height={44} style={{ display: "block" }} />
-        <div style={{ fontSize: 20, fontWeight: 650, marginTop: 16, letterSpacing: "-.01em" }}>
+        <div style={{ fontSize: 20, fontWeight: 600, marginTop: 16, letterSpacing: "-.01em" }}>
           {t("onboarding:welcome.title")}</div>
         <div style={{ fontSize: 13, color: "var(--tx3b)", marginTop: 6, lineHeight: 1.55 }}>
           {t("onboarding:welcome.desc")}</div>

@@ -106,7 +106,7 @@ export function AgentChoiceCard({ item, onRespond }) {
           background: statusColor[item.status] || statusColor.pending,
           flex: "none",
         }} />
-        <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx1)", flex: "none" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", flex: "none" }}>
           {title}
         </span>
         {item.multiSelect && open && (

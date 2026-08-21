@@ -1,7 +1,8 @@
 // 设置页与特性开关的关系:分区表按表项标的 feature 过滤、停在被隐藏分区上要回落、
 // 「实验性功能」分区由契约驱动渲染。断言绑在文案 key 上(cimode 回显),不看排版。
 import { beforeEach, expect, test, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import assert from "node:assert/strict";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { FerryRuntimeProvider } from "../../shared/capabilities/ferryRuntime.jsx";
 import SettingsPage from "./Settings.jsx";
@@ -148,4 +149,33 @@ test("宿主写入失败时保持原值并报错", async () => {
 
   expect(screen.getByRole("alert").textContent).toContain("写入 host-settings.json 失败");
   expect(toggle.getAttribute("aria-pressed")).toBe("false");
+});
+
+// ---- 偏好设置 · 密度 ----
+
+test("密度分段控件默认停在「标准」,选紧凑后落盘并打到根节点上", async () => {
+  localStorage.removeItem("ferry-density");
+  await mount();
+
+  const compact = screen.getByRole("radio", { name: "settings:density.compact" });
+  const standard = screen.getByRole("radio", { name: "settings:density.standard" });
+  assert.equal(standard.getAttribute("aria-checked"), "true");
+  assert.equal(compact.getAttribute("aria-checked"), "false");
+
+  await act(async () => { fireEvent.click(compact); });
+
+  assert.equal(localStorage.getItem("ferry-density"), "compact");
+  assert.equal(document.documentElement.dataset.density, "compact");
+  assert.equal(
+    screen.getByRole("radio", { name: "settings:density.compact" })
+      .getAttribute("aria-checked"), "true");
+});
+
+test("密度存量值坏了(手改过 / 旧版本)一律回落到标准", async () => {
+  localStorage.setItem("ferry-density", "roomy");
+  await mount();
+
+  assert.equal(
+    screen.getByRole("radio", { name: "settings:density.standard" })
+      .getAttribute("aria-checked"), "true");
 });

@@ -29,7 +29,7 @@ export default function SkillLibrary({ skills, global, selectedId, onSelect }) {
                   color: skill.broken ? "var(--err-text)" : on ? "var(--tx1)" : "var(--tx2b)" }}>
                   {skill.name}</span>
                 {isGlobal(skill.id, global) && (
-                  <span style={{ flex: "none", fontSize: 9.5, fontWeight: 650,
+                  <span style={{ flex: "none", fontSize: 9.5, fontWeight: 600,
                     padding: "1px 5px", borderRadius: 4, background: "var(--acc-soft3)",
                     color: "var(--acc-text)" }}>
                     {t("settings:skills.globalBadge")}</span>)}

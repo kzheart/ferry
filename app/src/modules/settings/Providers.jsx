@@ -32,7 +32,7 @@ function AuthFlow({ auth }) {
   return (
     <div style={{ border: "1px solid var(--acc-line)", background: "var(--acc-soft3)",
       borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 650,
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600,
         color: "var(--acc-text)" }}>
         {!done && <Spinner size={12} />}
         <span style={{ flex: 1 }}>
@@ -47,7 +47,7 @@ function AuthFlow({ auth }) {
           style={{ fontSize: 12, color: "var(--acc-text)", textDecoration: "underline",
             overflowWrap: "anywhere" }}>{bit.url}</a>
       ) : (
-        <code key={`${i}-${j}`} className="mono selectable" style={{ fontSize: 14, fontWeight: 700,
+        <code key={`${i}-${j}`} className="mono selectable" style={{ fontSize: 14, fontWeight: 600,
           letterSpacing: ".12em", color: "var(--tx1)" }}>{bit.code}</code>
       )))}
       {auth.prompts.map(p => (
@@ -186,7 +186,7 @@ function CustomProviderSettings({ sel, onSave }) {
                 <button key={value} className="fbtn" onClick={() => setApi(value)}
                   style={{ height: 32, fontSize: 12,
                     ...(api === value ? { borderColor: "var(--accent)", color: "var(--acc-text)",
-                      background: "var(--acc-soft3)", fontWeight: 650 } : {}) }}>
+                      background: "var(--acc-soft3)", fontWeight: 600 } : {}) }}>
                   {label}</button>
               ))}
           </div>
@@ -478,7 +478,7 @@ export default function Providers() {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <ProviderIcon provider={sel.id} size={20} />
-              <span style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{sel.name}</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: "var(--tx1)" }}>{sel.name}</span>
             </div>
 
             {sel.custom && (

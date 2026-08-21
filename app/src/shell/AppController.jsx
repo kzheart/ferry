@@ -1,5 +1,5 @@
 // Ferry 主壳:标题栏 / 导航轨 / 资源栏 / 详情区 + 全部弹层(按原型复刻)
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../shared/contracts/tools.js";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
@@ -23,7 +23,7 @@ import { useSessionEditing } from "../modules/editing/public.js";
 import { useHistoryResourcePane } from "../modules/migration/public.js";
 import { initialWorkspace, useOnboarding } from "../modules/onboarding/public.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
-import { AppRail } from "./AppRail.jsx";
+import { AppNav } from "./AppNav.jsx";
 import { WorkspaceToolbar } from "./WorkspaceToolbar.jsx";
 import { AppShell } from "./AppShell.jsx";
 import { AppOverlayController } from "./AppOverlayController.jsx";
@@ -32,6 +32,7 @@ import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
 import { useRailNavigation } from "./useRailNavigation.js";
 import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
+import { useNavCollapse } from "./useNavCollapse.js";
 import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
 import { useWorkspaceInteractions } from "./useWorkspaceInteractions.js";
 import { useWorkspaceState } from "./useWorkspaceState.js";
@@ -61,6 +62,7 @@ export default function App() {
   const [mig, setMig] = useState(null); // {scope}
 
   const paneLayout = useResourcePaneLayout();
+  const navLayout = useNavCollapse();
 
   const ferry = useAskFerry();
   const [agentAttachments, setAgentAttachments] = useState([]);
@@ -182,25 +184,39 @@ export default function App() {
     t,
     toolIds: TOOLS,
     toolNames: TOOL_NAME,
+    selectedKey: selId,
   });
   const {
     query: q,
     setQuery: setQ,
-    filter: libF,
-    setFilter: setLibF,
-    counts,
-    dirs,
-    tags: allTags,
+    scope: libScope,
+    selectScope: selectLibScope,
+    scopeLabel: libScopeLabel,
+    scopeCount: libScopeCount,
+    scopeCounts: libScopeCounts,
+    display: libDisplay,
+    setDisplay: setLibDisplay,
+    displayDirty: libDisplayDirty,
+    groupMode: libGroupMode,
+    projects: libProjects,
+    favorites: libFavorites,
+    favoriteProjects: libFavoriteProjects,
+    toggleFavorite: toggleLibFavorite,
+    reorderFavorite: reorderLibFavorite,
     groups: libGroups,
     collapsedGroups,
     toggleGroup: onToggleGroup,
     visibleIds: libraryVisibleIds,
-    filterCount: libFilterCount,
-    tokens: libTokens,
     clear: clearLibF,
     multiIds: multiSel,
     setMultiIds: setMultiSel,
   } = library;
+  // 范围单选:选中即切到会话页——它本来就是"我要看这一部分会话"的意思
+  const pickLibraryScope = useCallback((next) => {
+    selectLibScope(next);
+    setView("library");
+    setSettingsOpen(false);
+  }, [selectLibScope]);
   const history = useHistoryResourcePane({
     historyRows,
     t,
@@ -329,8 +345,9 @@ export default function App() {
     sessions,
     libraryQuery: q,
     setLibraryQuery: setQ,
-    libraryFilterCount: libFilterCount,
-    libraryTokens: libTokens,
+    libraryTitle: libScopeLabel,
+    libraryCount: libScopeCount,
+    libraryDisplayDirty: libDisplayDirty,
     historyItems: histItems,
     historyQuery: hq,
     setHistoryQuery: setHq,
@@ -338,7 +355,7 @@ export default function App() {
     historyTokens: histTokens,
   });
 
-  // 侧栏只剩导航轨(无资源栏或已折叠)时,导航轨要容纳红绿灯
+  // 侧栏只剩导航栏(无资源栏或已折叠)时,导航栏要容纳红绿灯
   const railOnly = !paneCfg || paneLayout.collapsed;
   const rail = useRailNavigation({
     labels: {
@@ -354,6 +371,11 @@ export default function App() {
   useAppKeyboardShortcuts({
     paneAvailable: Boolean(paneCfg),
     onOpenSearch: () => setSearchOpen(true),
+    onToggleNav: navLayout.toggle,
+    onFocusPaneSearch: () => {
+      if (view !== "library") return;
+      document.dispatchEvent(new Event("ferry-focus-pane-search"));
+    },
     dismissers: [
       { open: Boolean(ctxMenu), dismiss: () => setCtxMenu(null) },
       { open: Boolean(renameFor), dismiss: () => setRenameFor(null) },
@@ -401,16 +423,16 @@ export default function App() {
 
 
   const { browserState, operationsState, appChrome } = useWorkspaceState({
-    allTags, applyEdit, clearHistF, clearLibF, confirmApply,
-    counts, ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs, dirs,
+    applyEdit, clearHistF, confirmApply,
+    ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
     detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
-    histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
+    histDel, histF, histGroups, histSel, histSelectedId, historyToolIds,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
     onboarding, openConfig, paneCfg, peekEntity, peekId,
     popAnchor, popover, rail, railOnly, refreshing,
     scan, scanning, searchOpen, select, selectHistory, selId,
     sessions, setConfirmApply, setCtxMenu, setDiff,
-    setFloatChatOpen, setHistDel, setHistF, setLibF, setMetaFor, setMig,
+    setFloatChatOpen, setHistDel, setHistF, setMetaFor, setMig,
     setMultiSel, setPeekId, setPopover,
     setSearchOpen, setSettings, setSettingsOpen, setTagFor, setToast, setView,
     settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
@@ -435,7 +457,8 @@ export default function App() {
     >
       <AppShell
         rail={
-          <AppRail
+          <AppNav
+            collapsed={navLayout.collapsed}
             railOnly={railOnly}
             resizing={paneLayout.resizing}
             items={rail.items}
@@ -444,11 +467,26 @@ export default function App() {
             dropTarget={rail.dropTarget}
             scanning={scanning}
             settingsOpen={settingsOpen}
-            scanningLabel={t("app:titlebar.scanning")}
-            rescanLabel={t("app:titlebar.rescan")}
-            settingsLabel={t("app:rail.settings")}
+            scope={libScope}
+            scopeCounts={libScopeCounts}
+            favoriteProjects={libFavoriteProjects}
+            onReorderFavorite={reorderLibFavorite}
+            onSelectScope={pickLibraryScope}
+            labels={{
+              pinned: t("app:library.pinned"),
+              agents: t("app:nav.agents"),
+              favorites: t("app:nav.favorites"),
+              favoritesEmpty: t("app:nav.favoritesEmpty"),
+              tags: t("app:nav.tags"),
+              scanning: t("app:titlebar.scanning"),
+              rescan: t("app:titlebar.rescan"),
+              settings: t("app:rail.settings"),
+              toolNames: TOOL_NAME,
+            }}
             onSelect={(key) => {
               if (rail.shouldSuppressClick()) return;
+              // 点「会话」= 回到全部:导航项本身也是一个范围
+              if (key === "library") selectLibScope({ kind: "all" });
               setView(key);
               setSettingsOpen(false);
               setPopover(null);
@@ -487,6 +525,17 @@ export default function App() {
               }}
               library={{
                 scanning,
+                navCollapsed: navLayout.collapsed,
+                scope: libScope,
+                scopeCounts: libScopeCounts,
+                projects: libProjects,
+                favorites: libFavorites,
+                onFavoriteProject: toggleLibFavorite,
+                toolNames: TOOL_NAME,
+                onSelectScope: pickLibraryScope,
+                display: libDisplay,
+                onDisplayChange: setLibDisplay,
+                groupMode: libGroupMode,
                 sessions,
                 scanError: scan?.error || null,
                 scanningLabel: t("app:detail.scanningSessions"),
@@ -527,6 +576,8 @@ export default function App() {
             paneAvailable={Boolean(paneCfg)}
             collapsed={paneLayout.collapsed}
             onToggleCollapsed={paneLayout.toggleCollapsed}
+            navCollapsed={navLayout.collapsed}
+            onToggleNav={navLayout.toggle}
           />
         }
       >

@@ -213,7 +213,7 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
           cursor: "default", fontSize: 12 }}>
         <span style={{ color: "var(--tx2)", fontWeight: 500, flex: "none" }}>{verb}</span>
         {level === "mutate" && (
-          <span data-tool-level="mutate" style={{ fontSize: 9.5, fontWeight: 650,
+          <span data-tool-level="mutate" style={{ fontSize: 9.5, fontWeight: 600,
             letterSpacing: ".04em", textTransform: "uppercase", color: "var(--warn-text)",
             background: "var(--warn-soft, rgba(240,180,41,.16))",
             padding: "1px 5px", borderRadius: 4,

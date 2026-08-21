@@ -358,5 +358,12 @@
       "stopDone": "Daemon stopped",
       "stopAppMode": "The app's engine can't be stopped here; quit Ferry to release it"
     }
+  },
+  "density": {
+    "groupTitle": "Density",
+    "label": "Interface density",
+    "desc": "Standard is roomier; compact fits more on screen",
+    "compact": "Compact",
+    "standard": "Standard"
   }
 }

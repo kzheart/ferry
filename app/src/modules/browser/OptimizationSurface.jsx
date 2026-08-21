@@ -192,7 +192,7 @@ export function InlineRewriteDiff({ original, candidate, onAccept, onReject }) {
         borderBottom: "1px solid var(--line5)",
         whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
         <span className="mono" style={{ position: "absolute", left: 12,
-          top: 9, fontWeight: 700, color: "var(--err)",
+          top: 9, fontWeight: 600, color: "var(--err)",
           textDecoration: "none" }}>−</span>
         {String(original || "").slice(0, 4000)}
       </div>
@@ -201,7 +201,7 @@ export function InlineRewriteDiff({ original, candidate, onAccept, onReject }) {
         background: "var(--ok-bg)", color: "var(--ok-body2, var(--tx1))",
         whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>
         <span className="mono" style={{ position: "absolute", left: 12,
-          top: 9, fontWeight: 700, color: "var(--ok-deep)" }}>+</span>
+          top: 9, fontWeight: 600, color: "var(--ok-deep)" }}>+</span>
         {candidate.text.slice(0, 4000)}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8,
@@ -266,7 +266,7 @@ export function OptimizationFloatBar({
   if (pendingCount > 0) {
     return (
       <div style={barStyle}>
-        <span style={{ fontWeight: 650 }}>
+        <span style={{ fontWeight: 600 }}>
           {tt("browser:optimize.pending", { n: pendingCount })}
         </span>
         <span style={{ display: "flex", gap: 2 }}>
@@ -294,7 +294,7 @@ export function OptimizationFloatBar({
   if (selection && selection.count > 0) {
     return (
       <div style={barStyle}>
-        <span style={{ fontWeight: 650 }}>
+        <span style={{ fontWeight: 600 }}>
           {tt("browser:optimize.selected", { n: selection.count })}
         </span>
         <span style={{ fontSize: 11,

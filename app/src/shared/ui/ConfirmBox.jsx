@@ -16,7 +16,7 @@ export function ConfirmBox({ width = 400, title, children, actions }) {
         boxShadow: "var(--shadow-sheet)",
         padding: 22,
       }}>
-        <div style={{ fontSize: 15, fontWeight: 650 }}>{title}</div>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{title}</div>
         {children}
         <div style={{
           display: "flex",

@@ -169,8 +169,8 @@ export default memo(function SessionDetail({
         )}
         <div
           style={{
-            padding: `20px 26px ${dirtyOps.length ? 110 : 48}px`,
-            maxWidth: 720,
+            padding: `20px var(--main-pad) ${dirtyOps.length ? 110 : 48}px`,
+            maxWidth: "var(--read-max)",
             margin: "0 auto",
           }}
         >

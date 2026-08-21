@@ -7,17 +7,16 @@ import { useMemo } from "react";
 import { useFeature } from "../shared/capabilities/features.jsx";
 
 export function useWorkspaceState({
-  allTags, applyEdit, clearHistF, clearLibF, confirmApply,
-  counts, ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
-  dirs,
+  applyEdit, clearHistF, confirmApply,
+  ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
   detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
-  histDel, histF, histGroups, histSel, histSelectedId, historyToolIds, libF,
+  histDel, histF, histGroups, histSel, histSelectedId, historyToolIds,
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
   onboarding, openConfig, paneCfg, peekEntity, peekId, popAnchor,
   popover, rail, railOnly, refreshing, scan,
   scanning, searchOpen, select, selectHistory, selId, sessions,
   setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
-  setHistDel, setHistF, setLibF, setMetaFor, setMig, setMultiSel,
+  setHistDel, setHistF, setMetaFor, setMig, setMultiSel,
   setPeekId, setPopover, setSearchOpen,
   setSettings, setSettingsOpen, setTagFor, setToast, setView, settings,
   settingsOpen, settingsSection, tagFor, toast, updater, view,
@@ -78,18 +77,12 @@ export function useWorkspaceState({
         metaFor,
         updateMetadata: setMetaFor,
       },
+      // 会话库的筛选浮层已整体删除(范围进导航栏、显示选项进资源栏菜单),
+      // 这里只剩迁移历史那一个
       filters: {
         popover,
         anchor: popAnchor.current,
         onClose: () => setPopover(null),
-        library: {
-          value: libF,
-          onChange: setLibF,
-          counts,
-          dirs,
-          tags: allTags,
-          onClear: clearLibF,
-        },
         history: {
           value: histF,
           tools: historyToolIds,
@@ -103,9 +96,9 @@ export function useWorkspaceState({
       refreshing, loadingMore, searchOpen, paneCfg, view, ferrySessions,
       histGroups, libGroups, sessions, selectHistory, select, ctxMenu,
       ctxItems, deletion, histDel, deleteHistory, histSelectedId, histSel,
-      metaFor, setMetaFor, tagFor, popover, libF, counts, dirs,
-      allTags, clearLibF, histF, historyToolIds, setHistF, clearHistF,
-      setMultiSel, setLibF,
+      metaFor, setMetaFor, tagFor, popover,
+      histF, historyToolIds, setHistF, clearHistF,
+      setMultiSel,
     ],
   );
   const operationsState = useMemo(

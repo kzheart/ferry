@@ -41,25 +41,16 @@
   "filter": {
     "clear": "清除筛选",
     "done": "完成",
-    "source": "来源",
     "sourceTools": "来源工具",
     "timeRange": "时间范围",
     "allTime": "全部时间",
-    "today": "今天",
     "yesterday": "昨天",
-    "last7": "最近 7 天",
-    "last30": "最近 30 天",
     "earlier": "更早",
-    "projectDir": "项目目录",
-    "noDirs": "暂无目录",
-    "tags": "标签",
-    "content": "内容",
-    "onlyMigrated": "仅含迁移记录",
-    "onlySubSessions": "仅含子会话",
     "showArchived": "显示已归档",
     "targetTool": "目标工具",
     "allTargets": "全部目标",
-    "status": "状态"
+    "status": "状态",
+    "today": "今天"
   },
   "loss": {
     "keepTitle": "原生保留",

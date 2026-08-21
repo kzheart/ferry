@@ -38,7 +38,7 @@ export function DiffSheet({ ops, preview, loading, error, onClose }) {
         display: "flex",
         alignItems: "center",
       }}>
-        <div style={{ fontSize: 14, fontWeight: 650 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>
           {t("overlays:diff.title")}
         </div>
         <div style={{ fontSize: 12, color: "var(--tx4)", marginLeft: 12 }}>

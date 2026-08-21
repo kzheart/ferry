@@ -1,6 +1,5 @@
 import {
   BatchDeleteConfirm,
-  LibraryFilter,
   SessionDeleteConfirm,
   SessionPeekSheet,
 } from "../modules/browser/public.js";
@@ -33,7 +32,6 @@ export function AppOverlays({
   toast,
   railTip,
   settings,
-  libraryFilter,
   historyFilter,
   guide,
 }) {
@@ -183,18 +181,6 @@ export function AppOverlays({
           onOpenGuide={settings.onOpenGuide}
           onFirstRun={settings.onFirstRun}
           onClose={settings.onClose}
-        />
-      )}
-      {libraryFilter.open && (
-        <LibraryFilter
-          f={libraryFilter.value}
-          setF={libraryFilter.onChange}
-          counts={libraryFilter.counts}
-          dirs={libraryFilter.dirs}
-          tags={libraryFilter.tags}
-          anchor={libraryFilter.anchor}
-          onClose={libraryFilter.onClose}
-          onClear={libraryFilter.onClear}
         />
       )}
       {historyFilter.open && (

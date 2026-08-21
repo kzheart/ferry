@@ -167,7 +167,7 @@ export function Guide({ step, steps, onGo, onFinish }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 600,
             color: ACCENT,
             letterSpacing: ".03em",
           }}>
@@ -193,7 +193,7 @@ export function Guide({ step, steps, onGo, onFinish }) {
         </div>
         <div style={{
           fontSize: 14,
-          fontWeight: 650,
+          fontWeight: 600,
           marginTop: 11,
           letterSpacing: "-.01em",
         }}>

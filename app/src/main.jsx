@@ -3,12 +3,18 @@ import ReactDOM from "react-dom/client";
 import { initI18n } from "./shared/i18n/index.js";
 import { preloadBrowserCache } from "./modules/browser/useBrowserData.js";
 import App from "./shell/AppController.jsx";
+import { applyDensity, readDensity } from "./shared/ui/density.js";
 import { FeaturesProvider } from "./shared/capabilities/features.jsx";
+// 字体随包发行(离线可用,不走 Google Fonts):Geist / Geist Mono 可变字重 100-900
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./shared/styles/app.css";
 
 // 平台标记供 CSS 判断(macOS 下窗口透明走 vibrancy);
 // 屏蔽 WebView 默认右键菜单,输入框与可选中文本放行(保留系统的复制/粘贴菜单)
 if (navigator.userAgent.includes("Mac")) document.documentElement.dataset.platform = "mac";
+// 密度要在首帧之前落到根节点上,晚一步整页尺寸会跳一次
+applyDensity(readDensity());
 // 命中 .selectable / 输入类元素才算「可操作文本」;事件目标可能是文本节点,先归一到元素
 const inTextArea = target => {
   const el = target instanceof Element ? target

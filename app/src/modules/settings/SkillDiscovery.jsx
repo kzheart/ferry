@@ -27,12 +27,12 @@ function SourceHeader({ source, count, open, onToggle, onRemoveSource }) {
           background: "transparent", textAlign: "left", cursor: "default",
           fontFamily: "inherit", color: "var(--tx5)" }}>
         <Chevron open={open} />
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em",
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".04em",
           minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap" }}>
           {source.builtin ? source.label : source.path}</span>
         {count > 0 && (
-          <span style={{ flex: "none", fontSize: 9.5, fontWeight: 650,
+          <span style={{ flex: "none", fontSize: 9.5, fontWeight: 600,
             padding: "0 4px", borderRadius: 4, background: "var(--fill3)" }}>
             {count}</span>)}
       </button>
@@ -66,7 +66,7 @@ function CandidateRow({ candidate, on, onSelect }) {
           {candidate.name}</span>
       </span>
       {candidate.installedId && (
-        <span style={{ flex: "none", fontSize: 9.5, fontWeight: 650,
+        <span style={{ flex: "none", fontSize: 9.5, fontWeight: 600,
           padding: "1px 5px", borderRadius: 4, background: "var(--fill3)",
           color: "var(--tx5)" }}>
           {t("settings:skills.importedBadge")}</span>)}

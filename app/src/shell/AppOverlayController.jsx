@@ -216,17 +216,6 @@ export function AppOverlayController({ t }) {
         },
         onClose: () => settings.setOpen(false),
       }}
-      libraryFilter={{
-        open: filters.popover === "lib",
-        value: filters.library.value,
-        onChange: filters.library.onChange,
-        counts: filters.library.counts,
-        dirs: filters.library.dirs,
-        tags: filters.library.tags,
-        anchor: filters.anchor,
-        onClose: filters.onClose,
-        onClear: filters.library.onClear,
-      }}
       historyFilter={{
         open: filters.popover === "hist",
         value: filters.history.value,

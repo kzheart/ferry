@@ -317,7 +317,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     body = (
       <>
         <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "16px 18px" }}>
-          <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 12 }}>{t("migration:confirm.title")}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{t("migration:confirm.title")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9, fontSize: 12 }}>
             {[["target", TOOL_NAME[target], true],
               ["scope", d ? t("migration:confirm.scopeWithCount", { scope: scopeLabel, n: d.msg_count }) : scopeLabel],
@@ -390,7 +390,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
               <path d="M5 10.5 8.5 14 15 6.5" fill="none" stroke="var(--ok)" strokeWidth="2.2"
                 strokeLinecap="round" strokeLinejoin="round" /></svg>
           </span>
-          <div style={{ fontSize: 15, fontWeight: 650, marginTop: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginTop: 12 }}>
             {result.validation?.runtime?.status === "passed"
               ? t("migration:result.doneBoth") : t("migration:result.doneStructure")}</div>
           <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 5 }}>
@@ -417,7 +417,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
               <line x1="12" y1="4" x2="4" y2="12" stroke="var(--err2)" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 650, color: "var(--err-text)" }}>{t("migration:result.failTitle")}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--err-text)" }}>{t("migration:result.failTitle")}</div>
             <div style={{ fontSize: 12, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
               {t("migration:result.failDesc", { tool: TOOL_NAME[target] })}
               {(result?.probe?.model || result?.probe_model) && (
@@ -446,7 +446,7 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
     <Sheet width={720} maxHeight={800} onClose={step === "writing" ? undefined : onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 650 }}>{t("migration:sheet.title")}</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{t("migration:sheet.title")}</div>
         <StepsHeader step={step} t={t} />
         <div style={{ flex: 1 }} />
         {step !== "writing" &&

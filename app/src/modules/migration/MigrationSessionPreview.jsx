@@ -23,7 +23,7 @@ function PreviewToolCard({ block }) {
         style={{ width: "100%", minHeight: 34, padding: "6px 10px", display: "flex", alignItems: "center", gap: 8,
           border: "none", background: "transparent", color: "var(--tx2)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
         <Caret open={open} size={9} />
-        <span className="mono" style={{ fontSize: 11, fontWeight: 650, flex: 1 }}>{block.name}</span>
+        <span className="mono" style={{ fontSize: 11, fontWeight: 600, flex: 1 }}>{block.name}</span>
       </button>
       {open && <div style={{ padding: "9px 11px", borderTop: "1px solid var(--line5)", background: "var(--surface)" }}>
         <pre className="mono fscroll selectable" style={{ margin: 0, maxHeight: 105, overflow: "auto",
@@ -46,7 +46,7 @@ function PreviewTextBlock({ block, t, user }) {
       : <div className="fdel-text"><Markdown text={visibleText} /></div>}
     {shouldCollapse && <button type="button" onClick={() => setExpanded(value => !value)} className="hov-ghost"
       style={{ marginTop: 7, padding: "3px 7px", border: "none", borderRadius: 5, background: "transparent",
-        color: "var(--accent)", font: "inherit", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>
+        color: "var(--accent)", font: "inherit", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
       {expanded ? t("migration:preview.targetSession.collapseMessage") : t("migration:preview.targetSession.expandMessage")}
     </button>}
   </div>;
@@ -170,7 +170,7 @@ export default function MigrationSessionPreview({ preview }) {
           style={{ height: 29, display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11 }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: counts.dropped ? "var(--err)" : "var(--warn)" }} />
           {t("migration:preview.differences.open")}
-          <span className="mono" style={{ color: "var(--tx3)", fontWeight: 700 }}>{counts.total}</span>
+          <span className="mono" style={{ color: "var(--tx3)", fontWeight: 600 }}>{counts.total}</span>
         </button> : <span style={{ color: "var(--tx5)", fontSize: 11 }}>
           {t("migration:preview.differences.none")}
         </span>}

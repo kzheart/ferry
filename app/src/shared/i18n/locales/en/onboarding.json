@@ -11,14 +11,14 @@
     "start": "Start scanning local sessions"
   },
   "guide": {
-    "railTitle": "Switch modules via the navigation rail",
-    "railBody": "The rail on the far left switches between Overview, Sessions, Migrations, and Ask Ferry; drag the icons to reorder them. Rescan and Settings sit at the bottom, and the layout stays put in every module.",
+    "railTitle": "The sidebar",
+    "railBody": "The top half navigates modules (Overview, Sessions, Migrations, Ask Ferry) and can be reordered by dragging; the bottom half lists scopes by agent, project, and tag — click one to see only those sessions, click it again to go back to all. Press ⌘⇧S to collapse it to an icon rail.",
     "overviewTitle": "Overview: know your habits",
     "overviewBody": "Session count, token usage, estimated cost, and active-day streaks at a glance, switchable by tool and time range. Below: how your go-to model shifts over time and a 52-week activity heatmap.",
     "searchTitle": "Press ⌘K to search anywhere",
     "searchBody": "Jump to any session by title, project directory, or command — full-text search over session content works too. Search and filter controls keep the same spot in the resource pane across modules.",
-    "filterTitle": "Filter and organize sessions",
-    "filterBody": "Narrow the list by source agent, time range, project directory, or tags. Inline actions let you pin, rename, and tag; pinned or archived sessions are protected from deletion. This metadata stays local and never touches the original session files.",
+    "displayTitle": "Display options",
+    "displayBody": "Grouping, time window, only-with-sub-sessions and only-with-migrations live here; change any of them and a dot lights up on the button. Which slice of sessions you are looking at is not here — that is the scope in the sidebar.",
     "detailTitle": "Session detail and resume",
     "detailBody": "The detail view renders the full session tree, including subagent conversations and image previews. From here you can refresh, resume the conversation in your terminal, or copy the resume command; edits show a diff first, back up before applying, and can always be rolled back.",
     "scopeTitle": "Migrate up to here",

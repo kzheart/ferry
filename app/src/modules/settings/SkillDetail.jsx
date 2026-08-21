@@ -38,7 +38,7 @@ export default function SkillDetail({
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12,
         paddingBottom: 16, borderBottom: "1px solid var(--line4)" }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 17, fontWeight: 680, color: "var(--tx1)",
+          <div style={{ fontSize: 17, fontWeight: 600, color: "var(--tx1)",
             letterSpacing: "-.01em" }}>{title}</div>
           <div style={metaStyle}>
             {skill
@@ -82,7 +82,7 @@ export default function SkillDetail({
 
       {skill && (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)",
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)",
             letterSpacing: ".05em", marginBottom: 8 }}>SKILL.md</div>
           <div style={{ border: "1px solid var(--line4)", borderRadius: 11,
             background: "var(--surface)", padding: "12px 16px", fontSize: 12.5 }}>

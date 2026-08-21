@@ -2,15 +2,26 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
-import { supportsAgentCapability } from "../shared/contracts/tools.js";
-import { Caret, CloseIcon, FilterIcon, MoreDots, PinIcon,
-  SearchIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
+import { supportsAgentCapability, TOOL_NAME } from "../shared/contracts/tools.js";
+import { libraryGroupExpanded } from "../modules/browser/public.js";
+import { ArrowRightIcon, Caret, ChevronLeftIcon, CloseIcon, FilterIcon, MoreDots, PinIcon,
+  SearchIcon, StarIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
+import { useDensityMetrics } from "../shared/ui/density.js";
 
 export function Pane({ collapsed, width, dragging, title, count,
-  query, onOpenSearch, onClearSearch, filterCount, filterOn, onFilter,
-  tokens, listKey, children }) {
+  query, onQuery, searchInline, placeholder, onOpenSearch, onClearSearch,
+  onTitleClick, titleMenuOpen, displayDot, displayOn, onDisplay, displayLabel,
+  onBack, backLabel, listKey, headerExtra, children }) {
   const { t } = useTranslation();
   const w = collapsed ? 0 : width;
+  const searchRef = useRef(null);
+  // ⌘F / 搜索按钮都落到这个常驻输入框上;⌘K 仍是跨库的全文命令面板
+  useEffect(() => {
+    if (!searchInline) return undefined;
+    const focus = () => searchRef.current?.focus();
+    document.addEventListener("ferry-focus-pane-search", focus);
+    return () => document.removeEventListener("ferry-focus-pane-search", focus);
+  }, [searchInline]);
   return (
     <div data-guide="pane"
       style={{ width: w, flex: "none", overflow: "hidden", background: "var(--pane)",
@@ -21,27 +32,71 @@ export function Pane({ collapsed, width, dragging, title, count,
         {/* 通高侧栏:顶部 44px 归红绿灯,整块可拖拽窗口 */}
         <div data-tauri-drag-region style={{ height: 44, flex: "none" }} />
         <div style={{ flex: "none", padding: "0 10px 0" }}>
-          {/* 标题行:名称 + 数量,右侧一排图标(搜索/筛选/排序)——对齐 WorkBuddy 紧凑工具栏 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, height: 28 }}>
-            <span style={{ fontSize: 14, fontWeight: 650, color: "var(--tx1)",
-              letterSpacing: "-.01em" }}>{title}</span>
-            <span className="mono" style={{ fontSize: 12, color: "var(--tx5)" }}>{count}</span>
+          {/* 标题行:范围名 + 计数,右侧搜索与显示选项两个图标按钮 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28 }}>
+            {/* 进入某个项目范围之后要有一条回得去的路:标题左侧的返回箭头 */}
+            {onBack && (
+              <button type="button" className="row-act-btn" data-pane-back
+                title={backLabel} aria-label={backLabel} onClick={onBack}
+                style={{ flex: "none", width: 18, height: 18, marginLeft: -2 }}>
+                <ChevronLeftIcon size={13} />
+              </button>
+            )}
+            {onTitleClick ? (
+              <button type="button" className="lib-scope-title" data-guide="scope-title"
+                aria-haspopup="menu" aria-expanded={!!titleMenuOpen} onClick={onTitleClick}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 26,
+                  maxWidth: "72%", padding: "0 7px", marginLeft: -7, border: "none",
+                  borderRadius: 6, background: titleMenuOpen ? "var(--fill4)" : "transparent",
+                  color: "var(--tx1)", fontFamily: "inherit", fontSize: "var(--fs-title)",
+                  fontWeight: 600, letterSpacing: "-.01em", cursor: "default" }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: "nowrap" }}>{title}</span>
+                <span className="mono tnum" style={{ flex: "none", fontSize: "var(--fs-meta)",
+                  fontWeight: 500, color: "var(--tx5)" }}>{count}</span>
+                <Caret open={titleMenuOpen} size={8} />
+              </button>
+            ) : (
+              <>
+                <span style={{ fontSize: "var(--fs-title)", fontWeight: 600, color: "var(--tx1)",
+                  letterSpacing: "-.01em", minWidth: 0, overflow: "hidden",
+                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+                <span className="mono tnum" style={{ fontSize: "var(--fs-meta)",
+                  color: "var(--tx5)" }}>{count}</span>
+              </>
+            )}
             <span style={{ flex: 1 }} />
             <button className="ftool-btn" data-guide="search"
               title={t("app:pane.search")} onClick={onOpenSearch}
               style={query ? { background: "var(--fill4)", color: "var(--tx1)" } : undefined}>
               <SearchIcon /></button>
-            <button className="ftool-btn" data-guide="filter"
-              title={t("app:pane.filterButton")} onClick={onFilter}
+            <button className="ftool-btn" data-guide="display"
+              title={displayLabel} onClick={onDisplay}
               style={{ position: "relative",
-                ...(filterOn ? { background: "var(--fill4)", color: "var(--tx1)" } : {}) }}>
+                ...(displayOn ? { background: "var(--fill4)", color: "var(--tx1)" } : {}) }}>
               <FilterIcon />
-              {filterCount > 0 && (
+              {displayDot && (
                 <span style={{ position: "absolute", top: 3, right: 3, width: 6, height: 6,
                   borderRadius: "50%", background: ACCENT }} />
               )}</button>
           </div>
-          {query && (
+          {searchInline ? (
+            <div className="lib-search" style={{ display: "flex", alignItems: "center", gap: 6,
+              height: 26, padding: "0 7px", marginTop: 8, borderRadius: 7,
+              background: "var(--fill4)", boxShadow: "inset 0 0 0 .5px var(--line)" }}>
+              <SearchIcon />
+              <input ref={searchRef} data-pane-search value={query} onChange={onQuery}
+                placeholder={placeholder}
+                onKeyDown={event => { if (event.key === "Escape") onClearSearch(); }}
+                style={{ flex: 1, minWidth: 0, height: 22, border: "none", outline: "none",
+                  background: "transparent", color: "var(--tx1)", fontSize: 12.5,
+                  fontFamily: "inherit", padding: 0 }} />
+              {query && (
+                <button className="row-act-btn" onClick={onClearSearch}
+                  title={t("common:empty.clearFilter")}><CloseIcon size={11} /></button>
+              )}
+            </div>
+          ) : query ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, height: 26, padding: "0 6px 0 10px",
               background: "var(--acc-soft3)", border: "1px solid var(--acc-line)", borderRadius: 6,
               marginTop: 9, fontSize: 11, color: "var(--acc-text)" }}>
@@ -51,22 +106,16 @@ export function Pane({ collapsed, width, dragging, title, count,
               <button className="row-act-btn" onClick={onClearSearch}
                 title={t("common:empty.clearFilter")}><CloseIcon size={11} /></button>
             </div>
-          )}
-          {tokens.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
-              {tokens.map((tk, i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 22,
-                  padding: "0 6px 0 9px", background: "var(--acc-soft3)", border: "1px solid var(--acc-line)",
-                  borderRadius: 20, fontSize: 11, color: "var(--acc-text)" }}>
-                  {tk.label}
-                  <a onClick={tk.onRemove} style={{ color: "var(--acc-mut)", fontSize: 13, lineHeight: 1 }}>×</a>
-                </span>
-              ))}
-            </div>
-          )}
+          ) : null}
+          {headerExtra}
         </div>
-        <div data-pane-scroll className="fscroll"
-          style={{ flex: 1, overflowY: "auto", padding: "8px 8px 10px", minHeight: 0 }}>
+        <div data-pane-scroll className="fscroll" tabIndex={-1}
+          onKeyDown={event => {
+            // 列表聚焦时 Esc 等于点了标题左边那个返回箭头
+            if (event.key === "Escape" && onBack) { event.stopPropagation(); onBack(); }
+          }}
+          style={{ flex: 1, overflowY: "auto", padding: "8px 8px 10px", minHeight: 0,
+            outline: "none" }}>
           <div key={listKey}>{children}</div>
         </div>
       </div>
@@ -125,8 +174,9 @@ export function StaleScanNotice({ error, scanning, onRescan }) {
 }
 
 // ----- 列表虚拟化:几千行会话全量渲染会拖垮 WebView,只挂载可视区 ± OVERSCAN 内的行 -----
-const ROW_H = 30;      // 会话/历史行高(与行内 style 的 height 一致)
-const HEADER_H = 24;   // 分组标题行高
+// 行高随密度变(shared/ui/density.js 维护数值),虚拟化要的是数字而不是 CSS 变量,
+// 所以这里从密度表里取,并把它一路传进行内 style,两边必须是同一个值。
+const ROW_ICON = 16;   // 会话行前的 agent 图标
 const OVERSCAN = 300;  // 视口上下各多渲染的像素,避免快速滚动露白
 
 // 列表顶部相对滚动容器内容原点的偏移:虚拟化的 y 都以此为基准
@@ -230,8 +280,52 @@ const PinGlyph = () => (
   </svg>
 );
 
-// 单行会话:紧凑单行,悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
-const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
+const FolderGlyph = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden
+    style={{ flex: "none", color: "var(--tx4)" }}>
+    <path d="M2 4.2c0-.7.5-1.2 1.2-1.2h2.4l1.3 1.5h5.9c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H3.2c-.7 0-1.2-.5-1.2-1.2V4.2z"
+      stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+  </svg>
+);
+
+// 项目文件夹头:折叠箭头 + 文件夹图标 + 文件夹名 + 计数。
+// 同名仓库不再靠淡色父路径消歧(分组键仍是完整 dir),完整路径放进 title。
+// 悬停时右侧浮现两个动作(计数让位):☆ 收藏到导航栏、→ 只看此项目;右键同样两项。
+function FolderRow({ group, expanded, height, favorite, onToggle, onFavorite, onOnly, onMenu }) {
+  const { t } = useTranslation();
+  const act = fn => event => { event.stopPropagation(); fn(group.dir); };
+  return (
+    <div className="hov-row folder-row" onClick={onToggle} title={group.dir}
+      onContextMenu={onMenu
+        ? event => { event.preventDefault(); event.stopPropagation(); onMenu(group.dir, event); }
+        : undefined}
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height,
+        cursor: "default", borderRadius: 6 }}>
+      <Caret open={expanded} />
+      <FolderGlyph />
+      <span style={{ fontSize: "var(--fs-meta)", color: "var(--tx2)", flex: 1, minWidth: 0,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{group.label}</span>
+      <span className="row-meta mono tnum" style={{ fontSize: "var(--fs-meta)",
+        color: "var(--tx5)", flex: "none" }}>{group.count}</span>
+      {onFavorite && (
+        <span className="row-act" style={{ gap: 1, flex: "none" }}>
+          <button className="row-act-btn" onClick={act(onFavorite)}
+            title={t(favorite ? "app:ctx.unfavoriteProject" : "app:ctx.favoriteProject")}
+            aria-label={t(favorite ? "app:ctx.unfavoriteProject" : "app:ctx.favoriteProject")}
+            style={{ width: 20, height: 20, ...(favorite ? { color: "var(--warn)" } : {}) }}>
+            <StarIcon size={13} filled={favorite} /></button>
+          <button className="row-act-btn" onClick={act(onOnly)}
+            title={t("app:ctx.onlyThisProject")} aria-label={t("app:ctx.onlyThisProject")}
+            style={{ width: 20, height: 20 }}>
+            <ArrowRightIcon size={13} /></button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+// 会话行:双行 40px(标题 / 元信息),悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
+const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editing, showRepo, showTool,
   onRowClick, onRowPin, onRowDelete, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
@@ -241,9 +335,9 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
 
   if (editing) {
     return (
-      <div className="lib-row" style={{ display: "flex", gap: 8, alignItems: "center",
-        padding: "5px 8px", height: 30, borderRadius: 6, background: "var(--acc-soft2)" }}>
-        <ToolIcon tool={r.tool} size={18} />
+      <div className="lib-row lib-row-tall" style={{ display: "flex", gap: 8, alignItems: "center",
+        padding: "0 8px", height, borderRadius: 6, background: "var(--acc-soft2)" }}>
+        <ToolIcon tool={r.tool} size={ROW_ICON} />
         <input autoFocus defaultValue={r.title}
           placeholder={t("app:prompt.renamePlaceholder")}
           onFocus={e => { settled.current = false; e.target.select(); }}
@@ -264,30 +358,48 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
               onRowRenameCancel();
             }
           }}
-          style={{ flex: 1, minWidth: 0, height: 20, border: "none", outline: "none",
-            background: "transparent", color: "var(--tx1)", fontSize: 12, padding: 0 }} />
+          style={{ flex: 1, minWidth: 0, height: 24, border: "none", outline: "none",
+            background: "transparent", color: "var(--tx1)", fontSize: 13, padding: 0 }} />
       </div>
     );
   }
+
+  // 元信息:范围已经说过的事不再重复——选定项目就不写项目名,选定 Agent 就不写 Agent 名
+  const meta = [
+    showRepo ? r.repo : null,
+    showTool ? (TOOL_NAME[r.tool] || r.tool) : null,
+    r.count != null ? t("app:library.metaCount", { n: r.count }) : null,
+  ].filter(Boolean).join(" · ");
 
   return (
     <div onClick={e => onRowClick(r.key, e)}
       onDoubleClick={e => { if (!e.target.closest(".row-act")) onRowRename(r.key); }}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.key, e); }}
       title={r.dir}
-      className={selected || multi ? "lib-row" : "lib-row hov-item"}
-      style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,
+      className={selected || multi ? "lib-row lib-row-tall" : "lib-row lib-row-tall hov-item"}
+      style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "5px 8px", height,
         borderRadius: 6, cursor: "default", transition: "background .12s ease",
         ...rowSel(selected || multi) }}>
-      <ToolIcon tool={r.tool} size={18} />
-      <span style={{ fontSize: 12, color: "var(--tx1)", whiteSpace: "nowrap",
-        overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.title}</span>
-      {r.pinned && <PinGlyph />}
-      {r.hasMig && <span className="row-meta" title={t("app:library.hasMig")}
-        style={{ width: 5, height: 5, borderRadius: "50%",
-          background: "var(--info-dot)", flex: "none" }} />}
-      <span className="row-meta" style={{ fontSize: 10, color: "var(--tx5)",
-        flex: "none" }}>{r.active}</span>
+      <span title={TOOL_NAME[r.tool] || r.tool} style={{ flex: "none", display: "flex" }}>
+        <ToolIcon tool={r.tool} size={ROW_ICON} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1,
+        marginTop: -3 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--tx1)", whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.title}</span>
+          {r.pinned && <PinGlyph />}
+          {r.hasSub && <span className="row-meta" title={r.subLabel}
+            style={{ fontSize: 11, color: "var(--tx5)", flex: "none" }}>+{r.subCount}</span>}
+          {r.hasMig && <span className="row-meta" title={t("app:library.hasMig")}
+            style={{ width: 5, height: 5, borderRadius: "50%",
+              background: "var(--info-dot)", flex: "none" }} />}
+        </span>
+        <span style={{ fontSize: "var(--fs-meta)", color: "var(--tx5)", whiteSpace: "nowrap",
+          overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</span>
+      </span>
+      <span className="row-meta" style={{ fontSize: 11, color: "var(--tx5)", flex: "none",
+        marginTop: -1 }}>{r.active}</span>
       <span className="row-act" style={{ gap: 1, flex: "none" }}>
         <button className="row-act-btn" onClick={act(onRowPin, r.key)}
           title={r.pinned ? t("app:ctx.unpin") : t("app:ctx.pin")}
@@ -305,11 +417,18 @@ const LibraryRow = memo(function LibraryRow({ r, selected, multi, editing,
 
 // 会话库分组列表
 export function LibraryList({ groups, collapsed, onToggle, empty, filtered, query, scanError,
+  groupMode = "time", scopeKind = "all",
+  favorites = [], onFavoriteProject, onOnlyProject, onFolderMenu,
   onClear, onRescan, onFullTextSearch,
   selectedId, multiSel,
   renamingKey, onRowClick, onRowPin, onRowDelete, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
+  const metrics = useDensityMetrics();
+  const ROW_H = metrics.libRow;
+  const FOLDER_H = metrics.folderRow;
+  const HEADER_H = metrics.groupHeader;
+  const favoriteSet = new Set(favorites);
   if (empty) {
     // 扫描失败优先说:列表空是故障的后果,不是筛选或首次启动
     if (scanError) {
@@ -331,12 +450,37 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
       ]} />;
   }
   const multiSet = new Set(multiSel);
+  // 项目视图里行已经归在文件夹下,选中项目范围后项目名也已在标题上,都不必再重复
+  const showRepo = scopeKind !== "project" && groupMode !== "project";
+  const showTool = scopeKind !== "agent";
   const items = [];
   let y = 0;
   groups.forEach(g => {
-    const expanded = !(collapsed[g.key] ?? false);
-    items.push({ key: `h:${g.key}`, y, h: HEADER_H, node: (
-      <div className="hov-row" onClick={() => onToggle(g.key)}
+    const project = g.kind === "project";
+    const expanded = libraryGroupExpanded(g, collapsed, query || "");
+    // 不分组时整条列表只有会话行,没有任何分组头
+    if (g.kind === "flat") {
+      g.rows.forEach(r => {
+        items.push({ key: r.key, y, h: ROW_H, node: (
+          <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
+            editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
+            onRowClick={onRowClick} onRowPin={onRowPin}
+            onRowDelete={onRowDelete} onRowMore={onRowMore}
+            onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
+            onRowRenameCancel={onRowRenameCancel} />
+        ) });
+        y += ROW_H;
+      });
+      return;
+    }
+    const headerH = project ? FOLDER_H : HEADER_H;
+    items.push({ key: `h:${g.key}`, y, h: headerH, node: project ? (
+      <FolderRow group={g} expanded={expanded} height={FOLDER_H}
+        favorite={favoriteSet.has(g.dir)}
+        onToggle={() => onToggle(g.key, g.kind)}
+        onFavorite={onFavoriteProject} onOnly={onOnlyProject} onMenu={onFolderMenu} />
+    ) : (
+      <div className="hov-row" onClick={() => onToggle(g.key, g.kind)}
         style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 8px", height: HEADER_H,
           cursor: "default", borderRadius: 6 }}>
         <Caret open={expanded} />
@@ -344,11 +488,11 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
         <span style={{ fontSize: 11, color: "var(--tx5)" }}>· {g.count}</span>
       </div>
     ) });
-    y += HEADER_H;
+    y += headerH;
     if (expanded) g.rows.forEach(r => {
       items.push({ key: r.key, y, h: ROW_H, node: (
-        <LibraryRow r={r} selected={r.key === selectedId} multi={multiSet.has(r.key)}
-          editing={r.key === renamingKey}
+        <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
+          editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
           onRowClick={onRowClick} onRowPin={onRowPin}
           onRowDelete={onRowDelete} onRowMore={onRowMore}
           onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
@@ -360,9 +504,13 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
   });
   return <VirtualItems items={items} total={y} focusKey={selectedId} />;
 }
+
 // 迁移历史分组列表
 export function HistoryList({ groups, empty, filtered, onClear, onDelete }) {
   const { t } = useTranslation();
+  const metrics = useDensityMetrics();
+  const HIST_ROW_H = metrics.histRow;
+  const HEADER_H = metrics.groupHeader;
   if (empty) {
     return filtered
       ? <PaneEmpty text={t("common:empty.history")}
@@ -382,11 +530,11 @@ export function HistoryList({ groups, empty, filtered, onClear, onDelete }) {
     y += HEADER_H;
     g.rows.forEach(h => {
       if (h.selected) focusKey = h.id;
-      items.push({ key: h.id, y, h: ROW_H, node: (
+      items.push({ key: h.id, y, h: HIST_ROW_H, node: (
         <div onClick={h.onClick} onContextMenu={e => e.preventDefault()}
           title={`${h.from} → ${h.to} · ${h.statusLabel ?? h.status}`}
           className={h.selected ? "lib-row" : "lib-row hov-item"}
-          style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: 30,
+          style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: HIST_ROW_H,
             borderRadius: 6, cursor: "default", transition: "background .12s ease", ...rowSel(h.selected) }}>
           <ToolIcon tool={h.tool} size={18} />
           <span style={{ fontSize: 12, color: "var(--tx1)", whiteSpace: "nowrap",
@@ -403,7 +551,7 @@ export function HistoryList({ groups, empty, filtered, onClear, onDelete }) {
             </span>)}
         </div>
       ) });
-      y += ROW_H;
+      y += HIST_ROW_H;
     });
     y += 5;
   });

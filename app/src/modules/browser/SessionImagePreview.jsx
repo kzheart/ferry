@@ -140,7 +140,7 @@ export default function SessionImagePreview({
           <span
             style={{
               fontSize: 12,
-              fontWeight: 650,
+              fontWeight: 600,
               color: "var(--tx2)",
               flex: 1,
             }}

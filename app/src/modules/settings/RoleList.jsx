@@ -50,7 +50,7 @@ function DeleteConfirm({ name, onConfirm, onClose }) {
             {t("settings:roles.cancel")}</button>
           <button className="fbtn"
             onMouseDown={event => { event.preventDefault(); onClose(); onConfirm(); }}
-            style={{ flex: 1, height: 26, fontSize: 11.5, fontWeight: 650,
+            style={{ flex: 1, height: 26, fontSize: 11.5, fontWeight: 600,
               color: "var(--err-deep)", borderColor: "var(--err-line)" }}>
             {t("settings:roles.delete")}</button>
         </div>
@@ -98,7 +98,7 @@ export default function RoleList({
           <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 8px",
             borderRadius: 8, background: "var(--seg-on)" }}>
             <RoleAvatar icon={draft.icon} color={draft.color} size={28} />
-            <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--tx1)",
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)",
               minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {draft.name || t("settings:roles.create")}</span>
           </div>

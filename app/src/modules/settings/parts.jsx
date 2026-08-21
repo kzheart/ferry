@@ -1,6 +1,6 @@
 // 设置面板的通用排版件:分组标题 / 卡片 / 行 / 下拉 / 开关
 export const GroupTitle = ({ children, first, icon, right }) => (
-  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".05em",
+  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".05em",
     margin: first ? "0 0 9px 2px" : "22px 0 9px 2px",
     display: "flex", alignItems: "center", gap: 7 }}>
     {icon}{children}
@@ -16,11 +16,12 @@ export const Card = ({ children }) => (
 
 export function Row({ title, desc, children, first }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+    <div style={{ display: "flex", alignItems: "center", gap: 12,
+      padding: "calc(var(--fs-body) + 1px) 16px",
       borderTop: first ? "none" : "1px solid var(--line6)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx1)" }}>{title}</div>
-        {desc && <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
+        <div style={{ fontSize: "var(--fs-body)", fontWeight: 600, color: "var(--tx1)" }}>{title}</div>
+        {desc && <div style={{ fontSize: "var(--fs-meta)", color: "var(--tx4)", marginTop: 2 }}>{desc}</div>}
       </div>
       {children}
     </div>
@@ -83,3 +84,26 @@ export const inputStyle = {
   fontSize: 12.5, background: "var(--surface)", color: "var(--tx1)", fontFamily: "inherit",
   outline: "none",
 };
+
+// 分段控件:选项少(2–3 个)且需要一眼看全时用它,比下拉少一次点击
+export function Segmented({ value, options, onChange, label }) {
+  return (
+    <div role="radiogroup" aria-label={label}
+      style={{ display: "flex", flex: "none", padding: 2, gap: 2, borderRadius: 9,
+        background: "var(--fill4)", border: "1px solid var(--line4)" }}>
+      {options.map(([key, text]) => {
+        const on = key === value;
+        return (
+          <button key={key} type="button" role="radio" aria-checked={on}
+            onClick={() => onChange(key)}
+            style={{ height: 26, padding: "0 13px", borderRadius: 7, border: "none",
+              background: on ? "var(--seg-on)" : "transparent",
+              color: on ? "var(--tx1)" : "var(--tx3)", fontSize: 12, fontWeight: 600,
+              fontFamily: "inherit", cursor: "default",
+              boxShadow: on ? "0 1px 2px rgba(0,0,0,.08)" : "none",
+              transition: "background .12s ease" }}>{text}</button>
+        );
+      })}
+    </div>
+  );
+}

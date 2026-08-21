@@ -3,6 +3,8 @@ import { useEffect } from "react";
 export function useAppKeyboardShortcuts({
   paneAvailable,
   onOpenSearch,
+  onToggleNav,
+  onFocusPaneSearch,
   dismissers,
   view,
   currentSession,
@@ -21,11 +23,23 @@ export function useAppKeyboardShortcuts({
 }) {
   useEffect(() => {
     const onKeyDown = event => {
-      if ((event.metaKey || event.ctrlKey)
-          && event.key.toLowerCase() === "k"
-          && paneAvailable) {
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      // ⌘⇧S 折叠 / 展开导航栏(⌘B 归资源栏,由系统菜单占着)
+      if (mod && event.shiftKey && key === "s") {
+        event.preventDefault();
+        onToggleNav?.();
+        return;
+      }
+      if (mod && !event.shiftKey && key === "k" && paneAvailable) {
         event.preventDefault();
         onOpenSearch();
+        return;
+      }
+      // ⌘F 聚焦资源栏那条常驻搜索框;跨库全文仍走 ⌘K
+      if (mod && !event.shiftKey && key === "f" && paneAvailable) {
+        event.preventDefault();
+        onFocusPaneSearch?.();
         return;
       }
       if (event.key === "Escape") {
@@ -89,8 +103,10 @@ export function useAppKeyboardShortcuts({
     multiIds,
     onBatchDelete,
     onDelete,
+    onFocusPaneSearch,
     onOpenSearch,
     onRename,
+    onToggleNav,
     onResume,
     paneAvailable,
     selectHistory,

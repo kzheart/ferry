@@ -7,7 +7,8 @@ import { LOCALE_META } from "../../shared/i18n/index.js";
 import { useScanProgress } from "../browser/public.js";
 import { RefreshIcon, SetGlyph, Spinner, TerminalIcon, ToolIcon } from "../../shared/ui/icons.jsx";
 import { formatBytes } from "./useAppUpdater.js";
-import { Card, GroupTitle, Row, Select, Toggle } from "./parts.jsx";
+import { Card, GroupTitle, Row, Segmented, Select, Toggle } from "./parts.jsx";
+import { useDensity, writeDensity } from "../../shared/ui/density.js";
 import Providers from "./Providers.jsx";
 import Models from "./Models.jsx";
 import Roles from "./Roles.jsx";
@@ -103,7 +104,7 @@ function TerminalPicker({ value, onChange, t }) {
         style={{ minWidth: 168, height: 32, padding: "0 10px", borderRadius: 9,
           border: `1px solid ${open ? "var(--accent)" : "var(--line4)"}`,
           background: "var(--surface)", color: "var(--tx1)", display: "flex", alignItems: "center",
-          gap: 8, fontSize: 12, fontWeight: 650, fontFamily: "inherit", cursor: "default",
+          gap: 8, fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "default",
           boxShadow: open ? "0 0 0 2px var(--acc-soft3)" : "none" }}>
         <TerminalAppIcon app={current[0]} />
         <span style={{ flex: 1, textAlign: "left" }}>{current[1]}</span>
@@ -142,6 +143,9 @@ function TerminalPicker({ value, onChange, t }) {
 function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
   const { t } = useTranslation();
   const localeValue = s.locale ?? "";
+  // 密度不进 ferry-settings:它要在 React 挂载之前就落到根节点上(见 main.jsx),
+  // 单独一个键读起来最省事
+  const density = useDensity();
   return (
     <div style={{  }}>
       <GroupTitle first>{t("settings:theme.groupTitle")}</GroupTitle>
@@ -152,6 +156,16 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
             <option value="dark">{t("settings:theme.dark")}</option>
             <option value="system">{t("settings:theme.system")}</option>
           </Select>
+        </Row>
+      </Card>
+
+      <GroupTitle>{t("settings:density.groupTitle")}</GroupTitle>
+      <Card>
+        <Row first title={t("settings:density.label")} desc={t("settings:density.desc")}>
+          <Segmented value={density} label={t("settings:density.label")}
+            options={[["compact", t("settings:density.compact")],
+              ["standard", t("settings:density.standard")]]}
+            onChange={writeDensity} />
         </Row>
       </Card>
 
@@ -227,7 +241,7 @@ function Sources({ scan, env, scanning, onRescan }) {
   return (
     <div style={{  }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 9px 2px" }}>
-        <div style={{ flex: 1, fontSize: 11, fontWeight: 700, color: "var(--tx5)",
+        <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: "var(--tx5)",
           letterSpacing: ".05em" }}>{t("settings:sources.connectedTools")}</div>
         <div style={{ fontSize: 11, color: "var(--tx4)" }}>
           {t("settings:sources.connectedMeta", { connected, total })}</div>
@@ -332,7 +346,7 @@ function Updates({ s, set, updater }) {
           style={{ padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 650, color: error ? "var(--err-deep)" : "var(--tx1)" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: error ? "var(--err-deep)" : "var(--tx1)" }}>
                 {t(UPDATE_COPY_KEY[phase] || UPDATE_COPY_KEY.idle)}
               </div>
               {update && <div style={{ fontSize: 11, color: "var(--tx4)", marginTop: 3 }}>
@@ -367,7 +381,7 @@ function Updates({ s, set, updater }) {
           </div>}
         </div>
         {update?.body && <div style={{ borderTop: "1px solid var(--line6)", padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
           <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 180,
             overflowY: "auto", fontSize: 12, lineHeight: 1.6, color: "var(--tx3b)" }}>{update.body}</div>
         </div>}
@@ -404,7 +418,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
         <div style={{ width: 196, flex: "none", background: "var(--settings-rail)",
           borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column",
           padding: "16px 12px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".08em",
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx5)", letterSpacing: ".08em",
             padding: "2px 8px 12px" }}>{t("settings:sections.railTitle")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {sections.map(({ key: k, labelKey }) => {
@@ -425,7 +439,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ height: 54, flex: "none", display: "flex", alignItems: "center", gap: 12,
             padding: "0 20px", borderBottom: "1px solid var(--line4)" }}>
-            <div style={{ fontSize: 15, fontWeight: 650, color: "var(--tx1)" }}>{t(title)}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--tx1)" }}>{t(title)}</div>
             <div style={{ flex: 1 }} />
             <button className="hov" onClick={onClose} title={t("settings:sections.close")}
               style={{ width: 28, height: 28, borderRadius: "50%", border: "none",

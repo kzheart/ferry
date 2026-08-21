@@ -40,7 +40,7 @@ function CallSide({ title, snapshot, missing, t }) {
   const parts = snapshot?.parts;
   return <div style={{ minWidth: 0 }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
-      <span style={{ color: "var(--tx4)", fontSize: 10.5, fontWeight: 650 }}>{title}</span>
+      <span style={{ color: "var(--tx4)", fontSize: 10.5, fontWeight: 600 }}>{title}</span>
       {snapshot && <span className="mono" style={{ fontSize: 10.5, color: "var(--tx3)",
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{snapshot.label}</span>}
     </div>
@@ -84,10 +84,10 @@ function IssueCard({ item, t, onLocate }) {
       <span style={{ width: 4, alignSelf: "stretch", minHeight: 26, borderRadius: 4, background: color }} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-          <span style={{ fontSize: 11, color, fontWeight: 700, flex: "none" }}>
+          <span style={{ fontSize: 11, color, fontWeight: 600, flex: "none" }}>
             {t(`migration:preview.differences.${fidelity}`)}
           </span>
-          <span className="mono" style={{ fontSize: 11, color: "var(--tx2)", fontWeight: 650,
+          <span className="mono" style={{ fontSize: 11, color: "var(--tx2)", fontWeight: 600,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</span>
           {targetLabel && <>
             <span style={{ color: "var(--tx5)", fontSize: 11, flex: "none" }}>→</span>
@@ -191,7 +191,7 @@ export default function DifferenceReview({ preview, t, onBack, onLocate }) {
     </div>
     <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "12px 7px 18px" }}>
       {groups.length ? groups.map(group => <section key={group.key} style={{ marginBottom: 17 }}>
-        <div style={{ margin: "0 3px 7px", color: "var(--tx4)", fontSize: 10.5, fontWeight: 650 }}>
+        <div style={{ margin: "0 3px 7px", color: "var(--tx4)", fontSize: 10.5, fontWeight: 600 }}>
           {group.title}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>

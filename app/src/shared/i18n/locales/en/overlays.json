@@ -41,25 +41,16 @@
   "filter": {
     "clear": "Clear filters",
     "done": "Done",
-    "source": "Source",
     "sourceTools": "Source tools",
     "timeRange": "Time range",
     "allTime": "All time",
-    "today": "Today",
     "yesterday": "Yesterday",
-    "last7": "Last 7 days",
-    "last30": "Last 30 days",
     "earlier": "Earlier",
-    "projectDir": "Project directory",
-    "noDirs": "No directories",
-    "tags": "Tags",
-    "content": "Content",
-    "onlyMigrated": "Only migrated",
-    "onlySubSessions": "Only with sub-sessions",
     "showArchived": "Show archived",
     "targetTool": "Target tool",
     "allTargets": "All targets",
-    "status": "Status"
+    "status": "Status",
+    "today": "Today"
   },
   "loss": {
     "keepTitle": "Kept natively",
