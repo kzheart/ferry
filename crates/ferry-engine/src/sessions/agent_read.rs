@@ -214,7 +214,7 @@ fn fit_context_result(mut result: Value, budget: usize) -> Map<String, Value> {
     result.as_object().cloned().unwrap_or_default()
 }
 
-/// `agent_session_read` 的 context 档位。
+/// `session_read` 的 context 档位。
 #[allow(clippy::too_many_arguments)]
 pub fn get_session_context(
     tool: &str,
@@ -475,7 +475,7 @@ pub fn char_find(haystack: &str, needle: &str) -> Option<usize> {
         .map(|byte| haystack[..byte].chars().count())
 }
 
-/// `agent_session_read` 的 search 档位。
+/// `session_read` 的 search 档位。
 #[allow(clippy::too_many_arguments)]
 pub fn search_session_content(
     tool: &str,
@@ -654,7 +654,7 @@ pub fn search_session_content(
     finalize_dto(result)
 }
 
-/// `agent_session_read` 分发：给了 `terms` 走内容检索，否则走上下文分页。
+/// `session_read` 分发：给了 `terms` 走内容检索，否则走上下文分页。
 #[allow(clippy::too_many_arguments)]
 pub fn session_read(
     tool: &str,
@@ -747,7 +747,7 @@ mod tests {
         assert!(clipped);
     }
 
-    /// `agent_session_read` 的分发默认值只在**缺键**时生效；键在而值为 `null`
+    /// `session_read` 的分发默认值只在**缺键**时生效；键在而值为 `null`
     /// 会走到 `isinstance(None, bool)` 的假分支（`agent_read.py:400-401`）。
     #[test]
     fn session_read_rejects_a_non_boolean_include_tool_outputs() {

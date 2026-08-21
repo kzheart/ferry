@@ -240,7 +240,7 @@ fn scan_regex(
     (hits, meta)
 }
 
-/// `agent_search_sessions` 的入参；字段与 RPC 参数同名。
+/// `content_search` 的入参；字段与 RPC 参数同名。
 #[derive(Default)]
 pub struct SearchRequest<'a> {
     pub query: Option<&'a Value>,

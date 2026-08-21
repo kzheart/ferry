@@ -146,6 +146,49 @@ impl DomainError {
         )
     }
 
+    /// callers 矩阵拒绝：方法存在，但不对这条传输通道**按方法名分发**。
+    ///
+    /// 复用 `rpc.unknown_method` 是刻意的：从这条通道看出去，这个方法名就是
+    /// 不可分发的；单独造码会把「传输策略」泄漏成新的错误契约。
+    pub fn method_not_exposed(method: &str, caller: &str) -> Self {
+        let mut params = Map::new();
+        params.insert("method".into(), Value::from(method));
+        params.insert("caller".into(), Value::from(caller));
+        params.insert("reason".into(), Value::from("caller_not_allowed"));
+        Self::new(
+            "rpc.unknown_method",
+            "UnknownMethodError",
+            format!("方法未对 {caller} 暴露: {method}"),
+            params,
+        )
+    }
+
+    /// 传输层管理方法被拒（如 App 模式下 CLI 想关引擎）。
+    pub fn transport_refused(reason: &str, message: &str, recovery: &str) -> Self {
+        let mut params = Map::new();
+        params.insert("reason".into(), Value::from(reason));
+        params.insert("recovery".into(), Value::from(recovery));
+        Self::new(
+            "rpc.invalid_request",
+            "InvalidRequestError",
+            message,
+            params,
+        )
+    }
+
+    /// CLI 客户端侧的连接/传输失败：连不上、拉不起、握手不一致。
+    pub fn engine_unavailable(reason: &str, message: impl Into<String>, recovery: &str) -> Self {
+        let mut params = Map::new();
+        params.insert("reason".into(), Value::from(reason));
+        params.insert("recovery".into(), Value::from(recovery));
+        Self::new(
+            "engine.unavailable",
+            "EngineUnavailableError",
+            message,
+            params,
+        )
+    }
+
     pub fn missing_param(param: &str) -> Self {
         let mut params = Map::new();
         params.insert("param".into(), Value::from(param));

@@ -33,8 +33,11 @@ use super::scan_progress::TRACKER;
 
 /// ref 是稳定的会话句柄，但钉内容的读取/编辑路径在会话被写入后需要重扫。
 /// agent 只看得到结构化错误的 params，所以恢复办法必须以数据形式给出。
-/// **逐字对齐 `index.py:85-88`，测试逐字断言。**
-pub const REF_RECOVERY_HINT: &str = "the session changed since the last scan; call session_search \
+///
+/// 措辞对调用方中立：不点名任何 RPC 方法。`session_search` 只对 ui caller 开放，
+/// 照着方法名重试的 CLI 会撞 `caller_not_allowed`——恢复提示不能把人引到死路。
+/// 测试逐字断言。
+pub const REF_RECOVERY_HINT: &str = "the session changed since the last scan; run a session search \
                                      again to re-index it, then retry with the ref from the results";
 
 const DIGEST_CACHE_LIMIT: usize = 50_000;
@@ -1378,8 +1381,12 @@ mod tests {
     fn recovery_hint_is_quoted_verbatim() {
         assert_eq!(
             REF_RECOVERY_HINT,
-            "the session changed since the last scan; call session_search again to re-index it, \
+            "the session changed since the last scan; run a session search again to re-index it, \
              then retry with the ref from the results"
+        );
+        assert!(
+            !REF_RECOVERY_HINT.contains("session_search"),
+            "恢复提示不能点名 caller 专属方法：CLI 照做会撞 caller_not_allowed"
         );
     }
 }

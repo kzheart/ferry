@@ -25,7 +25,7 @@ use crate::server::serve::{log_info, log_warning};
 
 pub const PROTOCOL: &str = FERRY_IPC_PROTOCOL;
 
-/// `agent_session_read` 的 `max_bytes` 默认值。
+/// `session_read` 的 `max_bytes` 默认值。
 ///
 /// 分发层在这里兜底，`sessions::agent_read` 自己也认这个上限。
 pub const DEFAULT_CONTEXT_BYTES: i64 = 24 * 1024;
@@ -33,9 +33,9 @@ pub const DEFAULT_CONTEXT_BYTES: i64 = 24 * 1024;
 /// `agent_prompt` 的默认超时（秒）。
 pub const DEFAULT_AGENT_PROMPT_TIMEOUT_SEC: i64 = 360;
 
-/// `agent_search_sessions` 的分发层参数包。
+/// `content_search` 的分发层参数包。
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentSearchRequest {
+pub struct ContentSearchRequest {
     pub query: Value,
     pub agents: Value,
     pub projects: Value,
@@ -48,9 +48,9 @@ pub struct AgentSearchRequest {
     pub exhaustive: Value,
 }
 
-/// `agent_session_read` 的分发层参数包。
+/// `session_read` 的分发层参数包。
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentSessionReadRequest {
+pub struct SessionReadRequest {
     pub tool: Value,
     pub reference: Value,
     pub terms: Value,
@@ -106,9 +106,9 @@ pub trait EngineService: Send + Sync {
         from_ordinal: &Value,
         from_seq: &Value,
     ) -> EngineResult<Value>;
-    fn agent_search_sessions(&self, request: &AgentSearchRequest) -> EngineResult<Value>;
-    fn agent_session_read(&self, request: &AgentSessionReadRequest) -> EngineResult<Value>;
-    fn agent_get_usage(
+    fn content_search(&self, request: &ContentSearchRequest) -> EngineResult<Value>;
+    fn session_read(&self, request: &SessionReadRequest) -> EngineResult<Value>;
+    fn usage_stats(
         &self,
         agents: &Value,
         projects: &Value,
@@ -148,9 +148,9 @@ const DISPATCH_METHOD_NAMES: &[&str] = &[
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",
-    "agent_search_sessions",
-    "agent_session_read",
-    "agent_get_usage",
+    "content_search",
+    "session_read",
+    "usage_stats",
     "agent_prompt",
     "operation.plan",
     "operation.apply",
@@ -203,14 +203,7 @@ impl RpcDispatcher {
     fn handle_inner(&self, request: &str) -> Value {
         let mut request_id = "unknown".to_string();
         match self.route(request, &mut request_id) {
-            Ok(result) => {
-                let mut envelope = Map::new();
-                envelope.insert("protocol".into(), Value::from(PROTOCOL));
-                envelope.insert("id".into(), Value::from(request_id));
-                envelope.insert("ok".into(), Value::Bool(true));
-                envelope.insert("result".into(), result);
-                Value::Object(envelope)
-            }
+            Ok(result) => result_envelope(result, &request_id),
             Err(EngineError::Domain(error)) => {
                 log_warning(&format!("RPC domain error: {}", error.message()));
                 error_envelope(&error, &request_id)
@@ -313,7 +306,7 @@ impl RpcDispatcher {
                 required(params, "from_ordinal")?,
                 required(params, "from_seq")?,
             ),
-            "agent_search_sessions" => service.agent_search_sessions(&AgentSearchRequest {
+            "content_search" => service.content_search(&ContentSearchRequest {
                 query: default_of(params, "query", Value::from("")),
                 agents: optional(params, "agents").clone(),
                 projects: optional(params, "projects").clone(),
@@ -329,7 +322,7 @@ impl RpcDispatcher {
                 regex: optional(params, "regex").clone(),
                 exhaustive: default_of(params, "exhaustive", Value::Bool(false)),
             }),
-            "agent_session_read" => service.agent_session_read(&AgentSessionReadRequest {
+            "session_read" => service.session_read(&SessionReadRequest {
                 tool: required(params, "tool")?.clone(),
                 reference: required(params, "ref")?.clone(),
                 terms: optional(params, "terms").clone(),
@@ -343,7 +336,7 @@ impl RpcDispatcher {
                 ),
                 max_bytes: default_of(params, "max_bytes", Value::from(DEFAULT_CONTEXT_BYTES)),
             }),
-            "agent_get_usage" => service.agent_get_usage(
+            "usage_stats" => service.usage_stats(
                 optional(params, "agents"),
                 optional(params, "projects"),
                 optional(params, "time_range"),
@@ -384,6 +377,18 @@ fn optional<'a>(params: &'a Map<String, Value>, key: &str) -> &'a Value {
 /// `p.get(key, default)`：键存在就用它（哪怕是 null），否则用默认值。
 fn default_of(params: &Map<String, Value>, key: &str, default: Value) -> Value {
     params.get(key).cloned().unwrap_or(default)
+}
+
+/// 成功信封 `{protocol, id, ok:true, result}`。
+///
+/// socket 传输层直答 `daemon.*` 时也用它：全进程只有这一处造成功帧。
+pub fn result_envelope(result: Value, request_id: &str) -> Value {
+    let mut envelope = Map::new();
+    envelope.insert("protocol".into(), Value::from(PROTOCOL));
+    envelope.insert("id".into(), Value::from(request_id));
+    envelope.insert("ok".into(), Value::Bool(true));
+    envelope.insert("result".into(), result);
+    Value::Object(envelope)
 }
 
 /// `{code, params(+message), category, retryable}`。
@@ -559,9 +564,9 @@ mod tests {
                           "from_ordinal" => from_ordinal, "from_seq" => from_seq),
             )
         }
-        fn agent_search_sessions(&self, request: &AgentSearchRequest) -> EngineResult<Value> {
+        fn content_search(&self, request: &ContentSearchRequest) -> EngineResult<Value> {
             self.record(
-                "agent_search_sessions",
+                "content_search",
                 recorded!("s",
                     "query" => request.query, "agents" => request.agents,
                     "projects" => request.projects, "time_range" => request.time_range,
@@ -571,9 +576,9 @@ mod tests {
                     "exhaustive" => request.exhaustive),
             )
         }
-        fn agent_session_read(&self, request: &AgentSessionReadRequest) -> EngineResult<Value> {
+        fn session_read(&self, request: &SessionReadRequest) -> EngineResult<Value> {
             self.record(
-                "agent_session_read",
+                "session_read",
                 recorded!("r",
                     "tool" => request.tool, "ref" => request.reference,
                     "terms" => request.terms, "roles" => request.roles,
@@ -582,14 +587,14 @@ mod tests {
                     "max_bytes" => request.max_bytes),
             )
         }
-        fn agent_get_usage(
+        fn usage_stats(
             &self,
             agents: &Value,
             projects: &Value,
             time_range: &Value,
         ) -> EngineResult<Value> {
             self.record(
-                "agent_get_usage",
+                "usage_stats",
                 recorded!("u", "agents" => agents, "projects" => projects,
                           "time_range" => time_range),
             )
@@ -636,6 +641,20 @@ mod tests {
     #[test]
     fn dispatch_table_matches_the_generated_contract() {
         assert_eq!(DISPATCH_METHOD_NAMES, ENGINE_METHOD_NAMES);
+    }
+
+    /// callers 矩阵的 cli 列只能从方法表里取,管理面(`daemon.shutdown`)由
+    /// socket 传输层在分发前自己拦掉,永远不进方法表。
+    #[test]
+    fn cli_callers_are_a_subset_of_the_method_table() {
+        use crate::contracts::engine_methods::CLI_METHOD_NAMES;
+        for method in CLI_METHOD_NAMES {
+            assert!(ENGINE_METHOD_NAMES.contains(method), "method={method}");
+        }
+        assert!(!ENGINE_METHOD_NAMES.contains(&"daemon.shutdown"));
+        for internal in ["agent_prompt", "runtime_sessions.commit", "session_search"] {
+            assert!(!CLI_METHOD_NAMES.contains(&internal), "method={internal}");
+        }
     }
 
     #[test]
@@ -880,7 +899,7 @@ mod tests {
         call(&engine, "pricing", json!({}), "x");
         assert_eq!(service.last().1["force"], json!(false));
 
-        call(&engine, "agent_search_sessions", json!({}), "x");
+        call(&engine, "content_search", json!({}), "x");
         let (_, payload) = service.last();
         assert_eq!(payload["query"], json!(""));
         assert_eq!(payload["limit"], json!(20));
@@ -891,7 +910,7 @@ mod tests {
 
         call(
             &engine,
-            "agent_session_read",
+            "session_read",
             json!({"tool": "claude", "ref": "fsr_a"}),
             "x",
         );
@@ -942,9 +961,9 @@ mod tests {
                 "runtime_sessions.truncate",
                 json!({"session_id": "s", "from_ordinal": 0, "from_seq": 0}),
             ),
-            ("agent_search_sessions", json!({})),
-            ("agent_session_read", json!({"tool": "c", "ref": "r"})),
-            ("agent_get_usage", json!({})),
+            ("content_search", json!({})),
+            ("session_read", json!({"tool": "c", "ref": "r"})),
+            ("usage_stats", json!({})),
             (
                 "agent_prompt",
                 json!({"tool": "c", "ref": "r", "prompt": "p"}),

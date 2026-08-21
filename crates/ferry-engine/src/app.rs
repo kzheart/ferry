@@ -6,6 +6,7 @@
 //! （`isinstance` 假分支落到哪个错误、缺键与显式 `null` 的区别等）。
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::{Map, Value};
 
@@ -21,7 +22,7 @@ use crate::operations::types::{
 use crate::operations::{history, metadata, verification};
 use crate::runtime::sessions as runtime_sessions;
 use crate::server::notify::Notifier;
-use crate::server::rpc::{AgentSearchRequest, AgentSessionReadRequest, EngineService};
+use crate::server::rpc::{ContentSearchRequest, EngineService, SessionReadRequest};
 use crate::sessions::content_index::ContentIndex;
 use crate::sessions::index::{AgentSessionIndex, IndexedSession, SessionPorts};
 use crate::sessions::live::LiveIndexService;
@@ -73,14 +74,70 @@ fn project(record: &IndexedSession) -> OperationSession {
     }
 }
 
+/// `session_changed` 自愈的重试上限（首次尝试之外的次数）。
+const HEAL_ATTEMPTS: u32 = 3;
+
+/// 每次重试前的静默等待。agent 的写入是阵发的，几百毫秒足以落进写入间隙；
+/// 定向重扫本身实测约 0.75s，这个间隔不构成额外的用户可感延迟。
+const HEAL_BACKOFF: Duration = Duration::from_millis(250);
+
+/// 刷新完成、即将重试 resolve 时的观察点；只在测试里注入。
+type HealHook = Arc<dyn Fn(u32) + Send + Sync>;
+
+/// 自愈策略。次数与间隔可注入，测试据此确定性驱动而不真的 sleep。
+struct HealPolicy {
+    attempts: u32,
+    backoff: Duration,
+    hook: Option<HealHook>,
+}
+
+/// 该错误是否是「上次扫描后会话又被写过」这一**瞬态**失败。
+/// 其余 reason（`session_missing` / `unknown_ref` / `tool_mismatch`）重扫也不会
+/// 变，必须立即抛出。
+fn is_session_changed(error: &DomainError) -> bool {
+    error.code == "agent.reference_invalid"
+        && error.params().get("reason").and_then(Value::as_str) == Some("session_changed")
+}
+
 /// `operations::types::SessionResolver` 的生产实现，背靠 [`AgentSessionIndex`]。
+///
+/// 操作路径（`operation.plan` 全线）在这里做有界自愈：`pin_content=true` 撞上
+/// `session_changed` 时定向重扫该工具后用同一个 ref 重试（ref 按
+/// `(tool, canonical)` 签发，刷新不换发）。UI 只读浏览走 `pin_content=false`、
+/// Agent 读取路径直接调 `AgentSessionIndex::resolve`，都不受影响。
 pub struct IndexResolver {
     index: Arc<AgentSessionIndex>,
+    heal: HealPolicy,
 }
 
 impl IndexResolver {
     pub fn new(index: Arc<AgentSessionIndex>) -> Self {
-        Self { index }
+        Self {
+            index,
+            heal: HealPolicy {
+                attempts: HEAL_ATTEMPTS,
+                backoff: HEAL_BACKOFF,
+                hook: None,
+            },
+        }
+    }
+
+    /// 测试专用：把重试次数、间隔与观察点注进来，避免依赖真实 sleep。
+    #[cfg(test)]
+    fn with_heal_policy(
+        index: Arc<AgentSessionIndex>,
+        attempts: u32,
+        backoff: Duration,
+        hook: Option<HealHook>,
+    ) -> Self {
+        Self {
+            index,
+            heal: HealPolicy {
+                attempts,
+                backoff,
+                hook,
+            },
+        }
     }
 
     /// 把窄记录换回索引里的完整记录（`read_indexed_session` 需要
@@ -96,7 +153,29 @@ impl SessionResolver for IndexResolver {
     fn resolve(&self, tool: &str, reference: &str) -> DomainResult<OperationSession> {
         // Python 的 `AgentSessionIndex.resolve` 默认 `pin_content=True`；
         // operations 全线走的都是这条钉内容的路径。
-        Ok(project(&self.index.resolve(tool, reference, true)?))
+        let mut attempt = 0;
+        loop {
+            let failure = match self.index.resolve(tool, reference, true) {
+                Ok(record) => return Ok(project(&record)),
+                Err(error) => error,
+            };
+            if attempt >= self.heal.attempts || !is_session_changed(&failure) {
+                // fail-closed 语义不变：重试耗尽仍在变，原样抛给调用方。
+                return Err(failure);
+            }
+            attempt += 1;
+            if !self.heal.backoff.is_zero() {
+                std::thread::sleep(self.heal.backoff);
+            }
+            // 失败的 pin 分支已把刚算出的真实摘要写回摘要缓存，这里的重扫因此
+            // 能拿到一致指纹；重扫本身失败就不再遮盖原始的 session_changed。
+            if self.index.refresh_tool(tool).is_err() {
+                return Err(failure);
+            }
+            if let Some(hook) = &self.heal.hook {
+                hook(attempt);
+            }
+        }
     }
 
     fn resolve_message_locator(
@@ -227,6 +306,23 @@ impl Engine {
         }
     }
 
+    /// `daemon.status` 用的内容索引覆盖度：只读快照，不触发扫描也不入队。
+    ///
+    /// 没扫过库就如实说「还没扫」，而不是伪装成 ready——CLI 的 `scan --wait`
+    /// 正是靠这个字段判断要不要继续等。
+    pub fn content_index_status(&self) -> Value {
+        let Some(content_index) = &self.content_index else {
+            return json_status(false, "content_index_unavailable");
+        };
+        let Some((_tools, records, _generation)) = self.index.snapshot_with_status() else {
+            return json_status(false, "not_scanned");
+        };
+        match content_index.coverage(&records) {
+            Ok(status) => Value::Object(status),
+            Err(error) => json_status(false, error.code),
+        }
+    }
+
     fn live_service(&self) -> Option<Arc<LiveIndexService>> {
         self.live
             .lock()
@@ -331,6 +427,13 @@ impl Engine {
         }
         Ok(())
     }
+}
+
+fn json_status(ready: bool, reason: &str) -> Value {
+    let mut status = Map::new();
+    status.insert("ready".into(), Value::Bool(ready));
+    status.insert("reason".into(), Value::from(reason));
+    Value::Object(status)
 }
 
 fn request_error(message: &str, params: Map<String, Value>) -> DomainError {
@@ -531,7 +634,7 @@ impl EngineService for Engine {
         )
     }
 
-    fn agent_search_sessions(&self, request: &AgentSearchRequest) -> EngineResult<Value> {
+    fn content_search(&self, request: &ContentSearchRequest) -> EngineResult<Value> {
         Ok(Value::Object(search::search_sessions(
             &SearchRequest {
                 query: Some(&request.query),
@@ -550,7 +653,7 @@ impl EngineService for Engine {
         )?))
     }
 
-    fn agent_session_read(&self, request: &AgentSessionReadRequest) -> EngineResult<Value> {
+    fn session_read(&self, request: &SessionReadRequest) -> EngineResult<Value> {
         let name = tool_name(&request.tool)?;
         SessionPorts::adapter(self.ports.as_ref(), name)?.require_browser()?;
         Ok(Value::Object(agent_read::session_read(
@@ -566,7 +669,7 @@ impl EngineService for Engine {
         )?))
     }
 
-    fn agent_get_usage(
+    fn usage_stats(
         &self,
         agents: &Value,
         projects: &Value,
@@ -680,5 +783,129 @@ mod tests {
         let error = tool_name(&json!(null)).unwrap_err();
         assert_eq!(error.code, "tool.unknown");
         assert_eq!(error.message(), "未知工具: None");
+    }
+
+    // -----------------------------------------------------------------------
+    // §9.1 操作路径解析的 session_changed 自愈
+    // -----------------------------------------------------------------------
+
+    use crate::adapters::contracts::StorageKind;
+    use crate::sessions::index::golden_tests::{harness, Harness};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// 首扫后取一个文件型会话；它的 `canonical_ref` 是临时目录里的真实文件。
+    fn file_session(harness: &Harness) -> IndexedSession {
+        harness
+            .index
+            .refresh()
+            .expect("首扫成功")
+            .into_iter()
+            .find(|record| record.storage_kind == StorageKind::File)
+            .expect("有文件型会话")
+    }
+
+    /// 模拟 agent 追加写入：JSONL 会话的合法增量就是多一行。
+    fn append_line(path: &str, line: &str) {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .expect("会话文件可追加");
+        writeln!(file, "{line}").expect("追加成功");
+    }
+
+    /// 计数用的观察点：返回 (hook, 计数器)。
+    fn counting_hook() -> (HealHook, Arc<AtomicU32>) {
+        let counter = Arc::new(AtomicU32::new(0));
+        let sink = Arc::clone(&counter);
+        let hook: HealHook = Arc::new(move |_attempt| {
+            sink.fetch_add(1, Ordering::SeqCst);
+        });
+        (hook, counter)
+    }
+
+    #[test]
+    fn session_changed_heals_by_rescanning_and_retrying_the_same_ref() {
+        let harness = harness();
+        let target = file_session(&harness);
+        // 扫描之后 agent 又写了一笔：不自愈的话这里就是用户看到的
+        // agent.reference_invalid。
+        append_line(
+            &target.canonical_ref,
+            r#"{"type":"user","content":"扫描后追加"}"#,
+        );
+
+        let (hook, retries) = counting_hook();
+        let resolver = IndexResolver::with_heal_policy(
+            Arc::clone(&harness.index),
+            HEAL_ATTEMPTS,
+            Duration::ZERO,
+            Some(hook),
+        );
+        let healed = resolver
+            .resolve(&target.tool, &target.opaque_ref)
+            .expect("自愈后解析成功");
+
+        // ref 稳定、revision 跟到最新内容，且只用了一轮重试。
+        assert_eq!(healed.opaque_ref, target.opaque_ref);
+        assert_ne!(healed.revision, target.revision);
+        assert_eq!(retries.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn non_transient_reasons_fail_immediately_without_a_rescan() {
+        let harness = harness();
+        let target = file_session(&harness);
+        std::fs::remove_file(&target.canonical_ref).expect("删除会话文件");
+
+        let (hook, retries) = counting_hook();
+        let resolver = IndexResolver::with_heal_policy(
+            Arc::clone(&harness.index),
+            HEAL_ATTEMPTS,
+            Duration::ZERO,
+            Some(hook),
+        );
+        let error = resolver
+            .resolve(&target.tool, &target.opaque_ref)
+            .unwrap_err();
+        assert_eq!(error.code, "agent.reference_invalid");
+        assert_eq!(error.params()["reason"], Value::from("session_missing"));
+        assert_eq!(retries.load(Ordering::SeqCst), 0);
+
+        // tool 配错同样是终态。
+        let error = resolver.resolve("nope", &target.opaque_ref).unwrap_err();
+        assert_eq!(error.params()["reason"], Value::from("tool_mismatch"));
+        assert_eq!(retries.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_session_that_keeps_changing_exhausts_the_retries_and_reports_session_changed() {
+        let harness = harness();
+        let target = file_session(&harness);
+        append_line(&target.canonical_ref, r#"{"seq":0}"#);
+
+        // 观察点在重扫之后、重试 resolve 之前触发：每轮都让文件再变一次，
+        // 等价于一个从不安静的写入者，但完全确定性。
+        let counter = Arc::new(AtomicU32::new(0));
+        let sink = Arc::clone(&counter);
+        let path = target.canonical_ref.clone();
+        let hook: HealHook = Arc::new(move |attempt| {
+            sink.fetch_add(1, Ordering::SeqCst);
+            append_line(&path, &format!(r#"{{"seq":{attempt}}}"#));
+        });
+        let resolver = IndexResolver::with_heal_policy(
+            Arc::clone(&harness.index),
+            HEAL_ATTEMPTS,
+            Duration::ZERO,
+            Some(hook),
+        );
+
+        let error = resolver
+            .resolve(&target.tool, &target.opaque_ref)
+            .unwrap_err();
+        assert_eq!(error.code, "agent.reference_invalid");
+        assert_eq!(error.params()["reason"], Value::from("session_changed"));
+        assert_eq!(error.message(), "ref 在扫描后已变化，请重新搜索");
+        assert_eq!(counter.load(Ordering::SeqCst), HEAL_ATTEMPTS);
     }
 }

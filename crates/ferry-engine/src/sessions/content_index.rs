@@ -442,6 +442,45 @@ impl ContentIndex {
         Ok(status)
     }
 
+    /// 只读覆盖度：与 [`Self::sync`] 同口径统计，但不写库、不入队、不清陈旧。
+    ///
+    /// `daemon.status` 与 `ferry scan --wait` 靠它判断内容索引是否已就绪；
+    /// 状态查询必须无副作用，所以不能借道 `sync`。
+    pub fn coverage(&self, records: &[IndexedSession]) -> DomainResult<Map<String, Value>> {
+        let mut status = Map::new();
+        if self.with_db(|_| Ok(()))?.is_none() {
+            status.insert("ready".into(), Value::Bool(false));
+            status.insert(
+                "reason".into(),
+                self.unavailable_reason()
+                    .map(Value::from)
+                    .unwrap_or(Value::Null),
+            );
+            return Ok(status);
+        }
+        let stored = self.stored_revisions()?;
+        let pending = records
+            .iter()
+            .filter(|record| {
+                stored
+                    .get(&(record.tool.clone(), record.canonical_ref.clone()))
+                    .map(String::as_str)
+                    != Some(record.revision.as_str())
+            })
+            .count();
+        status.insert(
+            "ready".into(),
+            Value::Bool(pending == 0 && !self.building()),
+        );
+        status.insert(
+            "indexed_sessions".into(),
+            Value::from(records.len() - pending),
+        );
+        status.insert("pending_sessions".into(), Value::from(pending));
+        status.insert("building".into(), Value::Bool(self.building()));
+        Ok(status)
+    }
+
     /// 等后台构建收敛；测试与预热用，请求路径不等。
     pub fn wait_until_idle(&self, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;

@@ -52,10 +52,12 @@ pub fn build_cli_deps() -> Result<CliDeps, String> {
     let warm = Arc::clone(&engine);
     let live = Arc::clone(&engine);
     let close = Arc::clone(&engine);
+    let status = Arc::clone(&engine);
     Ok(CliDeps {
         service,
         warm_agent_search: Some(Arc::new(move || warm.warm_agent_search())),
         enable_live_updates: Some(Arc::new(move |notifier| live.enable_live_updates(notifier))),
         close: Some(Arc::new(move || close.close())),
+        content_index_status: Some(Arc::new(move || status.content_index_status())),
     })
 }

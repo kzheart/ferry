@@ -1,16 +1,21 @@
-//! 常驻模式：stdin 每行一个请求，stdout 每行一个响应或事件帧。
+//! 常驻模式：每行一个请求，每行一个响应或事件帧。
 //!
 //! 硬约束（§2.1 第 3 / 7 条）：
 //! - `PARALLEL_READ_METHOD_NAMES` 的 9 个方法进 4-worker 只读池，可乱序完成；
 //!   其余请求一律进单 worker 池，严格保序；
-//! - stdout 只有一把写锁，响应与事件帧共用，保证行级原子；
+//! - 每条输出通道只有一把写锁，响应与事件帧共用，保证行级原子；
 //! - 日志只能走 stderr——stdout 上任何杂质都会打死连接；
 //! - EOF 后必须等全部在途请求完成再退出；worker 里的失败不能被吞掉。
+//!
+//! stdio 与本地 socket 是两种传输、**同一对工作道**：[`Lanes`] 由进程共享，
+//! 多开一条 socket 连接不会多开一条串行道，否则「mutation 全局串行」会失效。
+//! 传输差异全部收在 [`LanePolicy`] 里——socket 的 callers 过滤与 `daemon.*`
+//! 拦截就是一条自定义 policy，读线程直接回帧、不进工作道。
 
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,10 +34,38 @@ pub type ServeHandler = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
+/// 一行请求的处置。
+pub enum Lane {
+    /// 传输层直接回帧：不经 handler、不占工作道（`daemon.*` 与 callers 拒绝）。
+    Immediate(Value),
+    /// 进 4-worker 只读池。
+    Parallel,
+    /// 进单 worker 串行池。
+    Serial,
+}
+
+/// 按原始请求行决定分道方式。
+pub type LanePolicy = Arc<dyn Fn(&str) -> Lane + Send + Sync>;
+
+/// 默认分道：契约的 parallel-read 表说了算，其余串行。
+pub fn contract_lane_policy() -> LanePolicy {
+    Arc::new(|request: &str| {
+        if request_method(request)
+            .as_deref()
+            .is_some_and(is_parallel_read)
+        {
+            Lane::Parallel
+        } else {
+            Lane::Serial
+        }
+    })
+}
+
 /// 固定大小的线程池（对齐 `ThreadPoolExecutor`）。
 struct Pool {
-    sender: Option<Sender<Job>>,
-    workers: Vec<JoinHandle<()>>,
+    /// 进程共享，`shutdown` 只能拿 `&self`，所以 sender/workers 都要内部可变。
+    sender: Mutex<Option<Sender<Job>>>,
+    workers: Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl Pool {
@@ -59,22 +92,99 @@ impl Pool {
             );
         }
         Self {
-            sender: Some(sender),
-            workers,
+            sender: Mutex::new(Some(sender)),
+            workers: Mutex::new(workers),
         }
     }
 
     fn submit(&self, job: Job) {
-        if let Some(sender) = &self.sender {
+        if let Some(sender) = self
+            .sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+        {
             let _ = sender.send(job);
         }
     }
 
     /// 等价 `shutdown(wait=True)`：不再接新任务，等在途任务跑完。
-    fn shutdown(mut self) {
-        self.sender.take();
-        for worker in self.workers.drain(..) {
+    fn shutdown(&self) {
+        self.sender
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        let workers: Vec<JoinHandle<()>> = self
+            .workers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .drain(..)
+            .collect();
+        for worker in workers {
             let _ = worker.join();
+        }
+    }
+}
+
+/// 进程级的两条工作道：1 串行 + 4 并行读。
+pub struct Lanes {
+    serial: Pool,
+    reads: Pool,
+}
+
+impl Lanes {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            serial: Pool::new(1, "engine-serial"),
+            reads: Pool::new(MAX_PARALLEL_READS, "engine-read"),
+        })
+    }
+
+    fn submit(&self, parallel: bool, job: Job) {
+        if parallel {
+            self.reads.submit(job);
+        } else {
+            self.serial.submit(job);
+        }
+    }
+
+    /// 先关只读池再关串行池，两者都等在途请求结束。
+    pub fn shutdown(&self) {
+        self.reads.shutdown();
+        self.serial.shutdown();
+    }
+}
+
+/// 本次 pump 提交的在途任务计数。
+///
+/// 共享工作道之后不能再靠「关池子」等自己那批请求：一条连接读到 EOF 时，
+/// 别的连接可能正用着同一条道。
+#[derive(Default)]
+struct InFlight {
+    count: Mutex<usize>,
+    idle: Condvar,
+}
+
+impl InFlight {
+    fn enter(&self) {
+        *self.count.lock().unwrap_or_else(|error| error.into_inner()) += 1;
+    }
+
+    fn leave(&self) {
+        let mut count = self.count.lock().unwrap_or_else(|error| error.into_inner());
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            self.idle.notify_all();
+        }
+    }
+
+    fn wait_until_idle(&self) {
+        let mut count = self.count.lock().unwrap_or_else(|error| error.into_inner());
+        while *count > 0 {
+            count = self
+                .idle
+                .wait(count)
+                .unwrap_or_else(|error| error.into_inner());
         }
     }
 }
@@ -87,68 +197,119 @@ fn request_method(request: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// 处理 JSONL RPC：安全的纯读方法有限并发，其余请求严格串行。
-pub fn serve<R: BufRead>(
-    input: R,
-    output: Box<dyn Write + Send>,
-    handler: ServeHandler,
-    notifier: Option<&Notifier>,
-) -> Result<(), String> {
+/// 一条输出通道的单写者。响应与事件帧共用它，保证行级原子。
+fn line_writer(output: Box<dyn Write + Send>, channel: &'static str) -> LineWriter {
     let output = Arc::new(Mutex::new(output));
-    let write_line: LineWriter = {
-        let output = Arc::clone(&output);
-        Arc::new(move |line: &str| {
-            let mut stream = output.lock().unwrap_or_else(|error| error.into_inner());
-            // 写失败（宿主已断开）不能把引擎主流程打崩，只记 stderr。
-            if stream
-                .write_all(line.as_bytes())
-                .and_then(|()| stream.write_all(b"\n"))
-                .and_then(|()| stream.flush())
-                .is_err()
-            {
-                log_warning("stdout 写入失败，宿主可能已断开");
-            }
-        })
-    };
-    if let Some(notifier) = notifier {
-        // 事件帧与响应共用同一把输出锁，保证行级原子性。
-        notifier.bind(Arc::clone(&write_line));
-    }
+    Arc::new(move |line: &str| {
+        let mut stream = output.lock().unwrap_or_else(|error| error.into_inner());
+        // 写失败（对端已断开）不能把引擎主流程打崩，只记 stderr。
+        if stream
+            .write_all(line.as_bytes())
+            .and_then(|()| stream.write_all(b"\n"))
+            .and_then(|()| stream.flush())
+            .is_err()
+        {
+            log_warning(&format!("{channel} 写入失败，对端可能已断开"));
+        }
+    })
+}
 
-    let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-    let serial = Pool::new(1, "engine-serial");
-    let reads = Pool::new(MAX_PARALLEL_READS, "engine-read");
-
+/// 读循环：逐行分道，返回前等自己提交的任务写完。
+fn pump<R: BufRead>(
+    input: R,
+    write_line: &LineWriter,
+    handler: &ServeHandler,
+    lanes: &Lanes,
+    policy: &LanePolicy,
+    failures: &Arc<Mutex<Vec<String>>>,
+) {
+    let in_flight = Arc::new(InFlight::default());
     for line in input.lines() {
         let Ok(line) = line else { break };
         let request = line.trim().to_string();
         if request.is_empty() {
             continue;
         }
-        let parallel = request_method(&request)
-            .as_deref()
-            .is_some_and(is_parallel_read);
-        let handler = Arc::clone(&handler);
-        let write_line = Arc::clone(&write_line);
-        let failures = Arc::clone(&failures);
-        let job: Job = Box::new(move || match handler(&request) {
-            Ok(response) => write_line(&response.to_string()),
-            Err(error) => failures
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .push(error),
-        });
-        if parallel {
-            reads.submit(job);
-        } else {
-            serial.submit(job);
-        }
+        let parallel = match policy(&request) {
+            Lane::Immediate(response) => {
+                write_line(&response.to_string());
+                continue;
+            }
+            Lane::Parallel => true,
+            Lane::Serial => false,
+        };
+        let handler = Arc::clone(handler);
+        let write_line = Arc::clone(write_line);
+        let failures = Arc::clone(failures);
+        let in_flight = Arc::clone(&in_flight);
+        in_flight.enter();
+        lanes.submit(
+            parallel,
+            Box::new(move || {
+                match handler(&request) {
+                    Ok(response) => write_line(&response.to_string()),
+                    Err(error) => failures
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .push(error),
+                }
+                in_flight.leave();
+            }),
+        );
     }
+    in_flight.wait_until_idle();
+}
 
-    // EOF：先关只读池再关串行池，两者都等在途请求结束。
-    reads.shutdown();
-    serial.shutdown();
+/// stdio 常驻：独占一对工作道，EOF 后关池退出。
+pub fn serve<R: BufRead>(
+    input: R,
+    output: Box<dyn Write + Send>,
+    handler: ServeHandler,
+    notifier: Option<&Notifier>,
+) -> Result<(), String> {
+    serve_on(Lanes::new(), input, output, handler, notifier)
+}
 
+/// stdio 常驻，但工作道由调用方给（App sidecar 与 socket 连接共用同一对）。
+pub fn serve_on<R: BufRead>(
+    lanes: Arc<Lanes>,
+    input: R,
+    output: Box<dyn Write + Send>,
+    handler: ServeHandler,
+    notifier: Option<&Notifier>,
+) -> Result<(), String> {
+    let write_line = line_writer(output, "stdout");
+    if let Some(notifier) = notifier {
+        // 事件帧与响应共用同一把输出锁，保证行级原子性。
+        notifier.bind(Arc::clone(&write_line));
+    }
+    let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let policy = contract_lane_policy();
+    pump(input, &write_line, &handler, &lanes, &policy, &failures);
+    // EOF：等在途请求结束再退出。
+    lanes.shutdown();
+
+    let failures = failures.lock().unwrap_or_else(|error| error.into_inner());
+    match failures.first() {
+        Some(error) => Err(error.clone()),
+        None => Ok(()),
+    }
+}
+
+/// 一条 socket 连接：共享工作道，连接结束只等自己的在途请求，不关池。
+///
+/// 事件推送（notifier）不接到 socket：CLI 是请求-响应式调用方，订阅增量事件
+/// 会让「一条连接一次调用」的客户端拿到读不完的帧。
+pub fn serve_connection<R: BufRead>(
+    lanes: &Arc<Lanes>,
+    input: R,
+    output: Box<dyn Write + Send>,
+    handler: ServeHandler,
+    policy: LanePolicy,
+) -> Result<(), String> {
+    let write_line = line_writer(output, "socket");
+    let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    pump(input, &write_line, &handler, lanes, &policy, &failures);
     let failures = failures.lock().unwrap_or_else(|error| error.into_inner());
     match failures.first() {
         Some(error) => Err(error.clone()),
@@ -212,6 +373,12 @@ fn asctime() -> String {
         (time_of_day % 3600) / 60,
         time_of_day % 60
     )
+}
+
+/// 供 [`crate::server::args`] 的反函数测试用。
+#[cfg(test)]
+pub(crate) fn civil_from_days_for_tests(days: i64) -> (i64, u32, u32) {
+    civil_from_days(days)
 }
 
 /// Howard Hinnant 的 `civil_from_days`。

@@ -403,8 +403,11 @@ fn every_module_file_is_declared() {
         };
         let source = std::fs::read_to_string(&declaring)
             .unwrap_or_else(|_| panic!("缺少 mod 声明文件: {}", declaring.display()));
+        // 平台边界模块（`socket/platform/{unix,windows,unsupported}.rs`）是
+        // cfg 门控的私有 mod，只对边界文件可见；这里要守的是「文件必须被某个
+        // mod 树声明」，不是「必须 pub」。
         assert!(
-            source.contains(&format!("pub mod {stem};")),
+            source.contains(&format!("mod {stem};")),
             "{} 未在 {} 里声明",
             path.display(),
             declaring.display()
