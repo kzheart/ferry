@@ -8,6 +8,16 @@ import type { IpcError } from "../../shared/contracts/generated/ipc.js";
 type ErrorParams = Record<string, unknown>;
 
 function translateError(code: string, params: ErrorParams): string {
+  if (code === "agent.reference_invalid") {
+    // 引擎已经会为 session_changed 定向重扫自愈,走到用户面前的只剩「一直在被写入」
+    // 和「已经不在了」两种;重搜会拿回同一个 ref,所以不能再提示「刷新或重新搜索」。
+    if (params.reason === "session_changed") {
+      return i18n.t("errors:agent.reference_invalid_session_changed");
+    }
+    if (params.reason === "session_missing") {
+      return i18n.t("errors:agent.reference_invalid_session_missing");
+    }
+  }
   if (code === "edit.operation_unsupported") {
     if (params.capability) {
       return i18n.t("errors:edit.operation_unsupported_with_capability", {

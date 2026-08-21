@@ -189,15 +189,16 @@ test("导航轨提示按 railOnly 决定横向位置", () => {
 });
 
 test("引导层只在 step 大于 0 时出现", () => {
+  const steps = [{ target: "rail", view: "library", titleKey: "t", bodyKey: "b" }];
   const { container, rerender } = renderOverlays({
-    guide: { step: 0, onGo: () => {}, onFinish: () => {} },
+    guide: { step: 0, steps, onGo: () => {}, onFinish: () => {} },
   });
   assert.equal(container.innerHTML, "");
 
   rerender(
     <AppOverlays
       {...closedOverlays()}
-      guide={{ step: 1, onGo: () => {}, onFinish: () => {} }}
+      guide={{ step: 1, steps, onGo: () => {}, onFinish: () => {} }}
     />,
   );
   assert.notEqual(container.innerHTML, "");

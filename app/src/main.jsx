@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { initI18n } from "./shared/i18n/index.js";
 import { preloadBrowserCache } from "./modules/browser/useBrowserData.js";
 import App from "./shell/AppController.jsx";
+import { FeaturesProvider } from "./shared/capabilities/features.jsx";
 import "./shared/styles/app.css";
 
 // 平台标记供 CSS 判断(macOS 下窗口透明走 vibrancy);
@@ -30,7 +31,9 @@ Promise.race([
 ]).finally(() => {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>
-      <App />
+      <FeaturesProvider>
+        <App />
+      </FeaturesProvider>
     </React.StrictMode>
   );
   // index.html 在 CSS 就绪前先落了一层底色防白闪,首帧后交还给样式表(macOS 下要透出毛玻璃)

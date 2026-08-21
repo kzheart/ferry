@@ -154,6 +154,10 @@ const SETTINGS_GLYPH = {
   providers: '<rect x="4.6" y="4.6" width="8.8" height="8.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="7.3" y="7.3" width="3.4" height="3.4" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 2.4v2.2M11 2.4v2.2M7 13.4v2.2M11 13.4v2.2M2.4 7h2.2M2.4 11h2.2M13.4 7h2.2M13.4 11h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
   skills: '<path d="M9 2.1 11.1 6.4l4.7.7-3.4 3.3.8 4.7L9 12.9l-4.2 2.2.8-4.7L2.2 7.1l4.7-.7L9 2.1Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
   roles: '<circle cx="9" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.8 15.2c.6-3 2.3-4.5 5.2-4.5s4.6 1.5 5.2 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  // 终端窗口:这一页装的就是「让 agent 在终端里用 Ferry」的那套东西
+  integration: '<rect x="2.3" y="3.4" width="13.4" height="11.2" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.6 7.2 2.3 2.1-2.3 2.1M9.9 11.6h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  // 锥形瓶:测试中的功能
+  experimental: '<path d="M7.3 2.3v4.4L3.1 13a1.6 1.6 0 0 0 1.35 2.5h9.1A1.6 1.6 0 0 0 14.9 13l-4.2-6.3V2.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.4 2.3h5.2M5.1 10.4h7.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
 };
 
 export const SetGlyph = ({ name, color = "var(--tx3b)" }) =>

@@ -19,9 +19,17 @@ const SESSION = {
   dir: "/repo/ferry", mtime: "2026-01-01T00:00:00Z", size: 1024, msgs: 2,
 };
 
+// 特性开关:宿主侧的事实源在这里由用例决定。
+const host = vi.hoisted(() => ({ builtinAgent: true }));
+
 // 只替换取数据的入口,其余导出保持真实:传输层新增方法时这里不必跟着改。
 vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
   ...(await importOriginal()),
+  featuresList: async () => [{
+    id: "builtin-agent", stage: "experimental", default: false,
+    enabled: host.builtinAgent,
+  }],
+  featureSet: async (_id, enabled) => { host.builtinAgent = enabled; },
   engine: async (method) => {
     if (method === "scan") return { tools: { claude: 1 }, sessions: [SESSION] };
     if (method === "show") {
@@ -112,6 +120,20 @@ test("回到起点仍然正常,说明工作区切换没有留下坏状态", asyn
     await act(async () => { railItem(container, key).click(); });
   }
   assert.ok(container.querySelector("[data-pane-scroll]"));
+});
+
+test("内置 AI 助手关着时导航轨没有对话入口,其余工作区照旧", async () => {
+  host.builtinAgent = false;
+  try {
+    const { container } = await mountApp();
+
+    assert.equal(railItem(container, "askferry"), null, "对话入口不该出现");
+    for (const key of ["overview", "library", "history"]) {
+      assert.ok(railItem(container, key), `缺少导航项 ${key}`);
+    }
+  } finally {
+    host.builtinAgent = true;
+  }
 });
 
 test("优化入口默认不渲染:测试中功能需在设置里显式打开", async () => {

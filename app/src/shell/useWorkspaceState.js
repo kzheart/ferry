@@ -4,6 +4,8 @@
 // value 必须 memo 化:下游详情区与资源栏都是 memo 组件,靠引用相等跳过重渲染。
 import { useMemo } from "react";
 
+import { useFeature } from "../shared/capabilities/features.jsx";
+
 export function useWorkspaceState({
   allTags, applyEdit, clearHistF, clearLibF, confirmApply,
   counts, ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
@@ -20,6 +22,8 @@ export function useWorkspaceState({
   setSettings, setSettingsOpen, setTagFor, setToast, setView, settings,
   settingsOpen, settingsSection, tagFor, toast, updater, view,
 }) {
+  // 悬浮球是内置 AI 助手的一个入口:不是列表项,直接读开关。
+  const builtinAgent = useFeature("builtin-agent");
   const browserState = useMemo(
     () => ({
       peek: {
@@ -124,8 +128,10 @@ export function useWorkspaceState({
       },
       floatChat: {
         // 会话库浮动 Agent 面板:仅在浏览具体会话且设置页未打开时挂载;
-        // open 只控制展开与否,悬浮球本身由 mounted 决定
-        mounted: view === "library" && Boolean(cur) && !settingsOpen,
+        // open 只控制展开与否,悬浮球本身由 mounted 决定。它也是内置 AI 助手的
+        // 一个入口,特性关着时连悬浮球都不出现
+        mounted:
+          builtinAgent && view === "library" && Boolean(cur) && !settingsOpen,
         open: floatChatOpen,
         session: cur,
         scanSessions: sessions,
@@ -139,7 +145,7 @@ export function useWorkspaceState({
       },
     }),
     [
-      sessions, mig, cur, env, settings,
+      sessions, mig, cur, env, settings, builtinAgent,
       loadHistory, diff, dirtyOps, confirmApply, applyEdit, view, settingsOpen,
       floatChatOpen, peekEntity, openConfig, setDiff,
       setConfirmApply,
@@ -166,6 +172,7 @@ export function useWorkspaceState({
       },
       guide: {
         step: onboarding.step,
+        steps: onboarding.steps,
         onGo: onboarding.goStep,
         onFinish: onboarding.finishGuide,
       },

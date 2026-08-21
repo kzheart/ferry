@@ -9,7 +9,9 @@
     "providers": "Providers",
     "models": "Models",
     "roles": "Roles",
-    "skills": "Skills"
+    "skills": "Skills",
+    "integration": "Agent integration",
+    "experimental": "Experimental"
   },
   "roles": {
     "create": "New role",
@@ -146,7 +148,14 @@
     "groupTitle": "Experimental features",
     "groupDesc": "These features are still being polished. They are off by default and may change between versions.",
     "sessionOptimization": "Session optimization",
-    "sessionOptimizationDesc": "Adds the magic-wand entry to the browser: an optimizer role analyzes the session and proposes rewrites for user prompts, applied only after your confirmation. Consumes model calls."
+    "sessionOptimizationDesc": "Adds the magic-wand entry to the browser: an optimizer role analyzes the session and proposes rewrites for user prompts, applied only after your confirmation. Consumes model calls.",
+    "togglesNote": "These switches only control visibility and reachability; they never delete existing data. Turning one off hides its entry points right away, and any process already running stops the next time you launch the app."
+  },
+  "features": {
+    "builtin-agent": {
+      "title": "Built-in AI assistant",
+      "desc": "Once enabled, Ask Ferry appears in the sidebar and the Provider / model / role / skill settings are unlocked."
+    }
   },
   "writeCheck": {
     "groupTitle": "Write verification",
@@ -297,5 +306,57 @@
     "roleHint": "Only imported skills can be selected. Global skills apply to every role and can't be turned off here.",
     "roleEmpty": "The skill library is empty. Import one from the Skills page.",
     "roleMissing": "deleted"
+  },
+  "integration": {
+    "cli": {
+      "groupTitle": "Command line tool",
+      "title": "ferry command",
+      "descNotInstalled": "Put a ferry command on your PATH so coding agents can search, read, and migrate sessions.",
+      "descInstalled": "Installed at {{path}}",
+      "stateNotInstalled": "Not installed",
+      "stateInstalled": "Installed",
+      "stateOutdated": "Points at an old engine",
+      "install": "Install",
+      "update": "Update",
+      "uninstall": "Uninstall",
+      "linkTarget": "Points at {{path}}",
+      "pathHint": "{{dir}} is not on your PATH. Add export PATH=\"{{dir}}:$PATH\" to your shell profile and open a new terminal.",
+      "engineMissing": "Engine binary not found, cannot install.",
+      "unsupported": "One-click command line install is not available on this platform yet."
+    },
+    "skills": {
+      "groupTitle": "Skill installation",
+      "groupDesc": "Bundled v{{version}}",
+      "sharedTarget": "Shared skill warehouse",
+      "stateNotInstalled": "Not installed",
+      "stateInstalled": "Installed v{{version}}",
+      "stateInstalledUnknown": "Installed",
+      "stateUpdatable": "Update to v{{version}}",
+      "viaShared": "Active via shared warehouse",
+      "install": "Install",
+      "update": "Update",
+      "remove": "Remove",
+      "custom": "Install to another folder…",
+      "customDone": "Installed at {{path}}",
+      "bundleMissing": "The Ferry skill is missing from the app bundle, cannot install."
+    },
+    "engine": {
+      "groupTitle": "Engine service",
+      "state": "Current state",
+      "stateAppShared": "Sharing the app engine",
+      "stateDaemon": "Standalone daemon running (pid {{pid}})",
+      "stateStopped": "Not running",
+      "socket": "Socket path",
+      "socketNone": "—",
+      "socketMissing": "{{path}} (file is gone)",
+      "version": "Engine version",
+      "share": "Let the CLI share the app engine",
+      "shareDesc": "When off, the CLI always starts its own daemon",
+      "shareRestart": "Saved. Takes effect the next time the app starts.",
+      "stop": "Stop daemon",
+      "stopDesc": "Only a daemon started by the CLI can be stopped here",
+      "stopDone": "Daemon stopped",
+      "stopAppMode": "The app's engine can't be stopped here; quit Ferry to release it"
+    }
   }
 }

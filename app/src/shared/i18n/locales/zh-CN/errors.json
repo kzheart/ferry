@@ -9,7 +9,9 @@
     "not_installed": "{{tool}} 未安装"
   },
   "agent": {
-    "reference_invalid": "会话引用已失效（会话可能已被修改或删除），请刷新或重新搜索",
+    "reference_invalid": "会话引用已失效（会话可能已被修改或删除）",
+    "reference_invalid_session_changed": "会话内容在预演后发生了变化，该会话对应的 agent 可能仍在运行；结束该会话后重试",
+    "reference_invalid_session_missing": "会话已被删除或移动，请重新搜索",
     "request_invalid": "请求参数非法",
     "format_changed": "会话格式无法识别，可能是 Agent 版本更新所致"
   },

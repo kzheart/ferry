@@ -9,7 +9,9 @@
     "providers": "提供商",
     "models": "模型",
     "roles": "角色",
-    "skills": "技能"
+    "skills": "技能",
+    "integration": "Agent 集成",
+    "experimental": "实验性功能"
   },
   "roles": {
     "create": "新建角色",
@@ -146,7 +148,14 @@
     "groupTitle": "测试中功能",
     "groupDesc": "以下功能仍在打磨中,默认关闭,行为可能随版本调整",
     "sessionOptimization": "会话优化",
-    "sessionOptimizationDesc": "在浏览界面提供魔法棒入口:由优化器角色分析会话并给出用户提问的改写候选,逐条确认后写回;会消耗模型调用"
+    "sessionOptimizationDesc": "在浏览界面提供魔法棒入口:由优化器角色分析会话并给出用户提问的改写候选,逐条确认后写回;会消耗模型调用",
+    "togglesNote": "开关只控制界面入口与可达性,不会删除任何已有数据;关闭后入口立即隐藏,已在运行的进程会在下次启动 App 时停止"
+  },
+  "features": {
+    "builtin-agent": {
+      "title": "内置 AI 助手",
+      "desc": "启用后可在侧栏使用 Ask Ferry,并解锁 Provider / 模型 / 角色 / 技能设置"
+    }
   },
   "writeCheck": {
     "groupTitle": "写入验收",
@@ -297,5 +306,57 @@
     "roleHint": "只能选已导入的技能；通用技能对所有角色生效，这里不可取消。",
     "roleEmpty": "技能库还是空的，去「技能」页导入一个。",
     "roleMissing": "已删除"
+  },
+  "integration": {
+    "cli": {
+      "groupTitle": "命令行工具",
+      "title": "ferry 命令",
+      "descNotInstalled": "在 PATH 里放一个 ferry 命令，coding agent 就能检索、阅读和迁移会话。",
+      "descInstalled": "已安装到 {{path}}",
+      "stateNotInstalled": "未安装",
+      "stateInstalled": "已安装",
+      "stateOutdated": "指向旧的引擎",
+      "install": "安装",
+      "update": "更新",
+      "uninstall": "卸载",
+      "linkTarget": "指向 {{path}}",
+      "pathHint": "{{dir}} 不在 PATH 里。在 shell 配置里加上 export PATH=\"{{dir}}:$PATH\"，重开终端后生效。",
+      "engineMissing": "找不到引擎二进制，无法安装。",
+      "unsupported": "当前平台暂不支持一键安装命令行工具。"
+    },
+    "skills": {
+      "groupTitle": "Skill 安装",
+      "groupDesc": "随 App 打包 v{{version}}",
+      "sharedTarget": "共享技能仓库",
+      "stateNotInstalled": "未安装",
+      "stateInstalled": "已安装 v{{version}}",
+      "stateInstalledUnknown": "已安装",
+      "stateUpdatable": "可更新到 v{{version}}",
+      "viaShared": "经共享仓库生效",
+      "install": "安装",
+      "update": "更新",
+      "remove": "移除",
+      "custom": "安装到其他目录…",
+      "customDone": "已安装到 {{path}}",
+      "bundleMissing": "打包资源里没有 Ferry skill，无法安装。"
+    },
+    "engine": {
+      "groupTitle": "引擎服务",
+      "state": "当前状态",
+      "stateAppShared": "App 引擎共享中",
+      "stateDaemon": "独立 daemon 运行中（pid {{pid}}）",
+      "stateStopped": "未运行",
+      "socket": "Socket 路径",
+      "socketNone": "—",
+      "socketMissing": "{{path}}（文件已不在）",
+      "version": "引擎版本",
+      "share": "允许 CLI 共享 App 引擎",
+      "shareDesc": "关闭后 CLI 始终另起独立 daemon",
+      "shareRestart": "已保存,重启 App 后生效",
+      "stop": "停止 daemon",
+      "stopDesc": "只对 CLI 拉起的独立 daemon 有效",
+      "stopDone": "daemon 已停止",
+      "stopAppMode": "App 引擎不能从这里停止;退出 Ferry App 即可释放"
+    }
   }
 }

@@ -11,6 +11,7 @@ import {
   sessionRef,
   useLibraryResourcePaneActions,
 } from "../modules/browser/public.js";
+import { useIsFeatureEnabled } from "../shared/capabilities/features.jsx";
 
 export function useWorkspaceInteractions({
   t,
@@ -44,6 +45,8 @@ export function useWorkspaceInteractions({
   setTagSelection,
   setAgentAttachments,
 }) {
+  // 右键菜单是列表型入口:开关状态直接在这里取,不必由主壳层层转交。
+  const isFeatureEnabled = useIsFeatureEnabled();
   const askDelete = session => {
     if (!supportsAgentCapability(session?.tool, "delete")) return;
     deletion.requestSessionDeletion(session);
@@ -83,6 +86,7 @@ export function useWorkspaceInteractions({
     select,
     setMigration,
     settings,
+    isFeatureEnabled,
     t,
     askDelete,
   });

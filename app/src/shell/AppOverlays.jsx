@@ -210,6 +210,7 @@ export function AppOverlays({
       {guide.step > 0 && (
         <Guide
           step={guide.step}
+          steps={guide.steps}
           onGo={guide.onGo}
           onFinish={guide.onFinish}
         />

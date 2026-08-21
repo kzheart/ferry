@@ -7,6 +7,7 @@ import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.js
 import { BrowserStateProvider } from "../shared/capabilities/browserState.jsx";
 import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import { AppChromeProvider } from "../shared/capabilities/appChrome.jsx";
+import { useIsFeatureEnabled } from "../shared/capabilities/features.jsx";
 import {
   sessionIdentity,
   useBrowserData,
@@ -75,6 +76,10 @@ export default function App() {
   const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
+  // 特性开关的事实源在宿主的配置文件里,界面据此决定入口显不显示。列表型入口
+  // (导航轨、引导步骤)按表项上标的 feature 过滤,非列表点直接读这个判定。
+  const isFeatureEnabled = useIsFeatureEnabled();
+  const builtinAgent = isFeatureEnabled("builtin-agent");
   const updater = useAppUpdater(settings.autoCheckUpdates);
   // 内置优化器角色属于「会话优化」测试中功能:功能关闭时从角色列表整体隐身
   // (角色设置、问答角色下拉都经由这份 Context 取角色)
@@ -93,11 +98,17 @@ export default function App() {
       ferry.setSelectedRoleId("default");
     }
   }, [ferryValue.roles, ferry.selectedRoleId]);
+  // 助手关掉时正停在对话工作区:状态也跟着回落,否则导航轨没有高亮项、资源栏还
+  // 挂着对话列表(路由层另有一层同样的回落,负责这一帧就不渲染它)
+  useEffect(() => {
+    if (!builtinAgent && view === "askferry") setView("overview");
+  }, [builtinAgent, view]);
   const onboarding = useOnboarding({
     setView,
     closeSettings: () => setSettingsOpen(false),
     closeMigration: () => setMig(null),
     scan: doScan,
+    isFeatureEnabled,
   });
 
   const sessions = scan?.sessions || EMPTY_SESSIONS;
@@ -337,6 +348,7 @@ export default function App() {
       askferry: t("askferry:rail"),
     },
     storageKey: "ferry-rail-order",
+    isFeatureEnabled,
   });
 
   useAppKeyboardShortcuts({

@@ -2,10 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { FerryEventType } from "../../shared/contracts/generated/events.js";
 import { isFerryEventType } from "../../shared/contracts/generated/events.js";
-import type {
-  PublicEngineMethod,
-  TrustedUiEngineMethod,
-} from "../../shared/contracts/generated/engine-methods.js";
+import type { UiEngineMethod } from "../../shared/contracts/generated/engine-methods.js";
 import {
   FERRY_IPC_PROTOCOL,
   type FerryEvent,
@@ -18,6 +15,10 @@ import type {
   OperationState,
 } from "../../shared/contracts/operations.js";
 import type { PublicRuntimeMethod } from "../../shared/contracts/generated/runtime-methods.js";
+import type {
+  FeatureId,
+  FeatureStage,
+} from "../../shared/contracts/generated/features.js";
 import { throwEngineError } from "./errors.js";
 
 type DesktopParams = Record<string, unknown>;
@@ -38,7 +39,7 @@ class RuntimeError extends Error {
 }
 
 async function invokeEngine<Result>(
-  command: "engine_rpc" | "trusted_engine_rpc",
+  command: "engine_rpc",
   method: string,
   params: DesktopParams = {},
 ): Promise<Result> {
@@ -86,14 +87,9 @@ async function invokeOperation<Result>(
 }
 
 export const engine = <Result = unknown>(
-  method: PublicEngineMethod,
+  method: UiEngineMethod,
   params: DesktopParams = {},
 ) => invokeEngine<Result>("engine_rpc", method, params);
-
-export const trustedEngine = <Result = unknown>(
-  method: TrustedUiEngineMethod,
-  params: DesktopParams = {},
-) => invokeEngine<Result>("trusted_engine_rpc", method, params);
 
 export async function runtime<Result = unknown>(
   method: PublicRuntimeMethod,
@@ -111,6 +107,12 @@ export async function runtime<Result = unknown>(
       request: JSON.stringify(request),
     });
   } catch (error) {
+    // 宿主的拒绝可能是结构化的({code, message},如特性开关关着时的
+    // feature.disabled),其余仍是纯文本。
+    const structured = error as { code?: unknown; message?: unknown };
+    if (structured && typeof structured.code === "string") {
+      throw new RuntimeError(structured.code, String(structured.message ?? ""));
+    }
     throw new RuntimeError("agent_unavailable", String(error));
   }
   const response = JSON.parse(raw) as IpcResponse<Result>;
@@ -187,6 +189,100 @@ export const choiceRespond = (
 /** 技能目录选择:路径由系统对话框产生,webview 不能指定任意路径;取消返回 null。 */
 export const pickSkillDirectory = () =>
   invoke<string | null>("pick_skill_directory");
+
+export interface CliStatus {
+  supported: boolean;
+  unsupported_reason: string | null;
+  link_path: string | null;
+  installed: boolean;
+  link_target: string | null;
+  points_to_current_engine: boolean;
+  engine_path: string | null;
+  on_path: boolean;
+}
+
+export interface SkillTargetStatus {
+  id: string;
+  display_name: string;
+  path: string;
+  installed: boolean;
+  installed_version: string | null;
+  via_shared: boolean;
+}
+
+export interface IntegrationStatus {
+  cli: CliStatus;
+  skills: SkillTargetStatus[];
+  bundled_version: string | null;
+}
+
+export interface EngineServiceStatus {
+  state: "app-shared" | "daemon" | "stopped";
+  pid: number | null;
+  socket: string | null;
+  socket_ready: boolean;
+  version: string | null;
+}
+
+/** Agent 集成状态:CLI 入口与各 skill 目标的检测结果,路径全部由宿主计算。 */
+export const integrationStatus = () =>
+  invoke<IntegrationStatus>("integration_status");
+
+/** 创建/重建 `~/.local/bin/ferry`,指向本 App 的引擎二进制。 */
+export const cliInstall = () => invoke<void>("cli_install");
+
+/** 移除 CLI 入口;宿主只删确实指向 Ferry 引擎的链接。 */
+export const cliUninstall = () => invoke<void>("cli_uninstall");
+
+/** 把打包的 Ferry skill 装进固定目标表里的某个目录;targetId 来自 integrationStatus。 */
+export const skillInstall = (targetId: string) =>
+  invoke<void>("skill_install", { targetId });
+
+export const skillUninstall = (targetId: string) =>
+  invoke<void>("skill_uninstall", { targetId });
+
+/** 自定义目录安装:path 必须是 pickSkillDirectory 返回的目录,宿主再校验一次。 */
+export const skillInstallCustom = (path: string) =>
+  invoke<string>("skill_install_custom", { path });
+
+/** 引擎服务状态:只读锁文件与 socket,不做任何进程操作。 */
+export const engineServiceStatus = () =>
+  invoke<EngineServiceStatus>("engine_service_status");
+
+/** 「允许 CLI 共享 App 引擎」的当前值。事实源是宿主的配置文件,不是这里的状态。 */
+export const getEngineShare = () => invoke<boolean>("get_engine_share");
+
+/** 改开关。只落盘;sidecar 只在启动时决定是否监听 socket,所以下次启动 App 才生效。 */
+export const setEngineShare = (enabled: boolean) =>
+  invoke<void>("set_engine_share", { enabled });
+
+/** 一个特性开关的契约形态 + 这台机器上的当前值。 */
+export interface FeatureState {
+  id: FeatureId;
+  stage: FeatureStage;
+  default: boolean;
+  enabled: boolean;
+}
+
+/**
+ * 全部特性开关的当前状态。事实源是宿主的配置文件:界面按它决定入口显不显示,而
+ * 真正拦住能力的那道门在宿主侧自己回读同一份文件,不信 WebView 传来的任何东西。
+ */
+export const featuresList = () => invoke<FeatureState[]>("features_list");
+
+/** 改一个特性。只落盘;门是每次请求回读的,所以下一次调用就按新值判。 */
+export const featureSet = (id: FeatureId, enabled: boolean) =>
+  invoke<void>("feature_set", { id, enabled });
+
+/** 停止 CLI 拉起的独立 daemon。失败以 {@link DaemonStopError} 抛出。 */
+export const engineDaemonStop = () => invoke<void>("engine_daemon_stop");
+
+/** 宿主给的结构化失败:code 稳定可分支,message 兜底展示。 */
+export interface DaemonStopError {
+  /** app_mode = 对面是 App 自己的引擎,只能退出 App 来释放。 */
+  code: "unsupported" | "unavailable" | "app_mode" | "refused" | "timeout";
+  message: string;
+}
 
 export const writeClipboardText = async (text: unknown) => {
   const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");

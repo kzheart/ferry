@@ -29,6 +29,7 @@ function createInput(overrides = {}) {
     select: () => {},
     setMigration: () => {},
     settings: { terminalApp: "Terminal" },
+    isFeatureEnabled: () => true,
     t: (key, params) => params?.n ? `${key}:${params.n}` : key,
     askDelete: () => {},
     ...overrides,
@@ -80,4 +81,18 @@ test("缺少能力的会话不显示恢复、迁移和删除动作", () => {
   assert.equal(labels.includes("app:ctx.copyResume"), false);
   assert.equal(labels.includes("app:ctx.migrateTo"), false);
   assert.equal(labels.includes("app:ctx.deleteSession"), false);
+});
+
+test("标了 feature 的菜单项跟着开关走,没标的照旧", () => {
+  const labelsWith = (isFeatureEnabled) =>
+    createSessionContextMenu(createInput({ isFeatureEnabled }))
+      .filter(item => !item.sep)
+      .map(item => item.label);
+
+  assert.equal(labelsWith(() => true).includes("app:ctx.addToAgent"), true);
+  const off = labelsWith(() => false);
+  assert.equal(off.includes("app:ctx.addToAgent"), false);
+  // 只掉标了 feature 的那一项,其余动作一个不少
+  assert.equal(off.includes("app:ctx.rename"), true);
+  assert.equal(off.includes("app:ctx.resumeTerminal"), true);
 });

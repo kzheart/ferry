@@ -8,6 +8,7 @@ import {
   supportsAgentCapability,
   resumeDescriptor,
 } from "../../shared/contracts/tools.js";
+import { filterByFeatures } from "../../shared/capabilities/features.jsx";
 import {
   addSessionAttachment,
   serializeSessionAttachment,
@@ -33,6 +34,7 @@ export function createSessionContextMenu({
   select,
   setMigration,
   settings,
+  isFeatureEnabled,
   t,
   askDelete,
 }) {
@@ -84,8 +86,13 @@ export function createSessionContextMenu({
       .catch(() => {});
   };
 
-  return [
-    { label: t("app:ctx.addToAgent"), onClick: addToAgent },
+  // 标了 feature 的项由开关决定出不出现:「加入对话」通往内置 AI 助手
+  return filterByFeatures([
+    {
+      label: t("app:ctx.addToAgent"),
+      onClick: addToAgent,
+      feature: "builtin-agent",
+    },
     ...(supportsAgentCapability(session.tool, "resume") ? [{
       label: t("app:ctx.resumeTerminal"),
       hint: "↩",
@@ -145,5 +152,5 @@ export function createSessionContextMenu({
       danger: true,
       onClick: () => askDelete(session),
     }] : []),
-  ];
+  ], isFeatureEnabled);
 }

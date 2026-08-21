@@ -1,5 +1,5 @@
 // 设置悬浮弹窗(参考 LM Studio):左侧分类 + 偏好设置 / 数据来源
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
@@ -12,11 +12,28 @@ import Providers from "./Providers.jsx";
 import Models from "./Models.jsx";
 import Roles from "./Roles.jsx";
 import Skills from "./Skills.jsx";
+import Integration from "./Integration.jsx";
+import Experimental from "./Experimental.jsx";
+import {
+  filterByFeatures,
+  useFeaturesList,
+  useIsFeatureEnabled,
+} from "../../shared/capabilities/features.jsx";
 
-const SECTIONS = [["prefs", "settings:sections.prefs"], ["providers", "settings:sections.providers"],
-  ["models", "settings:sections.models"], ["roles", "settings:sections.roles"],
-  ["skills", "settings:sections.skills"],
-  ["sources", "settings:sections.sources"], ["updates", "settings:sections.updates"]];
+// 分区表。标了 feature 的分区跟着开关走——providers/models/roles/skills 四项只属于
+// 内置 AI 助手;「Agent 集成」不在其列:那是把 Ferry 接到用户自己的 coding agent
+// 上的引擎侧功能,与内置助手无关。
+const SECTIONS = [
+  { key: "prefs", labelKey: "settings:sections.prefs" },
+  { key: "providers", labelKey: "settings:sections.providers", feature: "builtin-agent" },
+  { key: "models", labelKey: "settings:sections.models", feature: "builtin-agent" },
+  { key: "roles", labelKey: "settings:sections.roles", feature: "builtin-agent" },
+  { key: "skills", labelKey: "settings:sections.skills", feature: "builtin-agent" },
+  { key: "integration", labelKey: "settings:sections.integration" },
+  { key: "sources", labelKey: "settings:sections.sources" },
+  { key: "updates", labelKey: "settings:sections.updates" },
+  { key: "experimental", labelKey: "settings:sections.experimental" },
+];
 
 function TerminalAppIcon({ app, size = 16 }) {
   if (app === "terminal") return <TerminalIcon size={size} />;
@@ -364,8 +381,16 @@ function Updates({ s, set, updater }) {
 export default function SettingsPage({ settings, setSettings, scan, env, scanning,
   onRescan, updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
   const { t } = useTranslation();
-  const [section, setSection] = useState(initialSection || "prefs");
-  const title = Object.fromEntries(SECTIONS)[section];
+  const features = useFeaturesList();
+  const isFeatureEnabled = useIsFeatureEnabled();
+  const sections = useMemo(
+    () => filterByFeatures(SECTIONS, isFeatureEnabled),
+    [isFeatureEnabled],
+  );
+  const [chosen, setSection] = useState(initialSection || "prefs");
+  // 停在一个刚被隐藏的分区上(比如就在这一页把助手关掉)时回落到偏好设置
+  const section = sections.some(({ key }) => key === chosen) ? chosen : "prefs";
+  const title = sections.find(({ key }) => key === section)?.labelKey;
 
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -382,7 +407,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--tx5)", letterSpacing: ".08em",
             padding: "2px 8px 12px" }}>{t("settings:sections.railTitle")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {SECTIONS.map(([k, labelKey]) => {
+            {sections.map(({ key: k, labelKey }) => {
               const on = section === k;
               return (
                 <button key={k} className={on ? undefined : "hov-item"} onClick={() => setSection(k)}
@@ -425,6 +450,8 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
               <div style={{ maxWidth: 620, margin: "0 auto" }}>
                 {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
                   onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
+                {section === "integration" && <Integration />}
+                {section === "experimental" && <Experimental features={features} />}
                 {section === "sources" && <Sources scan={scan} env={env}
                   scanning={scanning} onRescan={onRescan} />}
                 {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}

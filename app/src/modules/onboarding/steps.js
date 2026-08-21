@@ -1,6 +1,15 @@
+import { filterByFeatures } from "../../shared/capabilities/features.jsx";
+
 // 引导步骤定义:target 对应界面上的 data-guide 锚点,view 是该步骤所属模块。
 // Guide 负责测量与渲染,useOnboarding 按 view 在步骤间切换模块。
-export const GUIDE_STEPS = [
+//
+// 标了 feature 的步骤跟着开关走:关闭时锚点不存在,步骤一起消失;
+// 消费方一律经 guideSteps(isFeatureEnabled) 取表,不直接读全量表。
+export function guideSteps(isFeatureEnabled = () => false) {
+  return filterByFeatures(GUIDE_STEPS, isFeatureEnabled);
+}
+
+const GUIDE_STEPS = [
   {
     target: "rail",
     view: "library",
@@ -62,6 +71,7 @@ export const GUIDE_STEPS = [
     target: "rail-askferry",
     view: "askferry",
     side: "right",
+    feature: "builtin-agent",
     titleKey: "onboarding:guide.askferryTitle",
     bodyKey: "onboarding:guide.askferryBody",
   },

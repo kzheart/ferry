@@ -9,7 +9,9 @@
     "not_installed": "{{tool}} is not installed"
   },
   "agent": {
-    "reference_invalid": "Session reference is no longer valid (the session may have changed or been deleted); refresh or search again",
+    "reference_invalid": "Session reference is no longer valid (the session may have changed or been deleted)",
+    "reference_invalid_session_changed": "The session changed after the preview was built; the agent that owns it may still be running. End that session, then retry",
+    "reference_invalid_session_missing": "The session has been deleted or moved; search again",
     "request_invalid": "Invalid request parameters",
     "format_changed": "Unrecognized session format, possibly due to an agent version update"
   },

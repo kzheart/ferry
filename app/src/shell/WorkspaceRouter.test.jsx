@@ -1,6 +1,6 @@
 // 工作区路由:view 决定详情区渲染谁。这里守两件事——同一时刻只有一个工作区被
 // 挂载,以及资料库在"没有选中会话"时走的是空态而不是崩在 detail 上。
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import assert from "node:assert/strict";
 import { render as rtlRender, screen } from "@testing-library/react";
 
@@ -10,6 +10,16 @@ import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { OperationsStateProvider } from "../shared/capabilities/operationsState.jsx";
 import { SessionEditingProvider } from "../shared/capabilities/sessionEditing.jsx";
 import { WorkspaceRouter } from "./WorkspaceRouter.jsx";
+
+// 路由层直接读特性开关(不再由主壳转交 prop)。开关的存储与回读自有用例守,
+// 这里只要能同步决定「开着还是关着」,用例才不必为一次 IPC 变成异步的。
+const features = vi.hoisted(() => ({ builtinAgent: true }));
+vi.mock("../shared/capabilities/features.jsx", async (importOriginal) => ({
+  ...(await importOriginal()),
+  useFeature: (id) => id === "builtin-agent" && features.builtinAgent,
+}));
+
+afterEach(() => { features.builtinAgent = true; });
 
 const noop = () => {};
 
@@ -134,6 +144,21 @@ test("对话工作区从 Context 取 Ferry Runtime 句柄,不再由路由层转�
   render(baseProps({ view: "askferry" }), { ferry });
 
   assert.ok(screen.getByText("askferry:empty.title"));
+});
+
+test("内置 AI 助手关着时对话工作区不渲染,当场回落到总览", () => {
+  const ferry = {
+    available: true, activeId: null, activeLog: null, sessions: [], roles: [],
+    models: [], mode: "auto", health: null, lastError: null,
+    selectedRoleId: "default", clearError: () => {},
+  };
+  features.builtinAgent = false;
+  const { container } = render(baseProps({ view: "askferry" }), { ferry });
+
+  assert.equal(screen.queryByText("askferry:empty.title"), null);
+  // 回落到总览而不是白屏:未知 view 那条用例守的才是"什么都不渲染"
+  assert.notEqual(container.innerHTML, "");
+  assert.ok(container.textContent.includes("overview:"));
 });
 
 test("资料库详情区的待应用编辑取自 Context,不再由路由层转交", () => {

@@ -1,15 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export const DEFAULT_RAIL_ORDER = ["overview", "askferry", "library", "history"];
+import { filterByFeatures } from "../shared/capabilities/features.jsx";
 
-function isKnownRailKey(key) {
-  return DEFAULT_RAIL_ORDER.includes(key);
+// 导航轨的键表。标了 feature 的项由对应开关决定存不存在:开关关着时这条工作区
+// 整个不存在——顺序表、用户存在 localStorage 里的自定义顺序、拖拽落点判定,三处
+// 都按同一份可用键表过滤。
+export const RAIL_ITEMS = [
+  { key: "overview" },
+  { key: "askferry", feature: "builtin-agent" },
+  { key: "library" },
+  { key: "history" },
+];
+
+export const DEFAULT_RAIL_ORDER = RAIL_ITEMS.map(item => item.key);
+
+// 缺省一律「关」:漏传判定函数时宁可少显示一个入口。
+const NOTHING_ENABLED = () => false;
+
+export function railKeys(isFeatureEnabled = NOTHING_ENABLED) {
+  return filterByFeatures(RAIL_ITEMS, isFeatureEnabled).map(item => item.key);
 }
 
-export function normalizeRailOrder(value) {
-  if (!Array.isArray(value)) return [...DEFAULT_RAIL_ORDER];
-  const order = value.filter((key, index) => isKnownRailKey(key) && value.indexOf(key) === index);
-  return [...order, ...DEFAULT_RAIL_ORDER.filter(key => !order.includes(key))];
+export function normalizeRailOrder(value, isFeatureEnabled = NOTHING_ENABLED) {
+  const known = railKeys(isFeatureEnabled);
+  if (!Array.isArray(value)) return known;
+  const order = value.filter((key, index) => known.includes(key) && value.indexOf(key) === index);
+  return [...order, ...known.filter(key => !order.includes(key))];
 }
 
 export function reorderRailOrder(order, source, target, position) {
@@ -24,14 +40,19 @@ export function reorderRailOrder(order, source, target, position) {
 
 function loadRailOrder(storageKey) {
   try {
-    return normalizeRailOrder(JSON.parse(localStorage.getItem(storageKey) || "null"));
+    return JSON.parse(localStorage.getItem(storageKey) || "null");
   } catch {
-    return [...DEFAULT_RAIL_ORDER];
+    return null;
   }
 }
 
-export function useRailNavigation({ labels, storageKey }) {
-  const [railOrder, setRailOrder] = useState(() => loadRailOrder(storageKey));
+export function useRailNavigation({ labels, storageKey, isFeatureEnabled }) {
+  const [storedOrder, setStoredOrder] = useState(() => loadRailOrder(storageKey));
+  // 开关一变可用键表就变,顺序当场重算:被开关挡住的能力都是懒启动的,入口不必等重启
+  const railOrder = useMemo(
+    () => normalizeRailOrder(storedOrder, isFeatureEnabled),
+    [storedOrder, isFeatureEnabled],
+  );
   const [railTip, setRailTip] = useState(null);
   const [draggingKey, setDraggingKey] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -58,23 +79,21 @@ export function useRailNavigation({ labels, storageKey }) {
   const dropAt = useCallback((x, y) => {
     const target = document.elementFromPoint(x, y)?.closest?.("[data-rail-key]");
     const key = target?.dataset.railKey;
-    if (!isKnownRailKey(key)) return null;
+    if (!railOrder.includes(key)) return null;
     const rect = target.getBoundingClientRect();
     return { key, position: y < rect.top + rect.height / 2 ? "before" : "after" };
-  }, []);
+  }, [railOrder]);
 
   const reorder = useCallback((source, target, position) => {
-    setRailOrder(order => {
-      const next = reorderRailOrder(order, source, target, position);
-      if (next === order) return order;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(next));
-      } catch {
-        // 存储不可用时，保持本次会话中的排序结果。
-      }
-      return next;
-    });
-  }, [storageKey]);
+    const next = reorderRailOrder(railOrder, source, target, position);
+    if (next === railOrder) return;
+    setStoredOrder(next);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      // 存储不可用时，保持本次会话中的排序结果。
+    }
+  }, [railOrder, storageKey]);
 
   const onPointerDown = event => {
     if (event.button !== 0 || event.isPrimary === false) return;

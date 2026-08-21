@@ -2,13 +2,12 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
-import { GUIDE_STEPS } from "./steps.js";
 
-export function Guide({ step, onGo, onFinish }) {
+export function Guide({ step, steps, onGo, onFinish }) {
   const { t } = useTranslation();
   const [box, setBox] = useState(null);
   const [card, setCard] = useState(null);
-  const config = GUIDE_STEPS[step - 1];
+  const config = steps[step - 1];
 
   useEffect(() => {
     setBox(null);
@@ -172,10 +171,10 @@ export function Guide({ step, onGo, onFinish }) {
             color: ACCENT,
             letterSpacing: ".03em",
           }}>
-            {step} / {GUIDE_STEPS.length}
+            {step} / {steps.length}
           </span>
           <div style={{ display: "flex", gap: 4, marginLeft: 2 }}>
-            {GUIDE_STEPS.map((_, index) => index + 1).map(index => (
+            {steps.map((_, index) => index + 1).map(index => (
               <span
                 key={index}
                 style={{
@@ -227,11 +226,11 @@ export function Guide({ step, onGo, onFinish }) {
           <button
             className="fbtn-primary"
             style={{ height: 31, padding: "0 16px", fontSize: 12 }}
-            onClick={() => step >= GUIDE_STEPS.length
+            onClick={() => step >= steps.length
               ? onFinish()
               : onGo(step + 1)}
           >
-            {step >= GUIDE_STEPS.length
+            {step >= steps.length
               ? t("onboarding:guide.start")
               : t("onboarding:guide.next")}
           </button>
