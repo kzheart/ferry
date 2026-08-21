@@ -290,6 +290,12 @@ pub trait SessionBrowser: Send + Sync {
     fn read_agent(&self, reference: &str) -> DomainResult<Session> {
         self.read(reference)
     }
+
+    /// UI 分页浏览路径。默认复用 Agent 读取；只在浏览不需要子树时由 adapter
+    /// 提供更轻的根会话读取，正式读取与迁移仍走 [`Self::read`]。
+    fn read_browser(&self, reference: &str) -> DomainResult<Session> {
+        self.read_agent(reference)
+    }
     fn resolve_ref(&self, reference: &str) -> DomainResult<String>;
     fn fingerprint(&self, reference: &str) -> DomainResult<Fingerprint>;
     fn agent_fingerprint(&self, reference: &str) -> DomainResult<Fingerprint>;

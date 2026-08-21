@@ -20,10 +20,11 @@ pub enum RetryPolicy {
     Never,
 }
 
-/// 分发池归属：parallel-read 走 4-worker 只读池（可乱序），
+/// 分发池归属：control 走独立轻量控制池，parallel-read 走 4-worker 只读池，
 /// 其余方法一律单 worker 串行保序。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Dispatch {
+    Control,
     ParallelRead,
     Serial,
 }
@@ -68,9 +69,6 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
 
 /// 允许进并发只读池的方法。
 pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
-    "health",
-    "version",
-    "scan_progress",
     "env",
     "models",
     "history",
@@ -78,6 +76,9 @@ pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
     "session_asset",
     "session_meta_list",
 ];
+
+/// 进独立轻量控制池的方法，不得被重读队列阻塞。
+pub const CONTROL_METHOD_NAMES: &[&str] = &["health", "version", "scan_progress"];
 
 /// callers 含 cli 的方法：本地 socket 传输只分发这一集合。
 pub const CLI_METHOD_NAMES: &[&str] = &[
@@ -105,13 +106,13 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
-            dispatch: Dispatch::ParallelRead,
+            dispatch: Dispatch::Control,
         }),
         "version" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
-            dispatch: Dispatch::ParallelRead,
+            dispatch: Dispatch::Control,
         }),
         "scan" => Some(EngineMethodPolicy {
             kind: MethodKind::IndexRefresh,
@@ -123,7 +124,7 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
-            dispatch: Dispatch::ParallelRead,
+            dispatch: Dispatch::Control,
         }),
         "env" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
@@ -263,6 +264,10 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
 
 pub fn is_parallel_read(method: &str) -> bool {
     PARALLEL_READ_METHOD_NAMES.contains(&method)
+}
+
+pub fn is_control(method: &str) -> bool {
+    CONTROL_METHOD_NAMES.contains(&method)
 }
 
 pub fn is_cli_method(method: &str) -> bool {

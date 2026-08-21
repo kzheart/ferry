@@ -789,6 +789,13 @@ fn child_transcripts(main_path: &Path) -> Vec<PathBuf> {
     found
 }
 
+/// 浏览分页只需要根会话；子会话数量由扫描索引提供，避免为一页正文解析整棵树。
+pub fn read_preview(path: &str) -> DomainResult<Session> {
+    let mut session = decode_transcript(Path::new(path), false)?.session;
+    session.root_id = Some(session.source_id.clone());
+    Ok(session)
+}
+
 /// 读取一棵 claude 会话树（主会话 + subagents）。
 pub fn read(path: &str) -> DomainResult<Session> {
     let main_path = PathBuf::from(path);
@@ -1129,6 +1136,27 @@ mod tests {
         assert_eq!(session.loss[0].params["child_id"], json!("orphan"));
         assert_eq!(session.children[0].root_id.as_deref(), Some("sid"));
         assert_eq!(session.children[0].parent_id.as_deref(), Some("sid"));
+    }
+
+    #[test]
+    fn preview_reads_only_the_root_transcript() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("s.jsonl");
+        write_session(
+            &path,
+            &[json!({"uuid": "u1", "type": "user", "sessionId": "sid",
+                     "message": {"role": "user", "content": "root"}})],
+        );
+        let child = root.path().join("s/subagents/agent-broken.jsonl");
+        std::fs::create_dir_all(child.parent().unwrap()).unwrap();
+        std::fs::write(&child, [0xff]).unwrap();
+
+        let preview = read_preview(path.to_str().unwrap()).expect("预览不读取损坏子会话");
+        assert_eq!(preview.source_id, "sid");
+        assert_eq!(preview.root_id.as_deref(), Some("sid"));
+        assert_eq!(preview.messages.len(), 1);
+        assert!(preview.children.is_empty());
+        assert!(read(path.to_str().unwrap()).is_err());
     }
 
     #[test]

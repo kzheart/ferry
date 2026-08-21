@@ -306,7 +306,7 @@ fn envelope_errors_still_carry_a_string_id() {
 
 #[cfg(unix)]
 #[test]
-fn parallel_read_requests_can_finish_out_of_input_order() {
+fn control_requests_bypass_busy_parallel_reads() {
     let sandbox = Sandbox::new();
     let bin = slow_cli_dir(&sandbox);
     let mut serve = {
@@ -328,12 +328,12 @@ fn parallel_read_requests_can_finish_out_of_input_order() {
         }
     };
 
-    // 两条都在 parallel-read 池里：慢的先进，快的必须先出。
+    // env 在 parallel-read 池里占住 worker；version 走独立控制道，必须先出。
     serve.send("env", "slow", json!({}));
     serve.send("version", "fast", json!({}));
     let first = serve.next_response();
     let second = serve.next_response();
-    assert_eq!(first["id"], json!("fast"), "并发只读池没有乱序完成");
+    assert_eq!(first["id"], json!("fast"), "控制请求被重读阻塞");
     assert_eq!(second["id"], json!("slow"));
     assert_eq!(first["ok"], json!(true));
     assert_eq!(second["ok"], json!(true));

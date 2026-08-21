@@ -752,8 +752,10 @@ pub fn read_one(path: &Path, meta: Option<&Map<String, Value>>) -> DomainResult<
 }
 
 const WINDOW: usize = 4096;
-const CACHE_MAX_ENTRIES: usize = 256;
-const CACHE_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
+const CACHE_MAX_ENTRIES: usize = 128;
+const CACHE_MAX_ENTRY_SOURCE_BYTES: u64 = 1024 * 1024;
+const CACHE_MAX_TOTAL_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
+const TREE_LOCK_SHARDS: usize = 64;
 
 /// rollout → 增量解析器的 LRU 缓存。
 struct RolloutCache {
@@ -872,8 +874,13 @@ impl RolloutCache {
         loop {
             let total: u64 = self.entries.values().map(|entry| entry.size).sum();
             let over_entries = self.entries.len() > CACHE_MAX_ENTRIES;
-            let over_bytes = total > CACHE_MAX_TOTAL_BYTES && self.entries.len() > 1;
-            if !over_entries && !over_bytes {
+            let over_total = total > CACHE_MAX_TOTAL_SOURCE_BYTES;
+            let over_single = self
+                .order
+                .first()
+                .and_then(|key| self.entries.get(key))
+                .is_some_and(|entry| entry.size > CACHE_MAX_ENTRY_SOURCE_BYTES);
+            if !over_entries && !over_total && !over_single {
                 return;
             }
             if self.order.is_empty() {
@@ -927,16 +934,14 @@ pub fn clear_cache() {
     cache.order.clear();
 }
 
-/// 树装配会读取多份缓存条目，同一根会话的并发读取必须互斥。
+/// 树装配会读取多份缓存条目；固定分片锁避免按会话永久泄漏 mutex。
 fn tree_lock(key: &str) -> &'static Mutex<()> {
-    static LOCKS: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
-    let table = LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = table
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    guard
-        .entry(key.to_string())
-        .or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+    use std::hash::{Hash, Hasher};
+    static LOCKS: OnceLock<[Mutex<()>; TREE_LOCK_SHARDS]> = OnceLock::new();
+    let locks = LOCKS.get_or_init(|| std::array::from_fn(|_| Mutex::new(())));
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut hasher);
+    &locks[hasher.finish() as usize % TREE_LOCK_SHARDS]
 }
 
 fn cached_read_one(path: &Path) -> DomainResult<Session> {
@@ -1167,6 +1172,30 @@ mod tests {
         let third = cached_read_one(&path).unwrap();
         assert_eq!(third.messages.len(), 3);
         clear_cache();
+    }
+
+    #[test]
+    fn oversized_rollouts_are_not_kept_in_the_incremental_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let records = vec![
+            json!({"type": "session_meta", "payload": {"id": "large", "cwd": "/w"}}),
+            json!({"type": "response_item", "payload": {
+            "type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "x".repeat(
+                CACHE_MAX_ENTRY_SOURCE_BYTES as usize + 1024
+            )}]}}),
+        ];
+        let path = write_rollout(dir.path(), "rollout-large.jsonl", &records);
+        clear_cache();
+        assert_eq!(cached_read_one(&path).unwrap().source_id, "large");
+        assert!(
+            parse_cache()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .entries
+                .is_empty(),
+            "超过单条上限的 parser 不得常驻"
+        );
     }
 
     #[test]

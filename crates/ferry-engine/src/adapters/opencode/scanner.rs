@@ -10,9 +10,9 @@
 //! 扫描路径（`scan_fingerprint`）容忍落后一轮的快照，Agent 严格路径
 //! （`fingerprint`）则按库戳记同步重建。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Map, Value};
@@ -30,6 +30,7 @@ use super::store;
 
 /// 落盘快照的版本号；不匹配即整体丢弃。
 const FINGERPRINT_STORE_VERSION: i64 = 1;
+const STRICT_FINGERPRINT_CACHE_MAX_ENTRIES: usize = 256;
 
 /// 库戳记：`[(路径, dev, ino, mtime_ns, size)]`，取不到 stat 时是 `[路径, null]`。
 type Stamp = Vec<Value>;
@@ -45,10 +46,53 @@ struct FingerprintIndex {
     children: BTreeMap<String, Vec<String>>,
 }
 
+#[derive(Clone)]
+struct StrictFingerprintEntry {
+    stamp: Stamp,
+    value: Option<String>,
+}
+
+#[derive(Default)]
+struct StrictFingerprintCache {
+    entries: HashMap<String, StrictFingerprintEntry>,
+    order: VecDeque<String>,
+}
+
+impl StrictFingerprintCache {
+    fn get(&mut self, session_id: &str, stamp: &Stamp) -> Option<Option<String>> {
+        let value = self
+            .entries
+            .get(session_id)
+            .filter(|entry| &entry.stamp == stamp)
+            .map(|entry| entry.value.clone())?;
+        self.order.retain(|key| key != session_id);
+        self.order.push_back(session_id.to_string());
+        Some(value)
+    }
+
+    fn insert(&mut self, session_id: &str, entry: StrictFingerprintEntry) {
+        self.entries.insert(session_id.to_string(), entry);
+        self.order.retain(|key| key != session_id);
+        self.order.push_back(session_id.to_string());
+        while self.entries.len() > STRICT_FINGERPRINT_CACHE_MAX_ENTRIES {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            self.entries.remove(&oldest);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+    }
+}
+
 struct IndexState {
-    current: Option<FingerprintIndex>,
+    current: Option<Arc<FingerprintIndex>>,
     /// 后台重建线程是否在跑（对齐 `_REBUILD_THREAD.is_alive()`）。
     rebuilding: bool,
+    strict: StrictFingerprintCache,
 }
 
 fn state() -> MutexGuard<'static, IndexState> {
@@ -58,6 +102,7 @@ fn state() -> MutexGuard<'static, IndexState> {
             Mutex::new(IndexState {
                 current: None,
                 rebuilding: false,
+                strict: StrictFingerprintCache::default(),
             })
         })
         .lock()
@@ -77,6 +122,7 @@ pub fn reset_fingerprint_index() {
     let mut state = state();
     state.current = None;
     state.rebuilding = false;
+    state.strict.clear();
 }
 
 fn fingerprint_store_path() -> PathBuf {
@@ -401,6 +447,113 @@ fn read_fingerprint_index() -> rusqlite::Result<IndexTriple> {
     Ok((sessions, revisions, children))
 }
 
+/// 只读取目标会话及其 SQLite parent_id 子树，保持与整库索引相同的逐行哈希口径。
+fn read_target_fingerprint_index(session_id: &str) -> rusqlite::Result<IndexTriple> {
+    let database = store::database_path();
+    let resolved = std::fs::canonicalize(&database).unwrap_or(database);
+    let connection = open_readonly(&resolved)?;
+    connection.execute_batch("BEGIN")?;
+
+    let tables = table_names(&connection)?;
+    if !tables.iter().any(|name| name == "session") {
+        return Ok((BTreeMap::new(), BTreeMap::new(), BTreeMap::new()));
+    }
+    let session_columns = store::table_columns(&connection, "session")?;
+    let session_id_index = session_columns
+        .iter()
+        .position(|name| name == "id")
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    let parent_index = session_columns
+        .iter()
+        .position(|name| name == "parent_id")
+        .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    let subtree = |table: &str, join_column: &str, order: &str| {
+        format!(
+            "WITH RECURSIVE subtree(id) AS (\
+                 SELECT id FROM session WHERE id = ?1 \
+                 UNION \
+                 SELECT child.id FROM session child JOIN subtree parent \
+                   ON child.parent_id = parent.id\
+             ) \
+             SELECT source.* FROM \"{table}\" source JOIN subtree \
+               ON source.\"{join_column}\" = subtree.id ORDER BY {order}"
+        )
+    };
+
+    let mut sessions: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut digests: BTreeMap<String, Sha256> = BTreeMap::new();
+    {
+        let mut statement = connection.prepare(&subtree("session", "id", "source.id"))?;
+        let width = session_columns.len();
+        let mut rows = statement.query([session_id])?;
+        while let Some(row) = rows.next()? {
+            let values: Vec<Value> = (0..width)
+                .map(|index| {
+                    store::cell_to_json(
+                        row.get_ref(index)
+                            .unwrap_or(rusqlite::types::ValueRef::Null),
+                    )
+                })
+                .collect();
+            let current = crate::adapters::shared::dialect::python_str(&values[session_id_index]);
+            let parent = match &values[parent_index] {
+                Value::Null => None,
+                other => Some(crate::adapters::shared::dialect::python_str(other)),
+            };
+            sessions.insert(current.clone(), parent);
+            let mut digest = Sha256::new();
+            hash_row(&mut digest, "session", &values);
+            digests.insert(current, digest);
+        }
+    }
+
+    for table in ["message", "part"] {
+        if !tables.iter().any(|name| name == table) {
+            continue;
+        }
+        let columns = store::table_columns(&connection, table)?;
+        let Some(session_index) = columns.iter().position(|name| name == "session_id") else {
+            continue;
+        };
+        let mut statement = connection.prepare(&subtree(
+            table,
+            "session_id",
+            "source.session_id, source.id",
+        ))?;
+        let width = columns.len();
+        let mut rows = statement.query([session_id])?;
+        while let Some(row) = rows.next()? {
+            let values: Vec<Value> = (0..width)
+                .map(|index| {
+                    store::cell_to_json(
+                        row.get_ref(index)
+                            .unwrap_or(rusqlite::types::ValueRef::Null),
+                    )
+                })
+                .collect();
+            let owner = crate::adapters::shared::dialect::python_str(&values[session_index]);
+            if let Some(digest) = digests.get_mut(&owner) {
+                hash_row(digest, table, &values);
+            }
+        }
+    }
+
+    let mut children: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (current, parent) in &sessions {
+        if let Some(parent) = parent {
+            children
+                .entry(parent.clone())
+                .or_default()
+                .push(current.clone());
+        }
+    }
+    let revisions = digests
+        .into_iter()
+        .map(|(current, digest)| (current, digest.finalize().into()))
+        .collect();
+    Ok((sessions, revisions, children))
+}
+
 fn load_fingerprint_store() -> Option<FingerprintIndex> {
     let raw = std::fs::read_to_string(fingerprint_store_path()).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
@@ -525,7 +678,7 @@ fn save_fingerprint_store(index: &FingerprintIndex) {
 /// （多个 opencode 进程同时开着就是这样），稳定永远等不到，不发布就等于缓存恒空，
 /// 于是扫描的每一行都会再触发一次整库重建。发布时 stamp 记 `after`，扫描路径本就
 /// 容忍旧快照，严格路径见 stamp 不匹配仍会同步重建，语义安全。
-fn rebuild_index_locked() -> Option<FingerprintIndex> {
+fn rebuild_index_locked() -> Option<Arc<FingerprintIndex>> {
     let mut current = None;
     for _ in 0..3 {
         let before = database_stamp();
@@ -533,15 +686,15 @@ fn rebuild_index_locked() -> Option<FingerprintIndex> {
             return None;
         };
         let after = database_stamp();
-        let index = FingerprintIndex {
+        let index = Arc::new(FingerprintIndex {
             stamp: after.clone(),
             sessions,
             revisions,
             children,
-        };
+        });
         let stable = before == after;
-        current = Some(index.clone());
-        state().current = Some(index.clone());
+        current = Some(Arc::clone(&index));
+        state().current = Some(Arc::clone(&index));
         save_fingerprint_store(&index);
         if stable {
             break;
@@ -601,7 +754,7 @@ fn schedule_background_rebuild() {
 }
 
 /// 取当前索引；`allow_stale` 决定库变更后是吃旧快照还是同步重建。
-fn current_index(allow_stale: bool) -> Option<FingerprintIndex> {
+fn current_index(allow_stale: bool) -> Option<Arc<FingerprintIndex>> {
     let stamp = database_stamp();
     let mut cached = state().current.clone();
     if cached.as_ref().is_some_and(|index| index.stamp == stamp) {
@@ -614,7 +767,8 @@ fn current_index(allow_stale: bool) -> Option<FingerprintIndex> {
             // 进程冷启动：先吃上一次进程落盘的成果。库没变它就是新鲜的；
             // 库变了它仍可作为扫描路径的旧快照，严格路径会按 stamp 重建。
             if let Some(loaded) = load_fingerprint_store() {
-                state().current = Some(loaded.clone());
+                let loaded = Arc::new(loaded);
+                state().current = Some(Arc::clone(&loaded));
                 cached = Some(loaded);
             }
         }
@@ -646,25 +800,13 @@ fn current_index(allow_stale: bool) -> Option<FingerprintIndex> {
     rebuild_index_locked()
 }
 
-fn subtree_fingerprint(session_id: &str, allow_stale: bool) -> Option<String> {
-    if !store::database_path().exists() {
-        return None;
-    }
-    let cached = current_index(allow_stale)?;
-    if !cached.sessions.contains_key(session_id) {
-        if allow_stale && cached.stamp != database_stamp() {
-            // 快照落后于库：比快照更新的会话还没进快照。给占位指纹保住索引条目
-            // （否则新会话会从扫描结果里消失），后台重建收敛后下一轮扫描会替换
-            // 成真实指纹；钉内容路径对占位值必然失配，语义安全。
-            return Some(format!("sha256:pending-{session_id}"));
-        }
-        return None;
-    }
+fn fingerprint_from_index(session_id: &str, cached: &FingerprintIndex) -> Option<String> {
+    cached.sessions.contains_key(session_id).then_some(())?;
     let mut digest = Sha256::new();
     let mut pending = vec![session_id.to_string()];
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     while let Some(current) = pending.pop() {
-        if seen.contains(&current) {
+        if !seen.insert(current.clone()) {
             continue;
         }
         let parent = match cached.sessions.get(&current) {
@@ -673,7 +815,6 @@ fn subtree_fingerprint(session_id: &str, allow_stale: bool) -> Option<String> {
             Some(None) => "None".to_string(),
             None => continue,
         };
-        seen.push(current.clone());
         digest.update(format!("\0{current}\0{parent}\0").as_bytes());
         if let Some(revision) = cached.revisions.get(&current) {
             digest.update(revision);
@@ -693,9 +834,55 @@ fn subtree_fingerprint(session_id: &str, allow_stale: bool) -> Option<String> {
     Some(format!("sha256:{hex}"))
 }
 
-/// Agent 路径的严格指纹：按库戳记同步重建。
+fn subtree_fingerprint(session_id: &str, allow_stale: bool) -> Option<String> {
+    if !store::database_path().exists() {
+        return None;
+    }
+    let cached = current_index(allow_stale)?;
+    let fingerprint = fingerprint_from_index(session_id, &cached);
+    if fingerprint.is_none() && allow_stale && cached.stamp != database_stamp() {
+        // 快照落后于库：比快照更新的会话还没进快照。给占位指纹保住索引条目。
+        return Some(format!("sha256:pending-{session_id}"));
+    }
+    fingerprint
+}
+
+fn compute_strict_fingerprint(session_id: &str) -> Option<StrictFingerprintEntry> {
+    let mut last = None;
+    for _ in 0..3 {
+        let before = database_stamp();
+        let (sessions, revisions, children) = read_target_fingerprint_index(session_id).ok()?;
+        let stamp = database_stamp();
+        let index = FingerprintIndex {
+            stamp: stamp.clone(),
+            sessions,
+            revisions,
+            children,
+        };
+        last = Some(StrictFingerprintEntry {
+            stamp,
+            value: fingerprint_from_index(session_id, &index),
+        });
+        if before == index.stamp {
+            break;
+        }
+    }
+    last
+}
+
+/// Agent 路径的严格指纹：库变化后只哈希目标 SQLite 子树，并按 stamp 有界缓存。
 pub fn fingerprint(session_id: &str) -> Option<String> {
-    subtree_fingerprint(session_id, false)
+    if !store::database_path().exists() {
+        return None;
+    }
+    let stamp = database_stamp();
+    if let Some(cached) = state().strict.get(session_id, &stamp) {
+        return cached;
+    }
+    let entry = compute_strict_fingerprint(session_id)?;
+    let value = entry.value.clone();
+    state().strict.insert(session_id, entry);
+    value
 }
 
 /// 扫描路径的指纹：容忍落后一轮的快照。
@@ -826,6 +1013,80 @@ mod tests {
     }
 
     #[test]
+    fn strict_fingerprint_matches_full_index_and_ignores_unrelated_writes() {
+        let _guard = guard();
+        let root = tempfile::tempdir().unwrap();
+        let database = root.path().join("opencode.db");
+        store::tests::materialize(&database, &fixture("case-01-plain"));
+        let payload = fixture("case-01-plain");
+        let root_id = payload["session"]["id"].as_str().unwrap();
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO session (id, parent_id) VALUES (?1, ?2)",
+                    ["child-session", root_id],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO session (id) VALUES (?1)",
+                    ["unrelated-session"],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO message (id, session_id, data, time_created) \
+                     VALUES ('child-message', 'child-session', '{}', 1)",
+                    [],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO message (id, session_id, data, time_created) \
+                     VALUES ('unrelated-message', 'unrelated-session', '{}', 1)",
+                    [],
+                )
+                .unwrap();
+        }
+        store::set_database_path_override(Some(database.clone()));
+        let (sessions, revisions, children) = read_fingerprint_index().unwrap();
+        let full = FingerprintIndex {
+            stamp: database_stamp(),
+            sessions,
+            revisions,
+            children,
+        };
+        let expected = fingerprint_from_index(root_id, &full).unwrap();
+        assert_eq!(fingerprint(root_id).as_deref(), Some(expected.as_str()));
+
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO part (id, message_id, session_id, data, time_created) \
+                     VALUES ('unrelated-part', 'unrelated-message', 'unrelated-session', '{}', 2)",
+                    [],
+                )
+                .unwrap();
+        }
+        assert_eq!(fingerprint(root_id).as_deref(), Some(expected.as_str()));
+
+        {
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO part (id, message_id, session_id, data, time_created) \
+                     VALUES ('child-part', 'child-message', 'child-session', '{}', 2)",
+                    [],
+                )
+                .unwrap();
+        }
+        assert_ne!(fingerprint(root_id).as_deref(), Some(expected.as_str()));
+        store::set_database_path_override(None);
+    }
+
+    #[test]
     fn the_scan_path_returns_a_placeholder_for_sessions_newer_than_the_snapshot() {
         let _guard = guard();
         let root = tempfile::tempdir().unwrap();
@@ -836,9 +1097,9 @@ mod tests {
         let _env =
             crate::system::paths::testing::EnvGuard::acquire().set("FERRY_DATA_DIR", &data_dir);
 
-        // 先建一次索引，再把库换掉但不重建 → 快照落后。
+        // 扫描路径先建一次全库索引，再把库换掉但不重建 → 快照落后。
         let plain = fixture("case-01-plain");
-        assert!(fingerprint(plain["session"]["id"].as_str().unwrap()).is_some());
+        assert!(scan_fingerprint(plain["session"]["id"].as_str().unwrap()).is_some());
         std::fs::remove_file(&database).unwrap();
         store::tests::materialize(&database, &fixture("case-02-tools"));
 
@@ -869,7 +1130,7 @@ mod tests {
 
         let plain = fixture("case-01-plain");
         let session_id = plain["session"]["id"].as_str().unwrap();
-        let expected = fingerprint(session_id).unwrap();
+        let expected = scan_fingerprint(session_id).unwrap();
         assert!(data_dir.join("opencode-fingerprints.json").is_file());
 
         // 模拟冷启动：清空进程内索引，只剩落盘快照。

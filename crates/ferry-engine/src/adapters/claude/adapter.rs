@@ -53,6 +53,10 @@ impl SessionBrowser for ClaudeBrowser {
         reader::read(reference)
     }
 
+    fn read_browser(&self, reference: &str) -> DomainResult<Session> {
+        reader::read_preview(reference)
+    }
+
     fn resolve_ref(&self, reference: &str) -> DomainResult<String> {
         Ok(claude_edit::resolve(reference)?
             .to_string_lossy()

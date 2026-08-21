@@ -536,6 +536,33 @@ impl AgentSessionIndex {
         Ok(self.refresh_with_status()?.1)
     }
 
+    /// 首次扫描后只刷新请求中的工具，避免带 `--agent` 的搜索重复扫描全部数据源。
+    ///
+    /// 与全量扫描保持相同的容错语义：单个工具失败时记录失败状态并清除该工具的
+    /// 旧快照，但不让整次搜索失败。未知工具无需扫描，调用方过滤后自然得到空集。
+    pub fn refresh_selected(&self, names: &[String]) -> DomainResult<Vec<IndexedSession>> {
+        if names.is_empty() || !self.locked().bootstrapped {
+            return self.refresh();
+        }
+
+        let configured: HashSet<String> = self.ports.adapters().into_iter().collect();
+        let mut selected: Vec<&String> = names
+            .iter()
+            .filter(|name| configured.contains(*name))
+            .collect();
+        selected.sort_unstable();
+        for name in selected {
+            if let Err(error) = self.refresh_tool(name) {
+                self.record_failed_tool_refresh(name, &error)?;
+            }
+        }
+
+        Ok(self
+            .snapshot_with_status()
+            .map(|(_, records, _)| records)
+            .unwrap_or_default())
+    }
+
     /// 全量扫库并重建索引；并发调用单飞合并（后到者至多陈旧一轮扫描）。
     pub fn refresh_with_status(&self) -> DomainResult<(Map<String, Value>, Vec<IndexedSession>)> {
         let (flight, leader) = {
@@ -695,6 +722,32 @@ impl AgentSessionIndex {
         status.insert("ok".into(), Value::Bool(true));
         status.insert("count".into(), Value::from(count));
         status.insert("path".into(), source_path);
+        self.locked()
+            .tool_status
+            .insert(name.to_string(), Value::Object(status));
+        Ok(())
+    }
+
+    fn record_failed_tool_refresh(&self, name: &str, error: &DomainError) -> DomainResult<()> {
+        let adapter = self.ports.adapter(name)?;
+        let _guard = self
+            .mutate_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut scope = HashSet::new();
+        scope.insert(name.to_string());
+        self.index_rows(&[], Some(&scope))?;
+
+        let mut status = Map::new();
+        status.insert("ok".into(), Value::Bool(false));
+        status.insert(
+            "error".into(),
+            Value::from(super::safety::truncate_text(error.message(), 200).0),
+        );
+        status.insert(
+            "path".into(),
+            Value::from(adapter.manifest.source_path.as_str()),
+        );
         self.locked()
             .tool_status
             .insert(name.to_string(), Value::Object(status));
@@ -1896,6 +1949,33 @@ pub(crate) mod golden_tests {
         assert_eq!(snapshot.len(), others);
         assert_eq!(generation, 1);
         assert!(snapshot.iter().all(|record| record.tool != tool));
+    }
+
+    #[test]
+    fn refresh_selected_only_scans_requested_tools_after_bootstrap() {
+        let harness = harness();
+        harness.index.refresh().expect("首扫成功");
+        let before: BTreeMap<String, usize> = harness
+            .browsers
+            .iter()
+            .map(|(name, browser)| {
+                (
+                    name.clone(),
+                    browser.scans.load(std::sync::atomic::Ordering::SeqCst),
+                )
+            })
+            .collect();
+        let selected = vec!["opencode".to_string()];
+
+        harness
+            .index
+            .refresh_selected(&selected)
+            .expect("定向刷新成功");
+
+        for (name, browser) in &harness.browsers {
+            let delta = browser.scans.load(std::sync::atomic::Ordering::SeqCst) - before[name];
+            assert_eq!(delta, usize::from(name == "opencode"), "{name}");
+        }
     }
 
     #[test]

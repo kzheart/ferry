@@ -536,15 +536,19 @@ impl EngineService for Engine {
         limit: &Value,
     ) -> EngineResult<Value> {
         let name = tool_name(tool)?;
-        SessionPorts::adapter(self.ports.as_ref(), name)?.require_browser()?;
+        let browser = SessionPorts::adapter(self.ports.as_ref(), name)?.require_browser()?;
         self.checked_query(tool, reference, |record| {
             // 浏览路径与 Agent 读取共用同一 locator 命名空间：详情里的
             // turn_locator 与 Agent preview 候选、operations 编辑通道对得上。
             let issuer = agent_read::browser_locator_issuer(&self.index, record);
-            let session =
-                session_read::read_tree(name, &record.canonical_ref, self.ports.as_ref())?;
+            let session = browser.read_browser(&record.canonical_ref)?;
             let options = if equals_one(from_message) && limit.is_null() {
-                session_read::show_options()
+                session_read::SessionJsonOptions {
+                    tree_count: record.row.get("tree_count").and_then(Value::as_i64),
+                    child_count: record.row.get("child_count").and_then(Value::as_i64),
+                    total_count: record.row.get("count").and_then(Value::as_i64),
+                    ..session_read::show_options()
+                }
             } else {
                 session_read::SessionJsonOptions {
                     from_message: integer_param(from_message, "from_message")?,

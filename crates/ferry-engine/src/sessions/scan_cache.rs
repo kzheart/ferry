@@ -13,6 +13,7 @@
 //! ```
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use serde_json::{Map, Value};
@@ -24,6 +25,8 @@ use crate::system::paths::home_dir;
 const DIGESTS_KEY: &str = "digests";
 /// 缓存条目格式版本；改条目形状必须升它，否则旧条目会被当成新条目读。
 pub const SCAN_CACHE_VERSION: i64 = 6;
+const MAX_SCAN_ENTRIES: usize = 20_000;
+const MAX_DIGEST_ENTRIES: usize = 20_000;
 
 /// 条目合并规则：同一个 key 取 mtime 较新的那份。
 fn newer(candidate: &Value, current: Option<&Value>) -> bool {
@@ -71,11 +74,47 @@ fn merge(base: &Map<String, Value>, incoming: &Map<String, Value>) -> Map<String
     merged
 }
 
+fn entry_mtime(value: &Value) -> i64 {
+    value
+        .as_object()
+        .and_then(|entry| entry.get("mtime"))
+        .and_then(Value::as_i64)
+        .unwrap_or(-1)
+}
+
+fn prune_oldest(entries: &mut Map<String, Value>, limit: usize) {
+    if entries.len() <= limit {
+        return;
+    }
+    let mut ordered: Vec<(String, i64)> = entries
+        .iter()
+        .map(|(key, value)| (key.clone(), entry_mtime(value)))
+        .collect();
+    ordered.sort_unstable_by_key(|(_, mtime)| *mtime);
+    for (key, _) in ordered.into_iter().take(entries.len() - limit) {
+        entries.remove(&key);
+    }
+}
+
+fn prune(mut data: Map<String, Value>) -> Map<String, Value> {
+    let mut digests = match data.remove(DIGESTS_KEY) {
+        Some(Value::Object(entries)) => entries,
+        _ => Map::new(),
+    };
+    prune_oldest(&mut data, MAX_SCAN_ENTRIES);
+    prune_oldest(&mut digests, MAX_DIGEST_ENTRIES);
+    if !digests.is_empty() {
+        data.insert(DIGESTS_KEY.into(), Value::Object(digests));
+    }
+    data
+}
+
 pub struct ScanCache {
     path: PathBuf,
     version: i64,
     /// `None` = 尚未从磁盘装载（对齐 Python 的懒加载）。
     data: Mutex<Option<Map<String, Value>>>,
+    dirty: AtomicBool,
 }
 
 impl ScanCache {
@@ -89,6 +128,7 @@ impl ScanCache {
             path: path.unwrap_or_else(default_cache_path),
             version,
             data: Mutex::new(None),
+            dirty: AtomicBool::new(false),
         }
     }
 
@@ -149,7 +189,12 @@ impl ScanCachePort for ScanCache {
             "meta".into(),
             meta.map(Value::Object).unwrap_or(Value::Null),
         );
-        data.insert(path.to_string_lossy().into_owned(), Value::Object(entry));
+        let key = path.to_string_lossy().into_owned();
+        let entry = Value::Object(entry);
+        if data.get(&key) != Some(&entry) {
+            data.insert(key, entry);
+            self.dirty.store(true, Ordering::Release);
+        }
     }
 
     fn get_digest(&self, path: &Path, stat: &FileStat) -> Option<String> {
@@ -187,13 +232,19 @@ impl ScanCachePort for ScanCache {
         entry.insert("mtime".into(), Value::from(stat.mtime_ns as i64));
         entry.insert("size".into(), Value::from(stat.size as i64));
         entry.insert("sha256".into(), Value::from(digest));
-        digests
-            .as_object_mut()
-            .expect("上一步已保证是 object")
-            .insert(path.to_string_lossy().into_owned(), Value::Object(entry));
+        let entries = digests.as_object_mut().expect("上一步已保证是 object");
+        let key = path.to_string_lossy().into_owned();
+        let entry = Value::Object(entry);
+        if entries.get(&key) != Some(&entry) {
+            entries.insert(key, entry);
+            self.dirty.store(true, Ordering::Release);
+        }
     }
 
     fn flush(&self) {
+        if !self.dirty.swap(false, Ordering::AcqRel) {
+            return;
+        }
         let mut guard = self
             .data
             .lock()
@@ -206,7 +257,7 @@ impl ScanCachePort for ScanCache {
         }
         // 直接整份覆盖会把别人刚写进去的条目丢掉：持锁做
         // 「读回磁盘最新 → 合并本实例增量 → 写回」。
-        let merged = merge(&self.read_disk(), current);
+        let merged = prune(merge(&self.read_disk(), current));
         let name = self
             .path
             .file_name()
@@ -218,11 +269,12 @@ impl ScanCachePort for ScanCache {
             std::process::id(),
             thread_marker()
         ));
-        let payload = serde_json::to_string(&Value::Object(merged.clone())).unwrap_or_default();
+        let payload = serde_json::to_string(&merged).unwrap_or_default();
         if std::fs::write(&temp, payload).is_ok() && std::fs::rename(&temp, &self.path).is_ok() {
             *guard = Some(merged);
         } else {
             let _ = std::fs::remove_file(&temp);
+            self.dirty.store(true, Ordering::Release);
         }
     }
 }
@@ -360,5 +412,34 @@ mod tests {
         std::fs::write(&file, "not json").unwrap();
         let cache = ScanCache::new(Some(file));
         assert_eq!(cache.get(Path::new("/a"), &stat(1, 1)), None);
+    }
+
+    #[test]
+    fn clean_flush_does_not_touch_the_cache_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("scan-cache.json");
+        let cache = ScanCache::new(Some(file.clone()));
+        cache.put(Path::new("/a"), &stat(1, 1), None);
+        cache.flush();
+
+        std::fs::write(&file, "external-writer").unwrap();
+        cache.flush();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "external-writer");
+
+        cache.put(Path::new("/a"), &stat(1, 1), None);
+        cache.flush();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "external-writer");
+    }
+
+    #[test]
+    fn pruning_keeps_the_newest_entries() {
+        let mut entries = Map::new();
+        for mtime in 1..=4 {
+            entries.insert(format!("/{mtime}"), json!({"mtime": mtime, "meta": null}));
+        }
+        prune_oldest(&mut entries, 2);
+        assert_eq!(entries.len(), 2);
+        assert!(entries.contains_key("/3"));
+        assert!(entries.contains_key("/4"));
     }
 }

@@ -33,7 +33,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RUST_BIN = ROOT / "crates/ferry-engine/target/aarch64-apple-darwin/release/ferry-engine"
+NATIVE_BIN = ROOT / "crates/ferry-engine/target/release/ferry-engine"
+CROSS_BIN = ROOT / "crates/ferry-engine/target/aarch64-apple-darwin/release/ferry-engine"
+RUST_BIN = NATIVE_BIN if NATIVE_BIN.is_file() else CROSS_BIN
 PROTOCOL = "ferry-ipc/1"
 
 

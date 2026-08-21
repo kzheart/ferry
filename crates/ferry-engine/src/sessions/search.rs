@@ -323,7 +323,7 @@ pub fn search_sessions(
         })
         .collect();
 
-    let records = index.refresh()?;
+    let records = index.refresh_selected(&allowed_agents)?;
     // 元数据过滤前置：正则扫描只扫过滤后的会话，主循环复用同一份。
     let mut filtered: Vec<Candidate> = Vec::new();
     for record in &records {

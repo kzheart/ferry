@@ -196,7 +196,7 @@ def load_engine_methods() -> list[dict[str, object]]:
     allowed_kinds = {"read", "index-refresh", "mutation"}
     allowed_timeouts = {"normal", "lookup", "agent-run"}
     allowed_retries = {"safe-read", "never"}
-    allowed_dispatches = {"parallel-read", "serial"}
+    allowed_dispatches = {"control", "parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
         if not isinstance(method, dict) or set(method) != required:
@@ -228,8 +228,10 @@ def load_engine_methods() -> list[dict[str, object]]:
             raise ValueError(f"Engine method {name} 的 retry 无效")
         if method["dispatch"] not in allowed_dispatches:
             raise ValueError(f"Engine method {name} 的 dispatch 无效")
-        if method["dispatch"] == "parallel-read" and method["kind"] != "read":
-            raise ValueError(f"Engine method {name} 的 parallel-read 只能用于 read")
+        if method["dispatch"] in {"control", "parallel-read"} and method["kind"] != "read":
+            raise ValueError(
+                f"Engine method {name} 的 control/parallel-read 只能用于 read"
+            )
         names.append(name)
     if len(names) != len(set(names)):
         raise ValueError("Engine method name 必须唯一")
@@ -1598,7 +1600,11 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "agent-run": "AgentRun",
     }
     retry_variants = {"safe-read": "SafeRead", "never": "Never"}
-    dispatch_variants = {"parallel-read": "ParallelRead", "serial": "Serial"}
+    dispatch_variants = {
+        "control": "Control",
+        "parallel-read": "ParallelRead",
+        "serial": "Serial",
+    }
     rows: list[str] = []
     for method in methods:
         rows.extend((
@@ -1613,6 +1619,10 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
     parallel = [
         method["name"] for method in methods
         if method["dispatch"] == "parallel-read"
+    ]
+    control = [
+        method["name"] for method in methods
+        if method["dispatch"] == "control"
     ]
     cli = methods_for_caller(methods, "cli")
 
@@ -1637,7 +1647,7 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
           if any(method["retry"] == retry for method in methods)),
         "}",
         "",
-        "/// 分发池归属：parallel-read 走 4-worker 只读池（可乱序），",
+        "/// 分发池归属：control 走独立轻量控制池，parallel-read 走 4-worker 只读池，",
         "/// 其余方法一律单 worker 串行保序。",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub enum Dispatch {",
@@ -1661,6 +1671,9 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
             "PARALLEL_READ_METHOD_NAMES", parallel, "pub",
         ),
         "",
+        "/// 进独立轻量控制池的方法，不得被重读队列阻塞。",
+        rust_compact_declaration("CONTROL_METHOD_NAMES", control, "pub"),
+        "",
         "/// callers 含 cli 的方法：本地 socket 传输只分发这一集合。",
         rust_expanded_declaration("CLI_METHOD_NAMES", cli, "pub"),
         "",
@@ -1673,6 +1686,10 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "",
         "pub fn is_parallel_read(method: &str) -> bool {",
         "    PARALLEL_READ_METHOD_NAMES.contains(&method)",
+        "}",
+        "",
+        "pub fn is_control(method: &str) -> bool {",
+        "    CONTROL_METHOD_NAMES.contains(&method)",
         "}",
         "",
         "pub fn is_cli_method(method: &str) -> bool {",

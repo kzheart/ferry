@@ -306,7 +306,7 @@ fn serve_forever(
     // 常驻模式：日志只能走 stderr（stdout 是 RPC 通道），宿主会把它接到日志文件。
     enable_stderr_logging();
     let dispatcher = Arc::new(dispatcher);
-    // stdio 与全部 socket 连接共用同一对工作道：多开连接不得多开串行道。
+    // stdio 与全部 socket 连接共用同一组工作道：多开连接不得多开串行道。
     let lanes = Lanes::new();
     let daemon = socket_config
         .as_ref()

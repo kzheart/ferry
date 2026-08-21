@@ -511,6 +511,14 @@ fn read_tree(session_id: &str) -> DomainResult<Session> {
     Ok(root)
 }
 
+/// 只读取目标会话本身，不沿 parent/task 关系递归子会话。
+fn read_one(session_id: &str) -> DomainResult<Session> {
+    let connection = store::open_database()?;
+    let (mut session, _task_edges) = parse_session(&export(&connection, session_id)?)?;
+    session.root_id = Some(session_id.to_string());
+    Ok(session)
+}
+
 fn export(connection: &Connection, identifier: &str) -> DomainResult<Value> {
     store::export_from_database(connection, identifier)?
         .ok_or_else(|| DomainError::session_not_found("opencode", identifier))
@@ -626,9 +634,9 @@ pub fn read(session_id: &str) -> DomainResult<Session> {
     read_tree(session_id)
 }
 
-/// Agent 预览读取；OpenCode 的预览与正式读取走同一条只读链路。
+/// Agent 预览只读取目标根会话；`session_read` 不消费 children，无需递归整棵子树。
 pub fn read_preview(session_id: &str) -> DomainResult<Session> {
-    read_tree(session_id)
+    read_one(session_id)
 }
 
 #[cfg(test)]
@@ -639,6 +647,51 @@ mod tests {
 
     pub(crate) fn register() {
         register_dialect("opencode", &super::super::dialect::DIALECT);
+    }
+
+    struct DatabaseOverride;
+
+    impl DatabaseOverride {
+        fn install(path: std::path::PathBuf) -> Self {
+            super::store::set_database_path_override(Some(path));
+            Self
+        }
+    }
+
+    impl Drop for DatabaseOverride {
+        fn drop(&mut self) {
+            super::store::set_database_path_override(None);
+        }
+    }
+
+    fn add_child(database: &std::path::Path, parent_id: &str, part_data: &str) {
+        let connection = Connection::open(database).unwrap();
+        connection
+            .execute(
+                "INSERT INTO session \
+                 (id, title, directory, time_created, time_updated, parent_id) \
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                rusqlite::params!["child-session", "Child", "/tmp/child", 2, 2, parent_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                rusqlite::params![
+                    "child-message",
+                    "child-session",
+                    json!({"role": "user", "time": {"created": 2}}).to_string(),
+                    2
+                ],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) \
+                 VALUES (?, ?, ?, ?, ?)",
+                rusqlite::params!["child-part", "child-message", "child-session", part_data, 2],
+            )
+            .unwrap();
     }
 
     #[test]
@@ -873,6 +926,62 @@ mod tests {
                 "{case} 的 canonical Session 与黄金基线不一致"
             );
         }
+    }
+
+    #[test]
+    fn agent_preview_keeps_root_content_without_reading_children() {
+        register();
+        let _guard = super::store::tests::exclusive();
+        let fixture = super::store::tests::fixture("case-01-plain");
+        let root = tempfile::tempdir().unwrap();
+        let database = root.path().join("opencode.db");
+        super::store::tests::materialize(&database, &fixture);
+        let root_id = fixture["session"]["id"].as_str().unwrap();
+        add_child(&database, root_id, "not-json");
+        let _override = DatabaseOverride::install(database);
+
+        let preview = read_preview(root_id).expect("预览不应解析损坏的子会话");
+        assert_eq!(preview.source_id, root_id);
+        assert_eq!(
+            preview.title,
+            fixture["session"]["title"].as_str().unwrap_or("")
+        );
+        assert_eq!(
+            preview.cwd,
+            fixture["session"]["directory"].as_str().unwrap_or("")
+        );
+        assert!(!preview.messages.is_empty());
+        assert!(preview.children.is_empty());
+        assert!(read(root_id).is_err(), "正式读取仍应递归并发现损坏的子会话");
+    }
+
+    #[test]
+    fn full_read_still_includes_children_after_preview_is_lightweight() {
+        register();
+        let _guard = super::store::tests::exclusive();
+        let fixture = super::store::tests::fixture("case-01-plain");
+        let root = tempfile::tempdir().unwrap();
+        let database = root.path().join("opencode.db");
+        super::store::tests::materialize(&database, &fixture);
+        let root_id = fixture["session"]["id"].as_str().unwrap();
+        add_child(
+            &database,
+            root_id,
+            &json!({"type": "text", "text": "child body"}).to_string(),
+        );
+        let _override = DatabaseOverride::install(database);
+
+        let preview = read_preview(root_id).unwrap();
+        let full = read(root_id).unwrap();
+        assert_eq!(preview.source_id, full.source_id);
+        assert_eq!(preview.title, full.title);
+        assert_eq!(preview.cwd, full.cwd);
+        assert_eq!(preview.messages, full.messages);
+        assert_eq!(preview.root_id, full.root_id);
+        assert!(preview.children.is_empty());
+        assert_eq!(full.children.len(), 1);
+        assert_eq!(full.children[0].source_id, "child-session");
+        assert_eq!(full.children[0].messages[0].blocks[0].text, "child body");
     }
 
     #[test]

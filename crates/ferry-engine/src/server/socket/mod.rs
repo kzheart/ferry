@@ -11,7 +11,7 @@
 //! 3. **不订阅事件**：CLI 是请求-响应式调用方，notifier 只接 stdio。代价是
 //!    socket 侧拿不到 `sessions.changed` 增量，CLI 需要状态就显式查。
 //!
-//! 工作道与 stdio 共用同一对（见 [`crate::server::serve::Lanes`]），所以「读
+//! 工作道与 stdio 共用同一组（见 [`crate::server::serve::Lanes`]），所以「读
 //! 并行、mutation 串行」是进程级不变量，不会因为多开连接而失效。
 
 pub mod idle;
@@ -26,7 +26,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
-use crate::contracts::engine_methods::{is_cli_method, is_parallel_read};
+use crate::contracts::engine_methods::{is_cli_method, is_control, is_parallel_read};
 use crate::contracts::ipc::FERRY_CONTRACT_HASH;
 use crate::errors::DomainError;
 use crate::server::rpc::{error_envelope, result_envelope, RpcDispatcher, PROTOCOL};
@@ -402,6 +402,7 @@ fn lane_policy(shared: Arc<Shared>) -> LanePolicy {
                 &DomainError::method_not_exposed(other, "cli"),
                 &id,
             )),
+            other if is_control(other) => Lane::Control,
             other if is_parallel_read(other) => Lane::Parallel,
             _ => Lane::Serial,
         }
@@ -488,7 +489,7 @@ mod tests {
         }
         // callers 含 cli 的方法照旧进工作道。
         assert!(immediate(&policy, "content_search").is_none());
-        assert!(matches!(policy(&request("health")), Lane::Parallel));
+        assert!(matches!(policy(&request("health")), Lane::Control));
         assert!(matches!(policy(&request("operation.plan")), Lane::Serial));
     }
 

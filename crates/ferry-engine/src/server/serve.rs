@@ -1,13 +1,14 @@
 //! 常驻模式：每行一个请求，每行一个响应或事件帧。
 //!
 //! 硬约束（§2.1 第 3 / 7 条）：
-//! - `PARALLEL_READ_METHOD_NAMES` 的 9 个方法进 4-worker 只读池，可乱序完成；
+//! - 轻量控制方法进独立的单 worker 池，不受重读队列阻塞；
+//! - `PARALLEL_READ_METHOD_NAMES` 的方法进 4-worker 只读池，可乱序完成；
 //!   其余请求一律进单 worker 池，严格保序；
 //! - 每条输出通道只有一把写锁，响应与事件帧共用，保证行级原子；
 //! - 日志只能走 stderr——stdout 上任何杂质都会打死连接；
 //! - EOF 后必须等全部在途请求完成再退出；worker 里的失败不能被吞掉。
 //!
-//! stdio 与本地 socket 是两种传输、**同一对工作道**：[`Lanes`] 由进程共享，
+//! stdio 与本地 socket 是两种传输、**同一组工作道**：[`Lanes`] 由进程共享，
 //! 多开一条 socket 连接不会多开一条串行道，否则「mutation 全局串行」会失效。
 //! 传输差异全部收在 [`LanePolicy`] 里——socket 的 callers 过滤与 `daemon.*`
 //! 拦截就是一条自定义 policy，读线程直接回帧、不进工作道。
@@ -17,15 +18,33 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use crate::contracts::engine_methods::is_parallel_read;
+use crate::contracts::engine_methods::{is_control, is_parallel_read};
 use crate::server::notify::{LineWriter, Notifier};
 
 /// 只读池的 worker 数（`MAX_PARALLEL_READS`）。
 pub const MAX_PARALLEL_READS: usize = 4;
+
+/// 轻量控制池串行即可；这些方法必须保持常数时间且无 I/O。
+const MAX_CONTROL_WORKERS: usize = 1;
+const ALLOCATOR_RELIEF_AFTER: Duration = Duration::from_millis(25);
+
+#[cfg(target_os = "macos")]
+fn release_unused_allocator_pages() {
+    unsafe extern "C" {
+        fn malloc_zone_pressure_relief(zone: *mut std::ffi::c_void, goal: usize) -> usize;
+    }
+    // null zone requests relief from every malloc zone in the process.
+    unsafe {
+        malloc_zone_pressure_relief(std::ptr::null_mut(), 0);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn release_unused_allocator_pages() {}
 
 /// 一次请求的处理函数：拿到原始请求行，返回要写回的 JSON 值。
 ///
@@ -34,10 +53,60 @@ pub type ServeHandler = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
+#[derive(Default)]
+struct ReliefState {
+    active_reads: usize,
+    pending_slow: bool,
+}
+
+struct ReliefCoordinator {
+    state: Mutex<ReliefState>,
+    relieve: Arc<dyn Fn() + Send + Sync>,
+}
+
+impl ReliefCoordinator {
+    fn new(relieve: impl Fn() + Send + Sync + 'static) -> Arc<Self> {
+        Arc::new(Self {
+            state: Mutex::new(ReliefState::default()),
+            relieve: Arc::new(relieve),
+        })
+    }
+
+    fn wrap(self: &Arc<Self>, job: Job) -> Job {
+        let coordinator = Arc::clone(self);
+        Box::new(move || {
+            coordinator.enter();
+            let started = Instant::now();
+            job();
+            coordinator.finish(started.elapsed() >= ALLOCATOR_RELIEF_AFTER);
+        })
+    }
+
+    fn enter(&self) {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .active_reads += 1;
+    }
+
+    fn finish(&self, slow: bool) {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        state.pending_slow |= slow;
+        state.active_reads = state.active_reads.saturating_sub(1);
+        if state.active_reads == 0 && state.pending_slow {
+            state.pending_slow = false;
+            // 持锁期间新的 read worker 会停在 admission 前；控制 lane 不受影响。
+            (self.relieve)();
+        }
+    }
+}
+
 /// 一行请求的处置。
 pub enum Lane {
     /// 传输层直接回帧：不经 handler、不占工作道（`daemon.*` 与 callers 拒绝）。
     Immediate(Value),
+    /// 进独立轻量控制池。
+    Control,
     /// 进 4-worker 只读池。
     Parallel,
     /// 进单 worker 串行池。
@@ -49,15 +118,10 @@ pub type LanePolicy = Arc<dyn Fn(&str) -> Lane + Send + Sync>;
 
 /// 默认分道：契约的 parallel-read 表说了算，其余串行。
 pub fn contract_lane_policy() -> LanePolicy {
-    Arc::new(|request: &str| {
-        if request_method(request)
-            .as_deref()
-            .is_some_and(is_parallel_read)
-        {
-            Lane::Parallel
-        } else {
-            Lane::Serial
-        }
+    Arc::new(|request: &str| match request_method(request).as_deref() {
+        Some(method) if is_control(method) => Lane::Control,
+        Some(method) if is_parallel_read(method) => Lane::Parallel,
+        _ => Lane::Serial,
     })
 }
 
@@ -126,30 +190,36 @@ impl Pool {
     }
 }
 
-/// 进程级的两条工作道：1 串行 + 4 并行读。
+/// 进程级的三条工作道：1 控制 + 1 串行 + 4 并行读。
 pub struct Lanes {
+    control: Pool,
     serial: Pool,
     reads: Pool,
+    relief: Arc<ReliefCoordinator>,
 }
 
 impl Lanes {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
+            control: Pool::new(MAX_CONTROL_WORKERS, "engine-control"),
             serial: Pool::new(1, "engine-serial"),
             reads: Pool::new(MAX_PARALLEL_READS, "engine-read"),
+            relief: ReliefCoordinator::new(release_unused_allocator_pages),
         })
     }
 
-    fn submit(&self, parallel: bool, job: Job) {
-        if parallel {
-            self.reads.submit(job);
-        } else {
-            self.serial.submit(job);
+    fn submit(&self, lane: Lane, job: Job) {
+        match lane {
+            Lane::Control => self.control.submit(job),
+            Lane::Parallel => self.reads.submit(self.relief.wrap(job)),
+            Lane::Serial => self.serial.submit(job),
+            Lane::Immediate(_) => unreachable!("即时帧不得进工作池"),
         }
     }
 
-    /// 先关只读池再关串行池，两者都等在途请求结束。
+    /// 关闭所有工作池，并等在途请求结束。
     pub fn shutdown(&self) {
+        self.control.shutdown();
         self.reads.shutdown();
         self.serial.shutdown();
     }
@@ -230,13 +300,12 @@ fn pump<R: BufRead>(
         if request.is_empty() {
             continue;
         }
-        let parallel = match policy(&request) {
+        let lane = match policy(&request) {
             Lane::Immediate(response) => {
                 write_line(&response.to_string());
                 continue;
             }
-            Lane::Parallel => true,
-            Lane::Serial => false,
+            lane => lane,
         };
         let handler = Arc::clone(handler);
         let write_line = Arc::clone(write_line);
@@ -244,7 +313,7 @@ fn pump<R: BufRead>(
         let in_flight = Arc::clone(&in_flight);
         in_flight.enter();
         lanes.submit(
-            parallel,
+            lane,
             Box::new(move || {
                 match handler(&request) {
                     Ok(response) => write_line(&response.to_string()),
@@ -260,7 +329,7 @@ fn pump<R: BufRead>(
     in_flight.wait_until_idle();
 }
 
-/// stdio 常驻：独占一对工作道，EOF 后关池退出。
+/// stdio 常驻：独占一组工作道，EOF 后关池退出。
 pub fn serve<R: BufRead>(
     input: R,
     output: Box<dyn Write + Send>,
@@ -270,7 +339,7 @@ pub fn serve<R: BufRead>(
     serve_on(Lanes::new(), input, output, handler, notifier)
 }
 
-/// stdio 常驻，但工作道由调用方给（App sidecar 与 socket 连接共用同一对）。
+/// stdio 常驻，但工作道由调用方给（App sidecar 与 socket 连接共用同一组）。
 pub fn serve_on<R: BufRead>(
     lanes: Arc<Lanes>,
     input: R,
@@ -404,6 +473,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+    use std::sync::mpsc;
     use std::time::Duration;
 
     /// 可跨线程共享的内存输出。
@@ -434,8 +504,55 @@ mod tests {
         }
     }
 
+    struct ResponseWriter {
+        buffer: Vec<u8>,
+        responses: mpsc::Sender<Value>,
+    }
+
+    impl Write for ResponseWriter {
+        fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+            self.buffer.extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            let line = std::str::from_utf8(&self.buffer)
+                .map_err(std::io::Error::other)?
+                .trim();
+            if !line.is_empty() {
+                let response = serde_json::from_str(line).map_err(std::io::Error::other)?;
+                self.responses
+                    .send(response)
+                    .map_err(std::io::Error::other)?;
+            }
+            self.buffer.clear();
+            Ok(())
+        }
+    }
+
     fn request(id: &str, method: &str) -> String {
         format!(r#"{{"protocol":"ferry-ipc/1","id":"{id}","method":"{method}","params":{{}}}}"#)
+    }
+
+    #[test]
+    fn allocator_relief_runs_once_after_the_entire_read_wave_finishes() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let coordinator = ReliefCoordinator::new(move || {
+            observed.fetch_add(1, Ordering::SeqCst);
+        });
+        for _ in 0..MAX_PARALLEL_READS {
+            coordinator.enter();
+        }
+
+        coordinator.finish(true);
+        coordinator.finish(true);
+        coordinator.finish(true);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+        // 最后完成的读取本身即使很快，也必须替前面的慢读取收尾。
+        coordinator.finish(false);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -491,8 +608,8 @@ mod tests {
         serve(
             format!(
                 "{}\n{}\n",
-                request("slow", "health"),
-                request("fast", "version")
+                request("slow", "env"),
+                request("fast", "models")
             )
             .as_bytes(),
             Box::new(output.clone()),
@@ -508,6 +625,69 @@ mod tests {
             .map(|line| line["id"].as_str().unwrap().to_string())
             .collect();
         assert_eq!(ids, ["fast", "slow"]);
+    }
+
+    #[test]
+    fn control_requests_are_not_starved_by_a_saturated_read_pool() {
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let (started_tx, started_rx) = mpsc::channel();
+        let handler: ServeHandler = {
+            let gate = Arc::clone(&gate);
+            Arc::new(move |request: &str| {
+                let value: Value = serde_json::from_str(request).unwrap();
+                if value["method"] == "show" {
+                    started_tx.send(()).unwrap();
+                    let (released, changed) = gate.as_ref();
+                    let mut released = released.lock().unwrap();
+                    while !*released {
+                        released = changed.wait(released).unwrap();
+                    }
+                }
+                Ok(serde_json::json!({
+                    "protocol": "ferry-ipc/1",
+                    "id": value["id"],
+                    "ok": true,
+                    "result": null,
+                }))
+            })
+        };
+        let input = (0..MAX_PARALLEL_READS)
+            .map(|index| request(&format!("heavy-{index}"), "show"))
+            .chain(std::iter::once(request("control", "health")))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (responses_tx, responses_rx) = mpsc::channel();
+        let serving = std::thread::spawn(move || {
+            serve(
+                std::io::Cursor::new(format!("{input}\n")),
+                Box::new(ResponseWriter {
+                    buffer: Vec::new(),
+                    responses: responses_tx,
+                }),
+                handler,
+                None,
+            )
+        });
+
+        let all_reads_started = (0..MAX_PARALLEL_READS)
+            .all(|_| started_rx.recv_timeout(Duration::from_secs(1)).is_ok());
+        let control_response = if all_reads_started {
+            responses_rx.recv_timeout(Duration::from_secs(1)).ok()
+        } else {
+            None
+        };
+
+        let (released, changed) = gate.as_ref();
+        *released.lock().unwrap() = true;
+        changed.notify_all();
+        serving.join().unwrap().unwrap();
+
+        assert!(all_reads_started, "4 个重读 worker 未全部进入门控处理器");
+        assert_eq!(
+            control_response.as_ref().map(|response| &response["id"]),
+            Some(&Value::from("control")),
+            "health 在重读释放前没有从独立控制通道返回"
+        );
     }
 
     #[test]

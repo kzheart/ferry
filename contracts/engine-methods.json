@@ -9,7 +9,7 @@
       ],
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "parallel-read"
+      "dispatch": "control"
     },
     {
       "name": "version",
@@ -20,7 +20,7 @@
       ],
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "parallel-read"
+      "dispatch": "control"
     },
     {
       "name": "scan",
@@ -42,7 +42,7 @@
       ],
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "parallel-read"
+      "dispatch": "control"
     },
     {
       "name": "env",
