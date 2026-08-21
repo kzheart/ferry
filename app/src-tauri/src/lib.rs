@@ -40,7 +40,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             engine::engine_rpc,
-            engine::trusted_engine_rpc,
             operations::operation_plan,
             operations::operation_apply,
             operations::operation_status,
@@ -52,7 +51,19 @@ pub fn run() {
             desktop::reveal::reveal_path,
             desktop::role_file::export_roles_file,
             desktop::role_file::import_roles_file,
-            desktop::skill_dir::pick_skill_directory
+            desktop::skill_dir::pick_skill_directory,
+            desktop::integration::integration_status,
+            desktop::integration::cli_install,
+            desktop::integration::cli_uninstall,
+            desktop::integration::skill_install,
+            desktop::integration::skill_uninstall,
+            desktop::integration::skill_install_custom,
+            desktop::integration::engine_service_status,
+            desktop::features::features_list,
+            desktop::features::feature_set,
+            desktop::integration::get_engine_share,
+            desktop::integration::set_engine_share,
+            desktop::integration::engine_daemon_stop
         ])
         .on_window_event(desktop::window::handle_window_event)
         .run(tauri::generate_context!())

@@ -829,6 +829,7 @@ version = "0.7.0"
 dependencies = [
  "block2",
  "fix-path-env",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",

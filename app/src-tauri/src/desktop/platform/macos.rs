@@ -130,6 +130,34 @@ fn open_warp(launch: &TerminalLaunch) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn home_dir() -> Result<PathBuf, String> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "无法定位用户主目录".to_string())
+}
+
+pub(super) fn cli_link_path() -> Result<PathBuf, String> {
+    Ok(home_dir()?.join(".local").join("bin").join("ferry"))
+}
+
+pub(super) fn create_cli_link(link: &Path, target: &Path) -> Result<(), String> {
+    if let Some(parent) = link.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("创建 {} 失败: {error}", parent.display()))?;
+    }
+    // symlink(2) 不覆盖已有项,更新安装必须先摘掉旧入口。用 symlink_metadata 判存在,
+    // 否则指向已删除二进制的断链会被 exists() 判成不存在,remove 又照样失败。
+    if fs::symlink_metadata(link).is_ok() {
+        fs::remove_file(link).map_err(|error| format!("移除旧的 CLI 入口失败: {error}"))?;
+    }
+    std::os::unix::fs::symlink(target, link).map_err(|error| format!("创建 CLI 入口失败: {error}"))
+}
+
+pub(super) fn process_alive(pid: u32) -> bool {
+    // signal 0 只做权限与存在性检查,不投递信号。
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+}
+
 pub(super) fn open_terminal(
     launch: &TerminalLaunch,
     preference: TerminalPreference,

@@ -87,7 +87,7 @@ pub(crate) fn local_engine_candidates(root: &Path, windows: bool) -> Vec<PathBuf
 /// 不该被恒定压在 debug 之后；而引擎开发者刚 `cargo build` 出的 debug 产物
 /// 又必须立即生效。按 mtime 取最新即可两全。
 #[cfg(debug_assertions)]
-pub(crate) fn local_engine_command() -> Option<Command> {
+pub(crate) fn local_engine_path() -> Option<PathBuf> {
     local_engine_candidates(&repository_root(), cfg!(target_os = "windows"))
         .into_iter()
         .filter(|path| path.is_file())
@@ -96,7 +96,11 @@ pub(crate) fn local_engine_command() -> Option<Command> {
                 .and_then(|meta| meta.modified())
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
         })
-        .map(Command::new)
+}
+
+#[cfg(debug_assertions)]
+pub(crate) fn local_engine_command() -> Option<Command> {
+    local_engine_path().map(Command::new)
 }
 
 /// 开发模式找不到引擎产物时的报错：直接给出构建命令与找过的位置。

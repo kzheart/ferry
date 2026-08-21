@@ -55,6 +55,9 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "externalBin": ["binaries/ferry-engine", "binaries/ferry-runtime"],
+    "resources": {
+      "../../skills/ferry": "skills/ferry"
+    },
     "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }

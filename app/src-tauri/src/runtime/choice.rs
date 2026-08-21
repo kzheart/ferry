@@ -312,13 +312,15 @@ pub(super) fn propose(
     Ok(answer)
 }
 
+/// 选择卡只由 runtime 的 ask_user 挂起:开关关着时没有挂起项,这里跟着一起挡住。
 #[tauri::command]
 pub(crate) fn choice_respond(
     session_id: String,
     request_id: String,
     answer: Value,
-) -> Result<(), String> {
-    respond_value(&session_id, &request_id, answer)
+) -> Result<(), super::RuntimeError> {
+    super::runtime_gate()?;
+    Ok(respond_value(&session_id, &request_id, answer)?)
 }
 
 /// run 走到终态:唤醒该会话所有挂起的选择,并记住这个 run 已经结束。

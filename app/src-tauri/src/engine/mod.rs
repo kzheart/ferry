@@ -1,9 +1,11 @@
+pub(crate) mod daemon;
 mod policy;
 
 use self::policy::{request_attempts, request_timeout};
-use crate::contracts::engine_methods::{self, Exposure};
+use crate::contracts::engine_methods::is_ui_engine_method;
 use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
+use crate::desktop::{host_settings, platform};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
 use crate::process::command::{bundled_sidecar_command, configure_background};
 use crate::process::error::ProcessError;
@@ -96,9 +98,72 @@ fn validate_engine_response_id(response: &str, request_id: &str) -> Result<(), S
     Ok(())
 }
 
+/// 带 socket 起不来时的重试间隔:绑定冲突多半是上一个实例正在收尾。
+const SOCKET_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+/// 本次启动要不要共享引擎。开关的事实源是宿主自己的配置文件(WebView 此刻还没起来),
+/// 平台不支持 socket 时无论开关如何都不共享。
+fn socket_argument(share: bool, socket: Result<PathBuf, String>) -> Option<PathBuf> {
+    if !share {
+        return None;
+    }
+    match socket {
+        Ok(path) => Some(path),
+        Err(reason) => {
+            host_log("engine", &format!("本平台没有引擎 socket,不共享: {reason}"));
+            None
+        }
+    }
+}
+
 fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
+    match socket_argument(
+        host_settings::engine_share(),
+        platform::engine_socket_path(),
+    ) {
+        Some(socket) => spawn_shared_engine(resource_dir, &socket),
+        None => spawn_engine_process(resource_dir, None),
+    }
+}
+
+/// 共享形态的启动序列:先把在跑的 CLI daemon 请下去(App 优先级恒高于 daemon),
+/// 再带 `--socket` 起自己;绑定竞态给一次重试,仍失败就**降级为不共享**——
+/// 共享是增值能力,App 必须能起来(docs/cli-skill-design.md §4.2)。
+fn spawn_shared_engine(resource_dir: &Path, socket: &Path) -> Result<EngineProcess, String> {
+    daemon::evict(socket);
+    match spawn_engine_process(resource_dir, Some(socket)) {
+        Ok(process) => return Ok(process),
+        Err(error) => host_log(
+            "engine",
+            &format!(
+                "带 socket 启动失败,{}ms 后重试一次: {error}",
+                SOCKET_RETRY_DELAY.as_millis()
+            ),
+        ),
+    }
+    std::thread::sleep(SOCKET_RETRY_DELAY);
+    match spawn_engine_process(resource_dir, Some(socket)) {
+        Ok(process) => Ok(process),
+        Err(error) => {
+            host_log(
+                "engine",
+                &format!("socket 仍不可用,降级为不共享引擎启动: {error}"),
+            );
+            spawn_engine_process(resource_dir, None)
+        }
+    }
+}
+
+fn spawn_engine_process(
+    resource_dir: &Path,
+    socket: Option<&Path>,
+) -> Result<EngineProcess, String> {
     let mut command = engine_command(resource_dir)?;
     command.arg("serve");
+    // 不传 --mode:默认就是 app 模式——不 idle-exit,也拒绝 CLI 的 daemon.shutdown。
+    if let Some(socket) = socket {
+        command.arg("--socket").arg(socket);
+    }
     configure_background(&mut command);
     command
         .stdin(Stdio::piped())
@@ -107,7 +172,16 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
     let mut child = command
         .spawn()
         .map_err(|error| format!("启动引擎失败: {error}"))?;
-    host_log("engine", &format!("引擎进程已启动 pid={}", child.id()));
+    host_log(
+        "engine",
+        &format!(
+            "引擎进程已启动 pid={} socket={}",
+            child.id(),
+            socket
+                .map(Path::display)
+                .map_or("无".to_owned(), |path| path.to_string()),
+        ),
+    );
     let stdin = child.stdin.take().ok_or("引擎 stdin 不可用")?;
     let stdout = child.stdout.take().ok_or("引擎 stdout 不可用")?;
     let transport = JsonlProcessClient::new("Engine", stdin);
@@ -284,31 +358,20 @@ pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
 #[tauri::command]
 pub(crate) async fn engine_rpc(app: tauri::AppHandle, request: String) -> Result<String, String> {
     use tauri::Manager;
-    validate_engine_request_exposure(&request, Exposure::Public)?;
+    validate_engine_request_caller(&request)?;
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
         .await
         .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-pub(crate) async fn trusted_engine_rpc(
-    app: tauri::AppHandle,
-    request: String,
-) -> Result<String, String> {
-    use tauri::Manager;
-    validate_engine_request_exposure(&request, Exposure::TrustedUi)?;
-    let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || engine_request_blocking(&resource_dir, &request))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-fn validate_engine_request_exposure(request: &str, expected: Exposure) -> Result<(), String> {
+/// 通用通道只认 callers 含 ui 的方法;operation.* 这类走各自的专用命令,
+/// 参数形状由宿主固定,不能从这里按方法名直通。
+fn validate_engine_request_caller(request: &str) -> Result<(), String> {
     let value: Value = serde_json::from_str(request)
         .map_err(|error| format!("Engine 请求不是有效 JSON: {error}"))?;
     let method = value.get("method").and_then(Value::as_str).unwrap_or("");
-    if !engine_methods::policy(method).is_some_and(|policy| policy.exposure == expected) {
+    if !is_ui_engine_method(method) {
         return Err("该 Engine 方法不允许从当前前端通道调用".to_owned());
     }
     Ok(())

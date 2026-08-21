@@ -1,3 +1,6 @@
+pub(crate) mod features;
+pub(crate) mod host_settings;
+pub(crate) mod integration;
 #[cfg(target_os = "macos")]
 pub(crate) mod menu;
 pub(crate) mod platform;

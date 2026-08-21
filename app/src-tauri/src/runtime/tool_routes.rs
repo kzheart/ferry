@@ -32,9 +32,9 @@ pub(super) fn resolve_tool_request(
         requires_approval: false,
     };
     Some(match name {
-        "session_search" => read("agent_search_sessions"),
-        "session_read" => read("agent_session_read"),
-        "usage" => read("agent_get_usage"),
+        "session_search" => read("content_search"),
+        "session_read" => read("session_read"),
+        "usage" => read("usage_stats"),
         "agent_prompt" => {
             if !has_exact_keys(args, &["tool", "ref", "prompt"], &["model", "timeout_sec"]) {
                 return None;
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn tool_gateway_is_an_exact_allowlist() {
         let read = resolve_tool_request("session_read", &map(json!({"ref": "fsr_a"}))).unwrap();
-        assert_eq!(read.method, "agent_session_read");
+        assert_eq!(read.method, "session_read");
         assert!(!read.requires_approval);
 
         let migrate_preview = resolve_tool_request(

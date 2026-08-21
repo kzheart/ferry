@@ -1,9 +1,9 @@
 use super::policy::{AGENT_LOOKUP_TIMEOUT, AGENT_RUN_TIMEOUT, ENGINE_TIMEOUT};
 use super::{
-    read_engine_output, request_attempts, request_timeout, stamp_engine_request,
-    validate_engine_request_exposure, validate_engine_response_id, FERRY_IPC_PROTOCOL,
+    read_engine_output, request_attempts, request_timeout, socket_argument, stamp_engine_request,
+    validate_engine_request_caller, validate_engine_response_id, FERRY_IPC_PROTOCOL,
 };
-use crate::contracts::engine_methods::{is_runtime_gateway_method, Exposure};
+use crate::contracts::engine_methods::is_runtime_gateway_method;
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
     MigrationOperationPlanInput, OperationPlanInput,
@@ -14,6 +14,7 @@ use crate::operations::request::{
 use crate::operations::validate_operation_plan_input;
 use crate::process::client::PendingResponses;
 use std::io::Cursor;
+use std::path::PathBuf;
 
 #[test]
 fn engine_output_is_dispatched_by_id_even_when_responses_are_reordered() {
@@ -53,27 +54,27 @@ fn malformed_engine_output_releases_all_waiting_requests() {
     );
 }
 
+/// 共享开关与平台能力任一为否,sidecar 就不带 `--socket` 起——降级永远存在。
+#[test]
+fn sharing_needs_both_the_switch_and_a_platform_socket() {
+    let path = || Ok(PathBuf::from("/home/u/.ferry/engine.sock"));
+    assert_eq!(socket_argument(true, path()), Some(path().unwrap()));
+    assert_eq!(socket_argument(false, path()), None);
+    assert_eq!(
+        socket_argument(true, Err("当前平台尚未实现引擎 socket".to_owned())),
+        None
+    );
+    assert_eq!(socket_argument(false, Err("无所谓".to_owned())), None);
+}
+
 #[test]
 fn sensitive_agent_methods_are_not_generic_rpc_methods() {
-    assert!(
-        validate_engine_request_exposure(r#"{"method":"operation.apply"}"#, Exposure::Public,)
-            .is_err()
-    );
-    assert!(validate_engine_request_exposure(r#"{"method":"scan"}"#, Exposure::Public,).is_ok());
-    assert!(
-        validate_engine_request_exposure(r#"{"method":"agent_prompt"}"#, Exposure::TrustedUi,)
-            .is_err()
-    );
-    assert!(validate_engine_request_exposure(
-        r#"{"method":"agent_session_read"}"#,
-        Exposure::Public,
-    )
-    .is_err());
+    assert!(validate_engine_request_caller(r#"{"method":"operation.apply"}"#).is_err());
+    assert!(validate_engine_request_caller(r#"{"method":"scan"}"#).is_ok());
+    assert!(validate_engine_request_caller(r#"{"method":"agent_prompt"}"#).is_err());
+    assert!(validate_engine_request_caller(r#"{"method":"session_read"}"#).is_err());
     // 删除迁移记录只动 Ferry 自己的历史文件,不写目标工具的会话
-    assert!(
-        validate_engine_request_exposure(r#"{"method":"history_delete"}"#, Exposure::Public,)
-            .is_ok()
-    );
+    assert!(validate_engine_request_caller(r#"{"method":"history_delete"}"#).is_ok());
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn operation_enqueue_uses_normal_rpc_timeout() {
 
 #[test]
 fn agent_lookups_have_one_short_deadline() {
-    let request = r#"{"method":"agent_search_sessions"}"#;
+    let request = r#"{"method":"content_search"}"#;
     assert_eq!(request_timeout(request), AGENT_LOOKUP_TIMEOUT);
     assert_eq!(request_attempts(request), 1);
 }

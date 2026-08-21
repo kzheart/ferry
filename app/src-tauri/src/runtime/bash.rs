@@ -235,14 +235,18 @@ fn kill_group(pid: u32) {
         .status();
 }
 
+/// bash 审批只在 runtime 会话里产生:开关关着时提案不可能存在,这里跟着一起挡住。
 #[tauri::command]
-pub(crate) async fn bash_apply(plan_id: String) -> Result<Value, String> {
+pub(crate) async fn bash_apply(plan_id: String) -> Result<Value, super::RuntimeError> {
+    super::runtime_gate()?;
     if !is_bash_plan(&plan_id) {
-        return Err("agent.approval_invalid".to_owned());
+        return Err("agent.approval_invalid".into());
     }
-    tauri::async_runtime::spawn_blocking(move || apply(&plan_id))
-        .await
-        .map_err(|error| error.to_string())?
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || apply(&plan_id))
+            .await
+            .map_err(|error| error.to_string())??,
+    )
 }
 
 #[cfg(test)]

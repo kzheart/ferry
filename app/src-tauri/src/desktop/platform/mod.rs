@@ -4,7 +4,8 @@
 //! 不需要把平台判断散落回 Tauri command 或会话逻辑。
 
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -12,6 +13,13 @@ mod macos;
 mod unsupported;
 #[cfg(target_os = "windows")]
 mod windows;
+
+// 引擎 socket 的边界按 unix / 非 unix 划,而不是按 macOS / 其余:unix domain socket
+// 的实现在 macOS 与 Linux 上完全一样,拆进两个 OS 模块只会抄一遍。
+#[cfg(unix)]
+mod socket_unix;
+#[cfg(not(unix))]
+mod socket_unsupported;
 
 pub(crate) fn reveal_path(path: &Path) -> Result<(), String> {
     imp::reveal_path(path)
@@ -57,8 +65,48 @@ pub(crate) fn open_terminal(
     imp::open_terminal(launch, preference)
 }
 
+/// 用户主目录。`~/.claude/skills` 这类契约路径的展开点,平台各自决定读哪个变量。
+pub(crate) fn home_dir() -> Result<PathBuf, String> {
+    imp::home_dir()
+}
+
+/// `ferry` CLI 的安装点。macOS 是 `~/.local/bin/ferry`;
+/// Windows 的 `%LOCALAPPDATA%\Ferry\bin` + 用户 PATH 尚未实现。
+pub(crate) fn cli_link_path() -> Result<PathBuf, String> {
+    imp::cli_link_path()
+}
+
+/// 建立指向引擎二进制的 CLI 入口(macOS 是 symlink),已存在同名项时覆盖。
+pub(crate) fn create_cli_link(link: &Path, target: &Path) -> Result<(), String> {
+    imp::create_cli_link(link, target)
+}
+
+/// 进程是否还活着。只探测,不发真实信号。
+pub(crate) fn process_alive(pid: u32) -> bool {
+    imp::process_alive(pid)
+}
+
+/// 引擎监听的本地 socket 路径。`Err` 表示这个平台上没有共享引擎这回事,
+/// 调用方据此完全跳过 socket 相关的启动步骤。
+pub(crate) fn engine_socket_path() -> Result<PathBuf, String> {
+    socket_imp::engine_socket_path()
+}
+
+/// 在引擎 socket 上做一次一问一答的调用(请求必须是单行 JSONL,不含换行)。
+pub(crate) fn engine_socket_call(
+    socket: &Path,
+    request: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    socket_imp::engine_socket_call(socket, request, timeout)
+}
+
 #[cfg(target_os = "macos")]
 use macos as imp;
+#[cfg(unix)]
+use socket_unix as socket_imp;
+#[cfg(not(unix))]
+use socket_unsupported as socket_imp;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use unsupported as imp;
 #[cfg(target_os = "windows")]
