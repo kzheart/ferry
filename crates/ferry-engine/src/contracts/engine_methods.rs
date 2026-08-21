@@ -8,12 +8,6 @@ pub enum MethodKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Exposure {
-    Public,
-    Internal,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TimeoutClass {
     Normal,
     Lookup,
@@ -37,7 +31,6 @@ pub enum Dispatch {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EngineMethodPolicy {
     pub kind: MethodKind,
-    pub exposure: Exposure,
     pub timeout: TimeoutClass,
     pub retry: RetryPolicy,
     pub dispatch: Dispatch,
@@ -63,9 +56,9 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",
-    "agent_search_sessions",
-    "agent_session_read",
-    "agent_get_usage",
+    "content_search",
+    "session_read",
+    "usage_stats",
     "agent_prompt",
     "operation.plan",
     "operation.apply",
@@ -86,186 +79,180 @@ pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
     "session_meta_list",
 ];
 
+/// callers 含 cli 的方法：本地 socket 传输只分发这一集合。
+pub const CLI_METHOD_NAMES: &[&str] = &[
+    "health",
+    "version",
+    "scan",
+    "scan_progress",
+    "env",
+    "resume",
+    "models",
+    "history",
+    "session_meta_list",
+    "content_search",
+    "session_read",
+    "usage_stats",
+    "operation.plan",
+    "operation.apply",
+    "operation.status",
+    "operation.cancel",
+];
+
 pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
     match method {
         "health" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "version" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "scan" => Some(EngineMethodPolicy {
             kind: MethodKind::IndexRefresh,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::Serial,
         }),
         "scan_progress" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "env" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "resume" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::Serial,
         }),
         "models" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "history" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "history_delete" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "pricing" => Some(EngineMethodPolicy {
             kind: MethodKind::IndexRefresh,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::Serial,
         }),
         "show" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "session_asset" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "session_meta_list" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
         }),
         "session_search" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Public,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "runtime_sessions.load_all" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::Serial,
         }),
         "runtime_sessions.commit" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "runtime_sessions.delete" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "runtime_sessions.truncate" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
-        "agent_search_sessions" => Some(EngineMethodPolicy {
+        "content_search" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
-        "agent_session_read" => Some(EngineMethodPolicy {
+        "session_read" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
-        "agent_get_usage" => Some(EngineMethodPolicy {
+        "usage_stats" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "agent_prompt" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::AgentRun,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "operation.plan" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "operation.apply" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),
         "operation.status" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::Serial,
         }),
         "operation.cancel" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
-            exposure: Exposure::Internal,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
@@ -276,4 +263,8 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
 
 pub fn is_parallel_read(method: &str) -> bool {
     PARALLEL_READ_METHOD_NAMES.contains(&method)
+}
+
+pub fn is_cli_method(method: &str) -> bool {
+    CLI_METHOD_NAMES.contains(&method)
 }

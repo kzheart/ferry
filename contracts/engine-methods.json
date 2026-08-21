@@ -3,7 +3,10 @@
     {
       "name": "health",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -11,7 +14,10 @@
     {
       "name": "version",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -19,7 +25,10 @@
     {
       "name": "scan",
       "kind": "index-refresh",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "serial"
@@ -27,7 +36,10 @@
     {
       "name": "scan_progress",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -35,7 +47,10 @@
     {
       "name": "env",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -43,7 +58,10 @@
     {
       "name": "resume",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "serial"
@@ -51,7 +69,10 @@
     {
       "name": "models",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -59,7 +80,10 @@
     {
       "name": "history",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -67,7 +91,9 @@
     {
       "name": "history_delete",
       "kind": "mutation",
-      "exposure": "public",
+      "callers": [
+        "ui"
+      ],
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"
@@ -75,7 +101,9 @@
     {
       "name": "pricing",
       "kind": "index-refresh",
-      "exposure": "public",
+      "callers": [
+        "ui"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "serial"
@@ -83,7 +111,9 @@
     {
       "name": "show",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -91,7 +121,9 @@
     {
       "name": "session_asset",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -99,7 +131,10 @@
     {
       "name": "session_meta_list",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui",
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "parallel-read"
@@ -107,7 +142,9 @@
     {
       "name": "session_search",
       "kind": "read",
-      "exposure": "public",
+      "callers": [
+        "ui"
+      ],
       "timeout": "lookup",
       "retry": "never",
       "dispatch": "serial"
@@ -115,67 +152,69 @@
     {
       "name": "runtime_sessions.load_all",
       "kind": "read",
-      "exposure": "internal",
+      "callers": [
+        "runtime"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
-      "dispatch": "serial",
-      "consumers": [
-        "runtime-gateway"
-      ]
+      "dispatch": "serial"
     },
     {
       "name": "runtime_sessions.commit",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "runtime"
+      ],
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial",
-      "consumers": [
-        "runtime-gateway"
-      ]
+      "dispatch": "serial"
     },
     {
       "name": "runtime_sessions.delete",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "runtime"
+      ],
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial",
-      "consumers": [
-        "runtime-gateway"
-      ]
+      "dispatch": "serial"
     },
     {
       "name": "runtime_sessions.truncate",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "runtime"
+      ],
       "timeout": "normal",
       "retry": "never",
-      "dispatch": "serial",
-      "consumers": [
-        "runtime-gateway"
-      ]
+      "dispatch": "serial"
     },
     {
-      "name": "agent_search_sessions",
+      "name": "content_search",
       "kind": "read",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "lookup",
       "retry": "never",
       "dispatch": "serial"
     },
     {
-      "name": "agent_session_read",
+      "name": "session_read",
       "kind": "read",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "lookup",
       "retry": "never",
       "dispatch": "serial"
     },
     {
-      "name": "agent_get_usage",
+      "name": "usage_stats",
       "kind": "read",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "lookup",
       "retry": "never",
       "dispatch": "serial"
@@ -183,18 +222,19 @@
     {
       "name": "agent_prompt",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "runtime"
+      ],
       "timeout": "agent-run",
       "retry": "never",
-      "dispatch": "serial",
-      "consumers": [
-        "runtime-gateway"
-      ]
+      "dispatch": "serial"
     },
     {
       "name": "operation.plan",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"
@@ -202,7 +242,9 @@
     {
       "name": "operation.apply",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"
@@ -210,7 +252,9 @@
     {
       "name": "operation.status",
       "kind": "read",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "safe-read",
       "dispatch": "serial"
@@ -218,7 +262,9 @@
     {
       "name": "operation.cancel",
       "kind": "mutation",
-      "exposure": "internal",
+      "callers": [
+        "cli"
+      ],
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"

@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const PUBLIC_ENGINE_METHODS = [
+export const UI_ENGINE_METHODS = [
   "health",
   "version",
   "scan",
@@ -15,7 +15,4 @@ export const PUBLIC_ENGINE_METHODS = [
   "session_meta_list",
   "session_search",
 ] as const;
-export const TRUSTED_UI_ENGINE_METHODS = [] as const;
-export type PublicEngineMethod = (typeof PUBLIC_ENGINE_METHODS)[number];
-export type TrustedUiEngineMethod =
-  (typeof TRUSTED_UI_ENGINE_METHODS)[number];
+export type UiEngineMethod = (typeof UI_ENGINE_METHODS)[number];

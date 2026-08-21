@@ -18,6 +18,7 @@ SESSION_REF_SOURCE = ROOT / "contracts" / "session-ref.json"
 OPERATIONS_SOURCE = ROOT / "contracts" / "operations.json"
 EVENTS_SOURCE = ROOT / "contracts" / "events.json"
 ERRORS_SOURCE = ROOT / "contracts" / "errors.json"
+FEATURES_SOURCE = ROOT / "contracts" / "features.json"
 # engine-rust 是 Rust Session Engine（crates/ferry-engine）的生成目标：与 host
 # 的 rust 目标同源不同形——可见性用 pub（跨模块消费），且引擎侧需要 host 用不到
 # 的分发元数据（kind/dispatch、方法名全集、并发只读方法集）。
@@ -67,6 +68,21 @@ ERROR_OUTPUTS = {
     ENGINE_RUST_CONTRACTS / "errors.rs": "engine-rust",
     ROOT / "ferry-runtime/src/server/generated/errors.ts": "runtime",
 }
+# 特性开关只有两个消费方：宿主（唯一裁决者）与 UI（唯一编辑器）。引擎与 Runtime
+# 不认识它——它们被开关拦住的那一面在宿主的网关上，不在自己进程里。
+FEATURE_OUTPUTS = {
+    ROOT / "app/src/shared/contracts/generated/features.ts": "frontend",
+    ROOT / "app/src-tauri/src/contracts/features.rs": "rust",
+}
+# Engine 方法的调用方矩阵词表：每个调用方对应一条按方法名分发的传输通道
+# （ui = 宿主给 WebView 的通用 Engine RPC，runtime = 宿主 runtime 网关的转发，
+# cli = 本地 socket 传输）。固定顺序，契约里的 callers 必须是它的有序子集。
+ENGINE_CALLERS = ("ui", "runtime", "cli")
+# 特性开关的「面」词表：一个特性可能同时有宿主 runtime 网关这一面和界面这一面。
+# host-runtime 指的是宿主里那道拦住 Runtime sidecar 的门，不是 ferry-runtime 进程。
+FEATURE_SURFACES = ("host-runtime", "ui")
+# 特性 id 与 Rust 变体名一一对应，所以形态必须窄到能无歧义地转成 PascalCase。
+FEATURE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 AGENT_CAPABILITIES = (
     "browse",
     "resume",
@@ -176,44 +192,36 @@ def load_engine_methods() -> list[dict[str, object]]:
     methods = document.get("methods")
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
-    required = {"name", "kind", "exposure", "timeout", "retry", "dispatch"}
-    # consumers 是纯元数据:标注哪些下游把这个方法编进自己的白名单/联合类型，
-    # 不参与 wire 协议，只驱动代码生成。
-    optional = {"consumers"}
-    allowed_consumers = {"runtime-gateway"}
+    required = {"name", "kind", "callers", "timeout", "retry", "dispatch"}
     allowed_kinds = {"read", "index-refresh", "mutation"}
-    allowed_exposures = {"public", "trusted-ui", "internal"}
     allowed_timeouts = {"normal", "lookup", "agent-run"}
     allowed_retries = {"safe-read", "never"}
     allowed_dispatches = {"parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
-        if (
-            not isinstance(method, dict)
-            or not required <= set(method)
-            or set(method) - required - optional
-        ):
+        if not isinstance(method, dict) or set(method) != required:
             raise ValueError(
                 "Engine 方法契约字段必须精确为 "
-                "name/kind/exposure/timeout/retry/dispatch(+可选 consumers)"
-            )
-        consumers = method.get("consumers")
-        if consumers is not None and (
-            not isinstance(consumers, list)
-            or not consumers
-            or len(set(consumers)) != len(consumers)
-            or not set(consumers) <= allowed_consumers
-        ):
-            raise ValueError(
-                f"Engine method {method.get('name')} 的 consumers 无效"
+                "name/kind/callers/timeout/retry/dispatch"
             )
         name = method["name"]
         if not isinstance(name, str) or not name:
             raise ValueError("Engine method name 必须非空")
+        callers = method["callers"]
+        if (
+            not isinstance(callers, list)
+            or not callers
+            or len(callers) != len(set(callers))
+            or any(caller not in ENGINE_CALLERS for caller in callers)
+            or callers != [
+                caller for caller in ENGINE_CALLERS if caller in callers
+            ]
+        ):
+            raise ValueError(
+                f"Engine method {name} 的 callers 必须是 ENGINE_CALLERS 的非空有序子集"
+            )
         if method["kind"] not in allowed_kinds:
             raise ValueError(f"Engine method {name} 的 kind 无效")
-        if method["exposure"] not in allowed_exposures:
-            raise ValueError(f"Engine method {name} 的 exposure 无效")
         if method["timeout"] not in allowed_timeouts:
             raise ValueError(f"Engine method {name} 的 timeout 无效")
         if method["retry"] not in allowed_retries:
@@ -460,6 +468,166 @@ def load_errors() -> list[dict[str, object]]:
     return errors
 
 
+def load_features() -> dict[str, object]:
+    """特性开关的唯一事实源：stage 词表 + 特性表。"""
+    document = json.loads(FEATURES_SOURCE.read_text())
+    if set(document) != {"stages", "features"}:
+        raise ValueError("contracts/features.json 顶层键必须是 stages/features")
+    stages = document["stages"]
+    if (
+        not isinstance(stages, list)
+        or not stages
+        or not all(isinstance(stage, str) and stage for stage in stages)
+        or len(stages) != len(set(stages))
+    ):
+        raise ValueError("Feature stages 必须是唯一非空字符串数组")
+    features = document["features"]
+    if not isinstance(features, list) or not features:
+        raise ValueError("contracts/features.json 必须包含非空 features 数组")
+    identifiers = []
+    for feature in features:
+        if set(feature) != {"id", "stage", "default", "surfaces", "since"}:
+            raise ValueError(
+                "Feature 字段必须精确为 id/stage/default/surfaces/since"
+            )
+        if not isinstance(feature["id"], str) or not FEATURE_ID_PATTERN.match(
+            feature["id"]
+        ):
+            raise ValueError("Feature id 必须是 kebab-case")
+        if feature["stage"] not in stages:
+            raise ValueError(f"Feature {feature['id']} 的 stage 不在 stages 词表里")
+        if not isinstance(feature["default"], bool):
+            raise ValueError("Feature default 必须是布尔值")
+        surfaces = feature["surfaces"]
+        if (
+            not isinstance(surfaces, list)
+            or not surfaces
+            or len(surfaces) != len(set(surfaces))
+            or not set(surfaces) <= set(FEATURE_SURFACES)
+        ):
+            raise ValueError("Feature surfaces 必须是 FEATURE_SURFACES 的非空无重子集")
+        if surfaces != [s for s in FEATURE_SURFACES if s in surfaces]:
+            raise ValueError("Feature surfaces 必须按固定词表顺序排列")
+        if not isinstance(feature["since"], str) or not feature["since"]:
+            raise ValueError("Feature since 必须是非空字符串")
+        identifiers.append(feature["id"])
+    if len(identifiers) != len(set(identifiers)):
+        raise ValueError("Feature id 必须唯一")
+    return document
+
+
+def features_frontend(contract: dict[str, object]) -> str:
+    rows = [
+        "  { "
+        f'id: {json.dumps(feature["id"])}, '
+        f'stage: {json.dumps(feature["stage"])}, '
+        f'default: {json.dumps(feature["default"])} '
+        "},"
+        for feature in contract["features"]
+    ]
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        f"export const FEATURE_STAGES = {json.dumps(contract['stages'])} as const;",
+        "export type FeatureStage = (typeof FEATURE_STAGES)[number];",
+        "export const FEATURES = [",
+        *rows,
+        "] as const;",
+        'export type FeatureId = (typeof FEATURES)[number]["id"];',
+        "export const isFeatureId = (id: unknown): id is FeatureId =>",
+        "  FEATURES.some(feature => feature.id === id);",
+        "",
+    ))
+
+
+def features_rust(contract: dict[str, object]) -> str:
+    features = contract["features"]
+    rows = []
+    for feature in features:
+        surfaces = rust_inline_array(list(feature["surfaces"]), 8)
+        surfaces[-1] += ","
+        rows.extend((
+            "    FeatureSpec {",
+            f"        feature: Feature::{_pascal_case(feature['id'])},",
+            f'        id: {json.dumps(feature["id"])},',
+            f'        stage: {json.dumps(feature["stage"])},',
+            f'        default: {json.dumps(feature["default"])},',
+            f"        surfaces: {surfaces[0]}",
+            *surfaces[1:],
+            "    },",
+        ))
+    # 单个元素时 rustfmt 会把 `&[` 与那条结构体字面量并到同一行（末位溢出）。
+    if len(features) == 1:
+        table = [
+            f"pub(crate) const FEATURES: &[FeatureSpec] = &[{rows[0].lstrip()}",
+            *(row[4:] for row in rows[1:-1]),
+            "}];",
+        ]
+    else:
+        table = [
+            "pub(crate) const FEATURES: &[FeatureSpec] = &[",
+            *rows,
+            "];",
+        ]
+    return "\n".join((
+        "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
+        "/// 契约声明的特性开关。id 与变体一一对应：毕业时删掉契约里那一行，这个",
+        "/// 变体随之消失，所有引用点变成编译错误，强制清理干净。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) enum Feature {",
+        *(f"    {_pascal_case(feature['id'])}," for feature in features),
+        "}",
+        "",
+        "/// 一个特性的静态形态。`surfaces` 声明它有哪几张面，宿主据此决定把它交给谁",
+        "/// （比如设置页只列有 `ui` 面的特性）。",
+        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
+        "pub(crate) struct FeatureSpec {",
+        "    pub(crate) feature: Feature,",
+        "    pub(crate) id: &'static str,",
+        "    pub(crate) stage: &'static str,",
+        "    pub(crate) default: bool,",
+        "    pub(crate) surfaces: &'static [&'static str],",
+        "}",
+        "",
+        *table,
+        "",
+        "impl Feature {",
+        "    /// 前端传来的 id 只能经这里进门：不认识的一律返回 None。",
+        "    pub(crate) fn from_id(id: &str) -> Option<Self> {",
+        "        match id {",
+        *(
+            f'            {json.dumps(feature["id"])} '
+            f"=> Some(Self::{_pascal_case(feature['id'])}),"
+            for feature in features
+        ),
+        "            _ => None,",
+        "        }",
+        "    }",
+        "",
+        "    pub(crate) fn id(self) -> &'static str {",
+        "        match self {",
+        *(
+            f"            Self::{_pascal_case(feature['id'])} "
+            f'=> {json.dumps(feature["id"])},'
+            for feature in features
+        ),
+        "        }",
+        "    }",
+        "}",
+        "",
+        "/// 契约默认值：配置文件里没写过这个键时用它。",
+        "pub(crate) fn default_of(feature: Feature) -> bool {",
+        "    match feature {",
+        *(
+            f"        Feature::{_pascal_case(feature['id'])} "
+            f'=> {json.dumps(feature["default"])},'
+            for feature in features
+        ),
+        "    }",
+        "}",
+        "",
+    ))
+
+
 def frontend(agents: list[dict[str, object]]) -> str:
     payload = {
         agent["id"]: {
@@ -526,6 +694,13 @@ def rust(agents: list[dict[str, object]]) -> str:
             *nested,
             "    ),",
         ))
+    # 宿主装 Ferry skill 时要知道「装到哪」：(agent id, 展示名, 目标目录)。
+    # 一个 agent 有多个 skill 目录就展开成多行，宿主按顺序逐个处理。
+    skill_target_rows = [
+        f'    ("{agent["id"]}", "{agent["display_name"]}", "{path}"),'
+        for agent in agents
+        for path in agent["skill_paths"]
+    ]
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         *rust_const_str_slice("AGENT_IDS", [agent["id"] for agent in agents]),
@@ -533,6 +708,10 @@ def rust(agents: list[dict[str, object]]) -> str:
         *capability_rows,
         "];",
         *rust_const_str_slice("ALLOWED_EXECUTABLES", executables),
+        "pub(crate) const AGENT_SKILL_TARGETS: &[(&str, &str, &str)] = &[",
+        *skill_target_rows,
+        "];",
+        *rust_const_str_slice("SHARED_SKILL_PATHS", load_shared_skill_paths()),
         "",
     ))
 def runtime(agents: list[dict[str, object]]) -> str:
@@ -599,22 +778,18 @@ def runtime(agents: list[dict[str, object]]) -> str:
     ))
 
 
-def methods_for_consumer(
-    methods: list[dict[str, object]], consumer: str,
+def methods_for_caller(
+    methods: list[dict[str, object]], caller: str,
 ) -> list[str]:
-    """按 consumers 元数据挑出某个消费方的方法集，保持 JSON 中的声明顺序。"""
+    """按 callers 矩阵挑出某个调用方的方法集，保持 JSON 中的声明顺序。"""
     return [
         method["name"] for method in methods
-        if consumer in (method.get("consumers") or ())
+        if caller in method["callers"]
     ]
 
 
 def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
-    public = [method["name"] for method in methods if method["exposure"] == "public"]
-    trusted = [
-        method["name"] for method in methods
-        if method["exposure"] == "trusted-ui"
-    ]
+    ui = methods_for_caller(methods, "ui")
 
     def array(values: list[str]) -> str:
         if not values:
@@ -625,17 +800,15 @@ def engine_methods_frontend(methods: list[dict[str, object]]) -> str:
 
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        f"export const PUBLIC_ENGINE_METHODS = {array(public)} as const;",
-        f"export const TRUSTED_UI_ENGINE_METHODS = {array(trusted)} as const;",
-        "export type PublicEngineMethod = (typeof PUBLIC_ENGINE_METHODS)[number];",
-        "export type TrustedUiEngineMethod =",
-        "  (typeof TRUSTED_UI_ENGINE_METHODS)[number];",
+        f"export const UI_ENGINE_METHODS = {array(ui)} as const;",
+        "export type UiEngineMethod = (typeof UI_ENGINE_METHODS)[number];",
         "",
     ))
 
 
 def engine_methods_rust(methods: list[dict[str, object]]) -> str:
-    gateway = methods_for_consumer(methods, "runtime-gateway")
+    ui = methods_for_caller(methods, "ui")
+    gateway = methods_for_caller(methods, "runtime")
     timeout_variants = {
         "normal": "Normal",
         "lookup": "Lookup",
@@ -648,29 +821,16 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
     ]
     rows = []
     for method in methods:
-        exposure = {
-            "public": "Public",
-            "trusted-ui": "TrustedUi",
-            "internal": "Internal",
-        }[method["exposure"]]
         timeout = timeout_variants[method["timeout"]]
         retry = {"safe-read": "SafeRead", "never": "Never"}[method["retry"]]
         rows.extend((
             f'        {json.dumps(method["name"])} => Some(EngineMethodPolicy {{',
-            f"            exposure: Exposure::{exposure},",
             f"            timeout: TimeoutClass::{timeout},",
             f"            retry: RetryPolicy::{retry},",
             "        }),",
         ))
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
-        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
-        "pub(crate) enum Exposure {",
-        "    Public,",
-        "    TrustedUi,",
-        "    Internal,",
-        "}",
-        "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub(crate) enum TimeoutClass {",
         *(f"    {variant}," for variant in used_timeout_variants),
@@ -684,7 +844,6 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub(crate) struct EngineMethodPolicy {",
-        "    pub(crate) exposure: Exposure,",
         "    pub(crate) timeout: TimeoutClass,",
         "    pub(crate) retry: RetryPolicy,",
         "}",
@@ -696,10 +855,15 @@ def engine_methods_rust(methods: list[dict[str, object]]) -> str:
         "    }",
         "}",
         "",
+        "/// WebView 的通用 Engine RPC 通道允许按方法名调用的方法。",
+        rust_compact_declaration("UI_ENGINE_METHODS", ui),
+        "",
+        "pub(crate) fn is_ui_engine_method(method: &str) -> bool {",
+        "    UI_ENGINE_METHODS.contains(&method)",
+        "}",
+        "",
         "/// Ferry Runtime 允许经网关转发到 Engine 的方法白名单。",
-        "pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[",
-        *(f"    {json.dumps(name)}," for name in gateway),
-        "];",
+        rust_compact_declaration("RUNTIME_GATEWAY_METHODS", gateway),
         "",
         "pub(crate) fn is_runtime_gateway_method(method: &str) -> bool {",
         "    RUNTIME_GATEWAY_METHODS.contains(&method)",
@@ -1428,11 +1592,6 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "index-refresh": "IndexRefresh",
         "mutation": "Mutation",
     }
-    exposure_variants = {
-        "public": "Public",
-        "trusted-ui": "TrustedUi",
-        "internal": "Internal",
-    }
     timeout_variants = {
         "normal": "Normal",
         "lookup": "Lookup",
@@ -1445,7 +1604,6 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         rows.extend((
             f'        {json.dumps(method["name"])} => Some(EngineMethodPolicy {{',
             f'            kind: MethodKind::{kind_variants[method["kind"]]},',
-            f'            exposure: Exposure::{exposure_variants[method["exposure"]]},',
             f'            timeout: TimeoutClass::{timeout_variants[method["timeout"]]},',
             f'            retry: RetryPolicy::{retry_variants[method["retry"]]},',
             f'            dispatch: Dispatch::{dispatch_variants[method["dispatch"]]},',
@@ -1456,6 +1614,7 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         method["name"] for method in methods
         if method["dispatch"] == "parallel-read"
     ]
+    cli = methods_for_caller(methods, "cli")
 
     return "\n".join((
         GENERATED_RUST_HEADER,
@@ -1464,12 +1623,6 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "pub enum MethodKind {",
         *(f"    {kind_variants[kind]}," for kind in kind_variants
           if any(method["kind"] == kind for method in methods)),
-        "}",
-        "",
-        "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
-        "pub enum Exposure {",
-        *(f"    {exposure_variants[exposure]}," for exposure in exposure_variants
-          if any(method["exposure"] == exposure for method in methods)),
         "}",
         "",
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
@@ -1495,7 +1648,6 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "#[derive(Clone, Copy, Debug, Eq, PartialEq)]",
         "pub struct EngineMethodPolicy {",
         "    pub kind: MethodKind,",
-        "    pub exposure: Exposure,",
         "    pub timeout: TimeoutClass,",
         "    pub retry: RetryPolicy,",
         "    pub dispatch: Dispatch,",
@@ -1509,6 +1661,9 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
             "PARALLEL_READ_METHOD_NAMES", parallel, "pub",
         ),
         "",
+        "/// callers 含 cli 的方法：本地 socket 传输只分发这一集合。",
+        rust_expanded_declaration("CLI_METHOD_NAMES", cli, "pub"),
+        "",
         "pub fn policy(method: &str) -> Option<EngineMethodPolicy> {",
         "    match method {",
         *rows,
@@ -1518,6 +1673,10 @@ def engine_methods_engine_rust(methods: list[dict[str, object]]) -> str:
         "",
         "pub fn is_parallel_read(method: &str) -> bool {",
         "    PARALLEL_READ_METHOD_NAMES.contains(&method)",
+        "}",
+        "",
+        "pub fn is_cli_method(method: &str) -> bool {",
+        "    CLI_METHOD_NAMES.contains(&method)",
         "}",
         "",
     ))
@@ -1733,6 +1892,7 @@ def generated_contents(
     operations: dict[str, object],
     events: list[dict[str, object]],
     errors: list[dict[str, object]],
+    features: dict[str, object],
 ) -> dict[Path, str]:
     agent_contents = {
         path: {
@@ -1794,6 +1954,15 @@ def generated_contents(
         }[kind](errors)
         for path, kind in ERROR_OUTPUTS.items()
     }
+    feature_contents = {
+        path: {
+            "frontend": features_frontend,
+            "rust": features_rust,
+        }[kind](features)
+        for path, kind in FEATURE_OUTPUTS.items()
+    }
+    # 特性开关不进契约哈希：它不是线上协议的一部分，加一个开关不该让两个 sidecar
+    # 的握手全部失配。
     digest = contract_hash(
         agents, engine_methods, runtime_methods, ipc, session_ref, operations,
         events, errors,
@@ -1815,6 +1984,7 @@ def generated_contents(
         | operation_contents
         | event_contents
         | error_contents
+        | feature_contents
         | ipc_contents
     )
 
@@ -1833,6 +2003,7 @@ def main() -> int:
         operations,
         load_events(),
         load_errors(),
+        load_features(),
     )
     stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
     if args.check:

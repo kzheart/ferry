@@ -1,0 +1,17 @@
+{
+  "stages": [
+    "experimental"
+  ],
+  "features": [
+    {
+      "id": "builtin-agent",
+      "stage": "experimental",
+      "default": false,
+      "surfaces": [
+        "host-runtime",
+        "ui"
+      ],
+      "since": "0.8.0"
+    }
+  ]
+}

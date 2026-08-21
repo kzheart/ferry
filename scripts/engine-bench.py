@@ -9,10 +9,10 @@
   - scan_cold    首次全量扫描（空扫描缓存）
   - scan_warm    重复扫描（缓存命中，5 轮中位数）
   - search_meta  session_search 元数据搜索（5 轮）
-  - search_agent agent_search_sessions 关键词搜索（5 轮）
-  - search_regex agent_search_sessions 正则搜索（3 轮）
+  - search_content content_search 关键词搜索（5 轮）
+  - search_regex content_search 正则搜索（3 轮）
   - show_large   show 读取 400 条记录的大会话（5 轮）
-  - usage        agent_get_usage 全量聚合（3 轮）
+  - usage        usage_stats 全量聚合（3 轮）
 
 说明：内容 FTS 索引（content-index.sqlite3）的构建不在计时面内——后台同步的
 完成时机不可确定；search 请求命中的是元数据与正则路径。
@@ -161,18 +161,18 @@ def bench_engine(name: str, argv: list[str], home: Path, cwd: Path) -> dict:
     results["scan_warm"] = median_of(serve, "scan", {}, 5)
     results["search_meta"] = median_of(
         serve, "session_search", {"query": "module_7", "scope": "any"}, 5)
-    results["search_agent"] = median_of(
-        serve, "agent_search_sessions",
+    results["search_content"] = median_of(
+        serve, "content_search",
         {"query": "needle_alpha", "limit": 20, "scope": "any"}, 5)
     results["search_regex"] = median_of(
-        serve, "agent_search_sessions",
+        serve, "content_search",
         {"query": "", "regex": "needle_[a-z]+", "limit": 20, "scope": "any"}, 3)
     scan_result, _ = serve.request("scan", {})
     big = next(row for row in scan_result["sessions"]
                if row["id"].startswith("bench-big-"))
     results["show_large"] = median_of(
         serve, "show", {"tool": "claude", "ref": big["ref"], "limit": 200}, 5)
-    results["usage"] = median_of(serve, "agent_get_usage", {}, 3)
+    results["usage"] = median_of(serve, "usage_stats", {}, 3)
     serve.close()
     return results
 
