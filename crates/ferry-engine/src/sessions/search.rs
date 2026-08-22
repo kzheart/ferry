@@ -304,10 +304,11 @@ pub fn search_sessions(
         .collect();
     allowed_projects.sort_unstable();
     allowed_projects.dedup();
-    let mut allowed_session_ids: Vec<String> = string_set(request.session_ids, "session_ids", 20, 256)?
-        .iter()
-        .map(|item| casefold(item))
-        .collect();
+    let mut allowed_session_ids: Vec<String> =
+        string_set(request.session_ids, "session_ids", 20, 256)?
+            .iter()
+            .map(|item| casefold(item))
+            .collect();
     allowed_session_ids.sort_unstable();
     allowed_session_ids.dedup();
     let (start, end) = validated_interval(request.time_range)?;
@@ -883,7 +884,10 @@ mod tests {
         let index = &harness.index;
         let all = search_sessions(&SearchRequest::default(), index, None).expect("空检索");
         let sample = all["sessions"][0].clone();
-        let native = sample["session_id"].as_str().expect("有原生 id").to_string();
+        let native = sample["session_id"]
+            .as_str()
+            .expect("有原生 id")
+            .to_string();
         let tool = sample["tool"].as_str().expect("有 tool").to_string();
 
         // 大小写不敏感的精确命中，且照常给出 ref。
@@ -898,8 +902,14 @@ mod tests {
         )
         .expect("按 session_id 过滤");
         assert_eq!(hit["returned"], Value::from(1));
-        assert_eq!(hit["sessions"][0]["session_id"], Value::from(native.as_str()));
-        assert!(hit["sessions"][0]["ref"].as_str().unwrap().starts_with("fsr_"));
+        assert_eq!(
+            hit["sessions"][0]["session_id"],
+            Value::from(native.as_str())
+        );
+        assert!(hit["sessions"][0]["ref"]
+            .as_str()
+            .unwrap()
+            .starts_with("fsr_"));
 
         // 与 agents 组合：同一个 agent 仍命中。
         let agents = Value::Array(vec![Value::from(tool.as_str())]);

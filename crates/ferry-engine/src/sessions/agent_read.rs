@@ -759,11 +759,7 @@ pub fn session_read(
     let lazy = match inert {
         None => false,
         Some(Value::Bool(flag)) => *flag,
-        Some(_) => {
-            return Err(DomainError::agent_request_invalid(
-                "inert 必须是 boolean",
-            ))
-        }
+        Some(_) => return Err(DomainError::agent_request_invalid("inert 必须是 boolean")),
     };
     let mut result = if terms.is_some_and(|value| !value.is_null()) {
         let mut payload =

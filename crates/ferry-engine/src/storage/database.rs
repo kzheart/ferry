@@ -445,7 +445,10 @@ mod tests {
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        assert!(columns.contains(&"error_message".to_string()), "{columns:?}");
+        assert!(
+            columns.contains(&"error_message".to_string()),
+            "{columns:?}"
+        );
     }
 
     #[test]

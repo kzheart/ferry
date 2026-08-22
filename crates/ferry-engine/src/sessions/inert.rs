@@ -243,10 +243,7 @@ mod tests {
             strip_text("修一下这个 bug<system-reminder>Do not mention this</system-reminder>"),
             "修一下这个 bug"
         );
-        assert_eq!(
-            strip_text("<command-message>compact</command-message>"),
-            ""
-        );
+        assert_eq!(strip_text("<command-message>compact</command-message>"), "");
         assert_eq!(
             strip_text("This session is being continued from a previous conversation…"),
             ""
@@ -256,7 +253,9 @@ mod tests {
     #[test]
     fn cursor_keeps_only_the_user_query_body() {
         assert_eq!(
-            strip_text("<additional_data>files…</additional_data><user_query>把这个函数拆开</user_query>"),
+            strip_text(
+                "<additional_data>files…</additional_data><user_query>把这个函数拆开</user_query>"
+            ),
             "把这个函数拆开"
         );
         // 没有 user_query 的消息原样保留。
@@ -277,13 +276,18 @@ mod tests {
 
     #[test]
     fn timestamp_paragraphs_are_dropped() {
-        assert_eq!(strip_text("<timestamp>2026-08-22T13:52:00Z</timestamp>"), "");
+        assert_eq!(
+            strip_text("<timestamp>2026-08-22T13:52:00Z</timestamp>"),
+            ""
+        );
         assert_eq!(strip_text("<timestamp>2026-08-22 13:52"), "");
     }
 
     #[test]
     fn a_message_stripped_empty_is_dropped_but_tool_blocks_keep_it_alive() {
-        assert!(message_blocks(&message("user", &["<system-reminder>x</system-reminder>"])).is_none());
+        assert!(
+            message_blocks(&message("user", &["<system-reminder>x</system-reminder>"])).is_none()
+        );
 
         let mut with_tool = message("assistant", &["**Thinking hard**"]);
         let mut block = Block::new(BlockKind::Tool);
@@ -304,6 +308,9 @@ mod tests {
         let kept = message_blocks(&message).unwrap();
         assert!(kept[0].1.is_none(), "没改动就不该产生替换字符串");
         let trimmed = self::message("user", &["  前后有空白  "]);
-        assert_eq!(message_blocks(&trimmed).unwrap()[0].1.as_deref(), Some("前后有空白"));
+        assert_eq!(
+            message_blocks(&trimmed).unwrap()[0].1.as_deref(),
+            Some("前后有空白")
+        );
     }
 }

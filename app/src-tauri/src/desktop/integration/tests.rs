@@ -4,9 +4,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use super::{
     copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
     parse_engine_lock, parse_skill_version, points_to_ferry_engine, remove_skill_dir,
-    remove_skill_group, same_target, service_status, skill_target, skill_target_status,
-    skill_version_at, SkillTarget, BUNDLED_SKILLS, SHARED_TARGET_ID,
+    remove_skill_group, service_status, skill_target, skill_target_status, skill_version_at,
+    SkillTarget, BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
+// 只有 symlink 用例用到它,Windows 下不 cfg 掉会触发 -D unused-imports。
+#[cfg(unix)]
+use super::same_target;
 
 static SCRATCH_SEQUENCE: AtomicU32 = AtomicU32::new(0);
 

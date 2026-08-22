@@ -201,7 +201,14 @@ fn search_params(argv: &[String]) -> Result<Value, String> {
     let parsed = args::parse(
         argv,
         &[
-            "agent", "project", "session-id", "since", "until", "limit", "pattern", "scope",
+            "agent",
+            "project",
+            "session-id",
+            "since",
+            "until",
+            "limit",
+            "pattern",
+            "scope",
         ],
         &["regex", "exhaustive", "tool-outputs"],
     )?;
