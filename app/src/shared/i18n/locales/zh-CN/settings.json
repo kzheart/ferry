@@ -155,6 +155,10 @@
     "builtin-agent": {
       "title": "内置 AI 助手",
       "desc": "启用后可在侧栏使用 Ask Ferry,并解锁 Provider / 模型 / 角色 / 技能设置"
+    },
+    "handoff": {
+      "title": "续聊到其他 agent",
+      "desc": "在会话右键菜单里提供「复制续聊指令」:粘进任一装了 ferry-resume 技能的 coding agent,由它读历史接着聊,不写入任何存储"
     }
   },
   "writeCheck": {
@@ -327,17 +331,15 @@
     "skills": {
       "groupTitle": "Skill 安装",
       "groupDesc": "随 App 打包 v{{version}}",
-      "sharedTarget": "共享技能仓库",
+      "rowTitle": "Skill",
+      "groupHint": "装到 ~/.agents/skills,Claude Code、Codex、OpenCode 等会共同读取;包含 ferry 与 ferry-resume 两个 skill。",
       "stateNotInstalled": "未安装",
       "stateInstalled": "已安装 v{{version}}",
       "stateInstalledUnknown": "已安装",
       "stateUpdatable": "可更新到 v{{version}}",
-      "viaShared": "经共享仓库生效",
       "install": "安装",
       "update": "更新",
       "remove": "移除",
-      "custom": "安装到其他目录…",
-      "customDone": "已安装到 {{path}}",
       "bundleMissing": "打包资源里没有 Ferry skill，无法安装。"
     },
     "engine": {

@@ -96,3 +96,26 @@ test("标了 feature 的菜单项跟着开关走,没标的照旧", () => {
   assert.equal(off.includes("app:ctx.rename"), true);
   assert.equal(off.includes("app:ctx.resumeTerminal"), true);
 });
+
+test("续聊只有一条入口,点击把会话交给回调", () => {
+  let picked = null;
+  const items = createSessionContextMenu(createInput({
+    onResumeElsewhere: session => { picked = session; },
+  }));
+  const labels = items.filter(item => !item.sep).map(item => item.label);
+  assert.equal(labels.filter(label => label === "app:ctx.copyResumeElsewhere").length, 1);
+
+  items.find(item => item.label === "app:ctx.copyResumeElsewhere").onClick();
+  assert.ok(picked);
+  assert.equal(picked.tool, "claude");
+});
+
+test("续聊条目跟着 handoff 开关走", () => {
+  const labels = createSessionContextMenu(createInput({
+    onResumeElsewhere: () => {},
+    isFeatureEnabled: id => id !== "handoff",
+  })).filter(item => !item.sep).map(item => item.label);
+
+  assert.equal(labels.includes("app:ctx.copyResumeElsewhere"), false);
+  assert.equal(labels.includes("app:ctx.migrateTo"), true);
+});

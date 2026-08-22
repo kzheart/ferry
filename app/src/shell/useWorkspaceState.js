@@ -110,6 +110,7 @@ export function useWorkspaceState({
         settings,
         setState: setMig,
         loadHistory,
+        openConfig,
       },
       editing: {
         diff,

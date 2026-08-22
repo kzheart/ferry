@@ -39,6 +39,8 @@ pub struct ContentSearchRequest {
     pub query: Value,
     pub agents: Value,
     pub projects: Value,
+    /// 原生会话 id 精确过滤；缺省时不过滤。
+    pub session_ids: Value,
     pub time_range: Value,
     pub limit: Value,
     pub scope: Value,
@@ -59,6 +61,7 @@ pub struct SessionReadRequest {
     pub limit: Value,
     pub include_tool_outputs: Value,
     pub max_bytes: Value,
+    pub inert: Value,
 }
 
 /// Engine 能力门面。等价 Python 的 `EngineService`。
@@ -310,6 +313,7 @@ impl RpcDispatcher {
                 query: default_of(params, "query", Value::from("")),
                 agents: optional(params, "agents").clone(),
                 projects: optional(params, "projects").clone(),
+                session_ids: optional(params, "session_ids").clone(),
                 time_range: optional(params, "time_range").clone(),
                 limit: default_of(params, "limit", Value::from(20)),
                 scope: default_of(params, "scope", Value::from("any")),
@@ -335,6 +339,7 @@ impl RpcDispatcher {
                     Value::Bool(false),
                 ),
                 max_bytes: default_of(params, "max_bytes", Value::from(DEFAULT_CONTEXT_BYTES)),
+                inert: default_of(params, "inert", Value::Bool(false)),
             }),
             "usage_stats" => service.usage_stats(
                 optional(params, "agents"),
@@ -569,7 +574,9 @@ mod tests {
                 "content_search",
                 recorded!("s",
                     "query" => request.query, "agents" => request.agents,
-                    "projects" => request.projects, "time_range" => request.time_range,
+                    "projects" => request.projects,
+                    "session_ids" => request.session_ids,
+                    "time_range" => request.time_range,
                     "limit" => request.limit, "scope" => request.scope,
                     "include_tool_outputs" => request.include_tool_outputs,
                     "patterns" => request.patterns, "regex" => request.regex,
@@ -584,7 +591,8 @@ mod tests {
                     "terms" => request.terms, "roles" => request.roles,
                     "from_message" => request.from_message, "limit" => request.limit,
                     "include_tool_outputs" => request.include_tool_outputs,
-                    "max_bytes" => request.max_bytes),
+                    "max_bytes" => request.max_bytes,
+                    "inert" => request.inert),
             )
         }
         fn usage_stats(

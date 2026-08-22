@@ -155,6 +155,10 @@
     "builtin-agent": {
       "title": "Built-in AI assistant",
       "desc": "Once enabled, Ask Ferry appears in the sidebar and the Provider / model / role / skill settings are unlocked."
+    },
+    "handoff": {
+      "title": "Resume in another agent",
+      "desc": "Adds \"Copy resume instruction\" to the session context menu: paste it into any coding agent that has the ferry-resume skill and it reads the history and continues. Nothing is written to any store."
     }
   },
   "writeCheck": {
@@ -327,17 +331,15 @@
     "skills": {
       "groupTitle": "Skill installation",
       "groupDesc": "Bundled v{{version}}",
-      "sharedTarget": "Shared skill warehouse",
+      "rowTitle": "Skill",
+      "groupHint": "Installs into ~/.agents/skills, which Claude Code, Codex, OpenCode and others all read; it contains both the ferry and ferry-resume skills.",
       "stateNotInstalled": "Not installed",
       "stateInstalled": "Installed v{{version}}",
       "stateInstalledUnknown": "Installed",
       "stateUpdatable": "Update to v{{version}}",
-      "viaShared": "Active via shared warehouse",
       "install": "Install",
       "update": "Update",
       "remove": "Remove",
-      "custom": "Install to another folder…",
-      "customDone": "Installed at {{path}}",
       "bundleMissing": "The Ferry skill is missing from the app bundle, cannot install."
     },
     "engine": {

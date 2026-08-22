@@ -246,6 +246,8 @@ pub struct SearchRequest<'a> {
     pub query: Option<&'a Value>,
     pub agents: Option<&'a Value>,
     pub projects: Option<&'a Value>,
+    /// 原生会话 id 精确过滤（大小写不敏感）；可与 agents/projects 组合，可无 query。
+    pub session_ids: Option<&'a Value>,
     pub time_range: Option<&'a Value>,
     pub limit: Option<&'a Value>,
     pub scope: Option<&'a Value>,
@@ -302,6 +304,12 @@ pub fn search_sessions(
         .collect();
     allowed_projects.sort_unstable();
     allowed_projects.dedup();
+    let mut allowed_session_ids: Vec<String> = string_set(request.session_ids, "session_ids", 20, 256)?
+        .iter()
+        .map(|item| casefold(item))
+        .collect();
+    allowed_session_ids.sort_unstable();
+    allowed_session_ids.dedup();
     let (start, end) = validated_interval(request.time_range)?;
     let needles = validated_patterns(query, request.patterns)?;
     if compiled.is_some() && !needles.is_empty() {
@@ -344,6 +352,11 @@ pub fn search_sessions(
             continue;
         }
         if !allowed_projects.is_empty() && !allowed_projects.contains(&casefold(&project)) {
+            continue;
+        }
+        if !allowed_session_ids.is_empty()
+            && !allowed_session_ids.contains(&casefold(&record_session_id(row, None)))
+        {
             continue;
         }
         if start.is_some_and(|start| updated < start) || end.is_some_and(|end| updated > end) {
@@ -863,6 +876,72 @@ mod tests {
     ///
     /// 内容档位需要真实 canonical Session（适配器 WP-C1..C5 尚未就绪），
     /// 这里只钉住元数据匹配、排序与覆盖度字段的全套形状。
+    /// `session_ids`：原生 id 精确过滤（大小写不敏感），可无 query，可叠加 agents。
+    #[test]
+    fn session_ids_filter_matches_the_native_id_exactly() {
+        let harness = crate::sessions::index::golden_tests::harness();
+        let index = &harness.index;
+        let all = search_sessions(&SearchRequest::default(), index, None).expect("空检索");
+        let sample = all["sessions"][0].clone();
+        let native = sample["session_id"].as_str().expect("有原生 id").to_string();
+        let tool = sample["tool"].as_str().expect("有 tool").to_string();
+
+        // 大小写不敏感的精确命中，且照常给出 ref。
+        let ids = Value::Array(vec![Value::from(native.to_uppercase())]);
+        let hit = search_sessions(
+            &SearchRequest {
+                session_ids: Some(&ids),
+                ..SearchRequest::default()
+            },
+            index,
+            None,
+        )
+        .expect("按 session_id 过滤");
+        assert_eq!(hit["returned"], Value::from(1));
+        assert_eq!(hit["sessions"][0]["session_id"], Value::from(native.as_str()));
+        assert!(hit["sessions"][0]["ref"].as_str().unwrap().starts_with("fsr_"));
+
+        // 与 agents 组合：同一个 agent 仍命中。
+        let agents = Value::Array(vec![Value::from(tool.as_str())]);
+        let combined = search_sessions(
+            &SearchRequest {
+                session_ids: Some(&ids),
+                agents: Some(&agents),
+                ..SearchRequest::default()
+            },
+            index,
+            None,
+        )
+        .expect("agents + session_ids");
+        assert_eq!(combined["returned"], Value::from(1));
+
+        // 未命中给 0 而不是报错。
+        let missing = Value::Array(vec![Value::from("no-such-session-id")]);
+        let empty = search_sessions(
+            &SearchRequest {
+                session_ids: Some(&missing),
+                ..SearchRequest::default()
+            },
+            index,
+            None,
+        )
+        .expect("未命中");
+        assert_eq!(empty["returned"], Value::from(0));
+        assert_eq!(empty["total_matches"], Value::from(0));
+
+        // 超过 20 项或空串一律报参数错误。
+        let too_many = Value::Array((0..21).map(|i| Value::from(format!("id{i}"))).collect());
+        assert!(search_sessions(
+            &SearchRequest {
+                session_ids: Some(&too_many),
+                ..SearchRequest::default()
+            },
+            index,
+            None,
+        )
+        .is_err());
+    }
+
     #[test]
     fn metadata_search_end_to_end_reports_the_full_dto_shape() {
         let harness = crate::sessions::index::golden_tests::harness();

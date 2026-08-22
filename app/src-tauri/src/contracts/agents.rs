@@ -77,9 +77,4 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
 ];
 pub(crate) const ALLOWED_EXECUTABLES: &[&str] =
     &["claude", "codex", "opencode", "pi", "grok", "cursor"];
-pub(crate) const AGENT_SKILL_TARGETS: &[(&str, &str, &str)] = &[
-    ("claude", "Claude Code", "~/.claude/skills"),
-    ("codex", "Codex CLI", "~/.codex/skills"),
-    ("opencode", "OpenCode", "~/.config/opencode/skills"),
-];
 pub(crate) const SHARED_SKILL_PATHS: &[&str] = &["~/.agents/skills"];

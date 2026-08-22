@@ -644,6 +644,7 @@ impl EngineService for Engine {
                 query: Some(&request.query),
                 agents: Some(&request.agents),
                 projects: Some(&request.projects),
+                session_ids: Some(&request.session_ids),
                 time_range: Some(&request.time_range),
                 limit: Some(&request.limit),
                 scope: Some(&request.scope),
@@ -669,6 +670,7 @@ impl EngineService for Engine {
             Some(&request.limit),
             Some(&request.include_tool_outputs),
             Some(&request.max_bytes),
+            Some(&request.inert),
             &self.index,
         )?))
     }

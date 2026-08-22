@@ -201,7 +201,7 @@ fn search_params(argv: &[String]) -> Result<Value, String> {
     let parsed = args::parse(
         argv,
         &[
-            "agent", "project", "since", "until", "limit", "pattern", "scope",
+            "agent", "project", "session-id", "since", "until", "limit", "pattern", "scope",
         ],
         &["regex", "exhaustive", "tool-outputs"],
     )?;
@@ -219,6 +219,10 @@ fn search_params(argv: &[String]) -> Result<Value, String> {
     let projects = parsed.repeated("project");
     if !projects.is_empty() {
         insert_list(&mut params, "projects", Some(projects));
+    }
+    let session_ids = parsed.repeated("session-id");
+    if !session_ids.is_empty() {
+        insert_list(&mut params, "session_ids", Some(session_ids));
     }
     let patterns = parsed.repeated("pattern");
     if !patterns.is_empty() {
@@ -249,7 +253,7 @@ fn read_params(argv: &[String]) -> Result<Value, String> {
     let parsed = args::parse(
         argv,
         &["from", "limit", "roles", "terms", "max-bytes"],
-        &["tool-outputs"],
+        &["tool-outputs", "inert"],
     )?;
     let roles = parsed.list("roles");
     let terms = parsed.list("terms");
@@ -268,6 +272,9 @@ fn read_params(argv: &[String]) -> Result<Value, String> {
     insert_list(&mut params, "terms", terms);
     if parsed.has("tool-outputs") {
         params.insert("include_tool_outputs".into(), Value::Bool(true));
+    }
+    if parsed.has("inert") {
+        params.insert("inert".into(), Value::Bool(true));
     }
     Ok(Value::Object(params))
 }
@@ -572,6 +579,27 @@ mod tests {
         assert!(!params.as_object().unwrap().contains_key("time_range"));
         assert!(!params.as_object().unwrap().contains_key("exhaustive"));
         assert!(!params.as_object().unwrap().contains_key("regex"));
+        assert!(!params.as_object().unwrap().contains_key("session_ids"));
+    }
+
+    /// `--session-id` 可重复，映射到 `session_ids`；可以不带任何 query。
+    #[test]
+    fn search_maps_repeated_session_id_flags() {
+        let params = search_params(&argv(&[
+            "--agent",
+            "codex",
+            "--session-id",
+            "01a02803-9a5f-7b91-8610-37945d3b9478",
+            "--session-id",
+            "b2c3",
+        ]))
+        .expect("可解析");
+        assert_eq!(
+            params["session_ids"],
+            serde_json::json!(["01a02803-9a5f-7b91-8610-37945d3b9478", "b2c3"])
+        );
+        assert_eq!(params["agents"], serde_json::json!(["codex"]));
+        assert!(!params.as_object().unwrap().contains_key("query"));
     }
 
     #[test]
@@ -626,6 +654,19 @@ mod tests {
         assert_eq!(params["roles"], serde_json::json!(["user", "assistant"]));
         assert_eq!(params["terms"], serde_json::json!(["a", "b"]));
         assert!(read_params(&argv(&["claude"])).is_err());
+    }
+
+    #[test]
+    fn inert_is_a_switch_that_only_appears_when_asked_for() {
+        let plain = read_params(&argv(&["claude", "fsr_1"])).expect("可解析");
+        assert!(
+            !plain.as_object().unwrap().contains_key("inert"),
+            "没给就不下发，默认值由引擎分发层说了算"
+        );
+        let lazy = read_params(&argv(&["claude", "fsr_1", "--inert"])).expect("可解析");
+        assert_eq!(lazy["inert"], Value::Bool(true));
+        // `--inert=1` 这种写法不是开关，应报未知用法而不是被静默当成 true。
+        assert!(read_params(&argv(&["claude", "fsr_1", "--inert=1"])).is_err());
     }
 
     #[test]

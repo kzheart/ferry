@@ -11,11 +11,13 @@ import {
   sessionRef,
   useLibraryResourcePaneActions,
 } from "../modules/browser/public.js";
+import { copyResumeCommand } from "../modules/migration/public.js";
 import { useIsFeatureEnabled } from "../shared/capabilities/features.jsx";
 
 export function useWorkspaceInteractions({
   t,
   settings,
+  env,
   current,
   selectedId,
   sessionsByKey,
@@ -35,6 +37,7 @@ export function useWorkspaceInteractions({
   refreshDetail,
   loadMore,
   setToast,
+  openConfig,
   setView,
   setSettingsOpen,
   setPopover,
@@ -85,6 +88,14 @@ export function useWorkspaceInteractions({
     setToast,
     select,
     setMigration,
+    // 只复制一条指令:接手由目标 agent 的 ferry-resume skill 自己完成。
+    onResumeElsewhere: session => copyResumeCommand({
+      tool: session.tool,
+      sessionId: session.id,
+      t,
+      setToast,
+      openConfig,
+    }),
     settings,
     isFeatureEnabled,
     t,

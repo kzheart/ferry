@@ -696,13 +696,6 @@ def rust(agents: list[dict[str, object]]) -> str:
             *nested,
             "    ),",
         ))
-    # 宿主装 Ferry skill 时要知道「装到哪」：(agent id, 展示名, 目标目录)。
-    # 一个 agent 有多个 skill 目录就展开成多行，宿主按顺序逐个处理。
-    skill_target_rows = [
-        f'    ("{agent["id"]}", "{agent["display_name"]}", "{path}"),'
-        for agent in agents
-        for path in agent["skill_paths"]
-    ]
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         *rust_const_str_slice("AGENT_IDS", [agent["id"] for agent in agents]),
@@ -710,9 +703,6 @@ def rust(agents: list[dict[str, object]]) -> str:
         *capability_rows,
         "];",
         *rust_const_str_slice("ALLOWED_EXECUTABLES", executables),
-        "pub(crate) const AGENT_SKILL_TARGETS: &[(&str, &str, &str)] = &[",
-        *skill_target_rows,
-        "];",
         *rust_const_str_slice("SHARED_SKILL_PATHS", load_shared_skill_paths()),
         "",
     ))

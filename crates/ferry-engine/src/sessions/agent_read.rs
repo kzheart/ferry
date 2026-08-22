@@ -215,6 +215,10 @@ fn fit_context_result(mut result: Value, budget: usize) -> Map<String, Value> {
 }
 
 /// `session_read` 的 context 档位。
+///
+/// `inert=true` 时按 [`super::inert`] 的常量表剥离源 agent 的脚手架：整条被剥空的
+/// 消息丢弃并计入 `truncation.stripped_messages`，但**消息编号与分页游标仍按原始
+/// 序号**，避免两种模式下 `--from` 的语义漂移。
 #[allow(clippy::too_many_arguments)]
 pub fn get_session_context(
     tool: &str,
@@ -223,6 +227,7 @@ pub fn get_session_context(
     limit: Option<&Value>,
     include_tool_outputs: bool,
     max_bytes: Option<&Value>,
+    inert: bool,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
     let record = index.resolve(tool, opaque_ref, true)?;
@@ -247,8 +252,12 @@ pub fn get_session_context(
     let mut remaining = budget;
     let mut omitted_blocks = 0i64;
     let mut omitted_bytes = 0i64;
+    let mut stripped_messages = 0i64;
     let mut exhausted = false;
     let selected_until = (session.messages.len() as i64).min(first - 1 + count);
+    // 游标锚在「本页扫过的最后一条」而不是「返回的最后一条」：惰性模式下整页
+    // 都可能被剥空，用返回值当游标会让调用方卡在同一页上。
+    let mut last_scanned = first - 1;
 
     for (message_index, message) in session.messages.iter().enumerate() {
         if message.role == "user" {
@@ -258,16 +267,29 @@ pub fn get_session_context(
         if message_number < first || message_number > selected_until {
             continue;
         }
+        last_scanned = message_number;
+        let rendered: super::inert::InertBlocks<'_> = if inert {
+            match super::inert::message_blocks(message) {
+                Some(blocks) => blocks,
+                None => {
+                    stripped_messages += 1;
+                    continue;
+                }
+            }
+        } else {
+            message.blocks.iter().map(|block| (block, None)).collect()
+        };
         let mut blocks: Vec<Value> = Vec::new();
         let mut message_clipped = false;
-        for block in &message.blocks {
+        for (block, replacement) in &rendered {
+            let source_text = replacement.as_deref().unwrap_or(block.text.as_str());
             let item: Option<Map<String, Value>> = match block.kind {
                 BlockKind::Text => {
-                    let (value, left, clipped) = take(&block.text, remaining);
+                    let (value, left, clipped) = take(source_text, remaining);
                     remaining = left;
                     if clipped {
                         message_clipped = true;
-                        omitted_bytes += (block.text.len() - value.len()) as i64;
+                        omitted_bytes += (source_text.len() - value.len()) as i64;
                     }
                     let mut entry = Map::new();
                     entry.insert("kind".into(), Value::from("text"));
@@ -355,6 +377,9 @@ pub fn get_session_context(
         entry.insert("blocks".into(), Value::Array(blocks));
         entry.insert("editable".into(), Value::Bool(editable));
         entry.insert("complete".into(), Value::Bool(!message_clipped));
+        if inert {
+            entry.insert("inert".into(), Value::Bool(true));
+        }
         entry.insert(
             "locator".into(),
             Value::from(index.issue_message_locator(
@@ -374,8 +399,14 @@ pub fn get_session_context(
         .last()
         .and_then(|item| item.get("message").and_then(Value::as_i64))
         .unwrap_or(first - 1);
-    let has_more = last_returned < session.messages.len() as i64;
-    let (title, title_truncated) = truncate_text(&session.title, 200);
+    let has_more = last_scanned < session.messages.len() as i64;
+    // 标题取自会话第一条可见消息，同样可能整段是脚手架：惰性模式下一并剥掉。
+    let title_source = if inert {
+        super::inert::strip_text(&session.title)
+    } else {
+        session.title.clone()
+    };
+    let (title, title_truncated) = truncate_text(&title_source, 200);
     let (project, project_truncated) = truncate_text(&session.cwd, 1024);
 
     let mut result = Map::new();
@@ -407,11 +438,14 @@ pub fn get_session_context(
     result.insert(
         "next_from_message".into(),
         if has_more {
-            Value::from(last_returned + 1)
+            Value::from(last_scanned + 1)
         } else {
             Value::Null
         },
     );
+    if inert {
+        result.insert("inert".into(), Value::Bool(true));
+    }
     result.insert(
         "messages".into(),
         Value::Array(messages.into_iter().map(Value::Object).collect()),
@@ -423,6 +457,9 @@ pub fn get_session_context(
     );
     truncation.insert("omitted_blocks".into(), Value::from(omitted_blocks));
     truncation.insert("omitted_bytes".into(), Value::from(omitted_bytes));
+    if inert {
+        truncation.insert("stripped_messages".into(), Value::from(stripped_messages));
+    }
     truncation.insert("budget_bytes".into(), Value::from(budget));
     result.insert("truncation".into(), Value::Object(truncation));
     Ok(fit_context_result(Value::Object(result), budget))
@@ -441,11 +478,21 @@ fn status_text(status: crate::model::ToolResultStatus) -> &'static str {
 }
 
 /// 检索用文本：调用方要求带工具输出时一并纳入范围。
-fn searchable_text(message: &Message, include_tool_outputs: bool) -> String {
+///
+/// `inert=true` 时文本先过一遍剥离，检索与 snippet 都不会命中源 agent 的
+/// system prompt——否则 `--inert --terms` 会是个静默无效的组合。
+fn searchable_text(message: &Message, include_tool_outputs: bool, inert: bool) -> String {
     let mut parts: Vec<String> = Vec::new();
     for block in &message.blocks {
         if block.kind == BlockKind::Text && !block.text.is_empty() {
-            parts.push(block.text.clone());
+            let text = if inert {
+                super::inert::strip_text(&block.text)
+            } else {
+                block.text.clone()
+            };
+            if !text.is_empty() {
+                parts.push(text);
+            }
         } else if include_tool_outputs && block.kind == BlockKind::Tool {
             let Some(call) = block.tool.as_ref() else {
                 continue;
@@ -484,6 +531,7 @@ pub fn search_session_content(
     roles: Option<&Value>,
     limit: Option<&Value>,
     include_tool_outputs: bool,
+    inert: bool,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
     let record = index.resolve(tool, opaque_ref, true)?;
@@ -530,6 +578,7 @@ pub fn search_session_content(
     let mut current_turn = 0i64;
     let mut total_matches = 0i64;
     let mut byte_limited = false;
+    let mut stripped_messages = 0i64;
 
     for (message_index, message) in session.messages.iter().enumerate() {
         if message.role == "user" {
@@ -538,7 +587,15 @@ pub fn search_session_content(
         if !allowed_roles.is_empty() && !allowed_roles.contains(&message.role) {
             continue;
         }
-        let text = searchable_text(message, include_tool_outputs);
+        if inert && super::inert::drops_role(&message.role) {
+            stripped_messages += 1;
+            continue;
+        }
+        let text = searchable_text(message, include_tool_outputs, inert);
+        if inert && text.is_empty() {
+            stripped_messages += 1;
+            continue;
+        }
         let folded = super::usage::casefold(&text);
         let hits: Vec<&(String, String)> = normalized
             .iter()
@@ -596,6 +653,9 @@ pub fn search_session_content(
             "complete".into(),
             Value::Bool(start == 0 && end == text_chars),
         );
+        if inert {
+            item.insert("inert".into(), Value::Bool(true));
+        }
         let item = Value::Object(item);
 
         let mut candidate = Map::new();
@@ -623,6 +683,9 @@ pub fn search_session_content(
     result.insert("revision".into(), Value::from(record.revision.as_str()));
     result.insert("message_count".into(), Value::from(session.messages.len()));
     result.insert("turn_count".into(), Value::from(total_turns));
+    if inert {
+        result.insert("inert".into(), Value::Bool(true));
+    }
     // 键序与 Python 的字面量顺序一致：DTO 字节数判定依赖它。
     let returned = matches.len();
     result.insert("matches".into(), Value::Array(matches));
@@ -649,6 +712,9 @@ pub fn search_session_content(
             Value::Null
         },
     );
+    if inert {
+        truncation.insert("stripped_messages".into(), Value::from(stripped_messages));
+    }
     truncation.insert("budget_bytes".into(), Value::from(MAX_AGENT_DTO_BYTES));
     result.insert("truncation".into(), Value::Object(truncation));
     finalize_dto(result)
@@ -665,6 +731,7 @@ pub fn session_read(
     limit: Option<&Value>,
     include_tool_outputs: Option<&Value>,
     max_bytes: Option<&Value>,
+    inert: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
     let Some(reference) = reference.filter(|value| !value.is_empty()) else {
@@ -688,9 +755,19 @@ pub fn session_read(
             ))
         }
     };
+    // `inert` 与 `include_tool_outputs` 同口径：缺键默认 false，显式 null 报错。
+    let lazy = match inert {
+        None => false,
+        Some(Value::Bool(flag)) => *flag,
+        Some(_) => {
+            return Err(DomainError::agent_request_invalid(
+                "inert 必须是 boolean",
+            ))
+        }
+    };
     let mut result = if terms.is_some_and(|value| !value.is_null()) {
         let mut payload =
-            search_session_content(tool, reference, terms, roles, limit, outputs, index)?;
+            search_session_content(tool, reference, terms, roles, limit, outputs, lazy, index)?;
         payload.insert("mode".into(), Value::from("search"));
         payload
     } else {
@@ -701,6 +778,7 @@ pub fn session_read(
             limit,
             outputs,
             max_bytes,
+            lazy,
             index,
         )?;
         payload.insert("mode".into(), Value::from("context"));
@@ -762,6 +840,7 @@ mod tests {
                 None,
                 flag,
                 None,
+                None,
                 &harness.index,
             )
         };
@@ -778,6 +857,7 @@ mod tests {
         // ref 校验排在 include_tool_outputs 之前。
         let error = session_read(
             "claude",
+            None,
             None,
             None,
             None,
@@ -886,9 +966,9 @@ mod tests {
         ));
         tool_block.tool = Some(call);
         message.blocks.push(tool_block);
-        assert_eq!(searchable_text(&message, false), "hello");
+        assert_eq!(searchable_text(&message, false, false), "hello");
         assert_eq!(
-            searchable_text(&message, true),
+            searchable_text(&message, true, false),
             "hello\n[tool Bash]\noutput"
         );
     }

@@ -300,7 +300,7 @@ export default function App() {
     onRowRenameCancel,
   } = useWorkspaceInteractions({
     t,
-    settings,
+    settings, env, openConfig,
     current: cur,
     selectedId: selId,
     sessionsByKey: byKey,

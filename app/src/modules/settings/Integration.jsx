@@ -1,12 +1,11 @@
 // Agent 集成:把 Ferry 的能力接到用户电脑上的 coding agent 上。
-// 三个分区各管一件事——PATH 里的 ferry 命令、各 agent skill 目录里的 Ferry skill、
+// 三个分区各管一件事——PATH 里的 ferry 命令、共享技能目录里的 Ferry skill、
 // 引擎服务状态。页面本身不认识任何路径:目标只用 id 指代,路径由宿主算好带回来。
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   cliInstall, cliUninstall, engineDaemonStop, engineServiceStatus, getEngineShare,
-  integrationStatus, pickSkillDirectory, setEngineShare, skillInstall, skillInstallCustom,
-  skillUninstall,
+  integrationStatus, setEngineShare, skillInstall, skillUninstall,
 } from "../../platform/desktop/client.js";
 import { Card, GroupTitle, Row, Toggle } from "./parts.jsx";
 
@@ -77,28 +76,24 @@ function CliSection({ cli, busy, onInstall, onUninstall, t }) {
   );
 }
 
-function SkillRow({ target, bundledVersion, busy, onInstall, onRemove, t, first }) {
-  const name = target.display_name || t("settings:integration.skills.sharedTarget");
+/** 安装目标只有一个:共享技能目录,各 coding agent 都读它。 */
+function SkillRow({ target, bundledVersion, busy, onInstall, onRemove, t }) {
   const updatable = target.installed && !!bundledVersion
     && target.installed_version !== bundledVersion;
   const state = !target.installed ? t("settings:integration.skills.stateNotInstalled")
-    : target.via_shared ? t("settings:integration.skills.viaShared")
-      : updatable ? t("settings:integration.skills.stateUpdatable", { version: bundledVersion })
-        : target.installed_version
-          ? t("settings:integration.skills.stateInstalled", { version: target.installed_version })
-          : t("settings:integration.skills.stateInstalledUnknown");
+    : updatable ? t("settings:integration.skills.stateUpdatable", { version: bundledVersion })
+      : target.installed_version
+        ? t("settings:integration.skills.stateInstalled", { version: target.installed_version })
+        : t("settings:integration.skills.stateInstalledUnknown");
   return (
-    <Row first={first} title={name} desc={target.path}>
+    <Row first title={t("settings:integration.skills.rowTitle")} desc={target.path}>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <StateBadge ok={target.installed && !updatable} warn={updatable} text={state} />
-        {/* 经共享仓库生效的行不给安装:再装一次会把 symlink 换成实体目录,反而断了共享 */}
-        {!target.via_shared && (
-          <ActionButton primary={!target.installed || updatable}
-            disabled={!!busy || !bundledVersion}
-            label={target.installed ? t("settings:integration.skills.update")
-              : t("settings:integration.skills.install")}
-            onClick={onInstall} />
-        )}
+        <ActionButton primary={!target.installed || updatable}
+          disabled={!!busy || !bundledVersion}
+          label={target.installed ? t("settings:integration.skills.update")
+            : t("settings:integration.skills.install")}
+          onClick={onInstall} />
         {target.installed && <ActionButton disabled={!!busy}
           label={t("settings:integration.skills.remove")} onClick={onRemove} />}
       </div>
@@ -188,14 +183,6 @@ export default function Integration() {
     }
   };
 
-  // 自定义目录不在固定目标表里,装完之后状态列表看不到它,只能当场回报落点。
-  const installCustom = run("custom", async () => {
-    const path = await pickSkillDirectory();
-    if (!path) return;
-    const installed = await skillInstallCustom(path);
-    setNotice(t("settings:integration.skills.customDone", { path: installed }));
-  });
-
   // 改完立刻回读(refresh),提示只说「下次启动生效」:spawn 只在 App 启动时发生。
   const toggleShare = next => run("engine-share", async () => {
     await setEngineShare(next);
@@ -225,21 +212,18 @@ export default function Integration() {
       <GroupTitle right={bundled ? t("settings:integration.skills.groupDesc", { version: bundled }) : undefined}>
         {t("settings:integration.skills.groupTitle")}</GroupTitle>
       <Card>
-        {(status?.skills || []).map((target, index) => (
+        {(status?.skills || []).map(target => (
           <SkillRow key={target.id} target={target} bundledVersion={bundled} busy={busy} t={t}
-            first={index === 0}
             onInstall={run(`skill-install:${target.id}`, () => skillInstall(target.id))}
             onRemove={run(`skill-remove:${target.id}`, () => skillUninstall(target.id))} />
         ))}
       </Card>
+      <div style={{ ...mono, paddingLeft: 2 }}>
+        {t("settings:integration.skills.groupHint")}</div>
       {!bundled && status && (
         <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2 }}>
           {t("settings:integration.skills.bundleMissing")}</div>
       )}
-      <div style={{ marginTop: 10, paddingLeft: 2 }}>
-        <ActionButton disabled={!!busy || !bundled} onClick={installCustom}
-          label={t("settings:integration.skills.custom")} />
-      </div>
 
       <GroupTitle>{t("settings:integration.engine.groupTitle")}</GroupTitle>
       <EngineSection service={service} share={share} busy={busy} t={t}

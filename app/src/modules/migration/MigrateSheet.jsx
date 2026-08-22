@@ -10,10 +10,15 @@ import {
 } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
 import { sessionRef } from "../browser/public.js";
+import { useFeature } from "../../shared/capabilities/features.jsx";
 import { CheckBadge, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../shared/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../shared/contracts/events.js";
 import MigrationSessionPreview from "./MigrationSessionPreview.jsx";
+import StepsHeader from "./SheetSteps.jsx";
+import ProbeModelPicker from "./ProbeModelPicker.jsx";
+import TransferTargetStep from "./TransferTargetStep.jsx";
+import { canFallBackToResume } from "./resumeElsewhere.js";
 import {
   matchingMigrationPlan,
   migrationPlanInput,
@@ -22,88 +27,15 @@ import {
 
 const ORDER = ["target", "impact", "preview", "confirm", "result"];
 
-function StepsHeader({ step, t }) {
-  const labels = {
-    target: t("migration:steps.target"),
-    impact: t("migration:steps.impact"),
-    preview: t("migration:steps.preview"),
-    confirm: t("migration:steps.confirm"),
-    result: step === "writing" ? t("migration:steps.writing") : t("migration:steps.result"),
-  };
-  const cur = ORDER.indexOf(step === "writing" ? "result" : step);
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: 6 }}>
-      {ORDER.map((s, i) => (
-        <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 11, fontWeight: 600,
-            color: i === cur ? ACCENT : i < cur ? "var(--tx3)" : "var(--line-strong)" }}>{labels[s]}</span>
-          {i < ORDER.length - 1 && <span style={{ color: "var(--line-strong)", fontSize: 11 }}>›</span>}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function ProbeModelPicker({ catalog, loading, err, selected, custom, onSelect, onCustom, t }) {
-  const models = catalog?.models || [];
-  const filterable = models.length > 12;
-  const [q, setQ] = useState("");
-  const qn = q.trim().toLowerCase();
-  const shown = !filterable || !qn ? models
-    : models.filter(m => (m.id + " " + (m.label || "")).toLowerCase().includes(qn));
-  const srcHint = {
-    cli: t("migration:probeModel.sourceCli"),
-    alias: t("migration:probeModel.sourceAlias"),
-    fallback: t("migration:probeModel.sourceFallback"),
-    cache: t("migration:probeModel.sourceCache"),
-    user: t("migration:probeModel.sourceUser"),
-  }[catalog?.source] || "";
-
-  return (
-    <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:probeModel.title")}</div>
-        <div style={{ fontSize: 11, color: "var(--tx4)" }}>
-          {loading ? t("migration:probeModel.loading") : srcHint}
-        </div>
-      </div>
-      <div style={{ fontSize: 11, color: "var(--tx3b)", marginBottom: 10, lineHeight: 1.45 }}>
-        {t("migration:probeModel.hint")}
-      </div>
-      {err && <div style={{ fontSize: 11, color: "var(--err-deep)", marginBottom: 8 }}>{t("migration:probeModel.loadFailed", { error: err })}</div>}
-      {catalog?.error && !err && (
-        <div style={{ fontSize: 11, color: "var(--err-mut)", marginBottom: 8 }}>
-          {t("migration:probeModel.discoverWarn", { error: catalog.error })}
-        </div>
-      )}
-      {filterable && (
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("migration:probeModel.filterPlaceholder")}
-          style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
-            padding: "0 10px", fontSize: 12, marginBottom: 8 }} />
-      )}
-      <select value={selected} onChange={e => onSelect(e.target.value)}
-        disabled={loading}
-        style={{ width: "100%", height: 34, border: "1px solid var(--line)", borderRadius: 8,
-          padding: "0 10px", fontSize: 12, background: "var(--surface)", color: "var(--tx2)" }}>
-        <option value="">{t("migration:probeModel.toolDefault", { suffix: catalog?.default ? ` (${catalog.default})` : "" })}</option>
-        {shown.map(m => (
-          <option key={m.id} value={m.id}>{m.label || m.id}</option>
-        ))}
-      </select>
-      {catalog?.allow_custom !== false && (
-        <input value={custom} onChange={e => onCustom(e.target.value)}
-          placeholder={t("migration:probeModel.customPlaceholder")}
-          style={{ width: "100%", height: 32, border: "1px solid var(--line)", borderRadius: 8,
-            padding: "0 10px", fontSize: 12, marginTop: 8 }} />
-      )}
-    </div>
-  );
-}
-
-export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalApp, onClose, onDone }) {
+export default function MigrateSheet({
+  meta, scope, env, defaultProbe, terminalApp,
+  onClose, onDone, onResumeElsewhere,
+}) {
   const { t } = useTranslation();
+  // 「续聊到」还在特性开关后面:关着时迁移失败只有重试,没有第二条出路。
+  const resumeEnabled = useFeature("handoff");
   const targets = agentsWithCapability("migration-target")
-    .filter(t2 => t2 !== meta.tool);
+    .filter(tool => tool !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0] || "");
   const [probeOn, setProbeOn] = useState(
@@ -149,12 +81,14 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   );
   const d = previewPlan?.preview;
   const errorMessage = error => String(error?.message || error || t("errors:fallback"));
-  // 后端把失败原因放在 error_type(异常类名)里,通用 message 只有状态码,
-  // 不翻译的话用户只能看到 operation.not_applied: failed。
+  // 引擎失败时会同时给出 error_message(人话原因)与 error_type(异常类名);
+  // 只有拿不到人话原因时才退回类名,否则用户只能看到 SessionStoreUnavailableError。
   const failureText = error => {
     const errorType = error?.params?.error_type;
     if (errorType === "ConcurrentModificationError")
       return t("migration:result.failConcurrent", { tool: TOOL_NAME[meta.tool] });
+    const detail = error?.params?.error_message;
+    if (detail) return detail;
     return errorType ? `${errorMessage(error)} · ${errorType}` : errorMessage(error);
   };
 
@@ -185,7 +119,8 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
           rememberPlan(migrationPlanKey(input), input, plan);
       }
     } catch (e) {
-      if (request === planRequest.current) setDryErr(errorMessage(e));
+      // 存错误对象而不是文案:「改用交接」要按 code 判断该不该出现。
+      if (request === planRequest.current) setDryErr(e);
     } finally {
       if (request === planRequest.current) setDryBusy(false);
     }
@@ -236,60 +171,47 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
 
   const ok = result && !probeFailed(result.probe) && result.session_id;
   const fail = step === "result" && !ok;
+  // 「已自动回滚」只对真的回滚过的结果成立:写入前被门禁/并发检查拦下时
+  // 目标端根本没被碰过,再说回滚会误导用户去目标端找残留。
+  const rolledBack = !!result
+    && (result.rolled_back === true || result.validation?.structure?.ok === false);
+  const failTitleKey = rolledBack ? "failTitle"
+    : result ? "failProbeTitle" : "failAbortedTitle";
+  const failDescKey = rolledBack ? "failDesc"
+    : result ? "failProbeDesc" : "failAbortedDesc";
   const installed = t => env?.[t]?.installed;
 
   let body = null;
   if (step === "target") {
     body = (
-      <>
-        <div style={{ fontSize: 13, color: "var(--tx3b)", marginBottom: 6 }}>
-          {t("migration:target.sourceSession")} <b style={{ color: "var(--tx2)" }}>{meta.title || meta.id}</b> · {scopeLabel}</div>
-        <div style={{ fontSize: 12, color: "var(--tx4)", marginBottom: 14 }}>
-          {t("migration:target.chooseHint")}</div>
-        {!targets.length ? (
-          <div style={{ fontSize: 12, color: "var(--tx3b)", lineHeight: 1.55,
-            border: "1px solid var(--line3)", borderRadius: 10, padding: "14px 16px" }}>
-            {t("migration:target.noTargets")}
-          </div>
-        ) : targets.map(t2 => {
-          const on = target === t2;
-          const inst = installed(t2);
-          return (
-            <div key={t2} onClick={() => {
-              if (!inst) return;
-              setTarget(t2);
-              if (!supportsAgentCapability(t2, "probe")) setProbeOn(false);
-            }}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 14px",
-                border: `1.5px solid ${on ? ACCENT : "var(--line3)"}`, background: on ? "var(--acc-soft4)" : "var(--surface)",
-                borderRadius: 10, marginBottom: 9, cursor: inst ? "pointer" : "not-allowed",
-                opacity: inst ? 1 : 0.55 }}>
-              <ToolIcon tool={t2} size={32} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tx2)" }}>{TOOL_NAME[t2]}</div>
-                <div style={{ fontSize: 11, color: "var(--tx4)" }}>
-                  {inst ? t("migration:target.installedMeta", { tool: t2 })
-                    : t("migration:target.notInstalled")}
-                </div>
-              </div>
-              <span style={{ width: 18, height: 18, borderRadius: "50%",
-                border: `2px solid ${on ? ACCENT : "var(--line-strong)"}`, display: "inline-flex",
-                alignItems: "center", justifyContent: "center" }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%",
-                  background: on ? ACCENT : "transparent" }} />
-              </span>
-            </div>
-          );
-        })}
-      </>
+      <TransferTargetStep
+        meta={meta}
+        scopeLabel={scopeLabel}
+        targets={targets}
+        target={target}
+        onTarget={tool => {
+          setTarget(tool);
+          if (!supportsAgentCapability(tool, "probe")) setProbeOn(false);
+        }}
+        env={env}
+      />
     );
   } else if (step === "impact") {
     body = !d ? (
       <div style={{ padding: "60px 0", display: "flex", alignItems: "center", justifyContent: "center",
         gap: 10, color: "var(--tx4)", fontSize: 13 }}>
-        {dryErr ? <><span style={{ color: "var(--err-deep)" }}>{t("migration:preview.failed", { error: dryErr })}</span>
-          <button className="fbtn" onClick={() => loadDry(target)}>{t("migration:preview.retry")}</button></>
-          : <><Spinner size={16} /> {t("migration:preview.loading")}</>}
+        {dryErr ? (<>
+          <span style={{ color: "var(--err-deep)" }}>
+            {t("migration:preview.failed", { error: errorMessage(dryErr) })}</span>
+          <button className="fbtn" onClick={() => loadDry(target)}>{t("migration:preview.retry")}</button>
+          {/* 迁移的前置条件没满足时,「续聊」是那条零写入、永远可行的退路:
+              只复制一条指令,不切换面板步骤,用户拿着去任一装了 skill 的 agent 里粘贴即可 */}
+          {resumeEnabled && canFallBackToResume(dryErr) && (
+            <button className="fbtn-primary" onClick={() => onResumeElsewhere?.()}>
+              {t("migration:resume.fallback")}
+            </button>
+          )}
+        </>) : <><Spinner size={16} /> {t("migration:preview.loading")}</>}
       </div>
     ) : (
       <>
@@ -417,9 +339,9 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
               <line x1="12" y1="4" x2="4" y2="12" stroke="var(--err2)" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--err-text)" }}>{t("migration:result.failTitle")}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--err-text)" }}>{t(`migration:result.${failTitleKey}`)}</div>
             <div style={{ fontSize: 12, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
-              {t("migration:result.failDesc", { tool: TOOL_NAME[target] })}
+              {t(`migration:result.${failDescKey}`, { tool: TOOL_NAME[target] })}
               {(result?.probe?.model || result?.probe_model) && (
                 <>{t("migration:result.failDescProbe", { model: result.probe?.model || result.probe_model })}</>
               )}
@@ -440,14 +362,14 @@ export default function MigrateSheet({ meta, scope, env, defaultProbe, terminalA
   const canBack = step === "impact" || step === "preview" || step === "confirm";
   const canNext = step === "target" ? !!target && installed(target)
     : step === "impact" || step === "preview" ? !!d
-    : step === "confirm";
+      : step === "confirm";
 
   return (
     <Sheet width={720} maxHeight={800} onClose={step === "writing" ? undefined : onClose}>
       <div style={{ flex: "none", padding: "15px 20px", borderBottom: "1px solid var(--line5)",
         display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{t("migration:sheet.title")}</div>
-        <StepsHeader step={step} t={t} />
+        <StepsHeader step={step} order={ORDER} t={t} />
         <div style={{ flex: 1 }} />
         {step !== "writing" &&
           <a onClick={onClose} style={{ color: "var(--tx5)", fontSize: 18, lineHeight: 1 }}>×</a>}

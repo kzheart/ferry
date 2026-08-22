@@ -42,7 +42,13 @@
     "batchDone": "Sessions deleted",
     "batchDoneDesc": "Deleted {{done}} sessions.",
     "sessionReferenceCopied": "Session reference copied",
-    "sessionReferenceCopiedDesc": "Paste it into the Agent composer to attach this session."
+    "sessionReferenceCopiedDesc": "Paste it into the Agent composer to attach this session.",
+    "resumeCopied": "Resume instruction copied",
+    "resumeCopiedDesc": "Paste it into any coding agent — Claude Code, Codex and the rest — to continue.",
+    "resumeCopiedNoSkill": "Copied, but the ferry-resume skill is not installed yet",
+    "resumeCopiedNoSkillDesc": "The instruction will not be recognized. Install it from Settings in one click.",
+    "resumeInstallSkill": "Install",
+    "resumeCopyFail": "Could not copy"
   },
   "ctx": {
     "batchArchive": "Archive all",
@@ -53,6 +59,7 @@
     "resumeTerminal": "Resume in terminal",
     "addToAgent": "Add to Agent chat",
     "migrateTo": "Migrate to…",
+    "copyResumeElsewhere": "Copy resume instruction",
     "rename": "Rename…",
     "unpin": "Unpin",
     "pin": "Pin",

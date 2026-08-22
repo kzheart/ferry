@@ -69,6 +69,7 @@ export function AppOverlays({
           terminalApp={migration.terminalApp}
           onClose={migration.onClose}
           onDone={migration.onDone}
+          onResumeElsewhere={migration.onResumeElsewhere}
         />
       )}
       {editing.diff && (

@@ -3,6 +3,7 @@
 pub mod agent_read;
 pub mod content_index;
 pub mod index;
+pub mod inert;
 pub mod live;
 pub mod read;
 pub mod reasoning;

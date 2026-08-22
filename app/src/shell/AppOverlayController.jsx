@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { sessionIdentity } from "../modules/browser/public.js";
+import { copyResumeCommand } from "../modules/migration/public.js";
 import { useAppChrome } from "../shared/capabilities/appChrome.jsx";
 import { useBrowserState } from "../shared/capabilities/browserState.jsx";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
@@ -121,6 +122,14 @@ export function AppOverlayController({ t }) {
         terminalApp: migration.settings.terminalApp,
         onClose: () => migration.setState(null),
         onDone: migration.loadHistory,
+        // 迁移被拒时的退路:复制一条续聊指令,面板保持在原地
+        onResumeElsewhere: () => copyResumeCommand({
+          tool: migration.current?.tool,
+          sessionId: migration.current?.id,
+          t,
+          setToast: toast.setValue,
+          openConfig: migration.openConfig,
+        }),
       }}
       editing={{
         diff: editing.diff,

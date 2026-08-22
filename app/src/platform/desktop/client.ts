@@ -207,7 +207,6 @@ export interface SkillTargetStatus {
   path: string;
   installed: boolean;
   installed_version: string | null;
-  via_shared: boolean;
 }
 
 export interface IntegrationStatus {
@@ -234,16 +233,12 @@ export const cliInstall = () => invoke<void>("cli_install");
 /** 移除 CLI 入口;宿主只删确实指向 Ferry 引擎的链接。 */
 export const cliUninstall = () => invoke<void>("cli_uninstall");
 
-/** 把打包的 Ferry skill 装进固定目标表里的某个目录;targetId 来自 integrationStatus。 */
+/** 把打包的 Ferry skill 整组装进共享技能目录;targetId 来自 integrationStatus。 */
 export const skillInstall = (targetId: string) =>
   invoke<void>("skill_install", { targetId });
 
 export const skillUninstall = (targetId: string) =>
   invoke<void>("skill_uninstall", { targetId });
-
-/** 自定义目录安装:path 必须是 pickSkillDirectory 返回的目录,宿主再校验一次。 */
-export const skillInstallCustom = (path: string) =>
-  invoke<string>("skill_install_custom", { path });
 
 /** 引擎服务状态:只读锁文件与 socket,不做任何进程操作。 */
 export const engineServiceStatus = () =>

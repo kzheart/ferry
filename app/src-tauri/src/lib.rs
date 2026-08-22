@@ -57,7 +57,6 @@ pub fn run() {
             desktop::integration::cli_uninstall,
             desktop::integration::skill_install,
             desktop::integration::skill_uninstall,
-            desktop::integration::skill_install_custom,
             desktop::integration::engine_service_status,
             desktop::features::features_list,
             desktop::features::feature_set,

@@ -2,9 +2,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{
-    copy_tree, expand_home, install_skill_into, parse_engine_lock, parse_skill_version,
-    points_to_ferry_engine, remove_skill_dir, same_target, service_status, skill_target_status,
-    skill_targets, skill_version_at, SkillTarget, SHARED_TARGET_ID,
+    copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
+    parse_engine_lock, parse_skill_version, points_to_ferry_engine, remove_skill_dir,
+    remove_skill_group, same_target, service_status, skill_target, skill_target_status,
+    skill_version_at, SkillTarget, BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
 
 static SCRATCH_SEQUENCE: AtomicU32 = AtomicU32::new(0);
@@ -44,12 +45,22 @@ fn write(path: &Path, contents: &str) {
 }
 
 fn skill_source(scratch: &Scratch, version: &str) -> PathBuf {
-    let source = scratch.join("bundled/ferry");
-    write(
-        &source.join("SKILL.md"),
-        &format!("---\nname: ferry\nversion: {version}\n---\n\n# Ferry\n"),
-    );
-    source
+    skill_group(scratch, version).remove(0)
+}
+
+/// 打包资源里的**一组** skill:与 `BUNDLED_SKILLS` 一一对应。
+fn skill_group(scratch: &Scratch, version: &str) -> Vec<PathBuf> {
+    BUNDLED_SKILLS
+        .iter()
+        .map(|name| {
+            let source = scratch.join(&format!("bundled/{name}"));
+            write(
+                &source.join("SKILL.md"),
+                &format!("---\nname: {name}\nversion: {version}\n---\n\n# {name}\n"),
+            );
+            source
+        })
+        .collect()
 }
 
 #[test]
@@ -148,6 +159,54 @@ fn installing_replaces_the_previous_copy_instead_of_merging_into_it() {
     assert!(!installed.join("legacy.md").exists());
 }
 
+/// 安装是成组的:一次装齐 `BUNDLED_SKILLS`,少一份就不算装好。
+#[test]
+fn the_bundled_skills_are_installed_and_removed_as_one_group() {
+    let scratch = Scratch::new("group");
+    let sources = skill_group(&scratch, "0.7.0");
+    let target_dir = scratch.join("agent/skills");
+    let neighbour = target_dir.join("other-skill/SKILL.md");
+    write(&neighbour, "---\nname: other\n---\n");
+
+    let installed = install_skill_group(&sources, &target_dir).expect("成组安装");
+    assert_eq!(installed.len(), BUNDLED_SKILLS.len());
+    assert!(BUNDLED_SKILLS.len() >= 2, "至少 ferry + ferry-resume");
+    for name in BUNDLED_SKILLS {
+        assert!(target_dir.join(name).join("SKILL.md").is_file(), "{name}");
+    }
+
+    let target = SkillTarget {
+        id: SHARED_TARGET_ID.to_owned(),
+        path: target_dir.clone(),
+    };
+    let status = skill_target_status(&target);
+    assert!(status.installed);
+    assert_eq!(status.installed_version.as_deref(), Some("0.7.0"));
+
+    // 组里少一份就整体报「未安装」:半装状态不该显示成已安装。
+    remove_skill_dir(&target_dir.join(BUNDLED_SKILLS[1])).expect("摘掉其中一份");
+    let partial = skill_target_status(&target);
+    assert!(!partial.installed);
+    assert!(partial.installed_version.is_none());
+
+    // 版本不齐时取最小值,让设置页显示「有新版本」而不是假装最新。
+    install_skill_group(&skill_group(&scratch, "0.6.0"), &target_dir).expect("装一份旧的");
+    install_skill_into(&skill_group(&scratch, "0.9.0")[0], &target_dir).expect("只更新第一份");
+    assert_eq!(
+        skill_target_status(&target).installed_version.as_deref(),
+        Some("0.6.0")
+    );
+
+    // 移除只删 Ferry 自己装的那几个目录。
+    remove_skill_group(&target_dir).expect("成组移除");
+    for name in BUNDLED_SKILLS {
+        assert!(!target_dir.join(name).exists(), "{name}");
+    }
+    assert!(neighbour.exists());
+    // 已经不在了再删一次也不该报错(前端可能重复点)。
+    remove_skill_group(&target_dir).expect("重复移除");
+}
+
 #[test]
 fn uninstall_removes_only_the_ferry_directory() {
     let scratch = Scratch::new("uninstall");
@@ -164,74 +223,31 @@ fn uninstall_removes_only_the_ferry_directory() {
     remove_skill_dir(&target_dir.join("ferry")).expect("重复卸载");
 }
 
-#[cfg(unix)]
-#[test]
-fn a_symlink_farm_pointing_at_the_shared_warehouse_is_reported_as_shared() {
-    let scratch = Scratch::new("shared");
-    let source = skill_source(&scratch, "0.7.0");
-    let shared_dir = scratch.join("agents/skills");
-    install_skill_into(&source, &shared_dir).expect("装进共享仓库");
-
-    let agent_dir = scratch.join("claude/skills");
-    std::fs::create_dir_all(&agent_dir).expect("创建 agent 目录");
-    std::os::unix::fs::symlink(shared_dir.join("ferry"), agent_dir.join("ferry"))
-        .expect("建立 symlink 农场");
-
-    let shared = vec![shared_dir.join("ferry")];
-    let target = SkillTarget {
-        id: "claude".to_owned(),
-        display_name: "Claude Code".to_owned(),
-        path: agent_dir.clone(),
-    };
-    let status = skill_target_status(&target, &shared);
-    assert!(status.installed);
-    assert!(status.via_shared);
-    // symlink 指过去的那份也要读得出版本(stat 语义,不是 lstat)。
-    assert_eq!(status.installed_version.as_deref(), Some("0.7.0"));
-
-    // 共享仓库自己那一行不该标成「经共享仓库生效」。
-    let itself = SkillTarget {
-        id: SHARED_TARGET_ID.to_owned(),
-        display_name: String::new(),
-        path: shared_dir,
-    };
-    assert!(!skill_target_status(&itself, &shared).via_shared);
-
-    // 摘掉链接不影响共享仓库里的真身。
-    remove_skill_dir(&agent_dir.join("ferry")).expect("摘链接");
-    assert!(!agent_dir.join("ferry").exists());
-    assert!(shared[0].join("SKILL.md").is_file());
-}
-
 #[test]
 fn a_target_without_the_skill_reports_no_version() {
     let scratch = Scratch::new("empty");
     let target = SkillTarget {
-        id: "codex".to_owned(),
-        display_name: "Codex CLI".to_owned(),
-        path: scratch.join("codex/skills"),
+        id: SHARED_TARGET_ID.to_owned(),
+        path: scratch.join("agents/skills"),
     };
-    let status = skill_target_status(&target, &[]);
+    let status = skill_target_status(&target);
     assert!(!status.installed);
     assert!(status.installed_version.is_none());
-    assert!(!status.via_shared);
 }
 
+/// 安装目标只有一个:契约里的共享技能目录。各 agent 都读它,不再按 agent 分行。
 #[test]
-fn the_target_table_comes_from_the_contract_and_has_unique_ids() {
-    let targets = skill_targets().expect("目标表");
-    let ids: Vec<&str> = targets.iter().map(|target| target.id.as_str()).collect();
-    assert!(ids.contains(&"claude"));
-    assert!(ids.contains(&"codex"));
-    assert!(ids.contains(&"opencode"));
-    assert!(ids.contains(&SHARED_TARGET_ID));
-    // 契约里没有 skill_paths 的 agent 不进目标表。
-    assert!(!ids.contains(&"cursor"));
-    let mut unique = ids.clone();
-    unique.sort_unstable();
-    unique.dedup();
-    assert_eq!(unique.len(), ids.len());
-    assert!(targets.iter().all(|target| target.path.is_absolute()));
+fn the_only_target_is_the_shared_skill_directory() {
+    let target = skill_target().expect("目标");
+    assert_eq!(target.id, SHARED_TARGET_ID);
+    assert!(target.path.is_absolute());
+    assert!(target.path.ends_with(".agents/skills"));
+    // 别的 id 一律拒绝:webview 只该拿到状态里回报的那一个。
+    assert_eq!(
+        find_target(SHARED_TARGET_ID).expect("按 id 找回").path,
+        target.path
+    );
+    assert!(find_target("claude").is_err());
 }
 
 #[test]

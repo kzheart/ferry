@@ -4,7 +4,7 @@ import Integration from "./Integration.jsx";
 
 const calls = {
   cliInstall: 0, cliUninstall: 0, skillInstall: [], skillUninstall: [],
-  skillInstallCustom: [], pick: 0, status: 0, setShare: [], stop: 0,
+  status: 0, setShare: [], stop: 0,
 };
 let status;
 let service;
@@ -20,8 +20,6 @@ vi.mock("../../platform/desktop/client.js", () => ({
   cliUninstall: async () => { calls.cliUninstall += 1; },
   skillInstall: async (id) => { calls.skillInstall.push(id); },
   skillUninstall: async (id) => { calls.skillUninstall.push(id); },
-  skillInstallCustom: async (path) => { calls.skillInstallCustom.push(path); return `${path}/ferry`; },
-  pickSkillDirectory: async () => { calls.pick += 1; return "/tmp/custom-skills"; },
   getEngineShare: async () => share,
   setEngineShare: async (enabled) => { calls.setShare.push(enabled); share = enabled; },
   engineDaemonStop: async () => { calls.stop += 1; if (stopError) throw stopError; },
@@ -37,19 +35,15 @@ const baseStatus = () => ({
   cli: { ...CLI_INSTALLED },
   bundled_version: "0.7.0",
   skills: [
-    { id: "claude", display_name: "Claude Code", path: "/home/u/.claude/skills",
-      installed: true, installed_version: "0.7.0", via_shared: false },
-    { id: "codex", display_name: "Codex CLI", path: "/home/u/.codex/skills",
-      installed: false, installed_version: null, via_shared: false },
-    { id: "shared", display_name: "", path: "/home/u/.agents/skills",
-      installed: false, installed_version: null, via_shared: false },
+    { id: "shared", path: "/home/u/.agents/skills",
+      installed: true, installed_version: "0.7.0" },
   ],
 });
 
 beforeEach(() => {
   Object.assign(calls, {
     cliInstall: 0, cliUninstall: 0, skillInstall: [], skillUninstall: [],
-    skillInstallCustom: [], pick: 0, status: 0, setShare: [], stop: 0,
+    status: 0, setShare: [], stop: 0,
   });
   failNext = null;
   stopError = null;
@@ -142,52 +136,36 @@ test("宿主报错时展示错误文本", async () => {
   expect(screen.getByRole("alert").textContent).toContain("Permission denied");
 });
 
-test("skill 目标逐行渲染,共享仓库用兜底名字", async () => {
+test("skill 只有共享技能目录一行,并说清各 agent 共读", async () => {
   await mount();
-  expect(screen.getByText("Claude Code")).toBeTruthy();
-  expect(screen.getByText("Codex CLI")).toBeTruthy();
-  expect(screen.getByText("settings:integration.skills.sharedTarget")).toBeTruthy();
-  expect(screen.getByText("/home/u/.claude/skills")).toBeTruthy();
+  expect(screen.getByText("settings:integration.skills.rowTitle")).toBeTruthy();
+  expect(screen.getByText("/home/u/.agents/skills")).toBeTruthy();
+  expect(screen.getByText("settings:integration.skills.groupHint")).toBeTruthy();
 });
 
 test("skill 安装与移除只传 target id", async () => {
+  status.skills[0] = { ...status.skills[0], installed: false, installed_version: null };
   await mount();
-  await clickInRow("Codex CLI", "settings:integration.skills.install");
-  expect(calls.skillInstall).toEqual(["codex"]);
-  await clickInRow("Claude Code", "settings:integration.skills.remove");
-  expect(calls.skillUninstall).toEqual(["claude"]);
+  await clickText("settings:integration.skills.install");
+  expect(calls.skillInstall).toEqual(["shared"]);
+
+  status.skills[0] = { ...status.skills[0], installed: true, installed_version: "0.7.0" };
+  await mount();
+  await clickText("settings:integration.skills.remove");
+  expect(calls.skillUninstall).toEqual(["shared"]);
 });
 
-test("已装但版本落后的目标给更新按钮", async () => {
+test("已装但版本落后时给更新按钮", async () => {
   status.skills[0].installed_version = "0.6.0";
   await mount();
   expect(screen.getByText("settings:integration.skills.stateUpdatable")).toBeTruthy();
-  await clickInRow("Claude Code", "settings:integration.skills.update");
-  expect(calls.skillInstall).toEqual(["claude"]);
-});
-
-test("经共享仓库生效的目标不给安装按钮", async () => {
-  status.skills[0] = { ...status.skills[0], via_shared: true };
-  await mount();
-  expect(screen.getByText("settings:integration.skills.viaShared")).toBeTruthy();
-  const labels = [...rowOf("Claude Code").querySelectorAll("button")]
-    .map((button) => button.textContent.trim());
-  expect(labels).not.toContain("settings:integration.skills.install");
-  expect(labels).not.toContain("settings:integration.skills.update");
-  expect(labels).toContain("settings:integration.skills.remove");
-});
-
-test("自定义目录安装串起目录对话框,并回报落点", async () => {
-  await mount();
-  await clickText("settings:integration.skills.custom");
-  expect(calls.pick).toBe(1);
-  expect(calls.skillInstallCustom).toEqual(["/tmp/custom-skills"]);
-  expect(screen.getByRole("status").textContent)
-    .toContain("settings:integration.skills.customDone");
+  await clickText("settings:integration.skills.update");
+  expect(calls.skillInstall).toEqual(["shared"]);
 });
 
 test("打包资源缺失时禁用全部安装入口", async () => {
   status.bundled_version = null;
+  status.skills[0] = { ...status.skills[0], installed: false, installed_version: null };
   await mount();
   expect(screen.getByText("settings:integration.skills.bundleMissing")).toBeTruthy();
   const install = [...document.querySelectorAll("button")]

@@ -33,6 +33,7 @@ export function createSessionContextMenu({
   setToast,
   select,
   setMigration,
+  onResumeElsewhere,
   settings,
   isFeatureEnabled,
   t,
@@ -100,6 +101,13 @@ export function createSessionContextMenu({
         .then(launch => openTerminal(launch, settings.terminalApp))
         .catch(() => {}),
     }] : []),
+    // 续聊到其他 agent:只复制一条 `/ferry-resume <tool> <id>`,不发任何 RPC。
+    // 指令内容与粘到哪个 agent 无关,所以只有一条入口,不按目标分列。
+    {
+      label: t("app:ctx.copyResumeElsewhere"),
+      feature: "handoff",
+      onClick: () => onResumeElsewhere?.(session),
+    },
     ...(TOOLS.includes(session.tool)
       && supportsAgentCapability(session.tool, "migration-source") ? [{
       label: t("app:ctx.migrateTo"),

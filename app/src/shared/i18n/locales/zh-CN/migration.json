@@ -31,6 +31,9 @@
     "notInstalled": "未检测到安装,无法作为目标",
     "installedMeta": "写入 {{tool}} 的本地会话存储"
   },
+  "resume": {
+    "fallback": "改为续聊(复制指令)"
+  },
   "preview": {
     "failed": "预演失败:{{error}}",
     "retry": "重试",
@@ -121,7 +124,11 @@
     "failTitle": "迁移失败 · 验收未通过",
     "failDesc": "已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,请修正问题后重试。",
     "failDescProbe": " · 探针模型 {{model}}",
-    "failConcurrent": "源会话在确认期间被 {{tool}} 写入了新内容,与预览不再一致,已中止写入。请等源会话空闲后重新发起迁移。"
+    "failConcurrent": "源会话在确认期间被 {{tool}} 写入了新内容,与预览不再一致,已中止写入。请等源会话空闲后重新发起迁移。",
+    "failAbortedTitle": "迁移未完成",
+    "failAbortedDesc": "迁移在写入 {{tool}} 前被中止,源会话与 {{tool}} 均未改动。",
+    "failProbeTitle": "迁移已写入 · 探针未通过",
+    "failProbeDesc": "产物已写入 {{tool}} 并保留,但隔离探针未通过,请自行在 {{tool}} 中确认会话可用。"
   },
   "sheet": {
     "title": "迁移会话",
