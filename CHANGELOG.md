@@ -14,7 +14,7 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-23
 
 ### Added
 
@@ -30,6 +30,47 @@ fails validation if its version has no section.
   the destination folder in Cursor at least once so the chat is filed under
   the right workspace. Failed migrations roll back the chat and its subagents
   and touch nothing else in Cursor's database.
+- **`ferry` command-line tool** — a `ferry` command for coding agents and
+  scripts: search sessions, read them page by page, usage statistics, resume
+  commands, migration plan/apply/status, migration history, and index
+  refresh — all as JSON with the engine's error envelopes passed through.
+  While the desktop app is running the CLI shares its engine; otherwise it
+  starts a background daemon that exits on its own when idle. Install it from
+  Settings → Agent integration (a symlink in `~/.local/bin`, no sudo).
+- **Ferry skill for coding agents** — a bundled `ferry` skill teaches Claude
+  Code, Codex, OpenCode, and any other agent that reads `~/.agents/skills` to
+  use the CLI well: find how something was solved before, audit what another
+  agent actually did, migrate a session with an impact summary you must
+  confirm before anything is written, and report token usage. One-click
+  install from Settings → Agent integration.
+- **Resume a session in another agent** (experimental) — right-click a
+  session and choose "Copy resume instruction", then paste
+  `/ferry-resume <agent> <session id>` into any coding agent that has the new
+  `ferry-resume` skill. That agent reads the history through Ferry with the
+  other agent's system prompts and instruction wrappers stripped, writes a
+  short takeover summary, checks the repository state, and continues in its
+  own session — nothing is written to any agent's store, so it works even
+  when a native migration is refused (for example while Cursor is running).
+  The skill also accepts a plain-language description of the session. Turn it
+  on in Settings → Experimental.
+- **Experimental features** — Settings gains an Experimental section where
+  optional features can be switched on per machine; switches only control
+  visibility and never delete data.
+
+### Changed
+
+- **Workspace layout** — the navigation rail and resource pane were rebuilt.
+  One toggle (⌘⇧S, or ⌘B from the menu) hides both at once; the icon-only
+  collapsed rail is gone, the rail gets its own background, and migration
+  history rows now match session rows.
+- **Ask Ferry is now an experimental feature** — the built-in assistant is off
+  by default. Turn it on in Settings → Experimental; when off, the assistant,
+  its provider / model / role / skill settings, and the floating chat are
+  hidden and its runtime is not started.
+- **Engine methods renamed for all callers** — the engine's API no longer
+  names a specific caller (for example `agent_session_read` is now
+  `session_read`); the desktop app, the built-in assistant, and the CLI share
+  one method set. No user-visible change.
 
 ### Fixed
 
@@ -41,6 +82,22 @@ fails validation if its version has no section.
   input fields as dropped for tool calls that get rewritten as history text.
   Those calls keep their name, input, and result inside the text that is
   written; only calls dropped outright list their fields now.
+- **Migration failures say why** — the result card now shows the engine's
+  actual reason (such as "Cursor is running: quit it before migrating")
+  instead of an error class name, and distinguishes a migration that was
+  rolled back after validation, one kept despite a failed probe, and one
+  stopped before anything was written. Cursor's "must be quit" check now runs
+  when the plan is made, so you no longer walk through every step before
+  being told.
+- **Fewer spurious "session reference is no longer valid" errors** — when a
+  session changes underneath an operation, the engine re-resolves it and
+  retries briefly instead of failing the action; when the error does surface
+  it now says whether the session was deleted or modified.
+
+### Performance
+
+- **Lower idle footprint** — the engine does much less work while nothing is
+  happening, and reading sessions (notably OpenCode and Codex) is faster.
 
 ## [0.7.0] - 2026-08-19
 
