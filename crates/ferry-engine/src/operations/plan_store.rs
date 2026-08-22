@@ -65,6 +65,7 @@ pub struct OperationState {
     pub status: String,
     pub result_json: Option<String>,
     pub error_type: Option<String>,
+    pub error_message: Option<String>,
     pub updated_at: i64,
 }
 
@@ -74,6 +75,7 @@ impl OperationState {
         status: String,
         result_json: Option<String>,
         error_type: Option<String>,
+        error_message: Option<String>,
         updated_at: i64,
     ) -> EngineResult<Self> {
         if !OPERATION_STATUSES.contains(&status.as_str()) {
@@ -91,6 +93,7 @@ impl OperationState {
             status,
             result_json,
             error_type,
+            error_message,
             updated_at,
         })
     }
@@ -188,7 +191,13 @@ impl OperationPlanStore {
                 created_at: row.created_at,
                 expires_at: row.expires_at,
             },
-            OperationState::new(row.status, row.result_json, row.error_type, row.updated_at)?,
+            OperationState::new(
+                row.status,
+                row.result_json,
+                row.error_type,
+                row.error_message,
+                row.updated_at,
+            )?,
         ))
     }
 
@@ -386,7 +395,7 @@ mod tests {
 
     #[test]
     fn state_rejects_unknown_status() {
-        let error = OperationState::new("nope".into(), None, None, 0).unwrap_err();
+        let error = OperationState::new("nope".into(), None, None, None, 0).unwrap_err();
         assert_eq!(error.error_type(), "AgentRequestError");
         assert_eq!(error.message(), "operation status 非法");
     }

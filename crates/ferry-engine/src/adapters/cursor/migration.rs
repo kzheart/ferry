@@ -21,7 +21,7 @@ use crate::model::{Message, Session, ToolCall, ToolResultBlockKind, ToolResultSt
 use crate::tool_ops::{has_valid_tool_input, CanonicalOp};
 
 use super::dialect::DIALECT;
-use super::writer;
+use super::{store, writer};
 
 /// Cursor 迁移目标。
 pub struct CursorMigrationTarget;
@@ -83,6 +83,12 @@ impl MigrationTargetBase for CursorMigrationTarget {
             return None;
         }
         self.dialect_preview(tool)
+    }
+
+    /// Cursor 必须已完全退出才能被写：这条门禁提前到 plan 阶段，用户在「目标」
+    /// 步骤就能看到提示，不必走完四步再被写入前的同一条检查拦下。
+    fn preflight(&self) -> DomainResult<()> {
+        store::ensure_offline()
     }
 
     fn write(&self, session: &Session, cwd: &str) -> DomainResult<Map<String, Value>> {

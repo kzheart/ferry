@@ -18,7 +18,8 @@
   "session": {
     "not_found": "{{tool}} session {{ref}} not found",
     "concurrent_modification": "Session changed after preview, please preview again",
-    "locator_stale": "Locator is stale, please refresh the session"
+    "locator_stale": "Locator is stale, please refresh the session",
+    "store_unavailable": "{{tool}} session store is unavailable: {{reason}}"
   },
   "edit": {
     "operation_unsupported_with_capability": "{{tool}} does not support {{capability}}",

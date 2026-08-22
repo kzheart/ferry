@@ -105,7 +105,12 @@ mod tests {
         assert!(get_dialect("cursor").is_some());
         assert_eq!(
             adapter.manifest.capabilities,
-            ["browse", "resume", "migration-source", "migration-target"]
+            [
+                "browse",
+                "resume",
+                "migration-source",
+                "migration-target"
+            ]
         );
         assert!(adapter.manifest.edit_operations.is_empty());
         for component in [

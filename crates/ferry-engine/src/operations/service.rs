@@ -331,6 +331,7 @@ impl ServiceInner {
                 self.plans.database()?.operations.fail(
                     plan_id,
                     error.error_type(),
+                    Some(error.message()),
                     self.clock.now_ms(),
                 )?;
                 return Err(error);
@@ -374,6 +375,14 @@ fn status_dto(
     result.insert("updated_at".into(), Value::from(state.updated_at));
     if let Some(error_type) = state.error_type.as_deref().filter(|text| !text.is_empty()) {
         result.insert("error_type".into(), Value::from(error_type));
+    }
+    // 类名给日志用，人话原因给用户看；宿主优先展示后者。
+    if let Some(error_message) = state
+        .error_message
+        .as_deref()
+        .filter(|text| !text.is_empty())
+    {
+        result.insert("error_message".into(), Value::from(error_message));
     }
     if let Some(result_json) = &state.result_json {
         result.insert(

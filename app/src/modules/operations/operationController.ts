@@ -45,15 +45,23 @@ export class OperationNotAppliedError extends Error {
     plan_id: string;
     status: OperationStatus;
     error_type: string;
+    error_message: string;
   };
 
-  constructor(planId: string, status: OperationStatus, errorType = "") {
-    super(`operation.not_applied: ${status}`);
+  constructor(
+    planId: string,
+    status: OperationStatus,
+    errorType = "",
+    errorMessage = "",
+  ) {
+    // 引擎给了人话原因就用它,否则只剩状态码。
+    super(errorMessage || `operation.not_applied: ${status}`);
     this.name = "OperationNotAppliedError";
     this.params = {
       plan_id: planId,
       status,
       error_type: errorType,
+      error_message: errorMessage,
     };
   }
 }
@@ -105,6 +113,7 @@ export class OperationController {
         planId,
         current.status,
         current.error_type,
+        current.error_message,
       );
     }
     return current;

@@ -761,6 +761,25 @@ fn apply_rejects_changed_index_revision() {
     let status = service.status(&plan["plan_id"]).unwrap();
     assert_eq!(status["status"], json!("failed"));
     assert_eq!(status["error_type"], json!("ConcurrentModificationError"));
+    // 类名之外还要带上人话原因，否则宿主只能显示一个异常类名。
+    assert_eq!(
+        status["error_message"],
+        json!("会话在操作计划生成后已变化，请重新计划")
+    );
+    let audit: Vec<Value> = service
+        .audit(&plan["plan_id"])
+        .unwrap()
+        .iter()
+        .map(|entry| entry.to_value())
+        .collect();
+    let failed = audit
+        .iter()
+        .find(|entry| entry["event"] == json!("failed"))
+        .expect("必须有 failed 审计");
+    assert_eq!(
+        failed["details"]["error_message"],
+        json!("会话在操作计划生成后已变化，请重新计划")
+    );
     assert_eq!(harness.commits(), 0);
 }
 

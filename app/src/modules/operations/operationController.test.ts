@@ -3,7 +3,10 @@ import { test } from "vitest";
 
 import type { OperationStatus }
   from "../../shared/contracts/generated/operations.js";
-import { OperationController } from "./operationController.js";
+import {
+  OperationController,
+  type OperationNotAppliedError,
+} from "./operationController.js";
 
 test("controller owns plan, apply and status polling", async () => {
   const calls: Array<[string, unknown]> = [];
@@ -50,4 +53,33 @@ test("controller rejects non-applied terminal states", async () => {
     () => controller.apply("op_fixture"),
     /operation\.not_applied|failed/,
   );
+});
+
+test("controller surfaces the engine failure message", async () => {
+  const controller = new OperationController({
+    plan: async () => ({ plan_id: "op_fixture" }),
+    apply: async planId => ({
+      plan_id: planId,
+      status: "failed",
+      error_type: "SessionStoreUnavailableError",
+      error_message: "Cursor 正在运行:请先完全退出 Cursor 再迁入",
+    }),
+    status: async () => {
+      throw new Error("status should not be called");
+    },
+    cancel: async () => {},
+    pause: async () => {},
+  });
+
+  const error = await controller.apply("op_fixture").then(
+    () => undefined,
+    (reason: unknown) => reason as OperationNotAppliedError,
+  );
+  assert.ok(error);
+  assert.equal(error.message, "Cursor 正在运行:请先完全退出 Cursor 再迁入");
+  assert.equal(
+    error.params.error_message,
+    "Cursor 正在运行:请先完全退出 Cursor 再迁入",
+  );
+  assert.equal(error.params.error_type, "SessionStoreUnavailableError");
 });

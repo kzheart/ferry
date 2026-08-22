@@ -31,6 +31,7 @@ pub struct OperationPlanRow {
     pub status: String,
     pub result_json: Option<String>,
     pub error_type: Option<String>,
+    pub error_message: Option<String>,
     pub updated_at: i64,
 }
 
@@ -61,6 +62,7 @@ impl OperationStore {
                 "UPDATE operation_plans
                  SET status = 'failed',
                      error_type = 'EngineRestarted',
+                     error_message = 'Ferry 引擎在操作执行期间重启，该操作已中断。',
                      updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
                  WHERE status IN ('queued', 'applying')",
                 [],
@@ -95,12 +97,12 @@ impl OperationStore {
                      plan_id, kind, input_json, preview_json,
                      input_digest, preview_digest, base_revision,
                      document_revision, created_at, expires_at,
-                     status, result_json, error_type, updated_at
+                     status, result_json, error_type, error_message, updated_at
                  ) VALUES (
                      ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
-                     'planned', NULL, NULL, ?
+                     'planned', NULL, NULL, NULL, ?
                  )",
                 params![
                     plan.plan_id,
@@ -160,32 +162,34 @@ impl OperationStore {
                 status: row.get("status")?,
                 result_json: row.get("result_json")?,
                 error_type: row.get("error_type")?,
+                error_message: row.get("error_message")?,
                 updated_at: row.get("updated_at")?,
             }))
         })
     }
 
     pub fn expire(&self, plan_id: &str, now: i64) -> EngineResult<bool> {
-        self.transition(plan_id, "planned", "expired", now, None, "expired")
+        self.transition(plan_id, "planned", "expired", now, None, None, "expired")
     }
 
     pub fn claim(&self, plan_id: &str, now: i64) -> EngineResult<bool> {
-        self.transition(plan_id, "planned", "applying", now, None, "applying")
+        self.transition(plan_id, "planned", "applying", now, None, None, "applying")
     }
 
     /// 一次性批准的唯一闸门：rowcount==1 才算抢到。
     pub fn enqueue(&self, plan_id: &str, now: i64) -> EngineResult<bool> {
-        self.transition(plan_id, "planned", "queued", now, None, "queued")
+        self.transition(plan_id, "planned", "queued", now, None, None, "queued")
     }
 
     pub fn claim_queued(&self, plan_id: &str, now: i64) -> EngineResult<bool> {
-        self.transition(plan_id, "queued", "applying", now, None, "applying")
+        self.transition(plan_id, "queued", "applying", now, None, None, "applying")
     }
 
     pub fn cancel(&self, plan_id: &str, expected: &str, now: i64) -> EngineResult<bool> {
-        self.transition(plan_id, expected, "cancelled", now, None, "cancelled")
+        self.transition(plan_id, expected, "cancelled", now, None, None, "cancelled")
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn transition(
         &self,
         plan_id: &str,
@@ -193,20 +197,25 @@ impl OperationStore {
         status: &str,
         now: i64,
         error_type: Option<&str>,
+        error_message: Option<&str>,
         event: &str,
     ) -> EngineResult<bool> {
         self.connector.with_connection(|connection| {
             connection.execute_batch("BEGIN IMMEDIATE")?;
             let changed = connection.execute(
                 "UPDATE operation_plans
-                 SET status = ?, error_type = ?, updated_at = ?
+                 SET status = ?, error_type = ?, error_message = ?, updated_at = ?
                  WHERE plan_id = ? AND status = ?",
-                params![status, error_type, now, plan_id, expected],
+                params![status, error_type, error_message, now, plan_id, expected],
             )?;
             if changed > 0 {
                 let mut details = Map::new();
                 if let Some(error_type) = error_type {
                     details.insert("error_type".into(), Value::from(error_type));
+                }
+                // 人话原因与类名同级落审计：类名只够定位代码，定位不了用户遇到的事。
+                if let Some(error_message) = error_message {
+                    details.insert("error_message".into(), Value::from(error_message));
                 }
                 Self::audit_row(connection, plan_id, event, now, &details)?;
             }
@@ -228,7 +237,7 @@ impl OperationStore {
             let changed = connection.execute(
                 "UPDATE operation_plans
                  SET status = 'applied', result_json = ?,
-                     error_type = NULL, updated_at = ?
+                     error_type = NULL, error_message = NULL, updated_at = ?
                  WHERE plan_id = ? AND status = 'applying'",
                 params![result_json, now, plan_id],
             )?;
@@ -245,14 +254,22 @@ impl OperationStore {
         })
     }
 
-    /// 失败收尾：`error_type` 存的是 Python 异常类名（§2.4 第 22 条）。
-    pub fn fail(&self, plan_id: &str, error_type: &str, now: i64) -> EngineResult<()> {
+    /// 失败收尾：`error_type` 存的是 Python 异常类名（§2.4 第 22 条），
+    /// `error_message` 是给用户看的原因原文。
+    pub fn fail(
+        &self,
+        plan_id: &str,
+        error_type: &str,
+        error_message: Option<&str>,
+        now: i64,
+    ) -> EngineResult<()> {
         if !self.transition(
             plan_id,
             "applying",
             "failed",
             now,
             Some(error_type),
+            error_message.filter(|text| !text.is_empty()),
             "failed",
         )? {
             return Err(EngineError::runtime("Operation 失败状态提交失败"));

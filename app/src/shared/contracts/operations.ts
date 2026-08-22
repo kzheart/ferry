@@ -19,6 +19,7 @@ export interface OperationState {
   plan_id: string;
   status: OperationStatus;
   error_type?: string;
+  error_message?: string;
   result?: unknown;
   [key: string]: unknown;
 }

@@ -1,7 +1,8 @@
 //! Ferry 自有状态 SQLite 的连接与 schema 组合根。
 //!
-//! 只有 Engine 打开并写入此数据库。schema 版本白名单 `(0, 9, 10)`，v9→v10 是
-//! 单跳迁移（DROP `deletion_recoveries`），v0 直接建 v10 全量表（§2.3 第 18 条）。
+//! 只有 Engine 打开并写入此数据库。schema 版本白名单 `(0, 9, 10, 11)`：v9→v10 是
+//! DROP `deletion_recoveries`，v10→v11 给 `operation_plans` 补 `error_message` 列，
+//! v0 直接建 v11 全量表（§2.3 第 18 条）。老库按序逐跳升级。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use crate::operations::state_store::OperationStore;
 use crate::operations::types::{EngineError, EngineResult};
 use crate::runtime::store::RuntimeSessionStore;
 
-pub const SCHEMA_VERSION: i64 = 10;
+pub const SCHEMA_VERSION: i64 = 11;
 
 /// 状态库文件名；`state_dir()` 下唯一。
 pub const STATE_DATABASE_FILENAME: &str = "ferry-state.sqlite3";
@@ -153,9 +154,10 @@ impl StateDatabase {
     }
 }
 
-/// schema v10 的全量建表脚本；SQL 与 `database.py:93-161` 逐字对齐。
-/// BEGIN/COMMIT 由 [`initialize`] 持有：写锁内要先复查版本再决定是否执行。
-const CREATE_SCHEMA_V10: &str = r#"
+/// schema v11 的全量建表脚本；SQL 与 `database.py:93-161` 逐字对齐（外加 v11 的
+/// `error_message` 列）。BEGIN/COMMIT 由 [`initialize`] 持有：写锁内要先复查版本
+/// 再决定是否执行。
+const CREATE_SCHEMA_V11: &str = r#"
                     CREATE TABLE operation_plans (
                         plan_id TEXT PRIMARY KEY,
                         kind TEXT NOT NULL,
@@ -170,6 +172,7 @@ const CREATE_SCHEMA_V10: &str = r#"
                         status TEXT NOT NULL,
                         result_json TEXT,
                         error_type TEXT,
+                        error_message TEXT,
                         updated_at INTEGER NOT NULL
                     );
                     CREATE TABLE operation_audit (
@@ -220,7 +223,7 @@ const CREATE_SCHEMA_V10: &str = r#"
                             REFERENCES runtime_sessions(session_id)
                             ON DELETE CASCADE
                     );
-                    PRAGMA user_version = 10;
+                    PRAGMA user_version = 11;
 "#;
 
 /// v9 → v10 单跳迁移：删除恢复系统退役。
@@ -229,10 +232,16 @@ const MIGRATE_V9_TO_V10: &str = r#"
                     PRAGMA user_version = 10;
 "#;
 
+/// v10 → v11 单跳迁移：失败操作除类名外还要留下人话原因。
+const MIGRATE_V10_TO_V11: &str = r#"
+                    ALTER TABLE operation_plans ADD COLUMN error_message TEXT;
+                    PRAGMA user_version = 11;
+"#;
+
 fn initialize(connector: &StateConnector) -> EngineResult<()> {
     connector.with_connection(|connection| {
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if !matches!(version, 0 | 9 | SCHEMA_VERSION) {
+        if !matches!(version, 0 | 9 | 10 | SCHEMA_VERSION) {
             return Err(EngineError::runtime(format!(
                 "Ferry state schema 不受支持: {version}"
             )));
@@ -244,10 +253,12 @@ fn initialize(connector: &StateConnector) -> EngineResult<()> {
         // 输掉竞态的一方（另一连接已建好 schema）直接放弃，避免 CREATE 撞表。
         connection.execute_batch("BEGIN IMMEDIATE;")?;
         let current: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        let script = match current {
-            0 => Some(CREATE_SCHEMA_V10),
-            9 => Some(MIGRATE_V9_TO_V10),
-            SCHEMA_VERSION => None,
+        // 老库逐跳升级：v9 先补 v10 再补 v11，一律在同一个写事务里完成。
+        let scripts: &[&str] = match current {
+            0 => &[CREATE_SCHEMA_V11],
+            9 => &[MIGRATE_V9_TO_V10, MIGRATE_V10_TO_V11],
+            10 => &[MIGRATE_V10_TO_V11],
+            SCHEMA_VERSION => &[],
             other => {
                 let _ = connection.execute_batch("ROLLBACK;");
                 return Err(EngineError::runtime(format!(
@@ -255,13 +266,11 @@ fn initialize(connector: &StateConnector) -> EngineResult<()> {
                 )));
             }
         };
-        let result = match script {
-            Some(script) => connection.execute_batch(script),
-            None => Ok(()),
-        };
-        if let Err(error) = result {
-            let _ = connection.execute_batch("ROLLBACK;");
-            return Err(error.into());
+        for script in scripts {
+            if let Err(error) = connection.execute_batch(script) {
+                let _ = connection.execute_batch("ROLLBACK;");
+                return Err(error.into());
+            }
         }
         connection.execute_batch("COMMIT;")?;
         Ok(())
@@ -321,11 +330,11 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_creates_the_v10_schema() {
+    fn fresh_database_creates_the_v11_schema() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested").join(STATE_DATABASE_FILENAME);
         StateDatabase::open(&path, false).unwrap();
-        assert_eq!(user_version(&path), 10);
+        assert_eq!(user_version(&path), SCHEMA_VERSION);
 
         let connection = Connection::open(&path).unwrap();
         let mut statement = connection
@@ -365,8 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn schema_version_whitelist_is_exactly_zero_nine_ten() {
-        for version in [1, 2, 3, 4, 5, 6, 7, 8, 11, 99] {
+    fn schema_version_whitelist_is_exactly_zero_nine_ten_eleven() {
+        for version in [1, 2, 3, 4, 5, 6, 7, 8, 12, 99] {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join(STATE_DATABASE_FILENAME);
             let connection = Connection::open(&path).unwrap();
@@ -385,13 +394,14 @@ mod tests {
     }
 
     #[test]
-    fn v9_migrates_in_a_single_hop_and_drops_deletion_recoveries() {
+    fn v9_migrates_up_and_drops_deletion_recoveries() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(STATE_DATABASE_FILENAME);
         let connection = Connection::open(&path).unwrap();
         connection
             .execute_batch(
                 "CREATE TABLE deletion_recoveries (id TEXT PRIMARY KEY);
+                 CREATE TABLE operation_plans (plan_id TEXT PRIMARY KEY, error_type TEXT);
                  PRAGMA user_version = 9;",
             )
             .unwrap();
@@ -399,7 +409,7 @@ mod tests {
 
         StateDatabase::open(&path, false).unwrap();
 
-        assert_eq!(user_version(&path), 10);
+        assert_eq!(user_version(&path), SCHEMA_VERSION);
         let connection = Connection::open(&path).unwrap();
         let remaining: i64 = connection
             .query_row(
@@ -409,6 +419,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn v10_gains_the_error_message_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(STATE_DATABASE_FILENAME);
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE operation_plans (plan_id TEXT PRIMARY KEY, error_type TEXT);
+                 PRAGMA user_version = 10;",
+            )
+            .unwrap();
+        drop(connection);
+
+        StateDatabase::open(&path, false).unwrap();
+
+        assert_eq!(user_version(&path), SCHEMA_VERSION);
+        let connection = Connection::open(&path).unwrap();
+        let columns: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info('operation_plans')")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert!(columns.contains(&"error_message".to_string()), "{columns:?}");
     }
 
     #[test]

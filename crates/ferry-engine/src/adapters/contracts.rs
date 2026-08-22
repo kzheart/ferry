@@ -328,6 +328,14 @@ pub trait MigrationSource: Send + Sync {
 }
 
 pub trait MigrationTarget: Send + Sync {
+    /// 写入前置检查：目标端此刻能不能被写。
+    ///
+    /// 在 plan/preview 阶段就调用，把「目标 App 正在运行」之类的门禁提前到用户
+    /// 选目标那一步，而不是等他走完四步、点了确认才拦。默认放行。
+    fn preflight(&self) -> DomainResult<()> {
+        Ok(())
+    }
+
     fn plan(&self, session: &Session) -> DomainResult<Map<String, Value>>;
     fn preview(&self, session: &Session, cwd: Option<&str>) -> DomainResult<Map<String, Value>>;
     fn write(&self, session: &Session, cwd: &str) -> DomainResult<Map<String, Value>>;

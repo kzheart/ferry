@@ -553,10 +553,19 @@ pub trait MigrationTargetBase: Send + Sync {
 
     /// 实际写入目标存储；没有默认实现。
     fn write(&self, session: &Session, cwd: &str) -> DomainResult<Map<String, Value>>;
+
+    /// 写入前置检查；见 [`crate::adapters::contracts::MigrationTarget::preflight`]。
+    fn preflight(&self) -> DomainResult<()> {
+        Ok(())
+    }
 }
 
 /// 任何 [`MigrationTargetBase`] 自动满足 `contracts::MigrationTarget`。
 impl<T: MigrationTargetBase> crate::adapters::contracts::MigrationTarget for T {
+    fn preflight(&self) -> DomainResult<()> {
+        MigrationTargetBase::preflight(self)
+    }
+
     fn plan(&self, session: &Session) -> DomainResult<Map<String, Value>> {
         MigrationTargetBase::plan(self, session)
     }

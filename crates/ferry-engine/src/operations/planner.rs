@@ -130,7 +130,7 @@ impl OperationPlanner {
             .adapter(&source_tool)?
             .require_migration_source()?;
         let target_adapter = self.ports.adapter(&target_tool)?;
-        target_adapter.require_migration_target()?;
+        let target = target_adapter.require_migration_target()?;
         target_adapter.require_browser()?;
         target_adapter.require_lifecycle("resume")?;
         if operation_input
@@ -140,6 +140,9 @@ impl OperationPlanner {
         {
             target_adapter.require_verifier("probe")?;
         }
+        // 目标端写入门禁前置：宁可在 plan 阶段多花一次进程探测，也不要让用户走完
+        // 四步、点了确认才看到「目标 App 正在运行」。
+        target.preflight()?;
         let reference = require_str(&operation_input, "ref")?;
         let before = self.index.resolve(&source_tool, &reference)?;
         let session = self.index.read_indexed_session(&before)?;
