@@ -32,7 +32,7 @@ import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 import { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts.js";
 import { useRailNavigation } from "./useRailNavigation.js";
 import { useResourcePaneLayout } from "./useResourcePaneLayout.js";
-import { useNavCollapse } from "./useNavCollapse.js";
+import { useSidebarCollapse } from "./useSidebarCollapse.js";
 import { useResourcePaneConfig } from "./useResourcePaneConfig.js";
 import { useWorkspaceInteractions } from "./useWorkspaceInteractions.js";
 import { useWorkspaceState } from "./useWorkspaceState.js";
@@ -62,7 +62,7 @@ export default function App() {
   const [mig, setMig] = useState(null); // {scope}
 
   const paneLayout = useResourcePaneLayout();
-  const navLayout = useNavCollapse();
+  const sidebar = useSidebarCollapse();
 
   const ferry = useAskFerry();
   const [agentAttachments, setAgentAttachments] = useState([]);
@@ -274,7 +274,7 @@ export default function App() {
 
   useDesktopChrome({
     onOpenSettings: () => openConfig("prefs"),
-    onToggleSidebar: paneLayout.toggleCollapsed,
+    onToggleSidebar: sidebar.toggle,
     onRescan: doScan,
   });
 
@@ -355,8 +355,6 @@ export default function App() {
     historyTokens: histTokens,
   });
 
-  // 侧栏只剩导航栏(无资源栏或已折叠)时,导航栏要容纳红绿灯
-  const railOnly = !paneCfg || paneLayout.collapsed;
   const rail = useRailNavigation({
     labels: {
       overview: t("app:rail.overview"),
@@ -371,7 +369,7 @@ export default function App() {
   useAppKeyboardShortcuts({
     paneAvailable: Boolean(paneCfg),
     onOpenSearch: () => setSearchOpen(true),
-    onToggleNav: navLayout.toggle,
+    onToggleSidebar: sidebar.toggle,
     onFocusPaneSearch: () => {
       if (view !== "library") return;
       document.dispatchEvent(new Event("ferry-focus-pane-search"));
@@ -429,7 +427,7 @@ export default function App() {
     histDel, histF, histGroups, histSel, histSelectedId, historyToolIds,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
     onboarding, openConfig, paneCfg, peekEntity, peekId,
-    popAnchor, popover, rail, railOnly, refreshing,
+    popAnchor, popover, rail, refreshing,
     scan, scanning, searchOpen, select, selectHistory, selId,
     sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setHistDel, setHistF, setMetaFor, setMig,
@@ -458,9 +456,7 @@ export default function App() {
       <AppShell
         rail={
           <AppNav
-            collapsed={navLayout.collapsed}
-            railOnly={railOnly}
-            resizing={paneLayout.resizing}
+            collapsed={sidebar.collapsed}
             items={rail.items}
             activeView={view}
             draggingKey={rail.draggingKey}
@@ -490,19 +486,14 @@ export default function App() {
               setView(key);
               setSettingsOpen(false);
               setPopover(null);
-              rail.leave();
             }}
             onRescan={() => {
               doScan();
-              rail.leave();
             }}
             onToggleSettings={() => {
               setSettingsSection("prefs");
               setSettingsOpen((value) => !value);
-              rail.leave();
             }}
-            onEnter={rail.enter}
-            onLeave={rail.leave}
             pointerHandlers={rail.pointerHandlers}
           />
         }
@@ -511,7 +502,7 @@ export default function App() {
             <ResourcePaneHost
               view={view}
               pane={paneCfg}
-              collapsed={paneLayout.collapsed}
+              collapsed={sidebar.collapsed}
               width={paneLayout.width}
               resizing={paneLayout.resizing}
               filterOpen={popover === { library: "lib", history: "hist" }[view]}
@@ -525,7 +516,6 @@ export default function App() {
               }}
               library={{
                 scanning,
-                navCollapsed: navLayout.collapsed,
                 scope: libScope,
                 scopeCounts: libScopeCounts,
                 projects: libProjects,
@@ -566,19 +556,15 @@ export default function App() {
             />
           )
         }
-        showDivider={Boolean(paneCfg && !paneLayout.collapsed)}
+        showDivider={Boolean(paneCfg)}
+        dividerCollapsed={sidebar.collapsed}
         resizing={paneLayout.resizing}
         onResizeStart={paneLayout.startResize}
         onResizeReset={paneLayout.resetWidth}
         dividerTitle={t("app:drag.hint")}
+        sidebarCollapsed={sidebar.collapsed}
         toolbar={
-          <WorkspaceToolbar
-            paneAvailable={Boolean(paneCfg)}
-            collapsed={paneLayout.collapsed}
-            onToggleCollapsed={paneLayout.toggleCollapsed}
-            navCollapsed={navLayout.collapsed}
-            onToggleNav={navLayout.toggle}
-          />
+          <WorkspaceToolbar collapsed={sidebar.collapsed} onToggle={sidebar.toggle} />
         }
       >
         <WorkspaceRouter

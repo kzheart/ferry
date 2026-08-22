@@ -5,7 +5,7 @@ import { Spinner } from "../shared/ui/icons.jsx";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
 import { AgentSessionList } from "../modules/askferry/public.js";
 import { HistoryList, LibraryList, Pane, StaleScanNotice } from "./ResourcePane.jsx";
-import { DisplayMenu, ScopeMenu } from "./LibraryPaneMenus.jsx";
+import { DisplayMenu } from "./LibraryPaneMenus.jsx";
 
 export function ResourcePaneHost({
   view,
@@ -26,15 +26,10 @@ export function ResourcePaneHost({
   const isLibrary = view === "library";
   const inProjectScope = isLibrary && library.scope.kind === "project";
   const onlyProject = dir => library.onSelectScope({ kind: "project", value: dir });
-  const titleRef = useRef(null);
   const displayRef = useRef(null);
-  const [scopeOpen, setScopeOpen] = useState(false);
   const [displayOpen, setDisplayOpen] = useState(false);
   // 文件夹头的右键菜单:内容与悬停出现的两个动作一致,自成一体,不走会话行那套 ctxMenu
   const [folderMenu, setFolderMenu] = useState(null);
-  // 导航栏展开时范围就在左边常驻,标题不必再当入口;折叠时它是唯一的入口
-  const titleIsMenu = isLibrary && library.navCollapsed;
-
   return (
     <>
     <Pane collapsed={collapsed} width={width} dragging={resizing}
@@ -45,13 +40,6 @@ export function ResourcePaneHost({
       placeholder={pane.placeholder}
       onOpenSearch={onOpenSearch}
       onClearSearch={() => pane.onQuery({ target: { value: "" } })}
-      onTitleClick={titleIsMenu
-        ? event => {
-            titleRef.current = event.currentTarget;
-            setScopeOpen(value => !value);
-          }
-        : null}
-      titleMenuOpen={scopeOpen}
       onBack={inProjectScope ? () => library.onSelectScope({ kind: "all" }) : null}
       backLabel={t("app:nav.backToAll")}
       displayLabel={pane.displayLabel}
@@ -101,13 +89,6 @@ export function ResourcePaneHost({
       {view === "askferry" && (
         <AgentSessionList sessions={agent.sessions} />)}
     </Pane>
-    {isLibrary && scopeOpen && titleRef.current && (
-      <ScopeMenu anchorRef={titleRef} scope={library.scope}
-        scopeCounts={library.scopeCounts} projects={library.projects}
-        favorites={library.favorites}
-        toolNames={library.toolNames} onPick={library.onSelectScope}
-        onClose={() => setScopeOpen(false)} />
-    )}
     {isLibrary && displayOpen && displayRef.current && (
       <DisplayMenu anchorRef={displayRef} display={library.display}
         onChange={library.onDisplayChange} onClose={() => setDisplayOpen(false)} />

@@ -13,7 +13,7 @@ export function useWorkspaceState({
   histDel, histF, histGroups, histSel, histSelectedId, historyToolIds,
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
   onboarding, openConfig, paneCfg, peekEntity, peekId, popAnchor,
-  popover, rail, railOnly, refreshing, scan,
+  popover, rail, refreshing, scan,
   scanning, searchOpen, select, selectHistory, selId, sessions,
   setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setHistDel, setHistF, setMetaFor, setMig, setMultiSel,
@@ -147,7 +147,6 @@ export function useWorkspaceState({
   const appChrome = useMemo(
     () => ({
       toast: { value: toast, setValue: setToast },
-      railTip: { value: rail.railTip, railOnly },
       settings: {
         open: settingsOpen,
         value: settings,
@@ -171,7 +170,7 @@ export function useWorkspaceState({
       },
     }),
     [
-      toast, setToast, rail.railTip, railOnly, settingsOpen, settings,
+      toast, setToast, settingsOpen, settings,
       setSettings, updater, settingsSection, scan, env, scanning,
       doScan, onboarding,
     ],

@@ -1,4 +1,4 @@
-// 全局快捷键里这次新增的两条:⌘⇧S 折叠导航栏、⌘F 聚焦资源栏那条常驻搜索框。
+// 全局快捷键里这次新增的两条:⌘⇧S 收起侧栏、⌘F 聚焦资源栏那条常驻搜索框。
 // ⌘K(全文命令面板)必须原样活着——三者共用同一个 keydown,很容易互相抢。
 import { test } from "vitest";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ function setup(overrides = {}) {
   renderHook(() => useAppKeyboardShortcuts({
     paneAvailable: true,
     onOpenSearch: () => calls.push("search"),
-    onToggleNav: () => calls.push("nav"),
+    onToggleSidebar: () => calls.push("sidebar"),
     onFocusPaneSearch: () => calls.push("focus"),
     dismissers: [],
     view: "library",
@@ -38,14 +38,14 @@ function setup(overrides = {}) {
 const press = (key, init = {}) =>
   fireEvent.keyDown(document, { key, metaKey: true, ...init });
 
-test("⌘⇧S 折叠导航栏,⌘F 聚焦常驻搜索框,⌘K 仍是全文面板", () => {
+test("⌘⇧S 收起侧栏,⌘F 聚焦常驻搜索框,⌘K 仍是全文面板", () => {
   const calls = setup();
 
   press("s", { shiftKey: true });
   press("f");
   press("k");
 
-  assert.deepEqual(calls, ["nav", "focus", "search"]);
+  assert.deepEqual(calls, ["sidebar", "focus", "search"]);
 });
 
 test("不带 Shift 的 ⌘S 不折叠导航栏", () => {
@@ -61,5 +61,5 @@ test("没有资源栏的视图里 ⌘F / ⌘K 不动作,⌘⇧S 仍然可用", (
   press("k");
   press("s", { shiftKey: true });
 
-  assert.deepEqual(calls, ["nav"]);
+  assert.deepEqual(calls, ["sidebar"]);
 });

@@ -1,17 +1,14 @@
 // Wake 式导航栏:上半是应用导航(可拖拽排序),下半是会话库的「范围」——
 // 全部 / 置顶 / 各 Agent / 各项目 / 各标签,常驻可见、带计数、单选互斥。
-// 可折叠回 56px 图标轨,折叠时范围入口退回资源栏标题上的下拉菜单。
+// 只有「在」与「不在」两态:收起时连同资源栏一起退场,不留没有文字的图标轨。
 import { useEffect, useState } from "react";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
 import { Caret, PinIcon, RailGlyph, RescanIcon, Spinner, ToolIcon } from "../shared/ui/icons.jsx";
 import { useDensityMetrics } from "../shared/ui/density.js";
 
-// 展开宽度由密度变量决定(standard 240 / compact 208)
+// 宽度由密度变量决定(standard 240 / compact 208)
 const NAV_WIDTH = "var(--nav-w)";
-const RAIL_WIDTH = 56;
-// 折叠且没有资源栏时,红绿灯要落在导航栏自己身上,得再宽一点
-const RAIL_WIDTH_ALONE = 80;
 const SECTIONS_KEY = "ferry-nav-sections";
 
 // Agent 图标上的角标:后台会话有事要人处理时是警告色实点,只是在跑用弱色。
@@ -91,15 +88,16 @@ export function NavRow({
         fontWeight: active ? 500 : 400,
         opacity: dragging ? .48 : 1,
         boxShadow: dropBefore ? `0 -2px 0 ${ACCENT}` : dropAfter ? `0 2px 0 ${ACCENT}` : "none",
-        transition: "background .12s ease, opacity .12s ease" }}>
+        transition: "background .12s ease, color .12s ease, opacity .12s ease" }}>
       <span style={{ flex: "none", display: "flex", alignItems: "center",
+        transition: "color .12s ease",
         color: active ? "var(--tx1)" : "var(--tx4b)" }}>{icon}</span>
       <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
         whiteSpace: "nowrap" }}>{label}</span>
       {badge}
       {count != null && (
         <span className="mono tnum" style={{ flex: "none", fontSize: 12,
-          color: "var(--tx5)", textAlign: "right" }}>
+          color: "var(--tx5)", textAlign: "right", transition: "color .12s ease" }}>
           {count}
         </span>
       )}
@@ -123,32 +121,8 @@ function NavSection({ label, open, onToggle }) {
   );
 }
 
-// 折叠态的图标按钮:与旧导航轨完全一致的手感
-function RailButton({ children, active, onClick, onEnter, onLeave, disabled,
-  dataKey, guide, pointerHandlers, dragging, dropBefore, dropAfter }) {
-  return (
-    <button className="hov-rail" type="button"
-      data-rail-key={dataKey} data-guide={guide} disabled={disabled}
-      onMouseEnter={onEnter} onMouseLeave={onLeave}
-      onPointerDown={pointerHandlers?.down} onPointerMove={pointerHandlers?.move}
-      onPointerUp={pointerHandlers?.up} onPointerCancel={pointerHandlers?.cancel}
-      onClick={onClick}
-      style={{ width: 40, height: 40, border: "none", borderRadius: 8, position: "relative",
-        background: active ? "var(--acc-soft2)" : "transparent", display: "flex",
-        alignItems: "center", justifyContent: "center", cursor: "default",
-        touchAction: "none", opacity: dragging ? .48 : 1,
-        transform: dragging ? "scale(.9)" : "none",
-        boxShadow: dropBefore ? `0 -2px 0 ${ACCENT}` : dropAfter ? `0 2px 0 ${ACCENT}` : "none",
-        transition: "background .12s ease, transform .12s ease, opacity .12s ease" }}>
-      {children}
-    </button>
-  );
-}
-
 export function AppNav({
   collapsed,
-  railOnly,
-  resizing,
   items,
   activeView,
   draggingKey,
@@ -164,8 +138,6 @@ export function AppNav({
   onSelect,
   onRescan,
   onToggleSettings,
-  onEnter,
-  onLeave,
   pointerHandlers,
 }) {
   const agentDot = useAgentRailDot();
@@ -174,12 +146,7 @@ export function AppNav({
   // 收藏行的拖拽排序:HTML5 拖放就够用了,不必复用页面项那套指针拖拽
   const [dragDir, setDragDir] = useState(null);
   const [dropAt, setDropAt] = useState(null);
-  const width = collapsed ? (railOnly ? RAIL_WIDTH_ALONE : RAIL_WIDTH) : NAV_WIDTH;
   const scopeActive = key => activeView === "library" && scope.kind === key;
-  // 折叠时文字看不见,只能靠 tooltip;展开时行上就写着名字,再弹一个是噪音
-  const hover = label => (collapsed
-    ? { onEnter: event => onEnter(label, event), onLeave }
-    : {});
   const dropSlot = key => ({
     dragging: draggingKey === key,
     dropBefore: dropTarget?.key === key && dropTarget.position === "before"
@@ -190,22 +157,26 @@ export function AppNav({
   const pageCount = key => (key === "library" ? scopeCounts.total : null);
 
   return (
-    <div data-guide="rail"
-      style={{ width, flex: "none", background: "var(--pane)", position: "relative",
-        display: "flex", flexDirection: "column",
-        alignItems: collapsed ? "center" : "stretch",
-        padding: collapsed ? "0 0 12px" : "0 8px 10px", gap: collapsed ? 4 : 1, zIndex: 5,
-        minHeight: 0,
-        transition: resizing ? "none" : "width .2s ease-out" }}>
-      {railOnly && (
-        <div style={{ position: "absolute", right: 0, top: 44, bottom: 0, width: 1,
-          background: "var(--line)", pointerEvents: "none" }} />
-      )}
+    // 收起是把宽度收成 0 而不是卸载:内层始终按原宽排版,整栏才能平滑地滑进滑出
+    <div data-guide="rail" aria-hidden={collapsed || undefined}
+      style={{ width: collapsed ? 0 : NAV_WIDTH, flex: "none", overflow: "hidden",
+        background: "var(--nav)", position: "relative", zIndex: 5, minHeight: 0,
+        transition: "width .2s ease-out" }}>
+      {/* 右侧分隔线:导航栏与资源栏同族底色,没有这条线两块会糊成一片 */}
+      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 1,
+        background: "var(--line)", pointerEvents: "none" }} />
+      {/* 收起后内容还在 DOM 里,visibility 延到滑动结束再切,免得它还能被 Tab 聚焦 */}
+      <div style={{ width: NAV_WIDTH, height: "100%", display: "flex",
+        flexDirection: "column", alignItems: "stretch", padding: "0 8px 10px", gap: 1,
+        minHeight: 0, opacity: collapsed ? 0 : 1,
+        visibility: collapsed ? "hidden" : "visible",
+        transition: collapsed
+          ? "opacity .12s ease, visibility 0s linear .2s"
+          : "opacity .12s ease" }}>
       <div data-tauri-drag-region style={{ height: 44, alignSelf: "stretch", flex: "none" }} />
 
       <div className="fscroll nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto",
-        display: "flex", flexDirection: "column",
-        alignItems: collapsed ? "center" : "stretch", gap: collapsed ? 4 : 1 }}>
+        display: "flex", flexDirection: "column", alignItems: "stretch", gap: 1 }}>
         {items.map(item => {
           // 选了某个范围之后「会话」就不再是当前项了——高亮的是那条范围行
           const active = activeView === item.key
@@ -214,19 +185,6 @@ export function AppNav({
             ? <span style={{ flex: "none", width: 6, height: 6, borderRadius: "50%",
                 background: agentDot }} />
             : null;
-          if (collapsed) {
-            return (
-              <RailButton key={item.key} dataKey={item.key} guide={`rail-${item.key}`}
-                active={active} onClick={() => onSelect(item.key)}
-                {...hover(item.label)} pointerHandlers={pointerHandlers} {...dropSlot(item.key)}>
-                <RailGlyph name={item.key} color={active ? ACCENT : "var(--tx4b)"} />
-                {badge && (
-                  <span style={{ position: "absolute", top: 8, right: 8, width: 6, height: 6,
-                    borderRadius: "50%", background: agentDot }} />
-                )}
-              </RailButton>
-            );
-          }
           return (
             <div key={item.key}>
               <NavRow dataKey={item.key} guide={`rail-${item.key}`}
@@ -246,112 +204,86 @@ export function AppNav({
           );
         })}
 
-        {collapsed && scopeCounts.pinned > 0 && (
-          <RailButton active={scopeActive("pinned")} {...hover(labels.pinned)}
-            onClick={() => onSelectScope({ kind: "pinned" })}>
-            <span style={{ color: scopeActive("pinned") ? ACCENT : "var(--tx4b)",
-              display: "flex" }}><PinIcon size={16} /></span>
-          </RailButton>
-        )}
-
-        {!collapsed && (
+        {scopeCounts.agents.length > 0 && (
           <>
-            {scopeCounts.agents.length > 0 && (
-              <>
-                <NavSection label={labels.agents} open={sections.isOpen("agents")}
-                  onToggle={() => sections.toggle("agents")} />
-                {sections.isOpen("agents") && scopeCounts.agents.map(agent => (
-                  <NavRow key={agent.tool} indent
-                    icon={<ToolIcon tool={agent.tool} size={metrics.navIcon} />}
-                    label={labels.toolNames[agent.tool] || agent.tool}
-                    count={agent.count}
-                    active={scopeActive("agent") && scope.value === agent.tool}
-                    onClick={() => onSelectScope({ kind: "agent", value: agent.tool })} />
-                ))}
-              </>
-            )}
-            {/* 「收藏」= Finder 侧栏的个人收藏:只放用户钉过的项目,全集在资源栏的
-                文件夹树里。空着也照样显示分区,否则用户不知道有这么个地方 */}
-            <NavSection label={labels.favorites} open={sections.isOpen("favorites")}
-              onToggle={() => sections.toggle("favorites")} />
-            {sections.isOpen("favorites") && (favoriteProjects.length > 0 ? (
-              favoriteProjects.map(project => (
-                <NavRow key={project.dir} indent icon={<FolderGlyph size={metrics.navIcon} />}
-                  label={project.repo} count={project.count} title={project.dir}
-                  active={scopeActive("project") && scope.value === project.dir}
-                  draggable
-                  dragging={dragDir === project.dir}
-                  dropBefore={dropAt?.dir === project.dir && dropAt.position === "before"}
-                  dropAfter={dropAt?.dir === project.dir && dropAt.position === "after"}
-                  onDragStart={event => {
-                    setDragDir(project.dir);
-                    event.dataTransfer.effectAllowed = "move";
-                    // Firefox 不设 data 就不触发 drop
-                    try { event.dataTransfer.setData("text/plain", project.dir); } catch { /* 忽略 */ }
-                  }}
-                  onDragOver={event => {
-                    if (!dragDir || dragDir === project.dir) return;
-                    event.preventDefault();
-                    const box = event.currentTarget.getBoundingClientRect();
-                    const after = event.clientY > box.top + box.height / 2;
-                    setDropAt({ dir: project.dir, position: after ? "after" : "before" });
-                  }}
-                  onDrop={event => {
-                    event.preventDefault();
-                    if (dragDir && dropAt) {
-                      onReorderFavorite(dragDir, dropAt.dir, dropAt.position);
-                    }
-                    setDragDir(null);
-                    setDropAt(null);
-                  }}
-                  onDragEnd={() => { setDragDir(null); setDropAt(null); }}
-                  onClick={() => onSelectScope({ kind: "project", value: project.dir })} />
-              ))
-            ) : (
-              <div style={{ padding: "2px 10px 4px 20px", fontSize: 11.5, lineHeight: 1.5,
-                color: "var(--tx5)" }}>{labels.favoritesEmpty}</div>
+            <NavSection label={labels.agents} open={sections.isOpen("agents")}
+              onToggle={() => sections.toggle("agents")} />
+            {sections.isOpen("agents") && scopeCounts.agents.map(agent => (
+              <NavRow key={agent.tool} indent
+                icon={<ToolIcon tool={agent.tool} size={metrics.navIcon} />}
+                label={labels.toolNames[agent.tool] || agent.tool}
+                count={agent.count}
+                active={scopeActive("agent") && scope.value === agent.tool}
+                onClick={() => onSelectScope({ kind: "agent", value: agent.tool })} />
             ))}
-            {scopeCounts.tags.length > 0 && (
-              <>
-                <NavSection label={labels.tags} open={sections.isOpen("tags")}
-                  onToggle={() => sections.toggle("tags")} />
-                {sections.isOpen("tags") && scopeCounts.tags.map(item => (
-                  <NavRow key={item.tag} indent icon={<TagGlyph size={metrics.navIcon} />} label={item.tag}
-                    count={item.count}
-                    active={scopeActive("tag") && scope.value === item.tag}
-                    onClick={() => onSelectScope({ kind: "tag", value: item.tag })} />
-                ))}
-              </>
-            )}
+          </>
+        )}
+        {/* 「收藏」= Finder 侧栏的个人收藏:只放用户钉过的项目,全集在资源栏的
+            文件夹树里。空着也照样显示分区,否则用户不知道有这么个地方 */}
+        <NavSection label={labels.favorites} open={sections.isOpen("favorites")}
+          onToggle={() => sections.toggle("favorites")} />
+        {sections.isOpen("favorites") && (favoriteProjects.length > 0 ? (
+          favoriteProjects.map(project => (
+            <NavRow key={project.dir} indent icon={<FolderGlyph size={metrics.navIcon} />}
+              label={project.repo} count={project.count} title={project.dir}
+              active={scopeActive("project") && scope.value === project.dir}
+              draggable
+              dragging={dragDir === project.dir}
+              dropBefore={dropAt?.dir === project.dir && dropAt.position === "before"}
+              dropAfter={dropAt?.dir === project.dir && dropAt.position === "after"}
+              onDragStart={event => {
+                setDragDir(project.dir);
+                event.dataTransfer.effectAllowed = "move";
+                // Firefox 不设 data 就不触发 drop
+                try { event.dataTransfer.setData("text/plain", project.dir); } catch { /* 忽略 */ }
+              }}
+              onDragOver={event => {
+                if (!dragDir || dragDir === project.dir) return;
+                event.preventDefault();
+                const box = event.currentTarget.getBoundingClientRect();
+                const after = event.clientY > box.top + box.height / 2;
+                setDropAt({ dir: project.dir, position: after ? "after" : "before" });
+              }}
+              onDrop={event => {
+                event.preventDefault();
+                if (dragDir && dropAt) {
+                  onReorderFavorite(dragDir, dropAt.dir, dropAt.position);
+                }
+                setDragDir(null);
+                setDropAt(null);
+              }}
+              onDragEnd={() => { setDragDir(null); setDropAt(null); }}
+              onClick={() => onSelectScope({ kind: "project", value: project.dir })} />
+          ))
+        ) : (
+          <div style={{ padding: "2px 10px 4px 20px", fontSize: 11.5, lineHeight: 1.5,
+            color: "var(--tx5)" }}>{labels.favoritesEmpty}</div>
+        ))}
+        {scopeCounts.tags.length > 0 && (
+          <>
+            <NavSection label={labels.tags} open={sections.isOpen("tags")}
+              onToggle={() => sections.toggle("tags")} />
+            {sections.isOpen("tags") && scopeCounts.tags.map(item => (
+              <NavRow key={item.tag} indent icon={<TagGlyph size={metrics.navIcon} />} label={item.tag}
+                count={item.count}
+                active={scopeActive("tag") && scope.value === item.tag}
+                onClick={() => onSelectScope({ kind: "tag", value: item.tag })} />
+            ))}
           </>
         )}
       </div>
 
       <div style={{ flex: "none", display: "flex", flexDirection: "column",
-        alignItems: collapsed ? "center" : "stretch", gap: collapsed ? 4 : 1,
-        marginTop: 6, paddingTop: 6,
-        borderTop: collapsed ? "none" : ".5px solid var(--line)" }}>
-        {collapsed ? (
-          <>
-            <RailButton disabled={scanning} onClick={onRescan}
-              {...hover(scanning ? labels.scanning : labels.rescan)}>
-              {scanning ? <Spinner size={18} /> : <RescanIcon size={18} color="var(--tx4b)" />}
-            </RailButton>
-            <RailButton active={settingsOpen} onClick={onToggleSettings}
-              {...hover(labels.settings)}>
-              <RailGlyph name="settings" color={settingsOpen ? ACCENT : "var(--tx4b)"} />
-            </RailButton>
-          </>
-        ) : (
-          <>
-            <NavRow icon={scanning ? <Spinner size={metrics.navIcon} /> : <RescanIcon size={metrics.navIcon} color="currentColor" />}
-              label={scanning ? labels.scanning : labels.rescan}
-              onClick={scanning ? undefined : onRescan} />
-            <NavRow icon={<RailGlyph name="settings" size={metrics.navIcon}
-              color={settingsOpen ? ACCENT : "var(--tx4b)"} />}
-              label={labels.settings} active={settingsOpen} onClick={onToggleSettings} />
-          </>
-        )}
+        alignItems: "stretch", gap: 1, marginTop: 6, paddingTop: 6,
+        borderTop: ".5px solid var(--line)" }}>
+        <NavRow icon={scanning ? <Spinner size={metrics.navIcon} />
+          : <RescanIcon size={metrics.navIcon} color="currentColor" />}
+          label={scanning ? labels.scanning : labels.rescan}
+          onClick={scanning ? undefined : onRescan} />
+        <NavRow icon={<RailGlyph name="settings" size={metrics.navIcon}
+          color={settingsOpen ? ACCENT : "var(--tx4b)"} />}
+          label={labels.settings} active={settingsOpen} onClick={onToggleSettings} />
+      </div>
       </div>
     </div>
   );

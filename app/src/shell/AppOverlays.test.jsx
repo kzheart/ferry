@@ -22,7 +22,6 @@ function closedOverlays() {
     batchDelete: { prepared: null },
     tags: { selection: null },
     toast: { value: null },
-    railTip: { value: null },
     settings: { open: false },
     historyFilter: { open: false },
     guide: { step: 0 },
@@ -174,16 +173,6 @@ test("迁移历史的筛选弹层按自己的开关出现", () => {
 
   rerender(<AppOverlays {...closedOverlays()} />);
   assert.equal(container.innerHTML, "");
-});
-
-test("导航轨提示按 railOnly 决定横向位置", () => {
-  const { container } = renderOverlays({
-    railTip: { value: { top: 120, label: "资料库" }, railOnly: true },
-  });
-  const tip = screen.getByText("资料库");
-  assert.equal(tip.style.left, "86px");
-  assert.equal(tip.style.top, "120px");
-  assert.ok(container.innerHTML.includes("资料库"));
 });
 
 test("引导层只在 step 大于 0 时出现", () => {

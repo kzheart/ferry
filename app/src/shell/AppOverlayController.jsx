@@ -10,7 +10,7 @@ import { useSessionContentSearch } from "./useSessionContentSearch.js";
 
 export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
-  const { toast, railTip, settings, guide } = useAppChrome();
+  const { toast, settings, guide } = useAppChrome();
   const { peek, search, contextMenu, deletion, tags, filters } =
     useBrowserState();
   const { migration, editing, floatChat } = useOperationsState();
@@ -194,7 +194,6 @@ export function AppOverlayController({ t }) {
         },
       }}
       toast={{ value: toast.value, onDismiss: () => toast.setValue(null) }}
-      railTip={railTip}
       settings={{
         open: settings.open,
         value: settings.value,

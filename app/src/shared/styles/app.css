@@ -38,8 +38,9 @@ html, body, #root { height: 100%; }
   --titlebar: #F1F4F7;
   --rail: #E8ECF0;
   --rail-line: #DEE4E9;
-  --pane: #F3F5F7;
-  --pane-foot: #F0F3F5;
+  --pane: #F7F9FB;
+  --nav: #F2F5F8;
+  --pane-foot: #F4F7F9;
   --inset: #F7F9FB;
   --fill: #F8FAFB;
   --fill2: #F4F7F9;
@@ -152,6 +153,8 @@ html, body, #root { height: 100%; }
 
   --hov: #E4E9EE;
   --hov-rail: #DDE3E9;
+  --nav-press: #D3DAE1;
+  --nav-active-hov: #DDE1E6;
   --hov-row: #E7ECF1;
   --hov-item: #EEF2F6;
   --hov-ghost: #F2F5F8;
@@ -174,6 +177,7 @@ html, body, #root { height: 100%; }
   --rail: #0F0F11;
   --rail-line: #262629;
   --pane: #121214;
+  --nav: #101013;
   --pane-foot: #0F0F11;
   --inset: #121214;
   --fill: #26262A;
@@ -279,6 +283,8 @@ html, body, #root { height: 100%; }
 
   --hov: #2C2D33;
   --hov-rail: #202127;
+  --nav-press: #17181D;
+  --nav-active-hov: #35363D;
   --hov-row: #212228;
   --hov-item: #2A2B31;
   --hov-ghost: #26272C;
@@ -372,8 +378,10 @@ html[data-platform="mac"] {
   --win-bg: transparent;
   --titlebar: rgba(241,244,247,.55);
   --rail: rgba(232,236,240,.55);
-  --pane: rgba(243,245,247,.55);
-  --pane-foot: rgba(240,243,245,.55);
+  --pane: rgba(247,249,251,.55);
+  /* 导航栏也走毛玻璃:漏了它就会在半透明的资源栏旁边糊出一块闷实色 */
+  --nav: rgba(242,245,248,.55);
+  --pane-foot: rgba(244,247,249,.55);
 }
 html[data-platform="mac"][data-theme="dark"] {
   /* 深色下磨砂材质本身发中性灰,透过来会把近黑洗成灰;
@@ -382,6 +390,7 @@ html[data-platform="mac"][data-theme="dark"] {
   --titlebar: rgba(14,14,16,.86);
   --rail: rgba(13,13,15,.88);
   --pane: rgba(16,16,18,.88);
+  --nav: rgba(14,14,16,.88);
   --pane-foot: rgba(13,13,15,.88);
 }
 
@@ -673,9 +682,15 @@ html[data-reduce="1"] .update-progress.indeterminate > span { animation: none; w
 .lib-row-tall { contain-intrinsic-size: auto var(--lib-row-h); }
 
 /* ---- Wake 式导航栏 ---- */
-.nav-row:hover { background: var(--hov-rail); }
-.nav-row[aria-current="true"]:hover { background: var(--acc-soft2); }
-.nav-section:hover { color: var(--tx3); }
+/* 行的底色/字色写在内联样式里,悬停规则要盖过内联就得带 !important。
+   悬停时图标与计数一起提亮,整行才有「活」的反馈,而不是只换个底。 */
+.nav-row:hover { background: var(--hov-rail) !important; color: var(--tx1) !important; }
+.nav-row:hover > span:first-child { color: var(--tx3) !important; }
+.nav-row:hover .tnum { color: var(--tx4b) !important; }
+.nav-row:active { background: var(--nav-press) !important; }
+.nav-row[aria-current="true"]:hover { background: var(--nav-active-hov) !important; }
+.nav-section { transition: color .12s ease; }
+.nav-section:hover { color: var(--tx3) !important; }
 
 /* 导航栏滚动条:常驻的细条在一列短文本旁边太吵,只在鼠标进入导航栏时显形 */
 .nav-scroll { scrollbar-width: none; }

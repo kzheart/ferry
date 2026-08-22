@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { filterByFeatures } from "../shared/capabilities/features.jsx";
 
@@ -53,28 +53,10 @@ export function useRailNavigation({ labels, storageKey, isFeatureEnabled }) {
     () => normalizeRailOrder(storedOrder, isFeatureEnabled),
     [storedOrder, isFeatureEnabled],
   );
-  const [railTip, setRailTip] = useState(null);
   const [draggingKey, setDraggingKey] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
-  const tipTimer = useRef(null);
   const pointer = useRef(null);
   const suppressClick = useRef(false);
-
-  const leave = useCallback(() => {
-    clearTimeout(tipTimer.current);
-    setRailTip(null);
-  }, []);
-
-  const enter = useCallback((label, event) => {
-    const item = event.currentTarget.getBoundingClientRect();
-    const root = document.querySelector("[data-ferry-win]");
-    if (!root) return;
-    const top = item.top - root.getBoundingClientRect().top + item.height / 2;
-    clearTimeout(tipTimer.current);
-    tipTimer.current = setTimeout(() => setRailTip({ label, top }), 450);
-  }, []);
-
-  useEffect(() => () => clearTimeout(tipTimer.current), []);
 
   const dropAt = useCallback((x, y) => {
     const target = document.elementFromPoint(x, y)?.closest?.("[data-rail-key]");
@@ -114,7 +96,6 @@ export function useRailNavigation({ labels, storageKey, isFeatureEnabled }) {
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
       drag.dragging = true;
       setDraggingKey(drag.key);
-      leave();
     }
     event.preventDefault();
     setDropTarget(dropAt(event.clientX, event.clientY));
@@ -144,11 +125,8 @@ export function useRailNavigation({ labels, storageKey, isFeatureEnabled }) {
 
   return {
     items: railOrder.map(key => ({ key, label: labels[key] })).filter(item => item.label),
-    railTip,
     draggingKey,
     dropTarget,
-    enter,
-    leave,
     shouldSuppressClick: () => suppressClick.current,
     pointerHandlers: {
       down: onPointerDown,

@@ -34,7 +34,6 @@ export {
   sameScope,
   scopeLabel,
   scopeMatches,
-  scopeMenuProjectSections,
 } from "./libraryResourcePaneModel.js";
 export { createSessionContextMenu } from "./sessionContextMenu.js";
 export { useBrowserData, useScanProgress } from "./useBrowserData.js";

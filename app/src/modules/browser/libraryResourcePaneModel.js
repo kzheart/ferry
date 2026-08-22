@@ -115,16 +115,6 @@ export function favoriteProjectRows(projects, favorites) {
   return favorites.map(dir => byDir.get(dir)).filter(Boolean);
 }
 
-/**
- * 折叠态标题菜单(ScopeMenu)的项目分段:收藏的在前,其余按最近活跃跟在
- * 「其他项目」小标题下。导航栏不再列全部项目之后,这里是唯一的全集入口。
- */
-export function scopeMenuProjectSections(projects, favorites) {
-  const favored = favoriteProjectRows(projects, favorites);
-  const favoredDirs = new Set(favored.map(project => project.dir));
-  return { favorites: favored, others: projects.filter(p => !favoredDirs.has(p.dir)) };
-}
-
 export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }) {
   return sessions.map(session => {
     const meta = metadata[sessionIdentity(session)] || {};

@@ -30,7 +30,6 @@ export function AppOverlays({
   batchDelete,
   tags,
   toast,
-  railTip,
   settings,
   historyFilter,
   guide,
@@ -145,28 +144,6 @@ export function AppOverlays({
         />
       )}
       {toast.value && <Toast toast={toast.value} onDismiss={toast.onDismiss} />}
-      {railTip.value && (
-        <div
-          style={{
-            position: "absolute",
-            left: railTip.railOnly ? 86 : 62,
-            top: railTip.value.top,
-            transform: "translateY(-50%)",
-            zIndex: 60,
-            background: "var(--tooltip)",
-            color: "#fff",
-            fontSize: 11,
-            padding: "5px 9px",
-            borderRadius: 6,
-            boxShadow: "var(--shadow-menu)",
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            animation: "ffade .1s ease",
-          }}
-        >
-          {railTip.value.label}
-        </div>
-      )}
       {settings.open && (
         <SettingsPage
           settings={settings.value}

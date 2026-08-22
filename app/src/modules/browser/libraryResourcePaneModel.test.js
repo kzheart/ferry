@@ -17,7 +17,6 @@ import {
   normalizeFavoriteProjects,
   normalizeScope,
   reorderFavoriteProjects,
-  scopeMenuProjectSections,
   seedFavoriteProjects,
   toggleFavoriteProject,
   sameScope,
@@ -378,8 +377,3 @@ test("拖到自己身上或目标不在列表里时顺序原样不动", () => {
   assert.equal(reorderFavoriteProjects(list, "/zzz", "/a"), list);
 });
 
-test("折叠态标题菜单:收藏的在前,其余按最近活跃跟在后面", () => {
-  const sections = scopeMenuProjectSections(favProjects, ["/work/klib", "/work/old"]);
-  assert.deepEqual(sections.favorites.map(p => p.repo), ["klib", "old"]);
-  assert.deepEqual(sections.others.map(p => p.repo), ["ferry", "dotfiles"]);
-});

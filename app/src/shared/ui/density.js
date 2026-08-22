@@ -18,7 +18,7 @@ export const DENSITY_METRICS = {
     navIcon: 17,     // 导航栏 / 列表图标
     folderRow: 34,   // 资源栏项目文件夹头
     libRow: 48,      // 资源栏会话行(双行)
-    histRow: 34,     // 迁移历史行(单行)
+    histRow: 48,     // 迁移历史行(双行,与会话行同高)
     groupHeader: 28, // 时间分组标题行
     paneDefault: 300,
     paneMin: 240,
@@ -29,7 +29,7 @@ export const DENSITY_METRICS = {
     navIcon: 15,
     folderRow: 30,
     libRow: 40,
-    histRow: 30,
+    histRow: 40,
     groupHeader: 24,
     paneDefault: 250,
     paneMin: 190,

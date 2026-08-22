@@ -10,10 +10,9 @@ import { useDensityMetrics } from "../shared/ui/density.js";
 
 export function Pane({ collapsed, width, dragging, title, count,
   query, onQuery, searchInline, placeholder, onOpenSearch, onClearSearch,
-  onTitleClick, titleMenuOpen, displayDot, displayOn, onDisplay, displayLabel,
+  displayDot, displayOn, onDisplay, displayLabel,
   onBack, backLabel, listKey, headerExtra, children }) {
   const { t } = useTranslation();
-  const w = collapsed ? 0 : width;
   const searchRef = useRef(null);
   // ⌘F / 搜索按钮都落到这个常驻输入框上;⌘K 仍是跨库的全文命令面板
   useEffect(() => {
@@ -24,11 +23,17 @@ export function Pane({ collapsed, width, dragging, title, count,
   }, [searchInline]);
   return (
     <div data-guide="pane"
-      style={{ width: w, flex: "none", overflow: "hidden", background: "var(--pane)",
+      aria-hidden={collapsed || undefined}
+      style={{ width: collapsed ? 0 : width, flex: "none", overflow: "hidden",
+      background: "var(--pane)",
       borderRight: collapsed ? "none" : "1px solid var(--line)",
       transition: dragging ? "width 0s" : "width .2s ease-out" }}>
       <div style={{ width, height: "100%", display: "flex", flexDirection: "column",
-        minHeight: 0, opacity: collapsed ? 0 : 1, transition: "opacity .1s ease" }}>
+        minHeight: 0, opacity: collapsed ? 0 : 1,
+        visibility: collapsed ? "hidden" : "visible",
+        transition: collapsed
+          ? "opacity .12s ease, visibility 0s linear .2s"
+          : "opacity .12s ease" }}>
         {/* 通高侧栏:顶部 44px 归红绿灯,整块可拖拽窗口 */}
         <div data-tauri-drag-region style={{ height: 44, flex: "none" }} />
         <div style={{ flex: "none", padding: "0 10px 0" }}>
@@ -42,29 +47,11 @@ export function Pane({ collapsed, width, dragging, title, count,
                 <ChevronLeftIcon size={13} />
               </button>
             )}
-            {onTitleClick ? (
-              <button type="button" className="lib-scope-title" data-guide="scope-title"
-                aria-haspopup="menu" aria-expanded={!!titleMenuOpen} onClick={onTitleClick}
-                style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 26,
-                  maxWidth: "72%", padding: "0 7px", marginLeft: -7, border: "none",
-                  borderRadius: 6, background: titleMenuOpen ? "var(--fill4)" : "transparent",
-                  color: "var(--tx1)", fontFamily: "inherit", fontSize: "var(--fs-title)",
-                  fontWeight: 600, letterSpacing: "-.01em", cursor: "default" }}>
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
-                  whiteSpace: "nowrap" }}>{title}</span>
-                <span className="mono tnum" style={{ flex: "none", fontSize: "var(--fs-meta)",
-                  fontWeight: 500, color: "var(--tx5)" }}>{count}</span>
-                <Caret open={titleMenuOpen} size={8} />
-              </button>
-            ) : (
-              <>
-                <span style={{ fontSize: "var(--fs-title)", fontWeight: 600, color: "var(--tx1)",
-                  letterSpacing: "-.01em", minWidth: 0, overflow: "hidden",
-                  textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-                <span className="mono tnum" style={{ fontSize: "var(--fs-meta)",
-                  color: "var(--tx5)" }}>{count}</span>
-              </>
-            )}
+            <span style={{ fontSize: "var(--fs-title)", fontWeight: 600, color: "var(--tx1)",
+              letterSpacing: "-.01em", minWidth: 0, overflow: "hidden",
+              textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
+            <span className="mono tnum" style={{ fontSize: "var(--fs-meta)",
+              color: "var(--tx5)" }}>{count}</span>
             <span style={{ flex: 1 }} />
             <button className="ftool-btn" data-guide="search"
               title={t("app:pane.search")} onClick={onOpenSearch}
@@ -533,16 +520,30 @@ export function HistoryList({ groups, empty, filtered, onClear, onDelete }) {
       items.push({ key: h.id, y, h: HIST_ROW_H, node: (
         <div onClick={h.onClick} onContextMenu={e => e.preventDefault()}
           title={`${h.from} → ${h.to} · ${h.statusLabel ?? h.status}`}
-          className={h.selected ? "lib-row" : "lib-row hov-item"}
-          style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 8px", height: HIST_ROW_H,
+          className={h.selected ? "lib-row lib-row-tall" : "lib-row lib-row-tall hov-item"}
+          style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "5px 8px",
+            height: HIST_ROW_H,
             borderRadius: 6, cursor: "default", transition: "background .12s ease", ...rowSel(h.selected) }}>
-          <ToolIcon tool={h.tool} size={18} />
-          <span style={{ fontSize: 12, color: "var(--tx1)", whiteSpace: "nowrap",
-            overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{h.title}</span>
-          <span className="row-meta" style={{ width: 5, height: 5, borderRadius: "50%",
-            background: h.stColor, flex: "none" }} />
-          <span className="row-meta"
-            style={{ fontSize: 10, color: "var(--tx5)", flex: "none" }}>{h.short}</span>
+          <span style={{ flex: "none", display: "flex" }}>
+            <ToolIcon tool={h.tool} size={ROW_ICON} />
+          </span>
+          {/* 与会话行同构的双行:标题 + 「源 → 目标 · 状态」,两个列表的节奏才对得上 */}
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1,
+            marginTop: -3 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--tx1)",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                flex: 1, minWidth: 0 }}>{h.title}</span>
+              <span style={{ flex: "none", width: 5, height: 5, borderRadius: "50%",
+                background: h.stColor }} />
+            </span>
+            <span style={{ fontSize: "var(--fs-meta)", color: "var(--tx5)", whiteSpace: "nowrap",
+              overflow: "hidden", textOverflow: "ellipsis" }}>
+              {`${h.from} → ${h.to} · ${h.statusLabel ?? h.status}`}
+            </span>
+          </span>
+          <span className="row-meta" style={{ fontSize: 11, color: "var(--tx5)", flex: "none",
+            marginTop: -1 }}>{h.short}</span>
           {onDelete && h.deletable && (
             <span className="row-act" style={{ gap: 1, flex: "none" }}>
               <button className="row-act-btn row-act-danger" title={t("migration:history.delete")}

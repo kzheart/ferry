@@ -1,7 +1,7 @@
 {
   "titlebar": {
-    "expand": "Expand sidebar ⌘B",
-    "collapse": "Collapse sidebar ⌘B",
+    "expand": "Show Sidebar ⌘B",
+    "collapse": "Hide Sidebar ⌘B",
     "scanning": "Scanning…",
     "rescan": "Rescan"
   },
@@ -118,12 +118,8 @@
     "agents": "AGENTS",
     "projects": "PROJECTS",
     "tags": "TAGS",
-    "scopeMenu": "Scope",
-    "collapse": "Collapse sidebar ⌘⇧S",
-    "expand": "Expand sidebar ⌘⇧S",
     "favorites": "Favorites",
     "favoritesEmpty": "Click ☆ on a folder to add it here",
-    "otherProjects": "Other projects",
     "backToAll": "Back to all sessions"
   },
   "display": {

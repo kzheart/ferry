@@ -3,9 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { CheckIcon, PinIcon, ToolIcon } from "../shared/ui/icons.jsx";
-import { scopeMenuProjectSections } from "../modules/browser/public.js";
-import { FolderGlyph, TagGlyph } from "./AppNav.jsx";
+import { CheckIcon } from "../shared/ui/icons.jsx";
 
 const MENU_WIDTH = 232;
 
@@ -87,74 +85,6 @@ export function MenuItem({ icon, label, count, checked, selected, title, onClick
 const Divider = () => (
   <div style={{ height: 1, background: "var(--line3)", margin: "5px 6px" }} />
 );
-
-/** 范围菜单:内容与导航栏的范围区一致——全部 / 置顶 / Agents / 项目 / 标签。 */
-export function ScopeMenu({ anchorRef, scope, scopeCounts, projects, favorites = [],
-  toolNames, onPick, onClose }) {
-  const { t } = useTranslation();
-  const is = (kind, value) => scope.kind === kind && (scope.value ?? null) === (value ?? null);
-  const pick = next => { onPick(next); onClose(); };
-  // 导航栏折叠时这里是项目的唯一入口:收藏的排在前面,其余按最近活跃跟在后面
-  const sections = scopeMenuProjectSections(projects, favorites);
-  const projectItem = project => (
-    <MenuItem key={project.dir} icon={<FolderGlyph size={14} />}
-      label={project.repo} count={project.count} title={project.dir}
-      selected={is("project", project.dir)}
-      onClick={() => pick({ kind: "project", value: project.dir })} />
-  );
-  return (
-    <PaneMenu anchorRef={anchorRef} label={t("app:nav.scopeMenu")} onClose={onClose}>
-      <MenuItem label={t("app:nav.allSessions")} count={scopeCounts.total}
-        selected={is("all")} onClick={() => pick({ kind: "all" })} />
-      {scopeCounts.pinned > 0 && (
-        <MenuItem icon={<PinIcon size={13} />} label={t("app:library.pinned")}
-          count={scopeCounts.pinned} selected={is("pinned")}
-          onClick={() => pick({ kind: "pinned" })} />
-      )}
-      {scopeCounts.agents.length > 0 && (
-        <>
-          <Divider />
-          <MenuHeading>{t("app:nav.agents")}</MenuHeading>
-          {scopeCounts.agents.map(agent => (
-            <MenuItem key={agent.tool} icon={<ToolIcon tool={agent.tool} size={15} />}
-              label={toolNames[agent.tool] || agent.tool} count={agent.count}
-              selected={is("agent", agent.tool)}
-              onClick={() => pick({ kind: "agent", value: agent.tool })} />
-          ))}
-        </>
-      )}
-      {sections.favorites.length > 0 && (
-        <>
-          <Divider />
-          <MenuHeading>{t("app:nav.favorites")}</MenuHeading>
-          {sections.favorites.map(projectItem)}
-        </>
-      )}
-      {sections.others.length > 0 && (
-        <>
-          <Divider />
-          <MenuHeading>
-            {t(sections.favorites.length ? "app:nav.otherProjects" : "app:nav.projects")}
-          </MenuHeading>
-          {sections.others.map(projectItem)}
-        </>
-      )}
-      {scopeCounts.tags.length > 0 && (
-        <>
-          <Divider />
-          <MenuHeading>{t("app:nav.tags")}</MenuHeading>
-          {scopeCounts.tags.map(item => (
-            <MenuItem key={item.tag} icon={<TagGlyph size={14} />} label={item.tag}
-              count={item.count} selected={is("tag", item.tag)}
-              onClick={() => pick({ kind: "tag", value: item.tag })} />
-          ))}
-        </>
-      )}
-    </PaneMenu>
-  );
-}
-
-/** 显示选项:原筛选浮层里"不是范围"的那几项,加上分组方式与排序。 */
 export function DisplayMenu({ anchorRef, display, onChange, onClose }) {
   const { t } = useTranslation();
   const groups = [

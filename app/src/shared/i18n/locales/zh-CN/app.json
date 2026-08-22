@@ -1,7 +1,7 @@
 {
   "titlebar": {
-    "expand": "展开侧边栏 ⌘B",
-    "collapse": "收起侧边栏 ⌘B",
+    "expand": "展开侧栏 ⌘B",
+    "collapse": "收起侧栏 ⌘B",
     "scanning": "扫描中…",
     "rescan": "重新扫描"
   },
@@ -118,12 +118,8 @@
     "agents": "AGENTS",
     "projects": "项目",
     "tags": "标签",
-    "scopeMenu": "范围",
-    "collapse": "收起导航栏 ⌘⇧S",
-    "expand": "展开导航栏 ⌘⇧S",
     "favorites": "收藏",
     "favoritesEmpty": "在文件夹上点 ☆ 可收藏到这里",
-    "otherProjects": "其他项目",
     "backToAll": "返回全部会话"
   },
   "display": {

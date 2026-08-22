@@ -3,7 +3,7 @@ import { useEffect } from "react";
 export function useAppKeyboardShortcuts({
   paneAvailable,
   onOpenSearch,
-  onToggleNav,
+  onToggleSidebar,
   onFocusPaneSearch,
   dismissers,
   view,
@@ -25,10 +25,10 @@ export function useAppKeyboardShortcuts({
     const onKeyDown = event => {
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
-      // ⌘⇧S 折叠 / 展开导航栏(⌘B 归资源栏,由系统菜单占着)
+      // ⌘⇧S 收起 / 展开侧栏(导航栏 + 资源栏一起)
       if (mod && event.shiftKey && key === "s") {
         event.preventDefault();
-        onToggleNav?.();
+        onToggleSidebar?.();
         return;
       }
       if (mod && !event.shiftKey && key === "k" && paneAvailable) {
@@ -106,7 +106,7 @@ export function useAppKeyboardShortcuts({
     onFocusPaneSearch,
     onOpenSearch,
     onRename,
-    onToggleNav,
+    onToggleSidebar,
     onResume,
     paneAvailable,
     selectHistory,

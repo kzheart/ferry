@@ -34,7 +34,6 @@ function baseProps(overrides = {}) {
     onFilter: noop,
     library: {
       scanning: false, sessions: [], scanningLabel: "扫描中",
-      navCollapsed: false,
       scope: { kind: "all" },
       scopeCounts: { total: 2, pinned: 0, agents: [], tags: [] },
       projects: [], toolNames: {}, onSelectScope: noop,
@@ -93,29 +92,6 @@ test("迁移历史的筛选按钮仍然接到 onFilter 弹层", () => {
   assert.deepEqual(calls, ["filter"]);
 });
 
-test("导航栏展开时标题不是菜单,折叠后才成为范围入口", () => {
-  const { unmount } = render(<ResourcePaneHost {...baseProps()} />);
-  assert.equal(screen.queryByRole("button", { name: /资料库/ }), null);
-  unmount();
-
-  render(
-    <ResourcePaneHost
-      {...baseProps({
-        library: {
-          ...baseProps().library,
-          navCollapsed: true,
-          scopeCounts: { total: 2, pinned: 1, agents: [{ tool: "claude", count: 2 }], tags: [] },
-          toolNames: { claude: "Claude Code" },
-        },
-      })}
-    />,
-  );
-
-  fireEvent.click(screen.getByRole("button", { name: /资料库/ }));
-  assert.ok(screen.getByText("app:nav.allSessions"));
-  assert.ok(screen.getByText("Claude Code"));
-});
-
 test("会话库的搜索框常驻,清除走的是 pane.onQuery", () => {
   const queries = [];
   render(
@@ -168,19 +144,6 @@ test("view 决定挂载哪一种列表", () => {
   library.unmount();
 
   render(<ResourcePaneHost {...baseProps({ view: "askferry", agent })} />);
-  assert.ok(screen.getByText("一次问询"));
-});
-
-test("折叠只把宽度收成 0,列表内容仍然挂载", () => {
-  const agent = {
-    ...baseProps().agent,
-    sessions: [{ session_id: "f1", title: "一次问询", model_id: "opus" }],
-  };
-  const { container } = render(
-    <ResourcePaneHost {...baseProps({ view: "askferry", agent, collapsed: true })} />,
-  );
-
-  assert.equal(container.firstChild.style.width, "0px");
   assert.ok(screen.getByText("一次问询"));
 });
 
