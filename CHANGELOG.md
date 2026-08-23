@@ -14,6 +14,38 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.1] - 2026-08-23
+
+### Changed
+
+- **Session handoff always on** — copy-resume and `ferry-resume` are no longer
+  behind an experimental toggle; the session context menu and migration fallback
+  are available by default.
+- **Handoff moved to Agent integration** — handoff settings now live under
+  Settings → Agent integration instead of Experimental.
+- **System UI fonts** — replaced bundled Geist variable fonts with system fonts
+  (SF Pro and PingFang on macOS) so mixed Chinese/Latin text reads more evenly
+  and the app bundle is smaller.
+- **Reduced motion by default** — reduced motion is always enabled at startup;
+  the toggle was removed.
+- **Skills page actions** — skill import and delete use the StateButton
+  pattern; delete goes through a confirmation dialog like session and migration
+  record deletion.
+- **Onboarding button style** — "Re-view onboarding" now matches the other
+  buttons in its section.
+
+### Removed
+
+- **Session optimization** — removed the session optimization feature entirely,
+  including its UI, runtime roles, and purpose.
+
+### Fixed
+
+- **macOS window controls** — traffic light buttons no longer jump during live
+  window resize.
+- **CI** — rustfmt alignment and a Windows build fix for an unused-import gate
+  on `same_target` tests.
+
 ## [0.8.0] - 2026-08-23
 
 ### Added

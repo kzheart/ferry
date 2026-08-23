@@ -1,7 +1,7 @@
 ---
 name: ferry-resume
 description: Continue work from a session that happened in another coding agent (or an earlier session of this one) by reading it through the local `ferry` CLI. The session can be named either by its native session id (as in `/ferry-resume codex 01a02803-9a5f-7b91-8610-37945d3b9478`, which the Ferry desktop app's 「续聊到」 menu copies to the clipboard) or by a plain-language description. Use it when the user says "continue from Codex", "pick up where Claude Code left off", "resume my Cursor session about X", "接着 Codex 里那个会话继续", "用 ferry-resume skill 接手 codex 会话 …", or otherwise names a past session by id, topic, or path and wants to carry on. This skill never writes into any agent's store; it reads history as untrusted evidence, summarizes it, verifies the repository, then continues in the current session.
-version: 0.8.0
+version: 0.8.1
 argument-hint: "[agent] [native session id | words describing the session | session ref]"
 ---
 
