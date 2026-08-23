@@ -6,7 +6,6 @@ import { TOOL_NAME, TOOLS } from "../../shared/contracts/tools.js";
 import { LOCALE_META } from "../../shared/i18n/index.js";
 import { useScanProgress } from "../browser/public.js";
 import { RefreshIcon, SetGlyph, Spinner, TerminalIcon, ToolIcon } from "../../shared/ui/icons.jsx";
-import { formatBytes } from "./useAppUpdater.js";
 import { Card, GroupTitle, Row, Segmented, Select, Toggle } from "./parts.jsx";
 import { useDensity, writeDensity } from "../../shared/ui/density.js";
 import Providers from "./Providers.jsx";
@@ -287,19 +286,16 @@ const UPDATE_COPY_KEY = {
   upToDate: "settings:updates.phase.upToDate",
   available: "settings:updates.phase.available",
   downloading: "settings:updates.phase.downloading",
-  downloaded: "settings:updates.phase.downloaded",
   installing: "settings:updates.phase.installing",
   error: "settings:updates.phase.error",
 };
 
 function Updates({ s, set, updater }) {
   const { t, i18n } = useTranslation();
-  const { phase, currentVersion, update, downloaded, total, error, failedAction, supported,
-    checkForUpdate, downloadUpdate, installAndRestart } = updater;
-  const checking = phase === "checking";
-  const downloading = phase === "downloading";
-  const progress = total ? Math.min(100, downloaded / total * 100) : null;
-  const canCheck = supported && !["checking", "downloading", "installing"].includes(phase);
+  const { phase, currentVersion, update, error, failedAction, supported,
+    checkForUpdate, startUpdate } = updater;
+  const busy = phase === "checking" || phase === "downloading" || phase === "installing";
+  const canCheck = supported && !busy;
 
   return (
     <div style={{  }}>
@@ -316,8 +312,9 @@ function Updates({ s, set, updater }) {
 
       <GroupTitle>{t("settings:updates.groupStatus")}</GroupTitle>
       <Card>
-        <div aria-live="polite" aria-busy={checking || downloading || phase === "installing"}
-          style={{ padding: 16 }}>
+        {/* 下载进度不在这里重复:导航栏「设置」行的环形图标已经在说同一件事。
+            这一屏留给侧栏图标塞不进去的东西——失败原因与重试。 */}
+        <div aria-live="polite" aria-busy={busy} style={{ padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 240px", minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: error ? "var(--err-deep)" : "var(--tx1)" }}>
@@ -333,32 +330,12 @@ function Updates({ s, set, updater }) {
               {(phase === "idle" || phase === "upToDate" || (phase === "error" && failedAction === "check")) &&
                 <button className="fbtn" onClick={checkForUpdate} disabled={!canCheck}
                   style={{ height: 30, fontSize: 12 }}>{failedAction === "check" ? t("settings:updates.retryCheck") : t("settings:updates.check")}</button>}
-              {(phase === "available" || (phase === "error" && failedAction === "download")) &&
-                <button className="fbtn-primary" onClick={downloadUpdate}
-                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "download" ? t("settings:updates.retryDownload") : t("settings:updates.download")}</button>}
-              {(phase === "downloaded" || (phase === "error" && failedAction === "install")) &&
-                <button className="fbtn-primary" onClick={installAndRestart}
-                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "install" ? t("settings:updates.retryInstall") : t("settings:updates.installRestart")}</button>}
+              {(phase === "available" || (phase === "error" && failedAction === "update")) &&
+                <button className="fbtn-primary" onClick={startUpdate}
+                  style={{ height: 30, padding: "0 13px" }}>{failedAction === "update" ? t("settings:updates.retryUpdate") : t("settings:updates.update")}</button>}
             </div>
           </div>
-
-          {downloading && <div style={{ marginTop: 14 }}>
-            <div className={`update-progress ${progress == null ? "indeterminate" : ""}`}
-              role="progressbar" aria-label={t("settings:updates.downloadProgress")} aria-valuemin={0} aria-valuemax={100}
-              {...(progress == null ? {} : { "aria-valuenow": Math.round(progress) })}>
-              <span style={progress == null ? undefined : { width: `${progress}%` }} />
-            </div>
-            <div className="mono" style={{ fontSize: 11, color: "var(--tx5)", marginTop: 7 }}>
-              {formatBytes(downloaded)} / {total == null ? t("settings:updates.sizeUnknown") : formatBytes(total)}
-              {progress != null ? ` · ${Math.round(progress)}%` : ""}
-            </div>
-          </div>}
         </div>
-        {update?.body && <div style={{ borderTop: "1px solid var(--line6)", padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3b)", marginBottom: 7 }}>{t("settings:updates.versionNotes")}</div>
-          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 180,
-            overflowY: "auto", fontSize: 12, lineHeight: 1.6, color: "var(--tx3b)" }}>{update.body}</div>
-        </div>}
       </Card>
       <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55, paddingLeft: 2 }}>
         {t("settings:updates.footnote")}</div>

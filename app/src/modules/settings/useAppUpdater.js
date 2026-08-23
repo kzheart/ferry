@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { checkAppUpdate, closeAppUpdate, downloadAppUpdate, getAppVersion,
   installAppUpdate, isNativeApp, relaunchApp } from "../../platform/desktop/updater.js";
 
+// 更新装完就重启,新进程里没有任何内存状态能告诉我们「刚更新过」。
+// 所以安装前把版本与说明落到 localStorage,启动时读到就弹公告,读完即删。
+const PENDING_KEY = "ferry-update-pending";
+
 const INITIAL = {
   phase: "idle",
   currentVersion: "—",
@@ -15,14 +19,25 @@ const INITIAL = {
 
 const messageOf = error => error instanceof Error ? error.message : String(error);
 
-export function formatBytes(bytes) {
-  if (!Number.isFinite(bytes)) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"];
-  let value = bytes;
-  let unit = -1;
-  do { value /= 1024; unit += 1; } while (value >= 1024 && unit < units.length - 1);
-  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
+function readPending() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    return value && typeof value.to === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+// 更新完成公告:上一轮安装留下的记录,展示一次就清掉
+export function useUpdateAnnouncement() {
+  const [announcement, setAnnouncement] = useState(() => readPending());
+  const dismiss = useCallback(() => {
+    try { localStorage.removeItem(PENDING_KEY); } catch { /* 存不进去就只影响这次 */ }
+    setAnnouncement(null);
+  }, []);
+  return { announcement, dismiss };
 }
 
 export function useAppUpdater(autoCheck, delay = 3500) {
@@ -55,7 +70,9 @@ export function useAppUpdater(autoCheck, delay = 3500) {
     } finally { busyRef.current = false; }
   }, [native]);
 
-  const downloadUpdate = useCallback(async () => {
+  // 一次点击走完下载 + 安装 + 重启。中途不再问第二次:用户点下载图标时
+  // 表达的就是「装上」,多一次确认只是把同一个决定拆成两半。
+  const startUpdate = useCallback(async () => {
     const update = updateRef.current;
     if (!update || busyRef.current) return;
     busyRef.current = true;
@@ -69,29 +86,34 @@ export function useAppUpdater(autoCheck, delay = 3500) {
         } else if (event.event === "Progress") {
           downloaded += event.data.chunkLength;
           setState(v => ({ ...v, downloaded }));
-        } else if (event.event === "Finished") {
-          setState(v => ({ ...v, phase: "downloaded", downloaded: v.total ?? downloaded }));
         }
       });
     } catch (error) {
-      setState(v => ({ ...v, phase: "error", error: messageOf(error), failedAction: "download" }));
-    } finally { busyRef.current = false; }
-  }, []);
-
-  const installAndRestart = useCallback(async () => {
-    const update = updateRef.current;
-    const retryingInstall = state.phase === "error" && state.failedAction === "install";
-    if (!update || (state.phase !== "downloaded" && !retryingInstall) || busyRef.current) return;
-    busyRef.current = true;
-    setState(v => ({ ...v, phase: "installing", error: null, failedAction: null }));
+      busyRef.current = false;
+      setState(v => ({ ...v, phase: "error", error: messageOf(error), failedAction: "update" }));
+      return;
+    }
+    setState(v => {
+      // 重启后要展示的公告:趁进程还活着写进去
+      try {
+        localStorage.setItem(PENDING_KEY, JSON.stringify({
+          from: v.currentVersion,
+          to: update.version,
+          date: update.date || null,
+          notes: update.body || "",
+        }));
+      } catch { /* 写不进去就只是少一次公告,不该拦住安装 */ }
+      return { ...v, phase: "installing", downloaded: v.total ?? downloaded };
+    });
     try {
       await installAppUpdate(update);
       await relaunchApp();
     } catch (error) {
+      try { localStorage.removeItem(PENDING_KEY); } catch { /* 同上 */ }
       busyRef.current = false;
-      setState(v => ({ ...v, phase: "error", error: messageOf(error), failedAction: "install" }));
+      setState(v => ({ ...v, phase: "error", error: messageOf(error), failedAction: "update" }));
     }
-  }, [state.failedAction, state.phase]);
+  }, []);
 
   useEffect(() => {
     if (!native || !autoCheck) return;
@@ -101,5 +123,7 @@ export function useAppUpdater(autoCheck, delay = 3500) {
 
   useEffect(() => () => { closeAppUpdate(updateRef.current).catch(() => {}); }, []);
 
-  return { ...state, checkForUpdate, downloadUpdate, installAndRestart };
+  const progress = state.total ? Math.min(1, state.downloaded / state.total) : null;
+
+  return { ...state, progress, checkForUpdate, startUpdate };
 }

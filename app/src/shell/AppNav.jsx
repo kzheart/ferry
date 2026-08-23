@@ -138,6 +138,7 @@ export function AppNav({
   onSelect,
   onRescan,
   onToggleSettings,
+  settingsBadge,
   pointerHandlers,
 }) {
   const agentDot = useAgentRailDot();
@@ -282,7 +283,8 @@ export function AppNav({
           onClick={scanning ? undefined : onRescan} />
         <NavRow icon={<RailGlyph name="settings" size={metrics.navIcon}
           color={settingsOpen ? ACCENT : "var(--tx4b)"} />}
-          label={labels.settings} active={settingsOpen} onClick={onToggleSettings} />
+          label={labels.settings} active={settingsOpen} badge={settingsBadge}
+          onClick={onToggleSettings} />
       </div>
       </div>
     </div>

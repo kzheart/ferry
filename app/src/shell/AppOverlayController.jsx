@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { sessionIdentity } from "../modules/browser/public.js";
 import { copyResumeCommand } from "../modules/migration/public.js";
+import { useUpdateAnnouncement } from "../modules/settings/public.js";
 import { useAppChrome } from "../shared/capabilities/appChrome.jsx";
 import { useBrowserState } from "../shared/capabilities/browserState.jsx";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
@@ -15,6 +16,7 @@ export function AppOverlayController({ t }) {
   const { peek, search, contextMenu, deletion, tags, filters } =
     useBrowserState();
   const { migration, editing, floatChat } = useOperationsState();
+  const updateAnnouncement = useUpdateAnnouncement();
   const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
   const contentSearch = useSessionContentSearch(
@@ -233,6 +235,14 @@ export function AppOverlayController({ t }) {
         onClear: filters.history.onClear,
       }}
       guide={guide}
+      updateAnnouncement={{
+        value: updateAnnouncement.announcement,
+        onDismiss: updateAnnouncement.dismiss,
+        onOpenUpdates: () => {
+          settings.setSection("updates");
+          settings.setOpen(true);
+        },
+      }}
     />
   );
 }

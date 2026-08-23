@@ -11,7 +11,7 @@ import {
 } from "../modules/migration/public.js";
 import { FloatingAgentPanel } from "../modules/askferry/public.js";
 import { Guide } from "../modules/onboarding/public.js";
-import { SettingsPage } from "../modules/settings/public.js";
+import { SettingsPage, UpdateAnnouncement } from "../modules/settings/public.js";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
 import { PromptBox } from "../shared/ui/PromptBox.jsx";
 import { Toast } from "../shared/ui/Toast.jsx";
@@ -33,6 +33,7 @@ export function AppOverlays({
   settings,
   historyFilter,
   guide,
+  updateAnnouncement = { value: null },
 }) {
   return (
     <>
@@ -176,6 +177,14 @@ export function AppOverlays({
           steps={guide.steps}
           onGo={guide.onGo}
           onFinish={guide.onFinish}
+        />
+      )}
+      {/* 更新后的第一屏,压在所有弹层之上:它是本次启动最该先被读到的东西 */}
+      {updateAnnouncement.value && (
+        <UpdateAnnouncement
+          announcement={updateAnnouncement.value}
+          onDismiss={updateAnnouncement.onDismiss}
+          onOpenUpdates={updateAnnouncement.onOpenUpdates}
         />
       )}
     </>

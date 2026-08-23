@@ -18,8 +18,8 @@ export function useWorkspaceState({
   setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setHistDel, setHistF, setMetaFor, setMig, setMultiSel,
   setPeekId, setPopover, setSearchOpen,
-  setSettings, setSettingsOpen, setTagFor, setToast, setView, settings,
-  settingsOpen, settingsSection, tagFor, toast, updater, view,
+  setSettings, setSettingsOpen, setSettingsSection, setTagFor, setToast, setView,
+  settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
 }) {
   // 悬浮球是内置 AI 助手的一个入口:不是列表项,直接读开关。
   const builtinAgent = useFeature("builtin-agent");
@@ -160,6 +160,7 @@ export function useWorkspaceState({
         scan: doScan,
         guideSeen: onboarding.seen,
         setOpen: setSettingsOpen,
+        setSection: setSettingsSection,
         openGuide: onboarding.openGuide,
         setView,
       },
@@ -172,7 +173,7 @@ export function useWorkspaceState({
     }),
     [
       toast, setToast, settingsOpen, settings,
-      setSettings, updater, settingsSection, scan, env, scanning,
+      setSettings, updater, settingsSection, setSettingsSection, scan, env, scanning,
       doScan, onboarding,
     ],
   );

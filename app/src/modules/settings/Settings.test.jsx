@@ -32,8 +32,8 @@ const noop = () => {};
 
 const updater = {
   phase: "idle", currentVersion: "0.7.0", update: null, downloaded: 0, total: null,
-  error: null, failedAction: null, supported: true, checkForUpdate: noop,
-  downloadUpdate: noop, installAndRestart: noop,
+  error: null, failedAction: null, supported: true, progress: null,
+  checkForUpdate: noop, startUpdate: noop,
 };
 
 const settings = {

@@ -17,7 +17,7 @@ import {
   useSessionSelection,
 } from "../modules/browser/public.js";
 import { useAskFerry } from "../modules/askferry/public.js";
-import { useAppUpdater, useSettings } from "../modules/settings/public.js";
+import { UpdateBadge, useAppUpdater, useSettings } from "../modules/settings/public.js";
 import { useSessionEditing } from "../modules/editing/public.js";
 import { useHistoryResourcePane } from "../modules/migration/public.js";
 import { initialWorkspace, useOnboarding } from "../modules/onboarding/public.js";
@@ -402,7 +402,8 @@ export default function App() {
     sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setHistDel, setHistF, setMetaFor, setMig,
     setMultiSel, setPeekId, setPopover,
-    setSearchOpen, setSettings, setSettingsOpen, setTagFor, setToast, setView,
+    setSearchOpen, setSettings, setSettingsOpen, setSettingsSection, setTagFor,
+    setToast, setView,
     settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
   });
 
@@ -464,6 +465,14 @@ export default function App() {
               setSettingsSection("prefs");
               setSettingsOpen((value) => !value);
             }}
+            settingsBadge={
+              <UpdateBadge
+                phase={updater.phase}
+                version={updater.update?.version}
+                progress={updater.progress}
+                onStart={updater.startUpdate}
+              />
+            }
             pointerHandlers={rail.pointerHandlers}
           />
         }
