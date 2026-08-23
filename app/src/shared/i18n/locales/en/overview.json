@@ -55,7 +55,9 @@
     "model": "Model",
     "tokens": "Tokens",
     "amount": "Cost",
-    "unpriced": "Unmatched · {{n}} models"
+    "unpriced": "Unmatched · {{n}} models",
+    "sources": "Pricing: {{sources}}",
+    "updated": "Updated {{time}}"
   },
   "comp": {
     "title": "Token composition",

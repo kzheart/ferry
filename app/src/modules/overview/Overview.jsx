@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOLS, TOOL_NAME } from "../../shared/contracts/tools.js";
+import {
+  formatCompactNumber,
+  formatCurrency,
+  formatInteger,
+} from "../../shared/i18n/numberFormat.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../shared/ui/icons.jsx";
 import { computeOverview } from "./overviewModel.js";
 
@@ -20,16 +25,6 @@ const toolColor = tool => {
   const index = TOOLS.indexOf(tool);
   return TOOL_COLOR[tool] || CHART[(index < 0 ? 0 : index) % CHART.length];
 };
-
-const fmtInt = n => Math.round(n || 0).toLocaleString("en-US");
-function fmtTokens(n) {
-  n = n || 0;
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + " B";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + " M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + " K";
-  return String(Math.round(n));
-}
-const fmtCost = n => "$" + Math.round(n || 0).toLocaleString("en-US");
 
 // 月份/星期名按语言本地化。2024-01-01 是周一,用它推出 dow 0=周一 的顺序。
 const monthName = (index, locale) =>
@@ -261,9 +256,21 @@ function ToolFilter({ tool, setTool, t }) {
 }
 
 export default function Overview({ sessions = [], historyRows = [],
-  prices = {}, scanning = false, navigationTarget }) {
+  prices = {}, pricing = null, scanning = false, navigationTarget }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const fmtInt = value => formatInteger(value, locale);
+  const fmtTokens = value => formatCompactNumber(value, locale);
+  const fmtCost = value => formatCurrency(value, locale);
+  const sourceSummary = (pricing?.sources || [])
+    .filter(source => source.models > 0)
+    .map(source => source.source)
+    .join(" · ");
+  const pricingUpdated = pricing?.fetched_at
+    ? new Date(pricing.fetched_at).toLocaleString(locale, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+    : "";
   const [scope, setScope] = useState("30");
   const [tool, setTool] = useState("all");
   useEffect(() => {
@@ -350,8 +357,7 @@ export default function Overview({ sessions = [], historyRows = [],
               style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               {kpiCard(t("overview:kpi.sessions"), fmtInt(data.kpis.sessions.value), null,
                 delta(data.kpis.sessions, fmtInt), data.trends.sessions)}
-              {kpiCard(t("overview:kpi.tokens"), fmtTokens(data.kpis.tokens.value).split(" ")[0],
-                fmtTokens(data.kpis.tokens.value).split(" ")[1] || "",
+              {kpiCard(t("overview:kpi.tokens"), fmtTokens(data.kpis.tokens.value), null,
                 delta(data.kpis.tokens, v => fmtTokens(v)), data.trends.tokens)}
               {kpiCard(t("overview:kpi.cost"), fmtCost(data.kpis.cost.value), null,
                 delta(data.kpis.cost, fmtCost), data.trends.cost)}
@@ -440,6 +446,13 @@ export default function Overview({ sessions = [], historyRows = [],
                       </tbody>
                     </table>
                   </div>
+                  {(sourceSummary || pricingUpdated) && (
+                    <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid var(--line6)",
+                      display: "flex", gap: 8, flexWrap: "wrap", fontSize: 10, color: "var(--tx4b)" }}>
+                      {sourceSummary && <span>{t("overview:cost.sources", { sources: sourceSummary })}</span>}
+                      {pricingUpdated && <span>{t("overview:cost.updated", { time: pricingUpdated })}</span>}
+                    </div>
+                  )}
                 </Card>
               </div>
 

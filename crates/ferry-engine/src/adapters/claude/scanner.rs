@@ -4,6 +4,7 @@
 //! `adapters → sessions`（见 `adapters/mod.rs`），这几个纯函数由
 //! `adapters::shared::scanner` 提供，`sessions::usage` 反过来复用它们。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
@@ -37,6 +38,16 @@ fn usage_tokens(usage: &Value) -> Tokens {
     }
 }
 
+fn usage_by_model_value(by_model: &[(String, Tokens)]) -> Value {
+    let mut result = Map::new();
+    for (model, tokens) in by_model {
+        if has_tokens(tokens) {
+            result.insert(model.clone(), tokens.to_value());
+        }
+    }
+    Value::Object(result)
+}
+
 // ---------------------------------------------------------------------------
 // 扫描
 // ---------------------------------------------------------------------------
@@ -54,6 +65,10 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     let mut title = String::new();
     let mut count = 0i64;
     let mut by_model: Vec<(String, Tokens)> = Vec::new();
+    // Claude Code 的流式落盘会把同一 API 回复（message.id + requestId）写多行；
+    // 后续行通常只是 content block 更完整，usage 仍是同一次请求。Tokscale 对
+    // 复合键去重并按字段 max 合并，Ferry 也采用同一口径，避免逐行累加。
+    let mut seen_usage: HashMap<String, (String, Tokens)> = HashMap::new();
     let mut created: Option<i64> = None;
 
     for line in lines {
@@ -94,11 +109,37 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
                         .cloned()
                         .unwrap_or_else(|| Value::Object(Map::new()));
                     let tokens = usage_tokens(&usage);
-                    if by_model.iter().all(|(name, _)| name != model) {
-                        by_model.push((model.to_string(), empty_tokens()));
-                    }
-                    if let Some(slot) = by_model.iter_mut().find(|(name, _)| name == model) {
-                        add_tokens(&mut slot.1, &tokens);
+                    let message_id = message
+                        .and_then(|message| message.get("id"))
+                        .and_then(Value::as_str);
+                    let request_id = record.get("requestId").and_then(Value::as_str);
+                    let dedup = match (message_id, request_id) {
+                        (Some(message_id), Some(request_id)) => {
+                            Some(format!("{message_id}:{request_id}"))
+                        }
+                        (Some(message_id), None) => Some(format!("message:{message_id}")),
+                        _ => None,
+                    };
+                    if let Some(dedup) = dedup {
+                        seen_usage
+                            .entry(dedup)
+                            .and_modify(|(seen_model, current)| {
+                                if seen_model.is_empty() {
+                                    *seen_model = model.to_string();
+                                }
+                                current.input = current.input.max(tokens.input);
+                                current.output = current.output.max(tokens.output);
+                                current.cache_read = current.cache_read.max(tokens.cache_read);
+                                current.cache_write = current.cache_write.max(tokens.cache_write);
+                            })
+                            .or_insert_with(|| (model.to_string(), tokens));
+                    } else {
+                        if by_model.iter().all(|(name, _)| name != model) {
+                            by_model.push((model.to_string(), empty_tokens()));
+                        }
+                        if let Some(slot) = by_model.iter_mut().find(|(name, _)| name == model) {
+                            add_tokens(&mut slot.1, &tokens);
+                        }
                     }
                 }
                 let content = message.and_then(|message| message.get("content"));
@@ -123,6 +164,14 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
 
     if count == 0 {
         return Ok(ScanOutcome::Row(ScanRow::new()));
+    }
+    for (_, (model, tokens)) in seen_usage {
+        if by_model.iter().all(|(name, _)| *name != model) {
+            by_model.push((model.clone(), empty_tokens()));
+        }
+        if let Some(slot) = by_model.iter_mut().find(|(name, _)| *name == model) {
+            add_tokens(&mut slot.1, &tokens);
+        }
     }
 
     let relative = path.strip_prefix(base).unwrap_or(path);
@@ -164,6 +213,7 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
         },
     );
     row.insert("model".into(), Value::from(dominant_model(&by_model)));
+    row.insert("usage_by_model".into(), usage_by_model_value(&by_model));
     row.insert(
         "parent_id".into(),
         if child {

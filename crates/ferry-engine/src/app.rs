@@ -525,6 +525,16 @@ impl EngineService for Engine {
         payload.insert("prices".into(), Value::Object(result.prices));
         payload.insert("fetched_at".into(), Value::from(result.fetched_at));
         payload.insert("source".into(), Value::from(result.source));
+        payload.insert(
+            "sources".into(),
+            Value::Array(
+                result
+                    .sources
+                    .iter()
+                    .map(pricing::SourceStatus::to_value)
+                    .collect(),
+            ),
+        );
         Ok(Value::Object(payload))
     }
 

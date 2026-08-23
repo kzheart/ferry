@@ -2,7 +2,7 @@
 //!
 //! 三个工具的原始 token 字段口径不同，统一成
 //! `{"input", "output", "cache_read", "cache_write"}`；其中 input 只计未命中
-//! 缓存的输入（缓存读取单独放 cache_read），便于前端按 models.dev 单价分档估算。
+//! 缓存的输入（缓存读取单独放 cache_read），便于按多来源公开单价分档估算。
 //!
 //! 分层备注：`empty_tokens` / `add_tokens` / `has_tokens` / `dominant_model` /
 //! `iso_ms` 在 Python 侧被 `adapters/**/scanner.py` 反向引用。Rust 禁止
@@ -138,7 +138,11 @@ pub fn casefold(text: &str) -> String {
 }
 
 fn norm_model(model: &str) -> String {
-    casefold(model.rsplit('/').next().unwrap_or(model))
+    casefold(model.rsplit('/').next().unwrap_or(model)).replace('_', "-")
+}
+
+fn norm_full_model(model: &str) -> String {
+    casefold(model.trim()).replace('_', "-")
 }
 
 /// 单价表的归一化索引：同名归一后**先到者胜**（Python `setdefault`）。
@@ -153,9 +157,8 @@ pub fn price_index(prices: &Map<String, Value>) -> Vec<(String, Value)> {
     index
 }
 
-/// 与总览页同一套匹配规则：归一后精确命中优先，否则取**边界对齐**的最近前缀。
-///
-/// 边界字符只认 `-` `_` `.` `:`：`gpt-5` 不能匹配到 `gpt-51`。
+/// 与总览页同一套匹配规则：只接受完整 key 或裸 model-part 的精确命中。
+/// SKU 前缀猜测（如用 `gpt-5` 给 `gpt-5-mini` 计价）宁可判为未计价。
 pub fn match_price<'a>(
     model: &str,
     prices: &'a Map<String, Value>,
@@ -164,35 +167,14 @@ pub fn match_price<'a>(
     if model.is_empty() || prices.is_empty() {
         return None;
     }
-    if let Some(exact) = prices.get(model) {
+    if let Some(exact) = prices.get(&norm_full_model(model)) {
         return Some(exact);
     }
     let normalized = norm_model(model);
     if let Some((_, value)) = index.iter().find(|(key, _)| *key == normalized) {
         return Some(value);
     }
-    let mut best: Option<(&Value, usize)> = None;
-    for (key, value) in index {
-        let (short, long) = if normalized.len() <= key.len() {
-            (normalized.as_str(), key.as_str())
-        } else {
-            (key.as_str(), normalized.as_str())
-        };
-        if !long.starts_with(short) {
-            continue;
-        }
-        let boundary = long[short.len()..].chars().next();
-        if let Some(boundary) = boundary {
-            if !matches!(boundary, '-' | '_' | '.' | ':') {
-                continue;
-            }
-        }
-        let diff = long.len() - short.len();
-        if best.map(|(_, best_diff)| diff < best_diff).unwrap_or(true) {
-            best = Some((value, diff));
-        }
-    }
-    best.map(|(value, _)| value)
+    None
 }
 
 fn cost_of(tokens: &Tokens, price: Option<&Value>) -> f64 {
@@ -214,6 +196,26 @@ fn is_empty_price(price: &Value) -> bool {
         Value::Object(entries) => entries.is_empty(),
         Value::Null => true,
         _ => false,
+    }
+}
+
+fn usage_by_model(row: &Map<String, Value>, fallback: &Tokens) -> Vec<(String, Tokens)> {
+    if let Some(entries) = row.get("usage_by_model").and_then(Value::as_object) {
+        let usage: Vec<(String, Tokens)> = entries
+            .iter()
+            .filter(|(model, tokens)| !model.is_empty() && tokens.is_object())
+            .map(|(model, tokens)| (model.clone(), Tokens::from_value(tokens)))
+            .filter(|(_, tokens)| has_tokens(tokens))
+            .collect();
+        if !usage.is_empty() {
+            return usage;
+        }
+    }
+    let model = row.get("model").and_then(Value::as_str).unwrap_or_default();
+    if model.is_empty() || !has_tokens(fallback) {
+        Vec::new()
+    } else {
+        vec![(model.to_string(), *fallback)]
     }
 }
 
@@ -333,35 +335,30 @@ pub fn get_usage(
             };
             add_tokens(slot, &tokens);
         }
-        let model = row
-            .get("model")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        let price = match_price(&model, &prices, &index_of_prices);
-        let cost = cost_of(&tokens, price);
-        cost_total += cost;
-        if !model.is_empty() && price.is_none() && !unpriced_models.contains(&model) {
-            unpriced_models.push(model.clone());
-        }
-        for (bucket, key) in [
-            (
-                &mut by_model,
-                if model.is_empty() { "unknown" } else { &model },
-            ),
-            (
-                &mut by_project,
-                if project.is_empty() {
-                    "unknown"
-                } else {
-                    &project
-                },
-            ),
-        ] {
-            let entry = upsert(bucket, key);
-            add_tokens(&mut entry.tokens, &tokens);
+        let model_usage = usage_by_model(row, &tokens);
+        let mut session_cost = 0.0;
+        for (model, model_tokens) in model_usage {
+            let price = match_price(&model, &prices, &index_of_prices);
+            let cost = cost_of(&model_tokens, price);
+            session_cost += cost;
+            if price.is_none() && !unpriced_models.contains(&model) {
+                unpriced_models.push(model.clone());
+            }
+            let entry = upsert(&mut by_model, &model);
+            add_tokens(&mut entry.tokens, &model_tokens);
             entry.cost = round_to(entry.cost + cost, 6);
         }
+        cost_total += session_cost;
+        let project_entry = upsert(
+            &mut by_project,
+            if project.is_empty() {
+                "unknown"
+            } else {
+                &project
+            },
+        );
+        add_tokens(&mut project_entry.tokens, &tokens);
+        project_entry.cost = round_to(project_entry.cost + session_cost, 6);
     }
 
     let mut agent_totals = Map::new();
@@ -410,7 +407,7 @@ pub fn get_usage(
     payload.insert("sessions".into(), Value::from(sessions));
     payload.insert("tokens".into(), total.to_value());
     payload.insert("by_agent".into(), Value::Object(agent_totals));
-    // 金额是按 models.dev 公开单价估算的：模型匹配不上单价时只计 token，
+    // 金额按 LiteLLM / OpenRouter / models.dev 的公开单价估算：匹配不上时只计 token，
     // 这些模型名列在 unpriced_models 里，免得下游把估算当账单。
     payload.insert("by_model".into(), top_by_cost(&by_model));
     payload.insert("by_project".into(), top_by_cost(&by_project));
@@ -456,27 +453,22 @@ mod tests {
         .clone()
     }
 
-    /// 前缀匹配必须落在边界上，否则 `gpt-4` 会吃掉 `gpt-4o` 的单价。
+    /// 不猜 SKU 前缀，完整 key 与裸 model-part 精确命中才可计价。
     #[test]
-    fn match_price_uses_boundary_aligned_prefixes() {
+    fn match_price_requires_exact_model_identity() {
         let prices = prices();
         let index = price_index(&prices);
         assert_eq!(
             match_price("claude-sonnet-4-5-20250929", &prices, &index),
-            Some(&json!({"input": 3.0}))
+            None
         );
         assert_eq!(
             match_price("claude-sonnet-4-5", &prices, &index),
             Some(&json!({"input": 3.0}))
         );
-        assert_eq!(
-            match_price("gpt-5-mini", &prices, &index),
-            Some(&json!({"input": 1.0}))
-        );
-        // 边界字符不在 -_.: 里 → 不匹配。
+        assert_eq!(match_price("gpt-5-mini", &prices, &index), None);
         assert_eq!(match_price("gpt-51", &prices, &index), None);
         assert_eq!(match_price("", &prices, &index), None);
-        // 原串精确命中优先于归一化。
         assert_eq!(
             match_price("anthropic/claude-sonnet-4-5", &prices, &index),
             Some(&json!({"input": 3.0}))

@@ -10,13 +10,75 @@ use serde_json::Value;
 
 use crate::adapters::contracts::{ScanCache, ScanRow};
 use crate::adapters::shared::scanner::{
-    iso_ms, report_scan_advance, report_scan_total, session_roots, stat_digest,
+    has_tokens, iso_ms, report_scan_advance, report_scan_total, session_roots, stat_digest, Tokens,
 };
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
 use crate::system::paths::{grok_home, home_dir, process_environ};
 
 use super::store::{fingerprint as bundle_fingerprint, read_text};
+
+fn non_negative(value: Option<&Value>) -> i64 {
+    value.and_then(Value::as_i64).unwrap_or(0).max(0)
+}
+
+fn get_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter()
+        .try_fold(value, |current, key| current.get(*key))
+}
+
+fn extract_total_tokens(value: &Value) -> Option<i64> {
+    [
+        &["params", "_meta", "totalTokens"][..],
+        &["params", "update", "_meta", "totalTokens"][..],
+        &["params", "update", "totalTokens"][..],
+        &["params", "totalTokens"][..],
+        &["usage", "totalTokens"][..],
+        &["totalTokens"][..],
+    ]
+    .into_iter()
+    .find_map(|path| get_path(value, path).and_then(Value::as_i64))
+}
+
+/// 对齐 Tokscale 的 Grok legacy 口径：updates 里的 `totalTokens` 是累计计数，
+/// 只接受单调增加的最高水位；signals.json 在 compaction 后保存被折叠的历史，
+/// 用它补齐 updates 已不可见的部分。旧格式没有稳定 input/output 拆分，因此归入
+/// input，至少保证总量与原始账本一致。
+fn grok_tokens(path: &Path, summary: &Value) -> Tokens {
+    let history = if path.join("updates.jsonl").is_file() {
+        path.join("updates.jsonl")
+    } else {
+        path.join("chat_history.jsonl")
+    };
+    let mut maximum = 0i64;
+    if let Ok(text) = read_text(&history) {
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            let Ok(record) = serde_json::from_str::<Value>(line) else {
+                continue;
+            };
+            if let Some(total) = extract_total_tokens(&record).filter(|total| *total >= maximum) {
+                maximum = total;
+            }
+        }
+    }
+    if let Ok(text) = read_text(&path.join("signals.json")) {
+        if let Ok(signals) = serde_json::from_str::<Value>(&text) {
+            let before = non_negative(signals.get("totalTokensBeforeCompaction"));
+            let total = non_negative(signals.get("totalTokens"));
+            let effective = match signals.get("contextTokensUsed") {
+                None => before.saturating_add(total),
+                Some(context) => total.max(before.saturating_add(non_negative(Some(context)))),
+            };
+            maximum = maximum.max(effective);
+        }
+    }
+    // 少数版本把 rollup 直接写回 summary；作为最后回退。
+    maximum = maximum.max(non_negative(summary.get("totalTokens")));
+    Tokens {
+        input: maximum,
+        ..Tokens::default()
+    }
+}
 
 /// `~/.grok/sessions`（受 `GROK_HOME` 覆盖）。每次调用都重读环境变量，
 /// 对齐 Python 侧 `grok_home()` 的运行期求值。
@@ -60,6 +122,7 @@ fn meta(path: &Path) -> Option<ScanRow> {
         .or(id)
         .cloned()
         .unwrap_or(Value::Null);
+    let tokens = grok_tokens(path, &summary);
 
     let mut row = ScanRow::new();
     row.insert("tool".into(), Value::from("grok"));
@@ -88,7 +151,14 @@ fn meta(path: &Path) -> Option<ScanRow> {
             .unwrap_or(Value::Null),
     );
     row.insert("root_id".into(), root_id);
-    row.insert("tokens".into(), Value::Null);
+    row.insert(
+        "tokens".into(),
+        if has_tokens(&tokens) {
+            tokens.to_value()
+        } else {
+            Value::Null
+        },
+    );
     row.insert(
         "model".into(),
         summary
@@ -108,6 +178,23 @@ fn meta(path: &Path) -> Option<ScanRow> {
             }),
         ]),
     );
+    if has_tokens(&tokens) {
+        let model = row
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or("grok-unknown")
+            .to_string();
+        let mut by_model = serde_json::Map::new();
+        by_model.insert(
+            if model.is_empty() {
+                "grok-unknown".to_string()
+            } else {
+                model
+            },
+            tokens.to_value(),
+        );
+        row.insert("usage_by_model".into(), Value::Object(by_model));
+    }
     Some(row)
 }
 
@@ -171,21 +258,16 @@ pub fn scan(cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
         let Ok(metadata) = fs::metadata(&summary) else {
             continue;
         };
+        // Grok 的 token 还依赖 updates/signals，不能只拿 summary stat 当缓存键；
+        // bundle 较少且本就需要读历史，直接重算以免运行中的会话显示陈旧用量。
         let stat = FileStat::from_metadata(&metadata);
-        let row = match cache.get(&summary, &stat) {
-            Some(cached) => cached.unwrap_or_default(),
-            None => {
-                // 解析失败（IO / JSON 损坏）在 Python 里被吞成空 meta 并写缓存。
-                let parsed = meta(&path).unwrap_or_default();
-                cache.put(
-                    &summary,
-                    &stat,
-                    if parsed.is_empty() {
-                        None
-                    } else {
-                        Some(parsed.clone())
-                    },
-                );
+        let row = match meta(&path).unwrap_or_default() {
+            parsed if parsed.is_empty() => {
+                cache.put(&summary, &stat, None);
+                parsed
+            }
+            parsed => {
+                cache.put(&summary, &stat, Some(parsed.clone()));
                 parsed
             }
         };
@@ -267,6 +349,39 @@ mod tests {
             row["authoritative_members"],
             json!(["summary.json", "updates.jsonl"])
         );
+    }
+
+    #[test]
+    fn meta_reads_monotonic_grok_totals_and_reconciles_signals() {
+        let root = tempfile::tempdir().unwrap();
+        let path = write_bundle(
+            root.path(),
+            "usage",
+            json!({"info": {"id": "s1", "cwd": "/w"}, "chat_format_version": 1,
+                   "current_model_id": "grok-4.6"}),
+            true,
+        );
+        fs::write(
+            path.join("updates.jsonl"),
+            concat!(
+                "{\"params\":{\"_meta\":{\"totalTokens\":100}}}\n",
+                "{\"params\":{\"_meta\":{\"totalTokens\":250}}}\n",
+                "{\"params\":{\"_meta\":{\"totalTokens\":200}}}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            path.join("signals.json"),
+            json!({"totalTokensBeforeCompaction": 300, "contextTokensUsed": 50}).to_string(),
+        )
+        .unwrap();
+
+        let row = meta(&path).unwrap();
+        assert_eq!(
+            row["tokens"],
+            json!({"input": 350, "output": 0, "cache_read": 0, "cache_write": 0})
+        );
+        assert_eq!(row["usage_by_model"]["grok-4.6"], row["tokens"],);
     }
 
     #[test]

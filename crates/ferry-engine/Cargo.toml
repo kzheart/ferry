@@ -39,7 +39,7 @@ glob = "0.3"
 notify = "=8.2.0"
 tempfile = "3"
 thiserror = "2"
-# models.dev 单价抓取（Python 侧用 urllib）；rustls 后端，避免依赖系统 OpenSSL。
+# LiteLLM / OpenRouter / models.dev 单价抓取；rustls 后端，避免依赖系统 OpenSSL。
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 # 探针超时要终止整个进程组（setsid + killpg），标准库没有对应封装。

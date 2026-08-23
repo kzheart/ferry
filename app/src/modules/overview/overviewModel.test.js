@@ -9,6 +9,7 @@ import {
   costOf,
   emptyTokens,
   matchPrice,
+  modelUsageOf,
   sumTokens,
 } from "./overviewModel.js";
 
@@ -66,7 +67,7 @@ test("buildPriceIndex 归一化模型名且首次命中优先", () => {
   assert.equal(index["claude-x"].input, 1);
 });
 
-test("matchPrice 依次尝试原名、归一名与边界对齐的前缀", () => {
+test("matchPrice 只接受完整 key 或裸模型精确匹配", () => {
   const prices = {
     "claude-sonnet-4": { input: 3 },
     "gpt-5": { input: 1 },
@@ -74,9 +75,8 @@ test("matchPrice 依次尝试原名、归一名与边界对齐的前缀", () => 
 
   assert.equal(matchPrice("claude-sonnet-4", prices).input, 3);
   assert.equal(matchPrice("vendor/claude-sonnet-4", prices).input, 3);
-  // 长名是短名的前缀且断点落在分隔符上：视为同族。
-  assert.equal(matchPrice("claude-sonnet-4-20250101", prices).input, 3);
-  assert.equal(matchPrice("gpt-5-mini", prices).input, 1);
+  assert.equal(matchPrice("claude-sonnet-4-20250101", prices), null);
+  assert.equal(matchPrice("gpt-5-mini", prices), null);
 });
 
 test("matchPrice 拒绝非边界前缀与空输入", () => {
@@ -123,6 +123,27 @@ test("computeOverview 按工具过滤会话与迁移记录", () => {
 
   assert.equal(result.kpis.sessions.value, 1);
   assert.deepEqual(result.flows, [{ src: "claude", dst: "codex", count: 1 }]);
+});
+
+test("按模型分桶优先于会话代表模型，成本和排行不误归父模型", () => {
+  const mixed = session({
+    model: "gpt-test",
+    tokens: tokens(3_000_000),
+    usage_by_model: {
+      "gpt-test": tokens(1_000_000),
+      "other-model": tokens(2_000_000),
+    },
+  });
+  assert.deepEqual(modelUsageOf(mixed), [
+    { model: "gpt-test", tokens: tokens(1_000_000) },
+    { model: "other-model", tokens: tokens(2_000_000) },
+  ]);
+
+  const result = computeOverview({ sessions: [mixed], prices: PRICES, now: NOW });
+  assert.equal(result.kpis.tokens.value, 3_000_000);
+  assert.equal(result.costTotal, 3);
+  assert.equal(result.costRows[0].model, "gpt-test");
+  assert.deepEqual(result.unpriced, { models: 1, tokens: 2_000_000 });
 });
 
 test("成本表合并同族模型并单独统计无价条目", () => {

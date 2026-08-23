@@ -10,9 +10,10 @@ export const addTokens = (a, b) => { TOKEN_KEYS.forEach(k => { a[k] += (b?.[k] |
 export const sumTokens = t => TOKEN_KEYS.reduce((s, k) => s + (t?.[k] || 0), 0);
 const startedAt = s => s.created || s.updated || 0;
 
-// ---------- 成本:模型名模糊匹配 models.dev 单价 ----------
-const normModel = m => String(m || "").split("/").pop().toLowerCase();
-const isBoundary = c => !c || /[-_.:]/.test(c);
+// ---------- 成本:模型名安全匹配多来源单价 ----------
+const normFullModel = m => String(m || "").trim().toLowerCase().replaceAll("_", "-");
+const normModel = m => normFullModel(m).split("/").pop();
+const unsafeFuzzyPart = m => new Set(["auto", "mini", "chat", "default", "latest", "model"]).has(m);
 
 export function buildPriceIndex(prices) {
   const idx = {};
@@ -23,23 +24,17 @@ export function buildPriceIndex(prices) {
   return idx;
 }
 
-// 归一后精确命中优先;否则取"互为前缀且边界对齐、长度最接近"的键。
+// 只接受完整 key 或裸 model-part 的精确命中。旧实现会把 `gpt-5-mini` 按前缀
+// 计成 `gpt-5`，这不是可证明的同一 SKU，会产生比“未计价”更危险的错误金额。
 export function matchPrice(model, prices, idx) {
   if (!model || !prices) return null;
-  if (prices[model]) return prices[model];
+  const full = normFullModel(model);
+  if (prices[full]) return prices[full];
   const n = normModel(model);
+  if (!n || unsafeFuzzyPart(n)) return null;
   idx = idx || buildPriceIndex(prices);
   if (idx[n]) return idx[n];
-  let best = null, bestDiff = Infinity;
-  for (const k in idx) {
-    const short = n.length < k.length ? n : k;
-    const long = n.length < k.length ? k : n;
-    if (long.startsWith(short) && isBoundary(long[short.length])) {
-      const diff = long.length - short.length;
-      if (diff < bestDiff) { best = idx[k]; bestDiff = diff; }
-    }
-  }
-  return best;
+  return null;
 }
 
 export function costOf(tokens, price) {
@@ -47,6 +42,16 @@ export function costOf(tokens, price) {
   return (tokens.input * (price.input || 0) + tokens.output * (price.output || 0)
     + tokens.cache_read * (price.cache_read || 0)
     + tokens.cache_write * (price.cache_write || 0)) / 1e6;
+}
+
+// Scanner 会在树根保留按模型分桶；缺失时兼容旧数据，回退到会话代表模型。
+export function modelUsageOf(session) {
+  const entries = Object.entries(session?.usage_by_model || {})
+    .filter(([model, tokens]) => model && tokens && typeof tokens === "object");
+  if (entries.length) return entries.map(([model, tokens]) => ({ model, tokens }));
+  return session?.model && session?.tokens
+    ? [{ model: session.model, tokens: session.tokens }]
+    : [];
 }
 
 // ---------- 主体聚合 ----------
@@ -68,11 +73,11 @@ export function computeOverview({ sessions = [], history = [],
   const tokTotals = emptyTokens();
   scoped.forEach(s => addTokens(tokTotals, s.tokens));
   const total = sumTokens(tokTotals);
-  const costTotal = scoped.reduce((sum, s) =>
-    sum + costOf(s.tokens || emptyTokens(), matchPrice(s.model, prices, idx)), 0);
+  const sessionCost = s => modelUsageOf(s).reduce((sum, usage) =>
+    sum + costOf(usage.tokens, matchPrice(usage.model, prices, idx)), 0);
+  const costTotal = scoped.reduce((sum, s) => sum + sessionCost(s), 0);
   const prevTokens = prev.reduce((n, s) => n + sumTokens(s.tokens), 0);
-  const prevCost = prev.reduce((sum, s) =>
-    sum + costOf(s.tokens || emptyTokens(), matchPrice(s.model, prices, idx)), 0);
+  const prevCost = prev.reduce((sum, s) => sum + sessionCost(s), 0);
   const { streak, longest } = streaks(sessions, now);
 
   const composition = TOKEN_KEYS
@@ -82,12 +87,13 @@ export function computeOverview({ sessions = [], history = [],
   // 成本表:按模型归并(可计价的按归一名合并 vip/、feature/ 等前缀重复)
   const byModel = new Map();
   scoped.forEach(s => {
-    const tk = s.tokens; if (!tk) return;
-    const price = matchPrice(s.model, prices, idx);
-    const key = price ? normModel(s.model) : (s.model || "");
-    const row = byModel.get(key) || { model: key, tokens: emptyTokens(), cost: 0, priced: !!price };
-    addTokens(row.tokens, tk); row.cost += costOf(tk, price); row.priced = row.priced || !!price;
-    byModel.set(key, row);
+    modelUsageOf(s).forEach(({ model, tokens: tk }) => {
+      const price = matchPrice(model, prices, idx);
+      const key = price ? normModel(model) : (model || "");
+      const row = byModel.get(key) || { model: key, tokens: emptyTokens(), cost: 0, priced: !!price };
+      addTokens(row.tokens, tk); row.cost += costOf(tk, price); row.priced = row.priced || !!price;
+      byModel.set(key, row);
+    });
   });
   const priced = [...byModel.values()].filter(r => r.priced && r.model)
     .map(r => ({ ...r, total: sumTokens(r.tokens) }))
@@ -171,7 +177,8 @@ function buildTrends(sessions, prices, idx, now, n) {
     if (i < 0 || i >= n) return;
     sess[i]++;
     tok[i] += sumTokens(s.tokens);
-    cost[i] += costOf(s.tokens || emptyTokens(), matchPrice(s.model, prices, idx));
+    cost[i] += modelUsageOf(s).reduce((sum, usage) =>
+      sum + costOf(usage.tokens, matchPrice(usage.model, prices, idx)), 0);
   });
   return { sessions: sess, tokens: tok, cost };
 }
@@ -234,13 +241,14 @@ function buildBump(sessions, now) {
   const perMonth = keys.map(() => new Map());
   const totalByModel = new Map();
   sessions.forEach(s => {
-    if (!s.model || !s.tokens) return;
     const mk = monthKey(startedAt(s));
     const col = keys.indexOf(mk);
     if (col < 0) return;
-    const tk = sumTokens(s.tokens);
-    perMonth[col].set(s.model, (perMonth[col].get(s.model) || 0) + tk);
-    totalByModel.set(s.model, (totalByModel.get(s.model) || 0) + tk);
+    modelUsageOf(s).forEach(({ model, tokens }) => {
+      const tk = sumTokens(tokens);
+      perMonth[col].set(model, (perMonth[col].get(model) || 0) + tk);
+      totalByModel.set(model, (totalByModel.get(model) || 0) + tk);
+    });
   });
   const top = [...totalByModel.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(e => e[0]);
   if (top.length < 2) return null;

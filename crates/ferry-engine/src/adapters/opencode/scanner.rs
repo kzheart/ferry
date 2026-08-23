@@ -145,6 +145,16 @@ fn message_tokens(data: &Value) -> Tokens {
     }
 }
 
+fn usage_by_model_value(by_model: &[(String, Tokens)]) -> Value {
+    let mut result = serde_json::Map::new();
+    for (model, tokens) in by_model {
+        if !model.is_empty() && has_tokens(tokens) {
+            result.insert(model.clone(), tokens.to_value());
+        }
+    }
+    Value::Object(result)
+}
+
 /// 从 message 表按会话累加 token（session 表的 rollup 列覆盖不全）。
 fn aggregate_usage(
     connection: &Connection,
@@ -268,6 +278,7 @@ pub fn scan(_cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
             },
         );
         row.insert("model".into(), Value::from(dominant_model(&by_model)));
+        row.insert("usage_by_model".into(), usage_by_model_value(&by_model));
         rows.push(row);
     }
 

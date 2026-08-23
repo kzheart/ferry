@@ -49,6 +49,7 @@ export function WorkspaceRouter({
           sessions={sessions}
           historyRows={historyRows}
           prices={pricing?.prices || {}}
+          pricing={pricing}
           scanning={settings.scanning}
           navigationTarget={peek.navigationTarget}
         />

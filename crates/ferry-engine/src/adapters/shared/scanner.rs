@@ -499,6 +499,33 @@ fn summarize(nodes: &mut [TreeNode], index: usize, root_id: &Value, visiting: &m
         .fold(nodes[index].own_updated, |best, child| {
             best.max(nodes[*child].updated)
         });
+    // Token 的树语义必须与 count/size 一致：索引只暴露根会话，子代理如果只挂在
+    // children 里而不向根汇总，usage/总览就会静默漏掉整棵子树。每个 scanner
+    // 产出的 `tokens` 是本节点自有用量；这里保留为 `own_tokens`，并把子节点已经
+    // 汇总好的 token 桶逐层加到根。`usage_by_model` 同步汇总，避免把整棵树的
+    // 成本都错误归到父会话最后使用的那个模型。
+    let own_tokens = nodes[index]
+        .row
+        .get("tokens")
+        .filter(|value| value.is_object())
+        .map(Tokens::from_value)
+        .unwrap_or_default();
+    let mut aggregate_tokens = own_tokens;
+    let mut usage_by_model = model_usage_from_row(&nodes[index].row);
+    for child in &children {
+        if let Some(tokens) = nodes[*child]
+            .row
+            .get("tokens")
+            .filter(|value| value.is_object())
+        {
+            add_tokens(&mut aggregate_tokens, &Tokens::from_value(tokens));
+        }
+        merge_model_usage(
+            &mut usage_by_model,
+            model_usage_from_row(&nodes[*child].row),
+        );
+    }
+    let aggregate_model = dominant_model(&usage_by_model);
 
     let node = &mut nodes[index];
     node.children = children;
@@ -513,6 +540,73 @@ fn summarize(nodes: &mut [TreeNode], index: usize, root_id: &Value, visiting: &m
     node.row.insert("count".into(), count.to_value());
     node.row.insert("size".into(), size.to_value());
     node.row.insert("updated".into(), updated.to_value());
+    node.row.insert(
+        "tokens".into(),
+        if has_tokens(&aggregate_tokens) {
+            aggregate_tokens.to_value()
+        } else {
+            Value::Null
+        },
+    );
+    let usage_by_model = model_usage_to_value(&usage_by_model);
+    if usage_by_model
+        .as_object()
+        .is_some_and(|entries| !entries.is_empty())
+    {
+        node.row.insert("usage_by_model".into(), usage_by_model);
+    } else {
+        node.row.shift_remove("usage_by_model");
+    }
+    if !aggregate_model.is_empty() {
+        node.row
+            .insert("model".into(), Value::from(aggregate_model));
+    }
+}
+
+/// 扫描行里的模型分桶。新 scanner 直接写 `usage_by_model`；旧/无分桶来源回退到
+/// 单一 `model + tokens`，让树汇总对所有 adapter 都成立。
+fn model_usage_from_row(row: &ScanRow) -> Vec<(String, Tokens)> {
+    if let Some(entries) = row.get("usage_by_model").and_then(Value::as_object) {
+        let usage: Vec<(String, Tokens)> = entries
+            .iter()
+            .filter(|(model, value)| !model.is_empty() && value.is_object())
+            .map(|(model, value)| (model.clone(), Tokens::from_value(value)))
+            .filter(|(_, tokens)| has_tokens(tokens))
+            .collect();
+        if !usage.is_empty() {
+            return usage;
+        }
+    }
+    let model = row.get("model").and_then(Value::as_str).unwrap_or_default();
+    let tokens = row
+        .get("tokens")
+        .filter(|value| value.is_object())
+        .map(Tokens::from_value)
+        .unwrap_or_default();
+    if model.is_empty() || !has_tokens(&tokens) {
+        Vec::new()
+    } else {
+        vec![(model.to_string(), tokens)]
+    }
+}
+
+fn merge_model_usage(target: &mut Vec<(String, Tokens)>, source: Vec<(String, Tokens)>) {
+    for (model, tokens) in source {
+        match target.iter_mut().find(|(name, _)| *name == model) {
+            Some((_, current)) => add_tokens(current, &tokens),
+            None => target.push((model, tokens)),
+        }
+    }
+}
+
+fn model_usage_to_value(usage: &[(String, Tokens)]) -> Value {
+    let mut result = Map::new();
+    for (model, tokens) in usage {
+        if !model.is_empty() && has_tokens(tokens) {
+            result.insert(model.clone(), tokens.to_value());
+        }
+    }
+    Value::Object(result)
 }
 
 fn materialize(nodes: &mut [TreeNode], index: usize) -> ScanRow {
@@ -911,9 +1005,12 @@ mod tests {
     #[test]
     fn session_roots_builds_the_tree_and_aggregates() {
         let rows = vec![
-            row(json!({"id": "root", "updated": 10, "count": 1, "size": 100})),
+            row(json!({"id": "root", "updated": 10, "count": 1, "size": 100,
+                       "model": "parent-model",
+                       "tokens": {"input": 10, "output": 1, "cache_read": 0, "cache_write": 0}})),
             row(json!({"id": "child", "parent_id": "root", "updated": 20,
-                       "count": 2, "size": 200})),
+                       "count": 2, "size": 200, "model": "child-model",
+                       "tokens": {"input": 20, "output": 2, "cache_read": 3, "cache_write": 0}})),
             row(json!({"id": "other", "updated": 5, "count": 1, "size": 50})),
         ];
         let roots = session_roots(rows).unwrap();
@@ -933,6 +1030,18 @@ mod tests {
         assert_eq!(first["tree_count"], json!(2));
         assert_eq!(first["root_id"], json!("root"));
         assert_eq!(first["parent_id"], Value::Null);
+        assert_eq!(
+            first["tokens"],
+            json!({"input": 30, "output": 3, "cache_read": 3, "cache_write": 0})
+        );
+        assert_eq!(
+            first["usage_by_model"],
+            json!({
+                "parent-model": {"input": 10, "output": 1, "cache_read": 0, "cache_write": 0},
+                "child-model": {"input": 20, "output": 2, "cache_read": 3, "cache_write": 0}
+            })
+        );
+        assert_eq!(first["model"], json!("child-model"));
         let children = first["children"].as_array().unwrap();
         assert_eq!(children.len(), 1);
         assert_eq!(children[0]["root_id"], json!("root"));
