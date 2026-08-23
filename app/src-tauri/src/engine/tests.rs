@@ -116,7 +116,6 @@ fn edit_operation_input() -> EditOperationPlanInput {
                 "text": "updated",
             }),
         ],
-        probe: true,
     }
 }
 
@@ -141,12 +140,7 @@ fn operation_plan_request_has_a_fixed_method_and_tagged_input() {
     assert!(value.pointer("/params/input/tool").is_some());
     assert!(value.pointer("/params/input/ref").is_some());
     assert!(value.pointer("/params/input/ops").is_some());
-    assert_eq!(
-        value
-            .pointer("/params/input/probe")
-            .and_then(serde_json::Value::as_bool),
-        Some(true)
-    );
+    assert!(value.pointer("/params/input/probe").is_none());
     assert_eq!(
         value
             .get("params")
@@ -212,8 +206,6 @@ fn migration_operation_input() -> MigrationOperationPlanInput {
         reference: "fsr_fixture".to_owned(),
         target_tool: "codex".to_owned(),
         max_turn: Some(3),
-        probe: true,
-        probe_model: Some("gpt-5".to_owned()),
     }
 }
 
@@ -325,14 +317,6 @@ fn operation_migration_input_rejects_invalid_agents_and_options() {
     let mut invalid_turn = migration_operation_input();
     invalid_turn.max_turn = Some(0);
     assert!(validate_operation_plan_input(&OperationPlanInput::Migration(invalid_turn)).is_err());
-
-    let mut unused_model = migration_operation_input();
-    unused_model.probe = false;
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(unused_model)).is_err());
-
-    let mut invalid_model = migration_operation_input();
-    invalid_model.probe_model = Some("bad\nmodel".to_owned());
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(invalid_model)).is_err());
 }
 
 #[test]

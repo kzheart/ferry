@@ -157,11 +157,6 @@
       "desc": "Adds \"Copy resume instruction\" to the session context menu: paste it into any coding agent that has the ferry-resume skill and it reads the history and continues. Nothing is written to any store."
     }
   },
-  "writeCheck": {
-    "groupTitle": "Write verification",
-    "runtimeProbe": "Runtime probe",
-    "runtimeProbeDesc": "After writing, performs a real resume on a temporary shadow session for verification (consumes one model call; cleaned up automatically, no messages appended to the live session). When off, only structure validation is performed (default)."
-  },
   "terminal": {
     "groupTitle": "Terminal",
     "app": "Open terminals with",

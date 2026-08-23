@@ -8,7 +8,6 @@ const KEY = "ferry-settings";
 
 const DEFAULTS = {
   theme: "light",
-  runtimeProbe: false,
   terminalApp: "auto",
   autoCheckUpdates: true,
   locale: null,

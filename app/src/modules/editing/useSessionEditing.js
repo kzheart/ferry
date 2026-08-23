@@ -5,8 +5,7 @@ import { supportsEditOperation } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
 import { sessionRef } from "../browser/public.js";
 
-export function useSessionEditing({ current, runtimeProbe, doScan,
-  onInplaceApplied }) {
+export function useSessionEditing({ current, doScan, onInplaceApplied }) {
   const { t } = useTranslation();
   const [ops, setOps] = useState([]);
   const [diff, setDiff] = useState(null);
@@ -133,7 +132,6 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     tool: current.tool,
     ref: sessionRef(current),
     ops: rpcOps(),
-    probe: !!runtimeProbe,
   });
   const editPlanKey = input => JSON.stringify(input);
   const ensureEditPlan = async () => {
@@ -179,16 +177,15 @@ export function useSessionEditing({ current, runtimeProbe, doScan,
     if (!dirtyOps.length) return;
     setConfirmApply(false); setApplying(true);
     setToast({ kind: "run", title: t("browser:edit.toastApplying"),
-      desc: runtimeProbe ? t("browser:edit.toastApplyingDescProbe") : t("browser:edit.toastApplyingDescStructure") });
+      desc: t("browser:edit.toastApplyingDescStructure") });
     try {
       const replyEdit = dirtyOps.find(op => op.type === "assistant-reply");
       const invalid = replyEdit ? replyEditError(replyEdit) : null;
       if (invalid) throw new Error(invalid);
       const result = (await operations.apply(await ensureEditPlan())).result;
       if (result.ok) {
-        const verdict = runtimeProbe ? t("browser:edit.verdictProbe") : t("browser:edit.verdictStructure");
         setToast({ kind: "ok",
-          title: t("browser:edit.toastInplace", { verdict }),
+          title: t("browser:edit.toastInplace", { verdict: t("browser:edit.verdictStructure") }),
           desc: t("browser:edit.toastInplaceDesc") });
         setOps([]);
         setPlannedEdit(null);

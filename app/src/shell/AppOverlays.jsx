@@ -65,7 +65,6 @@ export function AppOverlays({
           meta={migration.meta}
           scope={migration.scope}
           env={migration.env}
-          defaultProbe={migration.defaultProbe}
           terminalApp={migration.terminalApp}
           onClose={migration.onClose}
           onDone={migration.onDone}

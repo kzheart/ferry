@@ -62,7 +62,6 @@ pub(super) fn resolve_tool_request(
             if let Some(max_turn) = args.get("max_turn") {
                 input.insert("max_turn".to_owned(), max_turn.clone());
             }
-            input.insert("probe".to_owned(), Value::Bool(false));
             ToolRequestRoute {
                 method: "operation.plan",
                 params: json!({"input": Value::Object(input)}),
@@ -82,7 +81,6 @@ pub(super) fn resolve_tool_request(
                         "tool": args.get("tool")?,
                         "ref": args.get("ref")?,
                         "ops": args.get("ops")?,
-                        "probe": false,
                     }}),
                     requires_approval: execute,
                 }
@@ -164,7 +162,6 @@ mod tests {
                 "ref": "fsr_a",
                 "target_tool": "codex",
                 "max_turn": 3,
-                "probe": false,
             }})
         );
 
@@ -200,7 +197,6 @@ mod tests {
                 "tool": "claude",
                 "ref": "fsr_a",
                 "ops": [{"op": "delete-turn", "turn": 1}],
-                "probe": false,
             }})
         );
 

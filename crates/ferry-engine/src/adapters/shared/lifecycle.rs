@@ -50,11 +50,6 @@ pub trait BaseLifecycle: Send + Sync {
         Ok(dest.to_string_lossy().into_owned())
     }
 
-    /// 探针是否需要工作目录；默认需要。
-    fn probe_cwd(&self, cwd: Option<&str>) -> Option<String> {
-        cwd.map(str::to_string)
-    }
-
     /// 永久删除会话；默认不支持。
     fn delete(
         &self,
@@ -148,10 +143,6 @@ impl<T: BaseLifecycle> crate::adapters::contracts::SessionLifecycle for T {
 
     fn validation_ref(&self, session_id: &str, dest: &Path) -> DomainResult<String> {
         BaseLifecycle::validation_ref(self, session_id, dest)
-    }
-
-    fn probe_cwd(&self, cwd: Option<&str>) -> Option<String> {
-        BaseLifecycle::probe_cwd(self, cwd)
     }
 
     fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
@@ -289,12 +280,6 @@ mod tests {
             descriptor["display_command"],
             Value::from("cd '/work dir' && /usr/local/bin/claude --resume 's 1'")
         );
-    }
-
-    #[test]
-    fn probe_cwd_passes_the_directory_through() {
-        assert_eq!(Probe.probe_cwd(Some("/a")), Some("/a".to_string()));
-        assert_eq!(Probe.probe_cwd(None), None);
     }
 
     #[test]

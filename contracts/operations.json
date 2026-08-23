@@ -31,16 +31,13 @@
     "edit": {
       "tool": "agent-id",
       "ref": "session-ref",
-      "ops": "edit-operation[]",
-      "probe": "boolean?"
+      "ops": "edit-operation[]"
     },
     "migration": {
       "source_tool": "agent-id",
       "ref": "session-ref",
       "target_tool": "agent-id",
-      "max_turn": "positive-integer?",
-      "probe": "boolean?",
-      "probe_model": "string?"
+      "max_turn": "positive-integer?"
     },
     "metadata": {
       "tool": "agent-id",

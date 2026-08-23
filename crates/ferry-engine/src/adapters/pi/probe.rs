@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use crate::adapters::contracts::{SessionEditor, SessionVerifier};
-use crate::adapters::shared::editing::EditDocument;
+use crate::adapters::contracts::SessionVerifier;
 use crate::adapters::shared::scanner::split_jsonl_lines;
 use crate::errors::{DomainError, DomainResult};
 use crate::system::executables;
@@ -246,50 +245,9 @@ fn run_prompt_path(
     Ok(payload)
 }
 
-/// 影子会话：把目标文件拷进临时目录再探，绝不动用户的原文件。
-fn probe_shadow(path: &Path, cwd: Option<&str>) -> DomainResult<ProbeReport> {
-    let directory = tempfile::tempdir()
-        .map_err(|error| DomainError::internal(format!("Pi 影子会话目录失败: {error}")))?;
-    let name = path
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("session.jsonl"));
-    let shadow = directory.path().join(name);
-    fs::copy(path, &shadow)
-        .map_err(|error| DomainError::internal(format!("Pi 影子会话复制失败: {error}")))?;
-    // Python 的 `report["isolation"] = {..., "id": str(shadow)}`：id 是影子**路径**。
-    let shadow_id = shadow.to_string_lossy().into_owned();
-    probe_path(&shadow_id, cwd)
-        .map(|report| report.with_isolation("shadow_session", &shadow_id, true))
-}
-
 pub struct PiVerifier;
 
 impl SessionVerifier for PiVerifier {
-    fn probe(
-        &self,
-        session_id: &str,
-        cwd: Option<&str>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        probe_shadow(&super::adapter::resolve(session_id)?, cwd)
-    }
-
-    fn probe_edited(
-        &self,
-        _editor: &dyn SessionEditor,
-        doc: &EditDocument,
-        result: &Map<String, Value>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        let saved_as = result
-            .get("saved_as")
-            .and_then(Value::as_str)
-            .ok_or_else(|| DomainError::internal("Pi 编辑结果缺少 saved_as"))?;
-        let cwd = super::editor::document_cwd(doc);
-        probe_shadow(Path::new(saved_as), cwd.as_deref())
-    }
-
     fn prompt_session(
         &self,
         session_id: &str,

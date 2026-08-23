@@ -118,7 +118,6 @@ export function AppOverlayController({ t }) {
         meta: migration.current,
         scope: migration.state?.scope,
         env: migration.env,
-        defaultProbe: Boolean(migration.settings.runtimeProbe),
         terminalApp: migration.settings.terminalApp,
         onClose: () => migration.setState(null),
         onDone: migration.loadHistory,

@@ -320,7 +320,6 @@ mod tests {
                 "migration-source",
                 "migration-target",
                 "delete",
-                "probe",
                 "prompt",
                 "models"
             ]

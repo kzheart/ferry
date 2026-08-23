@@ -30,7 +30,6 @@ use ferry_engine::operations::types::{
     Resolver, SessionResolver,
 };
 use ferry_engine::storage::database::{Clock, StateDatabase};
-use ferry_engine::system::probes::{Diagnostic, ProbeReport};
 
 // ---------------------------------------------------------------------------
 // 假件
@@ -62,7 +61,6 @@ struct EditorState {
     last_ops: Mutex<Vec<Value>>,
     replies: Mutex<Vec<Value>>,
     restored: Mutex<Vec<String>>,
-    probe_status: Mutex<String>,
 }
 
 struct FakeEditor {
@@ -168,44 +166,9 @@ impl SessionEditor for FakeEditor {
     }
 }
 
-struct FakeVerifier {
-    state: Arc<EditorState>,
-}
-
-fn report(status: &str) -> ProbeReport {
-    ProbeReport {
-        status: status.to_string(),
-        code: None,
-        params: Map::new(),
-        diagnostic: Diagnostic {
-            stdout: String::new(),
-            stderr: String::new(),
-            truncated: false,
-        },
-        isolation: None,
-    }
-}
+struct FakeVerifier;
 
 impl SessionVerifier for FakeVerifier {
-    fn probe(
-        &self,
-        _session_id: &str,
-        _cwd: Option<&str>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        Ok(report(&self.state.probe_status.lock().unwrap().clone()))
-    }
-
-    fn probe_edited(
-        &self,
-        _editor: &dyn SessionEditor,
-        _doc: &EditDocument,
-        _result: &Map<String, Value>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        Ok(report(&self.state.probe_status.lock().unwrap().clone()))
-    }
-
     fn prompt_session(
         &self,
         _session_id: &str,
@@ -239,10 +202,6 @@ impl SessionLifecycle for FakeLifecycle {
 
     fn validation_ref(&self, session_id: &str, _dest: &Path) -> DomainResult<String> {
         Ok(session_id.to_string())
-    }
-
-    fn probe_cwd(&self, cwd: Option<&str>) -> Option<String> {
-        cwd.map(str::to_string)
     }
 
     fn delete(&self, _adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
@@ -305,12 +264,10 @@ fn manifest(edit_operations: &[&str]) -> AgentManifest {
         icon: "claude".into(),
         source_path: "~/.claude/projects".into(),
         // 顺序必须是 AGENT_CAPABILITIES 的有序子集。
-        capabilities: [
-            "browse", "resume", "edit", "delete", "probe", "prompt", "models",
-        ]
-        .iter()
-        .map(|value| (*value).to_string())
-        .collect(),
+        capabilities: ["browse", "resume", "edit", "delete", "prompt", "models"]
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect(),
         edit_operations: edit_operations
             .iter()
             .map(|value| (*value).to_string())
@@ -435,7 +392,6 @@ impl Harness {
         let state_dir = dir.path().to_path_buf();
         let editor_state = Arc::new(EditorState {
             revision: Mutex::new("revision-1".into()),
-            probe_status: Mutex::new("passed".into()),
             ..EditorState::default()
         });
         let lifecycle_state = Arc::new(LifecycleState::default());
@@ -445,9 +401,7 @@ impl Harness {
                 operations: edit_operations.to_vec(),
                 state: Arc::clone(&editor_state),
             }))
-            .verifier(Arc::new(FakeVerifier {
-                state: Arc::clone(&editor_state),
-            }))
+            .verifier(Arc::new(FakeVerifier))
             .lifecycle(Arc::new(FakeLifecycle {
                 state: Arc::clone(&lifecycle_state),
             }))
@@ -495,13 +449,12 @@ impl Harness {
     }
 }
 
-fn edit_plan(ops: Value, probe: bool) -> Value {
+fn edit_plan(ops: Value) -> Value {
     json!({
         "kind": "edit",
         "tool": "claude",
         "ref": "fsr_abcdefgh",
         "ops": ops,
-        "probe": probe,
     })
 }
 
@@ -543,7 +496,7 @@ fn audit_events(service: &OperationService, plan_id: &Value) -> Vec<String> {
 fn plan_freezes_input_and_apply_only_uses_plan_id() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
 
     assert_eq!(plan["status"], json!("planned"));
     assert_eq!(plan["base_revision"], json!("index-revision-1"));
@@ -573,13 +526,10 @@ fn audit_sequence_is_planned_queued_applying_applied() {
     let service = harness.service();
     let secret = "Bearer operation-audit-secret";
     let plan = service
-        .plan(&edit_plan(
-            json!([{
-                "op": "replace-assistant-reply", "turn": 1,
-                "reply": {"items": [{"kind": "text", "text": secret}]},
-            }]),
-            false,
-        ))
+        .plan(&edit_plan(json!([{
+            "op": "replace-assistant-reply", "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": secret}]},
+        }])))
         .unwrap();
     apply_and_wait(&service, &plan["plan_id"]).unwrap();
 
@@ -603,7 +553,7 @@ fn audit_sequence_is_planned_queued_applying_applied() {
 fn plan_can_only_be_applied_once() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
 
     apply_and_wait(&service, &plan["plan_id"]).unwrap();
     let error = service.apply(&plan["plan_id"]).unwrap_err();
@@ -616,7 +566,7 @@ fn plan_can_only_be_applied_once() {
 fn cancelled_plan_never_writes() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
 
     let cancelled = service.cancel(&plan["plan_id"]).unwrap();
     assert_eq!(cancelled["status"], json!("cancelled"));
@@ -638,7 +588,7 @@ fn cancelled_plan_never_writes() {
 fn expired_plan_cannot_be_applied() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
 
     harness.clock.advance(10 * 60 * 1000 + 1);
 
@@ -660,7 +610,7 @@ fn restart_marks_interrupted_apply_failed() {
     let harness = Harness::new();
     let plan = {
         let service = harness.service();
-        service.plan(&edit_plan(default_ops(), false)).unwrap()
+        service.plan(&edit_plan(default_ops())).unwrap()
     };
     // 模拟「引擎在 applying 中途被杀」。
     assert!(harness
@@ -680,7 +630,7 @@ fn restart_marks_interrupted_apply_failed() {
 fn metadata_paths_never_trigger_crash_recovery() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
     assert!(harness
         .database()
         .operations
@@ -751,7 +701,7 @@ fn metadata_plan_rejects_concurrent_metadata_change() {
 fn apply_rejects_changed_index_revision() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
     *harness.index_state.revision.lock().unwrap() = "index-revision-2".into();
 
     let error = apply_and_wait(&service, &plan["plan_id"]).unwrap_err();
@@ -787,7 +737,7 @@ fn apply_rejects_changed_index_revision() {
 fn apply_rejects_changed_document_revision() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
     *harness.editor.revision.lock().unwrap() = "revision-2".into();
 
     let error = apply_and_wait(&service, &plan["plan_id"]).unwrap_err();
@@ -806,7 +756,7 @@ fn apply_rejects_changed_document_revision() {
 fn commit_failure_restores_snapshot_and_marks_plan_failed() {
     let harness = Harness::new();
     let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
     harness.editor.fail_commit.store(true, Ordering::SeqCst);
 
     let error = apply_and_wait(&service, &plan["plan_id"]).unwrap_err();
@@ -822,49 +772,14 @@ fn commit_failure_restores_snapshot_and_marks_plan_failed() {
 }
 
 #[test]
-fn failed_probe_restores_the_snapshot_but_keeps_the_operation_applied() {
-    let harness = Harness::new();
-    *harness.editor.probe_status.lock().unwrap() = "failed".into();
-    let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), true)).unwrap();
-
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-
-    assert_eq!(applied["status"], json!("applied"));
-    assert_eq!(applied["result"]["ok"], json!(false));
-    assert_eq!(
-        applied["result"]["error"],
-        json!("隔离探针未通过,已自动还原快照")
-    );
-    assert_eq!(applied["result"]["probe"]["status"], json!("failed"));
-    assert_eq!(
-        harness.editor.restored.lock().unwrap().clone(),
-        ["snapshot-before-agent-edit"]
-    );
-}
-
-#[test]
-fn probe_setting_is_frozen_in_the_plan() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let plan = service.plan(&edit_plan(default_ops(), true)).unwrap();
-    // 计划落盘的是 probe=true；执行期不会再看请求里的值。
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    assert_eq!(applied["result"]["probe"]["status"], json!("passed"));
-}
-
-#[test]
 fn replace_reply_requires_the_editor_operation() {
     let harness = Harness::with_edit_operations(&["delete-turn", "rewrite"]);
     let service = harness.service();
     let error = service
-        .plan(&edit_plan(
-            json!([{
-                "op": "replace-assistant-reply", "turn": 1,
-                "reply": {"items": [{"kind": "text", "text": "x"}]},
-            }]),
-            false,
-        ))
+        .plan(&edit_plan(json!([{
+            "op": "replace-assistant-reply", "turn": 1,
+            "reply": {"items": [{"kind": "text", "text": "x"}]},
+        }])))
         .unwrap_err();
     assert_eq!(error.error_type(), "OperationUnsupportedError");
     assert_eq!(harness.commits(), 0);
@@ -1003,7 +918,7 @@ fn plan_ids_are_unique_and_prefixed() {
     let service = harness.service();
     let mut seen: HashMap<String, ()> = HashMap::new();
     for _ in 0..8 {
-        let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+        let plan = service.plan(&edit_plan(default_ops())).unwrap();
         let plan_id = plan["plan_id"].as_str().unwrap().to_string();
         assert!(plan_id.starts_with("op_"), "{plan_id}");
         assert_eq!(plan_id.len(), 3 + 24);
@@ -1015,7 +930,7 @@ fn plan_ids_are_unique_and_prefixed() {
 fn concurrent_apply_only_commits_once() {
     let harness = Harness::new();
     let service = Arc::new(harness.service());
-    let plan = service.plan(&edit_plan(default_ops(), false)).unwrap();
+    let plan = service.plan(&edit_plan(default_ops())).unwrap();
     let plan_id = plan["plan_id"].clone();
 
     let handles: Vec<_> = (0..2)
@@ -1049,7 +964,7 @@ fn plan_survives_service_restart() {
     let harness = Harness::new();
     let plan = {
         let service = harness.service();
-        service.plan(&edit_plan(default_ops(), false)).unwrap()
+        service.plan(&edit_plan(default_ops())).unwrap()
     };
 
     let service = harness.service();

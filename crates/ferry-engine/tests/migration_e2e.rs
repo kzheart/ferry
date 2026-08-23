@@ -355,8 +355,6 @@ fn migration_input(source: &str, reference: &str, target: &str) -> Value {
         "source_tool": source,
         "ref": reference,
         "target_tool": target,
-        // 探针会真的拉起目标 CLI，沙箱里既不该也不能跑；结构验收才是本测试的断言面。
-        "probe": false,
     })
 }
 
@@ -440,9 +438,9 @@ fn migration_plans_and_applies_across_three_target_agents() {
             json!(true),
             "{source_tool}→{target} 结构验收失败: {result}"
         );
-        // probe=false → runtime 恒为 skipped，且不出 probe 报告。
-        assert_eq!(result["validation"]["runtime"]["status"], json!("skipped"));
-        assert!(result.get("probe").is_none(), "probe=false 不该产出报告");
+        assert!(result["validation"].get("runtime").is_none());
+        assert!(result.get("probe").is_none());
+        assert!(result.get("probe_model").is_none());
         assert!(!result["rolled_back"].as_bool().unwrap_or(false));
 
         let session_id = result["session_id"].as_str().expect("session_id 是字符串");

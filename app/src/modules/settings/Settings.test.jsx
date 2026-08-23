@@ -37,8 +37,7 @@ const updater = {
 };
 
 const settings = {
-  theme: "system", locale: null, runtimeProbe: false, terminalApp: "auto",
-  autoCheckUpdates: true,
+  theme: "system", locale: null, terminalApp: "auto", autoCheckUpdates: true,
 };
 
 beforeEach(() => {

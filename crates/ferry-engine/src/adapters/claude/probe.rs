@@ -1,25 +1,13 @@
-//! Claude 会话验收探针：真实探测与编辑后的影子副本探测。
-//!
-//! `probe_edited` 在报告顶层追加 `isolation`（`ProbeReport::isolation`），与
-//! Python 的 `rep["isolation"] = {...}` 及前端 `events.js::probeText` 读的
-//! `p.isolation` 对齐。
+//! Claude 会话提问实现。
 
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use crate::adapters::contracts::{SessionEditor, SessionVerifier};
-use crate::adapters::shared::editing::EditDocument;
+use crate::adapters::contracts::SessionVerifier;
 use crate::errors::{DomainError, DomainResult};
-use crate::system::probes::{self, AgentProcessResult, ProbeReport, PROBE_PROMPT};
-use crate::system::{executables, probes::response_matches};
-
-use super::editing as claude_edit;
-use super::editing::uuid4;
-
-/// `probes.run` 的默认超时（Python 侧 `timeout=180`）。
-const PROBE_TIMEOUT: Duration = Duration::from_secs(180);
+use crate::system::executables;
+use crate::system::probes::{self, AgentProcessResult, ProbeReport};
 
 fn params_for(exit_code: Option<i32>) -> Map<String, Value> {
     let mut params = Map::new();
@@ -157,173 +145,9 @@ fn truthy(value: Option<&Value>) -> bool {
     }
 }
 
-fn probe(session_id: &str, cwd: Option<&str>, model: Option<&str>) -> DomainResult<ProbeReport> {
-    let cwd = cwd
-        .filter(|cwd| !cwd.is_empty())
-        .ok_or_else(|| DomainError::internal("claude 探针必须提供 --dir(项目目录)"))?;
-    let mut command = executables::argv(
-        "claude",
-        &[
-            "-p",
-            PROBE_PROMPT,
-            "--resume",
-            session_id,
-            "--output-format",
-            "json",
-        ],
-    );
-    if let Some(model) = model.filter(|model| !model.is_empty()) {
-        command.push("--model".to_string());
-        command.push(model.to_string());
-    }
-    let result = probes::run(&command, Some(Path::new(cwd)), PROBE_TIMEOUT, None)
-        .map_err(|timeout| DomainError::probe_timeout(timeout.message))?;
-    Ok(classify(&result.stdout, &result.stderr, result.returncode))
-}
-
-/// 把一次 CLI 调用的输出折成探针报告（与进程调用解耦，便于单测）。
-fn classify(stdout: &str, stderr: &str, returncode: Option<i32>) -> ProbeReport {
-    let raw = stdout.trim();
-    let error = stderr.trim();
-    if returncode != Some(0) && raw.is_empty() {
-        return probes::report(
-            "failed",
-            Some("probe.process_failed"),
-            Some(params_for(returncode)),
-            "",
-            error,
-        );
-    }
-    let output = if raw.is_empty() {
-        Some(Value::Object(Map::new()))
-    } else {
-        serde_json::from_str::<Value>(raw).ok()
-    };
-    let Some(output) = output else {
-        return probes::report(
-            "failed",
-            Some("probe.non_json_output"),
-            Some(params_for(returncode)),
-            raw,
-            error,
-        );
-    };
-    if truthy(output.get("is_error")) || returncode != Some(0) {
-        let mut params = params_for(returncode);
-        for key in [
-            "terminal_reason",
-            "stop_reason",
-            "api_error_status",
-            "session_id",
-        ] {
-            if let Some(value) = output.get(key).filter(|value| !value.is_null()) {
-                params.insert(key.to_string(), value.clone());
-            }
-        }
-        return probes::report(
-            "failed",
-            Some("probe.process_failed"),
-            Some(params),
-            raw,
-            error,
-        );
-    }
-    let reply = match output.get("result") {
-        Some(Value::String(text)) => text.clone(),
-        Some(other) => crate::adapters::shared::dialect::python_str(other),
-        None => String::new(),
-    };
-    if !response_matches(Some(&reply)) {
-        let mut params = Map::new();
-        params.insert("tool".into(), Value::from("claude"));
-        return probes::report(
-            "failed",
-            Some("probe.unexpected_response"),
-            Some(params),
-            &reply,
-            error,
-        );
-    }
-    probes::report("passed", None, None, &reply, "")
-}
-
-/// 递归复制 sidecar 目录（等价 `shutil.copytree(dirs_exist_ok=True)`）。
-fn copy_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(destination)?;
-    for entry in std::fs::read_dir(source)? {
-        let entry = entry?;
-        let target = destination.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_tree(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
-/// 把编辑结果复制成一个新 sessionId 的影子会话，探完即删。
-fn probe_edited_session(
-    result: &Map<String, Value>,
-    model: Option<&str>,
-) -> DomainResult<ProbeReport> {
-    let saved_as = result
-        .get("saved_as")
-        .and_then(Value::as_str)
-        .ok_or_else(|| DomainError::internal("claude 编辑结果缺少 saved_as"))?;
-    let path = PathBuf::from(saved_as);
-    let mut records = claude_edit::load(&path)?;
-    let cwd = records
-        .iter()
-        .filter_map(|record| record.get("cwd").and_then(Value::as_str))
-        .find(|cwd| !cwd.is_empty())
-        .unwrap_or(".")
-        .to_string();
-    let shadow_id = uuid4();
-    for record in &mut records {
-        if let Some(entries) = record.as_object_mut() {
-            if entries.contains_key("sessionId") {
-                entries.insert("sessionId".into(), Value::from(shadow_id.as_str()));
-            }
-        }
-    }
-    let shadow = path.with_file_name(format!("{shadow_id}.jsonl"));
-    claude_edit::save(&shadow, &records)?;
-    let sidecar = path.with_extension("");
-    let shadow_sidecar = shadow.with_extension("");
-    if sidecar.is_dir() {
-        copy_tree(&sidecar, &shadow_sidecar).map_err(|error| {
-            DomainError::internal(format!("claude 影子 sidecar 复制失败: {error}"))
-        })?;
-    }
-    let outcome = probe(&shadow_id, Some(&cwd), model);
-    let _ = std::fs::remove_file(&shadow);
-    let _ = std::fs::remove_dir_all(&shadow_sidecar);
-    outcome.map(|report| report.with_isolation("shadow_session", &shadow_id, true))
-}
-
 pub struct ClaudeVerifier;
 
 impl SessionVerifier for ClaudeVerifier {
-    fn probe(
-        &self,
-        session_id: &str,
-        cwd: Option<&str>,
-        model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        probe(session_id, cwd, model)
-    }
-
-    fn probe_edited(
-        &self,
-        _editor: &dyn SessionEditor,
-        _doc: &EditDocument,
-        result: &Map<String, Value>,
-        model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        probe_edited_session(result, model)
-    }
-
     fn prompt_session(
         &self,
         session_id: &str,
@@ -339,95 +163,9 @@ impl SessionVerifier for ClaudeVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn probe_token_round_trip_passes() {
-        let report = classify("{\"result\": \"PROBE_OK\"}", "", Some(0));
-        assert_eq!(report.status, "passed");
-        assert_eq!(report.code, None);
-        assert_eq!(report.diagnostic.stdout, "PROBE_OK");
-    }
-
-    #[test]
-    fn non_zero_exit_without_output_is_a_process_failure() {
-        let report = classify("", "boom", Some(2));
-        assert_eq!(report.status, "failed");
-        assert_eq!(report.code.as_deref(), Some("probe.process_failed"));
-        assert_eq!(report.params["exit_code"], json!(2));
-        assert_eq!(report.params["tool"], json!("claude"));
-        assert_eq!(report.diagnostic.stderr, "boom");
-    }
-
-    #[test]
-    fn non_json_output_is_reported_separately() {
-        let report = classify("not json", "", Some(0));
-        assert_eq!(report.code.as_deref(), Some("probe.non_json_output"));
-        assert_eq!(report.diagnostic.stdout, "not json");
-    }
-
-    #[test]
-    fn is_error_payloads_carry_the_agent_reason_fields() {
-        let report = classify(
-            "{\"is_error\": true, \"stop_reason\": \"refusal\", \"session_id\": \"s1\"}",
-            "",
-            Some(0),
-        );
-        assert_eq!(report.code.as_deref(), Some("probe.process_failed"));
-        assert_eq!(report.params["stop_reason"], json!("refusal"));
-        assert_eq!(report.params["session_id"], json!("s1"));
-        assert!(!report.params.contains_key("terminal_reason"));
-    }
-
-    #[test]
-    fn unexpected_replies_fail_without_an_exit_code_param() {
-        let report = classify("{\"result\": \"hello\"}", "warn", Some(0));
-        assert_eq!(report.code.as_deref(), Some("probe.unexpected_response"));
-        assert_eq!(
-            report.params,
-            json!({"tool": "claude"}).as_object().cloned().unwrap()
-        );
-        assert_eq!(report.diagnostic.stdout, "hello");
-        assert_eq!(report.diagnostic.stderr, "warn");
-    }
 
     #[test]
     fn missing_working_directory_is_rejected() {
-        assert!(probe("sid", None, None).is_err());
-        assert!(probe("sid", Some(""), None).is_err());
         assert!(prompt_session("sid", None, "hi", None, 30).is_err());
-    }
-
-    #[test]
-    fn shadow_probe_cleans_up_its_copies() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("real.jsonl");
-        std::fs::write(
-            &path,
-            "{\"sessionId\": \"real\", \"cwd\": \"/ferry-no-such-cwd\", \"type\": \"user\"}\n",
-        )
-        .unwrap();
-        let sidecar = root.path().join("real/subagents");
-        std::fs::create_dir_all(&sidecar).unwrap();
-        std::fs::write(sidecar.join("agent-a.jsonl"), "{}\n").unwrap();
-
-        let mut result = Map::new();
-        result.insert(
-            "saved_as".into(),
-            Value::from(path.to_string_lossy().into_owned()),
-        );
-        // claude CLI 不存在 -> 探针以 process_failed 收场，但清理必须发生。
-        let _ = probe_edited_session(&result, None);
-        let leftovers: Vec<String> = std::fs::read_dir(root.path())
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        assert_eq!(
-            leftovers.len(),
-            2,
-            "只应留下原会话与其 sidecar: {leftovers:?}"
-        );
-        assert!(leftovers.contains(&"real.jsonl".to_string()));
-        assert!(leftovers.contains(&"real".to_string()));
     }
 }

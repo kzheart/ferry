@@ -11,14 +11,6 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-pub const PROBE_TOKEN: &str = "PROBE_OK";
-
-/// 探针提示词；文案逐字保留（各 adapter 的验收断言依赖它）。
-pub const PROBE_PROMPT: &str = concat!(
-    "Runtime validation only. Do not explain, use tools, or add formatting. ",
-    "Your entire response must be exactly this single token: PROBE_OK"
-);
-
 /// diagnostic 截断上限（按**字符**计，与 Python 的字符串切片一致）。
 const DIAG_LIMIT: usize = 8000;
 /// agent 输出截断上限（按字符计）。
@@ -62,32 +54,13 @@ pub struct Diagnostic {
     pub truncated: bool,
 }
 
-/// 结构化探针报告；序列化形状与 Python 的 dict 逐字段一致。
-///
-/// `isolation` 是 Python 侧 `probe_edited` / `_isolated_probe` 往报告 dict 上
-/// **顶层**追加的扩展键（`rep["isolation"] = {...}`），前端
-/// `app/src/shared/contracts/events.js::probeText` 读的就是 `p.isolation`——
-/// 它是 wire 面的一部分，不能降级成 `params` 里的子键。未做隔离时整个键不出现。
+/// 结构化验收报告。
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProbeReport {
     pub status: String,
     pub code: Option<String>,
     pub params: Map<String, Value>,
     pub diagnostic: Diagnostic,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub isolation: Option<Map<String, Value>>,
-}
-
-impl ProbeReport {
-    /// 追加 `isolation` 描述（链式，便于 `probe_edited` 的 `rep["isolation"] = ...`）。
-    pub fn with_isolation(mut self, kind: &str, id: &str, cleaned: bool) -> Self {
-        let mut isolation = Map::new();
-        isolation.insert("kind".into(), Value::from(kind));
-        isolation.insert("id".into(), Value::from(id));
-        isolation.insert("cleaned".into(), Value::Bool(cleaned));
-        self.isolation = Some(isolation);
-        self
-    }
 }
 
 fn truncate_chars(text: &str, limit: usize) -> (String, bool) {
@@ -115,7 +88,6 @@ pub fn report(
             stderr: clipped_stderr,
             truncated: stdout_truncated || stderr_truncated,
         },
-        isolation: None,
     }
 }
 
@@ -135,11 +107,6 @@ pub fn timeout_report(tool: &str, error: &ProbeTimeout) -> ProbeReport {
 /// 截断 agent 文本并回报是否发生截断。
 pub fn normalize_agent_text(value: Option<&str>) -> (String, bool) {
     truncate_chars(value.unwrap_or(""), AGENT_TEXT_LIMIT)
-}
-
-/// A resumed agent passes only when it returns the probe token exactly.
-pub fn response_matches(stdout: Option<&str>) -> bool {
-    stdout.unwrap_or("").trim() == PROBE_TOKEN
 }
 
 /// Windows 下抑制子进程闪现控制台窗口。
@@ -350,14 +317,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn probe_prompt_embeds_the_token_verbatim() {
-        assert!(PROBE_PROMPT.ends_with(PROBE_TOKEN));
-        assert!(response_matches(Some("  PROBE_OK\n")));
-        assert!(!response_matches(Some("PROBE_OK extra")));
-        assert!(!response_matches(None));
-    }
-
-    #[test]
     fn diagnostics_truncate_by_characters() {
         let long = "中".repeat(DIAG_LIMIT + 5);
         let payload = report("failed", None, None, &long, "");
@@ -396,7 +355,7 @@ mod tests {
     #[test]
     fn agent_command_captures_stdout() {
         let result = run_agent_command(
-            &["/bin/echo".to_string(), "PROBE_OK".to_string()],
+            &["/bin/echo".to_string(), "hello".to_string()],
             None,
             None,
             10,
@@ -404,6 +363,6 @@ mod tests {
         )
         .unwrap();
         assert!(!result.timed_out);
-        assert!(response_matches(Some(&result.stdout)));
+        assert_eq!(result.stdout.trim(), "hello");
     }
 }

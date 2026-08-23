@@ -1,7 +1,7 @@
 // 迁移向导:目标 → 损耗影响 → 目标会话预览 → 确认 → 写入 → 结果
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { engine, openTerminal } from "../../platform/desktop/client.js";
+import { openTerminal } from "../../platform/desktop/client.js";
 import { operations } from "../operations/public.js";
 import {
   TOOL_NAME,
@@ -11,11 +11,9 @@ import {
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
 import { sessionRef } from "../browser/public.js";
 import { CheckBadge, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
-import { CheckSquare, CmdRow, LossCols, Sheet } from "../../shared/ui/primitives.jsx";
-import { probeFailed, probeText } from "../../shared/contracts/events.js";
+import { CmdRow, LossCols, Sheet } from "../../shared/ui/primitives.jsx";
 import MigrationSessionPreview from "./MigrationSessionPreview.jsx";
 import StepsHeader from "./SheetSteps.jsx";
-import ProbeModelPicker from "./ProbeModelPicker.jsx";
 import TransferTargetStep from "./TransferTargetStep.jsx";
 import { canFallBackToResume } from "./resumeElsewhere.js";
 import {
@@ -27,7 +25,7 @@ import {
 const ORDER = ["target", "impact", "preview", "confirm", "result"];
 
 export default function MigrateSheet({
-  meta, scope, env, defaultProbe, terminalApp,
+  meta, scope, env, terminalApp,
   onClose, onDone, onResumeElsewhere,
 }) {
   const { t } = useTranslation();
@@ -35,37 +33,23 @@ export default function MigrateSheet({
     .filter(tool => tool !== meta.tool);
   const [step, setStep] = useState("target");
   const [target, setTarget] = useState(targets[0] || "");
-  const [probeOn, setProbeOn] = useState(
-    !!defaultProbe && supportsAgentCapability(targets[0], "probe"),
-  );
   const [planned, setPlanned] = useState(null);
   const [dryErr, setDryErr] = useState(null);
   const [dryBusy, setDryBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [wroteFirst, setWroteFirst] = useState(false);
-  const [modelCatalog, setModelCatalog] = useState({}); // { [tool]: catalog }
-  const [modelLoad, setModelLoad] = useState({});
-  const [modelErr, setModelErr] = useState({});
-  const [probeModel, setProbeModel] = useState({});     // { [tool]: id }
-  const [probeCustom, setProbeCustom] = useState({});   // { [tool]: free text }
-  const canProbeTarget = supportsAgentCapability(target, "probe");
   const doneRef = useRef(false);
   const plannedRef = useRef(null);
   const planRequest = useRef(0);
   const ref = sessionRef(meta);
 
   const scopeLabel = scope ? t("migration:target.scopeToTurn", { n: scope }) : t("migration:target.scopeFull");
-  const resolvedProbeModel = (probeCustom[target] || "").trim()
-    || (probeModel[target] || "").trim()
-    || undefined;
   const inputFor = (tgt = target) => migrationPlanInput({
     sourceTool: meta.tool,
     ref,
     targetTool: tgt,
     maxTurn: scope || undefined,
-    probe: probeOn,
-    probeModel: tgt === target ? resolvedProbeModel : undefined,
   });
   const currentInput = inputFor();
   const currentPlan = matchingMigrationPlan(planned, currentInput);
@@ -123,28 +107,10 @@ export default function MigrateSheet({
     }
   };
 
-  const loadModels = async tgt => {
-    if (!supportsAgentCapability(tgt, "models")) return;
-    if (modelCatalog[tgt] || modelLoad[tgt]) return;
-    setModelLoad(prev => ({ ...prev, [tgt]: true }));
-    setModelErr(prev => ({ ...prev, [tgt]: null }));
-    try {
-      const r = await engine("models", { tool: tgt });
-      setModelCatalog(prev => ({ ...prev, [tgt]: r }));
-    } catch (e) {
-      setModelErr(prev => ({ ...prev, [tgt]: errorMessage(e) }));
-    }
-    setModelLoad(prev => ({ ...prev, [tgt]: false }));
-  };
-
-  useEffect(() => {
-    if (step === "confirm") loadModels(target);
-  }, [step, target]);
-
   const next = () => {
     if (step === "target") { if (!currentPlan) loadDry(target); setStep("impact"); }
     else if (step === "impact") setStep("preview");
-    else if (step === "preview") { loadModels(target); setStep("confirm"); }
+    else if (step === "preview") setStep("confirm");
     else if (step === "confirm") execute();
   };
   const back = () => {
@@ -166,16 +132,14 @@ export default function MigrateSheet({
     if (!doneRef.current) { doneRef.current = true; onDone?.(); }
   };
 
-  const ok = result && !probeFailed(result.probe) && result.session_id;
+  const ok = result?.session_id;
   const fail = step === "result" && !ok;
   // 「已自动回滚」只对真的回滚过的结果成立:写入前被门禁/并发检查拦下时
   // 目标端根本没被碰过,再说回滚会误导用户去目标端找残留。
   const rolledBack = !!result
     && (result.rolled_back === true || result.validation?.structure?.ok === false);
-  const failTitleKey = rolledBack ? "failTitle"
-    : result ? "failProbeTitle" : "failAbortedTitle";
-  const failDescKey = rolledBack ? "failDesc"
-    : result ? "failProbeDesc" : "failAbortedDesc";
+  const failTitleKey = rolledBack ? "failTitle" : "failAbortedTitle";
+  const failDescKey = rolledBack ? "failDesc" : "failAbortedDesc";
   const installed = t => env?.[t]?.installed;
 
   let body = null;
@@ -186,10 +150,7 @@ export default function MigrateSheet({
         scopeLabel={scopeLabel}
         targets={targets}
         target={target}
-        onTarget={tool => {
-          setTarget(tool);
-          if (!supportsAgentCapability(tool, "probe")) setProbeOn(false);
-        }}
+        onTarget={setTarget}
         env={env}
       />
     );
@@ -241,9 +202,6 @@ export default function MigrateSheet({
             {[["target", TOOL_NAME[target], true],
               ["scope", d ? t("migration:confirm.scopeWithCount", { scope: scopeLabel, n: d.msg_count }) : scopeLabel],
               ["structureCheck", t("migration:confirm.structureAlways")],
-              ["runtimeProbe", probeOn
-                ? t("migration:confirm.probeOn", { model: resolvedProbeModel || t("migration:confirm.probeOff") })
-                : t("migration:confirm.probeOff")],
             ].map(([k, v, bold], i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 20 }}>
                 <span style={{ color: "var(--tx4)", flex: "none" }}>{t(`migration:confirm.${k}`)}</span>
@@ -252,37 +210,14 @@ export default function MigrateSheet({
             ))}
           </div>
         </div>
-        {canProbeTarget && <div style={{ border: "1px solid var(--line3)", borderRadius: 10, padding: "13px 15px",
-          marginTop: 12, display: "flex", alignItems: "flex-start", gap: 11 }}>
-          <label onClick={() => setProbeOn(v => !v)}
-            style={{ display: "flex", alignItems: "center", gap: 8, cursor: "default", flex: "none",
-              marginTop: 1 }}>
-            <CheckSquare on={probeOn} accent={ACCENT} fg="#fff" />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2)" }}>{t("migration:confirm.probeTitle")}</span>
-          </label>
-          <div style={{ fontSize: 11, color: "var(--tx3b)", lineHeight: 1.5 }}>
-            {t("migration:confirm.probeDesc")}</div>
-        </div>}
-        {canProbeTarget && probeOn && (
-          <ProbeModelPicker
-            catalog={modelCatalog[target]}
-            loading={!!modelLoad[target]}
-            err={modelErr[target]}
-            selected={probeModel[target] || ""}
-            custom={probeCustom[target] || ""}
-            onSelect={v => setProbeModel(prev => ({ ...prev, [target]: v }))}
-            onCustom={v => setProbeCustom(prev => ({ ...prev, [target]: v }))}
-            t={t}
-          />
-        )}
         <div style={{ fontSize: 12, color: "var(--tx3b)", margin: "14px 0 0", lineHeight: 1.55 }}>
-          {t("migration:confirm.epilogue", { probe: probeOn ? t("migration:confirm.probeEpilogue") : "" })}</div>
+          {t("migration:confirm.epilogue")}</div>
       </>
     );
   } else if (step === "writing") {
     const items = [
       { label: t("migration:writing.writeTarget", { tool: TOOL_NAME[target] }), state: wroteFirst ? "done" : "spin" },
-      { label: probeOn ? t("migration:writing.structureProbe") : t("migration:writing.structureOnly"),
+      { label: t("migration:writing.structureOnly"),
         state: wroteFirst ? "spin" : "wait" },
     ];
     body = (
@@ -310,8 +245,7 @@ export default function MigrateSheet({
                 strokeLinecap="round" strokeLinejoin="round" /></svg>
           </span>
           <div style={{ fontSize: 15, fontWeight: 600, marginTop: 12 }}>
-            {result.validation?.runtime?.status === "passed"
-              ? t("migration:result.doneBoth") : t("migration:result.doneStructure")}</div>
+            {t("migration:result.doneStructure")}</div>
           <div style={{ fontSize: 12, color: "var(--tx3b)", marginTop: 5 }}>
             {t("migration:result.doneDesc", { n: result.msg_count, tool: TOOL_NAME[target] })}</div>
         </div>
@@ -339,16 +273,13 @@ export default function MigrateSheet({
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--err-text)" }}>{t(`migration:result.${failTitleKey}`)}</div>
             <div style={{ fontSize: 12, color: "var(--err-mut)", marginTop: 5, lineHeight: 1.5 }}>
               {t(`migration:result.${failDescKey}`, { tool: TOOL_NAME[target] })}
-              {(result?.probe?.model || result?.probe_model) && (
-                <>{t("migration:result.failDescProbe", { model: result.probe?.model || result.probe_model })}</>
-              )}
             </div>
-            {(error || probeText(result?.probe)) && (
+            {error && (
               <pre className="mono selectable fscroll" style={{ margin: "10px 0 0", fontSize: 11,
                 color: "var(--err-pre)", whiteSpace: "pre-wrap", maxHeight: 280, overflow: "auto",
                 background: "var(--err-bg4)", border: "1px solid var(--err-line)", borderRadius: 8, padding: "10px 12px",
                 lineHeight: 1.5 }}>
-                {error || probeText(result.probe)}</pre>
+                {error}</pre>
             )}
           </div>
         </div>

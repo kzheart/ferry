@@ -58,15 +58,6 @@ fn all_chars_at_least(text: &str, floor: u32) -> bool {
     text.chars().all(|character| character as u32 >= floor)
 }
 
-/// 严格布尔：缺键取默认，存在但不是 bool（含显式 null）即非法。
-fn strict_bool(value: Option<&Value>, default: bool) -> Option<bool> {
-    match value {
-        None => Some(default),
-        Some(Value::Bool(flag)) => Some(*flag),
-        Some(_) => None,
-    }
-}
-
 /// 严格整数（bool 不是整数）。
 fn strict_int(value: &Value) -> Option<i64> {
     if value.is_boolean() {
@@ -83,7 +74,7 @@ pub fn validate_edit_input(value: &Value) -> EngineResult<Value> {
     let object = value
         .as_object()
         .ok_or_else(|| request_error("operation input 必须是 object"))?;
-    let allowed = ["kind", "tool", "ref", "ops", "probe"];
+    let allowed = ["kind", "tool", "ref", "ops"];
     let unknown = unknown_fields(object, &allowed);
     if !unknown.is_empty() {
         return Err(unknown_field_error("edit operation 包含未知字段", unknown).into());
@@ -98,11 +89,6 @@ pub fn validate_edit_input(value: &Value) -> EngineResult<Value> {
         .and_then(Value::as_str)
         .filter(|text| !text.is_empty())
         .ok_or_else(|| request_error("operation ref 非法"))?;
-    let probe = match object.get("probe") {
-        None => false,
-        Some(Value::Bool(flag)) => *flag,
-        Some(_) => return Err(request_error("operation probe 必须是布尔值").into()),
-    };
     let ops = validate_ops(object.get("ops").unwrap_or(&Value::Null))?;
     let ops = Value::Array(ops);
     if canonical_json(&ops)?.len() > 64 * 1024 {
@@ -113,7 +99,6 @@ pub fn validate_edit_input(value: &Value) -> EngineResult<Value> {
     result.insert("tool".into(), Value::from(tool));
     result.insert("ref".into(), Value::from(reference));
     result.insert("ops".into(), ops);
-    result.insert("probe".into(), Value::Bool(probe));
     canonicalized(&Value::Object(result))
 }
 
@@ -125,15 +110,7 @@ pub fn validate_migration_input(value: &Value, adapters: &[String]) -> EngineRes
     let object = value
         .as_object()
         .ok_or_else(|| request_error("operation input 必须是 object"))?;
-    let allowed = [
-        "kind",
-        "source_tool",
-        "ref",
-        "target_tool",
-        "max_turn",
-        "probe",
-        "probe_model",
-    ];
+    let allowed = ["kind", "source_tool", "ref", "target_tool", "max_turn"];
     let unknown = unknown_fields(object, &allowed);
     if !unknown.is_empty() {
         return Err(unknown_field_error("migration operation 包含未知字段", unknown).into());
@@ -152,8 +129,6 @@ pub fn validate_migration_input(value: &Value, adapters: &[String]) -> EngineRes
     let reference = bounded_string(object.get("ref"), 512)
         .filter(|text| all_chars_at_least(text, 33))
         .ok_or_else(|| request_error("migration ref 非法"))?;
-    let probe = strict_bool(object.get("probe"), false)
-        .ok_or_else(|| request_error("migration probe 必须是布尔值"))?;
     let max_turn = match object.get("max_turn") {
         None | Some(Value::Null) => None,
         Some(raw) => Some(
@@ -162,27 +137,13 @@ pub fn validate_migration_input(value: &Value, adapters: &[String]) -> EngineRes
                 .ok_or_else(|| request_error("migration max_turn 非法"))?,
         ),
     };
-    let probe_model = match object.get("probe_model") {
-        None | Some(Value::Null) => None,
-        Some(raw) => Some(
-            raw.as_str()
-                .filter(|text| (1..=512).contains(&text.chars().count()))
-                .filter(|text| all_chars_at_least(text, 32))
-                .ok_or_else(|| request_error("migration probe_model 非法"))?,
-        ),
-    };
-
     let mut result = Map::new();
     result.insert("kind".into(), Value::from("migration"));
     result.insert("source_tool".into(), Value::from(source_tool));
     result.insert("ref".into(), Value::from(reference));
     result.insert("target_tool".into(), Value::from(target_tool));
-    result.insert("probe".into(), Value::Bool(probe));
     if let Some(max_turn) = max_turn {
         result.insert("max_turn".into(), Value::from(max_turn));
-    }
-    if let Some(probe_model) = probe_model {
-        result.insert("probe_model".into(), Value::from(probe_model));
     }
     canonicalized(&Value::Object(result))
 }
@@ -385,10 +346,10 @@ mod tests {
             "ops": [{"op": "delete-turn", "turn": 1}],
         });
         let frozen = validate_edit_input(&value).unwrap();
-        // canonical 化后 key 有序，probe 补默认 false。
+        // canonical 化后 key 有序。
         assert_eq!(
             canonical_json(&frozen).unwrap(),
-            r#"{"kind":"edit","ops":[{"op":"delete-turn","turn":1}],"probe":false,"ref":"fsr_abcdefgh","tool":"claude"}"#
+            r#"{"kind":"edit","ops":[{"op":"delete-turn","turn":1}],"ref":"fsr_abcdefgh","tool":"claude"}"#
         );
     }
 
@@ -406,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn edit_input_rejects_non_boolean_probe_and_empty_identifiers() {
+    fn edit_input_rejects_empty_identifiers() {
         for (value, expected) in [
             (
                 json!({"kind": "edit", "tool": "", "ref": "r", "ops": []}),
@@ -415,10 +376,6 @@ mod tests {
             (
                 json!({"kind": "edit", "tool": "claude", "ref": "", "ops": []}),
                 "operation ref 非法",
-            ),
-            (
-                json!({"kind": "edit", "tool": "claude", "ref": "r", "ops": [], "probe": "yes"}),
-                "operation probe 必须是布尔值",
             ),
         ] {
             assert_eq!(validate_edit_input(&value).unwrap_err().message(), expected);
@@ -451,8 +408,6 @@ mod tests {
             (json!({"max_turn": true}), "migration max_turn 非法"),
             (json!({"max_turn": 0}), "migration max_turn 非法"),
             (json!({"max_turn": 1_000_001}), "migration max_turn 非法"),
-            (json!({"probe": "yes"}), "migration probe 必须是布尔值"),
-            (json!({"probe_model": ""}), "migration probe_model 非法"),
         ];
         for (patch, expected) in cases {
             let mut value = base.clone();
@@ -481,7 +436,35 @@ mod tests {
         .unwrap();
         assert!(frozen.get("max_turn").is_none());
         assert!(frozen.get("probe_model").is_none());
-        assert_eq!(frozen["probe"], json!(false));
+        assert!(frozen.get("probe").is_none());
+    }
+
+    #[test]
+    fn removed_probe_fields_are_rejected_as_unknown() {
+        let edit = json!({
+            "kind": "edit", "tool": "claude", "ref": "fsr_abcdefgh",
+            "ops": [{"op": "delete-turn", "turn": 1}], "probe": false,
+        });
+        assert_eq!(
+            validate_edit_input(&edit).unwrap_err().message(),
+            "edit operation 包含未知字段"
+        );
+
+        for field in [json!({"probe": false}), json!({"probe_model": "model"})] {
+            let mut migration = json!({
+                "kind": "migration", "source_tool": "claude",
+                "ref": "fsr_abcdefgh", "target_tool": "opencode",
+            });
+            for (key, value) in field.as_object().unwrap() {
+                migration[key] = value.clone();
+            }
+            assert_eq!(
+                validate_migration_input(&migration, &adapters())
+                    .unwrap_err()
+                    .message(),
+                "migration operation 包含未知字段"
+            );
+        }
     }
 
     #[test]

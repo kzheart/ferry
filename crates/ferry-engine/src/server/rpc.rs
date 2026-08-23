@@ -6,8 +6,8 @@
 //!    取不到回落 `"unknown"`；
 //! 2. 任何响应（含错误）必须带 string 型 `id`；
 //! 4. 错误信封 `{code, params(+message=str(err)[:500] setdefault), category,
-//!    retryable}`；`probe.timeout` 是幽灵码；未捕获异常一律 `internal.unexpected`
-//!    且不泄漏异常文本（除非 `FERRY_DEBUG`）；
+//!    retryable}`；未捕获异常一律 `internal.unexpected` 且不泄漏异常文本
+//!    （除非 `FERRY_DEBUG`）；
 //! 5. 分发层默认参数是 wire 语义的一部分；
 //! 6. 只有「分发层直接取参」的缺键才算 `rpc.missing_param`，深层缺键是内部缺陷；
 //! 9. 启动自检：方法表 == 生成契约的方法集合，不一致直接失败。
@@ -838,29 +838,6 @@ mod tests {
         assert_eq!(
             response["error"]["params"],
             json!({"tool": "nope", "message": "未知工具: nope"})
-        );
-    }
-
-    #[test]
-    fn probe_timeout_stays_a_ghost_code_on_the_wire() {
-        let service = Arc::new(Recorder {
-            failure: Some(DomainError::probe_timeout("探针超时: claude --version").into()),
-            ..Recorder::default()
-        });
-        let response = call(
-            &dispatcher(service),
-            "models",
-            json!({"tool": "claude"}),
-            "x",
-        );
-        assert_eq!(
-            response["error"],
-            json!({
-                "code": "probe.timeout",
-                "params": {"message": "探针超时: claude --version"},
-                "category": "internal",
-                "retryable": true,
-            })
         );
     }
 

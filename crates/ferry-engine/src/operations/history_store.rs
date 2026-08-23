@@ -139,6 +139,30 @@ mod tests {
     }
 
     #[test]
+    fn legacy_probe_fields_round_trip_without_schema_filtering() {
+        let (_dir, database) = database();
+        let legacy = json!({
+            "src": "claude",
+            "dst": "codex",
+            "probe_model": "legacy-model",
+            "probe": {"status": "passed"},
+            "validation": {
+                "structure": {"ok": true},
+                "runtime": {"status": "passed", "model": "legacy-model"}
+            }
+        });
+        database
+            .migration_history
+            .append("history_legacy", &legacy)
+            .unwrap();
+
+        let entries = database.migration_history.list_all().unwrap();
+        let mut expected = legacy;
+        expected["id"] = json!("history_legacy");
+        assert_eq!(entries, vec![expected]);
+    }
+
+    #[test]
     fn delete_reports_the_remaining_count_from_the_same_transaction() {
         let (_dir, database) = database();
         database

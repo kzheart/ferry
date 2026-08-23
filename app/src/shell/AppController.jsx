@@ -119,7 +119,6 @@ export default function App() {
   const cur = selId ? byKey[selId] : null;
   const editing = useSessionEditing({
     current: cur,
-    runtimeProbe: !!settings.runtimeProbe,
     doScan,
     onInplaceApplied: () => select(selId),
   });

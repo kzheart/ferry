@@ -2,7 +2,6 @@
 import { useTranslation } from "react-i18next";
 import { probeText } from "../../shared/contracts/events.js";
 import { TOOL_NAME } from "../../shared/contracts/tools.js";
-import { fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime } from "../browser/public.js";
 import { histStatus, STATUS_CODE } from "./migrationModel.js";
 import { ToolIcon, TrashIcon } from "../../shared/ui/icons.jsx";
@@ -35,16 +34,16 @@ export default function HistoryDetail({ h, onDelete }) {
   const ok = status === STATUS_CODE.success;
   const fail = status === STATUS_CODE.failed;
   const rolled = h.rolled_back;
-  // 探针未通过但结构验收通过:产物留在目标端,仍可接续
+  // 旧记录可能包含运行时探针失败；结构验收通过的产物当时会保留，继续兼容展示。
   const retained = fail && !rolled && !!h.session_id;
   const range = h.max_turn ? t("migration:history.rangeToTurn", { n: h.max_turn }) : t("migration:history.rangeFull");
   const probeDetail = probeText(h.probe);
-  const probeLines = h.probe
+  const verdictLines = h.probe
     ? (ok ? probeDetail.split("\n").filter(Boolean).slice(0, 4)
       : probeDetail.split("\n").filter(Boolean))
     : h.validation?.structure
-      ? [h.validation.structure.detail, t("migration:history.probeNotRunDefault")]
-      : [t("migration:history.probeNotRun")];
+      ? [h.validation.structure.detail]
+      : [t("migration:history.validationUnavailable")];
   // 容器保持中性,状态只由圆点承载
   const probeDot = ok ? "var(--ok)" : fail ? "var(--err)" : "var(--tx5)";
   const probeModel = h.probe?.model || h.probe_model;
@@ -104,7 +103,7 @@ export default function HistoryDetail({ h, onDelete }) {
             <pre className="mono selectable fscroll" style={{ margin: 0, fontSize: 11,
               color: "var(--err-pre)", whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto",
               lineHeight: 1.5 }}>{probeDetail}</pre>
-          ) : probeLines.map((p, i) => (
+          ) : verdictLines.map((p, i) => (
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9, fontSize: 12,
               color: "var(--tx2b)", lineHeight: 1.45, marginTop: i ? 8 : 0 }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: probeDot,

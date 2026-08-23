@@ -7,21 +7,6 @@
     "writing": "写入",
     "result": "结果"
   },
-  "probeModel": {
-    "title": "探针模型",
-    "loading": "加载中…",
-    "sourceCli": "来自目标 CLI 实时列表",
-    "sourceAlias": "CLI 文档 alias(无官方 models 命令)",
-    "sourceFallback": "发现失败,使用内置回退",
-    "sourceCache": "本地缓存",
-    "sourceUser": "用户配置",
-    "hint": "验收时用该模型 resume 并发送极小探测消息。留空则用目标工具默认模型。也可在 ~/.ferry/models.json 追加自定义 id。",
-    "loadFailed": "列表加载失败:{{error}}",
-    "discoverWarn": "动态发现告警:{{error}}",
-    "filterPlaceholder": "筛选模型…",
-    "toolDefault": "工具默认{{suffix}}",
-    "customPlaceholder": "或手填模型 id(优先于上方选择)"
-  },
   "target": {
     "sourceSession": "源会话",
     "scopeFull": "完整会话",
@@ -101,34 +86,23 @@
     "scope": "范围",
     "scopeWithCount": "{{scope}} · {{n}} 条",
     "structureCheck": "结构验证",
-    "runtimeProbe": "运行时探针",
     "structureAlways": "始终执行 · 无模型调用",
-    "probeOn": "开启 · {{model}}(影子副本)",
-    "probeOff": "关闭",
-    "probeTitle": "运行时探针",
-    "probeDesc": "在临时影子会话上真实 resume 验证(需数十秒并消耗一次极小的模型调用,完成后自动清理,不向迁移产物追加任何消息)。关闭时仅做结构验证。",
-    "epilogue": "Ferry 将写入目标工具,并重读产物做结构验证(节点数、父子关系与层级拓扑)。{{probe}}若验收失败,会自动回滚,不在目标保留任何产物。",
-    "probeEpilogue": "随后在影子副本上运行探针。"
+    "epilogue": "Ferry 将写入目标工具,并重读产物做结构验证(节点数、父子关系与层级拓扑)。若验收失败,会自动回滚,不在目标保留任何产物。"
   },
   "writing": {
     "writeTarget": "写入 {{tool}} 会话存储",
-    "structureProbe": "结构验证 + 隔离探针(影子副本)",
     "structureOnly": "结构验证(节点 · 拓扑)"
   },
   "result": {
-    "doneBoth": "迁移完成 · 结构验证与隔离探针通过",
     "doneStructure": "迁移完成 · 结构验证通过",
     "doneDesc": "{{n}} 条消息已写入 {{tool}},源会话保持不变。",
     "continueIn": "在 {{tool}} 中继续",
     "openTerminal": "在终端打开",
     "failTitle": "迁移失败 · 验收未通过",
     "failDesc": "已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,请修正问题后重试。",
-    "failDescProbe": " · 探针模型 {{model}}",
     "failConcurrent": "源会话在确认期间被 {{tool}} 写入了新内容,与预览不再一致,已中止写入。请等源会话空闲后重新发起迁移。",
     "failAbortedTitle": "迁移未完成",
-    "failAbortedDesc": "迁移在写入 {{tool}} 前被中止,源会话与 {{tool}} 均未改动。",
-    "failProbeTitle": "迁移已写入 · 探针未通过",
-    "failProbeDesc": "产物已写入 {{tool}} 并保留,但隔离探针未通过,请自行在 {{tool}} 中确认会话可用。"
+    "failAbortedDesc": "迁移在写入 {{tool}} 前被中止,源会话与 {{tool}} 均未改动。"
   },
   "sheet": {
     "title": "迁移会话",
@@ -149,8 +123,7 @@
     "treeMeta": "{{n}} 个节点{{detail}}",
     "impactReport": "迁移影响",
     "verdict": "验收结果",
-    "probeNotRunDefault": "运行时探针未执行(默认关闭,可在设置中开启)",
-    "probeNotRun": "未运行探针验收",
+    "validationUnavailable": "旧记录未保存结构验收详情",
     "rollbackTitle": "回滚信息",
     "rollbackDesc": "结构验收未通过,Ferry 已自动回滚,未在 {{tool}} 保留任何产物。源会话完好,可修正问题后重试。",
     "retainedTitle": "产物保留",

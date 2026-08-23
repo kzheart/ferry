@@ -54,16 +54,6 @@ pub(super) fn handle_of(doc: &EditDocument) -> DomainResult<&PathBuf> {
         .ok_or_else(|| DomainError::internal("Pi 编辑文档句柄类型不符"))
 }
 
-/// 会话记录的原生 cwd（探针复用）。
-pub(super) fn document_cwd(doc: &EditDocument) -> Option<String> {
-    records_ref(doc)
-        .ok()?
-        .first()?
-        .get("cwd")?
-        .as_str()
-        .map(str::to_string)
-}
-
 /// 集合成员用 JSON 文本做键：Python 侧的 `calls` / `results` 是任意值的集合
 /// （含 `None`），必须能表达非字符串成员，否则配对判定会漏掉异常数据。
 fn key(value: Option<&Value>) -> String {

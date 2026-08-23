@@ -2,26 +2,20 @@
 //!
 //! 硬约束：
 //! - 每条分支都要在写之前重新解析索引并比 `base_revision`（§2.4）；
-//! - 探针失败还原快照、`result.ok=false`，但 operation 仍算 `applied`（§2.4 第 24 条）；
 //! - migration 的二次门禁：`rolled_back or structure.ok is not True → RuntimeError`（第 25 条）；
 //! - delete 三重门禁 + 单条失败不中断 + 成功后立刻 `index.evict`（第 26 条）。
 
-use std::path::Path;
-
 use serde_json::{Map, Value};
 
-use crate::adapters::contracts::SessionEditor;
-use crate::adapters::shared::editing::EditDocument;
 use crate::errors::DomainError;
 use crate::operations::delete::SessionDeletionService;
-use crate::operations::edit::{EditOperationHandler, MutationFinisher};
+use crate::operations::edit::EditOperationHandler;
 use crate::operations::metadata;
 use crate::operations::metadata_store::metadata_key;
 use crate::operations::migrate::MigrationService;
 use crate::operations::plan_store::OperationPlan;
 use crate::operations::planner::protected_cause;
 use crate::operations::types::{EngineError, EngineResult, Ports, Resolver};
-use crate::operations::verification;
 
 pub struct OperationExecutor {
     ports: Ports,
@@ -61,19 +55,7 @@ impl OperationExecutor {
     }
 
     fn apply_edit(&self, operation: &OperationPlan) -> EngineResult<Map<String, Value>> {
-        let params = operation.input()?;
-        let probe = params
-            .get("probe")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| EngineError::key_error("probe"))?;
-        if probe {
-            let tool = params
-                .get("tool")
-                .and_then(Value::as_str)
-                .ok_or_else(|| EngineError::key_error("tool"))?;
-            self.ports.adapter(tool)?.require_verifier("probe")?;
-        }
-        self.edit.apply(operation, self)
+        self.edit.apply(operation)
     }
 
     fn apply_migration(&self, operation: &OperationPlan) -> EngineResult<Map<String, Value>> {
@@ -103,12 +85,7 @@ impl OperationExecutor {
             &target_tool,
             session,
             None,
-            params
-                .get("probe")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| EngineError::key_error("probe"))?,
             params.get("max_turn").and_then(Value::as_i64),
-            params.get("probe_model").and_then(Value::as_str),
             None,
         )?;
         // 二次门禁：回滚过、或结构验收不是恒等 true，都不许当成功收尾。
@@ -275,54 +252,6 @@ impl OperationExecutor {
         // 删除后索引定点摘除并推 removal delta，不必等下一轮重扫。
         self.index.evict(tool, &record.canonical_ref)?;
         Ok(None)
-    }
-}
-
-impl MutationFinisher for OperationExecutor {
-    fn finish(
-        &self,
-        tool: &str,
-        editor: &dyn SessionEditor,
-        mut result: Map<String, Value>,
-        document: &EditDocument,
-        snapshot: &Path,
-        probe: bool,
-    ) -> EngineResult<Map<String, Value>> {
-        if !probe {
-            return Ok(result);
-        }
-        let report = match self.probe_edited(tool, editor, document, &result) {
-            Ok(report) => report,
-            Err(error) if verification::is_probe_timeout(&error) => {
-                verification::timeout_report(tool, error.message())
-            }
-            Err(error) => return Err(error),
-        };
-        let passed = report.get("status") == Some(&Value::from("passed"));
-        result.insert("probe".into(), report);
-        if passed {
-            return Ok(result);
-        }
-        // 探针失败：还原快照、标记失败，但 operation 仍然是 applied。
-        editor.restore_snapshot(snapshot, document)?;
-        result.insert("ok".into(), Value::Bool(false));
-        result.insert("error".into(), Value::from("隔离探针未通过,已自动还原快照"));
-        Ok(result)
-    }
-}
-
-impl OperationExecutor {
-    fn probe_edited(
-        &self,
-        tool: &str,
-        editor: &dyn SessionEditor,
-        document: &EditDocument,
-        result: &Map<String, Value>,
-    ) -> EngineResult<Value> {
-        let adapter = self.ports.adapter(tool)?;
-        let verifier = adapter.require_verifier("probe")?;
-        let report = verifier.probe_edited(editor, document, result, None)?;
-        Ok(verification::report_to_value(&report))
     }
 }
 

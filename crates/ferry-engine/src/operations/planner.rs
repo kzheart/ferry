@@ -86,13 +86,6 @@ impl OperationPlanner {
         let reference = require_str(&operation_input, "ref")?;
         let adapter = self.ports.adapter(&tool)?;
         adapter.require_editor()?;
-        if operation_input
-            .get("probe")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            adapter.require_verifier("probe")?;
-        }
         let before = self.index.resolve(&tool, &reference)?;
         let ops = operation_input
             .get("ops")
@@ -133,13 +126,6 @@ impl OperationPlanner {
         let target = target_adapter.require_migration_target()?;
         target_adapter.require_browser()?;
         target_adapter.require_lifecycle("resume")?;
-        if operation_input
-            .get("probe")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            target_adapter.require_verifier("probe")?;
-        }
         // 目标端写入门禁前置：宁可在 plan 阶段多花一次进程探测，也不要让用户走完
         // 四步、点了确认才看到「目标 App 正在运行」。
         target.preflight()?;
@@ -152,7 +138,6 @@ impl OperationPlanner {
             session,
             None,
             operation_input.get("max_turn").and_then(Value::as_i64),
-            operation_input.get("probe_model").and_then(Value::as_str),
             None,
         )?;
         let after = match self.index.resolve(&source_tool, &reference) {

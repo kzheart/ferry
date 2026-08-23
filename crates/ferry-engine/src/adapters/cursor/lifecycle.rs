@@ -84,7 +84,6 @@ mod tests {
                 .unwrap(),
             "c-1"
         );
-        assert_eq!(lifecycle.probe_cwd(Some("/w")), Some("/w".to_string()));
     }
 
     #[test]

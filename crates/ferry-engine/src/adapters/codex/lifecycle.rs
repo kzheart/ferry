@@ -80,11 +80,6 @@ impl BaseLifecycle for CodexLifecycle {
         Ok(())
     }
 
-    /// `codex resume` 从 rollout 记录恢复工作目录，探针不额外传 cwd。
-    fn probe_cwd(&self, _cwd: Option<&str>) -> Option<String> {
-        None
-    }
-
     fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
         delete_file_session(self, adapter, reference)
     }
@@ -171,8 +166,6 @@ mod tests {
             descriptor["display_command"],
             json!("cd /work && codex resume abc")
         );
-        // 探针不需要工作目录。
-        assert_eq!(lifecycle.probe_cwd(Some("/work")), None);
     }
 
     #[test]

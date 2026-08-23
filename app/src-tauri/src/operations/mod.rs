@@ -143,17 +143,6 @@ fn validate_migration_operation_input(input: &MigrationOperationPlanInput) -> Re
     if input.max_turn == Some(0) || input.max_turn.is_some_and(|turn| turn > 100_000) {
         return Err("Migration Operation max_turn 无效".to_owned());
     }
-    if input.probe_model.as_ref().is_some_and(|model| {
-        model.is_empty() || model.chars().count() > 512 || model.chars().any(char::is_control)
-    }) {
-        return Err("Migration Operation probe_model 无效".to_owned());
-    }
-    if !input.probe && input.probe_model.is_some() {
-        return Err("Migration Operation 未启用 probe 时不能指定模型".to_owned());
-    }
-    if input.probe && !agent_has_capability(&input.target_tool, "probe") {
-        return Err("Migration Operation 目标 Agent 不支持 probe".to_owned());
-    }
     Ok(())
 }
 
@@ -342,7 +331,6 @@ mod tests {
                     "reply": {"items": [{"kind": "text", "text": "答"}]},
                 },
             ],
-            "probe": true,
         })))
         .is_ok());
     }
@@ -414,12 +402,9 @@ mod tests {
     }
 
     #[test]
-    fn migration_accepts_probe_with_model_on_capable_target() {
+    fn migration_accepts_declared_options() {
         assert!(validate(migration(json!({}))).is_ok());
-        assert!(validate(migration(json!({
-            "max_turn": 7, "probe": true, "probe_model": "model-a",
-        })))
-        .is_ok());
+        assert!(validate(migration(json!({"max_turn": 7}))).is_ok());
     }
 
     #[test]
@@ -429,12 +414,10 @@ mod tests {
     }
 
     #[test]
-    fn migration_rejects_out_of_range_and_inconsistent_probe_fields() {
+    fn migration_rejects_bad_reference_and_out_of_range_max_turn() {
         assert!(validate(migration(json!({"ref": "not-opaque"}))).is_err());
         assert!(validate(migration(json!({"max_turn": 0}))).is_err());
         assert!(validate(migration(json!({"max_turn": 100_001}))).is_err());
-        assert!(validate(migration(json!({"probe": true, "probe_model": ""}))).is_err());
-        assert!(validate(migration(json!({"probe_model": "model-a"}))).is_err());
     }
 
     #[test]

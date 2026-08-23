@@ -1,7 +1,7 @@
-//! 迁移用例：预览、写入后的结构校验、可选影子探针、回滚与历史审计。
+//! 迁移用例：预览、写入后的结构校验、回滚与历史审计。
 //!
 //! 硬约束（§2.4 第 25 条）：
-//! `write → validate_written_tree（re-read 验收）→ 结构失败才回滚（探针失败不回滚）
+//! `write → validate_written_tree（re-read 验收）→ 结构失败回滚
 //!  → history.append（回滚也写）`；executor 侧还有第二道门禁。
 //!
 //! 与 Python 的一处结构差异（注释里点明）：`session` 由调用方传入并按值持有
@@ -19,8 +19,8 @@ use serde_json::{Map, Value};
 use crate::adapters::contracts::MigrationTarget;
 use crate::adapters::shared::narration;
 use crate::model::Session;
+use crate::operations::history;
 use crate::operations::types::{EngineError, EngineResult, Ports};
-use crate::operations::{history, verification};
 use crate::storage::database::now_ms;
 
 /// 目标 adapter `write()` 返回的两个必需键。
@@ -55,7 +55,6 @@ impl MigrationService {
     }
 
     /// 只读预览。`content_locale` 目前恒为 `None`（RPC 面不暴露），守卫仍要装。
-    #[allow(clippy::too_many_arguments)]
     pub fn preview(
         &self,
         src: &str,
@@ -63,10 +62,9 @@ impl MigrationService {
         session: Session,
         cwd: Option<&str>,
         max_turn: Option<i64>,
-        probe_model: Option<&str>,
         content_locale: Option<&str>,
     ) -> EngineResult<Map<String, Value>> {
-        let prepared = self.prepare(src, dst, session, cwd, max_turn, probe_model)?;
+        let prepared = self.prepare(src, dst, session, cwd, max_turn)?;
         let target_adapter = self.ports.adapter(dst)?;
         let target = target_adapter.require_migration_target()?;
         let preview = {
@@ -78,27 +76,21 @@ impl MigrationService {
         Ok(result)
     }
 
-    /// 写入 + 验收 + 可选探针 + 回滚 + 历史。
-    #[allow(clippy::too_many_arguments)]
+    /// 写入 + 结构验收 + 回滚 + 历史。
     pub fn apply(
         &self,
         src: &str,
         dst: &str,
         session: Session,
         cwd: Option<&str>,
-        probe: bool,
         max_turn: Option<i64>,
-        probe_model: Option<&str>,
         content_locale: Option<&str>,
     ) -> EngineResult<Map<String, Value>> {
         let target_adapter = self.ports.adapter(dst)?;
         target_adapter.require_migration_target()?;
         target_adapter.require_browser()?;
         target_adapter.require_lifecycle("resume")?;
-        if probe {
-            target_adapter.require_verifier("probe")?;
-        }
-        let prepared = self.prepare(src, dst, session, cwd, max_turn, probe_model)?;
+        let prepared = self.prepare(src, dst, session, cwd, max_turn)?;
         let target = target_adapter.require_migration_target()?;
         let (session_id, destination) = {
             let _locale = narration::content_locale(content_locale, None);
@@ -113,9 +105,6 @@ impl MigrationService {
             target,
             &session_id,
             &destination,
-            probe,
-            probe_model,
-            content_locale,
             &mut artifact_active,
         ) {
             Ok(result) => Ok(result),
@@ -128,7 +117,6 @@ impl MigrationService {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn apply_after_write(
         &self,
         dst: &str,
@@ -136,9 +124,6 @@ impl MigrationService {
         target: &dyn MigrationTarget,
         session_id: &str,
         destination: &Path,
-        probe: bool,
-        probe_model: Option<&str>,
-        content_locale: Option<&str>,
         artifact_active: &mut bool,
     ) -> EngineResult<Map<String, Value>> {
         let mut result = prepared.base.clone();
@@ -163,39 +148,9 @@ impl MigrationService {
         let mut structure = Map::new();
         structure.insert("ok".into(), Value::Bool(ok));
         structure.insert("detail".into(), Value::from(tree_detail.as_str()));
-        let mut runtime = Map::new();
-        runtime.insert("status".into(), Value::from("skipped"));
         let mut validation = Map::new();
         validation.insert("structure".into(), Value::Object(structure));
-        validation.insert("runtime".into(), Value::Object(runtime));
-
-        let mut runtime_report: Option<Map<String, Value>> = None;
-        if ok && probe {
-            let report = self.isolated_probe(
-                dst,
-                &prepared.session,
-                &prepared.target_cwd,
-                probe_model,
-                content_locale,
-            )?;
-            let mut with_model = report.clone();
-            with_model.insert("model".into(), optional_string(probe_model));
-            validation.insert("runtime".into(), Value::Object(with_model));
-            runtime_report = Some(report);
-        }
         result.insert("validation".into(), Value::Object(validation));
-
-        // 探针失败不回滚：产物已过结构验收，失败多源于目标环境而非迁移本身。
-        if probe || !ok {
-            let mut report = match runtime_report {
-                Some(report) => report,
-                None => structure_probe_report(ok, &tree_detail),
-            };
-            if probe {
-                report.insert("model".into(), optional_string(probe_model));
-            }
-            result.insert("probe".into(), Value::Object(report));
-        }
 
         if !ok {
             self.cleanup_artifact(dst, session_id, destination)?;
@@ -217,7 +172,6 @@ impl MigrationService {
         mut session: Session,
         cwd: Option<&str>,
         max_turn: Option<i64>,
-        probe_model: Option<&str>,
     ) -> EngineResult<Prepared> {
         let source_adapter = self.ports.adapter(src)?;
         source_adapter.require_migration_source()?;
@@ -272,70 +226,11 @@ impl MigrationService {
             "root_msg_count".into(),
             Value::from(session.messages.len() as i64),
         );
-        base.insert("probe_model".into(), optional_string(probe_model));
-
         Ok(Prepared {
             session,
             target_cwd,
             base,
         })
-    }
-
-    /// 影子副本探针：写一份一次性产物、跑探针、无论成败都清理掉。
-    ///
-    /// Python 版还会保存/还原每个节点的 `loss`（`target.write` 会往里追加），
-    /// Rust 的 `MigrationTarget::write` 只拿 `&Session`，天然不会污染，故省略。
-    fn isolated_probe(
-        &self,
-        dst: &str,
-        session: &Session,
-        cwd: &str,
-        model: Option<&str>,
-        content_locale: Option<&str>,
-    ) -> EngineResult<Map<String, Value>> {
-        // Python 侧整个 `_isolated_probe` 调用都在 `with content_locale(...)` 里。
-        let _locale = narration::content_locale(content_locale, None);
-        let target_adapter = self.ports.adapter(dst)?;
-        let target = target_adapter.require_migration_target()?;
-        let (shadow_session_id, shadow_destination) = write_artifact(target, session, cwd)?;
-        let outcome = self.run_probe(dst, &shadow_session_id, cwd, model);
-        let cleanup = self.cleanup_artifact(dst, &shadow_session_id, &shadow_destination);
-        let mut report = outcome?;
-        cleanup?;
-        if !report.contains_key("isolation") {
-            let mut isolation = Map::new();
-            isolation.insert("kind".into(), Value::from("shadow_copy"));
-            isolation.insert("id".into(), Value::from(shadow_session_id.as_str()));
-            isolation.insert("cleaned".into(), Value::Bool(true));
-            report.insert("isolation".into(), Value::Object(isolation));
-        }
-        Ok(report)
-    }
-
-    /// 探针超时不上抛，折成 `probe.timeout` 报告。
-    pub fn run_probe(
-        &self,
-        tool: &str,
-        session_id: &str,
-        cwd: &str,
-        model: Option<&str>,
-    ) -> EngineResult<Map<String, Value>> {
-        let adapter = self.ports.adapter(tool)?;
-        let lifecycle = adapter.require_lifecycle("resume")?;
-        let probe_cwd = lifecycle.probe_cwd(Some(cwd));
-        match verification::run_probe(tool, session_id, probe_cwd.as_deref(), model, &self.ports) {
-            Ok(report) => Ok(verification::report_to_value(&report)
-                .as_object()
-                .cloned()
-                .unwrap_or_default()),
-            Err(error) if verification::is_probe_timeout(&error) => {
-                Ok(verification::timeout_report(tool, error.message())
-                    .as_object()
-                    .cloned()
-                    .unwrap_or_default())
-            }
-            Err(error) => Err(error),
-        }
     }
 
     /// re-read 验收：节点数 / id 去重数 / 父子边数 / 层级拓扑四项全中才算通过。
@@ -413,37 +308,6 @@ fn write_artifact(
         .and_then(Value::as_str)
         .ok_or_else(|| EngineError::key_error(WRITE_DEST))?;
     Ok((session_id, PathBuf::from(destination)))
-}
-
-fn optional_string(value: Option<&str>) -> Value {
-    match value.filter(|text| !text.is_empty()) {
-        Some(text) => Value::from(text),
-        None => Value::Null,
-    }
-}
-
-/// 结构验收失败时的兜底 probe 报告。
-fn structure_probe_report(ok: bool, detail: &str) -> Map<String, Value> {
-    let mut diagnostic = Map::new();
-    diagnostic.insert("stdout".into(), Value::from(detail));
-    diagnostic.insert("stderr".into(), Value::from(""));
-    diagnostic.insert("truncated".into(), Value::Bool(false));
-    let mut report = Map::new();
-    report.insert(
-        "status".into(),
-        Value::from(if ok { "passed" } else { "failed" }),
-    );
-    report.insert(
-        "code".into(),
-        if ok {
-            Value::Null
-        } else {
-            Value::from("probe.structure_invalid")
-        },
-    );
-    report.insert("params".into(), Value::Object(Map::new()));
-    report.insert("diagnostic".into(), Value::Object(diagnostic));
-    report
 }
 
 /// `Path(cwd or source.cwd or ".").resolve()`。
@@ -659,20 +523,5 @@ mod tests {
             codes,
             ["migration.truncated", "migration.children_not_migrated"]
         );
-    }
-
-    #[test]
-    fn structure_failure_report_carries_the_ghost_free_code() {
-        let report = structure_probe_report(false, "树结构验收: 节点 1/2");
-        assert_eq!(report["status"], Value::from("failed"));
-        assert_eq!(report["code"], Value::from("probe.structure_invalid"));
-        assert_eq!(
-            report["diagnostic"]["stdout"],
-            Value::from("树结构验收: 节点 1/2")
-        );
-
-        let passed = structure_probe_report(true, "ok");
-        assert_eq!(passed["status"], Value::from("passed"));
-        assert_eq!(passed["code"], Value::Null);
     }
 }

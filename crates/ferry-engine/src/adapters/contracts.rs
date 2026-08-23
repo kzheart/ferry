@@ -18,7 +18,6 @@ use crate::errors::{DomainError, DomainResult};
 use crate::events::Event;
 use crate::model::{Session, ToolCall};
 use crate::system::paths::{expanduser, is_within, realpath_strict};
-use crate::system::probes::ProbeReport;
 
 /// 扫描行：adapter 输出的原生会话摘要（Python 的 `dict`）。
 pub type ScanRow = Map<String, Value>;
@@ -58,7 +57,7 @@ pub const COMPONENT_CAPABILITIES: &[(Component, &[&str])] = &[
     (Component::MigrationSource, &["migration-source"]),
     (Component::MigrationTarget, &["migration-target"]),
     (Component::Editor, &["edit"]),
-    (Component::Verifier, &["probe", "prompt"]),
+    (Component::Verifier, &["prompt"]),
     (Component::Lifecycle, &["resume", "delete"]),
     (Component::Models, &["models"]),
 ];
@@ -393,21 +392,6 @@ pub trait SessionEditor: Send + Sync {
 }
 
 pub trait SessionVerifier: Send + Sync {
-    fn probe(
-        &self,
-        session_id: &str,
-        cwd: Option<&str>,
-        model: Option<&str>,
-    ) -> DomainResult<ProbeReport>;
-
-    fn probe_edited(
-        &self,
-        editor: &dyn SessionEditor,
-        doc: &EditDocument,
-        result: &Map<String, Value>,
-        model: Option<&str>,
-    ) -> DomainResult<ProbeReport>;
-
     /// `timeout` 默认 360 秒（分发层默认参数，方案 §2.1 第 5 条）。
     fn prompt_session(
         &self,
@@ -437,7 +421,6 @@ pub trait SessionLifecycle: Send + Sync {
     fn resume_descriptor(&self, session_id: &str, cwd: &str) -> DomainResult<Map<String, Value>>;
     fn cleanup(&self, session_id: &str, dest: &Path) -> DomainResult<()>;
     fn validation_ref(&self, session_id: &str, dest: &Path) -> DomainResult<String>;
-    fn probe_cwd(&self, cwd: Option<&str>) -> Option<String>;
     fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>>;
 }
 
@@ -584,7 +567,7 @@ impl AgentAdapter {
         Ok(self.editor.as_deref().expect("require 已校验组件存在"))
     }
 
-    /// `capability` 只能是 `probe` 或 `prompt`——两者共用 verifier 组件。
+    /// verifier 组件只服务 `prompt` capability。
     pub fn require_verifier(&self, capability: &str) -> DomainResult<&dyn SessionVerifier> {
         self.require(capability, Component::Verifier)?;
         Ok(self.verifier.as_deref().expect("require 已校验组件存在"))

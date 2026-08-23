@@ -7,21 +7,6 @@
     "writing": "Writing",
     "result": "Result"
   },
-  "probeModel": {
-    "title": "Probe model",
-    "loading": "Loading…",
-    "sourceCli": "Live list from target CLI",
-    "sourceAlias": "CLI documentation alias (no official models command)",
-    "sourceFallback": "Discovery failed, using built-in fallback",
-    "sourceCache": "Local cache",
-    "sourceUser": "User config",
-    "hint": "Resumes with this model and sends a tiny probe message during verification. Leave empty to use the target tool's default model. You can also append custom ids in ~/.ferry/models.json.",
-    "loadFailed": "Failed to load list: {{error}}",
-    "discoverWarn": "Dynamic discovery warning: {{error}}",
-    "filterPlaceholder": "Filter models…",
-    "toolDefault": "Tool default{{suffix}}",
-    "customPlaceholder": "Or enter a model id manually (overrides the selection above)"
-  },
   "target": {
     "sourceSession": "Source session",
     "scopeFull": "Full session",
@@ -101,34 +86,23 @@
     "scope": "Scope",
     "scopeWithCount": "{{scope}} · {{n}} msgs",
     "structureCheck": "Structure check",
-    "runtimeProbe": "Runtime probe",
     "structureAlways": "Always performed · no model calls",
-    "probeOn": "On · {{model}} (shadow copy)",
-    "probeOff": "Off",
-    "probeTitle": "Runtime probe",
-    "probeDesc": "Performs a real resume on a temporary shadow session for verification (takes tens of seconds and consumes one tiny model call; cleaned up automatically, no messages appended to the migration artifact). When off, only structure validation is performed.",
-    "epilogue": "Ferry will write to the target tool and re-read the artifact for structure validation (node count, parent-child relationships, and topology). {{probe}}If verification fails, it rolls back automatically and leaves nothing in the target.",
-    "probeEpilogue": "Then runs the probe on a shadow copy."
+    "epilogue": "Ferry will write to the target tool and re-read the artifact for structure validation (node count, parent-child relationships, and topology). If verification fails, it rolls back automatically and leaves nothing in the target."
   },
   "writing": {
     "writeTarget": "Writing to {{tool}} session store",
-    "structureProbe": "Structure validation + isolated probe (shadow copy)",
     "structureOnly": "Structure validation (nodes · topology)"
   },
   "result": {
-    "doneBoth": "Migration complete · structure validation and isolated probe passed",
     "doneStructure": "Migration complete · structure validation passed",
     "doneDesc": "{{n}} messages written to {{tool}}, source session unchanged.",
     "continueIn": "Continue in {{tool}}",
     "openTerminal": "Open in terminal",
     "failTitle": "Migration failed · verification did not pass",
     "failDesc": "Rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
-    "failDescProbe": " · probe model {{model}}",
     "failConcurrent": "The source session was modified by {{tool}} while you were confirming, so it no longer matches the preview. The write was aborted; retry once the source session is idle.",
     "failAbortedTitle": "Migration not completed",
-    "failAbortedDesc": "The migration was aborted before writing to {{tool}}; neither the source session nor {{tool}} was modified.",
-    "failProbeTitle": "Written · probe did not pass",
-    "failProbeDesc": "The artifacts were written to {{tool}} and kept, but the isolated probe did not pass. Please confirm the session works in {{tool}} yourself."
+    "failAbortedDesc": "The migration was aborted before writing to {{tool}}; neither the source session nor {{tool}} was modified."
   },
   "sheet": {
     "title": "Migrate session",
@@ -149,8 +123,7 @@
     "treeMeta": "{{n}} nodes{{detail}}",
     "impactReport": "Migration impact",
     "verdict": "Verification result",
-    "probeNotRunDefault": "Runtime probe not executed (off by default, can be enabled in settings)",
-    "probeNotRun": "Probe verification not run",
+    "validationUnavailable": "This legacy record has no saved structure-validation detail",
     "rollbackTitle": "Rollback info",
     "rollbackDesc": "Structure validation did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
     "retainedTitle": "Artifact kept",

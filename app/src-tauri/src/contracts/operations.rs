@@ -50,8 +50,6 @@ pub(crate) struct EditOperationPlanInput {
     #[serde(rename = "ref")]
     pub(crate) reference: String,
     pub(crate) ops: Vec<Value>,
-    #[serde(default)]
-    pub(crate) probe: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -63,10 +61,6 @@ pub(crate) struct MigrationOperationPlanInput {
     pub(crate) target_tool: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_turn: Option<u32>,
-    #[serde(default)]
-    pub(crate) probe: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) probe_model: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]

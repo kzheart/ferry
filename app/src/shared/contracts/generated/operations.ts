@@ -52,7 +52,6 @@ export interface EditOperationInput {
   tool: AgentId;
   ref: string;
   ops: EditOperation[];
-  probe?: boolean;
 }
 
 export interface MigrationOperationInput {
@@ -61,8 +60,6 @@ export interface MigrationOperationInput {
   ref: string;
   target_tool: AgentId;
   max_turn?: number;
-  probe?: boolean;
-  probe_model?: string;
 }
 
 export interface MetadataOperationInput {

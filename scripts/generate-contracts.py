@@ -90,7 +90,6 @@ AGENT_CAPABILITIES = (
     "migration-target",
     "edit",
     "delete",
-    "probe",
     "prompt",
     "models",
 )

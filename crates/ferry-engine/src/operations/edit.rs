@@ -10,7 +10,7 @@
 //! **带空格**的分隔符（`", "` / `": "`），与 `jsonutil::canonical_json` 的无空格
 //! 分隔符不是一回事：体积判定用前者，摘要用后者，两者不可互换。
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{Map, Value};
 
@@ -34,27 +34,6 @@ pub struct PreviewOutcome {
     pub after: Map<String, Value>,
     pub changes: Vec<Event>,
     pub revision: String,
-}
-
-/// 写入事务的产物：结果 DTO、事务里的文档、已创建的快照。
-pub struct MutationOutcome {
-    pub result: Map<String, Value>,
-    pub document: EditDocument,
-    pub snapshot: PathBuf,
-}
-
-/// `_finish_mutation` 的回调面：executor 实现它，edit 只负责在正确的时机调用。
-pub trait MutationFinisher {
-    #[allow(clippy::too_many_arguments)]
-    fn finish(
-        &self,
-        tool: &str,
-        editor: &dyn SessionEditor,
-        result: Map<String, Value>,
-        document: &EditDocument,
-        snapshot: &Path,
-        probe: bool,
-    ) -> EngineResult<Map<String, Value>>;
 }
 
 fn is_locator_stale(error: &EngineError) -> bool {
@@ -101,7 +80,7 @@ pub fn apply_mutation(
     reference: &str,
     mutate: impl FnOnce(&mut EditDocument) -> EngineResult<Vec<Event>>,
     expected_revision: Option<&str>,
-) -> EngineResult<MutationOutcome> {
+) -> EngineResult<Map<String, Value>> {
     let mut document = editor.load(reference)?;
     if let Some(expected) = expected_revision {
         if document.revision != expected {
@@ -123,11 +102,7 @@ pub fn apply_mutation(
         .ok_or_else(|| EngineError::runtime("原地编辑无法创建恢复快照，已取消写入"))?;
 
     match commit_and_finalize(editor, &mut document, &changes, &snapshot) {
-        Ok(result) => Ok(MutationOutcome {
-            result,
-            document,
-            snapshot,
-        }),
+        Ok(result) => Ok(result),
         Err(error) => {
             // ConcurrentModificationError 不还原：源已被别人改过，旧快照会盖掉新内容。
             if !error.is_concurrent_modification() {
@@ -186,7 +161,7 @@ pub fn apply(
     reference: &str,
     ops: &[Value],
     expected_revision: Option<&str>,
-) -> EngineResult<MutationOutcome> {
+) -> EngineResult<Map<String, Value>> {
     let supported = ops.iter().all(|operation| {
         operation
             .get("op")
@@ -247,11 +222,7 @@ impl EditOperationHandler {
     }
 
     /// 批准后的写入。
-    pub fn apply(
-        &self,
-        operation: &OperationPlan,
-        finisher: &dyn MutationFinisher,
-    ) -> EngineResult<Map<String, Value>> {
+    pub fn apply(&self, operation: &OperationPlan) -> EngineResult<Map<String, Value>> {
         let params = operation.input()?;
         let tool = string_param(&params, "tool")?;
         let reference = string_param(&params, "ref")?;
@@ -279,14 +250,10 @@ impl EditOperationHandler {
             .ok_or_else(|| EngineError::key_error("ops"))?
             .clone();
         let native_ops = self.ensure_supported(&record, &requested_ops)?;
-        let probe = params
-            .get("probe")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| EngineError::key_error("probe"))?;
         let expected_revision = operation.document_revision.as_deref();
 
         let has_replacement = native_ops.iter().any(is_replace_reply);
-        let outcome = if has_replacement {
+        let result = if has_replacement {
             apply_mutation(
                 editor,
                 &record.canonical_ref,
@@ -301,21 +268,14 @@ impl EditOperationHandler {
                 expected_revision,
             )
         };
-        let outcome = match outcome {
-            Ok(outcome) => outcome,
+        let result = match result {
+            Ok(result) => result,
             Err(error) if is_locator_stale(&error) => {
                 return Err(Self::public_locator_error(&requested_ops).into())
             }
             Err(error) => return Err(error),
         };
-        finisher.finish(
-            &tool,
-            editor,
-            outcome.result,
-            &outcome.document,
-            &outcome.snapshot,
-            probe,
-        )
+        Ok(result)
     }
 
     /// `fml_` 轮次定位符与 rewrite locator 的解析。

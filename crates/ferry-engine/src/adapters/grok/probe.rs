@@ -12,11 +12,10 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use serde_json::{Map, Value};
 
-use crate::adapters::contracts::{SessionEditor, SessionVerifier};
-use crate::adapters::shared::editing::EditDocument;
+use crate::adapters::contracts::SessionVerifier;
 use crate::errors::{DomainError, DomainResult};
 use crate::system::paths::process_environ;
-use crate::system::probes::{self, ProbeReport, ProbeTimeout};
+use crate::system::probes::{self, ProbeReport};
 use crate::system::{executables, probes as probe_system};
 
 use super::store::read_text;
@@ -319,33 +318,10 @@ fn prompt_session(
     Ok(payload)
 }
 
-/// [`SessionVerifier`] 的 grok 实现。
+/// [`SessionVerifier`] 的 Grok 会话提问实现。
 pub struct GrokVerifier;
 
 impl SessionVerifier for GrokVerifier {
-    fn probe(
-        &self,
-        session_id: &str,
-        _cwd: Option<&str>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        probe_bundle(&super::adapter::resolve(session_id)?)
-    }
-
-    fn probe_edited(
-        &self,
-        _editor: &dyn SessionEditor,
-        _doc: &EditDocument,
-        result: &Map<String, Value>,
-        _model: Option<&str>,
-    ) -> DomainResult<ProbeReport> {
-        let saved_as = result
-            .get("saved_as")
-            .and_then(Value::as_str)
-            .ok_or_else(|| DomainError::internal("编辑结果缺少 saved_as"))?;
-        probe_bundle(Path::new(saved_as))
-    }
-
     fn prompt_session(
         &self,
         session_id: &str,
@@ -358,9 +334,6 @@ impl SessionVerifier for GrokVerifier {
         prompt_session(session_id, cwd, prompt, model, timeout)
     }
 }
-
-/// 显式再导出，方便调用方在不引入 system::probes 的情况下匹配超时类型。
-pub type Timeout = ProbeTimeout;
 
 #[cfg(test)]
 mod tests {

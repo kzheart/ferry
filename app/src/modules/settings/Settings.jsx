@@ -183,14 +183,6 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         </Row>
       </Card>
 
-      <GroupTitle>{t("settings:writeCheck.groupTitle")}</GroupTitle>
-      <Card>
-        <Row first title={t("settings:writeCheck.runtimeProbe")}
-          desc={t("settings:writeCheck.runtimeProbeDesc")}>
-          <Toggle on={s.runtimeProbe} onChange={v => set({ runtimeProbe: v })} />
-        </Row>
-      </Card>
-
       <GroupTitle>{t("settings:terminal.groupTitle")}</GroupTitle>
       <Card>
         <Row first title={t("settings:terminal.app")} desc={t("settings:terminal.appDesc")}>

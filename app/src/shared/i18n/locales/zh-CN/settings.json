@@ -157,11 +157,6 @@
       "desc": "在会话右键菜单里提供「复制续聊指令」:粘进任一装了 ferry-resume 技能的 coding agent,由它读历史接着聊,不写入任何存储"
     }
   },
-  "writeCheck": {
-    "groupTitle": "写入验收",
-    "runtimeProbe": "运行时探针",
-    "runtimeProbeDesc": "写入后在临时影子会话上真实 resume 验证,消耗一次模型调用,完成后自动清理,不向正式会话追加消息;关闭时仅做结构验证(默认)"
-  },
   "terminal": {
     "groupTitle": "终端",
     "app": "打开终端时使用",

@@ -8,10 +8,6 @@ use serde_json::{Map, Value};
 
 use crate::contracts::errors::error_policy;
 
-/// `probe.timeout` 是**未注册在契约里的幽灵码**（方案 §2.1 第 4 条 / §5）。
-/// 只能由 [`DomainError::probe_timeout`] 构造，绕开 code 注册校验。
-pub const PROBE_TIMEOUT_CODE: &str = "probe.timeout";
-
 /// 领域错误。等价于 Python 的 `DomainError` 及其全部子类。
 ///
 /// `error_type` 保存 Python 异常类名：operation 失败时落库的就是这个字符串
@@ -74,25 +70,6 @@ impl DomainError {
 
     pub fn params_mut(&mut self) -> &mut Map<String, Value> {
         &mut self.detail.params
-    }
-
-    /// 探针超时的幽灵错误码：不在契约里注册，策略硬编码为 internal/retryable。
-    pub fn probe_timeout(message: impl Into<String>) -> Self {
-        let message = message.into();
-        Self {
-            code: PROBE_TIMEOUT_CODE,
-            error_type: "ProbeTimeout",
-            category: "internal",
-            retryable: true,
-            detail: Box::new(Detail {
-                message: if message.is_empty() {
-                    PROBE_TIMEOUT_CODE.to_string()
-                } else {
-                    message
-                },
-                params: Map::new(),
-            }),
-        }
     }
 
     /// 未捕获异常的兜底：不泄漏异常文本（除非 FERRY_DEBUG）。
@@ -375,7 +352,6 @@ pub type DomainResult<T> = Result<T, DomainError>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::errors::FERRY_ERROR_CODES;
 
     #[test]
     fn policy_comes_from_the_generated_contract() {
@@ -407,15 +383,6 @@ mod tests {
         let plain = DomainError::operation_unsupported("pi", "rewrite", None);
         assert_eq!(plain.message(), "pi 不支持操作 rewrite");
         assert!(!plain.params().contains_key("mode"));
-    }
-
-    #[test]
-    fn probe_timeout_stays_a_ghost_code() {
-        assert!(!FERRY_ERROR_CODES.contains(&PROBE_TIMEOUT_CODE));
-        let error = DomainError::probe_timeout("探针超时: claude --version");
-        assert_eq!(error.code, "probe.timeout");
-        assert_eq!(error.category, "internal");
-        assert!(error.retryable);
     }
 
     #[test]
