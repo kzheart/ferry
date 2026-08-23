@@ -4,12 +4,7 @@ import { beforeEach, test, vi } from "vitest";
 import assert from "node:assert/strict";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
-let resumeEnabled = true;
 let planFailure = null;
-
-vi.mock("../../shared/capabilities/features.jsx", () => ({
-  useFeature: () => resumeEnabled,
-}));
 
 vi.mock("../../platform/desktop/client.js", () => ({
   engine: async () => ({}),
@@ -41,7 +36,6 @@ const sheet = (props = {}) => render(
 );
 
 beforeEach(() => {
-  resumeEnabled = true;
   planFailure = null;
 });
 
@@ -72,18 +66,6 @@ test("源存储被占用时给出「改为续聊」,点了只复制、不换步�
 test("与续聊无关的失败不给退路按钮", async () => {
   planFailure = Object.assign(new Error("gone"), {
     code: "session.not_found",
-    params: {},
-  });
-  await act(async () => { sheet(); });
-  await act(async () => { fireEvent.click(screen.getByText("migration:sheet.next")); });
-
-  assert.equal(screen.queryByText(/migration:resume.fallback/), null);
-});
-
-test("特性开关关着时连退路按钮都不出现", async () => {
-  resumeEnabled = false;
-  planFailure = Object.assign(new Error("busy"), {
-    code: "session.store_unavailable",
     params: {},
   });
   await act(async () => { sheet(); });

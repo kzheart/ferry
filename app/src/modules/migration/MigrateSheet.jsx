@@ -10,7 +10,6 @@ import {
 } from "../../shared/contracts/tools.js";
 import { ACCENT } from "../../shared/ui/toolDisplay.js";
 import { sessionRef } from "../browser/public.js";
-import { useFeature } from "../../shared/capabilities/features.jsx";
 import { CheckBadge, Spinner, ToolIcon } from "../../shared/ui/icons.jsx";
 import { CheckSquare, CmdRow, LossCols, Sheet } from "../../shared/ui/primitives.jsx";
 import { probeFailed, probeText } from "../../shared/contracts/events.js";
@@ -32,8 +31,6 @@ export default function MigrateSheet({
   onClose, onDone, onResumeElsewhere,
 }) {
   const { t } = useTranslation();
-  // 「续聊到」还在特性开关后面:关着时迁移失败只有重试,没有第二条出路。
-  const resumeEnabled = useFeature("handoff");
   const targets = agentsWithCapability("migration-target")
     .filter(tool => tool !== meta.tool);
   const [step, setStep] = useState("target");
@@ -206,7 +203,7 @@ export default function MigrateSheet({
           <button className="fbtn" onClick={() => loadDry(target)}>{t("migration:preview.retry")}</button>
           {/* 迁移的前置条件没满足时,「续聊」是那条零写入、永远可行的退路:
               只复制一条指令,不切换面板步骤,用户拿着去任一装了 skill 的 agent 里粘贴即可 */}
-          {resumeEnabled && canFallBackToResume(dryErr) && (
+          {canFallBackToResume(dryErr) && (
             <button className="fbtn-primary" onClick={() => onResumeElsewhere?.()}>
               {t("migration:resume.fallback")}
             </button>

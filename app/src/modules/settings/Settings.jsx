@@ -201,7 +201,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
       <GroupTitle>{t("settings:guideSection.groupTitle")}</GroupTitle>
       <Card>
         <Row first title={t("settings:guideSection.guide")} desc={t("settings:guideSection.guideDesc")}>
-          <button className="fbtn-primary" style={{ height: 30, padding: "0 13px" }}
+          <button className="fbtn" style={{ height: 30, padding: "0 13px", fontSize: 12 }}
             onClick={onOpenGuide}>{guideSeen ? t("settings:guideSection.reviewGuide") : t("settings:guideSection.quickStart")}</button>
         </Row>
         <Row title={t("settings:guideSection.firstRun")} desc={t("settings:guideSection.firstRunDesc")}>

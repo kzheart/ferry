@@ -15,10 +15,6 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
   cliUninstall: async () => { calls.cliUninstall += 1; },
   skillInstall: async (id) => { calls.skillInstall.push(id); },
   skillUninstall: async (id) => { calls.skillUninstall.push(id); },
-  featuresList: async () => [{
-    id: "handoff", stage: "preferences", default: true, enabled: true,
-  }],
-  featureSet: async () => {},
 }));
 
 const CLI_INSTALLED = {

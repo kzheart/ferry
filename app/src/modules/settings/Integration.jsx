@@ -10,9 +10,8 @@ import { useTranslation } from "react-i18next";
 import {
   cliInstall, cliUninstall, integrationStatus, skillInstall, skillUninstall,
 } from "../../platform/desktop/client.js";
-import { setFeature, useFeaturesList } from "../../shared/capabilities/features.jsx";
 import StateButton from "../../shared/ui/StateButton.jsx";
-import { Card, GroupTitle, Row, Toggle } from "./parts.jsx";
+import { Card, GroupTitle, Row } from "./parts.jsx";
 
 const mono = { fontSize: 11, color: "var(--tx5)", marginTop: 3, overflowWrap: "anywhere" };
 
@@ -111,9 +110,6 @@ export default function Integration() {
   const { t } = useTranslation();
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
-  const [handoffBusy, setHandoffBusy] = useState(false);
-  const features = useFeaturesList();
-  const handoff = features.find(feature => feature.id === "handoff");
 
   const message = value => String(value?.message || value || "");
 
@@ -145,18 +141,6 @@ export default function Integration() {
   const updatable = (status?.skills || []).some(s => s.installed && !!bundled
     && s.installed_version !== bundled);
 
-  const toggleHandoff = async next => {
-    setHandoffBusy(true);
-    setError(null);
-    try {
-      await setFeature("handoff", next);
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setHandoffBusy(false);
-    }
-  };
-
   return (
     <div>
       <GroupTitle first>{t("settings:integration.cli.groupTitle")}</GroupTitle>
@@ -180,22 +164,6 @@ export default function Integration() {
       {!bundled && status && (
         <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2 }}>
           {t("settings:integration.skills.bundleMissing")}</div>
-      )}
-
-      {handoff && (
-        <>
-          <GroupTitle>{t("settings:integration.handoff.groupTitle")}</GroupTitle>
-          <Card>
-            <Row first title={t("settings:features.handoff.title")}
-              desc={t("settings:features.handoff.desc")}>
-              <span style={{ opacity: handoffBusy ? 0.45 : 1,
-                pointerEvents: handoffBusy ? "none" : undefined, flex: "none" }}>
-                <Toggle on={handoff.enabled}
-                  onChange={toggleHandoff} />
-              </span>
-            </Row>
-          </Card>
-        </>
       )}
 
       {error && <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2, marginTop: 10 }}

@@ -105,7 +105,6 @@ export function createSessionContextMenu({
     // 指令内容与粘到哪个 agent 无关,所以只有一条入口,不按目标分列。
     {
       label: t("app:ctx.copyResumeElsewhere"),
-      feature: "handoff",
       onClick: () => onResumeElsewhere?.(session),
     },
     ...(TOOLS.includes(session.tool)
