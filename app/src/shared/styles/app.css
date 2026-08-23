@@ -397,6 +397,8 @@ html[data-platform="mac"][data-theme="dark"] {
 }
 
 @keyframes fspin { to { transform: rotate(360deg); } }
+.fspin { animation: fspin .8s linear infinite; }
+html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 @keyframes fsheet { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes ffade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fslide { from { opacity: 0; transform: translateX(7px); } to { opacity: 1; transform: none; } }

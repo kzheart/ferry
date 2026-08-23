@@ -89,10 +89,13 @@ export function ProviderIcon({ provider, size = 16 }) {
   );
 }
 
-const svg = (vb, w, h, html, extra) => (
-  <svg viewBox={vb} style={{ width: w, height: h, ...extra }}
-    dangerouslySetInnerHTML={{ __html: html }} />
-);
+const svg = (vb, w, h, html, extra = {}) => {
+  const { className, ...styleExtra } = extra;
+  return (
+    <svg className={className} viewBox={vb} style={{ width: w, height: h, ...styleExtra }}
+      dangerouslySetInnerHTML={{ __html: html }} />
+  );
+};
 
 export const SearchIcon = () => svg("0 0 16 16", 13, 13,
   '<circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
@@ -115,7 +118,7 @@ export const SortCaret = () => svg("0 0 16 16", 10, 10,
 
 export const Spinner = ({ size = 13, accent = "var(--accent)", track = "var(--spin-track)" }) => svg("0 0 16 16", size, size,
   `<circle cx="8" cy="8" r="6" fill="none" style="stroke:${track}" stroke-width="2"/><path d="M8 2 a6 6 0 0 1 6 6" fill="none" style="stroke:${accent}" stroke-width="2" stroke-linecap="round"/>`,
-  { animation: "fspin .8s linear infinite", flex: "none" });
+  { className: "fspin", flex: "none" });
 
 export const RescanIcon = ({ size = 13, color = "var(--tx2)" } = {}) => svg("0 0 16 16", size, size,
   '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2h-2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',

@@ -36,7 +36,7 @@ export function useSettings() {
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(s));
     const root = document.documentElement;
-    root.dataset.reduce = "1";
+    delete root.dataset.reduce;
     root.dataset.theme = dark ? "dark" : "light";
     // 窗口外观(毛玻璃材质/红绿灯)必须与应用主题同步,
     // 否则深色 CSS 叠在浅色 NSVisualEffectView 上会发灰;跟随系统时交还系统决定
