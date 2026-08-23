@@ -106,20 +106,15 @@ test("点某个范围就把它回传上去", () => {
   ]);
 });
 
-test("选中的范围行是高亮的那一条,「会话」此时不再高亮", () => {
-  render(<AppNav {...baseProps({ scope: { kind: "agent", value: "claude" } })} />);
+test.each([
+  [{ kind: "agent", value: "claude" }, "Claude Code84"],
+  [{ kind: "pinned" }, "置顶3"],
+])("选中的范围行是唯一高亮的那一条,「会话」不再高亮: %o", (scope, label) => {
+  render(<AppNav {...baseProps({ scope })} />);
 
   const current = screen.getAllByRole("button")
     .filter(node => node.getAttribute("aria-current") === "true");
-  assert.deepEqual(current.map(node => node.textContent.trim()), ["Claude Code84"]);
-});
-
-test("范围是置顶时高亮置顶行,不再高亮「会话」", () => {
-  render(<AppNav {...baseProps({ scope: { kind: "pinned" } })} />);
-
-  const current = screen.getAllByRole("button")
-    .filter(node => node.getAttribute("aria-current") === "true");
-  assert.deepEqual(current.map(node => node.textContent.trim()), ["置顶3"]);
+  assert.deepEqual(current.map(node => node.textContent.trim()), [label]);
 });
 
 test("没有置顶会话时不显示置顶项", () => {

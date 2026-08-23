@@ -699,6 +699,13 @@ describe("AgentRuntime", () => {
     expect(
       blank.replay("s2", 0).some((event) => event.type === "session.renamed"),
     ).toBe(false);
+
+    // 压根没配生成器时同样落到无标题。
+    const none = await createRuntime();
+    await none.createSession("s3");
+    await none.prompt("s3", "hello");
+    await none.waitForIdle("s3");
+    expect(none.state("s3").title).toBeNull();
   });
 
   it("does not auto-name a session whose first run failed", async () => {
@@ -712,14 +719,6 @@ describe("AgentRuntime", () => {
 
     expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.failed");
     expect(generated).toBe(0);
-    expect(runtime.state("s1").title).toBeNull();
-  });
-
-  it("falls back to no title when nothing can generate one", async () => {
-    const runtime = await createRuntime();
-    await runtime.createSession("s1");
-    await runtime.prompt("s1", "hello");
-    await runtime.waitForIdle("s1");
     expect(runtime.state("s1").title).toBeNull();
   });
 

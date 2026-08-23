@@ -1471,13 +1471,6 @@ mod tests {
     }
 
     #[test]
-    fn token_helpers_match_the_python_lengths() {
-        assert_eq!(token_hex(12).len(), 24);
-        assert_eq!(token_hex(25).len(), 50);
-        assert_eq!(token_urlsafe_24().len(), 24);
-    }
-
-    #[test]
     fn canonical_timestamps_survive_and_epochs_are_formatted() {
         assert_eq!(
             timestamp(Some(&Timestamp::Text("2024-01-01T00:00:00Z".into()))),

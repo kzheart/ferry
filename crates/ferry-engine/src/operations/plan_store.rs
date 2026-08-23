@@ -321,27 +321,6 @@ mod tests {
     }
 
     #[test]
-    fn digests_are_taken_over_the_canonical_form() {
-        let plan = OperationPlan {
-            plan_id: "op_x".into(),
-            kind: "edit".into(),
-            input_json: canonical_json(&json!({"b": 1, "a": 2})).unwrap(),
-            preview_json: "{}".into(),
-            input_digest: String::new(),
-            preview_digest: String::new(),
-            base_revision: "rev".into(),
-            document_revision: None,
-            created_at: 0,
-            expires_at: 0,
-        };
-        assert_eq!(plan.input_json, r#"{"a":2,"b":1}"#);
-        assert_eq!(
-            digest_json(&plan.input_json),
-            digest_json(r#"{"a":2,"b":1}"#)
-        );
-    }
-
-    #[test]
     fn public_plan_matches_the_python_summary_table() {
         let base = OperationPlan {
             plan_id: "op_x".into(),

@@ -384,6 +384,11 @@ mod tests {
             }],
         })))
         .is_err());
+        // op 里夹带 method 字段是注入企图,必须拒。
+        assert!(validate(edit(json!({
+            "ops": [{"op": "delete-turn", "turn": 1, "method": "operation.apply"}],
+        })))
+        .is_err());
     }
 
     #[test]
@@ -399,6 +404,16 @@ mod tests {
             .collect();
 
         assert!(validate(edit(json!({"ops": ops}))).is_err());
+
+        // 单条回复正文 20_001 字同样超限。
+        assert!(validate(edit(json!({
+            "ops": [{
+                "op": "replace-assistant-reply",
+                "turn": 1,
+                "reply": {"items": [{"kind": "text", "text": "x".repeat(20_001)}]},
+            }],
+        })))
+        .is_err());
     }
 
     #[test]
@@ -451,14 +466,10 @@ mod tests {
     }
 
     #[test]
-    fn delete_accepts_every_agent_declaring_the_delete_capability() {
-        for tool in crate::contracts::agents::AGENT_IDS {
-            let accepted = validate(json!({"kind": "delete", "tool": tool, "refs": [REF]})).is_ok();
-            assert_eq!(
-                accepted,
-                crate::operations::validation::agent_has_capability(tool, "delete")
-            );
-        }
+    fn delete_follows_the_declared_delete_capability() {
+        // claude 声明了 delete;cursor 没有。
+        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [REF]})).is_ok());
+        assert!(validate(json!({"kind": "delete", "tool": "cursor", "refs": [REF]})).is_err());
     }
 
     #[test]

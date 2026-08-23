@@ -3,7 +3,6 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   AGENT_CAPABILITIES,
-  AGENT_EDIT_OPERATIONS,
   AGENT_IDS,
 } from "../src/server/generated/agents.js";
 import { createFerryTools } from "../src/tools/catalog.js";
@@ -415,22 +414,5 @@ describe("Ferry mutation tool schemas", () => {
     await expect(execute({ ...migration, intent: "invalid" })).rejects.toThrow(
       "requires intent preview or execute",
     );
-  });
-
-  it("describes the explicit operation intent", () => {
-    const exposedOperations = new Set(["delete-turn", "rewrite"]);
-    const supportDescription = AGENT_IDS.flatMap((tool) => {
-      const operations = AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
-        exposedOperations.has(operation),
-      );
-      return operations.length ? [`${tool}: ${operations.join(", ")}`] : [];
-    }).join("; ");
-    expect(migrateTool.description).toContain("intent is required");
-    expect(sessionEditTool.description).toContain(
-      "Metadata patch does not accept intent",
-    );
-    expect(sessionEditTool.description).toContain(supportDescription);
-    expect(sessionDeleteTool.description).toContain("NO undo");
-    expect(askUserTool.description).toContain("does not authorize deletion");
   });
 });

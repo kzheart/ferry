@@ -161,6 +161,9 @@ test("没有筛选的空资料库给出路,而不是一个点了没反应的清�
   assert.ok(screen.getByText("common:empty.libraryNone"));
   assert.ok(screen.getByText("common:empty.libraryNoneHint"));
   assert.equal(screen.queryByText("common:empty.library"), null, "不该说'没有匹配'");
+  // 扫描成功,所以既没有旧数据提示,也没有故障空态
+  assert.equal(screen.queryByText("common:empty.staleScan"), null);
+  assert.equal(screen.queryByText("common:empty.scanFailed"), null);
   // 清除筛选按钮不存在(顶部查询条也没有,所以整屏都不该出现这个词)
   assert.equal(screen.queryByText("common:empty.clearFilter"), null);
 
@@ -217,6 +220,8 @@ test("只有筛选条件、没有查询词时不提全文搜索——没有词�
   assert.equal(screen.queryByText("common:empty.fullTextSearch"), null);
   assert.equal(screen.queryByText("common:empty.titleOnlyHint"), null);
   assert.ok(screen.getByText("common:empty.clearFilter"));
+  // 只有筛选条件同样算"筛出来的空"
+  assert.ok(screen.getByText("common:empty.library"));
 });
 
 // 扫描失败时列表也是空的,但那是故障,不是"没匹配上"或"你还没有会话"。
@@ -280,27 +285,6 @@ test("扫描失败但上次结果还在:列表照常渲染,顶部说明这是旧
   assert.ok(screen.getByText("engine offline"));
   fireEvent.click(screen.getByText("common:empty.retryScan"));
   assert.deepEqual(rescans, [1]);
-});
-
-test("扫描成功时既没有旧数据提示,也没有故障空态", () => {
-  render(<ResourcePaneHost {...baseProps({ library: { ...baseProps().library, groups: [] } })} />);
-
-  assert.equal(screen.queryByText("common:empty.staleScan"), null);
-  assert.equal(screen.queryByText("common:empty.scanFailed"), null);
-  assert.ok(screen.getByText("common:empty.libraryNone"));
-});
-
-test("只有筛选条件(无查询词)同样算筛出来的空", () => {
-  render(
-    <ResourcePaneHost
-      {...baseProps({
-        pane: { ...baseProps().pane, filterCount: 2 },
-        library: { ...baseProps().library, groups: [] },
-      })}
-    />,
-  );
-
-  assert.ok(screen.getByText("common:empty.library"));
 });
 
 test("迁移历史的真空态讲清楚记录从哪来,且不给清除筛选", () => {

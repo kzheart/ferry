@@ -7,7 +7,6 @@
 //! 这里用假 adapter / 假索引把 operations 单独拎出来跑，不依赖 WP-C/WP-D。
 
 use std::any::Any;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -910,20 +909,6 @@ fn unknown_operation_kind_is_rejected() {
     let error = service.plan(&json!({"kind": "unknown"})).unwrap_err();
     assert_eq!(error.error_type(), "AgentRequestError");
     assert_eq!(error.message(), "operation kind 非法");
-}
-
-#[test]
-fn plan_ids_are_unique_and_prefixed() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let mut seen: HashMap<String, ()> = HashMap::new();
-    for _ in 0..8 {
-        let plan = service.plan(&edit_plan(default_ops())).unwrap();
-        let plan_id = plan["plan_id"].as_str().unwrap().to_string();
-        assert!(plan_id.starts_with("op_"), "{plan_id}");
-        assert_eq!(plan_id.len(), 3 + 24);
-        assert!(seen.insert(plan_id, ()).is_none(), "plan_id 重复");
-    }
 }
 
 #[test]

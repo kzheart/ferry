@@ -131,13 +131,6 @@ mod tests {
         assert_eq!(extract_templates(&fixture()).unwrap(), templates());
     }
 
-    #[test]
-    fn results_are_independent_copies() {
-        let mut first = templates();
-        first.clear();
-        assert!(!templates().is_empty());
-    }
-
     /// 移植 `tests/test_current_native_formats.py::test_pi_current_structure_is_session_v3`。
     #[test]
     fn current_structure_is_session_v3() {

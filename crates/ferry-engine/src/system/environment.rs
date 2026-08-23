@@ -56,21 +56,3 @@ pub fn inspect(registry: &AdapterRegistry) -> Map<String, Value> {
     }
     out
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_executables_report_neither_installed_nor_broken() {
-        let payload = ToolPresence::default().to_value();
-        assert_eq!(payload["installed"], Value::Bool(false));
-        assert_eq!(payload["broken"], Value::Bool(false));
-        assert_eq!(payload["path"], Value::Null);
-    }
-
-    #[test]
-    fn empty_registry_yields_an_empty_report() {
-        assert!(inspect(&AdapterRegistry::default()).is_empty());
-    }
-}

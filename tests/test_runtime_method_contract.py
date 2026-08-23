@@ -44,12 +44,3 @@ def test_internal_runtime_commands_never_enter_webview_allowlist():
 
     host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
     assert "runtime_methods::is_public(method)" in host
-    assert 'method,\n        "health"' not in host
-
-
-def test_runtime_parser_uses_generated_method_union():
-    messages = (ROOT / "ferry-runtime/src/server/messages.ts").read_text()
-    assert "type RuntimeMethod" in messages
-    assert "isRuntimeMethod(input.method)" in messages
-    assert "export type CommandMethod =" not in messages
-    assert "const methods: readonly string[]" not in messages

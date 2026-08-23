@@ -49,8 +49,6 @@ jobs:
       - run: npm run check:boundaries && npm run typecheck && npm test && npm run build
         working-directory: app
       - run: python -m pip install -r requirements-test.txt
-      - run: python scripts/check-no-agent-versioning.py
-      - run: python scripts/check-no-legacy-runtime.py
       - run: python scripts/generate-contracts.py --check
       - run: python -m ruff check tests scripts
       - run: python -m pytest

@@ -1647,33 +1647,21 @@ mod tests {
         assert_eq!(codes(&dropped), ["tool_unsupported"]);
         assert_eq!(fields(&dropped.ignored_fields), ["url"]);
 
-        let narrated = decide(&call(
-            "Glob",
-            CanonicalOp::FS_GLOB,
-            json!({"pattern": "*.rs"}),
-            Some(text_result("out")),
-        ));
-        assert_eq!(narrated.fidelity, Fidelity::Narrated);
-        assert_eq!(codes(&narrated), ["tool_to_history"]);
-        // dropped 的入参真的没进目标端，narrated 的还在 narration 里。
-        assert!(narrated.ignored_fields.is_empty());
-    }
-
-    #[test]
-    fn narrated_decisions_do_not_claim_fields_that_narration_keeps() {
-        // 报告与实际写入必须一致：narration 模板会把入参 JSON 原样写进目标会话，
-        // 所以 ignored_fields 必须为空——否则 plan/preview 会谎报字段丢失。
-        let tool = call(
+        let glob = call(
             "Glob",
             CanonicalOp::FS_GLOB,
             json!({"pattern": "*.rs"}),
             Some(text_result("out")),
         );
-        let decision = decide(&tool);
-        assert_eq!(decision.fidelity, Fidelity::Narrated);
-        assert!(decision.ignored_fields.is_empty());
-        assert!(decision.consumed_fields.is_empty());
-        assert!(narrate(&tool).contains("\"pattern\": \"*.rs\""));
+        let narrated = decide(&glob);
+        assert_eq!(narrated.fidelity, Fidelity::Narrated);
+        assert_eq!(codes(&narrated), ["tool_to_history"]);
+        // dropped 的入参真的没进目标端，narrated 的还在 narration 里：
+        // narration 模板把入参 JSON 原样写进目标会话，所以两份字段清单都必须为空，
+        // 否则 plan/preview 会谎报字段丢失。
+        assert!(narrated.ignored_fields.is_empty());
+        assert!(narrated.consumed_fields.is_empty());
+        assert!(narrate(&glob).contains("\"pattern\": \"*.rs\""));
     }
 
     #[test]

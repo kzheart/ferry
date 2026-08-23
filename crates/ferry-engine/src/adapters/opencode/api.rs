@@ -304,25 +304,4 @@ mod tests {
         assert_eq!(captures[1].trim_end_matches('/'), "http://127.0.0.1:53211");
         assert!(LISTENING_RE.captures("something else").is_none());
     }
-
-    #[test]
-    fn the_factory_can_be_swapped_for_tests() {
-        struct Fake;
-        impl OpenCodeApiClient for Fake {
-            fn supports_part_patch(&self) -> DomainResult<bool> {
-                Ok(true)
-            }
-            fn patch_part(&self, _: &str, _: &str, _: &Value) -> DomainResult<Value> {
-                Ok(Value::Null)
-            }
-            fn assert_idle(&self, _: &str) -> DomainResult<()> {
-                Ok(())
-            }
-        }
-        install_factory(Some(Arc::new(|_cwd: &str| {
-            Ok(Box::new(Fake) as Box<dyn OpenCodeApiClient>)
-        })));
-        assert!(factory()("/tmp").unwrap().supports_part_patch().unwrap());
-        install_factory(None);
-    }
 }

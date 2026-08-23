@@ -12,24 +12,12 @@ pub fn blake3_hex(value: &[u8]) -> String {
 mod tests {
     use super::*;
 
-    /// BLAKE3 官方测试向量。
-    #[test]
-    fn matches_the_official_vectors() {
-        assert_eq!(
-            blake3_hex(b""),
-            "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
-        );
-        assert_eq!(
-            blake3_hex(b"abc"),
-            "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"
-        );
-    }
-
-    /// 跨 chunk 边界的冻结向量。
+    /// 官方向量 + 跨 chunk 边界的冻结向量。
     ///
-    /// 覆盖 1 chunk 以内、正好 1024 字节、跨 chunk（触发 parent 归并）与含 NUL
-    /// 的 content_hash 形态。这几个值是冻结基线：升级 `blake3` crate 时，任何
-    /// 一条对不上都说明摘要口径变了，Grok 的搜索索引会整体失配。
+    /// 覆盖 BLAKE3 官方测试向量、1 chunk 以内、正好 1024 字节、跨 chunk
+    /// （触发 parent 归并）与含 NUL 的 content_hash 形态。这几个值是冻结基线：
+    /// 升级 `blake3` crate 时，任何一条对不上都说明摘要口径变了，Grok 的搜索
+    /// 索引会整体失配。
     #[test]
     fn matches_the_frozen_chunk_boundary_vectors() {
         let mut bytes_256: Vec<u8> = Vec::new();
@@ -37,6 +25,14 @@ mod tests {
             bytes_256.extend(0u8..=255);
         }
         let cases: Vec<(Vec<u8>, &str)> = vec![
+            (
+                b"".to_vec(),
+                "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+            ),
+            (
+                b"abc".to_vec(),
+                "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85",
+            ),
             (
                 b"title\0content".to_vec(),
                 "e145d4463ac2b66b19d3ba46968e795a4a450b21fce38906306d2f7c64ee919d",

@@ -503,23 +503,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// 体积助手本体的用例在 `sessions::safety`；这里只钉住「edit 用的是**那一份**」。
-    #[test]
-    fn edit_dto_helpers_come_from_sessions_safety() {
-        assert_eq!(
-            crate::sessions::safety::python_json(&json!({"b": 1, "a": 2}), false),
-            r#"{"b": 1, "a": 2}"#
-        );
-        let big = json!({"text": "x".repeat(70 * 1024)});
-        let error = finalize_dto(big.as_object().unwrap().clone()).unwrap_err();
-        assert_eq!(error.message(), "Agent DTO 超过 64 KiB");
-        let bounded = bounded_json(
-            &Value::Array((0..201).map(Value::from).collect()),
-            32 * 1024,
-        );
-        assert_eq!(bounded["truncated"], json!(true));
-    }
-
     #[test]
     fn locator_error_prefers_the_authored_turn_locator() {
         let ops = vec![

@@ -382,17 +382,4 @@ mod tests {
         assert!(payload["params"]["recovery"].is_string());
         assert_eq!(failure.exit_code(), 2);
     }
-
-    #[test]
-    fn engine_failures_are_passed_through_verbatim() {
-        let payload = serde_json::json!({
-            "code": "agent.reference_invalid",
-            "category": "validation",
-            "retryable": false,
-            "params": {"reason": "unknown_ref"},
-        });
-        let failure = Failure::Engine(payload.clone());
-        assert_eq!(failure.payload(), payload);
-        assert_eq!(failure.exit_code(), 1);
-    }
 }

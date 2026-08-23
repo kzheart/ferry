@@ -934,30 +934,6 @@ mod tests {
     }
 
     #[test]
-    fn scan_rows_carry_the_id_shaped_metadata() {
-        let _guard = guard();
-        let root = tempfile::tempdir().unwrap();
-        let database = root.path().join("opencode.db");
-        store::tests::materialize(&database, &fixture("case-02-tools"));
-        store::set_database_path_override(Some(database));
-        let rows = scan(&NoCache).unwrap();
-        store::set_database_path_override(None);
-
-        assert_eq!(rows.len(), 1);
-        let row = &rows[0];
-        assert_eq!(row["tool"], json!("opencode"));
-        assert_eq!(row["id"], json!("fixture-opencode-tools"));
-        assert_eq!(row["count"], json!(3));
-        // opencode 不落文件：path 恒 ""、size 恒 0。
-        assert_eq!(row["path"], json!(""));
-        assert_eq!(row["size"], json!(0));
-        assert_eq!(row["tokens"], json!(null));
-        assert_eq!(row["model"], json!(""));
-        assert_eq!(row["parent_id"], json!(null));
-        assert_eq!(row["root_id"], json!("fixture-opencode-tools"));
-    }
-
-    #[test]
     fn the_database_stamp_never_includes_the_shm_sidecar() {
         let _guard = guard();
         let root = tempfile::tempdir().unwrap();

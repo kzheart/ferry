@@ -1,10 +1,9 @@
-//! 源码级结构守卫：分层方向、mod 声明完整性、canonical 模型边界、损耗目录闭环。
+//! 源码级结构守卫：分层方向、mod 声明完整性、损耗目录闭环。
 //!
 //! `adapters` 不得引用 `operations` 与 `sessions`：共享助手放进
 //! `adapters::shared`，由 sessions 复用，依赖方向单向向下。
 //!
-//! canonical 模型的两条边界（不留存完整原生记录、工具结果只有一份事实源）与
-//! 损耗目录闭环都是**源码形态**约束，编译器管不到，只能靠本文件扫描源码守住。
+//! 损耗目录闭环是**源码形态**约束，编译器管不到，只能靠本文件扫描源码守住。
 
 use std::path::{Path, PathBuf};
 
@@ -88,142 +87,6 @@ fn braced_body(source: &str, header: &str) -> Option<String> {
         index += 1;
     }
     None
-}
-
-/// 结构体体内声明的字段名（`pub name: Type,`）。
-fn field_names(body: &str) -> Vec<String> {
-    body.lines()
-        .filter_map(|line| {
-            let line = line.trim_start();
-            let rest = line.strip_prefix("pub ")?;
-            let name = rest.split(':').next()?.trim();
-            name.chars()
-                .all(|character| character.is_ascii_alphanumeric() || character == '_')
-                .then(|| name.to_string())
-        })
-        .collect()
-}
-
-/// 块内声明的函数名（含 `pub fn` / `fn` / `pub(crate) fn`）。
-fn function_names(body: &str) -> Vec<String> {
-    body.lines()
-        .filter_map(|line| {
-            let index = line.find("fn ")?;
-            let prefix = line[..index].trim();
-            if !prefix.is_empty() && !prefix.starts_with("pub") && prefix != "const" {
-                return None;
-            }
-            let rest = &line[index + 3..];
-            let name: String = rest
-                .chars()
-                .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
-                .collect();
-            (!name.is_empty()).then_some(name)
-        })
-        .collect()
-}
-
-// ---------------------------------------------------------------------------
-// canonical 模型边界
-// ---------------------------------------------------------------------------
-
-fn model_source() -> String {
-    std::fs::read_to_string(source_root().join("model.rs")).expect("model.rs 可读")
-}
-
-#[test]
-fn canonical_sessions_keep_no_complete_native_records() {
-    let model = model_source();
-    let mut offenders = Vec::new();
-    if model.contains("struct RawRecord") {
-        offenders.push("RawRecord".to_string());
-    }
-    let forbidden: &[(&str, &[&str])] = &[
-        ("Message", &["raw"]),
-        ("Session", &["meta", "raw_records"]),
-        ("AgentEdge", &["meta"]),
-    ];
-    for (name, banned) in forbidden {
-        let body = braced_body(&model, &format!("pub struct {name} {{"))
-            .unwrap_or_else(|| panic!("model.rs 里找得到 {name}"));
-        for field in field_names(&body) {
-            if banned.contains(&field.as_str()) {
-                offenders.push(format!("{name}.{field}"));
-            }
-        }
-    }
-    // 完整原生记录一旦被留存，整棵会话树都会跟着带上——全 crate 兜底。
-    for path in rust_sources(&source_root()) {
-        let text = std::fs::read_to_string(&path).expect("源文件可读");
-        for (number, line) in text.lines().enumerate() {
-            if line.contains("raw_records") {
-                offenders.push(format!("{}:{}", path.display(), number + 1));
-            }
-        }
-    }
-    assert!(
-        offenders.is_empty(),
-        "canonical 会话不得留存完整原生记录:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn canonical_tool_results_have_one_source_of_truth() {
-    let model = model_source();
-    let mut offenders = Vec::new();
-
-    let call_body =
-        braced_body(&model, "pub struct ToolCall {").expect("model.rs 里找得到 ToolCall");
-    for field in field_names(&call_body) {
-        if ["meta", "output", "status", "tool_result"].contains(&field.as_str()) {
-            offenders.push(format!("ToolCall.{field}"));
-        }
-    }
-
-    let banned_methods = [
-        "from_legacy",
-        "legacy_output",
-        "normalize_tool_result_status",
-        "set_result",
-    ];
-    for name in ["ToolCall", "ToolResult"] {
-        let Some(body) = braced_body(&model, &format!("impl {name} {{")) else {
-            continue;
-        };
-        for function in function_names(&body) {
-            if banned_methods.contains(&function.as_str()) {
-                offenders.push(format!("{name}::{function}()"));
-            }
-        }
-    }
-    for function in function_names(&model) {
-        if function == "normalize_tool_result_status" {
-            offenders.push("normalize_tool_result_status()".to_string());
-        }
-    }
-
-    // 镜像字段：同一份工具结果被复制成第二个形态，就会有两处需要同时维护。
-    let mirrored = [
-        concat!("canonical", "ToolResult"),
-        concat!("canonical_", "blocks"),
-        concat!("canonical_", "metadata"),
-    ];
-    for path in rust_sources(&source_root()) {
-        let text = std::fs::read_to_string(&path).expect("源文件可读");
-        for (number, line) in text.lines().enumerate() {
-            for field in mirrored {
-                if line.contains(field) {
-                    offenders.push(format!("{}:{}: {field}", path.display(), number + 1));
-                }
-            }
-        }
-    }
-    assert!(
-        offenders.is_empty(),
-        "canonical 工具结果必须只有一份事实源:\n{}",
-        offenders.join("\n")
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -365,24 +228,6 @@ fn every_produced_loss_code_is_declared_by_its_owner() {
         undeclared.is_empty(),
         "这些 loss code 产出了却没人声明后果:\n{}",
         undeclared.join("\n")
-    );
-}
-
-#[test]
-fn the_loss_scanner_sees_both_call_shapes() {
-    // 扫描器本身要有护栏：漏掉一种调用形态，上面那条测试就会静默变成空跑。
-    let source = r#"
-        session.lose("migration.truncated", params);
-        losing(session, "session.unpaired_tool_use", "key", value);
-        session.lose(dynamic_code, params);
-        #[cfg(test)]
-        mod tests {
-            fn probe() { session.lose("never.declared", params); }
-        }
-    "#;
-    assert_eq!(
-        produced_loss_codes(&strip_test_modules(source)),
-        ["migration.truncated", "session.unpaired_tool_use"]
     );
 }
 

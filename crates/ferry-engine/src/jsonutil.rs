@@ -282,8 +282,10 @@ mod tests {
         );
     }
 
+    /// 冻结的 stat 摘要：macOS 的 dev_t 是 int32_t，`MetadataExt::dev()` 把 -1
+    /// 抬成 u64::MAX，而 Python 的 st_dev 仍然打印 -1。
     #[test]
-    fn stat_digest_uses_the_stat_prefix() {
+    fn stat_digest_prints_negative_dev_like_python() {
         let stat = FileStat {
             dev: 1,
             ino: 2,
@@ -292,23 +294,15 @@ mod tests {
         };
         assert_eq!(
             stat_digest("/tmp/a.jsonl", &stat),
-            format!("stat:{}", sha256_hex(b"/tmp/a.jsonl:1:2:3:4"))
+            "stat:f9baea645ddb5b3a2b599a6dcd269a4f6c1ca017a6a6245e79e74a6ca80435f0"
         );
-    }
-
-    #[test]
-    fn stat_digest_prints_negative_dev_like_python() {
-        // macOS 的 dev_t 是 int32_t：`MetadataExt::dev()` 把 -1 抬成 u64::MAX，
-        // Python 的 st_dev 仍然打印 -1。
-        let stat = FileStat {
+        let negative = FileStat {
             dev: u64::MAX,
-            ino: 2,
-            mtime_ns: 3,
-            size: 4,
+            ..stat
         };
         assert_eq!(
-            stat_digest("/tmp/a.jsonl", &stat),
-            format!("stat:{}", sha256_hex(b"/tmp/a.jsonl:-1:2:3:4"))
+            stat_digest("/tmp/a.jsonl", &negative),
+            "stat:b2541df695edf8d5dbfc2f865d3b223b5728d8b09c8ff9a3c55e780e3bae2763"
         );
     }
 
@@ -320,21 +314,5 @@ mod tests {
         assert_eq!(python_str(&json!("x")), "x");
         assert_eq!(python_str(&json!(3)), "3");
         assert_eq!(python_str(&json!(1.5)), "1.5");
-    }
-
-    #[test]
-    fn revision_shape_matches_python_tuple_serialization() {
-        // index.py:30-47 的 revision：file_identity 的嵌套 tuple 序列化为 JSON 数组。
-        let payload = json!({
-            "tool": "claude",
-            "ref": "/tmp/a.jsonl",
-            "updated": 1,
-            "size": 2,
-            "file_identity": [["a.jsonl", ["sha256", "deadbeef"]]],
-        });
-        assert_eq!(
-            canonical_json(&payload).unwrap(),
-            r#"{"file_identity":[["a.jsonl",["sha256","deadbeef"]]],"ref":"/tmp/a.jsonl","size":2,"tool":"claude","updated":1}"#
-        );
     }
 }

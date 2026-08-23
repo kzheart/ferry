@@ -188,6 +188,8 @@ fn the_bundled_skills_are_installed_and_removed_as_one_group() {
 
     // 组里少一份就整体报「未安装」:半装状态不该显示成已安装。
     remove_skill_dir(&target_dir.join(BUNDLED_SKILLS[1])).expect("摘掉其中一份");
+    // 单个目录已经不在了再删一次也不该报错(前端可能重复点)。
+    remove_skill_dir(&target_dir.join(BUNDLED_SKILLS[1])).expect("重复摘除");
     let partial = skill_target_status(&target);
     assert!(!partial.installed);
     assert!(partial.installed_version.is_none());
@@ -208,22 +210,6 @@ fn the_bundled_skills_are_installed_and_removed_as_one_group() {
     assert!(neighbour.exists());
     // 已经不在了再删一次也不该报错(前端可能重复点)。
     remove_skill_group(&target_dir).expect("重复移除");
-}
-
-#[test]
-fn uninstall_removes_only_the_ferry_directory() {
-    let scratch = Scratch::new("uninstall");
-    let source = skill_source(&scratch, "0.7.0");
-    let target_dir = scratch.join("agent/skills");
-    let neighbour = target_dir.join("other-skill/SKILL.md");
-    write(&neighbour, "---\nname: other\n---\n");
-
-    install_skill_into(&source, &target_dir).expect("安装");
-    remove_skill_dir(&target_dir.join("ferry")).expect("卸载");
-    assert!(!target_dir.join("ferry").exists());
-    assert!(neighbour.exists());
-    // 已经不在了再删一次也不该报错(前端可能重复点)。
-    remove_skill_dir(&target_dir.join("ferry")).expect("重复卸载");
 }
 
 #[test]

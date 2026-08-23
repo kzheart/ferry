@@ -1090,11 +1090,11 @@ mod tests {
 
     #[test]
     fn slug_folds_every_non_alphanumeric_character() {
-        assert_eq!(slug("/tmp"), slug("/tmp"));
-        assert!(!slug("/a b/c").contains(' '));
-        assert!(slug("/a b/c")
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-'));
+        // 不存在的路径走词法归一：空格等非字母数字字符统一折成 '-'。
+        assert_eq!(slug("/ferry nx/a b"), "-ferry-nx-a-b");
+        // `..` 与重复斜杠先被 resolve_lexically 归一，再折字符。
+        assert_eq!(slug("/ferry nx/x/../y"), "-ferry-nx-y");
+        assert_eq!(slug("/ferry nx//z"), "-ferry-nx-z");
     }
 
     #[test]

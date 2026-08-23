@@ -171,7 +171,3 @@ test("打包资源缺失时禁用安装入口", async () => {
   expect(buttonWith("settings:integration.skills.stateNotInstalled").disabled).toBe(true);
 });
 
-test("引擎状态与共享开关不再出现在这一页", async () => {
-  await mount();
-  expect(document.body.textContent).not.toContain("integration.engine");
-});

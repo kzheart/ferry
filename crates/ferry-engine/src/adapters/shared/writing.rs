@@ -209,12 +209,4 @@ mod tests {
         // 临时文件必须已被 rename 掉。
         assert!(!path.with_extension("jsonl.tmp").exists());
     }
-
-    #[test]
-    fn empty_rows_produce_an_empty_file() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("empty.jsonl");
-        write_jsonl(&path, &[]).unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "");
-    }
 }

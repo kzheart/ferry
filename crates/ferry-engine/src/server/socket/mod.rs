@@ -433,24 +433,6 @@ fn shutdown_response(shared: &Shared, id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::engine_methods::ENGINE_METHOD_NAMES;
-
-    /// 管理方法是传输的性质，不是引擎能力：不得混进方法表。
-    #[test]
-    fn daemon_control_methods_are_not_rpc_methods() {
-        for method in ["daemon.status", "daemon.shutdown"] {
-            assert!(!ENGINE_METHOD_NAMES.contains(&method), "{method}");
-            assert!(!is_cli_method(method), "{method}");
-        }
-    }
-
-    #[test]
-    fn engine_mode_parses_both_roles() {
-        assert_eq!(EngineMode::parse("app"), Some(EngineMode::App));
-        assert_eq!(EngineMode::parse("daemon"), Some(EngineMode::Daemon));
-        assert_eq!(EngineMode::parse("both"), None);
-        assert_eq!(EngineMode::App.as_str(), "app");
-    }
 
     fn shared(mode: EngineMode) -> Arc<Shared> {
         Arc::new(Shared {

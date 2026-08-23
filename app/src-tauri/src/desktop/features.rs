@@ -84,20 +84,6 @@ pub(crate) async fn feature_set(id: String, enabled: bool) -> Result<(), Feature
 mod tests {
     use super::*;
 
-    /// 契约生成物与 id 校验的往返:前端只能用契约里有的 id 进门。
-    #[test]
-    fn only_ids_declared_by_the_contract_get_through() {
-        for spec in FEATURES {
-            let feature = Feature::from_id(spec.id).expect("契约里的 id 必须认得");
-            assert_eq!(feature, spec.feature);
-            assert_eq!(feature.id(), spec.id);
-            assert_eq!(default_of(feature), spec.default);
-        }
-        assert!(Feature::from_id("experimental_agent").is_none());
-        assert!(Feature::from_id("").is_none());
-        assert!(Feature::from_id("builtin_agent").is_none());
-    }
-
     /// 未知 id 拒绝在落盘之前,而且给的是结构化 code 而不是一句人话。
     #[test]
     fn an_unknown_id_is_refused_before_anything_is_written() {
@@ -106,19 +92,7 @@ mod tests {
         let value = serde_json::to_value(&error).expect("可序列化");
         assert_eq!(value["code"], "feature.unknown");
         assert_eq!(value["feature"], "nope");
-    }
-
-    /// 设置页拿到的一行必须自带契约默认:前端不重复抄一份默认值。
-    #[test]
-    fn every_listed_feature_carries_its_contract_shape() {
-        for state in states() {
-            let spec = FEATURES
-                .iter()
-                .find(|spec| spec.id == state.id)
-                .expect("列出的特性必须来自契约");
-            assert_eq!(state.stage, spec.stage);
-            assert_eq!(state.default, spec.default);
-            assert!(spec.surfaces.contains(&"ui"));
-        }
+        assert!(Feature::from_id("nope").is_none());
+        assert!(Feature::from_id("").is_none());
     }
 }

@@ -320,14 +320,9 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn there_are_exactly_eleven_canonical_ops() {
-        assert_eq!(TOOL_OP_SPECS.len(), 11);
+    fn missing_or_empty_required_inputs_are_invalid() {
         assert!(is_canonical_op(CanonicalOp::AGENT_SPAWN));
         assert!(!is_canonical_op("shell.run"));
-    }
-
-    #[test]
-    fn missing_or_empty_required_inputs_are_invalid() {
         assert!(has_valid_tool_input(
             Some(CanonicalOp::SHELL_EXEC),
             &json!({"command": "ls"})

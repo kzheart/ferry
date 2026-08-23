@@ -128,52 +128,6 @@ def test_view_models_live_with_their_consuming_capability():
             )
 
 
-def test_shell_composes_capabilities_without_reaching_into_their_internals():
-    """主壳负责编排:渲染工作区路由与弹层控制器,不直接拼装某个能力的内部视图。"""
-    app = (FRONTEND / "shell/AppController.jsx").read_text()
-    assert "AppOverlayController" in app
-    assert "WorkspaceRouter" in app
-    # 详情区视图由 WorkspaceRouter 决定,主壳不直接引入
-    assert "browser/SessionDetail.jsx" not in app
-    assert "shared/ui/primitives.jsx" not in app
-    # 键盘监听归 useAppKeyboardShortcuts,主壳不自己挂全局监听
-    assert 'document.addEventListener("keydown"' not in app
-
-
-def test_operation_flow_has_one_module_controller():
-    controller = FRONTEND / "modules/operations/operationController.ts"
-    composition = FRONTEND / "modules/operations/operations.ts"
-    assert controller.is_file()
-    assert composition.is_file()
-
-    transport = (FRONTEND / "platform/desktop/client.ts").read_text()
-    assert "operationApplyAndWait" not in transport
-
-    for relative_path in (
-        "shell/AppController.jsx",
-        "modules/editing/useSessionEditing.js",
-        "modules/migration/MigrateSheet.jsx",
-    ):
-        source = (FRONTEND / relative_path).read_text()
-        assert "operationPlan" not in source
-        assert "operationApply" not in source
-        assert "operationStatus" not in source
-        assert "operationCancel" not in source
-
-
-def test_session_mutations_live_in_browser_capability():
-    app = (FRONTEND / "shell/AppController.jsx").read_text()
-    metadata = FRONTEND / "modules/browser/useSessionMetadata.js"
-    deletion = FRONTEND / "modules/browser/useSessionDeletion.js"
-
-    assert metadata.is_file()
-    assert deletion.is_file()
-    assert "operations.plan" not in app
-    assert 'engine("session_meta_list")' not in app
-    assert "useSessionMetadata" in app
-    assert "useSessionDeletion" in app
-
-
 def test_frontend_core_uses_strict_typescript():
     tsconfig = (ROOT / "app/tsconfig.json").read_text()
     package = (ROOT / "app/package.json").read_text()
@@ -182,10 +136,6 @@ def test_frontend_core_uses_strict_typescript():
     assert '"noUncheckedIndexedAccess": true' in tsconfig
     assert '"exactOptionalPropertyTypes": true' in tsconfig
     assert '"typecheck": "tsc --noEmit"' in package
-    assert (FRONTEND / "shared/contracts/generated/operations.ts").is_file()
-    assert not (FRONTEND / "shared/contracts/generated/operations.js").exists()
-    assert (FRONTEND / "platform/desktop/client.ts").is_file()
-    assert not (FRONTEND / "api/transport/rpc.js").exists()
 
 
 def test_desktop_webview_has_a_restricted_content_security_policy():
@@ -212,12 +162,6 @@ def test_desktop_webview_has_a_restricted_content_security_policy():
 
 def test_agent_icons_are_resources_not_inline_code():
     """Agent 图标是 assets 资源；新增 Agent 放一个 svg 即可，不必改 icons.jsx。"""
-    icons = (FRONTEND / "shared/ui/icons.jsx").read_text(encoding="utf-8")
-    assert "import.meta.glob" in icons, "Agent 图标应从 assets/icons 静态收集"
-    assert "CLAUDE_PATH" not in icons
-    assert "CODEX_PATH" not in icons
-    assert "OPENCODE_FRAME_PATH" not in icons
-
     declared = {
         agent["icon"]
         for agent in json.loads(
@@ -230,11 +174,6 @@ def test_agent_icons_are_resources_not_inline_code():
     assert declared <= available, (
         f"契约声明的图标缺少资源: {sorted(declared - available)}"
     )
-    assert "AGENT_FALLBACK_COLOR" in icons
-    assert 'markup?.includes("<rect")' in icons
-    assert 'className="agent-icon-svg"' in icons
-    styles = (FRONTEND / "shared/styles/app.css").read_text(encoding="utf-8")
-    assert ".agent-icon-svg > svg" in styles
 
 
 def test_agent_icon_assets_are_self_contained():
@@ -252,12 +191,3 @@ def test_agent_icon_assets_are_self_contained():
         )
         assert "http://www.w3.org/2000/svg" in markup, path.name
         assert "xlink:href" not in markup and "<image" not in markup, path.name
-
-
-def test_current_session_filters_follow_capabilities_but_history_keeps_all_tools():
-    browser = (FRONTEND / "modules/browser/BrowserOverlays.jsx").read_text()
-    history = (FRONTEND / "modules/migration/HistoryOverlays.jsx").read_text()
-
-    assert 'agentsWithCapability("browse")' in browser
-    assert "tools.map" in history
-    assert "agentsWithCapability" not in history

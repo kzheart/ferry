@@ -425,14 +425,12 @@ mod tests {
     }
 
     #[test]
-    fn serve_without_socket_flags_stays_pure_stdio() {
-        assert!(parse_serve_options(&[]).unwrap().is_none());
-    }
-
-    #[test]
     fn serve_socket_flags_shape_the_three_deployments() {
         let argv =
             |items: &[&str]| -> Vec<String> { items.iter().map(|item| item.to_string()).collect() };
+        // 不带任何 socket 开关：纯 stdio。
+        assert!(parse_serve_options(&[]).unwrap().is_none());
+
         // App sidecar：兼听 socket，不 idle-exit。
         let sidecar = parse_serve_options(&argv(&["--socket", "/tmp/a.sock"]))
             .unwrap()
@@ -462,14 +460,6 @@ mod tests {
         assert!(parse_serve_options(&argv(&["--idle-exit", "soon"])).is_err());
         assert!(parse_serve_options(&argv(&["--nope"])).is_err());
         assert!(parse_serve_options(&argv(&["--mode"])).is_err());
-    }
-
-    /// `extract-format` 只是维护者工具，不得混进 `ferry-ipc/1` 的方法表。
-    #[test]
-    fn extract_format_is_not_an_rpc_method() {
-        use crate::contracts::engine_methods::ENGINE_METHOD_NAMES;
-        assert!(!ENGINE_METHOD_NAMES.contains(&"extract-format"));
-        assert!(!ENGINE_METHOD_NAMES.contains(&"extract_format"));
     }
 
     #[test]

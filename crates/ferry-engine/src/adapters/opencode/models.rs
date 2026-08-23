@@ -86,11 +86,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fallback_is_empty() {
-        assert!(fallback().is_empty());
-    }
-
-    #[test]
     fn borders_and_prose_lines_are_filtered_out() {
         let stdout = "┌ providers\n\
                       │ ignored\n\

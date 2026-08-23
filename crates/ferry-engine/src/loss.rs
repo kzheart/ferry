@@ -92,10 +92,8 @@ mod tests {
             Some(Outcome::Degraded)
         );
         assert_eq!(outcome_for_code("never.declared"), None);
-    }
 
-    #[test]
-    fn outcome_reads_the_event_code() {
+        // 事件走的是同一张表，读的是 event.code。
         let event = Event::new("migration.reasoning_dropped", Map::new());
         assert_eq!(outcome(&event), Some(Outcome::Dropped));
     }

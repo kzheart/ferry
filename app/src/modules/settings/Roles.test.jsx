@@ -7,10 +7,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { FerryRuntimeProvider } from "../../shared/capabilities/ferryRuntime.jsx";
 import Roles from "./Roles.jsx";
-import { TOOLS } from "./roleForm.js";
-import { TOOL_GLYPH } from "./roleGlyphs.jsx";
-import zhSettings from "../../shared/i18n/locales/zh-CN/settings.json";
-import enSettings from "../../shared/i18n/locales/en/settings.json";
 
 const role = (id, extra = {}) => ({
   id, name: id, description: "", persona: "", tools: ["session_read"],
@@ -82,33 +78,16 @@ test("工具卡的勾选会写回草稿", () => {
 
   // 没有改动就没有保存按钮,点一下工具卡才出现——按钮在不在就是脏标记
   assert.equal(screen.queryByText("settings:roles.save"), null);
+  // bash 是能力里的一张卡,不是安全区的占位开关
+  assert.ok(screen.getByText("settings:roles.tool.bash.label"));
   fireEvent.click(screen.getByText("settings:roles.tool.usage.label"));
   assert.equal(screen.getByText("settings:roles.save").disabled, false);
   assert.ok(screen.getByLabelText("settings:roles.discard"));
 });
 
-test("bash 是能力里的一张卡,安全区不再有占位开关", () => {
-  mount();
-  assert.ok(screen.getByText("settings:roles.tool.bash.label"));
-  assert.equal(screen.queryByText("settings:roles.bashLater"), null);
-});
-
 test("delete 与 ask_user 工具进入角色能力清单,并可与高权限能力一起保存", async () => {
   const calls = mount();
   fireEvent.click(screen.getByText("reader"));
-
-  assert.equal(TOOLS.length, 9);
-  assert.ok(TOOL_GLYPH.session_delete);
-  assert.ok(TOOL_GLYPH.ask_user);
-  assert.equal(zhSettings.roles.tool.session_delete.label, "会话删除");
-  assert.equal(enSettings.roles.tool.session_delete.label, "Session delete");
-  assert.equal(zhSettings.roles.tool.ask_user.label, "询问用户");
-  assert.equal(enSettings.roles.tool.ask_user.label, "Ask the user");
-  assert.ok(TOOL_GLYPH.agent_prompt);
-  assert.equal(zhSettings.roles.tool.agent_prompt.label, "驱动 Agent");
-  assert.equal(enSettings.roles.tool.agent_prompt.label, "Drive Agent");
-  assert.match(zhSettings.roles.tool.agent_prompt.desc, /修改工作区或会话/);
-  assert.match(enSettings.roles.tool.agent_prompt.desc, /modify the workspace or session/);
 
   fireEvent.click(screen.getByText("settings:roles.tool.session_delete.label"));
   fireEvent.click(screen.getByText("settings:roles.tool.ask_user.label"));

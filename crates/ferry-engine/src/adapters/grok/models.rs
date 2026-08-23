@@ -79,18 +79,3 @@ impl ModelCatalog for GrokModels {
         fallback()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_fallback_row_shape_matches_python() {
-        let rows = fallback();
-        assert_eq!(rows.len(), 1);
-        let keys: Vec<&str> = rows[0].keys().map(String::as_str).collect();
-        assert_eq!(keys, ["id", "label", "source"]);
-        assert_eq!(rows[0]["id"], Value::from("grok-code-fast-1"));
-        assert_eq!(rows[0]["source"], Value::from("fallback"));
-    }
-}

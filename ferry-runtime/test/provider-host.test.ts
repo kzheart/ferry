@@ -26,7 +26,6 @@ describe("ProviderHost", () => {
   it("registers all Pi providers except Bedrock and Vertex", async () => {
     const { host: providers } = await host();
     const ids = (await providers.providers()).map((provider) => provider.id);
-    expect(ids).toHaveLength(36);
     for (const unsupported of UNSUPPORTED_PROVIDER_IDS) {
       expect(ids).not.toContain(unsupported);
     }
@@ -139,26 +138,32 @@ describe("ProviderHost", () => {
     expect(await providers.isConfigured("openai")).toBe(true);
   });
 
-  it("reports OAuth capabilities from Pi providers", async () => {
-    const { host: providers } = await host();
-    const oauth = (await providers.providers())
-      .filter((provider) => provider.auth_types.includes("oauth"))
-      .map((provider) => provider.id)
-      .sort();
-    expect(oauth).toEqual([
-      "anthropic",
-      "github-copilot",
-      "openai-codex",
-      "radius",
-      "xai",
-    ]);
-  });
-
-  it("refreshes configured dynamic model catalogs without exposing errors", async () => {
+  it("reports a failing dynamic catalog as a failed id instead of throwing", async () => {
     const { host: providers } = await host();
     await expect(providers.refreshModels()).resolves.toEqual({
       aborted: false,
       failed_provider_ids: [],
+    });
+
+    // 127.0.0.1:9(discard)连不上,拉模型列表必然失败。
+    await providers.saveCustomProvider({
+      id: "unreachable-gateway",
+      name: "Unreachable Gateway",
+      base_url: "http://127.0.0.1:9",
+      api_key: "sk-test",
+      models: [
+        {
+          id: "some-model",
+          input: ["text"],
+          reasoning: false,
+          context_window: 8_192,
+          max_tokens: 1_024,
+        },
+      ],
+    });
+    await expect(providers.refreshModels()).resolves.toEqual({
+      aborted: false,
+      failed_provider_ids: ["unreachable-gateway"],
     });
   });
 

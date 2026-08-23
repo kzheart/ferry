@@ -63,15 +63,12 @@ test("已导入区与可导入区分别渲染", async () => {
   expect(screen.getByText("settings:skills.mine")).toBeTruthy();
   expect(screen.getByText("settings:skills.available")).toBeTruthy();
   expect(screen.getByText("代码评审")).toBeTruthy();
-  await expandSources();
-  expect(screen.getByText("PDF 工具")).toBeTruthy();
-});
 
-test("来源默认折叠,只露出目录名与候选数", async () => {
-  harness();
+  // 来源默认折叠,只露出目录名与候选数
   expect(screen.getByText("Claude Code")).toBeTruthy();
   expect(screen.getByText("1")).toBeTruthy();
   expect(screen.queryByText("PDF 工具")).toBeNull();
+
   await expandSources();
   expect(screen.getByText("PDF 工具")).toBeTruthy();
 });

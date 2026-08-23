@@ -6,5 +6,4 @@ pub mod models;
 pub mod paths;
 pub mod pricing;
 pub mod probes;
-pub mod resources;
 pub mod snapshots;

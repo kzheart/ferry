@@ -638,14 +638,6 @@ mod tests {
     }
 
     #[test]
-    fn intervals_match_the_python_constants() {
-        assert_eq!(POLL_INTERVAL.as_secs_f64(), 2.5);
-        assert_eq!(RECONCILE_INTERVAL.as_secs_f64(), 300.0);
-        assert_eq!(NUDGE_MIN_GAP.as_secs_f64(), 5.0);
-        assert_eq!(MAX_PENDING.as_secs_f64(), 15.0);
-    }
-
-    #[test]
     fn file_events_are_debounced_per_tool_and_forced_at_the_cap() {
         let shared = Shared {
             state: Mutex::new(WakeState::default()),

@@ -1429,19 +1429,6 @@ mod tests {
         assert_eq!(value, json!([1, 2, 3, 4, "ab"]));
         assert_eq!(stat_key_of(&value), Some((1, 2, 3, 4)));
     }
-
-    #[test]
-    fn recovery_hint_is_quoted_verbatim() {
-        assert_eq!(
-            REF_RECOVERY_HINT,
-            "the session changed since the last scan; run a session search again to re-index it, \
-             then retry with the ref from the results"
-        );
-        assert!(
-            !REF_RECOVERY_HINT.contains("session_search"),
-            "恢复提示不能点名 caller 专属方法：CLI 照做会撞 caller_not_allowed"
-        );
-    }
 }
 
 /// 黄金扫描行驱动的索引集成测试。
@@ -1833,6 +1820,9 @@ pub(crate) mod golden_tests {
 
     #[test]
     fn resolve_reports_every_invalidation_path_with_exact_params() {
+        // 恢复提示不能点名 caller 专属方法：CLI 照做会撞 caller_not_allowed。
+        assert!(!REF_RECOVERY_HINT.contains("session_search"));
+
         let harness = harness();
         let records = harness.index.refresh().expect("首扫成功");
         let file_record = records

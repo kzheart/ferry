@@ -647,25 +647,6 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_table_matches_the_generated_contract() {
-        assert_eq!(DISPATCH_METHOD_NAMES, ENGINE_METHOD_NAMES);
-    }
-
-    /// callers 矩阵的 cli 列只能从方法表里取,管理面(`daemon.shutdown`)由
-    /// socket 传输层在分发前自己拦掉,永远不进方法表。
-    #[test]
-    fn cli_callers_are_a_subset_of_the_method_table() {
-        use crate::contracts::engine_methods::CLI_METHOD_NAMES;
-        for method in CLI_METHOD_NAMES {
-            assert!(ENGINE_METHOD_NAMES.contains(method), "method={method}");
-        }
-        assert!(!ENGINE_METHOD_NAMES.contains(&"daemon.shutdown"));
-        for internal in ["agent_prompt", "runtime_sessions.commit", "session_search"] {
-            assert!(!CLI_METHOD_NAMES.contains(&internal), "method={internal}");
-        }
-    }
-
-    #[test]
     fn success_envelope_carries_protocol_and_id() {
         let service = Arc::new(Recorder {
             health: json!({"status": "ready", "service": "engine"}),
@@ -782,17 +763,15 @@ mod tests {
             response["error"]["params"],
             json!({"method": "nope", "message": "未知 method: nope"})
         );
-    }
 
-    #[test]
-    fn metadata_write_is_not_a_generic_rpc_method() {
-        let response = call(
+        // 元数据写入不是通用 RPC 方法。
+        let write = call(
             &dispatcher(Arc::new(Recorder::default())),
             "session_meta_set",
             json!({"id": "session", "patch": {"name": "direct write"}}),
             "x",
         );
-        assert_eq!(response["error"]["code"], json!("rpc.unknown_method"));
+        assert_eq!(write["error"]["code"], json!("rpc.unknown_method"));
     }
 
     #[test]

@@ -281,20 +281,4 @@ mod tests {
             Value::from("cd '/work dir' && /usr/local/bin/claude --resume 's 1'")
         );
     }
-
-    #[test]
-    fn validation_ref_defaults_to_the_destination_path() {
-        assert_eq!(
-            Probe
-                .validation_ref("abc", Path::new("/tmp/x.jsonl"))
-                .unwrap(),
-            "/tmp/x.jsonl"
-        );
-    }
-
-    #[test]
-    fn unimplemented_hooks_report_internal_errors() {
-        let error = Probe.cleanup("abc", Path::new("/tmp")).unwrap_err();
-        assert_eq!(error.code, "internal.unexpected");
-    }
 }

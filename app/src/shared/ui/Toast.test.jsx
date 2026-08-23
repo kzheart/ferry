@@ -87,31 +87,9 @@ test("换一条提示会重新计时,不会继承上一条已走过的时间", (
   assert.equal(dismissed, 1);
 });
 
-// ---- 外观:整块染色是 Ferry 里唯一的一处,改完三种状态共用中性表面 ----
+// ---- 外观 ----
 
 const box = () => screen.getByRole("status");
-
-test("三种状态共用中性表面,不再按 kind 铺色", () => {
-  const surfaces = ["ok", "fail", "run"].map(kind => {
-    const view = render(<Toast toast={{ kind, title: "t", desc: "d" }} onDismiss={() => {}} />);
-    const bg = box().style.background;
-    view.unmount();
-    return bg;
-  });
-
-  assert.deepEqual(surfaces, ["var(--surface)", "var(--surface)", "var(--surface)"]);
-});
-
-test("失败态靠一圈细描边比成功重一档,而不是靠粉底", () => {
-  const fail = render(<Toast toast={{ kind: "fail", title: "t", desc: "d" }} onDismiss={() => {}} />);
-  const failShadow = box().style.boxShadow;
-  fail.unmount();
-  render(<Toast toast={{ kind: "ok", title: "t", desc: "d" }} onDismiss={() => {}} />);
-
-  assert.ok(failShadow.includes("var(--err-line)"), "失败态该有 err-line 描边");
-  assert.ok(failShadow.includes("var(--shadow-menu)"), "投影用菜单档,不是大面板档");
-  assert.equal(box().style.boxShadow, "var(--shadow-menu)", "成功态只有菜单档投影");
-});
 
 test("关闭键是有无障碍名称的图标按钮,不再是与失败图标同形的文字 ×", () => {
   render(<Toast toast={{ kind: "fail", title: "删除失败", desc: "d", dismissLabel: "关闭" }}

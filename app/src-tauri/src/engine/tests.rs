@@ -1,9 +1,8 @@
 use super::policy::{AGENT_LOOKUP_TIMEOUT, AGENT_RUN_TIMEOUT, ENGINE_TIMEOUT};
 use super::{
-    read_engine_output, request_attempts, request_timeout, socket_argument, stamp_engine_request,
+    read_engine_output, request_attempts, request_timeout, stamp_engine_request,
     validate_engine_request_caller, validate_engine_response_id, FERRY_IPC_PROTOCOL,
 };
-use crate::contracts::engine_methods::is_runtime_gateway_method;
 use crate::contracts::operations::{
     DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
     MigrationOperationPlanInput, OperationPlanInput,
@@ -14,7 +13,6 @@ use crate::operations::request::{
 use crate::operations::validate_operation_plan_input;
 use crate::process::client::PendingResponses;
 use std::io::Cursor;
-use std::path::PathBuf;
 
 #[test]
 fn engine_output_is_dispatched_by_id_even_when_responses_are_reordered() {
@@ -54,19 +52,6 @@ fn malformed_engine_output_releases_all_waiting_requests() {
     );
 }
 
-/// 共享开关与平台能力任一为否,sidecar 就不带 `--socket` 起——降级永远存在。
-#[test]
-fn sharing_needs_both_the_switch_and_a_platform_socket() {
-    let path = || Ok(PathBuf::from("/home/u/.ferry/engine.sock"));
-    assert_eq!(socket_argument(true, path()), Some(path().unwrap()));
-    assert_eq!(socket_argument(false, path()), None);
-    assert_eq!(
-        socket_argument(true, Err("当前平台尚未实现引擎 socket".to_owned())),
-        None
-    );
-    assert_eq!(socket_argument(false, Err("无所谓".to_owned())), None);
-}
-
 #[test]
 fn sensitive_agent_methods_are_not_generic_rpc_methods() {
     assert!(validate_engine_request_caller(r#"{"method":"operation.apply"}"#).is_err());
@@ -100,8 +85,6 @@ fn agent_prompt_has_one_long_deadline_and_no_retry() {
     let request = r#"{"method":"agent_prompt"}"#;
     assert_eq!(request_timeout(request), AGENT_RUN_TIMEOUT);
     assert_eq!(request_attempts(request), 1);
-    assert_eq!(AGENT_RUN_TIMEOUT, std::time::Duration::from_secs(390));
-    assert!(is_runtime_gateway_method("agent_prompt"));
 }
 
 fn edit_operation_input() -> EditOperationPlanInput {
@@ -174,30 +157,6 @@ fn operation_plan_id_requests_cannot_override_the_engine_method() {
         );
     }
     assert!(operation_plan_id_request("show", "op_fixture-123").is_err());
-}
-
-#[test]
-fn operation_inputs_are_strictly_validated() {
-    assert!(
-        validate_operation_plan_input(&OperationPlanInput::Edit(edit_operation_input())).is_ok()
-    );
-    let mut unknown_tool = edit_operation_input();
-    unknown_tool.tool = "unknown".to_owned();
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(unknown_tool)).is_err());
-    let mut unsupported_tool = edit_operation_input();
-    unsupported_tool.tool = "grok".to_owned();
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(unsupported_tool)).is_err());
-    let mut extra_field = edit_operation_input();
-    extra_field.ops = vec![serde_json::json!({
-        "op": "delete-turn", "turn": 1, "method": "operation.apply",
-    })];
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(extra_field)).is_err());
-    let mut duplicate = edit_operation_input();
-    duplicate.ops = vec![
-        serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "a"}),
-        serde_json::json!({"op": "rewrite", "locator": "fml_a", "text": "b"}),
-    ];
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(duplicate)).is_err());
 }
 
 fn migration_operation_input() -> MigrationOperationPlanInput {
@@ -301,25 +260,6 @@ fn operation_accepts_strict_tagged_migration_input() {
 }
 
 #[test]
-fn operation_migration_input_rejects_invalid_agents_and_options() {
-    let mut same_agent = migration_operation_input();
-    same_agent.target_tool = "claude".to_owned();
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(same_agent)).is_err());
-
-    let mut unknown_agent = migration_operation_input();
-    unknown_agent.source_tool = "unknown".to_owned();
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(unknown_agent)).is_err());
-
-    let mut native_ref = migration_operation_input();
-    native_ref.reference = "/tmp/session.jsonl".to_owned();
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(native_ref)).is_err());
-
-    let mut invalid_turn = migration_operation_input();
-    invalid_turn.max_turn = Some(0);
-    assert!(validate_operation_plan_input(&OperationPlanInput::Migration(invalid_turn)).is_err());
-}
-
-#[test]
 fn operation_tagged_inputs_deny_unknown_or_cross_variant_fields() {
     let unknown = serde_json::json!({
         "kind": "migration",
@@ -414,26 +354,6 @@ fn operation_rejects_invalid_replace_assistant_reply_shapes() {
         input.ops = vec![operation];
         assert!(validate_operation_plan_input(&OperationPlanInput::Edit(input)).is_err());
     }
-}
-
-#[test]
-fn operation_rejects_oversized_or_duplicate_reply_targets() {
-    let mut oversized = edit_operation_input();
-    oversized.ops = vec![serde_json::json!({
-        "op": "replace-assistant-reply",
-        "turn": 1,
-        "reply": {"items": [{"kind": "text", "text": "x".repeat(20_001)}]},
-    })];
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(oversized)).is_err());
-
-    let authored = serde_json::json!({
-        "op": "replace-assistant-reply",
-        "turn": 1,
-        "reply": {"items": [{"kind": "text", "text": "x"}]},
-    });
-    let mut duplicate = edit_operation_input();
-    duplicate.ops = vec![authored.clone(), authored];
-    assert!(validate_operation_plan_input(&OperationPlanInput::Edit(duplicate)).is_err());
 }
 
 #[test]

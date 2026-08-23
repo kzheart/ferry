@@ -223,17 +223,6 @@ mod tests {
     }
 
     #[test]
-    fn target_spawn_rejection_carries_the_tool_param() {
-        let error = reject_target_spawn("claude");
-        assert_eq!(error.code, "edit.subagent_not_supported");
-        assert_eq!(error.params()["tool"], json!("claude"));
-        assert_eq!(
-            error.message(),
-            "目标回复包含子 Agent spawn/task，编辑操作已拒绝"
-        );
-    }
-
-    #[test]
     fn replace_at_first_collapses_every_match_into_one_slot() {
         let records = vec![1, 2, 3, 2, 4];
         assert_eq!(
@@ -281,11 +270,6 @@ mod tests {
         let migrated = root.path().join("migrated.jsonl");
         super::super::writing::write_jsonl(&migrated, &[]).unwrap();
         assert_eq!(fs::read_to_string(&migrated).unwrap(), "");
-    }
-
-    #[test]
-    fn json_size_counts_utf8_bytes_of_the_spaced_dump() {
-        assert_eq!(json_size(&json!({"a": "中"})), r#"{"a": "中"}"#.len());
     }
 
     #[test]

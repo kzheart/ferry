@@ -96,6 +96,15 @@ fn copy_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// 标题里第一个长度 ≥3 的 word；找不到就用 `Migrated` 兜底。
+fn search_sentinel(title: &str) -> String {
+    WORD.find_iter(title)
+        .map(|found| found.as_str())
+        .find(|token| token.chars().count() >= 3)
+        .unwrap_or("Migrated")
+        .to_string()
+}
+
 fn failed(code: &str, stdout: &str, stderr: &str, exit_code: Option<i32>) -> ProbeReport {
     let mut params = Map::new();
     params.insert("tool".into(), Value::from("grok"));
@@ -134,12 +143,7 @@ pub fn probe_bundle(bundle: &Path) -> DomainResult<ProbeReport> {
             sid.clone()
         }
     };
-    let sentinel = WORD
-        .find_iter(&title)
-        .map(|found| found.as_str())
-        .find(|token| token.chars().count() >= 3)
-        .unwrap_or("Migrated")
-        .to_string();
+    let sentinel = search_sentinel(&title);
 
     let sandbox = tempfile::tempdir()
         .map_err(|error| DomainError::internal(format!("创建 Grok 验收沙箱失败: {error}")))?;
@@ -341,36 +345,9 @@ mod tests {
 
     #[test]
     fn the_search_sentinel_takes_the_first_long_word() {
-        let sentinel = |title: &str| -> String {
-            WORD.find_iter(title)
-                .map(|found| found.as_str())
-                .find(|token| token.chars().count() >= 3)
-                .unwrap_or("Migrated")
-                .to_string()
-        };
-        assert_eq!(sentinel("a b sentinel-grok"), "sentinel-grok");
-        assert_eq!(sentinel("迁移会话"), "迁移会话");
-        assert_eq!(sentinel("a b"), "Migrated");
-        assert_eq!(sentinel(""), "Migrated");
-    }
-
-    #[test]
-    fn the_test_probe_replaces_the_real_cli() {
-        let root = tempfile::tempdir().unwrap();
-        {
-            let _guard = install_test_probe(|_| Ok(probes::report("passed", None, None, "", "")));
-            assert_eq!(probe_bundle(root.path()).unwrap().status, "passed");
-        }
-        // 守卫析构后回到真实实现：目录里没有 summary.json，直接报错。
-        assert!(probe_bundle(root.path()).is_err());
-    }
-
-    #[test]
-    fn a_failed_report_carries_the_exit_code() {
-        let report = failed("probe.process_failed", "out", "err", Some(2));
-        assert_eq!(report.status, "failed");
-        assert_eq!(report.code.as_deref(), Some("probe.process_failed"));
-        assert_eq!(report.params["exit_code"], Value::from(2));
-        assert_eq!(report.diagnostic.stderr, "err");
+        assert_eq!(search_sentinel("a b sentinel-grok"), "sentinel-grok");
+        assert_eq!(search_sentinel("迁移会话"), "迁移会话");
+        assert_eq!(search_sentinel("a b"), "Migrated");
+        assert_eq!(search_sentinel(""), "Migrated");
     }
 }

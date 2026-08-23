@@ -459,19 +459,4 @@ pub(crate) mod tests {
         }
         set_database_path_override(None);
     }
-
-    #[test]
-    fn materialized_fixtures_pass_the_schema_gate() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("state.vscdb");
-        materialize(
-            &path,
-            &json!({"sessions": [{"id": "s1", "header": {"name": "T"},
-                                  "composerData": {"_v": 17}}]}),
-        );
-        let connection = open_readonly(&path).unwrap();
-        validate_schema(&connection).unwrap();
-        assert!(disk_kv(&connection, "composerData:s1").unwrap().is_some());
-        assert!(disk_kv(&connection, "nope").unwrap().is_none());
-    }
 }

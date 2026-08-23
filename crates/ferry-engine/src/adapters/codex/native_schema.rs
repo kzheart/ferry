@@ -180,30 +180,18 @@ pub fn templates() -> Map<String, Value> {
 mod tests {
     use super::*;
 
-    /// 抽取器与声明式模板必须互为逆运算：`extract_templates(fixture) == templates()`。
+    /// 对齐 claude 侧：从真实 rollout fixture 抽出的模板必须与内置模板一致。
     #[test]
     fn extracted_templates_match_the_declared_ones() {
-        let declared = templates();
-        // 用声明式模板自身反推 fixture 记录流：先 message.user 再 message.assistant，
-        // 保证 `response_item.message` 命中 user 那条（与真实 fixture 顺序一致）。
-        let records: Vec<Value> = [
-            "session_meta",
-            "turn_context",
-            "message.user",
-            "response_item.custom_tool_call",
-            "response_item.custom_tool_call_output",
-            "response_item.function_call",
-            "response_item.function_call_output",
-            "message.assistant",
-        ]
-        .iter()
-        .map(|key| declared[*key].clone())
-        .collect();
-        let extracted = extract_templates(&records).unwrap();
-        for (key, value) in &declared {
-            assert_eq!(extracted.get(key), Some(value), "模板 {key} 不一致");
-        }
-        assert_eq!(extracted.len(), declared.len());
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/agent_formats/codex/case-02-tools/session.jsonl");
+        let text = std::fs::read_to_string(&fixture).expect("fixture 可读");
+        let records: Vec<Value> = text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| serde_json::from_str(line).expect("fixture 是合法 JSONL"))
+            .collect();
+        assert_eq!(extract_templates(&records).unwrap(), templates());
     }
 
     #[test]

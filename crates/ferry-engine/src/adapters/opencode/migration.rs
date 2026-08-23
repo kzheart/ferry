@@ -86,7 +86,8 @@ mod tests {
     use super::*;
     use crate::adapters::contracts::MigrationTarget;
     use crate::adapters::shared::dialect::register_dialect;
-    use crate::model::{AgentEdge, Block, BlockKind, Message, ToolResult};
+    use crate::adapters::shared::migration::{Fidelity, RenderDecision};
+    use crate::model::{text_tool_result, AgentEdge, Block, BlockKind, Message, ToolResult};
     use serde_json::json;
 
     fn register() {
@@ -124,16 +125,48 @@ mod tests {
         );
     }
 
+    fn decide(tool: &ToolCall) -> RenderDecision {
+        let mut block = Block::new(BlockKind::Tool);
+        block.tool = Some(tool.clone());
+        let mut message = Message::new("assistant");
+        message.blocks = vec![block];
+        let mut session = Session::new("claude", "root", "/src");
+        session.messages = vec![message];
+        OpenCodeMigrationTarget
+            .evaluate_tool(tool, &session, session.messages.first())
+            .unwrap()
+    }
+
+    fn shell_call() -> ToolCall {
+        ToolCall::new(
+            "bash",
+            Some(CanonicalOp::SHELL_EXEC.into()),
+            json!({"command": "ls"}),
+        )
+    }
+
     #[test]
     fn running_and_pending_results_stay_native() {
-        let target = OpenCodeMigrationTarget;
-        assert!(target
-            .tool_result_statuses()
-            .contains(&ToolResultStatus::Running));
-        assert!(target
-            .tool_result_statuses()
-            .contains(&ToolResultStatus::Pending));
-        assert!(target.preserves_tool_result_attachments());
+        register();
+        for status in [ToolResultStatus::Running, ToolResultStatus::Pending] {
+            let mut call = shell_call();
+            call.result = Some(text_tool_result("", status));
+            let decision = decide(&call);
+            assert_eq!(decision.fidelity, Fidelity::Exact, "{status:?}");
+            assert_eq!(decision.outcome(), "native");
+        }
+        // 五个目标端里只有 opencode 保留 attachments：不该记丢弃、不该降级。
+        let mut with_attachment = shell_call();
+        with_attachment.result = Some(ToolResult {
+            status: ToolResultStatus::Success,
+            attachments: vec![json!({"type": "file", "path": "/a.png"})],
+            ..ToolResult::default()
+        });
+        let decision = decide(&with_attachment);
+        assert_eq!(decision.fidelity, Fidelity::Exact);
+        assert!(!decision
+            .reason_codes
+            .contains(&"tool_result_attachments_dropped".to_string()));
     }
 
     #[test]

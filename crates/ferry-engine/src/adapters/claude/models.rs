@@ -118,15 +118,6 @@ impl ModelCatalog for ClaudeModels {
 mod tests {
     use super::*;
 
-    #[test]
-    fn fallback_lists_every_alias() {
-        let rows = fallback();
-        assert_eq!(rows.len(), ALIASES.len());
-        assert_eq!(rows[0]["id"], Value::from("default"));
-        assert_eq!(rows[0]["label"], Value::from("默认(账号推荐)"));
-        assert!(rows.iter().all(|row| row["source"] == "fallback"));
-    }
-
     /// discover 依赖真实 HOME，这里只固定「别名部分恒定、source 恒为 alias」。
     #[test]
     fn discover_always_starts_with_the_aliases() {

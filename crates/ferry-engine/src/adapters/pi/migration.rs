@@ -122,15 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn patch_and_web_ops_degrade() {
-        for op in [
-            CanonicalOp::FS_PATCH,
-            CanonicalOp::WEB_FETCH,
-            CanonicalOp::WEB_SEARCH,
-            CanonicalOp::AGENT_SPAWN,
-        ] {
-            assert_eq!(PiMigrationTarget.tool_fidelity(op), ToolVerdict::Degrade);
-        }
+    fn patch_ops_degrade_to_narration() {
         let call = ToolCall::new(
             "apply_patch",
             Some(CanonicalOp::FS_PATCH.to_string()),

@@ -344,6 +344,7 @@ mod tests {
         let dir = sessions_dir(temp.path());
         let path = write_rollout(&dir, "rollout-a.jsonl", &base("a"));
         let mut doc = CodexBackend.load(path.to_str().unwrap()).unwrap();
+        assert_eq!(CodexBackend.stats(&doc).unwrap()["count"], json!(4));
         let notes = CodexBackend
             .apply_ops(&mut doc, &[json!({"op": "delete-turn", "turn": 1})])
             .unwrap();
@@ -442,16 +443,5 @@ mod tests {
     fn missing_references_report_session_not_found() {
         let error = resolve("definitely-not-a-session").unwrap_err();
         assert_eq!(error.code, "session.not_found");
-    }
-
-    #[test]
-    fn stats_count_records_and_utf8_size() {
-        let temp = tempfile::tempdir().unwrap();
-        let dir = sessions_dir(temp.path());
-        let path = write_rollout(&dir, "rollout-a.jsonl", &base("a"));
-        let doc = CodexBackend.load(path.to_str().unwrap()).unwrap();
-        let stats = CodexBackend.stats(&doc).unwrap();
-        assert_eq!(stats["count"], json!(4));
-        assert!(stats["size"].as_i64().unwrap() > 0);
     }
 }

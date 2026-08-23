@@ -511,13 +511,37 @@ mod tests {
         assert!(run(CanonicalOp::TOOL_INVOKE, &broken).is_none());
     }
 
+    /// `NATIVE_OPS` 里除 `agent.spawn` 外的每个 op 都要真有 writer：给最小
+    /// 合法入参必须写出原生 part。新增 op 忘了配 writer 时这里会红。
     #[test]
-    fn fidelity_covers_every_writer_plus_agent_spawn() {
+    fn every_native_op_but_agent_spawn_renders_from_minimal_input() {
+        let minimal: &[(&str, Value)] = &[
+            (CanonicalOp::SHELL_EXEC, json!({"command": "ls"})),
+            (CanonicalOp::FS_READ, json!({"file_path": "/a"})),
+            (CanonicalOp::FS_WRITE, json!({"file_path": "/a"})),
+            (CanonicalOp::FS_EDIT, json!({"file_path": "/a"})),
+            (
+                CanonicalOp::FS_PATCH,
+                json!({"raw_patch": "*** Begin Patch"}),
+            ),
+            (CanonicalOp::FS_SEARCH, json!({"query": "todo"})),
+            (CanonicalOp::FS_GLOB, json!({"pattern": "*.rs"})),
+            (CanonicalOp::WEB_FETCH, json!({"url": "https://x"})),
+            (CanonicalOp::WEB_SEARCH, json!({"query": "rust"})),
+            (CanonicalOp::TOOL_INVOKE, json!({"name": "n", "input": {}})),
+        ];
         for op in NATIVE_OPS {
-            assert_eq!(op_fidelity(op), ToolVerdict::Native);
+            if *op == CanonicalOp::AGENT_SPAWN {
+                assert!(!has_writer(op));
+                continue;
+            }
+            let input = minimal
+                .iter()
+                .find(|(key, _)| key == op)
+                .unwrap_or_else(|| panic!("{op} 缺最小入参样例"))
+                .1
+                .clone();
+            assert!(run(op, &call(op, input, "")).is_some(), "{op}");
         }
-        assert!(!has_writer(CanonicalOp::AGENT_SPAWN));
-        assert!(has_writer(CanonicalOp::SHELL_EXEC));
-        assert_eq!(op_fidelity("nope"), ToolVerdict::Degrade);
     }
 }

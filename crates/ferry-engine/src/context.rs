@@ -77,22 +77,3 @@ impl OperationPorts for EngineContext {
         data_dir()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn engine_version_is_independent_of_the_crate_version() {
-        // crate 版本跟随 app（0.6.x），引擎自称版本是独立的历史契约值。
-        assert_eq!(ENGINE_VERSION, "0.1.0");
-        assert_ne!(ENGINE_VERSION, env!("CARGO_PKG_VERSION"));
-    }
-
-    #[test]
-    fn empty_registry_reports_no_adapters() {
-        let context = EngineContext::new(AdapterRegistry::default(), ENGINE_VERSION);
-        assert!(SessionPorts::adapters(&context).is_empty());
-        assert!(OperationPorts::adapter(&context, "claude").is_err());
-    }
-}

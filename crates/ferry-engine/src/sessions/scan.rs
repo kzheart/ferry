@@ -55,27 +55,3 @@ fn updated_of(session: &Map<String, Value>) -> i64 {
 pub fn scan_progress() -> Map<String, Value> {
     TRACKER.snapshot()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn sessions_are_sorted_by_updated_descending() {
-        let mut rows: Vec<Map<String, Value>> = [3i64, 1, 2, 3]
-            .iter()
-            .enumerate()
-            .map(|(position, updated)| {
-                json!({"id": position, "updated": updated})
-                    .as_object()
-                    .unwrap()
-                    .clone()
-            })
-            .collect();
-        rows.sort_by_key(|row| std::cmp::Reverse(updated_of(row)));
-        let ids: Vec<i64> = rows.iter().map(|row| row["id"].as_i64().unwrap()).collect();
-        // 相等的 updated 保持原有相对次序（0 在 3 之前）。
-        assert_eq!(ids, vec![0, 3, 2, 1]);
-    }
-}

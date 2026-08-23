@@ -197,29 +197,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nine_write_ops_are_declared() {
-        let ops = DIALECT.write_ops();
-        assert_eq!(ops.len(), 9);
-        for op in [
-            CanonicalOp::SHELL_EXEC,
-            CanonicalOp::FS_READ,
-            CanonicalOp::FS_WRITE,
-            CanonicalOp::FS_EDIT,
-            CanonicalOp::FS_SEARCH,
-            CanonicalOp::FS_GLOB,
-            CanonicalOp::WEB_FETCH,
-            CanonicalOp::WEB_SEARCH,
-            CanonicalOp::AGENT_SPAWN,
-        ] {
-            assert!(ops.contains(op), "缺少 {op}");
-        }
-        assert!(!DIALECT.is_strict_input());
-    }
-
     /// 宽松档：入参不是对象时保留 op、原样透传。
     #[test]
     fn non_object_inputs_pass_through() {
+        assert!(!DIALECT.is_strict_input());
         assert_eq!(
             DIALECT.parse("Read", &json!("raw")),
             Some((CanonicalOp::FS_READ, json!("raw")))

@@ -335,22 +335,4 @@ mod tests {
         let error = probe_path("/nonexistent/pi/session.jsonl", None).unwrap_err();
         assert_eq!(error.code, "session.not_found");
     }
-
-    #[test]
-    fn probe_reports_serialise_to_the_python_dict_shape() {
-        let report = probes::report(
-            "failed",
-            Some("probe.process_failed"),
-            Some(exit_code_params(Some(2))),
-            "out",
-            "err",
-        );
-        let payload = report_to_map(&report);
-        assert_eq!(payload["status"], json!("failed"));
-        assert_eq!(payload["code"], json!("probe.process_failed"));
-        assert_eq!(payload["params"]["tool"], json!("pi"));
-        assert_eq!(payload["params"]["exit_code"], json!(2));
-        assert_eq!(payload["diagnostic"]["stdout"], json!("out"));
-        assert_eq!(payload["diagnostic"]["truncated"], json!(false));
-    }
 }

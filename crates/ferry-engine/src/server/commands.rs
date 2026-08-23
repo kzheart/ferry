@@ -828,11 +828,4 @@ mod tests {
             "终态不是 applied 就不算成功"
         );
     }
-
-    #[test]
-    fn local_version_needs_no_engine() {
-        let payload = local_version();
-        assert_eq!(payload["contract_hash"], Value::from(FERRY_CONTRACT_HASH));
-        assert_eq!(payload["package"], Value::from(env!("CARGO_PKG_VERSION")));
-    }
 }

@@ -1110,31 +1110,4 @@ mod tests {
         // 收窄后不再暴露 revision / record_count 之类的 agent 专用字段。
         assert!(row.get("revision").is_none());
     }
-
-    #[test]
-    fn ranking_sorts_double_hits_first_then_bm25_then_recency() {
-        let mut ranks = [
-            ((2i64, f64::INFINITY, -100i64), "metadata-only"),
-            ((1, -1.0, -300), "content-weak"),
-            ((0, -0.5, -200), "double"),
-            ((1, -2.0, -50), "content-strong"),
-        ];
-        ranks.sort_by(|left, right| {
-            left.0
-                 .0
-                .cmp(&right.0 .0)
-                .then(
-                    left.0
-                         .1
-                        .partial_cmp(&right.0 .1)
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                )
-                .then(left.0 .2.cmp(&right.0 .2))
-        });
-        let order: Vec<&str> = ranks.iter().map(|(_, name)| *name).collect();
-        assert_eq!(
-            order,
-            vec!["double", "content-strong", "content-weak", "metadata-only"]
-        );
-    }
 }

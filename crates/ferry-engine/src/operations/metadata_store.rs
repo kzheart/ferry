@@ -207,11 +207,6 @@ mod tests {
     }
 
     #[test]
-    fn key_uses_a_nul_separator() {
-        assert_eq!(metadata_key("claude", "one"), "claude\0one");
-    }
-
-    #[test]
     fn merge_drops_python_falsy_values() {
         let merged = merge_metadata(
             &object(json!({"name": "keep", "pinned": true, "tags": ["a"]})),

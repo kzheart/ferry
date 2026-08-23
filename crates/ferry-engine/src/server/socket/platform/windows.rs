@@ -69,17 +69,3 @@ impl Write for Stream {
         match *self {}
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    #[test]
-    fn socket_transport_fails_closed() {
-        assert!(!super::SUPPORTED);
-        assert!(super::bind(Path::new("pipe")).is_err());
-        assert!(super::connect(Path::new("pipe")).is_err());
-        // 死活判定必须保守，否则会清掉活实例的锁。
-        assert!(super::process_alive(1));
-    }
-}

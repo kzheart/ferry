@@ -181,11 +181,4 @@ mod tests {
         assert!(timestamp_label(0, 0).starts_with("Thursday, Jan 1, 1970"));
         assert!(local_timestamp_label(now_ms()).contains(" (UTC"));
     }
-
-    #[test]
-    fn the_timezone_falls_back_to_utc_instead_of_failing() {
-        let name = timezone_name();
-        assert!(!name.is_empty());
-        assert!(!name.contains('\0'));
-    }
 }

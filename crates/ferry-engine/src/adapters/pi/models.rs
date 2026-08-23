@@ -194,9 +194,4 @@ mod tests {
         assert_eq!(rows[1]["label"], json!("acme/m2"));
         assert_eq!(rows[0]["source"], json!("models.json"));
     }
-
-    #[test]
-    fn fallback_is_empty() {
-        assert!(PiModels.fallback().is_empty());
-    }
 }

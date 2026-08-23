@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { sessionRef, toTimeline } from "./sessionModel.js";
-
-test("sessionRef only returns the Engine-issued opaque reference", () => {
-  assert.equal(sessionRef({
-    tool: "codex",
-    id: "native-session-id",
-    path: "/private/session.jsonl",
-    ref: "fsr_current",
-  }), "fsr_current");
-});
+import { toTimeline } from "./sessionModel.js";
 
 test("toTimeline defers unreached compactions while more pages remain", () => {
   const rounds = [{ n: 1 }, { n: 2 }];

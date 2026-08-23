@@ -17,12 +17,7 @@ fn log_dir() -> Option<PathBuf> {
 }
 
 /// UTC 时间戳 `YYYY-MM-DDTHH:MM:SS.mmmZ`;不引依赖,手工从 epoch 换算。
-fn timestamp() -> String {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
+fn format_timestamp(secs: u64, millis: u32) -> String {
     let days = (secs / 86_400) as i64;
     let (hour, minute, second) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
     // civil_from_days(Howard Hinnant 算法),epoch 为 1970-01-01
@@ -37,6 +32,13 @@ fn timestamp() -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { year + 1 } else { year };
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
+}
+
+fn timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    format_timestamp(now.as_secs(), now.subsec_millis())
 }
 
 /// 宿主日志:`host.log` 追加一行 `时间 [组件] 内容`。
@@ -69,14 +71,19 @@ pub(crate) fn sidecar_stderr(file_name: &str) -> Stdio {
 
 #[cfg(test)]
 mod tests {
-    use super::timestamp;
+    use super::format_timestamp;
 
     #[test]
     fn timestamp_shape_is_iso_utc() {
-        let stamp = timestamp();
-        assert_eq!(stamp.len(), 24);
-        assert!(stamp.ends_with('Z'));
-        assert_eq!(&stamp[4..5], "-");
-        assert_eq!(&stamp[10..11], "T");
+        assert_eq!(format_timestamp(0, 0), "1970-01-01T00:00:00.000Z");
+        // 闰日
+        assert_eq!(
+            format_timestamp(1_709_214_307, 12),
+            "2024-02-29T13:45:07.012Z"
+        );
+        assert_eq!(
+            format_timestamp(1_787_469_154, 999),
+            "2026-08-23T07:12:34.999Z"
+        );
     }
 }

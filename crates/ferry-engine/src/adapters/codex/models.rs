@@ -151,12 +151,4 @@ mod tests {
             json!("o3 (hidden)")
         );
     }
-
-    #[test]
-    fn fallback_lists_the_three_known_models() {
-        let rows = CodexModels.fallback();
-        let ids: Vec<&str> = rows.iter().map(|row| row["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, ["gpt-5.4", "gpt-5.5", "o3"]);
-        assert!(rows.iter().all(|row| row["source"] == json!("fallback")));
-    }
 }

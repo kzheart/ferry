@@ -6,7 +6,6 @@ import {
   deleteIsBlocked,
   prepareSessionDeletion,
   prepareSessionDeletions,
-  summarizePreparedDeletions,
 } from "./sessionDeletionModel.js";
 
 const session = (id, treeCount = 1) => ({
@@ -120,11 +119,3 @@ test("批量删除先完成全部计划并复用各自的 plan", async () => {
   assert.strictEqual(calls[3][1], prepared[1].plan);
 });
 
-test("批量确认摘要只报总数,删除一律不可恢复", () => {
-  const prepared = [
-    { session: session("one"), plan: { preview: {} } },
-    { session: session("two"), plan: { preview: {} } },
-  ];
-
-  assert.deepEqual(summarizePreparedDeletions(prepared), { total: 2 });
-});

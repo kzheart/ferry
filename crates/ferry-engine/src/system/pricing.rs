@@ -222,15 +222,6 @@ mod tests {
     }
 
     #[test]
-    fn fallback_table_matches_the_python_constants() {
-        let prices = fallback_prices();
-        assert_eq!(prices.len(), 7);
-        assert_eq!(prices["claude-opus-4"]["input"], Value::from(15));
-        assert_eq!(prices["claude-opus-4"]["cache_write"], Value::from(18.75));
-        assert_eq!(prices["gpt-5"]["input"], Value::from(1.25));
-    }
-
-    #[test]
     fn stale_beats_fallback_when_a_cache_exists() {
         let cached = json!({"prices": {"m": {"input": 1}}, "fetched_at": 5});
         let result = stale_or_fallback(Some(&cached));

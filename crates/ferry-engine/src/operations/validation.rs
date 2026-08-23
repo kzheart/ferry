@@ -358,12 +358,12 @@ mod tests {
         let error = validate_edit_input(&json!({
             "kind": "edit", "tool": "claude", "ref": "r",
             "ops": [{"op": "delete-turn", "turn": 1}],
-            "zeta": 1, "alpha": 2,
+            "zeta": 1, "alpha": 2, "probe": false,
         }))
         .unwrap_err();
         assert_eq!(error.message(), "edit operation 包含未知字段");
         let params = error.as_domain().unwrap().params();
-        assert_eq!(params["fields"], json!(["alpha", "zeta"]));
+        assert_eq!(params["fields"], json!(["alpha", "probe", "zeta"]));
     }
 
     #[test]
@@ -408,6 +408,12 @@ mod tests {
             (json!({"max_turn": true}), "migration max_turn 非法"),
             (json!({"max_turn": 0}), "migration max_turn 非法"),
             (json!({"max_turn": 1_000_001}), "migration max_turn 非法"),
+            // 已移除的探针字段当未知字段拒掉。
+            (json!({"probe": false}), "migration operation 包含未知字段"),
+            (
+                json!({"probe_model": "model"}),
+                "migration operation 包含未知字段",
+            ),
         ];
         for (patch, expected) in cases {
             let mut value = base.clone();
@@ -437,34 +443,6 @@ mod tests {
         assert!(frozen.get("max_turn").is_none());
         assert!(frozen.get("probe_model").is_none());
         assert!(frozen.get("probe").is_none());
-    }
-
-    #[test]
-    fn removed_probe_fields_are_rejected_as_unknown() {
-        let edit = json!({
-            "kind": "edit", "tool": "claude", "ref": "fsr_abcdefgh",
-            "ops": [{"op": "delete-turn", "turn": 1}], "probe": false,
-        });
-        assert_eq!(
-            validate_edit_input(&edit).unwrap_err().message(),
-            "edit operation 包含未知字段"
-        );
-
-        for field in [json!({"probe": false}), json!({"probe_model": "model"})] {
-            let mut migration = json!({
-                "kind": "migration", "source_tool": "claude",
-                "ref": "fsr_abcdefgh", "target_tool": "opencode",
-            });
-            for (key, value) in field.as_object().unwrap() {
-                migration[key] = value.clone();
-            }
-            assert_eq!(
-                validate_migration_input(&migration, &adapters())
-                    .unwrap_err()
-                    .message(),
-                "migration operation 包含未知字段"
-            );
-        }
     }
 
     #[test]
