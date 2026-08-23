@@ -14,6 +14,20 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.2] - 2026-08-24
+
+### Removed
+
+- **Runtime probes** — removed the optional probe workflow from contracts,
+  engine execution, and the migration UI. Structure validation, write guards,
+  and reading older migration history that references probes still work.
+
+### Fixed
+
+- **Loading spinner speed** — session parsing and rescan spinners no longer
+  spin abnormally fast after `html[data-reduce]` was applied unconditionally
+  and shortened every animation to 0.001s.
+
 ## [0.8.1] - 2026-08-23
 
 ### Changed
