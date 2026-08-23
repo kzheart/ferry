@@ -1,22 +1,15 @@
 // 技能详情:已导入的给「设为通用 / 删除」,候选的只给「导入」。
 // 候选详情里不出现「设为通用」——没导入就没有可配置的东西。
+//
+// 头部只有一个 StateButton:静止时说当前状态(已导入 / 未导入),指上去才变成动作。
+// 导入是可撤销的(删掉重来即可),所以点了直接跑;删除不可撤销,过一道确认框。
 import { useTranslation } from "react-i18next";
 import Markdown from "../../shared/ui/Markdown.jsx";
+import StateButton from "../../shared/ui/StateButton.jsx";
 import { Toggle } from "./parts.jsx";
 import { formatSkillSize } from "./skillModel.js";
 
 const metaStyle = { fontSize: 11.5, color: "var(--tx5)", marginTop: 4 };
-
-function Action({ label, onClick, danger, busy }) {
-  return (
-    <button className="hov-item" onClick={onClick} disabled={busy}
-      style={{ height: 28, padding: "0 12px", borderRadius: 8, flex: "none",
-        border: `1px solid ${danger ? "var(--err-line)" : "var(--line4)"}`,
-        background: "transparent", fontFamily: "inherit", fontSize: 12, fontWeight: 600,
-        color: danger ? "var(--err-text)" : "var(--tx2)", cursor: "default" }}>
-      {label}</button>
-  );
-}
 
 export default function SkillDetail({
   skill, candidate, isGlobalSkill, body, busy,
@@ -51,13 +44,22 @@ export default function SkillDetail({
         </div>
         <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 8 }}>
           {candidate && (
-            <Action busy={busy} onClick={onImport}
-              label={candidate.installedId
+            <StateButton width={104} disabled={busy}
+              tone={candidate.installedId ? "ok" : "idle"}
+              stateLabel={candidate.installedId
+                ? t("settings:skills.stateImported")
+                : t("settings:skills.stateNotImported")}
+              actionLabel={candidate.installedId
                 ? t("settings:skills.reimport")
-                : t("settings:skills.import")} />)}
+                : t("settings:skills.import")}
+              pendingLabel={t("settings:skills.importing")}
+              onRun={onImport} />)}
           {skill && (
-            <Action busy={busy} danger onClick={onDelete}
-              label={t("settings:skills.delete")} />)}
+            <StateButton width={104} danger disabled={busy} tone="ok"
+              stateLabel={t("settings:skills.stateImported")}
+              actionLabel={t("settings:skills.delete")}
+              pendingLabel={t("settings:skills.deleting")}
+              onRun={onDelete} />)}
         </div>
       </div>
 

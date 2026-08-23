@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
+import { DangerConfirm } from "../../shared/ui/DangerConfirm.jsx";
 import SkillLibrary from "./SkillLibrary.jsx";
 import SkillDiscovery from "./SkillDiscovery.jsx";
 import SkillDetail from "./SkillDetail.jsx";
@@ -30,6 +31,8 @@ export default function Skills() {
   const [selectedId, setSelectedId] = useState(null);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  // 删除技能是不可撤销的磁盘操作,过一道确认;导入不用,删掉重来即可
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const { reloadSkills, loadSkillCandidates } = ferry;
   useEffect(() => {
@@ -76,7 +79,8 @@ export default function Skills() {
   });
 
   const removeSkill = () => guard(async () => {
-    await ferry.deleteSkill(skill.id);
+    await ferry.deleteSkill(pendingDelete.id);
+    setPendingDelete(null);
     setSelectedId(null);
   });
 
@@ -84,7 +88,8 @@ export default function Skills() {
     ferry.setGlobalSkills(toggleGlobal(skill.id, global)));
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+    // relative:确认框是 absolute inset 0,要贴在这一页而不是整个窗口
+    <div style={{ flex: 1, minHeight: 0, display: "flex", position: "relative" }}>
       <div style={{ width: 210, flex: "none", borderRight: "1px solid var(--line4)",
         display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
@@ -109,8 +114,24 @@ export default function Skills() {
         style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "0 24px 24px" }}>
         <SkillDetail skill={skill} candidate={candidate} body={body} busy={busy}
           isGlobalSkill={skill ? isGlobal(skill.id, global) : false}
-          onToggleGlobal={flipGlobal} onDelete={removeSkill} onImport={importCandidate} />
+          onToggleGlobal={flipGlobal} onImport={importCandidate}
+          onDelete={() => setPendingDelete(skill)} />
       </div>
+
+      {pendingDelete && (
+        <DangerConfirm
+          title={t("settings:skills.deleteTitle", { name: pendingDelete.name })}
+          desc={t("settings:skills.deleteDesc")}
+          bullets={[
+            ["var(--err)", t("settings:skills.deleteBulletFiles",
+              { n: pendingDelete.files, path: pendingDelete.id })],
+            ["var(--warn)", t("settings:skills.deleteBulletRoles")],
+            ["var(--tx4)", t("settings:skills.deleteBulletSource")],
+          ]}
+          confirmLabel={t("settings:skills.delete")}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={removeSkill} />
+      )}
     </div>
   );
 }

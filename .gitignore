@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 product-icon-concepts/
+designs/
 build/
 dist/
 app/src-tauri/binaries/

@@ -5,9 +5,7 @@ import { preloadBrowserCache } from "./modules/browser/useBrowserData.js";
 import App from "./shell/AppController.jsx";
 import { applyDensity, readDensity } from "./shared/ui/density.js";
 import { FeaturesProvider } from "./shared/capabilities/features.jsx";
-// 字体随包发行(离线可用,不走 Google Fonts):Geist / Geist Mono 可变字重 100-900
-import "@fontsource-variable/geist";
-import "@fontsource-variable/geist-mono";
+// 字体不随包发行:界面走系统字(SF Pro + 苹方 / Segoe UI + 雅黑),见 app.css 的 --font-ui
 import "./shared/styles/app.css";
 
 // 平台标记供 CSS 判断(macOS 下窗口透明走 vibrancy);

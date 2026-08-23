@@ -94,7 +94,8 @@ test("点候选的导入,入参带 candidate_id", async () => {
   const { calls } = harness();
   await expandSources();
   await clickContaining("PDF 工具");
-  await clickText("settings:skills.import");
+  // 头部是 StateButton:静止显示状态,点它就跑主动作(导入)
+  await clickText("settings:skills.stateNotImported");
   expect(calls.import).toEqual([
     { candidate_id: "claude:pdf-tools", overwrite: false },
   ]);
@@ -105,7 +106,28 @@ test("候选详情不出现「设为通用」开关——没导入就不能配�
   await expandSources();
   await clickContaining("PDF 工具");
   expect(screen.queryByText("settings:skills.globalTitle")).toBeNull();
-  expect(screen.getByText("settings:skills.import")).toBeTruthy();
+  expect(screen.getByText("settings:skills.stateNotImported")).toBeTruthy();
+});
+
+test("删除要先过确认框,取消则不动磁盘", async () => {
+  const { calls } = harness();
+  await clickContaining("代码评审");
+  await clickText("settings:skills.stateImported");
+  expect(screen.getByText("settings:skills.deleteTitle")).toBeTruthy();
+  expect(calls.delete).toEqual([]);
+
+  await clickText("overlays:delete.cancel");
+  expect(screen.queryByText("settings:skills.deleteTitle")).toBeNull();
+  expect(calls.delete).toEqual([]);
+});
+
+test("确认后才真的删,并清空选中", async () => {
+  const { calls } = harness();
+  await clickContaining("代码评审");
+  await clickText("settings:skills.stateImported");
+  await clickText("settings:skills.delete");
+  expect(calls.delete).toEqual(["code-review"]);
+  expect(screen.getByText("settings:skills.pickOne")).toBeTruthy();
 });
 
 test("已导入项打开通用开关,入参包含该 id", async () => {
