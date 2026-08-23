@@ -1,7 +1,7 @@
 ---
 name: ferry
 description: Search, read, audit, and migrate coding-agent session history through the local `ferry` CLI, which reads the unified Ferry library of Claude Code, Codex CLI, OpenCode, Pi Agent, Grok Build, and Cursor sessions. Use it when the user asks how something was solved or discussed before ("how did we fix X last time", "find the session where we debugged Y"), wants to browse or summarize past sessions across agents or projects, wants to audit what another agent actually did (its prompts, tool calls, and tool outputs), wants to move a conversation from one agent to another as a native migration with an impact preview, wants token usage or estimated cost broken down by agent, model, project, or time range, or mentions Ferry by name.
-version: 0.8.2
+version: 0.8.3
 ---
 
 # Ferry

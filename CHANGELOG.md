@@ -14,6 +14,22 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.3] - 2026-08-24
+
+### Added
+
+- **Sidebar update button** — when an update is available, a download icon
+  appears at the end of the sidebar's Settings row. One click downloads,
+  installs, and restarts Ferry.
+- **Post-update announcement** — after restarting into a new version, Ferry
+  shows what changed in that release.
+
+### Changed
+
+- **Settings update page** — simplified to version, auto-check toggle, status,
+  and retry. Download progress and release notes now live on the sidebar button
+  and the post-restart announcement instead.
+
 ## [0.8.2] - 2026-08-24
 
 ### Removed
