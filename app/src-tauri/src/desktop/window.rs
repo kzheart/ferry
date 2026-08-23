@@ -49,7 +49,7 @@ fn align_traffic_lights(ns_window: &objc2_app_kit::NSWindow) {
 #[cfg(target_os = "macos")]
 fn cache_traffic_light_spacing(ns_window: &objc2_app_kit::NSWindow) {
     use objc2_app_kit::NSWindowButton;
-    let _ = CACHED_SPACING.get_or_init(|| unsafe {
+    let _ = CACHED_SPACING.get_or_init(|| {
         let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
             return TRAFFIC_LIGHT_SPACING;
         };
