@@ -53,12 +53,6 @@ vi.mock("../platform/desktop/client.js", async (importOriginal) => ({
     if (method === "roles.list") {
       return [
         {
-          id: "session-optimizer", name: "会话优化器", builtin: true,
-          icon: "wand-sparkles", color: "violet", optimizer: true,
-          tools: ["session_search", "session_read", "session_edit"],
-        },
-        // 有读写工具但没有 optimizer 标记:不该出现在优化器下拉里
-        {
           id: "default", name: "通用助手", builtin: true,
           tools: ["session_search", "session_read", "session_edit"],
         },
@@ -134,41 +128,6 @@ test("内置 AI 助手关着时导航轨没有对话入口,其余工作区照旧
   } finally {
     host.builtinAgent = true;
   }
-});
-
-test("优化入口默认不渲染:测试中功能需在设置里显式打开", async () => {
-  const { container } = await mountApp();
-
-  await act(async () => { railItem(container, "library").click(); });
-  assert.ok(
-    !container.querySelector('[data-optimize="session"]'),
-    "开关默认关闭时不该出现优化入口",
-  );
-});
-
-test("优化入口:可 rewrite 来源渲染分体魔法棒,角色下拉只列合格角色", async () => {
-  localStorage.setItem("ferry-settings",
-    JSON.stringify({ sessionOptimization: true }));
-  const { container } = await mountApp();
-
-  await act(async () => { railItem(container, "library").click(); });
-  const entry = container.querySelector('[data-optimize="session"]');
-  assert.ok(entry, "可 rewrite 来源没有渲染整段优化入口");
-
-  // 点旁边的下拉箭头弹出角色列表:只列出具备 session_read+session_edit 的角色
-  const caret = entry.parentElement.querySelector("button:nth-of-type(2)");
-  assert.ok(caret, "魔法棒旁没有角色下拉箭头");
-  await act(async () => { caret.click(); });
-  assert.ok(
-    container.textContent.includes("会话优化器"),
-    "角色下拉没有列出内置优化器",
-  );
-  assert.ok(
-    !container.textContent.includes("通用助手"),
-    "未标记 optimizer 的角色不该出现在优化器下拉里",
-  );
-  // 不把开关留给后面的用例
-  localStorage.removeItem("ferry-settings");
 });
 
 test("资料库选中会话后详情区能渲染,编辑面从 Context 取到", async () => {

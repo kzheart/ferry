@@ -36,7 +36,6 @@ test("失败态会自行退去,按钮可以再试一次", async () => {
         navigationTarget={null}
         onLoadMore={() => {}}
         loadingMore={false}
-        optimization={null}
       />
     </SessionEditingProvider>,
   );

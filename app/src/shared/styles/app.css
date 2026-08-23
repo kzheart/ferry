@@ -5,9 +5,11 @@ html, body, #root { height: 100%; }
 :root {
   --accent: #1C2530;
   --accent-fg: #FFFFFF;
-  /* 拉丁走打包的 Geist,CJK 回退系统字(PingFang SC / 微软雅黑) */
-  --font-ui: "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* 拉丁与 CJK 都交给系统字:SF Pro + 苹方是苹果一起调过的搭配,字宽/字面/笔画
+     都对得上。之前栈首放 Geist,实测拉丁字宽比苹方宽 15%(x 字宽 58.5 vs 50.9),
+     密集列表里中西节奏对不齐,且要为此打包两个可变字体。 */
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --win-bg: var(--bg);
   color-scheme: light;
 
@@ -400,13 +402,24 @@ html[data-platform="mac"][data-theme="dark"] {
 @keyframes fslide { from { opacity: 0; transform: translateX(7px); } to { opacity: 1; transform: none; } }
 @keyframes fpop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes fbreath { 0%, 100% { opacity: .35; transform: scale(.82); } 50% { opacity: 1; transform: scale(1); } }
+/* 操作落定:状态点弹一下就停。只在动作完成时放一次,不做循环呼吸——
+   循环动画会一直抢注意力,而这里要表达的是「结束了」 */
+@keyframes fsettle { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   @keyframes fbreath { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+  @keyframes fsettle { from, to { transform: none; } }
   @keyframes fsheet { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fslide { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fpop { from { opacity: 0; } to { opacity: 1; } }
   * { transition-property: opacity, background-color, color, border-color !important; }
 }
+
+/* 次要/破坏性动作:静止时不占视觉位置,指到这一行才淡入。
+   目的是让每行静止时只有一个控件(StateButton),又不至于把「移除」藏进菜单。
+   键盘走 Tab 时靠 :focus-within 显形,不会出现聚焦在看不见的按钮上。 */
+.sb-row .sb-reveal { opacity: 0; transition: opacity .14s ease; }
+.sb-row:hover .sb-reveal,
+.sb-row:focus-within .sb-reveal { opacity: 1; }
 
 /* 悬停态(原型 style-hover 的等价) */
 .hov:hover { background: var(--hov) !important; }

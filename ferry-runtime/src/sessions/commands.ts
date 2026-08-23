@@ -10,7 +10,6 @@ import {
   type DispatchOutcome,
 } from "../server/messages.js";
 import type { AgentRuntime } from "../runtime/runtime.js";
-import { parseSessionPurpose } from "./session-store.js";
 
 export async function dispatchSessionCommand(
   runtime: AgentRuntime,
@@ -141,7 +140,6 @@ async function createSession(
           ...(thinking ? { thinking } : {}),
         },
     optionalString(params, "role_id", 128),
-    parseSessionPurpose(params.purpose),
   );
 }
 

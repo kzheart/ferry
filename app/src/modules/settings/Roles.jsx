@@ -17,8 +17,8 @@ import {
   buildRoleBundle, parseRoleBundle, planRoleImport, roleBundleFileName,
 } from "./roleBundle.js";
 
-// optimizerFeature:「会话优化」测试中功能的开关;关闭时不提供优化器标记入口
-export default function Roles({ optimizerFeature = false }) {
+// 角色编辑:出厂内置可改/重置,自定义可删/复制
+export default function Roles() {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
   const [selectedId, setSelectedId] = useState("default");
@@ -337,22 +337,6 @@ export default function Roles({ optimizerFeature = false }) {
               right={t("settings:roles.capabilityCount", { n: enabled, total: TOOLS.length })}>
               {t("settings:roles.groupCapability")}</GroupTitle>
             <RoleToolGrid tools={draft.tools} onChange={tools => patch({ tools })} />
-            {optimizerFeature && (
-              <div style={{ marginTop: 8 }}>
-                <Card>
-                  <Row first title={t("settings:roles.optimizer")}
-                    desc={t("settings:roles.optimizerHint")}>
-                    <Toggle on={draft.optimizer === true}
-                      onChange={on => setDraft(current => {
-                        const next = { ...current };
-                        if (on) next.optimizer = true;
-                        else delete next.optimizer;
-                        return next;
-                      })} />
-                  </Row>
-                </Card>
-              </div>
-            )}
 
             <GroupTitle icon={glyph(GROUP_GLYPH.skill)}>
               {t("settings:skills.roleTitle")}</GroupTitle>

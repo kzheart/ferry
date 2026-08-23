@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type {
-  SessionPurpose,
-  SessionStore,
-} from "../sessions/session-store.js";
+import type { SessionStore } from "../sessions/session-store.js";
 import { EphemeralSessionStore } from "../sessions/session-store.js";
 import { RuntimeSession } from "../sessions/runtime-session.js";
 import type {
@@ -173,10 +170,6 @@ export class AgentRuntime {
         // 重新解析:持久化的只是 id,技能可能在上次运行之后被删掉了
         await this.skillService.resolveFor(record.state.resolved_skills ?? []),
         (id) => this.skillService.read(id),
-        // 旧记录没有 purpose 字段,一律按 general 恢复
-        record.state.purpose === "session-optimization"
-          ? "session-optimization"
-          : "general",
       );
       this.sessions.set(session.id, session);
       if (record.state.status === "running" && record.state.active_run_id) {
@@ -205,7 +198,6 @@ export class AgentRuntime {
     requestedId?: string,
     requestedModel?: ModelSelection,
     requestedRoleId = DEFAULT_ROLE_ID,
-    purpose: SessionPurpose = "general",
   ) {
     const id = requestedId ?? this.newId();
     if (this.sessions.has(id))
@@ -241,11 +233,9 @@ export class AgentRuntime {
       role.id,
       role.persona,
       [...role.tools],
-      // 优化会话是产品级约束:无论角色怎么配,最终写回都必须人工审批
-      purpose === "session-optimization" ? "manual" : role.apply_policy,
+      role.apply_policy,
       await this.skillService.resolveFor(role.skills),
       (id) => this.skillService.read(id),
-      purpose,
     );
     this.sessions.set(id, session);
     await session.emit("session.created", {

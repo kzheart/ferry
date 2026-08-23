@@ -162,30 +162,23 @@ test("当前会话不攒 attention,打开会话会清掉已有徽标", async () 
   harness.unmount();
 });
 
-test("新会话按 purpose 创建;后续消息不重建,普通 newChat 重置 general", async () => {
+test("新会话创建后后续消息不重建", async () => {
   runtimeCalls.length = 0;
   const harness = await mountWithSessions([]);
   const creates = () =>
     runtimeCalls.filter((call) => call.method === "session.create");
 
-  // 优化新会话:session.create 带 purpose
-  await act(async () => harness.get().newChat("session-optimization"));
-  await act(async () => { await harness.get().send("优化这段会话"); });
+  await act(async () => harness.get().newChat());
+  await act(async () => { await harness.get().send("第一条消息"); });
   expect(creates()).toHaveLength(1);
-  expect(creates()[0].params).toMatchObject({
-    role_id: "default",
-    purpose: "session-optimization",
-  });
+  expect(creates()[0].params).toMatchObject({ role_id: "default" });
 
-  // 已有会话继续发消息:不再创建,purpose 不可切换
-  await act(async () => { await harness.get().send("继续调整"); });
+  await act(async () => { await harness.get().send("继续对话"); });
   expect(creates()).toHaveLength(1);
 
-  // 普通 newChat(即使收到点击事件对象)必须回到 general 语义:省略 purpose
-  await act(async () => harness.get().newChat({ type: "click" }));
-  await act(async () => { await harness.get().send("普通对话"); });
+  await act(async () => harness.get().newChat());
+  await act(async () => { await harness.get().send("另一条新对话"); });
   expect(creates()).toHaveLength(2);
-  expect(creates()[1].params).not.toHaveProperty("purpose");
 
   harness.unmount();
 });

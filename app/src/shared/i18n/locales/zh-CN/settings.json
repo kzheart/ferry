@@ -48,8 +48,6 @@
     "personaHint": "追加在 Ferry 安全前缀之后",
     "personaCount": "{{n}} / 建议 500 字",
     "capabilityCount": "{{n}} / {{total}} 已开启",
-    "optimizer": "用作会话优化器",
-    "optimizerHint": "开启后此角色可在会话浏览里被选为优化器;需要同时开启会话读取与会话编辑工具",
     "mutationBadge": "修改",
     "tool": {
       "session_search": {
@@ -147,8 +145,6 @@
   "experimental": {
     "groupTitle": "测试中功能",
     "groupDesc": "以下功能仍在打磨中,默认关闭,行为可能随版本调整",
-    "sessionOptimization": "会话优化",
-    "sessionOptimizationDesc": "在浏览界面提供魔法棒入口:由优化器角色分析会话并给出用户提问的改写候选,逐条确认后写回;会消耗模型调用",
     "togglesNote": "开关只控制界面入口与可达性,不会删除任何已有数据;关闭后入口立即隐藏,已在运行的进程会在下次启动 App 时停止"
   },
   "features": {
@@ -309,7 +305,16 @@
     "roleTitle": "技能",
     "roleHint": "只能选已导入的技能；通用技能对所有角色生效，这里不可取消。",
     "roleEmpty": "技能库还是空的，去「技能」页导入一个。",
-    "roleMissing": "已删除"
+    "roleMissing": "已删除",
+    "stateImported": "已导入",
+    "stateNotImported": "未导入",
+    "importing": "导入中",
+    "deleting": "删除中",
+    "deleteTitle": "删除技能「{{name}}」？",
+    "deleteDesc": "这会从 Ferry 的技能库里移除它，磁盘上的文件一并删掉。",
+    "deleteBulletFiles": "删除 {{path}} 下的 {{n}} 个文件",
+    "deleteBulletRoles": "引用了它的角色会失去这项能力",
+    "deleteBulletSource": "原始来源目录不受影响，之后可以重新导入"
   },
   "integration": {
     "cli": {
@@ -326,7 +331,11 @@
       "linkTarget": "指向 {{path}}",
       "pathHint": "{{dir}} 不在 PATH 里。在 shell 配置里加上 export PATH=\"{{dir}}:$PATH\"，重开终端后生效。",
       "engineMissing": "找不到引擎二进制，无法安装。",
-      "unsupported": "当前平台暂不支持一键安装命令行工具。"
+      "unsupported": "当前平台暂不支持一键安装命令行工具。",
+      "stateOutdatedShort": "旧引擎",
+      "installing": "安装中",
+      "updating": "更新中",
+      "uninstalling": "卸载中"
     },
     "skills": {
       "groupTitle": "Skill 安装",
@@ -340,25 +349,15 @@
       "install": "安装",
       "update": "更新",
       "remove": "移除",
-      "bundleMissing": "打包资源里没有 Ferry skill，无法安装。"
+      "bundleMissing": "打包资源里没有 Ferry skill，无法安装。",
+      "stateVersion": "v{{version}}",
+      "installing": "安装中",
+      "updating": "更新中",
+      "removing": "移除中",
+      "groupUpdatable": "可更新到 v{{version}}"
     },
-    "engine": {
-      "groupTitle": "引擎服务",
-      "state": "当前状态",
-      "stateAppShared": "App 引擎共享中",
-      "stateDaemon": "独立 daemon 运行中（pid {{pid}}）",
-      "stateStopped": "未运行",
-      "socket": "Socket 路径",
-      "socketNone": "—",
-      "socketMissing": "{{path}}（文件已不在）",
-      "version": "引擎版本",
-      "share": "允许 CLI 共享 App 引擎",
-      "shareDesc": "关闭后 CLI 始终另起独立 daemon",
-      "shareRestart": "已保存,重启 App 后生效",
-      "stop": "停止 daemon",
-      "stopDesc": "只对 CLI 拉起的独立 daemon 有效",
-      "stopDone": "daemon 已停止",
-      "stopAppMode": "App 引擎不能从这里停止;退出 Ferry App 即可释放"
+    "handoff": {
+      "groupTitle": "续聊到其他 agent"
     }
   },
   "density": {

@@ -1,35 +1,34 @@
 // Agent 集成:把 Ferry 的能力接到用户电脑上的 coding agent 上。
-// 三个分区各管一件事——PATH 里的 ferry 命令、共享技能目录里的 Ferry skill、
-// 引擎服务状态。页面本身不认识任何路径:目标只用 id 指代,路径由宿主算好带回来。
+// 两个分区各管一件事——PATH 里的 ferry 命令、共享技能目录里的 Ferry skill。
+// 页面本身不认识任何路径:目标只用 id 指代,路径由宿主算好带回来。
+//
+// 反馈全部锚在操作点:每行只有一个 StateButton,它同时是状态显示、进度和结果。
+// 引擎状态/socket 路径/共享开关这些只有开发者关心的东西不在这里露出——正常工作
+// 时用户不需要知道引擎存在,真出问题时错误会落到页面底部的告警行。
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  cliInstall, cliUninstall, engineDaemonStop, engineServiceStatus, getEngineShare,
-  integrationStatus, setEngineShare, skillInstall, skillUninstall,
+  cliInstall, cliUninstall, integrationStatus, skillInstall, skillUninstall,
 } from "../../platform/desktop/client.js";
+import { setFeature, useFeaturesList } from "../../shared/capabilities/features.jsx";
+import StateButton from "../../shared/ui/StateButton.jsx";
 import { Card, GroupTitle, Row, Toggle } from "./parts.jsx";
 
 const mono = { fontSize: 11, color: "var(--tx5)", marginTop: 3, overflowWrap: "anywhere" };
 
-function ActionButton({ label, onClick, disabled, primary }) {
+/** 行内幽灵按钮:承载「这一行的第二个动作」,静止时透明(见 app.css 的 .sb-reveal)。 */
+function GhostAction({ label, onClick, disabled }) {
   return (
-    <button className={primary ? "fbtn-primary" : "fbtn"} onClick={onClick} disabled={disabled}
-      style={{ height: 30, padding: "0 13px", fontSize: 12, flex: "none" }}>{label}</button>
+    <button type="button" className="sb-reveal" onClick={onClick} disabled={disabled}
+      style={{ height: 30, padding: "0 10px", flex: "none", borderRadius: 8,
+        border: "1px solid transparent", background: "transparent", color: "var(--tx3b)",
+        fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "default" }}>
+      {label}
+    </button>
   );
 }
 
-/** 状态点 + 文案,与「数据来源」分区同一套视觉语言。 */
-function StateBadge({ ok, warn, text }) {
-  const color = ok ? "var(--ok)" : warn ? "var(--warn)" : "var(--tx5)";
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11,
-      fontWeight: 600, color: "var(--tx3b)" }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />{text}
-    </span>
-  );
-}
-
-function CliSection({ cli, busy, onInstall, onUninstall, t }) {
+function CliSection({ cli, onInstall, onUninstall, t }) {
   if (!cli.supported) {
     return (
       <Card>
@@ -40,24 +39,29 @@ function CliSection({ cli, busy, onInstall, onUninstall, t }) {
   }
   const linkDir = cli.link_path?.replace(/\/[^/]*$/, "") || "";
   const outdated = cli.installed && !cli.points_to_current_engine;
+  // 三种状态各自只有一个「下一步」:没装就装,指向旧引擎就更新,装好了就只剩卸载。
+  const state = !cli.installed ? t("settings:integration.cli.stateNotInstalled")
+    : outdated ? t("settings:integration.cli.stateOutdatedShort")
+      : t("settings:integration.cli.stateInstalled");
+  const primary = !cli.installed
+    ? { label: t("settings:integration.cli.install"), pending: t("settings:integration.cli.installing"), run: onInstall }
+    : outdated
+      ? { label: t("settings:integration.cli.update"), pending: t("settings:integration.cli.updating"), run: onInstall }
+      : { label: t("settings:integration.cli.uninstall"), pending: t("settings:integration.cli.uninstalling"), run: onUninstall, danger: true };
   return (
     <>
       <Card>
-        <Row first title={t("settings:integration.cli.title")}
+        <Row first className="sb-row" title={t("settings:integration.cli.title")}
           desc={cli.installed
             ? t("settings:integration.cli.descInstalled", { path: cli.link_path })
             : t("settings:integration.cli.descNotInstalled")}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <StateBadge ok={cli.installed && !outdated} warn={outdated}
-              text={!cli.installed ? t("settings:integration.cli.stateNotInstalled")
-                : outdated ? t("settings:integration.cli.stateOutdated")
-                  : t("settings:integration.cli.stateInstalled")} />
-            <ActionButton primary={!cli.installed || outdated} disabled={!!busy || !cli.engine_path}
-              label={cli.installed ? t("settings:integration.cli.update") : t("settings:integration.cli.install")}
-              onClick={onInstall} />
-            {cli.installed && <ActionButton disabled={!!busy}
-              label={t("settings:integration.cli.uninstall")} onClick={onUninstall} />}
-          </div>
+          {/* 更新态下卸载仍要可达,但它不该和「更新」抢位置 */}
+          {outdated && (
+            <GhostAction label={t("settings:integration.cli.uninstall")} onClick={onUninstall} />
+          )}
+          <StateButton tone={outdated ? "warn" : cli.installed ? "ok" : "idle"}
+            stateLabel={state} actionLabel={primary.label} pendingLabel={primary.pending}
+            danger={primary.danger} disabled={!cli.engine_path} onRun={primary.run} />
         </Row>
       </Card>
       {cli.installed && cli.link_target && (
@@ -77,90 +81,45 @@ function CliSection({ cli, busy, onInstall, onUninstall, t }) {
 }
 
 /** 安装目标只有一个:共享技能目录,各 coding agent 都读它。 */
-function SkillRow({ target, bundledVersion, busy, onInstall, onRemove, t }) {
+function SkillRow({ target, bundledVersion, onInstall, onRemove, t }) {
   const updatable = target.installed && !!bundledVersion
     && target.installed_version !== bundledVersion;
+  // 装好之后版本号本身就是状态,再写一遍「已安装」是重复的
   const state = !target.installed ? t("settings:integration.skills.stateNotInstalled")
-    : updatable ? t("settings:integration.skills.stateUpdatable", { version: bundledVersion })
-      : target.installed_version
-        ? t("settings:integration.skills.stateInstalled", { version: target.installed_version })
-        : t("settings:integration.skills.stateInstalledUnknown");
+    : target.installed_version
+      ? t("settings:integration.skills.stateVersion", { version: target.installed_version })
+      : t("settings:integration.skills.stateInstalledUnknown");
+  const primary = !target.installed
+    ? { label: t("settings:integration.skills.install"), pending: t("settings:integration.skills.installing"), run: onInstall }
+    : updatable
+      ? { label: t("settings:integration.skills.update"), pending: t("settings:integration.skills.updating"), run: onInstall }
+      : { label: t("settings:integration.skills.remove"), pending: t("settings:integration.skills.removing"), run: onRemove, danger: true };
   return (
-    <Row first title={t("settings:integration.skills.rowTitle")} desc={target.path}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <StateBadge ok={target.installed && !updatable} warn={updatable} text={state} />
-        <ActionButton primary={!target.installed || updatable}
-          disabled={!!busy || !bundledVersion}
-          label={target.installed ? t("settings:integration.skills.update")
-            : t("settings:integration.skills.install")}
-          onClick={onInstall} />
-        {target.installed && <ActionButton disabled={!!busy}
-          label={t("settings:integration.skills.remove")} onClick={onRemove} />}
-      </div>
-    </Row>
-  );
-}
-
-function EngineSection({ service, share, busy, onShare, onStop, t }) {
-  const state = service?.state || "stopped";
-  const text = state === "app-shared" ? t("settings:integration.engine.stateAppShared")
-    : state === "daemon" ? t("settings:integration.engine.stateDaemon", { pid: service.pid })
-      : t("settings:integration.engine.stateStopped");
-  const socket = !service?.socket ? t("settings:integration.engine.socketNone")
-    : service.socket_ready ? service.socket
-      : t("settings:integration.engine.socketMissing", { path: service.socket });
-  return (
-    <Card>
-      <Row first title={t("settings:integration.engine.state")}>
-        <StateBadge ok={state !== "stopped"} text={text} />
-      </Row>
-      <Row title={t("settings:integration.engine.socket")}>
-        <span className="mono" style={{ fontSize: 11, color: "var(--tx3b)",
-          overflowWrap: "anywhere" }}>{socket}</span>
-      </Row>
-      {service?.version && (
-        <Row title={t("settings:integration.engine.version")}>
-          <span className="mono" style={{ fontSize: 12, color: "var(--tx3b)" }}>v{service.version}</span>
-        </Row>
+    <Row first className="sb-row" title={t("settings:integration.skills.rowTitle")} desc={target.path}>
+      {updatable && (
+        <GhostAction label={t("settings:integration.skills.remove")} onClick={onRemove} />
       )}
-      {/* 开关只写宿主的配置文件,不动正在跑的引擎:sidecar 只在启动时决定要不要监听 */}
-      <Row title={t("settings:integration.engine.share")}
-        desc={t("settings:integration.engine.shareDesc")}>
-        <span style={{ opacity: busy ? 0.45 : 1, pointerEvents: busy ? "none" : undefined,
-          flex: "none" }}>
-          <Toggle on={share} onChange={onShare} />
-        </span>
-      </Row>
-      {/* 只有 CLI 拉起的 daemon 能从这里停;App 自己的引擎由引擎侧结构化拒绝 */}
-      <Row title={t("settings:integration.engine.stop")}
-        desc={t("settings:integration.engine.stopDesc")}>
-        <ActionButton disabled={!!busy || state !== "daemon"}
-          label={t("settings:integration.engine.stop")} onClick={onStop} />
-      </Row>
-    </Card>
+      <StateButton tone={updatable ? "warn" : target.installed ? "ok" : "idle"}
+        stateLabel={state} actionLabel={primary.label} pendingLabel={primary.pending}
+        danger={primary.danger} disabled={!bundledVersion && !target.installed}
+        onRun={primary.run} />
+    </Row>
   );
 }
 
 export default function Integration() {
   const { t } = useTranslation();
   const [status, setStatus] = useState(null);
-  const [service, setService] = useState(null);
-  // 共享开关的真值在宿主的配置文件里,这里只是它的一份显示副本。
-  const [share, setShare] = useState(true);
-  const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const features = useFeaturesList();
+  const handoff = features.find(feature => feature.id === "handoff");
 
   const message = value => String(value?.message || value || "");
 
   const refresh = useCallback(async () => {
     try {
-      const [next, engine, sharing] = await Promise.all([
-        integrationStatus(), engineServiceStatus(), getEngineShare(),
-      ]);
-      setStatus(next);
-      setService(engine);
-      setShare(sharing);
+      setStatus(await integrationStatus());
     } catch (e) {
       setError(message(e));
     }
@@ -169,53 +128,51 @@ export default function Integration() {
   useEffect(() => { refresh(); }, [refresh]);
 
   // 每个动作跑完都重新拉一次状态:安装结果的真相在磁盘上,不在这次调用的返回值里。
-  const run = (key, action) => async () => {
-    setBusy(key);
+  // 失败时把错误抛回 StateButton(它变成「重试」),同时在页面底部说清原因。
+  const run = action => async () => {
     setError(null);
-    setNotice(null);
     try {
       await action();
     } catch (e) {
       setError(message(e));
+      throw e;
     } finally {
-      setBusy(null);
       await refresh();
     }
   };
 
-  // 改完立刻回读(refresh),提示只说「下次启动生效」:spawn 只在 App 启动时发生。
-  const toggleShare = next => run("engine-share", async () => {
-    await setEngineShare(next);
-    setNotice(t("settings:integration.engine.shareRestart"));
-  })();
-
-  const stopDaemon = run("engine-stop", async () => {
-    try {
-      await engineDaemonStop();
-      setNotice(t("settings:integration.engine.stopDone"));
-    } catch (e) {
-      // 宿主给的是 {code, message};只有 app_mode 需要换成自己的解释。
-      throw new Error(e?.code === "app_mode"
-        ? t("settings:integration.engine.stopAppMode") : message(e));
-    }
-  });
-
   const bundled = status?.bundled_version || null;
+  const updatable = (status?.skills || []).some(s => s.installed && !!bundled
+    && s.installed_version !== bundled);
+
+  const toggleHandoff = async next => {
+    setHandoffBusy(true);
+    setError(null);
+    try {
+      await setFeature("handoff", next);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setHandoffBusy(false);
+    }
+  };
 
   return (
     <div>
       <GroupTitle first>{t("settings:integration.cli.groupTitle")}</GroupTitle>
-      {status && <CliSection cli={status.cli} busy={busy} t={t}
-        onInstall={run("cli-install", cliInstall)}
-        onUninstall={run("cli-uninstall", cliUninstall)} />}
+      {status && <CliSection cli={status.cli} t={t}
+        onInstall={run(cliInstall)} onUninstall={run(cliUninstall)} />}
 
-      <GroupTitle right={bundled ? t("settings:integration.skills.groupDesc", { version: bundled }) : undefined}>
+      {/* 版本是「这一组共用」的信息,放组标题;每行的按钮只说自己的状态 */}
+      <GroupTitle right={updatable && bundled
+        ? t("settings:integration.skills.groupUpdatable", { version: bundled })
+        : undefined}>
         {t("settings:integration.skills.groupTitle")}</GroupTitle>
       <Card>
         {(status?.skills || []).map(target => (
-          <SkillRow key={target.id} target={target} bundledVersion={bundled} busy={busy} t={t}
-            onInstall={run(`skill-install:${target.id}`, () => skillInstall(target.id))}
-            onRemove={run(`skill-remove:${target.id}`, () => skillUninstall(target.id))} />
+          <SkillRow key={target.id} target={target} bundledVersion={bundled} t={t}
+            onInstall={run(() => skillInstall(target.id))}
+            onRemove={run(() => skillUninstall(target.id))} />
         ))}
       </Card>
       <div style={{ ...mono, paddingLeft: 2 }}>
@@ -225,12 +182,22 @@ export default function Integration() {
           {t("settings:integration.skills.bundleMissing")}</div>
       )}
 
-      <GroupTitle>{t("settings:integration.engine.groupTitle")}</GroupTitle>
-      <EngineSection service={service} share={share} busy={busy} t={t}
-        onShare={toggleShare} onStop={stopDaemon} />
+      {handoff && (
+        <>
+          <GroupTitle>{t("settings:integration.handoff.groupTitle")}</GroupTitle>
+          <Card>
+            <Row first title={t("settings:features.handoff.title")}
+              desc={t("settings:features.handoff.desc")}>
+              <span style={{ opacity: handoffBusy ? 0.45 : 1,
+                pointerEvents: handoffBusy ? "none" : undefined, flex: "none" }}>
+                <Toggle on={handoff.enabled}
+                  onChange={toggleHandoff} />
+              </span>
+            </Row>
+          </Card>
+        </>
+      )}
 
-      {notice && <div style={{ ...mono, color: "var(--ok-deep)", paddingLeft: 2, marginTop: 10 }}
-        role="status">{notice}</div>}
       {error && <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2, marginTop: 10 }}
         role="alert">{error}</div>}
     </div>

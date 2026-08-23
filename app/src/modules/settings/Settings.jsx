@@ -198,13 +198,6 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         </Row>
       </Card>
 
-      <GroupTitle>{t("settings:motion.groupTitle")}</GroupTitle>
-      <Card>
-        <Row first title={t("settings:motion.reduceMotion")} desc={t("settings:motion.reduceMotionDesc")}>
-          <Toggle on={s.reduceMotion} onChange={v => set({ reduceMotion: v })} />
-        </Row>
-      </Card>
-
       <GroupTitle>{t("settings:guideSection.groupTitle")}</GroupTitle>
       <Card>
         <Row first title={t("settings:guideSection.guide")} desc={t("settings:guideSection.guideDesc")}>
@@ -214,17 +207,6 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         <Row title={t("settings:guideSection.firstRun")} desc={t("settings:guideSection.firstRunDesc")}>
           <button className="fbtn" style={{ height: 30, fontSize: 12 }}
             onClick={onFirstRun}>{t("settings:guideSection.open")}</button>
-        </Row>
-      </Card>
-
-      <GroupTitle right={t("settings:experimental.groupDesc")}>
-        {t("settings:experimental.groupTitle")}
-      </GroupTitle>
-      <Card>
-        <Row first title={t("settings:experimental.sessionOptimization")}
-          desc={t("settings:experimental.sessionOptimizationDesc")}>
-          <Toggle on={s.sessionOptimization}
-            onChange={v => set({ sessionOptimization: v })} />
         </Row>
       </Card>
     </div>
@@ -424,11 +406,12 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             {sections.map(({ key: k, labelKey }) => {
               const on = section === k;
               return (
-                <button key={k} className={on ? undefined : "hov-item"} onClick={() => setSection(k)}
+                // 侧栏底色本身就是浅灰(--settings-rail),hov-item 压不出对比,用 hov-rail
+                <button key={k} className={on ? undefined : "hov-rail"} onClick={() => setSection(k)}
                   style={{ display: "flex", alignItems: "center", gap: 11, height: 36, padding: "0 11px",
                     border: "none", borderRadius: 8, background: on ? "var(--seg-on)" : "transparent",
                     color: on ? "var(--tx1)" : "var(--tx2b)", fontSize: 13, fontWeight: on ? 650 : 500,
-                    cursor: "default", textAlign: "left" }}>
+                    cursor: "default", textAlign: "left", transition: "background .12s ease" }}>
                   <SetGlyph name={k} color={on ? "var(--tx1)" : "var(--tx3b)"} />{t(labelKey)}
                 </button>
               );
@@ -456,7 +439,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
           ) : section === "models" ? (
             <Models onOpenProviders={() => setSection("providers")} />
           ) : section === "roles" ? (
-            <Roles optimizerFeature={!!settings.sessionOptimization} />
+            <Roles />
           ) : section === "skills" ? (
             <Skills />
           ) : (

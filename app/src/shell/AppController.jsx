@@ -14,7 +14,6 @@ import {
   useLibraryResourcePane,
   useSessionDeletion,
   useSessionMetadata,
-  useSessionOptimization,
   useSessionSelection,
 } from "../modules/browser/public.js";
 import { useAskFerry } from "../modules/askferry/public.js";
@@ -83,23 +82,6 @@ export default function App() {
   const isFeatureEnabled = useIsFeatureEnabled();
   const builtinAgent = isFeatureEnabled("builtin-agent");
   const updater = useAppUpdater(settings.autoCheckUpdates);
-  // 内置优化器角色属于「会话优化」测试中功能:功能关闭时从角色列表整体隐身
-  // (角色设置、问答角色下拉都经由这份 Context 取角色)
-  const ferryValue = useMemo(() => {
-    if (settings.sessionOptimization) return ferry;
-    return {
-      ...ferry,
-      roles: (ferry.roles || []).filter(
-        role => !(role.builtin && role.optimizer === true)),
-    };
-  }, [ferry, settings.sessionOptimization]);
-  // 被隐藏的角色若正被问答选中,回落到默认角色
-  useEffect(() => {
-    if (ferry.roles.length
-      && !ferryValue.roles.some(role => role.id === ferry.selectedRoleId)) {
-      ferry.setSelectedRoleId("default");
-    }
-  }, [ferryValue.roles, ferry.selectedRoleId]);
   // 助手关掉时正停在对话工作区:状态也跟着回落,否则导航轨没有高亮项、资源栏还
   // 挂着对话列表(路由层另有一层同样的回落,负责这一帧就不渲染它)
   useEffect(() => {
@@ -254,17 +236,6 @@ export default function App() {
   useEffect(() => {
     if (!selId && sessions.length) select(sessionIdentity(sessions[0]));
   }, [sessions]);
-
-  // 会话优化:魔法棒 → 会话绑定的优化器角色生成改写候选 → 内联 diff 取舍 →
-  // 接受项作为一个批次写回;全程留在浏览界面,不跳转
-  const optimization = useSessionOptimization({
-    enabled: !!settings.sessionOptimization,
-    current: cur,
-    roles: ferry.roles,
-    runtimeProbe: !!settings.runtimeProbe,
-    doScan,
-    onApplied: () => select(selId),
-  });
 
   // 打开设置并定位到指定分区:桌面菜单 / 路由 / 浮动面板共用
   const openConfig = (section = "providers") => {
@@ -437,7 +408,7 @@ export default function App() {
   });
 
   return (
-    <FerryRuntimeProvider value={ferryValue}>
+    <FerryRuntimeProvider value={ferry}>
     <SessionEditingProvider value={editingSurface}>
     <BrowserStateProvider value={browserState}>
     <OperationsStateProvider value={operationsState}>
@@ -573,7 +544,6 @@ export default function App() {
           historySelection={histSel}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
-          optimization={optimization}
           onFirstDone={onboarding.completeFirstRun}
           scanningLabel={t("app:detail.scanningSessions")}
           emptyLibraryLabel={t("app:detail.noSessionToDisplay")}

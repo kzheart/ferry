@@ -1,4 +1,4 @@
-// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/复制/优化/迁移)、子会话行
+// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/复制/迁移)、子会话行
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
@@ -16,7 +16,6 @@ import {
   ToolIcon,
 } from "../../shared/ui/icons.jsx";
 import { ContextStatusChip } from "./SessionContext.jsx";
-import { OptimizerWandControl } from "./OptimizationSurface.jsx";
 
 export default function SessionDetailHeader({
   meta,
@@ -27,9 +26,6 @@ export default function SessionDetailHeader({
   canResume,
   canMigrate,
   onOpenMigrate,
-  optActive,
-  optimization,
-  onStartOptimization,
 }) {
   const { t: tt } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -172,13 +168,6 @@ export default function SessionDetailHeader({
             {copied ? <CheckIcon size={15} />
               : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
           </button>}
-          {optActive && (
-            <OptimizerWandControl
-              optimization={optimization}
-              disabled={!data}
-              onStart={onStartOptimization}
-            />
-          )}
           {canMigrate && (
             <button
               data-guide="migrate"

@@ -134,7 +134,7 @@ describe("JSONL protocol", () => {
     });
   });
 
-  it("rejects_invalid_session_purpose", async () => {
+  it("rejects_invalid_session_create_params", async () => {
     const runtime = await AgentRuntime.create({
       backendFactory: createProtocolTestBackend,
     });
@@ -142,28 +142,14 @@ describe("JSONL protocol", () => {
       runtime,
       parseCommand({
         protocol: PROTOCOL_VERSION,
-        id: "bad-purpose",
+        id: "bad-model",
         method: "session.create",
-        params: { session_id: "s-bad", purpose: "replay" },
+        params: { session_id: "s-bad", provider_id: "openai" },
       }),
     );
     expect(invalid).toMatchObject({
       ok: false,
       error: { code: "invalid_params" },
-    });
-
-    const optimization = await dispatch(
-      runtime,
-      parseCommand({
-        protocol: PROTOCOL_VERSION,
-        id: "opt-purpose",
-        method: "session.create",
-        params: { session_id: "s-opt", purpose: "session-optimization" },
-      }),
-    );
-    expect(optimization).toMatchObject({
-      ok: true,
-      result: { session_id: "s-opt", purpose: "session-optimization" },
     });
 
     const plain = await dispatch(
@@ -177,7 +163,7 @@ describe("JSONL protocol", () => {
     );
     expect(plain).toMatchObject({
       ok: true,
-      result: { session_id: "s-plain", purpose: "general" },
+      result: { session_id: "s-plain" },
     });
   });
 });

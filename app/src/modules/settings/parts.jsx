@@ -14,9 +14,9 @@ export const Card = ({ children }) => (
     overflow: "hidden" }}>{children}</div>
 );
 
-export function Row({ title, desc, children, first }) {
+export function Row({ title, desc, children, first, className }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12,
+    <div className={className} style={{ display: "flex", alignItems: "center", gap: 12,
       padding: "calc(var(--fs-body) + 1px) 16px",
       borderTop: first ? "none" : "1px solid var(--line6)" }}>
       <div style={{ flex: 1, minWidth: 0 }}>

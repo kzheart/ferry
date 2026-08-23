@@ -29,8 +29,8 @@ pub(crate) const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         feature: Feature::Handoff,
         id: "handoff",
-        stage: "experimental",
-        default: false,
+        stage: "preferences",
+        default: true,
         surfaces: &["ui"],
     },
 ];
@@ -57,6 +57,6 @@ impl Feature {
 pub(crate) fn default_of(feature: Feature) -> bool {
     match feature {
         Feature::BuiltinAgent => false,
-        Feature::Handoff => false,
+        Feature::Handoff => true,
     }
 }

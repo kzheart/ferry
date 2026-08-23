@@ -15,13 +15,6 @@ import { CompactionBoundary } from "./SessionContext.jsx";
 import SessionDetailHeader from "./SessionDetailHeader.jsx";
 import SessionImagePreview from "./SessionImagePreview.jsx";
 import SessionRound from "./SessionRound.jsx";
-import {
-  OptimizationAgentBar,
-  OptimizationFloatBar,
-  OptimizationMinimap,
-  OptimizationNotice,
-} from "./OptimizationSurface.jsx";
-import { useOptimizationView } from "./useOptimizationView.js";
 import { JumpToLatest, useStickToBottom } from "./stickToBottom.jsx";
 
 // memo:侧边栏展开/折叠、悬停等与详情无关的状态变化不再重渲染整条时间线
@@ -36,7 +29,6 @@ export default memo(function SessionDetail({
   navigationTarget,
   onLoadMore,
   loadingMore,
-  optimization,
 }) {
   const { t: tt } = useTranslation();
   const {
@@ -79,20 +71,6 @@ export default memo(function SessionDetail({
   const { atBottom, scrollToBottom } = useStickToBottom(
     scrollRef, data, meta.id, Boolean(data?.next_from_message),
   );
-
-  // 会话优化的视图状态(候选映射/多选/乐观展示/跳转/快捷键)收在专用 hook
-  const optView = useOptimizationView({
-    optimization,
-    rounds,
-    data,
-    metaId: meta.id,
-    canRewrite,
-    scrollRef,
-  });
-  const {
-    optActive, candidates, pendingTurns, acceptAllCandidates,
-    selectedTurns, setSelectedTurns, startOptimization, jumpToTurn, navDiff,
-  } = optView;
 
   // 每个导航目标只定位一次:运行中会话每次内容重载都会换 data,
   // 不记账会反复滚回目标轮次,把停在底部的用户周期性甩上去。
@@ -157,16 +135,7 @@ export default memo(function SessionDetail({
           canResume={canResume}
           canMigrate={canMigrate}
           onOpenMigrate={onOpenMigrate}
-          optActive={optActive}
-          optimization={optimization}
-          onStartOptimization={() => startOptimization()}
         />
-        {optActive && (
-          <>
-            <OptimizationAgentBar optimization={optimization} />
-            <OptimizationNotice optimization={optimization} />
-          </>
-        )}
         <div
           style={{
             padding: `20px var(--main-pad) ${dirtyOps.length ? 110 : 48}px`,
@@ -233,7 +202,6 @@ export default memo(function SessionDetail({
                     const o = opFor(r.n, "rewrite");
                     if (o) removeOp(o.id);
                   }}
-                  {...optView.roundProps(r)}
                   onStartReply={() => startReplyEdit(r.assistantReply)}
                   onUpdateReply={(items) => {
                     const o = opFor(r.n, "assistant-reply");
@@ -284,34 +252,6 @@ export default memo(function SessionDetail({
         }}
         title={tt("browser:session.jumpToLatest")}
       />
-      {optActive && (
-        <>
-          <OptimizationFloatBar
-            pendingCount={candidates.length}
-            applying={optimization.status === "applying"}
-            onPrev={() => navDiff(-1)}
-            onNext={() => navDiff(1)}
-            onAcceptAll={acceptAllCandidates}
-            onRejectAll={optimization.rejectAll}
-            selection={
-              optimization.role
-                ? {
-                    count: selectedTurns.length,
-                    roleName: optimization.role.name,
-                    roleColor: optimization.role.color,
-                    onCancel: () => setSelectedTurns([]),
-                    onRun: () => startOptimization(selectedTurns),
-                  }
-                : null
-            }
-          />
-          <OptimizationMinimap
-            scrollRef={scrollRef}
-            pendingTurns={pendingTurns}
-            onJump={jumpToTurn}
-          />
-        </>
-      )}
       {dirtyOps.length > 0 && (
         <PendingEditBar
           ops={dirtyOps}

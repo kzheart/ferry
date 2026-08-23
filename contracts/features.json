@@ -1,6 +1,7 @@
 {
   "stages": [
-    "experimental"
+    "experimental",
+    "preferences"
   ],
   "features": [
     {
@@ -15,8 +16,8 @@
     },
     {
       "id": "handoff",
-      "stage": "experimental",
-      "default": false,
+      "stage": "preferences",
+      "default": true,
       "surfaces": [
         "ui"
       ],

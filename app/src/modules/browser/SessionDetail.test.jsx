@@ -48,7 +48,6 @@ function renderDetail(overrides = {}) {
         navigationTarget={null}
         onLoadMore={() => {}}
         loadingMore={false}
-        optimization={null}
         {...overrides}
       />
     </SessionEditingProvider>,

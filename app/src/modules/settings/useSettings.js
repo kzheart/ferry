@@ -1,4 +1,4 @@
-// 外观设置:主题 / 减少动效 / 语言
+// 外观设置:主题 / 语言
 // 落 localStorage,并以 data-* 属性作用到根节点;配色为黑白中性色,由 style.css 变量定义
 import { useEffect, useState } from "react";
 import { setWindowTheme } from "../../platform/desktop/client.js";
@@ -8,9 +8,7 @@ const KEY = "ferry-settings";
 
 const DEFAULTS = {
   theme: "light",
-  reduceMotion: false,
   runtimeProbe: false,
-  sessionOptimization: false,
   terminalApp: "auto",
   autoCheckUpdates: true,
   locale: null,
@@ -39,7 +37,7 @@ export function useSettings() {
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(s));
     const root = document.documentElement;
-    root.dataset.reduce = s.reduceMotion ? "1" : "0";
+    root.dataset.reduce = "1";
     root.dataset.theme = dark ? "dark" : "light";
     // 窗口外观(毛玻璃材质/红绿灯)必须与应用主题同步,
     // 否则深色 CSS 叠在浅色 NSVisualEffectView 上会发灰;跟随系统时交还系统决定

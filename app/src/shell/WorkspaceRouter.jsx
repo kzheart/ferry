@@ -18,7 +18,6 @@ export function WorkspaceRouter({
   historySelection,
   agentAttachments,
   onAgentAttachmentsChange,
-  optimization,
   onFirstDone,
   scanningLabel,
   emptyLibraryLabel,
@@ -68,7 +67,6 @@ export function WorkspaceRouter({
             onLoadMore={detailActions.onLoadMore}
             loadingMore={detailActions.loadingMore}
             onResume={detailActions.onResume}
-            optimization={optimization}
           />
         ) : (
           <div

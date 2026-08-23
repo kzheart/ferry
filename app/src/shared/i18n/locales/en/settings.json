@@ -48,8 +48,6 @@
     "personaHint": "Appended after Ferry's safety prefix",
     "personaCount": "{{n}} / 500 suggested",
     "capabilityCount": "{{n}} / {{total}} enabled",
-    "optimizer": "Use as session optimizer",
-    "optimizerHint": "When on, this role can be picked as an optimizer while browsing sessions; it also needs the session read and session edit tools",
     "mutationBadge": "Writes",
     "tool": {
       "session_search": {
@@ -147,8 +145,6 @@
   "experimental": {
     "groupTitle": "Experimental features",
     "groupDesc": "These features are still being polished. They are off by default and may change between versions.",
-    "sessionOptimization": "Session optimization",
-    "sessionOptimizationDesc": "Adds the magic-wand entry to the browser: an optimizer role analyzes the session and proposes rewrites for user prompts, applied only after your confirmation. Consumes model calls.",
     "togglesNote": "These switches only control visibility and reachability; they never delete existing data. Turning one off hides its entry points right away, and any process already running stops the next time you launch the app."
   },
   "features": {
@@ -309,7 +305,16 @@
     "roleTitle": "Skills",
     "roleHint": "Only imported skills can be selected. Global skills apply to every role and can't be turned off here.",
     "roleEmpty": "The skill library is empty. Import one from the Skills page.",
-    "roleMissing": "deleted"
+    "roleMissing": "deleted",
+    "stateImported": "Imported",
+    "stateNotImported": "Not imported",
+    "importing": "Importing",
+    "deleting": "Deleting",
+    "deleteTitle": "Delete the skill \"{{name}}\"?",
+    "deleteDesc": "It will be removed from your Ferry skill library, and its files deleted from disk.",
+    "deleteBulletFiles": "Deletes {{n}} files under {{path}}",
+    "deleteBulletRoles": "Roles referencing it lose that capability",
+    "deleteBulletSource": "The original source folder is untouched — you can import it again later"
   },
   "integration": {
     "cli": {
@@ -326,7 +331,11 @@
       "linkTarget": "Points at {{path}}",
       "pathHint": "{{dir}} is not on your PATH. Add export PATH=\"{{dir}}:$PATH\" to your shell profile and open a new terminal.",
       "engineMissing": "Engine binary not found, cannot install.",
-      "unsupported": "One-click command line install is not available on this platform yet."
+      "unsupported": "One-click command line install is not available on this platform yet.",
+      "stateOutdatedShort": "Outdated",
+      "installing": "Installing",
+      "updating": "Updating",
+      "uninstalling": "Removing"
     },
     "skills": {
       "groupTitle": "Skill installation",
@@ -340,25 +349,15 @@
       "install": "Install",
       "update": "Update",
       "remove": "Remove",
-      "bundleMissing": "The Ferry skill is missing from the app bundle, cannot install."
+      "bundleMissing": "The Ferry skill is missing from the app bundle, cannot install.",
+      "stateVersion": "v{{version}}",
+      "installing": "Installing",
+      "updating": "Updating",
+      "removing": "Removing",
+      "groupUpdatable": "Update to v{{version}}"
     },
-    "engine": {
-      "groupTitle": "Engine service",
-      "state": "Current state",
-      "stateAppShared": "Sharing the app engine",
-      "stateDaemon": "Standalone daemon running (pid {{pid}})",
-      "stateStopped": "Not running",
-      "socket": "Socket path",
-      "socketNone": "—",
-      "socketMissing": "{{path}} (file is gone)",
-      "version": "Engine version",
-      "share": "Let the CLI share the app engine",
-      "shareDesc": "When off, the CLI always starts its own daemon",
-      "shareRestart": "Saved. Takes effect the next time the app starts.",
-      "stop": "Stop daemon",
-      "stopDesc": "Only a daemon started by the CLI can be stopped here",
-      "stopDone": "Daemon stopped",
-      "stopAppMode": "The app's engine can't be stopped here; quit Ferry to release it"
+    "handoff": {
+      "groupTitle": "Resume in another agent"
     }
   },
   "density": {
