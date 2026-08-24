@@ -183,46 +183,76 @@ function DayDetail({ detail, locale, t, fmtInt, fmtTokens, fmtCost, onClose }) {
   );
 }
 
-function Clock({ clock, peakHour, t }) {
-  const CX = 130, CY = 112, R0 = 30, R1 = 94;
+function Clock({ clock, peakHour, activeWindow, t }) {
+  const CX = 130, CY = 118, R0 = 52, R1 = 88;
   const max = Math.max(1, ...clock);
-  const step = (Math.PI * 2) / 24, gap = step * 0.14;
-  const wedge = (i, val) => {
-    const a0 = -Math.PI / 2 + i * step + gap / 2;
-    const a1 = -Math.PI / 2 + (i + 1) * step - gap / 2;
-    const r = R0 + (val / max) * (R1 - R0);
-    const p = (ang, rad) => [(CX + Math.cos(ang) * rad).toFixed(2), (CY + Math.sin(ang) * rad).toFixed(2)];
-    const A = p(a0, R0), Bp = p(a1, R0), C = p(a1, r), D = p(a0, r);
-    return `M${A[0]} ${A[1]} A${R0} ${R0} 0 0 1 ${Bp[0]} ${Bp[1]} L${C[0]} ${C[1]} A${r} ${r} 0 0 0 ${D[0]} ${D[1]} Z`;
+  const total = clock.reduce((n, v) => n + v, 0);
+  const peakLabel = `${String(peakHour).padStart(2, "0")}:00`;
+
+  // 整点对齐:0 点在正上方,6/12/18 依次在右/下/左,和钟面一致
+  const ang = h => -Math.PI / 2 + h / 24 * Math.PI * 2;
+  const pt = (a, r) => [(CX + Math.cos(a) * r).toFixed(2), (CY + Math.sin(a) * r).toFixed(2)];
+  // h0 点到 h1 点的圆弧(h1 可越过 24 表示跨午夜)
+  const arc = (h0, h1, r) => {
+    const a0 = ang(h0) + 0.02, a1 = ang(h1) - 0.02;
+    const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r);
+    return `M ${x0} ${y0} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1} ${y1}`;
   };
+
   return (
-    <>
-    <svg viewBox="0 0 260 232" width="100%" height="232" role="img" aria-label={t("overview:clock.aria")}>
-      {[0.5, 1].map(f => (
-        <circle key={f} cx={CX} cy={CY} r={R0 + (R1 - R0) * f} fill="none" stroke="var(--grid)" strokeWidth="1" />
-      ))}
-      {clock.map((v, h) => {
-        const late = h <= 4 || h >= 21;
-        return <path key={h} d={wedge(h, v)} fill={late ? "var(--warn)" : "var(--c1)"} opacity={late ? 0.9 : 0.45} />;
-      })}
-      {[[0, "0"], [6, "6"], [12, "12"], [18, "18"]].map(([hh, lb]) => {
-        const ang = -Math.PI / 2 + (hh + 0.5) * step, rr = R1 + 15;
-        return <text key={hh} x={(CX + Math.cos(ang) * rr).toFixed(1)} y={(CY + Math.sin(ang) * rr + 3.5).toFixed(1)}
-          textAnchor="middle" fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{lb}</text>;
-      })}
-      <text x={CX} y={CY - 2} textAnchor="middle" fill="var(--tx1)" fontSize="17" fontWeight="600"
-        fontFamily="var(--font-ui)" letterSpacing="-0.5">{String(peakHour).padStart(2, "0")}:00</text>
-      <text x={CX} y={CY + 12} textAnchor="middle" fill="var(--tx4b)" fontSize="10" fontFamily="var(--font-ui)">{t("overview:clock.peak")}</text>
-    </svg>
-    <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 2 }}>
-      {[["var(--warn)", 0.9, t("overview:clock.night")], ["var(--c1)", 0.45, t("overview:clock.day")]].map(([fill, op, lb], i) => (
-        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--tx5)", fontFamily: "var(--font-ui)" }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: fill, opacity: op }} />
-          {lb}
-        </span>
-      ))}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+      <svg viewBox="0 0 260 236" width="100%" height="236" role="img" aria-label={t("overview:clock.aria")}>
+        <circle cx={CX} cy={CY} r={R0 - 8} fill="none" stroke="var(--grid)" strokeWidth="1.2" />
+        <path d={arc(6, 18, R0 - 8)} fill="none" strokeWidth="3"
+          stroke="color-mix(in srgb, var(--warn) 32%, transparent)" />
+        {activeWindow && (
+          <path d={arc(activeWindow.start, activeWindow.start + activeWindow.len, R1 + 7)}
+            fill="none" strokeWidth="2.5" strokeLinecap="round"
+            stroke="color-mix(in srgb, var(--c1) 45%, transparent)" />
+        )}
+        {clock.map((v, h) => {
+          if (!v) return null;
+          const pct = total ? Math.round(v / total * 100) : 0;
+          const peak = h === peakHour;
+          const a = ang(h), len = 4 + v / max * (R1 - R0 - 4);
+          const [x0, y0] = pt(a, R0), [x1, y1] = pt(a, R0 + len);
+          return (
+            <line key={h} x1={x0} y1={y0} x2={x1} y2={y1} stroke="var(--c1)"
+              opacity={peak ? 1 : 0.5} strokeWidth={peak ? 7 : 6} strokeLinecap="round">
+              <title>{t("overview:clock.hourTip", {
+                hour: String(h).padStart(2, "0"), count: v, pct,
+              })}</title>
+            </line>
+          );
+        })}
+        {[0, 3, 6, 9, 12, 15, 18, 21].map(hh => {
+          const [x, y] = pt(ang(hh), R1 + 20);
+          return (
+            <text key={hh} x={x} y={(Number(y) + 3.5).toFixed(1)} textAnchor="middle"
+              fill={hh % 6 === 0 ? "var(--tx4)" : "var(--tx5)"} fontSize="9.5"
+              fontFamily="var(--font-ui)">{hh}</text>
+          );
+        })}
+        <text x={CX} y={CY - 4} textAnchor="middle" fill="var(--tx1)" fontSize="19" fontWeight="600"
+          fontFamily="var(--font-ui)" letterSpacing="-0.5">{total ? peakLabel : "—"}</text>
+        {total > 0 && (
+          <text x={CX} y={CY + 13} textAnchor="middle" fill="var(--tx4)" fontSize="10"
+            fontFamily="var(--font-ui)">{t("overview:clock.peakLabel")}</text>
+        )}
+      </svg>
+      {total > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12,
+          color: "var(--tx3)", fontFamily: "var(--font-ui)", ...num }}>
+          <span>{t("overview:clock.peak")} <b style={{ color: "var(--tx1)", fontWeight: 600 }}>{peakLabel}</b></span>
+          {activeWindow && (
+            <>
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--tx5)" }} />
+              <span>{t("overview:clock.window")} <b style={{ color: "var(--tx1)", fontWeight: 600 }}>{activeWindow.label}</b></span>
+            </>
+          )}
+        </div>
+      )}
     </div>
-    </>
   );
 }
 
@@ -465,7 +495,7 @@ export default function Overview({ sessions = [],
               )}
               <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                 <Card title={t("overview:clock.title")} sub={t("overview:clock.sub")}>
-                  <Clock clock={data.clock} peakHour={data.peakHour} t={t} />
+                  <Clock clock={data.clock} peakHour={data.peakHour} activeWindow={data.activeWindow} t={t} />
                 </Card>
               </div>
             </div>

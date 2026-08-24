@@ -17,6 +17,28 @@ export const heatLevel = (count, max) => {
   return r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1;
 };
 
+const fmtHour = h => `${String(h).padStart(2, "0")}:00`;
+
+/** 覆盖 target 比例会话的最短连续小时窗口(可跨午夜) */
+export function computeActiveWindow(clock, target = 0.8) {
+  const total = clock.reduce((n, v) => n + v, 0);
+  if (!total) return null;
+  const n = clock.length;
+  const doubled = clock.concat(clock);
+  const need = Math.ceil(total * target);
+  let best = { len: n, start: 0 };
+  for (let start = 0; start < n; start++) {
+    let sum = 0;
+    for (let len = 1; len <= n; len++) {
+      sum += doubled[start + len - 1];
+      if (sum >= need && len < best.len) best = { len, start };
+    }
+  }
+  const endH = (best.start + best.len) % 24;
+  const endLabel = endH === 0 ? "00:00" : fmtHour(endH);
+  return { start: best.start, end: endH, len: best.len, label: `${fmtHour(best.start)}–${endLabel}` };
+}
+
 // ---------- 成本:模型名安全匹配多来源单价 ----------
 const normFullModel = m => String(m || "").trim().toLowerCase().replaceAll("_", "-");
 const normModel = m => normFullModel(m).split("/").pop();
@@ -211,15 +233,14 @@ export function computeOverview({ sessions = [],
   };
   const costRows = priced.slice(0, 5);
 
-  // 作息时钟(24 桶,按会话开始时刻)
+  // 作息分布(24 桶,按会话开始时刻)
   const clock = new Array(24).fill(0);
   scoped.forEach(s => { const h = new Date(startedAt(s)).getHours(); clock[h]++; });
+  const clockTotal = clock.reduce((n, v) => n + v, 0);
   const peakHour = clock.reduce((best, v, h) => v > clock[best] ? h : best, 0);
-  const nightShare = total => {
-    const night = clock.reduce((n, v, h) => (h <= 4 || h >= 21) ? n + v : n, 0);
-    const all = clock.reduce((n, v) => n + v, 0);
-    return all ? night / all : 0;
-  };
+  const nightCount = clock.reduce((n, v, h) => (h <= 4 || h >= 21) ? n + v : n, 0);
+  const nightShare = clockTotal ? nightCount / clockTotal : 0;
+  const activeWindow = computeActiveWindow(clock);
 
   // 热力图:近 52 周(按 updated 计天,GitHub 风格整年)
   const heatmap = buildHeatmap(sessions, now, 52);
@@ -252,7 +273,7 @@ export function computeOverview({ sessions = [],
     tokenTotals: { ...tokTotals, total },
     composition,
     costRows, unpriced, costTotal,
-    clock, peakHour, nightShare: nightShare(),
+    clock, peakHour, nightShare, activeWindow,
     heatmap,
     repos,
     daily,

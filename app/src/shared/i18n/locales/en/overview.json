@@ -74,9 +74,10 @@
   "clock": {
     "title": "Rhythm",
     "sub": "Session start time",
-    "peak": "peak",
-    "night": "21:00 – 04:00",
-    "day": "Daytime",
+    "peak": "Peak",
+    "window": "Active window",
+    "peakLabel": "Peak hour",
+    "hourTip": "{{hour}}:00 · {{count}} sessions · {{pct}}%",
     "aria": "Session start times across the 24-hour day"
   },
   "heat": {

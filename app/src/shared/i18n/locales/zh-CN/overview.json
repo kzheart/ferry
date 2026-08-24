@@ -74,9 +74,10 @@
   "clock": {
     "title": "作息",
     "sub": "会话开始时刻",
-    "peak": "高峰",
-    "night": "21:00 – 04:00",
-    "day": "白天",
+    "peak": "峰值",
+    "window": "活跃时段",
+    "peakLabel": "峰值时刻",
+    "hourTip": "{{hour}}:00 · {{count}} 次 · {{pct}}%",
     "aria": "24 小时会话开始时刻分布"
   },
   "heat": {

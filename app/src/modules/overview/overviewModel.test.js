@@ -5,6 +5,7 @@ import { test } from "vitest";
 import {
   addTokens,
   buildPriceIndex,
+  computeActiveWindow,
   computeDayDetail,
   computeOverview,
   computeToday,
@@ -331,6 +332,7 @@ test("空数据集给出 empty 标记且不产生 NaN", () => {
   assert.deepEqual(result.daily.tools, []);
   assert.deepEqual(result.agentShare, []);
   assert.equal(result.nightShare, 0);
+  assert.equal(result.activeWindow, null);
   assert.deepEqual(result.repos, []);
   assert.ok(result.composition.every(item => item.pct === 0));
 });
@@ -423,4 +425,40 @@ test("computeDayDetail 空日给出零值且不产生 NaN", () => {
   assert.equal(detail.cost, 0);
   assert.deepEqual(detail.byAgent, []);
   assert.deepEqual(detail.topModels, []);
+});
+
+test("computeActiveWindow 找出覆盖 80% 会话的最短连续窗口", () => {
+  const clock = new Array(24).fill(0);
+  for (let h = 14; h <= 18; h++) clock[h] = 10;
+  clock[22] = 2;
+  clock[23] = 2;
+
+  const win = computeActiveWindow(clock);
+  assert.equal(win.start, 14);
+  assert.equal(win.end, 19);
+  assert.equal(win.len, 5);
+  assert.equal(win.label, "14:00–19:00");
+});
+
+test("computeOverview 作息分布统计高峰、深夜占比与活跃窗口", () => {
+  const sessions = [
+    session({ created: new Date(2026, 0, 10, 2, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 10, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 18, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 22, 0, 0).getTime() }),
+  ];
+  const spread = computeOverview({ sessions, prices: PRICES, scope: "all", now: NOW });
+  assert.equal(spread.peakHour, 2);
+  assert.equal(spread.nightShare, 0.5);
+  // 分散数据也给出活跃窗口(可跨午夜),不再按跨度隐藏
+  assert.equal(spread.activeWindow?.label, "10:00–03:00");
+
+  const clustered = [
+    session({ created: new Date(2026, 0, 10, 15, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 16, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 17, 0, 0).getTime() }),
+    session({ created: new Date(2026, 0, 10, 18, 0, 0).getTime() }),
+  ];
+  const tight = computeOverview({ sessions: clustered, prices: PRICES, scope: "all", now: NOW });
+  assert.equal(tight.activeWindow?.label, "15:00–19:00");
 });
