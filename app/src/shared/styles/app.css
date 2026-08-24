@@ -492,6 +492,70 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 .ftool-btn:active { background: var(--fill4); }
 .ftool-btn:disabled { opacity: .4; background: transparent; }
 
+/* 续聊合并按钮:点击一分为二,分裂到下一行左右摊开成两个图标按钮,选完吸回合体 */
+.fsplit { position: relative; width: 30px; height: 30px; flex: none; }
+.fsplit-trigger { position: relative; z-index: 2; }
+.fsplit.open .fsplit-trigger { background: var(--hov); color: var(--tx1); }
+.fsplit-glyph, .fsplit-cross {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  transition: opacity .16s, transform .3s cubic-bezier(.34,1.4,.4,1);
+}
+.fsplit-cross { opacity: 0; transform: rotate(-90deg) scale(.5); }
+.fsplit.open .fsplit-glyph { opacity: 0; transform: rotate(60deg) scale(.5); }
+.fsplit.open .fsplit-cross { opacity: 1; transform: none; }
+/* 两个分裂项从触发钮中心出发,沿对角线落到下一行(±17px)成品字形 */
+.fsplit-opt {
+  position: absolute; top: 38px; width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--acc-line); border-radius: 8px;
+  background: var(--surface); color: var(--tx3); padding: 0; cursor: default;
+  box-shadow: var(--shadow-menu);
+  opacity: 0; pointer-events: none; z-index: 3;
+  transform: translate(calc(-1 * var(--dx)), -38px) scale(.35);
+  transition: transform .38s cubic-bezier(.3,1.35,.4,1), opacity .16s ease;
+}
+.fsplit-opt.l { --dx: -17px; left: -17px; }
+.fsplit-opt.r { --dx: 17px; left: 17px; }
+.fsplit.open .fsplit-opt { opacity: 1; pointer-events: auto; transform: none; }
+.fsplit-opt:hover { background: var(--hov); color: var(--tx1); }
+/* 吸回合体:沿原路收回中心,淡出略滞后让「合体」可见 */
+.fsplit.closing .fsplit-opt {
+  opacity: 0; transform: translate(calc(-1 * var(--dx)), -38px) scale(.35);
+  transition: transform .26s cubic-bezier(.55,0,.6,.35), opacity .14s ease .1s;
+}
+/* 复制反馈三拍:原图标向上飞走 → 结果图标弹入(成功勾用描边画出) → 涟漪扩散 */
+.fsplit-opt .oi {
+  display: flex;
+  transition: transform .16s cubic-bezier(.5,0,.8,.4), opacity .16s ease;
+}
+.fsplit-opt:active .oi { transform: scale(.82); }
+.fsplit-opt.picked .oi { transform: translateY(-10px) scale(.4); opacity: 0; }
+.fsplit-opt .fb {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  animation: fsplit-pop .36s cubic-bezier(.34,1.5,.5,1) .15s both;
+}
+.fsplit-opt.picked-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--acc-line)); }
+.fsplit-opt.picked-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--acc-line)); }
+.fsplit-opt.picked-err { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--acc-line)); }
+.fsplit-opt.picked-ok .fb path {
+  stroke-dasharray: 15; stroke-dashoffset: 15;
+  animation: fsplit-draw .28s cubic-bezier(.2,.7,.3,1) .17s forwards;
+}
+.fsplit-opt.picked-ok::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 8px;
+  border: 1.5px solid var(--ok); opacity: 0; pointer-events: none;
+  animation: fsplit-ripple .55s ease-out .2s forwards;
+}
+@keyframes fsplit-draw { to { stroke-dashoffset: 0; } }
+@keyframes fsplit-pop { from { transform: scale(.6); } to { transform: scale(1); } }
+@keyframes fsplit-ripple { from { opacity: .5; transform: scale(1); } to { opacity: 0; transform: scale(1.6); } }
+@media (prefers-reduced-motion: reduce) {
+  .fsplit-glyph, .fsplit-cross, .fsplit-opt, .fsplit-opt .oi { transition: none !important; }
+  .fsplit-opt .fb, .fsplit-opt.picked-ok .fb path, .fsplit-opt.picked-ok::after { animation: none !important; }
+  .fsplit-opt.picked-ok .fb path { stroke-dashoffset: 0; }
+  .fsplit-opt.picked-ok::after { display: none; }
+}
+
 /* 侧栏行:悬浮才浮现操作按钮,同时隐去右侧时间 */
 .lib-row .row-act { display: none; }
 .lib-row:hover .row-act { display: inline-flex; }

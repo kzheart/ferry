@@ -1,5 +1,5 @@
-// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/复制/续聊/迁移)、子会话行
-import { useState } from "react";
+// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/续聊/迁移)、子会话行
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
@@ -8,11 +8,13 @@ import { writeClipboardText } from "../../platform/desktop/client.js";
 import {
   BranchIcon,
   CheckIcon,
+  CloseIcon,
   WarnIcon,
   CopyIcon,
   HandoffIcon,
   MigrateIcon,
   RefreshIcon,
+  ResumeMenuIcon,
   Spinner,
   TerminalIcon,
   ToolIcon,
@@ -41,6 +43,53 @@ export default function SessionDetailHeader({
   const repo = repoOf(meta.dir);
   const branch = meta.branch || "";
 
+  // 两个「复制续聊」动作都在时合并成一个分裂按钮;只剩一个时保持原来的单按钮
+  const merged = canResume && !!onResumeElsewhere;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const splitRef = useRef(null);
+  const closeTimer = useRef(null);
+  const restoreTimer = useRef(null);
+
+  const closeMenu = () => {
+    clearTimeout(closeTimer.current);
+    setMenuOpen(false);
+    // closing 态驱动「吸回合体」动画,播完再摘掉,避免下次展开从半路起跳
+    setMenuClosing(true);
+    restoreTimer.current = setTimeout(() => setMenuClosing(false), 280);
+  };
+  const toggleMenu = () => {
+    if (menuOpen) return closeMenu();
+    clearTimeout(restoreTimer.current);
+    setMenuClosing(false);
+    setMenuOpen(true);
+  };
+  // 选完不立刻收:让反馈动画(飞走→画勾→涟漪)播完、错误态留足读 tooltip 的时间
+  const scheduleClose = (ms) => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(closeMenu, ms);
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => {
+      if (!splitRef.current?.contains(e.target)) closeMenu();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+  useEffect(() => () => {
+    clearTimeout(closeTimer.current);
+    clearTimeout(restoreTimer.current);
+  }, []);
+
   // 拿不到接续命令时不能先报"已复制":用户粘出来会是空的,却以为是自己操作错了。
   // 成败都只落在按钮上——这是本模块既有的反馈方式(见 SessionRound / SessionImagePreview)。
   const copyResume = async () => {
@@ -49,10 +98,21 @@ export default function SessionDetailHeader({
       await writeClipboardText(d.display_command);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
+      if (merged) scheduleClose(1200);
     } catch (error) {
       setCopyError(error?.message || String(error));
       setTimeout(() => setCopyError(null), 4000);
+      if (merged) scheduleClose(3600);
     }
+  };
+
+  const copyHandoff = async () => {
+    const result = await onResumeElsewhere(meta);
+    const kind = !result?.copied ? "fail"
+      : result.noSkill ? "noskill" : "ok";
+    setHandoffState({ kind, error: result?.error || "" });
+    setTimeout(() => setHandoffState(null), kind === "ok" ? 1600 : 4000);
+    if (merged) scheduleClose(kind === "ok" ? 1200 : 3600);
   };
 
   const resumeInTerminal = async () => {
@@ -68,6 +128,25 @@ export default function SessionDetailHeader({
       setResuming(false);
     }
   };
+
+  const copyFb = copied ? "ok" : copyError ? "err" : null;
+  const handoffFb = handoffState?.kind === "ok" ? "ok"
+    : handoffState?.kind === "noskill" ? "warn"
+      : handoffState?.kind === "fail" ? "err" : null;
+  const copyTitle = copyError
+    ? tt("browser:session.copyResumeFailed", { error: copyError })
+    : copied
+      ? tt("browser:session.copiedResume")
+      : tt("browser:session.copyResume");
+  const handoffTitle = handoffState?.kind === "fail"
+    ? tt("browser:session.copyResumeElsewhereFailed", {
+      error: handoffState.error,
+    })
+    : handoffState?.kind === "noskill"
+      ? tt("browser:session.copiedResumeElsewhereNoSkill")
+      : handoffState?.kind === "ok"
+        ? tt("browser:session.copiedResumeElsewhere")
+        : tt("browser:session.copyResumeElsewhere");
 
   return (
     <div
@@ -177,56 +256,76 @@ export default function SessionDetailHeader({
             {resuming ? <Spinner size={14} />
               : resumeError ? <WarnIcon size={15} /> : <TerminalIcon />}
           </button>}
-          {canResume && <button
-            className="ftool-btn"
-            onClick={copyResume}
-            title={
-              copyError
-                ? tt("browser:session.copyResumeFailed", { error: copyError })
-                : copied
-                  ? tt("browser:session.copiedResume")
-                  : tt("browser:session.copyResume")
-            }
-            style={copied ? { color: "var(--ok)" }
-              : copyError ? { color: "var(--err)" } : undefined}
-          >
-            {copied ? <CheckIcon size={15} />
-              : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
-          </button>}
-          {/* 续聊到其他 agent:与右键菜单同一入口,放在「复制接续命令」旁——
-              两者都是「把这条会话接着聊下去」,只是换不换 agent 的区别 */}
-          {onResumeElsewhere && <button
-            data-guide="handoff"
-            className="ftool-btn"
-            title={
-              handoffState?.kind === "fail"
-                ? tt("browser:session.copyResumeElsewhereFailed", {
-                  error: handoffState.error,
-                })
-                : handoffState?.kind === "noskill"
-                  ? tt("browser:session.copiedResumeElsewhereNoSkill")
-                  : handoffState?.kind === "ok"
-                    ? tt("browser:session.copiedResumeElsewhere")
-                    : tt("browser:session.copyResumeElsewhere")
-            }
-            onClick={async () => {
-              const result = await onResumeElsewhere(meta);
-              const kind = !result?.copied ? "fail"
-                : result.noSkill ? "noskill" : "ok";
-              setHandoffState({ kind, error: result?.error || "" });
-              setTimeout(() => setHandoffState(null),
-                kind === "ok" ? 1600 : 4000);
-            }}
-            style={
-              handoffState?.kind === "ok" ? { color: "var(--ok)" }
-                : handoffState?.kind === "noskill" ? { color: "var(--warn)" }
-                  : handoffState?.kind === "fail" ? { color: "var(--err)" }
-                    : undefined
-            }
-          >
-            {handoffState?.kind === "ok" ? <CheckIcon size={15} />
-              : handoffState ? <WarnIcon size={15} /> : <HandoffIcon />}
-          </button>}
+          {/* 续聊:两个「复制」动作(接续命令/续聊指令)都是把这条会话接着聊下去,
+              只差换不换 agent,合并成一个按钮,点击一分为二向下摊开 */}
+          {merged ? (
+            <div
+              ref={splitRef}
+              className={"fsplit" + (menuOpen ? " open" : menuClosing ? " closing" : "")}
+            >
+              <button
+                data-guide="handoff"
+                className="ftool-btn fsplit-trigger"
+                title={tt("browser:session.resumeMenu")}
+                aria-expanded={menuOpen}
+                aria-haspopup="true"
+                onClick={toggleMenu}
+              >
+                <span className="fsplit-glyph"><ResumeMenuIcon /></span>
+                <span className="fsplit-cross"><CloseIcon size={12} /></span>
+              </button>
+              <button
+                className={"fsplit-opt l" + (copyFb ? ` picked picked-${copyFb}` : "")}
+                title={copyTitle}
+                tabIndex={menuOpen ? 0 : -1}
+                onClick={copyResume}
+              >
+                <span className="oi"><CopyIcon size={14} /></span>
+                {copyFb && <span className="fb">
+                  {copyFb === "ok" ? <CheckIcon size={14} /> : <WarnIcon size={14} />}
+                </span>}
+              </button>
+              <button
+                className={"fsplit-opt r" + (handoffFb ? ` picked picked-${handoffFb}` : "")}
+                title={handoffTitle}
+                tabIndex={menuOpen ? 0 : -1}
+                onClick={copyHandoff}
+              >
+                <span className="oi"><HandoffIcon /></span>
+                {handoffFb && <span className="fb">
+                  {handoffFb === "ok" ? <CheckIcon size={14} /> : <WarnIcon size={14} />}
+                </span>}
+              </button>
+            </div>
+          ) : (
+            <>
+              {canResume && <button
+                className="ftool-btn"
+                onClick={copyResume}
+                title={copyTitle}
+                style={copied ? { color: "var(--ok)" }
+                  : copyError ? { color: "var(--err)" } : undefined}
+              >
+                {copied ? <CheckIcon size={15} />
+                  : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
+              </button>}
+              {onResumeElsewhere && <button
+                data-guide="handoff"
+                className="ftool-btn"
+                title={handoffTitle}
+                onClick={copyHandoff}
+                style={
+                  handoffState?.kind === "ok" ? { color: "var(--ok)" }
+                    : handoffState?.kind === "noskill" ? { color: "var(--warn)" }
+                      : handoffState?.kind === "fail" ? { color: "var(--err)" }
+                        : undefined
+                }
+              >
+                {handoffState?.kind === "ok" ? <CheckIcon size={15} />
+                  : handoffState ? <WarnIcon size={15} /> : <HandoffIcon />}
+              </button>}
+            </>
+          )}
           {canMigrate && (
             <button
               data-guide="migrate"

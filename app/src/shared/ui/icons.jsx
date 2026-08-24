@@ -247,6 +247,12 @@ export const TerminalIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.4 6l2.2 2-2.2 2M8 10.4h3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
+// 续聊入口(合并按钮的收起态):对话气泡 + 三点,表示「接着聊」;
+// 与 HandoffIcon(气泡+外箭头,换 agent)区分开
+export const ResumeMenuIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
+  '<path d="M2 4.4A2.1 2.1 0 0 1 4.1 2.3h7.8A2.1 2.1 0 0 1 14 4.4v4.7a2.1 2.1 0 0 1-2.1 2.1H7.2l-3.1 2.5v-2.5A2.1 2.1 0 0 1 2 9.1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.6" cy="6.8" r=".95" fill="currentColor"/><circle cx="8" cy="6.8" r=".95" fill="currentColor"/><circle cx="10.4" cy="6.8" r=".95" fill="currentColor"/>',
+  { flex: "none" });
+
 // 续聊到其他 agent:对话气泡 + 向外的箭头,与 MigrateIcon(整条搬走)区分开
 export const HandoffIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<path d="M2 3.6A1.6 1.6 0 0 1 3.6 2h5.8A1.6 1.6 0 0 1 11 3.6v3.3A1.6 1.6 0 0 1 9.4 8.5H6.2L3.6 10.6V8.5A1.6 1.6 0 0 1 2 6.9z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8.6 12.4h5.4M11.8 10.2l2.2 2.2-2.2 2.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',

@@ -88,6 +88,28 @@ test("剪贴板本身写失败也算失败,不是已复制", async () => {
   assert.equal(screen.queryByTitle("browser:session.copiedResume"), null);
 });
 
+test("两个复制动作都在时合并成续聊按钮:点开一分为二后仍能复制接续命令", async () => {
+  const written = [];
+  clipboard = async text => { written.push(text); };
+  renderDetail({ onResumeElsewhere: async () => ({ copied: true }) });
+
+  // 合并态下不再有独立的复制按钮,入口收进「续聊」触发钮
+  fireEvent.click(screen.getByTitle("browser:session.resumeMenu"));
+  fireEvent.click(screen.getByTitle("browser:session.copyResume"));
+
+  await waitFor(() => screen.getByTitle("browser:session.copiedResume"));
+  assert.deepEqual(written, ["claude --resume abc"]);
+});
+
+test("合并续聊按钮:换 agent 续聊复制成功后给出反馈", async () => {
+  renderDetail({ onResumeElsewhere: async () => ({ copied: true }) });
+
+  fireEvent.click(screen.getByTitle("browser:session.resumeMenu"));
+  fireEvent.click(screen.getByTitle("browser:session.copyResumeElsewhere"));
+
+  await waitFor(() => screen.getByTitle("browser:session.copiedResumeElsewhere"));
+});
+
 test("打开终端失败时按钮给出失败态,而不是静静回到常态", async () => {
   renderDetail({ onResume: async () => { throw new Error("no terminal found"); } });
 

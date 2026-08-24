@@ -8,6 +8,7 @@
     "jumpToLatest": "Jump to latest",
     "resumeTerminal": "Resume session in terminal",
     "resumingTerminal": "Opening terminal…",
+    "resumeMenu": "Resume options",
     "copyResume": "Copy resume command",
     "copiedResume": "Copied resume command",
     "copyResumeElsewhere": "Copy resume instruction",
