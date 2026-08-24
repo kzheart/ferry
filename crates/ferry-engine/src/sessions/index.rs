@@ -823,7 +823,15 @@ impl AgentSessionIndex {
         scope: Option<&HashSet<String>>,
     ) -> DomainResult<Vec<IndexedSession>> {
         let digest_store = self.digest_store();
+        let canonicalize_started = std::time::Instant::now();
         let canonical_rows = self.canonicalize_all(scanned, digest_store.as_ref())?;
+        // 这一段在首次扫描里占了将近一半（本机 2041 行 6.2s / 冷扫描 12.6s），
+        // 而且缓存命中后会掉到 0.05s——出问题时先看这行判断是不是摘要在重算。
+        crate::server::serve::log_info(&format!(
+            "规范化+身份: {:.2}s / {} 行",
+            canonicalize_started.elapsed().as_secs_f64(),
+            scanned.len()
+        ));
         digest_store.flush();
 
         let mut records: Vec<IndexedSession> = Vec::new();
