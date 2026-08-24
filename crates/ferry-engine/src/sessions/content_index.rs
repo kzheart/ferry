@@ -55,13 +55,21 @@ static BUILD_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
         .expect("内容索引读取线程池必须可创建")
 });
 
-/// 一批（= 一个写事务）里最多多少个会话。批越大 fsync 越省，但持锁越久，
-/// 期间的检索会被阻塞，所以取一个能摊薄提交开销又不至于明显卡住查询的中间值。
-/// 已知代价：批量提交会跳过大量 FTS5 automerge，段更碎、索引比逐条提交大约
-/// 20%（本机 2039 会话实测 1.10 GB → 1.33 GB）。换来的是构建时间减半。
-const WRITE_BATCH_SESSIONS: usize = 48;
-/// 同一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
-const WRITE_BATCH_BYTES: i64 = 64 * 1024 * 1024;
+/// 一轮处理多少个会话：先并行解析这么多，再把它们写进一个事务。
+///
+/// 这个值同时决定两件事，而且都往「越大越糟」的方向走：
+/// 1. 解析期间 [`BUILD_POOL`] 满负荷跑多久——越久，并发检索越抢不到 CPU；
+/// 2. 写事务持有共享连接多久——检索与写共用一把锁，事务多长停顿就多长。
+///
+/// 本机实测（100 s 窗口，边建边查，检索 p95/最坏，窗口内建完的会话数）：
+/// 48 → 3156/8125 ms，1195 条；24 → 2303/5528 ms，1176 条；
+/// 12 → 1774/2866 ms，1272 条；4 → 1294/1456 ms，1476 条。
+/// 4 在尾延迟和吞吐上同时最好，且已优于逐条提交的基线（1220/1737 ms，1208 条）。
+/// 试过「解析 48、每 4 个一个事务」想两头都要，结果最差（7246/10257 ms，768 条）：
+/// 拖垮检索的是长时间满负荷的解析，不是事务长度。别再往上调。
+const BUILD_BATCH_SESSIONS: usize = 4;
+/// 一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
+const BUILD_BATCH_BYTES: i64 = 64 * 1024 * 1024;
 
 /// 后台构建耗时分解（纳秒）；只给 `examples/index_bench` 这类基准用。
 static PARSE_NANOS: AtomicU64 = AtomicU64::new(0);
@@ -141,29 +149,29 @@ struct CappedText {
 }
 
 impl CappedText {
+    /// `chars` 必须在**每一条**返回路径上都与 `text` 的字符数保持一致，否则下
+    /// 一段又能重新写满一整个上限，累计长度突破 CAP。
     fn push(&mut self, piece: &str) {
-        if !self.started {
-            // 首段不加分隔符。
-            self.started = true;
-        } else if self.chars < RECORD_TEXT_CAP {
+        if self.started {
+            if self.chars >= RECORD_TEXT_CAP {
+                // 已满：后面还有内容，就一定发生了截断。
+                self.clipped = true;
+                return;
+            }
             self.text.push('\n');
             self.chars += 1;
         } else {
-            // 已满：后面还有内容，就一定发生了截断。
-            self.clipped = true;
-            return;
+            // 首段不加分隔符。
+            self.started = true;
         }
-        let room = RECORD_TEXT_CAP - self.chars;
-        let mut taken = 0usize;
         for character in piece.chars() {
-            if taken == room {
+            if self.chars == RECORD_TEXT_CAP {
                 self.clipped = true;
                 return;
             }
             self.text.push(character);
-            taken += 1;
+            self.chars += 1;
         }
-        self.chars += taken;
     }
 }
 
@@ -758,7 +766,7 @@ impl ContentIndex {
         }
         let mut batch = Vec::new();
         let mut bytes = 0i64;
-        while batch.len() < WRITE_BATCH_SESSIONS && bytes < WRITE_BATCH_BYTES {
+        while batch.len() < BUILD_BATCH_SESSIONS && bytes < BUILD_BATCH_BYTES {
             let Some((_, record)) = worker.queued.pop() else {
                 break;
             };
@@ -1298,6 +1306,17 @@ mod tests {
         let mut wide = Message::new("user");
         wide.blocks.push(Block::text("中".repeat(RECORD_TEXT_CAP + 5)));
         let (text, _, clipped) = extract(&wide);
+        assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
+        assert!(clipped);
+
+        // 回归：某一段把上限撑满后，后续每一段都必须继续被挡住。早期实现只在
+        // 循环正常结束时才回写计数，于是「截断后」的下一段又能写满一整个上限，
+        // 整条记录膨胀到 CAP 的若干倍（实测让全库正文多出 25%）。
+        let mut many = Message::new("user");
+        for _ in 0..5 {
+            many.blocks.push(Block::text("x".repeat(RECORD_TEXT_CAP)));
+        }
+        let (text, _, clipped) = extract(&many);
         assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
         assert!(clipped);
     }
