@@ -1,7 +1,6 @@
 {
   "stages": [
-    "experimental",
-    "preferences"
+    "experimental"
   ],
   "features": [
     {
@@ -10,15 +9,6 @@
       "default": false,
       "surfaces": [
         "host-runtime",
-        "ui"
-      ],
-      "since": "0.8.0"
-    },
-    {
-      "id": "handoff",
-      "stage": "preferences",
-      "default": true,
-      "surfaces": [
         "ui"
       ],
       "since": "0.8.0"

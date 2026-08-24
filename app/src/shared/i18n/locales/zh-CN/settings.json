@@ -151,10 +151,6 @@
     "builtin-agent": {
       "title": "内置 AI 助手",
       "desc": "启用后可在侧栏使用 Ask Ferry,并解锁 Provider / 模型 / 角色 / 技能设置"
-    },
-    "handoff": {
-      "title": "续聊到其他 agent",
-      "desc": "在会话右键菜单里提供「复制续聊指令」:粘进任一装了 ferry-resume 技能的 coding agent,由它读历史接着聊,不写入任何存储"
     }
   },
   "terminal": {
@@ -352,9 +348,6 @@
       "updating": "更新中",
       "removing": "移除中",
       "groupUpdatable": "可更新到 v{{version}}"
-    },
-    "handoff": {
-      "groupTitle": "续聊到其他 agent"
     }
   },
   "density": {

@@ -151,10 +151,6 @@
     "builtin-agent": {
       "title": "Built-in AI assistant",
       "desc": "Once enabled, Ask Ferry appears in the sidebar and the Provider / model / role / skill settings are unlocked."
-    },
-    "handoff": {
-      "title": "Resume in another agent",
-      "desc": "Adds \"Copy resume instruction\" to the session context menu: paste it into any coding agent that has the ferry-resume skill and it reads the history and continues. Nothing is written to any store."
     }
   },
   "terminal": {
@@ -352,9 +348,6 @@
       "updating": "Updating",
       "removing": "Removing",
       "groupUpdatable": "Update to v{{version}}"
-    },
-    "handoff": {
-      "groupTitle": "Resume in another agent"
     }
   },
   "density": {

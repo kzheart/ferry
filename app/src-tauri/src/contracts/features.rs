@@ -4,7 +4,6 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Feature {
     BuiltinAgent,
-    Handoff,
 }
 
 /// 一个特性的静态形态。`surfaces` 声明它有哪几张面，宿主据此决定把它交给谁
@@ -18,29 +17,19 @@ pub(crate) struct FeatureSpec {
     pub(crate) surfaces: &'static [&'static str],
 }
 
-pub(crate) const FEATURES: &[FeatureSpec] = &[
-    FeatureSpec {
-        feature: Feature::BuiltinAgent,
-        id: "builtin-agent",
-        stage: "experimental",
-        default: false,
-        surfaces: &["host-runtime", "ui"],
-    },
-    FeatureSpec {
-        feature: Feature::Handoff,
-        id: "handoff",
-        stage: "preferences",
-        default: true,
-        surfaces: &["ui"],
-    },
-];
+pub(crate) const FEATURES: &[FeatureSpec] = &[FeatureSpec {
+    feature: Feature::BuiltinAgent,
+    id: "builtin-agent",
+    stage: "experimental",
+    default: false,
+    surfaces: &["host-runtime", "ui"],
+}];
 
 impl Feature {
     /// 前端传来的 id 只能经这里进门：不认识的一律返回 None。
     pub(crate) fn from_id(id: &str) -> Option<Self> {
         match id {
             "builtin-agent" => Some(Self::BuiltinAgent),
-            "handoff" => Some(Self::Handoff),
             _ => None,
         }
     }
@@ -48,7 +37,6 @@ impl Feature {
     pub(crate) fn id(self) -> &'static str {
         match self {
             Self::BuiltinAgent => "builtin-agent",
-            Self::Handoff => "handoff",
         }
     }
 }
@@ -57,6 +45,5 @@ impl Feature {
 pub(crate) fn default_of(feature: Feature) -> bool {
     match feature {
         Feature::BuiltinAgent => false,
-        Feature::Handoff => true,
     }
 }
