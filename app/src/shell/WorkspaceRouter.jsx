@@ -35,11 +35,10 @@ export function WorkspaceRouter({
   const detailActions = useMemo(
     () => ({
       ...peek.actions,
-      refreshing: peek.refreshing,
       loadingMore: peek.loadingMore,
       onDeleteHistory: deletion.onDeleteHistory,
     }),
-    [peek.actions, peek.refreshing, peek.loadingMore, deletion.onDeleteHistory],
+    [peek.actions, peek.loadingMore, deletion.onDeleteHistory],
   );
 
   return (
@@ -63,8 +62,6 @@ export function WorkspaceRouter({
             error={peek.detail?.error}
             onOpenMigrate={detailActions.onOpenMigrate}
             navigationTarget={peek.navigationTarget}
-            onRefresh={detailActions.onRefresh}
-            refreshing={detailActions.refreshing}
             onLoadMore={detailActions.onLoadMore}
             loadingMore={detailActions.loadingMore}
             onResume={detailActions.onResume}

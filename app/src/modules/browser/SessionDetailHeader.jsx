@@ -1,4 +1,4 @@
-// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/续聊/迁移)、子会话行
+// 会话详情的 sticky 头部:标题与元信息、操作按钮(接续/续聊/迁移)、子会话行
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
@@ -13,7 +13,6 @@ import {
   CopyIcon,
   HandoffIcon,
   MigrateIcon,
-  RefreshIcon,
   ResumeMenuIcon,
   Spinner,
   TerminalIcon,
@@ -24,8 +23,6 @@ import { ContextStatusChip } from "./SessionContext.jsx";
 export default function SessionDetailHeader({
   meta,
   data,
-  refreshing,
-  onRefresh,
   onResume,
   onResumeElsewhere,
   canResume,
@@ -232,14 +229,6 @@ export default function SessionDetailHeader({
             flex: "none",
           }}
         >
-          <button
-            className="ftool-btn"
-            title={tt("browser:session.refresh")}
-            disabled={refreshing}
-            onClick={onRefresh}
-          >
-            {refreshing ? <Spinner size={14} /> : <RefreshIcon />}
-          </button>
           {canResume && <button
             className="ftool-btn"
             onClick={resumeInTerminal}

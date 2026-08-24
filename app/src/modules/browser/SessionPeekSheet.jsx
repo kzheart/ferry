@@ -8,7 +8,6 @@ export function SessionPeekSheet({
   detail,
   actions,
   navigationTarget,
-  refreshing,
   loadingMore,
   onClose,
   onOpenLibrary,
@@ -83,8 +82,6 @@ export function SessionPeekSheet({
           error={detail?.error}
           onOpenMigrate={actions.onOpenMigrate}
           navigationTarget={navigationTarget}
-          onRefresh={actions.onRefresh}
-          refreshing={refreshing}
           onLoadMore={actions.onLoadMore}
           loadingMore={loadingMore}
           onResume={actions.onResume}

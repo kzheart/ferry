@@ -107,7 +107,6 @@ export function AppOverlayController({ t }) {
         detail: peek.detail,
         actions: peek.actions,
         navigationTarget: peek.navigationTarget,
-        refreshing: peek.refreshing,
         loadingMore: peek.loadingMore,
         onClose: () => peek.setId(null),
         onOpenLibrary: () => {

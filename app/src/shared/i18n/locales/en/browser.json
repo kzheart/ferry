@@ -4,7 +4,6 @@
     "source": "Source",
     "messages": "{{n}} messages",
     "active": "Active {{time}}",
-    "refresh": "Refresh session",
     "jumpToLatest": "Jump to latest",
     "resumeTerminal": "Resume session in terminal",
     "resumingTerminal": "Opening terminal…",

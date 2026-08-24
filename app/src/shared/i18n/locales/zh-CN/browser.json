@@ -4,7 +4,6 @@
     "source": "来源",
     "messages": "{{n}} 条消息",
     "active": "活跃 {{time}}",
-    "refresh": "刷新会话",
     "jumpToLatest": "跳到最新",
     "resumeTerminal": "在终端中恢复会话",
     "resumingTerminal": "正在打开终端…",

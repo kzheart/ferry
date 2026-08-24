@@ -34,7 +34,6 @@ export function useWorkspaceInteractions({
   deletion,
   editing,
   scope,
-  refreshDetail,
   loadMore,
   setToast,
   openConfig,
@@ -146,7 +145,6 @@ export function useWorkspaceInteractions({
         setMigration({ scope: value ?? scope });
       }
     },
-    refresh: refreshDetail,
     loadMore,
     // 与右键菜单同一条指令,但不走 toast:按钮自己有反馈位,结果画在按钮上
     resumeElsewhere: (meta) => copyResumeInstruction({
@@ -192,7 +190,6 @@ export function useWorkspaceInteractions({
       onOpenDiff: () => detailFns.current.openDiff(),
       onApply: () => detailFns.current.apply(),
       onOpenMigrate: (sc) => detailFns.current.openMigrate(sc),
-      onRefresh: () => detailFns.current.refresh(),
       onLoadMore: () => detailFns.current.loadMore(),
       onResume: (meta) => detailFns.current.resume(meta),
       onResumeElsewhere: (meta) => detailFns.current.resumeElsewhere(meta),

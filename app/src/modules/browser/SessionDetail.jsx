@@ -23,8 +23,6 @@ export default memo(function SessionDetail({
   data,
   error,
   onOpenMigrate,
-  onRefresh,
-  refreshing,
   onResume,
   onResumeElsewhere,
   navigationTarget,
@@ -130,8 +128,6 @@ export default memo(function SessionDetail({
         <SessionDetailHeader
           meta={meta}
           data={data}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
           onResume={onResume}
           onResumeElsewhere={onResumeElsewhere}
           canResume={canResume}

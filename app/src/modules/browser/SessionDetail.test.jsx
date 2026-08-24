@@ -42,8 +42,6 @@ function renderDetail(overrides = {}) {
         data={null}
         error={null}
         onOpenMigrate={() => {}}
-        onRefresh={() => {}}
-        refreshing={false}
         onResume={async () => {}}
         navigationTarget={null}
         onLoadMore={() => {}}
