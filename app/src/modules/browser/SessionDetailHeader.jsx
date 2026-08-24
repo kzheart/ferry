@@ -1,4 +1,4 @@
-// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/复制/迁移)、子会话行
+// 会话详情的 sticky 头部:标题与元信息、操作按钮(刷新/接续/复制/续聊/迁移)、子会话行
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
@@ -9,6 +9,7 @@ import {
   CheckIcon,
   WarnIcon,
   CopyIcon,
+  HandoffIcon,
   MigrateIcon,
   RefreshIcon,
   Spinner,
@@ -23,6 +24,7 @@ export default function SessionDetailHeader({
   refreshing,
   onRefresh,
   onResume,
+  onResumeElsewhere,
   canResume,
   canMigrate,
   onOpenMigrate,
@@ -30,6 +32,8 @@ export default function SessionDetailHeader({
   const { t: tt } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(null);
+  // 续聊指令的反馈只落在按钮上:ok 打勾,noskill 变警告并在 title 里说去哪装
+  const [handoffState, setHandoffState] = useState(null);
   const [resumeError, setResumeError] = useState(null);
   const [resuming, setResuming] = useState(false);
   const subCount = data ? data.tree_count - 1 : 0;
@@ -167,6 +171,40 @@ export default function SessionDetailHeader({
           >
             {copied ? <CheckIcon size={15} />
               : copyError ? <WarnIcon size={15} /> : <CopyIcon size={15} />}
+          </button>}
+          {/* 续聊到其他 agent:与右键菜单同一入口,放在「复制接续命令」旁——
+              两者都是「把这条会话接着聊下去」,只是换不换 agent 的区别 */}
+          {onResumeElsewhere && <button
+            data-guide="handoff"
+            className="ftool-btn"
+            title={
+              handoffState?.kind === "fail"
+                ? tt("browser:session.copyResumeElsewhereFailed", {
+                  error: handoffState.error,
+                })
+                : handoffState?.kind === "noskill"
+                  ? tt("browser:session.copiedResumeElsewhereNoSkill")
+                  : handoffState?.kind === "ok"
+                    ? tt("browser:session.copiedResumeElsewhere")
+                    : tt("browser:session.copyResumeElsewhere")
+            }
+            onClick={async () => {
+              const result = await onResumeElsewhere(meta);
+              const kind = !result?.copied ? "fail"
+                : result.noSkill ? "noskill" : "ok";
+              setHandoffState({ kind, error: result?.error || "" });
+              setTimeout(() => setHandoffState(null),
+                kind === "ok" ? 1600 : 4000);
+            }}
+            style={
+              handoffState?.kind === "ok" ? { color: "var(--ok)" }
+                : handoffState?.kind === "noskill" ? { color: "var(--warn)" }
+                  : handoffState?.kind === "fail" ? { color: "var(--err)" }
+                    : undefined
+            }
+          >
+            {handoffState?.kind === "ok" ? <CheckIcon size={15} />
+              : handoffState ? <WarnIcon size={15} /> : <HandoffIcon />}
           </button>}
           {canMigrate && (
             <button

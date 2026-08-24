@@ -174,7 +174,7 @@
   "guideSection": {
     "groupTitle": "Onboarding",
     "guide": "Feature guide",
-    "guideDesc": "Replay the step-by-step walkthrough of navigation, resource pane, and migration delivery",
+    "guideDesc": "Replay the step-by-step walkthrough of navigation, session organizing, migration delivery, and agent integration",
     "reviewGuide": "Replay guide",
     "quickStart": "Quick start",
     "firstRun": "First-run detection",

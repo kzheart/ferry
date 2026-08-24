@@ -6,4 +6,5 @@ export {
   buildResumeCommand,
   canFallBackToResume,
   copyResumeCommand,
+  copyResumeInstruction,
 } from "./resumeElsewhere.js";

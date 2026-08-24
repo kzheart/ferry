@@ -281,8 +281,9 @@ export function AppNav({
           : <RescanIcon size={metrics.navIcon} color="currentColor" />}
           label={scanning ? labels.scanning : labels.rescan}
           onClick={scanning ? undefined : onRescan} />
-        <NavRow icon={<RailGlyph name="settings" size={metrics.navIcon}
-          color={settingsOpen ? ACCENT : "var(--tx4b)"} />}
+        <NavRow guide="rail-settings"
+          icon={<RailGlyph name="settings" size={metrics.navIcon}
+            color={settingsOpen ? ACCENT : "var(--tx4b)"} />}
           label={labels.settings} active={settingsOpen} badge={settingsBadge}
           onClick={onToggleSettings} />
       </div>

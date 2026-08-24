@@ -247,6 +247,11 @@ export const TerminalIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.4 6l2.2 2-2.2 2M8 10.4h3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
 
+// 续聊到其他 agent:对话气泡 + 向外的箭头,与 MigrateIcon(整条搬走)区分开
+export const HandoffIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
+  '<path d="M2 3.6A1.6 1.6 0 0 1 3.6 2h5.8A1.6 1.6 0 0 1 11 3.6v3.3A1.6 1.6 0 0 1 9.4 8.5H6.2L3.6 10.6V8.5A1.6 1.6 0 0 1 2 6.9z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8.6 12.4h5.4M11.8 10.2l2.2 2.2-2.2 2.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  { flex: "none" });
+
 export const MigrateIcon = ({ size = 15 }) => svg("0 0 16 16", size, size,
   '<path d="M9.6 3.2h3a1.2 1.2 0 0 1 1.2 1.2v7.2a1.2 1.2 0 0 1-1.2 1.2h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M1.8 8h8M7 4.8 10.2 8 7 11.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });

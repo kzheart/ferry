@@ -11,7 +11,7 @@ import {
   sessionRef,
   useLibraryResourcePaneActions,
 } from "../modules/browser/public.js";
-import { copyResumeCommand } from "../modules/migration/public.js";
+import { copyResumeCommand, copyResumeInstruction } from "../modules/migration/public.js";
 import { useIsFeatureEnabled } from "../shared/capabilities/features.jsx";
 
 export function useWorkspaceInteractions({
@@ -148,6 +148,11 @@ export function useWorkspaceInteractions({
     },
     refresh: refreshDetail,
     loadMore,
+    // 与右键菜单同一条指令,但不走 toast:按钮自己有反馈位,结果画在按钮上
+    resumeElsewhere: (meta) => copyResumeInstruction({
+      tool: meta.tool,
+      sessionId: meta.id,
+    }),
     resume: async (meta) => {
       if (!supportsAgentCapability(meta?.tool, "resume")) return;
       setToast({
@@ -190,6 +195,7 @@ export function useWorkspaceInteractions({
       onRefresh: () => detailFns.current.refresh(),
       onLoadMore: () => detailFns.current.loadMore(),
       onResume: (meta) => detailFns.current.resume(meta),
+      onResumeElsewhere: (meta) => detailFns.current.resumeElsewhere(meta),
     }),
     [],
   );

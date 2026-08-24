@@ -52,6 +52,27 @@ async function skillInstalled() {
 }
 
 /**
+ * 复制指令,反馈交给调用方渲染:按钮入口用它,把结果画在按钮自己身上。
+ *
+ * `copied` 表示剪贴板已写入;`noSkill` 只在确认没装 ferry-resume 时为 true
+ * (读不到宿主状态时不吓唬用户);`error` 是写剪贴板失败的原因。
+ */
+export async function copyResumeInstruction({ tool, sessionId } = {}) {
+  const command = buildResumeCommand({ tool, sessionId });
+  if (!command) return { command: "", copied: false };
+  try {
+    await writeClipboardText(command);
+  } catch (error) {
+    return {
+      command,
+      copied: false,
+      error: String(error?.message || error || ""),
+    };
+  }
+  return { command, copied: true, noSkill: (await skillInstalled()) === false };
+}
+
+/**
  * 复制指令并给出反馈。副作用(剪贴板、toast、跳设置页)全部由调用方注入。
  *
  * 反馈分三档:装了就打勾说粘到哪都行;没装时不能打勾说「即可续聊」——粘过去
@@ -60,20 +81,18 @@ async function skillInstalled() {
 export async function copyResumeCommand({
   tool, sessionId, t, setToast, openConfig,
 }) {
-  const command = buildResumeCommand({ tool, sessionId });
-  if (!command) return "";
-  try {
-    await writeClipboardText(command);
-  } catch (error) {
+  const result = await copyResumeInstruction({ tool, sessionId });
+  if (!result.command) return "";
+  if (!result.copied) {
     setToast?.({
       kind: "fail",
       title: t("app:toast.resumeCopyFail"),
-      desc: String(error?.message || error || ""),
+      desc: result.error || "",
     });
     return "";
   }
-  const installed = await skillInstalled();
-  if (installed === false) {
+  const command = result.command;
+  if (result.noSkill) {
     setToast?.({
       kind: "warn",
       title: t("app:toast.resumeCopiedNoSkill"),

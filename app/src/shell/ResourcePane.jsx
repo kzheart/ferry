@@ -313,7 +313,7 @@ function FolderRow({ group, expanded, height, favorite, onToggle, onFavorite, on
 
 // 会话行:双行 40px(标题 / 元信息),悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
 const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editing, showRepo, showTool,
-  onRowClick, onRowPin, onRowDelete, onRowMore,
+  guide, onRowClick, onRowPin, onRowDelete, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   const act = (fn, key) => e => { e.stopPropagation(); fn(key, e); };
@@ -363,6 +363,7 @@ const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editin
       onDoubleClick={e => { if (!e.target.closest(".row-act")) onRowRename(r.key); }}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onRowMore(r.key, e); }}
       title={r.dir}
+      data-guide={guide ? "session-row" : undefined}
       className={selected || multi ? "lib-row lib-row-tall" : "lib-row lib-row-tall hov-item"}
       style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "5px 8px", height,
         borderRadius: 6, cursor: "default", transition: "background .12s ease",
@@ -442,16 +443,19 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
   const showTool = scopeKind !== "agent";
   const items = [];
   let y = 0;
+  // 引导「右键菜单」那步要有一行可高亮:优先选中行,没有选中就用列表里的第一行
+  let guideKey = selectedId || null;
   groups.forEach(g => {
     const project = g.kind === "project";
     const expanded = libraryGroupExpanded(g, collapsed, query || "");
     // 不分组时整条列表只有会话行,没有任何分组头
     if (g.kind === "flat") {
       g.rows.forEach(r => {
+        if (!guideKey) guideKey = r.key;
         items.push({ key: r.key, y, h: ROW_H, node: (
           <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
             editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
-            onRowClick={onRowClick} onRowPin={onRowPin}
+            guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
             onRowDelete={onRowDelete} onRowMore={onRowMore}
             onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
             onRowRenameCancel={onRowRenameCancel} />
@@ -477,10 +481,11 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
     ) });
     y += headerH;
     if (expanded) g.rows.forEach(r => {
+      if (!guideKey) guideKey = r.key;
       items.push({ key: r.key, y, h: ROW_H, node: (
         <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
           editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
-          onRowClick={onRowClick} onRowPin={onRowPin}
+          guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
           onRowDelete={onRowDelete} onRowMore={onRowMore}
           onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
           onRowRenameCancel={onRowRenameCancel} />

@@ -18,6 +18,13 @@ const GUIDE_STEPS = [
     bodyKey: "onboarding:guide.railBody",
   },
   {
+    target: "sidebar-toggle",
+    view: "library",
+    side: "bottom",
+    titleKey: "onboarding:guide.sidebarToggleTitle",
+    bodyKey: "onboarding:guide.sidebarToggleBody",
+  },
+  {
     target: "overview-kpis",
     view: "overview",
     side: "bottom",
@@ -39,11 +46,25 @@ const GUIDE_STEPS = [
     bodyKey: "onboarding:guide.displayBody",
   },
   {
+    target: "session-row",
+    view: "library",
+    side: "right",
+    titleKey: "onboarding:guide.contextMenuTitle",
+    bodyKey: "onboarding:guide.contextMenuBody",
+  },
+  {
     target: "detail-actions",
     view: "library",
     side: "bottom",
     titleKey: "onboarding:guide.detailTitle",
     bodyKey: "onboarding:guide.detailBody",
+  },
+  {
+    target: "handoff",
+    view: "library",
+    side: "bottom",
+    titleKey: "onboarding:guide.handoffTitle",
+    bodyKey: "onboarding:guide.handoffBody",
   },
   {
     target: "scope",
@@ -74,5 +95,12 @@ const GUIDE_STEPS = [
     feature: "builtin-agent",
     titleKey: "onboarding:guide.askferryTitle",
     bodyKey: "onboarding:guide.askferryBody",
+  },
+  {
+    target: "rail-settings",
+    view: "library",
+    side: "right",
+    titleKey: "onboarding:guide.integrationTitle",
+    bodyKey: "onboarding:guide.integrationBody",
   },
 ];

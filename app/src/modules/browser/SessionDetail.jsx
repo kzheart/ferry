@@ -26,6 +26,7 @@ export default memo(function SessionDetail({
   onRefresh,
   refreshing,
   onResume,
+  onResumeElsewhere,
   navigationTarget,
   onLoadMore,
   loadingMore,
@@ -132,6 +133,7 @@ export default memo(function SessionDetail({
           refreshing={refreshing}
           onRefresh={onRefresh}
           onResume={onResume}
+          onResumeElsewhere={onResumeElsewhere}
           canResume={canResume}
           canMigrate={canMigrate}
           onOpenMigrate={onOpenMigrate}

@@ -68,6 +68,7 @@ export function WorkspaceRouter({
             onLoadMore={detailActions.onLoadMore}
             loadingMore={detailActions.loadingMore}
             onResume={detailActions.onResume}
+            onResumeElsewhere={detailActions.onResumeElsewhere}
           />
         ) : (
           <div
