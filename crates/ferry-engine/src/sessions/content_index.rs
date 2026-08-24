@@ -14,7 +14,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Map, Value};
 
 use crate::errors::{DomainError, DomainResult};
@@ -57,16 +57,15 @@ static BUILD_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
 
 /// 一轮处理多少个会话：先并行解析这么多，再把它们写进一个事务。
 ///
-/// 这个值同时决定两件事，而且都往「越大越糟」的方向走：
-/// 1. 解析期间 [`BUILD_POOL`] 满负荷跑多久——越久，并发检索越抢不到 CPU；
-/// 2. 写事务持有共享连接多久——检索与写共用一把锁，事务多长停顿就多长。
+/// 读已经走独立只读连接（[`ContentIndex::with_read_db`]），写事务不再挡住检索，
+/// 所以这个值现在只剩一个作用：解析期间 [`BUILD_POOL`] 满负荷跑多久——跑得越
+/// 久，并发检索越抢不到 CPU。
 ///
-/// 本机实测（100 s 窗口，边建边查，检索 p95/最坏，窗口内建完的会话数）：
-/// 48 → 3156/8125 ms，1195 条；24 → 2303/5528 ms，1176 条；
-/// 12 → 1774/2866 ms，1272 条；4 → 1294/1456 ms，1476 条。
-/// 4 在尾延迟和吞吐上同时最好，且已优于逐条提交的基线（1220/1737 ms，1208 条）。
-/// 试过「解析 48、每 4 个一个事务」想两头都要，结果最差（7246/10257 ms，768 条）：
-/// 拖垮检索的是长时间满负荷的解析，不是事务长度。别再往上调。
+/// 本机实测（100 s 窗口，边建边查；检索 p50/p95/最坏，窗口内建完的会话数）：
+/// 48 → 1047/3516/6230 ms，1147 条；12 → 924/1690/2073 ms，1344 条；
+/// 4 → 795/1114/1738 ms，1608 条。逐条提交的基线是 767/1099/1421 ms，1221 条。
+/// 4 在尾延迟和吞吐上同时最好：延迟已与基线齐平，同窗口还多建 32% 的会话。
+/// 往大调是两头都亏（解析抢核），别动。
 const BUILD_BATCH_SESSIONS: usize = 4;
 /// 一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
 const BUILD_BATCH_BYTES: i64 = 64 * 1024 * 1024;
@@ -357,9 +356,25 @@ struct WorkerState {
     closed: bool,
 }
 
+/// 空闲只读连接池。
+///
+/// WAL 本来就支持「一写多读」，之前所有检索和后台写共用同一条连接、同一把锁，
+/// 于是建索引期间的检索要排在整个写事务后面。读走独立连接后两者互不阻塞。
+#[derive(Default)]
+struct ReaderPool {
+    idle: Vec<Connection>,
+    /// 已开出去的连接数（含借出未还的），用于封顶。
+    opened: usize,
+    closed: bool,
+}
+
+/// 只读连接上限。检索本身是 CPU 密集的，开太多只会互相抢核。
+const MAX_READERS: usize = 4;
+
 pub struct ContentIndex {
     path: PathBuf,
     database: Mutex<Database>,
+    readers: Mutex<ReaderPool>,
     worker: Mutex<WorkerState>,
 }
 
@@ -372,8 +387,99 @@ impl ContentIndex {
                 unavailable: None,
                 closed: false,
             }),
+            readers: Mutex::new(ReaderPool::default()),
             worker: Mutex::new(WorkerState::default()),
         }
+    }
+
+    /// 只读连接：`mode=ro` 不会建库，也永远拿不到写锁。
+    fn open_reader(path: &PathBuf) -> rusqlite::Result<Connection> {
+        // 路径可能含 `?` `#` 之类的 URI 元字符，交给 rusqlite 的路径式 URI 打开。
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        connection.busy_timeout(Duration::from_secs(5))?;
+        // 读侧自己的页缓存；与写连接的缓存互不共享。
+        connection.pragma_update(None, "cache_size", -32_768i64)?;
+        Ok(connection)
+    }
+
+    /// 借一条只读连接；池空且未到上限就现开一条。
+    ///
+    /// 返回 `None` 表示「这条路不通」（库还没建出来 / 已关闭 / 开不出只读连接），
+    /// 调用方回落到写连接，语义与改造前一致。
+    fn checkout_reader(&self) -> Option<Connection> {
+        {
+            let mut pool = self
+                .readers
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if pool.closed {
+                return None;
+            }
+            if let Some(connection) = pool.idle.pop() {
+                return Some(connection);
+            }
+            if pool.opened >= MAX_READERS {
+                return None;
+            }
+            // 先占名额再开连接，避免并发下开超。
+            pool.opened += 1;
+        }
+        match Self::open_reader(&self.path) {
+            Ok(connection) => Some(connection),
+            Err(_) => {
+                let mut pool = self
+                    .readers
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                pool.opened -= 1;
+                None
+            }
+        }
+    }
+
+    fn return_reader(&self, connection: Connection) {
+        let mut pool = self
+            .readers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if pool.closed {
+            pool.opened -= 1;
+            return;
+        }
+        pool.idle.push(connection);
+    }
+
+    /// 纯读查询走独立只读连接，不与后台写抢同一把锁。
+    ///
+    /// 失败语义与 [`Self::with_db`] 完全一致：`Ok(None)` = 索引不可用，
+    /// `Err` = 查询本身失败。拿不到只读连接时回落到写连接（首次建库、
+    /// 单测里库还没落盘等情况都走这条）。
+    fn with_read_db<T>(
+        &self,
+        action: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+    ) -> DomainResult<Option<T>> {
+        {
+            // 写侧已判定不可用/已关闭时，读侧也必须如实说「没有索引」，
+            // 否则会拿着一条陈旧只读连接假装 ready。
+            let guard = self
+                .database
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if guard.unavailable.is_some() || guard.closed {
+                return Ok(None);
+            }
+        }
+        let Some(connection) = self.checkout_reader() else {
+            return self.with_db(action);
+        };
+        let outcome = action(&connection);
+        self.return_reader(connection);
+        outcome
+            .map(Some)
+            .map_err(|error| DomainError::internal(format!("内容索引查询失败: {error}")))
     }
 
     /// 在已加锁的数据库句柄上执行闭包。
@@ -474,6 +580,16 @@ impl ContentIndex {
         while self.building() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
         }
+        {
+            // 先断读侧：借出去的连接归还时会被直接丢弃。
+            let mut pool = self
+                .readers
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            pool.closed = true;
+            pool.opened -= pool.idle.len();
+            pool.idle.clear();
+        }
         let mut guard = self
             .database
             .lock()
@@ -572,7 +688,7 @@ impl ContentIndex {
     /// 状态查询必须无副作用，所以不能借道 `sync`。
     pub fn coverage(&self, records: &[IndexedSession]) -> DomainResult<Map<String, Value>> {
         let mut status = Map::new();
-        if self.with_db(|_| Ok(()))?.is_none() {
+        if self.with_read_db(|_| Ok(()))?.is_none() {
             status.insert("ready".into(), Value::Bool(false));
             status.insert(
                 "reason".into(),
@@ -619,7 +735,7 @@ impl ContentIndex {
 
     fn stored_revisions(&self) -> DomainResult<HashMap<SessionKey, String>> {
         Ok(self
-            .with_db(|connection| {
+            .with_read_db(|connection| {
                 let mut statement =
                     connection.prepare("SELECT tool, ref, revision FROM indexed_sessions")?;
                 let rows = statement.query_map([], |row| {
@@ -823,7 +939,7 @@ impl ContentIndex {
     ///
     /// 预过滤用它区分「索引说没有」与「索引还不知道」。
     pub fn indexed_session_keys(&self) -> DomainResult<Option<Vec<SessionKey>>> {
-        self.with_db(|connection| {
+        self.with_read_db(|connection| {
             let mut statement =
                 connection.prepare("SELECT tool, ref FROM indexed_sessions WHERE failed = 0")?;
             let rows = statement.query_map([], |row| {
@@ -836,7 +952,7 @@ impl ContentIndex {
     /// 每个会话被 16 KB 截断的消息数；只返回确有截断的会话。
     pub fn clipped_rows_by_session(&self) -> DomainResult<HashMap<SessionKey, i64>> {
         Ok(self
-            .with_db(|connection| {
+            .with_read_db(|connection| {
                 let mut statement = connection.prepare(
                     "SELECT tool, ref, clipped_rows FROM indexed_sessions WHERE clipped_rows > 0",
                 )?;
@@ -865,7 +981,7 @@ impl ContentIndex {
         include_tool_outputs: bool,
     ) -> DomainResult<Option<Vec<SessionKey>>> {
         let columns = columns_for(include_tool_outputs);
-        self.with_db(|connection| {
+        self.with_read_db(|connection| {
             let mut candidates: Option<Vec<SessionKey>> = None;
             for literal in literals {
                 let mut statement = connection.prepare(
@@ -961,7 +1077,7 @@ impl ContentIndex {
         let query = format!("{columns}: {}", phrases.join(" "));
         let (extra, extra_params) =
             Self::short_term_filter(short_terms, include_tool_outputs, "r.");
-        self.with_db(|connection| {
+        self.with_read_db(|connection| {
             let sql = format!(
                 "SELECT r.id, r.tool, r.ref, r.message, r.turn, r.role, bm25(records_fts) AS rank
                  FROM records_fts JOIN records r ON r.id = records_fts.rowid
@@ -985,7 +1101,7 @@ impl ContentIndex {
         include_tool_outputs: bool,
     ) -> DomainResult<Vec<MatchRow>> {
         let (extra, params) = Self::short_term_filter(terms, include_tool_outputs, "");
-        self.with_db(|connection| {
+        self.with_read_db(|connection| {
             let sql = format!(
                 "SELECT id, tool, ref, message, turn, role, NULL FROM records
                  WHERE 1=1{extra} ORDER BY id LIMIT ?"
@@ -1011,7 +1127,7 @@ impl ContentIndex {
         needles: &[String],
         include_tool_outputs: bool,
     ) -> DomainResult<(HashMap<SessionKey, ContentHit>, Map<String, Value>)> {
-        if self.with_db(|_| Ok(()))?.is_none() {
+        if self.with_read_db(|_| Ok(()))?.is_none() {
             let mut meta = Map::new();
             meta.insert("match_mode".into(), Value::Null);
             meta.insert("rows_capped".into(), Value::Bool(false));
@@ -1095,7 +1211,7 @@ impl ContentIndex {
         // Python 的 fetchone() 对缺行返回 None → 空串；query_row 需 optional()
         // 才不会把 QueryReturnedNoRows 当查询失败上抛。
         let row = self
-            .with_db(|connection| {
+            .with_read_db(|connection| {
                 connection
                     .query_row(
                         "SELECT text, tool_text FROM records WHERE id = ?",
@@ -1474,5 +1590,63 @@ mod tests {
         let clipped = content.clipped_rows_by_session().unwrap();
         assert_eq!(clipped.len(), 1);
         assert_eq!(clipped[&("claude".into(), "/a".into())], 2);
+    }
+
+    /// 读走独立只读连接后，必须仍然立刻看到写连接刚提交的内容——池化连接各有
+    /// 自己的页缓存，只要不残留长事务，每条语句都读最新已提交状态。
+    #[test]
+    fn pooled_readers_observe_writes_committed_after_they_were_opened() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        let insert = |reference: &str, text: &str| {
+            content
+                .with_db(|connection| {
+                    write_transaction(connection, |connection| {
+                        connection.execute(
+                            "INSERT INTO records(tool, ref, message, turn, role, text, tool_text,
+                             clipped) VALUES ('claude', ?, 1, 1, 'user', ?, '', 0)",
+                            rusqlite::params![reference, text],
+                        )?;
+                        connection.execute(
+                            "INSERT OR REPLACE INTO indexed_sessions(tool, ref, revision,
+                             record_rows, clipped_rows, failed, indexed_at)
+                             VALUES ('claude', ?, 'r1', 1, 0, 0, 0)",
+                            rusqlite::params![reference],
+                        )?;
+                        Ok(())
+                    })
+                })
+                .unwrap();
+        };
+
+        insert("/first", "alpha 共同前缀");
+        // 先读一轮，把只读连接真正开出来并放回池子。
+        assert_eq!(content.indexed_session_keys().unwrap().unwrap().len(), 1);
+        assert_eq!(
+            content
+                .sessions_matching_literals(&["共同前缀".to_string()], false)
+                .unwrap()
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // 同一批池化连接必须看见之后提交的新行。
+        insert("/second", "beta 共同前缀");
+        assert_eq!(content.indexed_session_keys().unwrap().unwrap().len(), 2);
+        assert_eq!(
+            content
+                .sessions_matching_literals(&["共同前缀".to_string()], false)
+                .unwrap()
+                .unwrap()
+                .len(),
+            2
+        );
+        let (hits, _) = content.search(&["共同前缀".to_string()], false).unwrap();
+        assert_eq!(hits.len(), 2);
+
+        // 关闭后读侧同样如实报「没有索引」，不能拿着旧连接假装可用。
+        content.close();
+        assert!(content.indexed_session_keys().unwrap().is_none());
     }
 }
