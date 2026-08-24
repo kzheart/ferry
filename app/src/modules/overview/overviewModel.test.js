@@ -5,9 +5,12 @@ import { test } from "vitest";
 import {
   addTokens,
   buildPriceIndex,
+  computeDayDetail,
   computeOverview,
+  computeToday,
   costOf,
   emptyTokens,
+  heatLevel,
   matchPrice,
   modelUsageOf,
   sumTokens,
@@ -109,20 +112,16 @@ test("computeOverview 按 scope 切窗并给出环比增量", () => {
   assert.equal(all.kpis.tokens.delta, null);
 });
 
-test("computeOverview 按工具过滤会话与迁移记录", () => {
+test("computeOverview 按工具过滤会话", () => {
   const result = computeOverview({
     sessions: [session({}), session({ tool: "codex" })],
-    history: [
-      { src: "claude", dst: "codex" },
-      { src: "pi", dst: "grok" },
-    ],
     prices: PRICES,
     tool: "codex",
     now: NOW,
   });
 
   assert.equal(result.kpis.sessions.value, 1);
-  assert.deepEqual(result.flows, [{ src: "claude", dst: "codex", count: 1 }]);
+  assert.deepEqual(result.daily.tools, ["codex"]);
 });
 
 test("按模型分桶优先于会话代表模型，成本和排行不误归父模型", () => {
@@ -222,14 +221,206 @@ test("连续活跃天数从今天往回数，并记录历史最长", () => {
   assert.equal(result.kpis.streak.longest, 3);
 });
 
+test("computeToday 只取今天的会话，并按 agent/模型/项目拆分", () => {
+  const today = computeToday({
+    sessions: [
+      session({ updated: dayStart(0), created: dayStart(0), tokens: tokens(600) }),
+      session({ updated: dayStart(0), created: dayStart(3), tool: "codex",
+        dir: "/Users/me/code/blog", tokens: tokens(400) }),
+      session({ updated: dayStart(1), tokens: tokens(9999) }),
+    ],
+    prices: PRICES,
+    now: NOW,
+  });
+
+  assert.equal(today.empty, false);
+  assert.equal(today.sessions, 2);
+  assert.equal(today.created, 1);            // 今天新建的只有第一个
+  assert.equal(today.tokens, 1000);          // 昨天那条不计入
+  assert.deepEqual(today.byAgent.map(a => [a.tool, a.tokens, a.pct]), [
+    ["claude", 600, 60], ["codex", 400, 40],
+  ]);
+  // 同票按名称排,保证渲染顺序稳定
+  assert.deepEqual(today.byProject, [
+    { name: "blog", sessions: 1 }, { name: "ferry", sessions: 1 },
+  ]);
+  assert.equal(today.topModel, "gpt-test");
+  assert.equal(today.topModelPct, 100);
+  assert.equal(today.cost, costOf(tokens(1000), PRICES["gpt-test"]));
+  assert.deepEqual(today.costByModel, [{ model: "gpt-test", cost: today.cost }]);
+});
+
+test("computeToday 的昨日对比截到同一钟点，昨日为空时百分比退化为 null", () => {
+  // NOW 是正午；昨天上午的会话进对比窗，昨天下午的不进。
+  const morning = dayStart(1) + 9 * 3600e3;
+  const evening = dayStart(1) + 20 * 3600e3;
+  const compared = computeToday({
+    sessions: [
+      session({ updated: dayStart(0), tokens: tokens(150) }),
+      session({ updated: morning, tokens: tokens(100) }),
+      session({ updated: evening, tokens: tokens(9999) }),
+    ],
+    prices: PRICES,
+    now: NOW,
+  }).compare;
+
+  assert.deepEqual(compared.current, { sessions: 1, tokens: 150, cost: compared.current.cost });
+  assert.equal(compared.yesterday.sessions, 1);
+  assert.equal(compared.yesterday.tokens, 100);
+  assert.equal(compared.tokensPct, 50);
+
+  const noBaseline = computeToday({
+    sessions: [session({ updated: dayStart(0) })], prices: PRICES, now: NOW,
+  }).compare;
+  assert.equal(noBaseline.tokensPct, null);
+  assert.equal(noBaseline.costPct, null);
+});
+
+test("computeToday 的近 7 天点阵以今天收尾，色阶与热力图同档", () => {
+  const { week } = computeToday({
+    sessions: [
+      session({ updated: dayStart(0) }),
+      session({ updated: dayStart(3) }), session({ updated: dayStart(3) }),
+      session({ updated: dayStart(9) }),      // 窗口外
+    ],
+    prices: PRICES,
+    now: NOW,
+  });
+
+  assert.equal(week.length, 7);
+  assert.equal(week[6].day, dayStart(0));
+  assert.deepEqual(week.map(d => d.count), [0, 0, 0, 2, 0, 0, 1]);
+  assert.deepEqual(week.map(d => d.level), [0, 0, 0, 4, 0, 0, 2]);
+  assert.equal(heatLevel(0, 5), 0);
+  assert.equal(heatLevel(5, 5), 4);
+});
+
+test("computeToday 今天没有会话时给出 empty 且各项归零", () => {
+  const today = computeToday({
+    sessions: [session({ updated: dayStart(2) })], prices: PRICES, now: NOW,
+  });
+
+  assert.equal(today.empty, true);
+  assert.equal(today.sessions, 0);
+  assert.equal(today.tokens, 0);
+  assert.equal(today.cost, 0);
+  assert.equal(today.topModel, null);
+  assert.deepEqual(today.byAgent, []);
+  assert.deepEqual(today.byProject, []);
+  assert.ok(today.composition.every(c => c.value === 0));
+});
+
+test("computeOverview 的 today 不随 scope 变化，但跟随 agent 筛选", () => {
+  const sessions = [
+    session({ updated: dayStart(0), tokens: tokens(100) }),
+    session({ updated: dayStart(0), tool: "codex", tokens: tokens(300) }),
+  ];
+  const base = { sessions, prices: PRICES, now: NOW };
+
+  assert.equal(computeOverview({ ...base, scope: "7" }).today.tokens, 400);
+  assert.equal(computeOverview({ ...base, scope: "all" }).today.tokens, 400);
+  assert.equal(computeOverview({ ...base, tool: "codex" }).today.tokens, 300);
+});
+
 test("空数据集给出 empty 标记且不产生 NaN", () => {
   const result = computeOverview({ now: NOW });
 
   assert.equal(result.empty, true);
   assert.equal(result.hasUsage, false);
   assert.equal(result.costTotal, 0);
-  assert.equal(result.bump, null);
+  assert.deepEqual(result.daily.tools, []);
+  assert.deepEqual(result.agentShare, []);
   assert.equal(result.nightShare, 0);
   assert.deepEqual(result.repos, []);
   assert.ok(result.composition.every(item => item.pct === 0));
+});
+
+test("daily 按日分桶并按 agent 拆分,桶数跟随 scope", () => {
+  const sessions = [
+    session({ updated: dayStart(0), tokens: tokens(100) }),
+    session({ updated: dayStart(0), tool: "codex", tokens: tokens(50) }),
+    session({ updated: dayStart(2), tokens: tokens(30) }),
+    session({ updated: dayStart(10), tokens: tokens(999) }),   // 7 天窗口外
+  ];
+  const { daily } = computeOverview({ sessions, prices: PRICES, scope: "7", now: NOW });
+
+  assert.equal(daily.unit, "day");
+  assert.equal(daily.buckets.length, 7);
+  assert.equal(daily.buckets[6].start, dayStart(0));
+  assert.equal(daily.buckets[6].tokens, 150);
+  assert.equal(daily.buckets[6].sessions, 2);
+  assert.equal(daily.buckets[6].byTool.claude.tokens, 100);
+  assert.equal(daily.buckets[6].byTool.codex.tokens, 50);
+  assert.equal(daily.buckets[4].tokens, 30);
+  assert.equal(daily.maxTokens, 150);
+  // 堆叠顺序:token 总量大的在前
+  assert.deepEqual(daily.tools, ["claude", "codex"]);
+});
+
+test("daily 在 scope=all 时按周分桶,首桶为最早会话所在周", () => {
+  const sessions = [
+    session({ updated: dayStart(0), tokens: tokens(100) }),
+    session({ updated: dayStart(15), tokens: tokens(70) }),
+  ];
+  const { daily } = computeOverview({ sessions, prices: PRICES, scope: "all", now: NOW });
+
+  assert.equal(daily.unit, "week");
+  assert.equal(daily.truncated, false);
+  // 2026-01-15 是周四:本周始于 1-12;15 天前(2025-12-31)在 3 周前
+  assert.equal(daily.buckets.length, 3);
+  assert.equal(daily.buckets[0].tokens, 70);
+  assert.equal(daily.buckets[2].tokens, 100);
+});
+
+test("agentShare 给出 token 占比与环比百分点,scope=all 时无环比", () => {
+  const sessions = [
+    session({ updated: dayStart(1), tokens: tokens(300) }),
+    session({ updated: dayStart(1), tool: "codex", tokens: tokens(100) }),
+    // 上一 30 天周期:claude 50%、codex 50%
+    session({ updated: dayStart(40), tokens: tokens(100) }),
+    session({ updated: dayStart(40), tool: "codex", tokens: tokens(100) }),
+  ];
+  const { agentShare } = computeOverview({ sessions, prices: PRICES, now: NOW });
+
+  assert.equal(agentShare.length, 2);
+  assert.equal(agentShare[0].tool, "claude");
+  assert.equal(agentShare[0].pct, 75);
+  assert.equal(agentShare[0].delta, 25);
+  assert.equal(agentShare[1].tool, "codex");
+  assert.equal(agentShare[1].delta, -25);
+
+  const all = computeOverview({ sessions, prices: PRICES, scope: "all", now: NOW });
+  assert.ok(all.agentShare.every(row => row.delta === null));
+});
+
+test("computeDayDetail 只取当天会话并拆分 agent 与 Top 模型", () => {
+  const detail = computeDayDetail({
+    sessions: [
+      session({ updated: dayStart(1), tokens: tokens(1_000_000) }),
+      session({
+        updated: dayStart(1), tool: "codex", model: "other-model",
+        tokens: tokens(3_000_000),
+      }),
+      session({ updated: dayStart(0), tokens: tokens(999) }),   // 不在选中日
+    ],
+    prices: PRICES,
+    day: dayStart(1),
+  });
+
+  assert.equal(detail.sessions, 2);
+  assert.equal(detail.tokens, 4_000_000);
+  assert.equal(detail.cost, costOf(tokens(1_000_000), PRICES["gpt-test"]));
+  assert.deepEqual(detail.byAgent.map(a => a.tool), ["codex", "claude"]);
+  assert.equal(detail.byAgent[0].pct, 75);
+  assert.deepEqual(detail.topModels.map(m => m.model), ["other-model", "gpt-test"]);
+});
+
+test("computeDayDetail 空日给出零值且不产生 NaN", () => {
+  const detail = computeDayDetail({ sessions: [], prices: PRICES, day: dayStart(0) });
+
+  assert.equal(detail.sessions, 0);
+  assert.equal(detail.tokens, 0);
+  assert.equal(detail.cost, 0);
+  assert.deepEqual(detail.byAgent, []);
+  assert.deepEqual(detail.topModels, []);
 });

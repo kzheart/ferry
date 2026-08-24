@@ -82,7 +82,10 @@ html, body, #root { height: 100%; }
   --info-dot: #8AA0B6;
   --tooltip: #2B333C;
 
-  /* 浮层 / 阴影辅助(两级投影:菜单/弹层 与 大面板,对齐系统 NSMenu/NSPanel 的细腻投影) */
+  /* 浮层 / 阴影辅助(三级投影:嵌入式卡片 < 菜单/弹层 < 大面板,对齐系统 NSMenu/NSPanel 的细腻投影)
+     --shadow 给的是最轻的一级:卡片自带 1px 描边界定边界,投影只补一点纵深,
+     密排时(总览页四张 KPI 卡并列)才不会糊成一片。色相跟 --ring 一样偏冷灰蓝,配冷调底色。 */
+  --shadow: 0 1px 2px rgba(20,28,38,.04), 0 2px 8px rgba(20,28,38,.03);
   --shadow-menu: 0 5px 16px rgba(0,0,0,.13), 0 0 0 1px var(--ring);
   --shadow-sheet: 0 12px 32px rgba(0,0,0,.16), 0 0 0 1px var(--ring);
   --scrim: rgba(24,33,43,.34);
@@ -218,6 +221,8 @@ html, body, #root { height: 100%; }
   --info-dot: #6C7891;
   --tooltip: #3E3F47;
 
+  /* 暗色下卡片靠 --surface 与 --bg 的明度差已经分得开,投影只做加强,过重会显脏 */
+  --shadow: 0 1px 2px rgba(0,0,0,.24), 0 2px 8px rgba(0,0,0,.18);
   --shadow-menu: 0 5px 16px rgba(0,0,0,.4), 0 0 0 1px var(--ring);
   --shadow-sheet: 0 12px 32px rgba(0,0,0,.5), 0 0 0 1px var(--ring);
   --scrim: rgba(0,0,0,.55);

@@ -12,6 +12,33 @@
     "label": "按工具筛选",
     "all": "全部"
   },
+  "today": {
+    "title": "今日速览",
+    "streak": "连续活跃第 {{n}} 天",
+    "weekAria": "近 7 天活跃度",
+    "empty": "今天还没有会话。",
+    "emptyStreak": "今天还没有会话 —— 连续活跃 {{n}} 天,别断了。",
+    "sessions": "活跃会话",
+    "projects": "今日项目",
+    "createdNote": "其中 {{n}} 个今日新建",
+    "nSessions": "{{n}} 个会话",
+    "noProject": "会话不在任何仓库下",
+    "other": "其他 {{n}} 项",
+    "tokens": "Token 总量",
+    "byAgent": "各 Agent 用量",
+    "cost": "估算费用",
+    "costByModel": "各模型估算费用",
+    "costNote": "与成本表同口径",
+    "noPriced": "今日模型均未匹配到价格",
+    "compare": "对比昨日同时段",
+    "asOf": "截至 {{time}}",
+    "todayRow": "今天",
+    "yesterdayRow": "昨天",
+    "tokensRow": "Token",
+    "costRow": "费用",
+    "topModel": "主力模型",
+    "byModel": "今日各模型用量"
+  },
   "kpi": {
     "sessions": "会话总数",
     "tokens": "Token 总量",
@@ -24,12 +51,25 @@
   "sec": {
     "habits": "使用习惯",
     "tokens": "Token 与成本",
-    "projects": "项目与迁移"
+    "projects": "项目与 Agent"
   },
-  "bump": {
-    "title": "主力模型变迁",
-    "sub": "按月排名 · 占当月 token",
-    "aria": "各模型每月按 token 用量排名的变迁"
+  "daily": {
+    "title": "用量走势",
+    "subDay": "{{range}} · 按 agent",
+    "subWeek": "按周 · 按 agent",
+    "subWeekCapped": "按周 · 近 52 周",
+    "metric": "口径",
+    "tokens": "Token",
+    "cost": "成本",
+    "aria": "各时段 token 用量堆叠柱状图,按 agent 着色"
+  },
+  "day": {
+    "sessions": "会话",
+    "tokens": "Token",
+    "cost": "成本",
+    "topModels": "Top 模型",
+    "close": "收起",
+    "empty": "这一天没有会话"
   },
   "clock": {
     "title": "作息",
@@ -70,9 +110,10 @@
     "title": "仓库排行",
     "sub": "按会话数 · Top 6"
   },
-  "flow": {
-    "title": "迁移流向",
-    "sub": "全部迁移记录",
-    "empty": "还没有迁移记录"
+  "agents": {
+    "title": "Agent 对比",
+    "sub": "{{range}} · Token 占比",
+    "pp": "pp",
+    "empty": "当前区间没有用量"
   }
 }

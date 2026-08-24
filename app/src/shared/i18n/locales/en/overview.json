@@ -12,6 +12,33 @@
     "label": "Filter by tool",
     "all": "All"
   },
+  "today": {
+    "title": "Today",
+    "streak": "Day {{n}} of the streak",
+    "weekAria": "Activity over the last 7 days",
+    "empty": "No sessions today yet.",
+    "emptyStreak": "No sessions today yet — {{n}}-day streak, don't break it.",
+    "sessions": "Active sessions",
+    "projects": "Projects today",
+    "createdNote": "{{n}} started today",
+    "nSessions": "{{n}} sessions",
+    "noProject": "No sessions under a repo",
+    "other": "{{n}} more",
+    "tokens": "Tokens",
+    "byAgent": "Usage by agent",
+    "cost": "Est. cost",
+    "costByModel": "Est. cost by model",
+    "costNote": "Same basis as the cost table",
+    "noPriced": "No model matched a price today",
+    "compare": "vs. yesterday, same time",
+    "asOf": "As of {{time}}",
+    "todayRow": "Today",
+    "yesterdayRow": "Yesterday",
+    "tokensRow": "Tokens",
+    "costRow": "Cost",
+    "topModel": "Top model",
+    "byModel": "Token usage by model"
+  },
   "kpi": {
     "sessions": "Total sessions",
     "tokens": "Total tokens",
@@ -24,12 +51,25 @@
   "sec": {
     "habits": "Habits",
     "tokens": "Tokens & cost",
-    "projects": "Projects & migrations"
+    "projects": "Projects & agents"
   },
-  "bump": {
-    "title": "Model rankings over time",
-    "sub": "Monthly rank · by token share",
-    "aria": "How model rankings shifted month over month, by token usage"
+  "daily": {
+    "title": "Usage over time",
+    "subDay": "{{range}} · by agent",
+    "subWeek": "Weekly · by agent",
+    "subWeekCapped": "Weekly · last 52 weeks",
+    "metric": "Metric",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "aria": "Stacked token usage over time, colored by agent"
+  },
+  "day": {
+    "sessions": "Sessions",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "topModels": "Top models",
+    "close": "Close",
+    "empty": "No sessions on this day"
   },
   "clock": {
     "title": "Rhythm",
@@ -70,9 +110,10 @@
     "title": "Top repos",
     "sub": "By sessions · Top 6"
   },
-  "flow": {
-    "title": "Migration flows",
-    "sub": "All migrations",
-    "empty": "No migrations yet"
+  "agents": {
+    "title": "Agents",
+    "sub": "{{range}} · token share",
+    "pp": "pp",
+    "empty": "No usage in this range"
   }
 }

@@ -9,22 +9,11 @@ import {
   formatInteger,
 } from "../../shared/i18n/numberFormat.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../shared/ui/icons.jsx";
-import { computeOverview } from "./overviewModel.js";
+import { computeDayDetail, computeOverview, heatLevel } from "./overviewModel.js";
+import { Card, CHART, card, num, Section, toolColor } from "./primitives.jsx";
+import TodayPanel from "./TodayPanel.jsx";
 
-const TOOL_COLOR = {
-  claude: "var(--t-claude)",
-  codex: "var(--t-codex)",
-  opencode: "var(--t-opencode)",
-  pi: "var(--c4)",
-  grok: "var(--tx2)",
-  cursor: "var(--t-cursor)",
-};
 const COMP_OPACITY = { cache_read: 0.92, input: 0.6, cache_write: 0.38, output: 0.2 };
-const CHART = ["var(--c1)", "var(--c2)", "var(--c3)", "var(--c4)"];
-const toolColor = tool => {
-  const index = TOOLS.indexOf(tool);
-  return TOOL_COLOR[tool] || CHART[(index < 0 ? 0 : index) % CHART.length];
-};
 
 // 月份/星期名按语言本地化。2024-01-01 是周一,用它推出 dow 0=周一 的顺序。
 const monthName = (index, locale) =>
@@ -47,34 +36,6 @@ function smooth(pts) {
   return d;
 }
 
-const card = { background: "var(--surface)", border: "1px solid var(--line)",
-  borderRadius: 10, boxShadow: "var(--shadow)" };
-const num = { fontVariantNumeric: "tabular-nums" };
-
-function Card({ title, sub, extra, fill, children }) {
-  return (
-    <div style={fill ? { ...card, height: "100%", display: "flex", flexDirection: "column" } : card}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "13px 15px 0" }}>
-        <h2 style={{ margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: ".02em", color: "var(--tx2)" }}>{title}</h2>
-        {sub && <span style={{ fontSize: 11, color: "var(--tx4b)" }}>{sub}</span>}
-        {extra && <><div style={{ flex: 1 }} />{extra}</>}
-      </div>
-      <div style={fill ? { padding: "13px 15px 15px", flex: 1, display: "flex", flexDirection: "column" }
-        : { padding: "13px 15px 15px" }}>{children}</div>
-    </div>
-  );
-}
-
-function Section({ title, note }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 -8px" }}>
-      <h3 style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--tx2)", letterSpacing: ".01em" }}>{title}</h3>
-      <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
-      {note && <span style={{ fontSize: 11, color: "var(--tx4b)" }}>{note}</span>}
-    </div>
-  );
-}
-
 function Spark({ values, w = 72, h = 24 }) {
   const max = Math.max(1, ...values), pad = 2;
   const x = i => pad + (i / Math.max(1, values.length - 1)) * (w - pad * 2);
@@ -90,46 +51,135 @@ function Spark({ values, w = 72, h = 24 }) {
   );
 }
 
-function Bump({ bump, locale, label }) {
-  const W = 720, H = 200, L = 60, R = 110, T = 22, B = 26;
-  const { months, models, ranks } = bump;
-  const n = months.length;
-  const x = i => L + (i / (n - 1)) * (W - L - R);
-  const y = r => T + ((r - 1) / Math.max(1, ranks - 1)) * (H - T - B);
-  const order = models.map((m, i) => i).sort((a, b) => (models[a].lead ? 1 : 0) - (models[b].lead ? 1 : 0));
+// 用量走势:按日(7/30 天)或按周(全部)的堆叠柱,按 agent 着色。
+// 日桶可点击,与热力图共用"选中日期"联动下钻。
+function DailyChart({ daily, metric, locale, label, fmtTokens, fmtCost, t, selectedDay, onPickDay }) {
+  const W = 720, H = 200, L = 48, R = 8, T = 14, B = 24;
+  const { unit, buckets, tools } = daily;
+  const n = buckets.length;
+  const max = Math.max(1, metric === "cost" ? daily.maxCost : daily.maxTokens);
+  const bw = (W - L - R) / n;
+  const gap = Math.min(6, Math.max(2, bw * 0.25));
+  const y0 = H - B;
+  const hOf = v => (v / max) * (H - T - B);
+  const fmt = metric === "cost" ? fmtCost : fmtTokens;
+  const clickable = unit === "day" && onPickDay;
+  const dayLabel = ts => new Date(ts).toLocaleDateString(locale, { month: "numeric", day: "numeric" });
+  const step = Math.max(1, Math.ceil(n / 6));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet"
-      style={{ display: "block" }} role="img"
-      aria-label={label}>
-      {Array.from({ length: ranks }, (_, i) => i + 1).map(r => (
-        <g key={r}>
-          <line x1={L} x2={W - R} y1={y(r)} y2={y(r)} stroke="var(--grid)" strokeWidth="1" />
-          <text x={L - 14} y={y(r) + 3.5} textAnchor="middle" fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">#{r}</text>
+      style={{ display: "block" }} role="img" aria-label={label}>
+      {[0.5, 1].map(f => (
+        <g key={f}>
+          <line x1={L} x2={W - R} y1={y0 - (H - T - B) * f} y2={y0 - (H - T - B) * f}
+            stroke="var(--grid)" strokeWidth="1" />
+          <text x={L - 7} y={y0 - (H - T - B) * f + 3.5} textAnchor="end" fill="var(--tx5)"
+            fontSize="10" fontFamily="var(--font-ui)" style={num}>{fmt(max * f)}</text>
         </g>
       ))}
-      {months.map((m, i) => (
-        <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{monthName(m, locale)}</text>
-      ))}
-      {order.map(mi => {
-        const m = models[mi];
-        const color = CHART[mi % CHART.length];
-        const pts = m.rank.map((r, i) => [x(i), y(r)]);
+      <line x1={L} x2={W - R} y1={y0} y2={y0} stroke="var(--line)" strokeWidth="1" />
+      {buckets.map((b, i) => {
+        const x = L + i * bw + gap / 2, w = Math.max(1, bw - gap);
+        const selected = unit === "day" && b.start === selectedDay;
+        const dimmed = clickable && selectedDay != null && !selected;
+        let acc = 0;
         return (
-          <g key={m.name}>
-            <path d={smooth(pts)} fill="none" stroke={color}
-              strokeWidth={m.lead ? 2.4 : 1.6} strokeLinecap="round" strokeLinejoin="round" opacity={m.lead ? 1 : 0.45} />
-            {pts.map((p, i) => (
-              <circle key={i} cx={p[0]} cy={p[1]} r={m.lead ? (i === n - 1 ? 4 : 3) : 2.4}
-                fill={m.lead ? color : "var(--surface)"} stroke={m.lead ? "var(--surface)" : color}
-                strokeWidth={m.lead ? 1.4 : 1.2} opacity={m.lead ? 1 : 0.6} />
-            ))}
-            <text x={W - R + 10} y={y(m.rank[n - 1]) + 3.5} fill={color}
-              fontSize="11" fontWeight={m.lead ? 600 : 400} fontFamily="var(--font-ui)"
-              opacity={m.lead ? 1 : 0.75}>{m.name}</text>
+          <g key={b.start} opacity={dimmed ? 0.4 : 1}
+            style={clickable ? { cursor: "pointer" } : undefined}
+            onClick={clickable ? () => onPickDay(b.start) : undefined}>
+            <title>{`${dayLabel(b.start)} · ${t("overview:today.nSessions", { n: b.sessions })} · ${fmtTokens(b.tokens)} · ${fmtCost(b.cost)}`}</title>
+            <rect x={x} y={T} width={w} height={H - T - B} fill="transparent" />
+            {tools.map(tl => {
+              const v = b.byTool[tl]?.[metric === "cost" ? "cost" : "tokens"] || 0;
+              const h = hOf(v);
+              if (h < 0.5) return null;
+              const y = y0 - hOf(acc) - h;
+              acc += v;
+              return <rect key={tl} x={x} y={y} width={w} height={Math.max(1, h - 1)}
+                rx="1.5" fill={toolColor(tl)} />;
+            })}
+            {selected && <rect x={x} y={y0 + 3} width={w} height="2.5" rx="1.25" fill="var(--tx1)" />}
           </g>
         );
       })}
+      {buckets.map((b, i) => {
+        if (unit === "day") {
+          if (i % step !== 0) return null;
+          return <text key={b.start} x={L + i * bw + bw / 2} y={H - 8} textAnchor="middle"
+            fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{dayLabel(b.start)}</text>;
+        }
+        const month = new Date(b.start).getMonth();
+        const prevMonth = i > 0 ? new Date(buckets[i - 1].start).getMonth() : -1;
+        if (i > 0 && month === prevMonth) return null;
+        return <text key={b.start} x={L + i * bw + bw / 2} y={H - 8} textAnchor="middle"
+          fill="var(--tx5)" fontSize="10" fontFamily="var(--font-ui)">{monthName(month, locale)}</text>;
+      })}
     </svg>
+  );
+}
+
+// 某天明细面板:点击热力图/走势图后展开,展示当天分 agent 与 Top 模型
+function DayDetail({ detail, locale, t, fmtInt, fmtTokens, fmtCost, onClose }) {
+  const dateStr = new Date(detail.day).toLocaleDateString(locale, {
+    month: "long", day: "numeric", weekday: "long",
+  });
+  const stat = (label, value) => (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+      <span style={{ fontSize: 11, color: "var(--tx4b)" }}>{label}</span>
+      <span style={{ fontSize: 15, fontWeight: 600, color: "var(--tx1)", ...num }}>{value}</span>
+    </span>
+  );
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line6)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx1)" }}>{dateStr}</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={onClose} aria-label={t("overview:day.close")}
+          style={{ border: "none", background: "none", font: "inherit", fontSize: 11,
+            color: "var(--tx4)", cursor: "default", padding: "2px 4px" }}>
+          {t("overview:day.close")}
+        </button>
+      </div>
+      {detail.sessions === 0 ? (
+        <div style={{ padding: "14px 0 6px", fontSize: 12, color: "var(--tx5)" }}>{t("overview:day.empty")}</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", margin: "8px 0 10px" }}>
+            {stat(t("overview:day.sessions"), fmtInt(detail.sessions))}
+            {stat(t("overview:day.tokens"), fmtTokens(detail.tokens))}
+            {stat(t("overview:day.cost"), fmtCost(detail.cost))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {detail.byAgent.map(a => (
+              <div key={a.tool} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 10, alignItems: "center" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--tx2)" }}>
+                  <i style={{ width: 8, height: 8, borderRadius: 2, flex: "none", background: toolColor(a.tool) }} />
+                  {TOOL_NAME[a.tool] || a.tool}
+                </span>
+                <div style={{ height: 6, background: "var(--track)", borderRadius: 3, overflow: "hidden" }}>
+                  <i style={{ display: "block", height: "100%", width: `${a.pct}%`, background: toolColor(a.tool) }} />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--tx3)", minWidth: 96, textAlign: "right", ...num }}>
+                  {fmtTokens(a.tokens)} · {a.pct.toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+          {detail.topModels.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--line6)",
+              fontSize: 11, color: "var(--tx4b)", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "baseline" }}>
+              <span>{t("overview:day.topModels")}</span>
+              {detail.topModels.map((m, i) => (
+                <span key={m.model} style={{ color: "var(--tx3)", ...num }}>
+                  {i > 0 && <span style={{ color: "var(--tx5)", marginRight: 6 }}>·</span>}
+                  {m.model} {m.pct.toFixed(0)}%
+                </span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -176,14 +226,9 @@ function Clock({ clock, peakHour, t }) {
   );
 }
 
-function Heatmap({ heatmap, locale, label }) {
-  const { grid, max } = heatmap;
+function Heatmap({ heatmap, locale, label, selectedDay, onPickDay }) {
+  const { grid, max, start } = heatmap;
   const cell = 11, gap = 3, LX = 26, TY = 8;
-  const level = c => {
-    if (c <= 0) return 0;
-    const r = c / max;
-    return r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1;
-  };
   const width = LX + grid.length * (cell + gap);
   // 隔行显示(周一/三/五/日),避免标签挤在一起
   const names = weekdayNames(locale);
@@ -195,12 +240,20 @@ function Heatmap({ heatmap, locale, label }) {
       {dow.map((s, d) => s && (
         <text key={d} x={LX - 6} y={TY + d * (cell + gap) + 9} textAnchor="end" fill="var(--tx5)" fontSize="9" fontFamily="var(--font-ui)">{s}</text>
       ))}
-      {grid.map((col, w) => col.map((c, d) => c === -1 ? null : (
-        <rect key={`${w}-${d}`} x={LX + w * (cell + gap)} y={TY + d * (cell + gap)}
-          width={cell} height={cell} rx="2.5" fill={`var(--heat-${level(c)})`}>
-          <title>{c > 0 ? `${c}` : ""}</title>
-        </rect>
-      )))}
+      {grid.map((col, w) => col.map((c, d) => {
+        if (c === -1) return null;
+        const day = start + (w * 7 + d) * 86400e3;
+        const selected = day === selectedDay;
+        return (
+          <rect key={`${w}-${d}`} x={LX + w * (cell + gap)} y={TY + d * (cell + gap)}
+            width={cell} height={cell} rx="2.5" fill={`var(--heat-${heatLevel(c, max)})`}
+            stroke={selected ? "var(--tx1)" : "none"} strokeWidth={selected ? 1.5 : 0}
+            style={onPickDay ? { cursor: "pointer" } : undefined}
+            onClick={onPickDay ? () => onPickDay(day) : undefined}>
+            <title>{c > 0 ? `${c}` : ""}</title>
+          </rect>
+        );
+      }))}
     </svg>
   );
 }
@@ -255,7 +308,7 @@ function ToolFilter({ tool, setTool, t }) {
   );
 }
 
-export default function Overview({ sessions = [], historyRows = [],
+export default function Overview({ sessions = [],
   prices = {}, pricing = null, scanning = false, navigationTarget }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -291,8 +344,19 @@ export default function Overview({ sessions = [], historyRows = [],
     }
   }, [navigationTarget]);
   const data = useMemo(() => computeOverview({
-    sessions, history: historyRows, prices, scope, tool,
-  }), [sessions, historyRows, prices, scope, tool]);
+    sessions, prices, scope, tool,
+  }), [sessions, prices, scope, tool]);
+
+  // 选中日期:热力图与用量走势共用,点同一天再点一次取消
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [metric, setMetric] = useState("tokens");
+  const pickDay = day => setSelectedDay(cur => (cur === day ? null : day));
+  useEffect(() => { setSelectedDay(null); }, [tool]);
+  const dayDetail = useMemo(() => {
+    if (selectedDay == null) return null;
+    const filtered = tool === "all" ? sessions : sessions.filter(s => s.tool === tool);
+    return computeDayDetail({ sessions: filtered, prices, day: selectedDay });
+  }, [selectedDay, sessions, prices, tool]);
 
   const delta = (kpi, fmt) => {
     if (kpi.delta == null) return null;
@@ -353,6 +417,9 @@ export default function Overview({ sessions = [], historyRows = [],
           </div>
         ) : (
           <>
+            <TodayPanel today={data.today} streak={data.kpis.streak.value} locale={locale} t={t}
+              fmtInt={fmtInt} fmtTokens={fmtTokens} fmtCost={fmtCost} />
+
             <div data-guide="overview-kpis"
               style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
               {kpiCard(t("overview:kpi.sessions"), fmtInt(data.kpis.sessions.value), null,
@@ -368,11 +435,30 @@ export default function Overview({ sessions = [], historyRows = [],
 
             <Section title={t("overview:sec.habits")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {data.bump && (
+              {data.daily.tools.length > 0 && (
                 <div style={{ flex: "2 1 420px", minWidth: 0 }}>
-                  <Card title={t("overview:bump.title")} sub={t("overview:bump.sub")} fill>
+                  <Card title={t("overview:daily.title")}
+                    sub={data.daily.unit === "day"
+                      ? t("overview:daily.subDay", { range: t(`overview:scope.${scope}`) })
+                      : (data.daily.truncated ? t("overview:daily.subWeekCapped") : t("overview:daily.subWeek"))}
+                    extra={
+                      <div role="group" aria-label={t("overview:daily.metric")}
+                        style={{ display: "flex", background: "var(--track)", borderRadius: 6, padding: 2, gap: 2 }}>
+                        {segBtn(t("overview:daily.tokens"), metric === "tokens", () => setMetric("tokens"))}
+                        {segBtn(t("overview:daily.cost"), metric === "cost", () => setMetric("cost"))}
+                      </div>
+                    } fill>
                     <div style={{ flex: 1, display: "flex", alignItems: "stretch", minHeight: 200 }}>
-                      <Bump bump={data.bump} locale={locale} label={t("overview:bump.aria")} />
+                      <DailyChart daily={data.daily} metric={metric} locale={locale}
+                        label={t("overview:daily.aria")} fmtTokens={fmtTokens} fmtCost={fmtCost} t={t}
+                        selectedDay={selectedDay} onPickDay={pickDay} />
+                    </div>
+                    <div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)", marginTop: 6 }}>
+                      {data.daily.tools.map(tl => (
+                        <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(tl) }} />{TOOL_NAME[tl] || tl}
+                        </span>
+                      ))}
                     </div>
                   </Card>
                 </div>
@@ -387,7 +473,8 @@ export default function Overview({ sessions = [], historyRows = [],
             <Card title={t("overview:heat.title")} sub={t("overview:heat.sub", { weeks: data.heatmap.weeks })}
               extra={<span style={{ fontSize: 11, color: "var(--tx4b)", ...num }}>{t("overview:heat.streak", { cur: data.kpis.streak.value, max: data.kpis.streak.longest })}</span>}>
               <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-                <Heatmap heatmap={data.heatmap} locale={locale} label={t("overview:heat.aria")} />
+                <Heatmap heatmap={data.heatmap} locale={locale} label={t("overview:heat.aria")}
+                  selectedDay={selectedDay} onPickDay={pickDay} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 11, color: "var(--tx4b)" }}>
                 <span>{t("overview:heat.less")}</span>
@@ -401,6 +488,10 @@ export default function Overview({ sessions = [], historyRows = [],
                 <div style={{ flex: 1 }} />
                 <span style={num}>{t("overview:heat.total", { n: fmtInt(data.heatmap.total) })}</span>
               </div>
+              {dayDetail && (
+                <DayDetail detail={dayDetail} locale={locale} t={t} fmtInt={fmtInt}
+                  fmtTokens={fmtTokens} fmtCost={fmtCost} onClose={() => setSelectedDay(null)} />
+              )}
             </Card>
 
             <Section title={t("overview:sec.tokens")} />
@@ -487,19 +578,14 @@ export default function Overview({ sessions = [], historyRows = [],
             <Section title={t("overview:sec.projects")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: "2 1 420px", minWidth: 0 }}>
-                <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")}
-                  extra={<div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)" }}>
-                    {TOOLS.map(tl => (
-                      <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                        <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(tl) }} />{TOOL_NAME[tl] || tl}
-                      </span>
-                    ))}
-                  </div>}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")} fill>
+                  {/* 行 flex:1 均摊高度,与右侧 Agent 对比卡等高时行距自适应 */}
+                  <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 9 }}>
                     {data.repos.map(r => {
                       const maxTotal = data.repos[0]?.total || 1;
                       return (
-                        <div key={r.name} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 10, alignItems: "center" }}>
+                        <div key={r.name} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 10,
+                          alignItems: "center", flex: 1 }}>
                           <span title={r.name} style={{ fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap",
                             overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
                           <div style={{ height: 7, background: "var(--track)", borderRadius: 4, overflow: "hidden", display: "flex" }}>
@@ -513,33 +599,49 @@ export default function Overview({ sessions = [], historyRows = [],
                       );
                     })}
                   </div>
+                  <div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)", marginTop: 12 }}>
+                    {TOOLS.map(tl => (
+                      <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(tl) }} />{TOOL_NAME[tl] || tl}
+                      </span>
+                    ))}
+                  </div>
                 </Card>
               </div>
 
               <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-                <Card title={t("overview:flow.title")} sub={t("overview:flow.sub")}>
-                  {data.flows.length ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                      {data.flows.map((f, i) => {
-                        const maxCount = data.flows[0]?.count || 1;
-                        return (
-                          <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center",
-                            padding: "7px 10px", borderRadius: 6, background: "var(--inset)", border: "1px solid var(--line6)" }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap" }}>
-                              <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(f.src) }} />{TOOL_NAME[f.src] || f.src}
-                              <span style={{ color: "var(--tx5)" }}>→</span>
-                              <i style={{ width: 8, height: 8, borderRadius: 2, background: toolColor(f.dst) }} />{TOOL_NAME[f.dst] || f.dst}
-                            </span>
-                            <div style={{ height: 5, background: "var(--track)", borderRadius: 3, overflow: "hidden" }}>
-                              <i style={{ display: "block", height: "100%", width: `${f.count / maxCount * 100}%`, background: "var(--accent)", opacity: 0.6 }} />
+                <Card title={t("overview:agents.title")}
+                  sub={t("overview:agents.sub", { range: t(`overview:scope.${scope}`) })} fill>
+                  {data.agentShare.length ? (
+                    <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+                      {data.agentShare.map((a, i) => (
+                        <div key={a.tool} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12,
+                          alignItems: "center", padding: "8px 0", flex: 1,
+                          borderTop: i ? "1px solid var(--line6)" : "none" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--tx2)", marginBottom: 5 }}>
+                              <ToolIcon tool={a.tool} size={16} />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{TOOL_NAME[a.tool] || a.tool}</span>
+                              <span style={{ fontSize: 11, color: "var(--tx4b)", ...num }}>{fmtTokens(a.tokens)}</span>
                             </div>
-                            <span style={{ fontSize: 12, fontWeight: 600, minWidth: 22, textAlign: "right", ...num }}>{f.count}</span>
+                            <div style={{ height: 6, background: "var(--track)", borderRadius: 3, overflow: "hidden" }}>
+                              <i style={{ display: "block", height: "100%", width: `${a.pct}%`, background: toolColor(a.tool) }} />
+                            </div>
                           </div>
-                        );
-                      })}
+                          <div style={{ textAlign: "right", minWidth: 74 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, ...num }}>{a.pct.toFixed(0)}%</div>
+                            {a.delta != null && (
+                              <div style={{ fontSize: 11, fontWeight: 500, ...num,
+                                color: a.delta >= 0 ? "var(--ok)" : "var(--err)" }}>
+                                {a.delta >= 0 ? "+" : "−"}{Math.abs(a.delta).toFixed(1)} {t("overview:agents.pp")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <div style={{ padding: "24px 8px", textAlign: "center", color: "var(--tx5)", fontSize: 12 }}>{t("overview:flow.empty")}</div>
+                    <div style={{ padding: "24px 8px", textAlign: "center", color: "var(--tx5)", fontSize: 12 }}>{t("overview:agents.empty")}</div>
                   )}
                 </Card>
               </div>

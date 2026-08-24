@@ -46,7 +46,6 @@ export function WorkspaceRouter({
       {view === "overview" && (
         <Overview
           sessions={sessions}
-          historyRows={historyRows}
           prices={pricing?.prices || {}}
           pricing={pricing}
           scanning={settings.scanning}
