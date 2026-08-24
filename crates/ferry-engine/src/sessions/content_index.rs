@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -36,6 +37,43 @@ const MAX_MATCH_ROWS: usize = 50_000;
 const SNIPPET_BEFORE: usize = 120;
 const SNIPPET_AFTER: usize = 240;
 const MATCHES_PER_SESSION: usize = 3;
+
+/// 后台构建的读+解析并行度；写仍是单线程（sqlite 连接只有一条）。
+fn build_workers() -> usize {
+    6.min(
+        std::thread::available_parallelism()
+            .map(|value| value.get())
+            .unwrap_or(4),
+    )
+}
+
+static BUILD_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(build_workers())
+        .thread_name(|index| format!("content-index-read-{index}"))
+        .build()
+        .expect("内容索引读取线程池必须可创建")
+});
+
+/// 一批（= 一个写事务）里最多多少个会话。批越大 fsync 越省，但持锁越久，
+/// 期间的检索会被阻塞，所以取一个能摊薄提交开销又不至于明显卡住查询的中间值。
+/// 已知代价：批量提交会跳过大量 FTS5 automerge，段更碎、索引比逐条提交大约
+/// 20%（本机 2039 会话实测 1.10 GB → 1.33 GB）。换来的是构建时间减半。
+const WRITE_BATCH_SESSIONS: usize = 48;
+/// 同一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
+const WRITE_BATCH_BYTES: i64 = 64 * 1024 * 1024;
+
+/// 后台构建耗时分解（纳秒）；只给 `examples/index_bench` 这类基准用。
+static PARSE_NANOS: AtomicU64 = AtomicU64::new(0);
+static WRITE_NANOS: AtomicU64 = AtomicU64::new(0);
+
+/// 返回 `(读+解析累计纳秒, sqlite 写入累计纳秒)`。
+pub fn build_timing() -> (u64, u64) {
+    (
+        PARSE_NANOS.load(Ordering::Relaxed),
+        WRITE_NANOS.load(Ordering::Relaxed),
+    )
+}
 
 const SCHEMA_SQL: &str = r#"
             CREATE TABLE IF NOT EXISTS indexed_sessions(
@@ -90,10 +128,49 @@ pub struct ContentHit {
     pub rows: Vec<Map<String, Value>>,
 }
 
+/// 以 `\n` 拼接、到 [`RECORD_TEXT_CAP`] 个字符即停手的累加器。
+///
+/// 语义与「先全量 join、再 `char_slice(0, CAP)`、再比字符总数」完全一致，但不会
+/// 为了取前 16 K 字符先把整段（可能是几 MB 的工具输出）拼出来再数一遍。
+#[derive(Default)]
+struct CappedText {
+    text: String,
+    chars: usize,
+    clipped: bool,
+    started: bool,
+}
+
+impl CappedText {
+    fn push(&mut self, piece: &str) {
+        if !self.started {
+            // 首段不加分隔符。
+            self.started = true;
+        } else if self.chars < RECORD_TEXT_CAP {
+            self.text.push('\n');
+            self.chars += 1;
+        } else {
+            // 已满：后面还有内容，就一定发生了截断。
+            self.clipped = true;
+            return;
+        }
+        let room = RECORD_TEXT_CAP - self.chars;
+        let mut taken = 0usize;
+        for character in piece.chars() {
+            if taken == room {
+                self.clipped = true;
+                return;
+            }
+            self.text.push(character);
+            taken += 1;
+        }
+        self.chars += taken;
+    }
+}
+
 /// 一条消息拆成正文列与工具输出列；第三个返回值是「有内容被 16 KB 截断」。
 fn extract(message: &Message) -> (String, String, bool) {
-    let mut texts: Vec<&str> = Vec::new();
-    let mut tools: Vec<String> = Vec::new();
+    let mut texts = CappedText::default();
+    let mut tools = CappedText::default();
     for block in &message.blocks {
         if block.kind == BlockKind::Text && !block.text.is_empty() {
             texts.push(&block.text);
@@ -101,22 +178,15 @@ fn extract(message: &Message) -> (String, String, bool) {
             let Some(call) = block.tool.as_ref() else {
                 continue;
             };
-            tools.push(format!("[tool {}]", call.name));
+            tools.push(&format!("[tool {}]", call.name));
             let output = tool_result_text(call.result.as_ref());
             if !output.is_empty() {
-                tools.push(output);
+                tools.push(&output);
             }
         }
     }
-    let text = texts.join("\n");
-    let tool_text = tools.join("\n");
-    let clipped =
-        text.chars().count() > RECORD_TEXT_CAP || tool_text.chars().count() > RECORD_TEXT_CAP;
-    (
-        char_slice(&text, 0, RECORD_TEXT_CAP),
-        char_slice(&tool_text, 0, RECORD_TEXT_CAP),
-        clipped,
-    )
+    let clipped = texts.clipped || tools.clipped;
+    (texts.text, tools.text, clipped)
 }
 
 struct RecordRow {
@@ -150,6 +220,32 @@ fn session_rows(session: &Session) -> Vec<RecordRow> {
         });
     }
     rows
+}
+
+/// 一个已解析、等待落库的会话。解析全程不碰数据库锁。
+struct ParsedSession {
+    record: IndexedSession,
+    rows: Vec<RecordRow>,
+    /// 读取失败：按当前 revision 记账，不空转重试。
+    failed: i64,
+}
+
+/// 读会话正文并切成待写行；不持有任何数据库锁，可并行调用。
+///
+/// 索引是批量后台读，不钉内容：读到比 revision 更新的内容无害，下轮 revision
+/// 变化会重新入队。
+fn parse_session(index: &Arc<AgentSessionIndex>, record: &IndexedSession) -> ParsedSession {
+    let started = Instant::now();
+    let (rows, failed) = match read_indexed_session(index, record, false) {
+        Ok(session) => (session_rows(&session), 0i64),
+        Err(_) => (Vec::new(), 1i64),
+    };
+    PARSE_NANOS.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
+    ParsedSession {
+        record: record.clone(),
+        rows,
+        failed,
+    }
 }
 
 fn like_pattern(needle: &str) -> String {
@@ -320,6 +416,15 @@ impl ContentIndex {
         }
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
+        // 这个库是**派生**索引：断电丢掉最后几个事务只是让那几个会话下轮重建，
+        // 不会有正确性损失，所以不值得为它每次提交都 fsync。
+        connection.pragma_update(None, "synchronous", "NORMAL")?;
+        // trigram FTS 的插入是随机写 b-tree，默认 2 MB 页缓存会把整批插入打成
+        // 随机 IO；给 64 MB 让一批的热页留在内存里。
+        connection.pragma_update(None, "cache_size", -65_536i64)?;
+        // 默认 1000 页（≈4 MB）就 checkpoint 一次，全量构建期间会反复把 WAL
+        // 灌回主库；放宽到 ≈64 MB 显著减少这类回写。
+        connection.pragma_update(None, "wal_autocheckpoint", 16_384i64)?;
         Self::ensure_schema(&connection)?;
         Ok(connection)
     }
@@ -393,18 +498,20 @@ impl ContentIndex {
             return Ok(status);
         }
         let stored = self.stored_revisions()?;
-        let mut current: Vec<SessionKey> = Vec::with_capacity(records.len());
+        // 用集合而不是 Vec 求差集：会话数上千时 `Vec::contains` 是 O(n²)。
+        let mut current: std::collections::HashSet<SessionKey> =
+            std::collections::HashSet::with_capacity(records.len());
         let mut pending: Vec<IndexedSession> = Vec::new();
         for record in records {
             let key = (record.tool.clone(), record.canonical_ref.clone());
-            current.push(key.clone());
             if stored.get(&key).map(String::as_str) != Some(record.revision.as_str()) {
                 pending.push(record.clone());
             }
+            current.insert(key);
         }
         let stale: Vec<SessionKey> = stored
             .keys()
-            .filter(|key| !current.contains(key))
+            .filter(|key| !current.contains(*key))
             .cloned()
             .collect();
         if !stale.is_empty() {
@@ -420,10 +527,19 @@ impl ContentIndex {
                 && pending.len() <= SYNC_SESSION_LIMIT
                 && total_bytes <= SYNC_BYTE_LIMIT
             {
-                for record in &pending {
-                    // 前台补完路径不吞 sqlite 错误（Python 的 `sync` 也不捕获）。
-                    self.index_session(index, record)?;
-                }
+                // 前台补完路径不吞 sqlite 错误（Python 的 `sync` 也不捕获）。
+                let parsed: Vec<ParsedSession> = if pending.len() == 1 {
+                    vec![parse_session(index, &pending[0])]
+                } else {
+                    BUILD_POOL.install(|| {
+                        use rayon::prelude::*;
+                        pending
+                            .par_iter()
+                            .map(|record| parse_session(index, record))
+                            .collect()
+                    })
+                };
+                self.write_batch(&parsed)?;
                 pending.clear();
             } else {
                 self.enqueue(index, &pending);
@@ -533,63 +649,67 @@ impl ContentIndex {
         Ok(())
     }
 
-    fn index_session(
-        &self,
-        index: &Arc<AgentSessionIndex>,
-        record: &IndexedSession,
-    ) -> DomainResult<()> {
-        // 解析在锁外做，大会话的读取不能阻塞并发查询。索引是批量后台读，
-        // 不钉内容：读到比 revision 更新的内容无害，下轮 revision 变化会重新入队。
-        let (rows, failed) = match read_indexed_session(index, record, false) {
-            Ok(session) => (session_rows(&session), 0i64),
-            // 读取失败按当前 revision 记账，不空转重试。
-            Err(_) => (Vec::new(), 1i64),
-        };
-        let clipped_rows: i64 = rows.iter().map(|row| row.clipped).sum();
+    /// 把一批已解析的会话写进一个事务。
+    ///
+    /// 批内每个会话的「删旧 + 插新 + 记账」在同一事务里，批中途失败整批回滚，
+    /// 落回未索引状态由下一轮 revision 对账重来，不会留下半个会话。
+    fn write_batch(&self, batch: &[ParsedSession]) -> DomainResult<()> {
+        if batch.is_empty() {
+            return Ok(());
+        }
+        let started = Instant::now();
         let indexed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|elapsed| elapsed.as_secs() as i64)
             .unwrap_or_default();
-        self.with_db(|connection| {
+        let outcome = self.with_db(|connection| {
             write_transaction(connection, |connection| {
-                connection.execute(
-                    "DELETE FROM records WHERE tool = ? AND ref = ?",
-                    rusqlite::params![record.tool, record.canonical_ref],
-                )?;
-                {
-                    let mut statement = connection.prepare(
-                        "INSERT INTO records(tool, ref, message, turn, role, text, tool_text, clipped)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                for parsed in batch {
+                    let record = &parsed.record;
+                    connection.execute(
+                        "DELETE FROM records WHERE tool = ? AND ref = ?",
+                        rusqlite::params![record.tool, record.canonical_ref],
                     )?;
-                    for row in &rows {
-                        statement.execute(rusqlite::params![
+                    {
+                        // prepare_cached：整批（乃至整次构建）复用同一份编译好的
+                        // 语句，避免每会话重新编译插入语句。
+                        let mut statement = connection.prepare_cached(
+                            "INSERT INTO records(tool, ref, message, turn, role, text, tool_text, clipped)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        )?;
+                        for row in &parsed.rows {
+                            statement.execute(rusqlite::params![
+                                record.tool,
+                                record.canonical_ref,
+                                row.message,
+                                row.turn,
+                                row.role,
+                                row.text,
+                                row.tool_text,
+                                row.clipped,
+                            ])?;
+                        }
+                    }
+                    let clipped_rows: i64 = parsed.rows.iter().map(|row| row.clipped).sum();
+                    connection.execute(
+                        "INSERT OR REPLACE INTO indexed_sessions(tool, ref, revision, record_rows,
+                         clipped_rows, failed, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        rusqlite::params![
                             record.tool,
                             record.canonical_ref,
-                            row.message,
-                            row.turn,
-                            row.role,
-                            row.text,
-                            row.tool_text,
-                            row.clipped,
-                        ])?;
-                    }
+                            record.revision,
+                            parsed.rows.len() as i64,
+                            clipped_rows,
+                            parsed.failed,
+                            indexed_at,
+                        ],
+                    )?;
                 }
-                connection.execute(
-                    "INSERT OR REPLACE INTO indexed_sessions(tool, ref, revision, record_rows,
-                     clipped_rows, failed, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    rusqlite::params![
-                        record.tool,
-                        record.canonical_ref,
-                        record.revision,
-                        rows.len() as i64,
-                        clipped_rows,
-                        failed,
-                        indexed_at,
-                    ],
-                )?;
                 Ok(())
             })
-        })?;
+        });
+        WRITE_NANOS.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        outcome?;
         Ok(())
     }
 
@@ -626,28 +746,55 @@ impl ContentIndex {
         }
     }
 
+    /// 取下一批待建会话（LIFO，与单条出队时同序）。
+    fn take_batch(&self) -> Option<Vec<IndexedSession>> {
+        let mut worker = self
+            .worker
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if worker.closed || worker.queued.is_empty() {
+            worker.running = false;
+            return None;
+        }
+        let mut batch = Vec::new();
+        let mut bytes = 0i64;
+        while batch.len() < WRITE_BATCH_SESSIONS && bytes < WRITE_BATCH_BYTES {
+            let Some((_, record)) = worker.queued.pop() else {
+                break;
+            };
+            bytes += record.row.get("size").and_then(Value::as_i64).unwrap_or(0);
+            batch.push(record);
+        }
+        Some(batch)
+    }
+
     fn drain(&self, index: &Arc<AgentSessionIndex>) {
         loop {
-            let next = {
-                let mut worker = self
-                    .worker
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                if worker.closed || worker.queued.is_empty() {
-                    worker.running = false;
-                    return;
-                }
-                worker.queued.pop().map(|(_, record)| record)
+            let Some(batch) = self.take_batch() else {
+                return;
             };
-            let Some(record) = next else {
+            if batch.is_empty() {
                 continue;
+            }
+            // 读+解析是纯 CPU/IO 混合负载且互不依赖，先并行做完；写仍串行，
+            // 一批一个事务。
+            let parsed: Vec<ParsedSession> = if batch.len() == 1 {
+                vec![parse_session(index, &batch[0])]
+            } else {
+                BUILD_POOL.install(|| {
+                    use rayon::prelude::*;
+                    batch
+                        .par_iter()
+                        .map(|record| parse_session(index, record))
+                        .collect()
+                })
             };
             // 后台构建吞掉 sqlite 错误并记日志（Python `_drain` 的
-            // `except sqlite3.Error`）：一条会话建不起来不能拖垮整条队列。
-            if let Err(error) = self.index_session(index, &record) {
+            // `except sqlite3.Error`）：一批建不起来不能拖垮整条队列。
+            if let Err(error) = self.write_batch(&parsed) {
                 crate::server::serve::log_warning(&format!(
-                    "内容索引后台构建失败: {} {}",
-                    record.canonical_ref,
+                    "内容索引后台构建失败: {} 条会话 {}",
+                    parsed.len(),
                     error.message()
                 ));
             }
@@ -725,10 +872,15 @@ impl ContentIndex {
                 let matched: Vec<SessionKey> = rows.collect::<rusqlite::Result<_>>()?;
                 candidates = Some(match candidates {
                     None => matched,
-                    Some(previous) => previous
-                        .into_iter()
-                        .filter(|key| matched.contains(key))
-                        .collect(),
+                    Some(previous) => {
+                        // 交集走集合：候选上千时逐条 `Vec::contains` 是 O(n²)。
+                        let matched: std::collections::HashSet<SessionKey> =
+                            matched.into_iter().collect();
+                        previous
+                            .into_iter()
+                            .filter(|key| matched.contains(key))
+                            .collect()
+                    }
                 });
                 if candidates.as_ref().is_some_and(Vec::is_empty) {
                     break;
@@ -1119,6 +1271,35 @@ mod tests {
         let mut short = Message::new("user");
         short.blocks.push(Block::text("hi"));
         assert_eq!(extract(&short), ("hi".into(), String::new(), false));
+
+        // 增量截断与「先全量 join 再切」等价：多段拼接含分隔符，恰好填满不算截断。
+        let mut exact = Message::new("user");
+        exact.blocks.push(Block::text("a".repeat(RECORD_TEXT_CAP)));
+        let (text, _, clipped) = extract(&exact);
+        assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
+        assert!(!clipped);
+
+        let mut joined = Message::new("user");
+        joined.blocks.push(Block::text("ab"));
+        joined.blocks.push(Block::text("cd"));
+        assert_eq!(extract(&joined).0, "ab\ncd");
+
+        // 分隔符本身把长度顶过上限时也要记成截断。
+        let mut spill = Message::new("user");
+        spill
+            .blocks
+            .push(Block::text("a".repeat(RECORD_TEXT_CAP - 1)));
+        spill.blocks.push(Block::text("b"));
+        let (text, _, clipped) = extract(&spill);
+        assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
+        assert!(clipped);
+
+        // 多字节字符按字符计，不按字节。
+        let mut wide = Message::new("user");
+        wide.blocks.push(Block::text("中".repeat(RECORD_TEXT_CAP + 5)));
+        let (text, _, clipped) = extract(&wide);
+        assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
+        assert!(clipped);
     }
 
     #[test]

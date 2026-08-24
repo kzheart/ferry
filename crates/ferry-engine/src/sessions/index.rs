@@ -643,9 +643,14 @@ impl AgentSessionIndex {
                 let adapter = self.ports.adapter(name)?;
                 let source_path = Value::from(adapter.manifest.source_path.as_str());
                 TRACKER.start_tool(name);
+                let tool_started = std::time::Instant::now();
                 let scan_result = adapter
                     .require_browser()
                     .and_then(|browser| browser.scan(cache.as_ref()));
+                crate::server::serve::log_info(&format!(
+                    "扫库 {name}: {:.2}s",
+                    tool_started.elapsed().as_secs_f64()
+                ));
                 let mut status = Map::new();
                 match scan_result {
                     Ok(rows) => {
