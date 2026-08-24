@@ -157,6 +157,11 @@ pub(super) fn create_cli_link(link: &Path, target: &Path) -> Result<(), String> 
     std::os::unix::fs::symlink(target, link).map_err(|error| format!("创建 CLI 入口失败: {error}"))
 }
 
+pub(super) fn create_directory_link(link: &Path, target: &Path) -> Result<(), String> {
+    std::os::unix::fs::symlink(target, link)
+        .map_err(|error| format!("创建目录链接 {} 失败: {error}", link.display()))
+}
+
 pub(super) fn process_alive(pid: u32) -> bool {
     // signal 0 只做权限与存在性检查,不投递信号。
     unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }

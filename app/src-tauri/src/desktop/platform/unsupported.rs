@@ -27,6 +27,10 @@ pub(super) fn create_cli_link(_link: &Path, _target: &Path) -> Result<(), String
     Err("当前平台尚未实现命令行工具安装".to_owned())
 }
 
+pub(super) fn create_directory_link(_link: &Path, _target: &Path) -> Result<(), String> {
+    Err("当前平台尚未实现 skill 目录链接".to_owned())
+}
+
 pub(super) fn process_alive(_pid: u32) -> bool {
     false
 }

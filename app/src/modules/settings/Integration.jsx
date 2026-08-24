@@ -1,5 +1,6 @@
 // Agent 集成:把 Ferry 的能力接到用户电脑上的 coding agent 上。
 // 两个分区各管一件事——PATH 里的 ferry 命令、共享技能目录里的 Ferry skill。
+// Claude Code 不扫描共享目录,宿主会同时在它的原生目录补受管理的 symlink。
 // 页面本身不认识任何路径:目标只用 id 指代,路径由宿主算好带回来。
 //
 // 反馈全部锚在操作点:每行只有一个 StateButton,它同时是状态显示、进度和结果。
@@ -79,7 +80,7 @@ function CliSection({ cli, onInstall, onUninstall, t }) {
   );
 }
 
-/** 安装目标只有一个:共享技能目录,各 coding agent 都读它。 */
+/** 安装真身只有一个;不读共享目录的 Agent 入口由宿主透明补齐。 */
 function SkillRow({ target, bundledVersion, onInstall, onRemove, t }) {
   const updatable = target.installed && !!bundledVersion
     && target.installed_version !== bundledVersion;

@@ -334,7 +334,7 @@
       "groupTitle": "Skill 安装",
       "groupDesc": "随 App 打包 v{{version}}",
       "rowTitle": "Skill",
-      "groupHint": "装到 ~/.agents/skills,Claude Code、Codex、OpenCode 等会共同读取;包含 ferry 与 ferry-resume 两个 skill。",
+      "groupHint": "真身装到 ~/.agents/skills;Codex、OpenCode、Pi、Grok 与 Cursor 直接读取,并自动链接到 Claude Code 的 ~/.claude/skills。包含 ferry 与 ferry-resume 两个 skill。",
       "stateNotInstalled": "未安装",
       "stateInstalled": "已安装 v{{version}}",
       "stateInstalledUnknown": "已安装",

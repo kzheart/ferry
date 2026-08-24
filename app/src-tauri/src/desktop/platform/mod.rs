@@ -81,6 +81,11 @@ pub(crate) fn create_cli_link(link: &Path, target: &Path) -> Result<(), String> 
     imp::create_cli_link(link, target)
 }
 
+/// 建立一个指向目录的符号链接。冲突判断由调用方完成,平台层不覆盖已有项。
+pub(crate) fn create_directory_link(link: &Path, target: &Path) -> Result<(), String> {
+    imp::create_directory_link(link, target)
+}
+
 /// 进程是否还活着。只探测,不发真实信号。
 pub(crate) fn process_alive(pid: u32) -> bool {
     imp::process_alive(pid)

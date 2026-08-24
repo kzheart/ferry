@@ -131,9 +131,8 @@ fallback.
 ### Use Ferry from Your Coding Agent (CLI + Skill)
 
 **Install**: Settings → **Agent integration** → one click installs the `ferry` command
-and the skills (into `~/.agents/skills`, read by Claude Code, Codex, OpenCode and others;
-it contains both `ferry` and `ferry-resume`). No sudo required, and the command keeps
-working when the desktop app isn't running.
+and its companion skills. No sudo required, and the command keeps working when the desktop
+app isn't running.
 
 The `ferry` command lets agents search, read in pages, migrate sessions, and check usage;
 the skill teaches them when to use it, how to read, and what needs your approval first

@@ -1,7 +1,8 @@
 //! 设置页「Agent 集成」的宿主侧实现。
 //!
 //! 三件事:把引擎二进制暴露成 PATH 里的 `ferry`、把打包的 Ferry skill 装进共享技能
-//! 目录、读引擎锁文件报服务状态。路径一律由宿主按契约算出,webview 只传目标 id。
+//! 目录并补齐不读取共享目录的 Agent 入口、读引擎锁文件报服务状态。路径一律由宿主
+//! 按契约算出,webview 只传目标 id。
 //!
 //! 方向上与 Runtime 的 skill *导入*正好相反:那边把别人的技能读进 Ferry 库,这边把
 //! Ferry 自己的技能写进别人的目录。两条路径不共用代码。
@@ -11,7 +12,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 use super::{host_settings, platform};
-use crate::contracts::agents::SHARED_SKILL_PATHS;
+use crate::contracts::agents::{AGENT_SKILL_PATHS, SHARED_SKILL_PATHS};
 use crate::engine::daemon::{self, DaemonError};
 use crate::process::command::sidecar_candidates;
 
@@ -22,9 +23,12 @@ use crate::process::command::sidecar_candidates;
 /// 来说只有「Ferry 的技能装没装」这一件事,所以设置页只有一行,状态取组里
 /// 最差的那个(未安装 > 有新版本 > 已安装)。
 const BUNDLED_SKILLS: &[&str] = &["ferry", "ferry-resume"];
-/// 唯一的安装目标——共享技能目录(`~/.agents/skills`)。Claude Code / Codex /
-/// OpenCode 等都会读它,所以设置页只需要一个目标、一个按钮。
+/// 唯一的安装真身——共享技能目录(`~/.agents/skills`)。大多数 Agent 直接读它;
+/// Claude Code 这类只认自己目录的客户端由 [`skill_link_targets`] 补 symlink。
 const SHARED_TARGET_ID: &str = "shared";
+/// 当前支持列表里只有 Claude Code 不读 `~/.agents/skills`。这里保留 agent id 而不是
+/// 硬编码路径,具体入口仍来自生成契约的 `skill_paths`。
+const LINKED_SKILL_AGENTS: &[&str] = &["claude"];
 
 #[derive(Serialize)]
 pub(crate) struct CliStatus {
@@ -143,6 +147,22 @@ fn skill_target() -> Result<SkillTarget, String> {
     })
 }
 
+/// 不读取共享仓库的 Agent 原生技能目录。只为明确列入 [`LINKED_SKILL_AGENTS`] 的
+/// 客户端建入口,避免 Codex/OpenCode 等重复发现同名技能。
+fn skill_link_targets() -> Result<Vec<PathBuf>, String> {
+    let mut targets = Vec::new();
+    for agent_id in LINKED_SKILL_AGENTS {
+        let paths = AGENT_SKILL_PATHS
+            .iter()
+            .find_map(|(id, paths)| (*id == *agent_id).then_some(*paths))
+            .ok_or_else(|| format!("契约里没有 {agent_id} 的 skill 路径"))?;
+        for raw in paths {
+            targets.push(expand_home(raw)?);
+        }
+    }
+    Ok(targets)
+}
+
 /// 打包资源里的一个 skill 源目录;开发模式(无打包资源)回退到仓库路径。
 fn bundled_skill_dir(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     if let Ok(resource_dir) = app.path().resource_dir() {
@@ -256,14 +276,22 @@ fn cli_status(app: &AppHandle) -> CliStatus {
     }
 }
 
-/// 目标目录的组状态:整组都在才算已安装,版本取组里最小的那个。
-fn skill_target_status(target: &SkillTarget) -> SkillTargetStatus {
+/// 目标目录的组状态:共享真身和所有必要的 Agent 链接都正确才算已安装。
+fn skill_target_status(target: &SkillTarget, link_targets: &[PathBuf]) -> SkillTargetStatus {
     let dirs: Vec<PathBuf> = BUNDLED_SKILLS
         .iter()
         .map(|name| target.path.join(name))
         .collect();
-    // is_dir 走 stat 语义:目标目录本身或其中的 skill 目录是 symlink 时按解析后的真实路径判断。
-    let installed = dirs.iter().all(|dir| dir.is_dir());
+    let links_ready = link_targets.iter().all(|link_root| {
+        BUNDLED_SKILLS.iter().all(|name| {
+            let source = target.path.join(name);
+            let link = link_root.join(name);
+            std::fs::symlink_metadata(&link)
+                .map(|meta| meta.file_type().is_symlink() && same_target(&link, &source))
+                .unwrap_or(false)
+        })
+    });
+    let installed = dirs.iter().all(|dir| dir.is_dir()) && links_ready;
     // 组里任一份读不出版本就整体报 None(前端显示「已安装」但版本未知);
     // 都读得出时取最小值,漏更新的那一份因此会让这一行显示「有新版本」。
     let installed_version = installed
@@ -335,6 +363,92 @@ fn install_skill_group(sources: &[PathBuf], target_dir: &Path) -> Result<Vec<Pat
         .collect()
 }
 
+/// 在 Agent 原生目录创建指向共享真身的入口。只覆盖两类安全对象:
+/// 1. 已经指向同一真身的链接;2. 断掉的 symlink。真实目录、文件或指向别处的链接都
+/// 视为用户资产,拒绝覆盖。
+fn install_skill_links(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<(), String> {
+    for link_root in link_targets {
+        std::fs::create_dir_all(link_root)
+            .map_err(|error| format!("创建 {} 失败: {error}", link_root.display()))?;
+        for name in BUNDLED_SKILLS {
+            let source = shared_dir.join(name);
+            let link = link_root.join(name);
+            match std::fs::symlink_metadata(&link) {
+                Ok(meta) if meta.file_type().is_symlink() => {
+                    if same_target(&link, &source) {
+                        continue;
+                    }
+                    if link.exists() {
+                        return Err(format!(
+                            "{} 已链接到其他位置,为避免覆盖已停止安装",
+                            link.display()
+                        ));
+                    }
+                    std::fs::remove_file(&link).map_err(|error| {
+                        format!("移除断开的链接 {} 失败: {error}", link.display())
+                    })?;
+                }
+                Ok(_) => {
+                    return Err(format!(
+                        "{} 已存在且不是 Ferry 管理的链接,为避免覆盖已停止安装",
+                        link.display()
+                    ));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(format!("检查 {} 失败: {error}", link.display()));
+                }
+            }
+            platform::create_directory_link(&link, &source)?;
+        }
+    }
+    Ok(())
+}
+
+/// 写共享真身前先做一遍只读冲突检查,避免 Agent 入口冲突时共享副本已经被更新一半。
+fn validate_skill_link_slots(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<(), String> {
+    for link_root in link_targets {
+        for name in BUNDLED_SKILLS {
+            let source = shared_dir.join(name);
+            let link = link_root.join(name);
+            let Ok(meta) = std::fs::symlink_metadata(&link) else {
+                continue;
+            };
+            if !meta.file_type().is_symlink() {
+                return Err(format!(
+                    "{} 已存在且不是 Ferry 管理的链接,为避免覆盖已停止安装",
+                    link.display()
+                ));
+            }
+            if link.exists() && !same_target(&link, &source) {
+                return Err(format!(
+                    "{} 已链接到其他位置,为避免覆盖已停止安装",
+                    link.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 只摘掉确实指向 Ferry 共享真身的链接;冲突项与用户目录原样保留。
+fn remove_skill_links(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<(), String> {
+    for link_root in link_targets {
+        for name in BUNDLED_SKILLS {
+            let source = shared_dir.join(name);
+            let link = link_root.join(name);
+            let Ok(meta) = std::fs::symlink_metadata(&link) else {
+                continue;
+            };
+            if meta.file_type().is_symlink() && same_target(&link, &source) {
+                std::fs::remove_file(&link)
+                    .map_err(|error| format!("移除 skill 入口 {} 失败: {error}", link.display()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// 成组移除:只删 Ferry 自己装的那几个目录,同目录下别人的技能不碰。
 fn remove_skill_group(target_dir: &Path) -> Result<(), String> {
     for name in BUNDLED_SKILLS {
@@ -390,9 +504,11 @@ fn service_status(
 #[tauri::command]
 pub(crate) async fn integration_status(app: AppHandle) -> Result<IntegrationStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let target = skill_target()?;
+        let link_targets = skill_link_targets()?;
         Ok(IntegrationStatus {
             cli: cli_status(&app),
-            skills: vec![skill_target_status(&skill_target()?)],
+            skills: vec![skill_target_status(&target, &link_targets)],
             bundled_version: bundled_group_version(&app),
         })
     })
@@ -432,7 +548,10 @@ pub(crate) async fn skill_install(app: AppHandle, target_id: String) -> Result<(
     tauri::async_runtime::spawn_blocking(move || {
         let target = find_target(&target_id)?;
         let sources = bundled_skill_dirs(&app)?;
-        install_skill_group(&sources, &target.path).map(|_| ())
+        let link_targets = skill_link_targets()?;
+        validate_skill_link_slots(&target.path, &link_targets)?;
+        install_skill_group(&sources, &target.path)?;
+        install_skill_links(&target.path, &link_targets)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -442,6 +561,8 @@ pub(crate) async fn skill_install(app: AppHandle, target_id: String) -> Result<(
 pub(crate) async fn skill_uninstall(target_id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let target = find_target(&target_id)?;
+        let link_targets = skill_link_targets()?;
+        remove_skill_links(&target.path, &link_targets)?;
         remove_skill_group(&target.path)
     })
     .await

@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{
     copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
-    parse_engine_lock, parse_skill_version, points_to_ferry_engine, remove_skill_dir,
-    remove_skill_group, service_status, skill_target, skill_target_status, skill_version_at,
-    SkillTarget, BUNDLED_SKILLS, SHARED_TARGET_ID,
+    install_skill_links, parse_engine_lock, parse_skill_version, points_to_ferry_engine,
+    remove_skill_dir, remove_skill_group, remove_skill_links, service_status, skill_link_targets,
+    skill_target, skill_target_status, skill_version_at, validate_skill_link_slots, SkillTarget,
+    BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
 // 只有 symlink 用例用到它,Windows 下不 cfg 掉会触发 -D unused-imports。
 #[cfg(unix)]
@@ -182,7 +183,7 @@ fn the_bundled_skills_are_installed_and_removed_as_one_group() {
         id: SHARED_TARGET_ID.to_owned(),
         path: target_dir.clone(),
     };
-    let status = skill_target_status(&target);
+    let status = skill_target_status(&target, &[]);
     assert!(status.installed);
     assert_eq!(status.installed_version.as_deref(), Some("0.7.0"));
 
@@ -190,7 +191,7 @@ fn the_bundled_skills_are_installed_and_removed_as_one_group() {
     remove_skill_dir(&target_dir.join(BUNDLED_SKILLS[1])).expect("摘掉其中一份");
     // 单个目录已经不在了再删一次也不该报错(前端可能重复点)。
     remove_skill_dir(&target_dir.join(BUNDLED_SKILLS[1])).expect("重复摘除");
-    let partial = skill_target_status(&target);
+    let partial = skill_target_status(&target, &[]);
     assert!(!partial.installed);
     assert!(partial.installed_version.is_none());
 
@@ -198,7 +199,9 @@ fn the_bundled_skills_are_installed_and_removed_as_one_group() {
     install_skill_group(&skill_group(&scratch, "0.6.0"), &target_dir).expect("装一份旧的");
     install_skill_into(&skill_group(&scratch, "0.9.0")[0], &target_dir).expect("只更新第一份");
     assert_eq!(
-        skill_target_status(&target).installed_version.as_deref(),
+        skill_target_status(&target, &[])
+            .installed_version
+            .as_deref(),
         Some("0.6.0")
     );
 
@@ -219,12 +222,12 @@ fn a_target_without_the_skill_reports_no_version() {
         id: SHARED_TARGET_ID.to_owned(),
         path: scratch.join("agents/skills"),
     };
-    let status = skill_target_status(&target);
+    let status = skill_target_status(&target, &[]);
     assert!(!status.installed);
     assert!(status.installed_version.is_none());
 }
 
-/// 安装目标只有一个:契约里的共享技能目录。各 agent 都读它,不再按 agent 分行。
+/// 安装真身只有一个;Claude 的原生入口来自契约,不作为第二个设置页目标。
 #[test]
 fn the_only_target_is_the_shared_skill_directory() {
     let target = skill_target().expect("目标");
@@ -237,6 +240,80 @@ fn the_only_target_is_the_shared_skill_directory() {
         target.path
     );
     assert!(find_target("claude").is_err());
+    let links = skill_link_targets().expect("Claude 链接目标");
+    assert_eq!(links.len(), 1);
+    assert!(links[0].ends_with(".claude/skills"));
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_links_point_to_the_shared_skill_group_and_count_toward_status() {
+    let scratch = Scratch::new("claude-links");
+    let shared = scratch.join(".agents/skills");
+    let claude = scratch.join(".claude/skills");
+    install_skill_group(&skill_group(&scratch, "0.8.0"), &shared).expect("安装真身");
+    install_skill_links(&shared, std::slice::from_ref(&claude)).expect("创建 Claude 入口");
+
+    for name in BUNDLED_SKILLS {
+        let link = claude.join(name);
+        assert!(std::fs::symlink_metadata(&link)
+            .expect("入口元数据")
+            .file_type()
+            .is_symlink());
+        assert!(same_target(&link, &shared.join(name)));
+    }
+
+    let target = SkillTarget {
+        id: SHARED_TARGET_ID.to_owned(),
+        path: shared.clone(),
+    };
+    assert!(skill_target_status(&target, std::slice::from_ref(&claude)).installed);
+
+    remove_skill_links(&shared, std::slice::from_ref(&claude)).expect("移除 Claude 入口");
+    assert!(!skill_target_status(&target, &[claude]).installed);
+    assert!(shared.join("ferry/SKILL.md").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_link_install_refuses_to_overwrite_user_owned_entries() {
+    let scratch = Scratch::new("claude-link-conflict");
+    let shared = scratch.join(".agents/skills");
+    let claude = scratch.join(".claude/skills");
+    install_skill_group(&skill_group(&scratch, "0.8.0"), &shared).expect("安装真身");
+
+    write(
+        &claude.join("ferry-resume/SKILL.md"),
+        "---\nname: ferry-resume\nversion: user\n---\n",
+    );
+    let error = validate_skill_link_slots(&shared, &[claude.clone()]).expect_err("必须拒绝冲突");
+    assert!(error.contains("不是 Ferry 管理的链接"));
+    assert_eq!(
+        skill_version_at(&claude.join("ferry-resume")).as_deref(),
+        Some("user")
+    );
+    assert!(!claude.join("ferry").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn claude_link_install_repairs_broken_links_but_not_links_to_other_targets() {
+    let scratch = Scratch::new("claude-link-repair");
+    let shared = scratch.join(".agents/skills");
+    let claude = scratch.join(".claude/skills");
+    install_skill_group(&skill_group(&scratch, "0.8.0"), &shared).expect("安装真身");
+    std::fs::create_dir_all(&claude).expect("创建 Claude 目录");
+    std::os::unix::fs::symlink(scratch.join("missing"), claude.join("ferry")).expect("创建断链");
+
+    install_skill_links(&shared, &[claude.clone()]).expect("修复断链");
+    assert!(same_target(&claude.join("ferry"), &shared.join("ferry")));
+
+    remove_skill_links(&shared, &[claude.clone()]).expect("先摘 Ferry 链接");
+    let other = scratch.join("other");
+    std::fs::create_dir_all(&other).expect("创建其他目标");
+    std::os::unix::fs::symlink(&other, claude.join("ferry")).expect("创建冲突链接");
+    let error = install_skill_links(&shared, &[claude]).expect_err("不得覆盖其他链接");
+    assert!(error.contains("已链接到其他位置"));
 }
 
 #[test]

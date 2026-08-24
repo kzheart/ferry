@@ -334,7 +334,7 @@
       "groupTitle": "Skill installation",
       "groupDesc": "Bundled v{{version}}",
       "rowTitle": "Skill",
-      "groupHint": "Installs into ~/.agents/skills, which Claude Code, Codex, OpenCode and others all read; it contains both the ferry and ferry-resume skills.",
+      "groupHint": "Installs the source of truth into ~/.agents/skills, read directly by Codex, OpenCode, Pi, Grok and Cursor, and links it into Claude Code's ~/.claude/skills. Includes ferry and ferry-resume.",
       "stateNotInstalled": "Not installed",
       "stateInstalled": "Installed v{{version}}",
       "stateInstalledUnknown": "Installed",

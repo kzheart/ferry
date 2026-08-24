@@ -122,8 +122,7 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 
 ### 在 Coding Agent 里使用 Ferry（CLI + Skill）
 
-**安装**：设置 → **Agent 集成** → 一键安装 `ferry` 命令和 skill（装到 `~/.agents/skills`，
-Claude Code、Codex、OpenCode 等共同读取，包含 `ferry` 与 `ferry-resume` 两个 skill）。
+**安装**：设置 → **Agent 集成** → 一键安装 `ferry` 命令和配套 skill。
 无需 sudo；桌面 App 不在运行时命令也照常可用。
 
 `ferry` 命令让 Agent 能检索、分页阅读、迁移会话和查看用量；skill 负责教它什么时候用、

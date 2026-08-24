@@ -677,6 +677,7 @@ def rust_const_str_slice(name: str, values: list[str]) -> list[str]:
 def rust(agents: list[dict[str, object]]) -> str:
     executables = [executable for agent in agents for executable in agent["executables"]]
     capability_rows = []
+    skill_path_rows = []
     for agent in agents:
         inline = ", ".join(f'"{capability}"' for capability in agent["capabilities"])
         single = f'    ("{agent["id"]}", &[{inline}]),'
@@ -695,6 +696,9 @@ def rust(agents: list[dict[str, object]]) -> str:
             *nested,
             "    ),",
         ))
+    for agent in agents:
+        paths = ", ".join(f'"{path}"' for path in agent["skill_paths"])
+        skill_path_rows.append(f'    ("{agent["id"]}", &[{paths}]),')
     return "\n".join((
         "// 此文件由 scripts/generate-contracts.py 生成，请勿手改。",
         *rust_const_str_slice("AGENT_IDS", [agent["id"] for agent in agents]),
@@ -702,6 +706,9 @@ def rust(agents: list[dict[str, object]]) -> str:
         *capability_rows,
         "];",
         *rust_const_str_slice("ALLOWED_EXECUTABLES", executables),
+        "pub(crate) const AGENT_SKILL_PATHS: &[(&str, &[&str])] = &[",
+        *skill_path_rows,
+        "];",
         *rust_const_str_slice("SHARED_SKILL_PATHS", load_shared_skill_paths()),
         "",
     ))

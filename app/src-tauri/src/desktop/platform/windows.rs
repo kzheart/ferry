@@ -23,6 +23,10 @@ pub(super) fn create_cli_link(_link: &Path, _target: &Path) -> Result<(), String
     Err("Windows 命令行工具安装尚未实现".to_owned())
 }
 
+pub(super) fn create_directory_link(_link: &Path, _target: &Path) -> Result<(), String> {
+    Err("Windows skill 目录链接尚未实现".to_owned())
+}
+
 /// 进程存活探测需要 OpenProcess/GetExitCodeProcess,尚未实现;
 /// 一律当作「不在运行」,引擎服务分区因此只会显示未运行,不会误报。
 pub(super) fn process_alive(_pid: u32) -> bool {

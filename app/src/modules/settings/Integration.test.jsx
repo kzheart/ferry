@@ -131,7 +131,7 @@ test("宿主报错时展示错误文本", async () => {
   expect(screen.getByRole("alert").textContent).toContain("Permission denied");
 });
 
-test("skill 只有共享技能目录一行,并说清各 agent 共读", async () => {
+test("skill 只有共享真身一行,Agent 原生入口由宿主处理", async () => {
   await mount();
   expect(screen.getByText("settings:integration.skills.rowTitle")).toBeTruthy();
   expect(screen.getByText("/home/u/.agents/skills")).toBeTruthy();
