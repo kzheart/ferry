@@ -1,16 +1,12 @@
 //! Cursor 的 SQLite 边界。
 //!
-//! Cursor 全部会话住在一个 `state.vscdb` 里（本机 1.9 GB），且 IDE 在运行时持续
-//! 以 WAL 写入。浏览路径**只读**：连接固定 `mode=ro` + `query_only`，从不 VACUUM、
-//! 不加写锁、不落任何文件到 Cursor 的目录。
+//! Cursor 全部会话住在一个 `state.vscdb` 里（本机可到 1.9 GB），且 IDE 在运行时
+//! 持续以 WAL 写入。Ferry 对它**只读**：连接固定 `mode=ro` + `query_only`，从不
+//! VACUUM、不加写锁、不落任何文件到 Cursor 的目录。
 //!
 //! 不用 `immutable=1`：那会让 SQLite 忽略 WAL，读到过期快照。
-//!
-//! 迁移写入路径（[`open_writable`]）是唯一的例外：它只**新增**本次迁移自己生成的
-//! 键，从不改写 Cursor 已有的行，且必须先过 [`ensure_offline`] 这道门——Cursor
-//! 在运行时会用内存态覆盖磁盘，写进去的会话会被它悄悄抹掉。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 
@@ -18,8 +14,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 
 use crate::errors::{DomainError, DomainResult};
-use crate::system::paths::{cursor_database_path, home_dir, process_environ, Environ, OsFamily};
-use crate::system::probes;
+use crate::system::paths::{cursor_database_path, home_dir, process_environ, OsFamily};
 
 /// Ferry 当前支持的 Cursor 表结构。
 ///
@@ -57,108 +52,6 @@ pub fn database_path() -> PathBuf {
 /// 覆盖 [`database_path`]；`None` 恢复按环境解析。
 pub fn set_database_path_override(path: Option<PathBuf>) {
     *DB_PATH_OVERRIDE.write().expect("库路径覆盖锁中毒") = path;
-}
-
-/// 不含任何覆盖的平台默认库位置。
-///
-/// `FERRY_CURSOR_DB` 与测试覆盖都会把库指到别处；那种库不是「运行中的 Cursor
-/// 正在写的那一个」，因此 [`ensure_offline`] 只对本函数返回的位置设防。
-fn default_database_path() -> PathBuf {
-    let mut environ: Environ = process_environ();
-    environ.remove("FERRY_CURSOR_DB");
-    cursor_database_path(OsFamily::current(), &environ, &home_dir())
-}
-
-/// 列出当前进程名的命令；Windows 用 `tasklist`，其余平台用 `ps`。
-fn process_listing_argv() -> Vec<String> {
-    let argv: &[&str] = if cfg!(windows) {
-        &["tasklist", "/fo", "csv", "/nh"]
-    } else {
-        &["ps", "-A", "-o", "comm="]
-    };
-    argv.iter().map(|part| (*part).to_string()).collect()
-}
-
-/// 一行进程清单是否指向 Cursor 桌面端本体。
-///
-/// 只认可执行文件本体，不认 `cursor` CLI 转发器与 `cursor-agent`：前者是一闪而过
-/// 的启动器，后者是另一个产品，都不会写这个库。
-fn is_cursor_process(line: &str) -> bool {
-    let line = line.trim().trim_matches('"');
-    if line.is_empty() {
-        return false;
-    }
-    // macOS：/Applications/Cursor.app/Contents/MacOS/Cursor（含 Helper 进程）。
-    if line.contains("Cursor.app/") {
-        return true;
-    }
-    let name = line.rsplit(['/', '\\']).next().unwrap_or(line);
-    // Linux：/usr/share/cursor/cursor；Windows：Cursor.exe。
-    name.eq_ignore_ascii_case("cursor.exe") || (name == "cursor" && line.contains('/'))
-}
-
-/// 迁移写入前的门禁：Cursor 必须已完全退出。
-///
-/// 探测失败（`ps` 不可用、超时）按「没在跑」处理：宁可让用户自己确认，也不要因为
-/// 一条取不到的进程清单把整条迁移路径堵死。
-pub fn ensure_offline() -> DomainResult<()> {
-    if database_path() != default_database_path() {
-        return Ok(());
-    }
-    let Ok(output) = probes::run(
-        &process_listing_argv(),
-        None,
-        Duration::from_secs(5),
-        Some(&[]),
-    ) else {
-        return Ok(());
-    };
-    if output.returncode != Some(0) || !output.stdout.lines().any(is_cursor_process) {
-        return Ok(());
-    }
-    Err(DomainError::session_store_unavailable(
-        "cursor",
-        "Cursor 正在运行：请先完全退出 Cursor 再迁入，否则它会用内存态覆盖写入的会话",
-    ))
-}
-
-/// 读写打开并校验结构；写入路径专用。
-///
-/// 不做整库备份：Cursor 的 `state.vscdb` 在本机是 1.9 GB，复制一份既慢又可能撑爆
-/// 磁盘。写入只 INSERT 本次迁移新生成的键，回滚由 lifecycle 精确删除同一批键完成。
-pub fn open_writable() -> DomainResult<Connection> {
-    let path = database_path();
-    if !path.exists() {
-        return Err(DomainError::session_store_unavailable(
-            "cursor",
-            &format!("数据库不存在: {}", path.display()),
-        ));
-    }
-    reject_symlink(&path)?;
-    let connection = Connection::open(&path).map_err(|error| {
-        DomainError::session_store_unavailable("cursor", &format!("数据库不可写入: {error}"))
-    })?;
-    connection
-        .busy_timeout(Duration::from_secs(10))
-        .map_err(|error| {
-            DomainError::session_store_unavailable("cursor", &format!("设置超时失败: {error}"))
-        })?;
-    validate_schema(&connection)?;
-    Ok(connection)
-}
-
-/// 库路径是符号链接时拒写：Cursor 自己不会这么放，出现即可疑。
-fn reject_symlink(path: &Path) -> DomainResult<()> {
-    let is_link = std::fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_type().is_symlink())
-        .unwrap_or(false);
-    if is_link {
-        return Err(DomainError::session_store_unavailable(
-            "cursor",
-            &format!("数据库是符号链接，拒绝写入: {}", path.display()),
-        ));
-    }
-    Ok(())
 }
 
 /// 只读打开，不校验结构（扫描路径用：库缺失/损坏只让 cursor 一栏空着）。
@@ -386,77 +279,5 @@ pub(crate) mod tests {
         let error = open_database().unwrap_err();
         set_database_path_override(None);
         assert_eq!(error.code, "session.store_unavailable");
-    }
-
-    #[test]
-    fn only_the_desktop_binary_counts_as_a_running_cursor() {
-        for line in [
-            "/Applications/Cursor.app/Contents/MacOS/Cursor",
-            "/Applications/Cursor.app/Contents/Frameworks/Cursor Helper (Renderer).app/Contents/MacOS/Cursor Helper (Renderer)",
-            "/usr/share/cursor/cursor",
-            "Cursor.exe",
-            "\"Cursor.exe\"",
-        ] {
-            assert!(is_cursor_process(line), "{line}");
-        }
-        // 转发器 CLI、另一个产品与随便一个名字里带 cursor 的进程都不算。
-        for line in [
-            "cursor",
-            "cursor-agent",
-            "/usr/bin/cursor-agent",
-            "",
-            "code",
-        ] {
-            assert!(!is_cursor_process(line), "{line}");
-        }
-    }
-
-    #[test]
-    fn the_offline_gate_only_guards_the_real_cursor_location() {
-        let _guard = exclusive();
-        let root = tempfile::tempdir().unwrap();
-        // 库被指到别处（测试 / FERRY_CURSOR_DB）时不做进程探测：那不是 Cursor 在写的库。
-        set_database_path_override(Some(root.path().join("state.vscdb")));
-        assert!(ensure_offline().is_ok());
-        set_database_path_override(None);
-    }
-
-    #[test]
-    fn writable_open_rejects_a_missing_database() {
-        let _guard = exclusive();
-        let root = tempfile::tempdir().unwrap();
-        set_database_path_override(Some(root.path().join("nope.vscdb")));
-        let error = open_writable().unwrap_err();
-        set_database_path_override(None);
-        assert_eq!(error.code, "session.store_unavailable");
-    }
-
-    #[test]
-    fn writable_open_validates_the_schema_and_allows_inserts() {
-        let _guard = exclusive();
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("state.vscdb");
-        materialize(&path, &json!({"sessions": []}));
-        set_database_path_override(Some(path.clone()));
-        let connection = open_writable().unwrap();
-        connection
-            .execute(
-                "INSERT INTO cursorDiskKV (key, value) VALUES ('probe', 'x')",
-                [],
-            )
-            .unwrap();
-        assert_eq!(disk_kv(&connection, "probe").unwrap().as_deref(), Some("x"));
-        drop(connection);
-
-        // 符号链接一律拒写。
-        #[cfg(unix)]
-        {
-            let link = root.path().join("link.vscdb");
-            std::os::unix::fs::symlink(&path, &link).unwrap();
-            set_database_path_override(Some(link));
-            let error = open_writable().unwrap_err();
-            assert!(error.message().contains("符号链接"));
-        }
-        set_database_path_override(None);
     }
 }

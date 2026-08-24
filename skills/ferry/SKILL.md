@@ -307,9 +307,6 @@ Engine errors arrive on stderr as JSON `{code, category, retryable, params}`.
 The reference-error `recovery` text says to "run a session search again". From the CLI that
 means: re-run `ferry search` and take the ref from the fresh results.
 
-Session-store errors on a Cursor target usually mean the two Cursor preconditions below
-are unmet.
-
 ## Workflows
 
 ### 1. Archaeology — "how did we solve this last time"
@@ -343,8 +340,7 @@ they already said. One line each:
 
 - **Migration** — the full conversation tree is written into the target's native store, so
   `<tool> --resume` continues it as if it had always lived there. Highest fidelity, but the
-  target must support being migrated into, Cursor must be fully quit, and some blocks
-  degrade or drop.
+  target must support being migrated into (Cursor does not), and some blocks degrade or drop.
 - **Resume elsewhere** — the user starts the other agent themselves and asks it to pick the
   session up with its `ferry-resume` skill: it reads the history with `ferry read --inert`,
   writes its own summary, checks the repo, and carries on. Nothing is written into any store
@@ -402,10 +398,10 @@ commands. The target agent's `ferry-resume` skill trades that id for a fresh ref
 `ferry search --session-id`. Do not launch the other agent yourself.
 
 **When migration is refused, offer that instruction as the fallback.** If `migrate plan`
-fails with `session.store_unavailable` (Cursor still running), the target has no
-`migration-target` capability, or `differences.counts.dropped` is a large share of the
-session, say so and proactively give the user the `/ferry-resume <tool> <session_id>` line as
-the alternative — then let them decide. Do not silently switch.
+fails because the target has no `migration-target` capability (Cursor is in this set), or
+`differences.counts.dropped` is a large share of the session, say so and proactively give
+the user the `/ferry-resume <tool> <session_id>` line as the alternative — then let them
+decide. Do not silently switch.
 
 ### 4. Digest — summarize a stretch of work
 
@@ -440,11 +436,10 @@ Always label cost as an estimate and mention `unpriced_models` if it is non-empt
 2. **Source sessions are never modified by migration.** The engine guarantees this. Do not
    copy, snapshot, or otherwise "back up" any agent's native store yourself — you would be
    duplicating conversation data outside Ferry's control for no benefit.
-3. **Migrating into Cursor has two preconditions.** The user must fully quit Cursor first
-   (a running Cursor overwrites its database from memory and your migration disappears),
-   and the target folder must have been opened in Cursor at least once (sessions are filed
-   under Cursor's own workspace id). The engine cannot detect either one, so check both
-   with the user before planning a Cursor target.
+3. **Cursor is not a migration target.** Ferry can browse Cursor sessions and migrate them
+   *out* to other agents, but it will not write into Cursor's `state.vscdb`. To continue
+   work inside Cursor, use resume elsewhere (`/ferry-resume`) instead of `migrate plan
+   --to cursor`.
 4. **Refs are ephemeral.** A `fsr_` ref is valid only while the current engine instance
    lives. Never cache refs across tasks, never write them into files or notes, never reuse
    one from earlier in a long conversation without re-verifying. On `unknown_ref`, follow

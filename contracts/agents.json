@@ -152,8 +152,7 @@
       "capabilities": [
         "browse",
         "resume",
-        "migration-source",
-        "migration-target"
+        "migration-source"
       ],
       "edit_operations": [],
       "executables": [

@@ -72,15 +72,11 @@ Ferry solves four problems:
 | OpenCode | ✓ | ✓ | ✓ |
 | Pi Agent | ✓ | ✓ | ✓ |
 | Grok Build | ✓ | ✓ | ✓ |
-| Cursor | ✓ | ✓ | ✓ |
+| Cursor | ✓ | out ✓ / in — | ✓ |
 
-Migrating **into** Cursor writes a native chat straight into Cursor's
-`state.vscdb`, so the model sees the imported history when you keep chatting.
-Two requirements: quit Cursor completely first (a running Cursor overwrites the
-database from memory), and open the target folder in Cursor at least once
-(sessions are filed under Cursor's own workspace id). Plain messages and
-terminal/shell tool calls migrate natively; other tool calls are written as
-history narration, same as every other target.
+Cursor can be a migration **source** (move a Cursor chat into another agent), but
+Ferry no longer migrates **into** Cursor. To continue a conversation inside Cursor,
+use **Resume** (`ferry-resume`) instead.
 
 ## Features
 
@@ -121,7 +117,7 @@ anything is written.
 ### Resume in Another Agent
 
 Native migration is high-fidelity but has preconditions (the target format must be
-writable, Cursor must be quit). **Resume** is the path that always works: nothing is
+writable and support being migrated into). **Resume** is the path that always works: nothing is
 written to any store — the receiving agent reads the history itself, writes a summary,
 checks the repository, and carries on.
 
@@ -133,7 +129,7 @@ checks the repository, and carries on.
 
 The target can be the **same agent**: resuming a Claude Code session into a fresh
 Claude Code session is just continuing with a clean context. When a migration is
-refused (for example while Cursor is running), Ferry offers this instruction as the
+refused (for example when the target does not support being migrated into), Ferry offers this instruction as the
 fallback.
 
 ### Use Ferry from Your Coding Agent (CLI + Skill)

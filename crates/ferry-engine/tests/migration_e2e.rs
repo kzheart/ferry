@@ -9,10 +9,9 @@
 //! - `apply` 的 `validation.structure.ok` 为真（`validate_written_tree` 的 re-read 验收）；
 //! - 每条 apply 都落一条 `migration_history`。
 //!
-//! 三条组合：`claude → codex`、`codex → claude` 与 `claude → cursor`——这三个
-//! 方向的 writer 都无外部 CLI 依赖，可完整关在沙箱 HOME 里（pi/grok/opencode 的写
-//! 路径要拉起真实 CLI）。cursor 直接写 `state.vscdb`，沙箱用 `FERRY_CURSOR_DB` 把
-//! 库指进 HOME，并预置一行「同一工作区已经聊过」的 header，迁入才认得工作区哈希。
+//! 两条组合：`claude → codex` 与 `codex → claude`——这两个方向的 writer 都无外部
+//! CLI 依赖，可完整关在沙箱 HOME 里（pi/grok/opencode 的写路径要拉起真实 CLI）。
+//! Cursor 已不再是迁入目标，不在此覆盖。
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -27,13 +26,9 @@ use ferry_engine::server::rpc::EngineService;
 static ENVIRONMENT: Mutex<()> = Mutex::new(());
 
 const APPLY_TIMEOUT: Duration = Duration::from_secs(120);
-/// 迁移的三条组合。只选 writer 无外部 CLI 依赖的方向：pi/grok/opencode 的写路径
-/// 都要拉起各自的真实 CLI 做验收，沙箱与 CI 都不能依赖它们。
-const COMBOS: &[(&str, &str)] = &[
-    ("claude", "codex"),
-    ("codex", "claude"),
-    ("claude", "cursor"),
-];
+/// 迁移的两条组合。只选 writer 无外部 CLI 依赖的方向：pi/grok/opencode 的写路径
+/// 都要拉起各自的真实 CLI 做验收，沙箱与 CI 都不能依赖它们。Cursor 不再支持迁入。
+const COMBOS: &[(&str, &str)] = &[("claude", "codex"), ("codex", "claude")];
 
 struct Sandbox {
     _guard: std::sync::MutexGuard<'static, ()>,
@@ -61,8 +56,7 @@ impl Sandbox {
         sandbox.set("FERRY_DATA_DIR", &home.join(".ferry"));
         sandbox.set("FERRY_BACKUP_DIR", &home.join(".ferry/backups"));
         sandbox.set("FERRY_OPENCODE_DB", &home.join("opencode/storage.db"));
-        // 不能让 cursor 落在平台默认位置：那会触发「Cursor 是否在运行」的进程门禁，
-        // 开发机上开着 Cursor 就会把用例打成失败。
+        // 把 cursor 库指进沙箱，避免扫描开发机上真实的 Cursor 会话。
         sandbox.set("FERRY_CURSOR_DB", &home.join("cursor/state.vscdb"));
         sandbox.set("GROK_HOME", &home.join(".grok"));
         sandbox.set("PI_CODING_AGENT_SESSION_DIR", &home.join("pi-sessions"));
@@ -231,111 +225,6 @@ fn seed_claude(home: &Path, case: &str) {
     std::fs::copy(fixture.join("session.jsonl"), &target).expect("fixture 可复制");
 }
 
-/// 预建 Cursor 的 `state.vscdb`：真实环境里这个库一直存在，Ferry 只往里加行、
-/// 从不建库。再塞一条「同一工作区已经聊过」的既有会话：header 让迁入认得工作区哈希
-/// （`workspace::resolve` 的第一条通路），composerData 则是 Cursor 自己写的**真实形态**
-/// ——`context` 是一个"对象非空、叶子全空"的结构，外加一处别的会话的真实内容。
-/// 少了这条样本，写入路径的模板分支根本不会被走到（BUG-1 就是这么漏掉的）。
-fn seed_cursor(home: &Path, cwd: &str) {
-    let directory = home.join("cursor");
-    std::fs::create_dir_all(&directory).expect("cursor 目录可创建");
-    let connection =
-        rusqlite::Connection::open(directory.join("state.vscdb")).expect("cursor 库可创建");
-    connection
-        .execute_batch(
-            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, \
-             value BLOB);\
-             CREATE TABLE IF NOT EXISTS cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, \
-             value BLOB);\
-             CREATE TABLE IF NOT EXISTS composerHeaders (composerId TEXT PRIMARY KEY, \
-             workspaceId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, \
-             isSubagent INTEGER, recency INTEGER, checkpointAt INTEGER, value TEXT);",
-        )
-        .expect("cursor schema 可建");
-    let head = json!({
-        "type": "head", "composerId": "seed-existing", "name": "seed",
-        "createdAt": 1_i64,
-        "workspaceIdentifier": {"id": "ws-seed", "uri": {
-            "$mid": 1, "scheme": "file", "fsPath": cwd, "path": cwd,
-            "external": format!("file://{cwd}")}},
-    });
-    connection
-        .execute(
-            "INSERT OR REPLACE INTO composerHeaders (composerId, workspaceId, createdAt, \
-             lastUpdatedAt, isArchived, isSubagent, recency, checkpointAt, value) \
-             VALUES ('seed-existing', 'ws-seed', 1, 1, 0, 0, 1, NULL, ?)",
-            [head.to_string()],
-        )
-        .expect("cursor header 行可写入");
-    let existing = json!({
-        "_v": 17, "composerId": "seed-existing", "name": "seed",
-        "fullConversationHeadersOnly": [],
-        "context": {
-            "composers": [], "selectedCommits": [], "selectedPullRequests": [],
-            "selectedImages": [], "selectedDocuments": [], "selectedVideos": [],
-            "folderSelections": [],
-            "fileSelections": [{"uri": {"$mid": 1, "path": format!("{cwd}/SEEDED.md"),
-                                        "scheme": "file"},
-                                "uuid": "seed-uuid"}],
-            "selections": [], "terminalSelections": [], "selectedDocs": [],
-            "externalLinks": [], "cursorRules": [], "cursorCommands": [],
-            "gitPRDiffSelections": [], "subagentSelections": [], "browserSelections": [],
-            "extraContext": [],
-            "mentions": {"composers": {}, "gitDiff": [], "fileSelections": {},
-                         "diffHistory": [], "consoleLogs": []}
-        }
-    });
-    connection
-        .execute(
-            "INSERT OR REPLACE INTO cursorDiskKV (key, value) VALUES \
-             ('composerData:seed-existing', ?)",
-            [existing.to_string()],
-        )
-        .expect("cursor composerData 行可写入");
-}
-
-/// 迁入 Cursor 的产物必须是「Cursor 真的打得开」的形态。
-///
-/// 树形验收只证明 Ferry 读得回自己写的东西；`context` 缺席这类问题只有 Cursor 本体
-/// 会炸（点开会话报 `Cannot read properties of undefined (reading 'fileSelections')`），
-/// 所以这里按真实客户端的读法逐项检查。
-fn assert_cursor_artifact(home: &Path, session_id: &str) {
-    let connection = rusqlite::Connection::open_with_flags(
-        home.join("cursor/state.vscdb"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .expect("cursor 库可只读打开");
-    let raw: String = connection
-        .query_row(
-            "SELECT value FROM cursorDiskKV WHERE key = ?",
-            [format!("composerData:{session_id}")],
-            |row| row.get(0),
-        )
-        .expect("composerData 必须落库");
-    let data: Value = serde_json::from_str(&raw).expect("composerData 是 JSON");
-    let context = data["context"]
-        .as_object()
-        .expect("context 缺席会让会话在 Cursor 里点不开");
-    assert!(
-        context.contains_key("fileSelections") && context.contains_key("mentions"),
-        "context 形状不完整: {context:?}"
-    );
-    // 采样只取形状：既有会话的文件选择不能被抄进迁入的会话。
-    assert!(!raw.contains("SEEDED.md"), "抄到了既有会话的 context 内容");
-    // 空标题在 Cursor 列表里显示成 "New Agent"。
-    let title = data["name"].as_str().unwrap_or_default();
-    assert!(!title.is_empty(), "迁入的会话没有标题");
-    let head: String = connection
-        .query_row(
-            "SELECT value FROM composerHeaders WHERE composerId = ?",
-            [session_id],
-            |row| row.get(0),
-        )
-        .expect("header 行必须落库");
-    let head: Value = serde_json::from_str(&head).expect("head 是 JSON");
-    assert_eq!(head["name"].as_str().unwrap_or_default(), title);
-}
-
 /// `operation.apply` 是异步入队；轮询 `operation.status` 直到终态。
 fn wait_for_terminal(engine: &dyn EngineService, plan_id: &Value) -> Value {
     let deadline = Instant::now() + APPLY_TIMEOUT;
@@ -359,7 +248,7 @@ fn migration_input(source: &str, reference: &str, target: &str) -> Value {
 }
 
 #[test]
-fn migration_plans_and_applies_across_three_target_agents() {
+fn migration_plans_and_applies_across_file_backed_targets() {
     let sandbox = Sandbox::enter();
     seed_claude(sandbox.home(), "case-01-plain");
     seed_claude(sandbox.home(), "case-02-tools");
@@ -375,17 +264,6 @@ fn migration_plans_and_applies_across_three_target_agents() {
             .find(|record| record.tool == *source_tool)
             .unwrap_or_else(|| panic!("沙箱里必须有 {source_tool} 会话"));
         let reference = record.opaque_ref.clone();
-        if *target == "cursor" {
-            // 迁入 cursor 要先有这个工作区的记录：迁移用源会话的 cwd 当目标工作区。
-            seed_cursor(
-                sandbox.home(),
-                record
-                    .row
-                    .get("dir")
-                    .and_then(Value::as_str)
-                    .expect("扫描行必须带 dir"),
-            );
-        }
         let plan = engine
             .operation_plan(&migration_input(source_tool, &reference, target))
             .unwrap_or_else(|error| {
@@ -461,10 +339,6 @@ fn migration_plans_and_applies_across_three_target_agents() {
         assert_eq!(result["resume"]["session_id"], json!(session_id));
         assert!(result["resume"]["args"].is_array());
         assert!(result["resume"]["display_command"].is_string());
-
-        if *target == "cursor" {
-            assert_cursor_artifact(sandbox.home(), session_id);
-        }
 
         applied_ids.push(session_id.to_string());
     }

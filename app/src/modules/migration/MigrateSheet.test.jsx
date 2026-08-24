@@ -43,6 +43,8 @@ test("目标列表是迁移那一份:源工具自己不在里面", async () => {
   await act(async () => { sheet(); });
   assert.equal(screen.queryByText("Claude Code"), null);
   assert.ok(screen.getByText("Codex CLI"));
+  // Cursor 只有 migration-source，不出现在迁入目标里。
+  assert.equal(screen.queryByText("Cursor"), null);
 });
 
 test("源存储被占用时给出「改为续聊」,点了只复制、不换步骤", async () => {

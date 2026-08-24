@@ -65,7 +65,7 @@ export const AGENT_CAPABILITIES = {
     "prompt",
     "models",
   ],
-  cursor: ["browse", "resume", "migration-source", "migration-target"],
+  cursor: ["browse", "resume", "migration-source"],
 } as const;
 export const AGENT_EDIT_OPERATIONS = {
   claude: ["delete-turn", "rewrite", "replace-assistant-reply"],

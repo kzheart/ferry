@@ -96,8 +96,7 @@ export const AGENTS = {
     "capabilities": [
       "browse",
       "resume",
-      "migration-source",
-      "migration-target"
+      "migration-source"
     ],
     "editOperations": []
   }

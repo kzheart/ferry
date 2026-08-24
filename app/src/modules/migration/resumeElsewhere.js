@@ -11,7 +11,7 @@ import {
 /**
  * 迁移倒在了「换个方式才有救」的地方吗?
  *
- * 两种:源存储被目标 agent 占着(Cursor 正在运行),以及目标压根不支持迁入。
+ * 两种:源存储被目标 agent 占着,以及目标压根不支持迁入。
  * 续聊零写入,这两种失败都绕得开;粘到哪个 agent 由用户决定,与迁移目标无关。
  */
 export function canFallBackToResume(error) {

@@ -15,7 +15,6 @@ scripts/demo/
 .plan
 node_modules/
 !docs/rust-engine-refactor-plan.md
-!docs/cursor-migration-target.md
 .opencode
 .claude
 .cursor

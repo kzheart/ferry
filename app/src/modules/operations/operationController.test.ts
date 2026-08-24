@@ -62,7 +62,7 @@ test("controller surfaces the engine failure message", async () => {
       plan_id: planId,
       status: "failed",
       error_type: "SessionStoreUnavailableError",
-      error_message: "Cursor 正在运行:请先完全退出 Cursor 再迁入",
+      error_message: "目标会话存储不可用: 请稍后重试",
     }),
     status: async () => {
       throw new Error("status should not be called");
@@ -76,10 +76,10 @@ test("controller surfaces the engine failure message", async () => {
     (reason: unknown) => reason as OperationNotAppliedError,
   );
   assert.ok(error);
-  assert.equal(error.message, "Cursor 正在运行:请先完全退出 Cursor 再迁入");
+  assert.equal(error.message, "目标会话存储不可用: 请稍后重试");
   assert.equal(
     error.params.error_message,
-    "Cursor 正在运行:请先完全退出 Cursor 再迁入",
+    "目标会话存储不可用: 请稍后重试",
   );
   assert.equal(error.params.error_type, "SessionStoreUnavailableError");
 });

@@ -129,10 +129,8 @@ fn decode_task(raw: &Map<String, Value>) -> Option<Map<String, Value>> {
 
 /// Cursor 方言。
 ///
-/// 读端覆盖全部已知原生工具；**写端只有 `shell.exec` 一个**——迁入 v1 的原生范围
-/// 就是纯文本消息 + 终端/Shell 类工具，其余操作在两层都降级成历史叙述文本
-/// （`docs/cursor-migration-target.md` §8 与「Ferry 实现说明」）。因此除 shell 外
-/// 的绑定一律 `readonly()`。
+/// 读端覆盖全部已知原生工具。Cursor 不再是迁移目标，写端绑定不会被迁入路径
+/// 消费；除 `shell.exec` 外其余操作一律 `readonly()`，与读侧降级策略一致。
 pub static DIALECT: LazyLock<ToolDialect> = LazyLock::new(|| {
     ToolDialect::new(
         "cursor",
@@ -399,7 +397,7 @@ mod tests {
             DIALECT.write_ops().into_iter().collect::<Vec<_>>(),
             [CanonicalOp::SHELL_EXEC]
         );
-        // 迁入 v1 只原生化终端类调用，其余操作没有写回形态。
+        // 非 shell 操作没有写回形态（Cursor 也不是迁入目标）。
         for op in [
             CanonicalOp::FS_READ,
             CanonicalOp::FS_PATCH,

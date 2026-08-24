@@ -1,9 +1,9 @@
 //! Cursor 当前原生结构的静态 Adapter 装配。
 //!
-//! Cursor 提供 `browse` + `migration-source` + `migration-target` + `resume`：
-//! 浏览与迁出对它的存储严格只读；迁入是唯一的写路径，且只新增本次迁移生成的键
-//! （见 `store::open_writable` 与 `writer`）。仍然没有 edit / delete / probe：
-//! 就地编辑与永久删除会改写 Cursor 自己的记录，探针需要一个跑得起来的 CLI Agent。
+//! Cursor 提供 `browse` + `migration-source` + `resume`：浏览与迁出对它的存储
+//! 严格只读。没有 `migration-target`：不再往 `state.vscdb` 写入会话。也没有
+//! edit / delete / probe：就地编辑与永久删除会改写 Cursor 自己的记录，探针需要
+//! 一个跑得起来的 CLI Agent。
 //!
 //! 它与 opencode 一样是 `storage_kind == "id"`——会话不落文件，引用就是
 //! `state.vscdb` 里的原生 composerId，因此 `canonicalize` 走 `id_reference`
@@ -24,7 +24,6 @@ use serde_json::Value;
 
 use super::dialect::DIALECT;
 use super::lifecycle::CursorLifecycle;
-use super::migration::CursorMigrationTarget;
 use super::{reader, scanner};
 
 /// Cursor 的读侧组件。
@@ -87,7 +86,6 @@ pub fn build() -> Result<AgentAdapter, String> {
     AgentAdapter::builder()
         .browser(browser.clone())
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
-        .migration_target(Arc::new(CursorMigrationTarget))
         .lifecycle(Arc::new(CursorLifecycle::new(executable)))
         .build(manifest)
 }
@@ -105,25 +103,29 @@ mod tests {
         assert!(get_dialect("cursor").is_some());
         assert_eq!(
             adapter.manifest.capabilities,
-            ["browse", "resume", "migration-source", "migration-target"]
+            ["browse", "resume", "migration-source"]
         );
         assert!(adapter.manifest.edit_operations.is_empty());
         for component in [
             Component::Browser,
             Component::MigrationSource,
-            Component::MigrationTarget,
             Component::Lifecycle,
         ] {
             assert!(adapter.has_component(component), "缺少组件 {component:?}");
         }
-        // 就地编辑、永久删除与探针都会改写或拉起 Cursor 自己的东西，一律不装。
-        for component in [Component::Editor, Component::Verifier, Component::Models] {
+        // 就地编辑、永久删除、探针与迁入写入一律不装。
+        for component in [
+            Component::Editor,
+            Component::Verifier,
+            Component::Models,
+            Component::MigrationTarget,
+        ] {
             assert!(!adapter.has_component(component), "多出组件 {component:?}");
         }
         assert!(adapter.require_editor().is_err());
         assert!(adapter.require_lifecycle("resume").is_ok());
         assert!(adapter.require_lifecycle("delete").is_err());
-        assert!(adapter.require_migration_target().is_ok());
+        assert!(adapter.require_migration_target().is_err());
     }
 
     #[test]
