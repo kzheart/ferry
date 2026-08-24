@@ -73,6 +73,7 @@
     "deleteSession": "Delete session…",
     "onlyDesktop": "Desktop only",
     "noSessionFile": "This source has no standalone session file",
+    "noProjectDir": "This session has no project directory",
     "more": "More",
     "favoriteProject": "Add to favorites",
     "unfavoriteProject": "Remove from favorites",

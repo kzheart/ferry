@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
 import { supportsAgentCapability, TOOL_NAME } from "../shared/contracts/tools.js";
 import { libraryGroupExpanded } from "../modules/browser/public.js";
-import { ArrowRightIcon, Caret, ChevronLeftIcon, CloseIcon, FilterIcon, MoreDots, PinIcon,
+import { ArrowRightIcon, BranchIcon, Caret, ChevronLeftIcon, CloseIcon, FilterIcon, MoreDots, PinIcon,
   SearchIcon, StarIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
 import { useDensityMetrics } from "../shared/ui/density.js";
 
@@ -269,7 +269,7 @@ const PinGlyph = () => (
 
 const FolderGlyph = ({ size = 12 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden
-    style={{ flex: "none", color: "var(--tx4)" }}>
+    style={{ flex: "none", color: "currentColor" }}>
     <path d="M2 4.2c0-.7.5-1.2 1.2-1.2h2.4l1.3 1.5h5.9c.7 0 1.2.5 1.2 1.2v5.6c0 .7-.5 1.2-1.2 1.2H3.2c-.7 0-1.2-.5-1.2-1.2V4.2z"
       stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
   </svg>
@@ -289,7 +289,7 @@ function FolderRow({ group, expanded, height, favorite, onToggle, onFavorite, on
       style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 8px", height,
         cursor: "default", borderRadius: 6 }}>
       <Caret open={expanded} />
-      <FolderGlyph />
+      <span style={{ color: "var(--tx4)", display: "flex" }}><FolderGlyph /></span>
       <span style={{ fontSize: "var(--fs-meta)", color: "var(--tx2)", flex: 1, minWidth: 0,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{group.label}</span>
       <span className="row-meta mono tnum" style={{ fontSize: "var(--fs-meta)",
@@ -312,7 +312,7 @@ function FolderRow({ group, expanded, height, favorite, onToggle, onFavorite, on
 }
 
 // 会话行:双行 40px(标题 / 元信息),悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
-const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editing, showRepo, showTool,
+const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editing, showRepo,
   guide, onRowClick, onRowPin, onRowDelete, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
@@ -351,12 +351,29 @@ const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editin
     );
   }
 
-  // 元信息:范围已经说过的事不再重复——选定项目就不写项目名,选定 Agent 就不写 Agent 名
-  const meta = [
-    showRepo ? r.repo : null,
-    showTool ? (TOOL_NAME[r.tool] || r.tool) : null,
-    r.count != null ? t("app:library.metaCount", { n: r.count }) : null,
-  ].filter(Boolean).join(" · ");
+  // 元信息:「仓库名 + 分支图标 + 分支」;选定项目范围时仓库名已在标题,只留分支。
+  // 不写 Agent 名(左侧图标已说明)。条数默认隐去,悬停再淡入。
+  const bits = [];
+  if (showRepo && r.repo) {
+    bits.push(
+      <span key="repo" className="lib-meta-bit" title={r.dir}>{r.repo}</span>,
+    );
+  }
+  if (r.branch) {
+    bits.push(
+      <span key="branch" className="lib-meta-bit" title={r.branch}>
+        <BranchIcon size={12} />
+        <span>{r.branch}</span>
+      </span>,
+    );
+  }
+  if (r.count != null) {
+    bits.push(
+      <span key="count" className="lib-meta-bit lib-count mono tnum">
+        {t("app:library.metaCount", { n: r.count })}
+      </span>,
+    );
+  }
 
   return (
     <div onClick={e => onRowClick(r.key, e)}
@@ -377,14 +394,19 @@ const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editin
           <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--tx1)", whiteSpace: "nowrap",
             overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.title}</span>
           {r.pinned && <PinGlyph />}
-          {r.hasSub && <span className="row-meta" title={r.subLabel}
+          {r.hasSub && <span className="lib-count" title={r.subLabel}
             style={{ fontSize: 11, color: "var(--tx5)", flex: "none" }}>+{r.subCount}</span>}
           {r.hasMig && <span className="row-meta" title={t("app:library.hasMig")}
             style={{ width: 5, height: 5, borderRadius: "50%",
               background: "var(--info-dot)", flex: "none" }} />}
         </span>
-        <span style={{ fontSize: "var(--fs-meta)", color: "var(--tx5)", whiteSpace: "nowrap",
-          overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</span>
+        {bits.length > 0 && (
+          <span className="lib-meta" style={{ fontSize: "var(--fs-meta)", color: "var(--tx5)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+            {bits}
+          </span>
+        )}
       </span>
       <span className="row-meta" style={{ fontSize: 11, color: "var(--tx5)", flex: "none",
         marginTop: -1 }}>{r.active}</span>
@@ -440,7 +462,6 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
   const multiSet = new Set(multiSel);
   // 项目视图里行已经归在文件夹下,选中项目范围后项目名也已在标题上,都不必再重复
   const showRepo = scopeKind !== "project" && groupMode !== "project";
-  const showTool = scopeKind !== "agent";
   const items = [];
   let y = 0;
   // 引导「右键菜单」那步要有一行可高亮:优先选中行,没有选中就用列表里的第一行
@@ -454,7 +475,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
         if (!guideKey) guideKey = r.key;
         items.push({ key: r.key, y, h: ROW_H, node: (
           <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
-            editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
+            editing={r.key === renamingKey} showRepo={showRepo}
             guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
             onRowDelete={onRowDelete} onRowMore={onRowMore}
             onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
@@ -471,12 +492,12 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
         onToggle={() => onToggle(g.key, g.kind)}
         onFavorite={onFavoriteProject} onOnly={onOnlyProject} onMenu={onFolderMenu} />
     ) : (
-      <div className="hov-row" onClick={() => onToggle(g.key, g.kind)}
+      <div className="hov-row group-header" onClick={() => onToggle(g.key, g.kind)}
         style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 8px", height: HEADER_H,
           cursor: "default", borderRadius: 6 }}>
         <Caret open={expanded} />
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tx3)" }}>{g.label}</span>
-        <span style={{ fontSize: 11, color: "var(--tx5)" }}>· {g.count}</span>
+        <span className="group-count" style={{ fontSize: 11, color: "var(--tx5)" }}>· {g.count}</span>
       </div>
     ) });
     y += headerH;
@@ -484,7 +505,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
       if (!guideKey) guideKey = r.key;
       items.push({ key: r.key, y, h: ROW_H, node: (
         <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
-          editing={r.key === renamingKey} showRepo={showRepo} showTool={showTool}
+          editing={r.key === renamingKey} showRepo={showRepo}
           guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
           onRowDelete={onRowDelete} onRowMore={onRowMore}
           onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}

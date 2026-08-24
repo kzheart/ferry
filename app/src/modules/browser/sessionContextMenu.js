@@ -148,9 +148,9 @@ export function createSessionContextMenu({
     }] : []),
     {
       label: t("app:ctx.revealInFinder"),
-      disabled: !session.path,
-      disabledHint: t("app:ctx.noSessionFile"),
-      onClick: () => revealPath(session.path).catch(() => {}),
+      disabled: !session.dir,
+      disabledHint: t("app:ctx.noProjectDir"),
+      onClick: () => revealPath(session.dir).catch(() => {}),
     },
     { sep: true },
     ...(supportsAgentCapability(session.tool, "delete") ? [{

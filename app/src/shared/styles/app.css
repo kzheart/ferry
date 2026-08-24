@@ -496,6 +496,16 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 .lib-row .row-act { display: none; }
 .lib-row:hover .row-act { display: inline-flex; }
 .lib-row:hover .row-meta { display: none; }
+.lib-meta-bit {
+  display: inline-flex; align-items: center; gap: 3; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.lib-meta-bit svg { flex: none; }
+.lib-row .lib-count { opacity: 0; transition: opacity .12s ease; }
+.lib-row:hover .lib-count,
+.lib-row:focus-within .lib-count { opacity: 1; }
+.group-header .group-count { opacity: 0; transition: opacity .12s ease; }
+.group-header:hover .group-count { opacity: 1; }
 .row-act-btn {
   width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
   border: none; background: transparent; color: var(--tx4); border-radius: 5px;
@@ -673,6 +683,9 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 .nav-row:hover { background: var(--hov-rail) !important; color: var(--tx1) !important; }
 .nav-row:hover > span:first-child { color: var(--tx3) !important; }
 .nav-row:hover .tnum { color: var(--tx4b) !important; }
+.nav-row .nav-count { opacity: 0; }
+.nav-row:hover .nav-count,
+.nav-row:focus-visible .nav-count { opacity: 1; }
 .nav-row:active { background: var(--nav-press) !important; }
 .nav-row[aria-current="true"]:hover { background: var(--nav-active-hov) !important; }
 .nav-section { transition: color .12s ease; }

@@ -139,6 +139,7 @@ export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }
         title: meta.name || session.title || t("app:library.untitled"),
         repo: repoOf(session.dir),
         dir: session.dir,
+        branch: session.branch || "",
         active: fmtTime(session.updated, t),
         tool: session.tool,
         dot: "var(--ok)",

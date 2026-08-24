@@ -62,6 +62,7 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
         return Ok(ScanOutcome::Skipped);
     };
     let mut cwd = String::new();
+    let mut branch = String::new();
     let mut title = String::new();
     let mut count = 0i64;
     let mut by_model: Vec<(String, Tokens)> = Vec::new();
@@ -87,6 +88,10 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
                 count += 1;
                 if cwd.is_empty() {
                     cwd = text_of(record.get("cwd")).to_string();
+                }
+                // 会话进行中的分支名；取第一条非空（通常整段会话同分支）。
+                if branch.is_empty() {
+                    branch = text_of(record.get("gitBranch")).to_string();
                 }
                 let stamp = record
                     .get("timestamp")
@@ -196,6 +201,9 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     row.insert("id".into(), Value::from(stem));
     row.insert("title".into(), Value::from(title));
     row.insert("dir".into(), Value::from(cwd));
+    if !branch.is_empty() {
+        row.insert("branch".into(), Value::from(branch));
+    }
     row.insert("updated".into(), Value::from(mtime_ms(stat)));
     row.insert("created".into(), created.map_or(Value::Null, Value::from));
     row.insert("count".into(), Value::from(count));
@@ -365,7 +373,8 @@ mod tests {
         write(
             &path,
             &[
-                json!({"type": "user", "cwd": "/w", "timestamp": "2026-07-25T00:00:00Z",
+                json!({"type": "user", "cwd": "/w", "gitBranch": "feature/x",
+                       "timestamp": "2026-07-25T00:00:00Z",
                        "message": {"role": "user", "content": "  Hello   there  "}}),
                 json!({"type": "assistant", "timestamp": "2026-07-25T00:00:01Z",
                        "message": {"role": "assistant", "model": "opus",
@@ -380,6 +389,7 @@ mod tests {
         assert_eq!(row["id"], json!("sess"));
         assert_eq!(row["title"], json!("Hello there"));
         assert_eq!(row["dir"], json!("/w"));
+        assert_eq!(row["branch"], json!("feature/x"));
         assert_eq!(row["count"], json!(2));
         assert_eq!(row["created"], json!(1_784_937_600_000_i64));
         assert_eq!(row["model"], json!("opus"));

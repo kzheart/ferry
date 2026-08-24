@@ -290,3 +290,15 @@ export const ArrowRightIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
 export const ChevronLeftIcon = ({ size = 13 }) => svg("0 0 16 16", size, size,
   '<path d="M10 3.4 5.4 8l4.6 4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   { flex: "none" });
+
+// Git 分支图标(对齐 VS Code / Cursor 源码管理图标,无角标)
+export const BranchIcon = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden
+    style={{ flex: "none", color: "currentColor" }}>
+    <path d="M4.5 3.5v9M4.5 8h5.2a2 2 0 0 0 2-2V4.8"
+      stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="4.5" cy="3.2" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="4.5" cy="12.8" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="11.7" cy="3.2" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+  </svg>
+);

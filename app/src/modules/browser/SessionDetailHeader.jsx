@@ -3,9 +3,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
-import { fmtTime, sessionRef } from "./sessionModel.js";
+import { fmtTime, repoOf, sessionRef } from "./sessionModel.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
 import {
+  BranchIcon,
   CheckIcon,
   WarnIcon,
   CopyIcon,
@@ -37,6 +38,8 @@ export default function SessionDetailHeader({
   const [resumeError, setResumeError] = useState(null);
   const [resuming, setResuming] = useState(false);
   const subCount = data ? data.tree_count - 1 : 0;
+  const repo = repoOf(meta.dir);
+  const branch = meta.branch || "";
 
   // 拿不到接续命令时不能先报"已复制":用户粘出来会是空的,却以为是自己操作错了。
   // 成败都只落在按钮上——这是本模块既有的反馈方式(见 SessionRound / SessionImagePreview)。
@@ -94,6 +97,7 @@ export default function SessionDetailHeader({
             style={{
               display: "flex",
               flexWrap: "wrap",
+              alignItems: "center",
               gap: "6px 14px",
               marginTop: 6,
               fontSize: "var(--fs-meta)",
@@ -106,9 +110,26 @@ export default function SessionDetailHeader({
                 {TOOL_NAME[meta.tool]}
               </b>
             </span>
-            <span className="mono" style={{ color: "var(--tx4)" }}>
-              {meta.dir}
-            </span>
+            {(repo || branch) && (
+              <span
+                title={meta.dir || undefined}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  color: "var(--tx4)",
+                  minWidth: 0,
+                }}
+              >
+                {repo && <span className="mono">{repo}</span>}
+                {branch && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    <BranchIcon size={12} />
+                    <span className="mono">{branch}</span>
+                  </span>
+                )}
+              </span>
+            )}
             <span>
               {tt("browser:session.messages", {
                 n: data ? data.count : meta.count,

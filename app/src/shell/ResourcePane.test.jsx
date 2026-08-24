@@ -112,7 +112,7 @@ test("Enter 提交后紧随的失焦不会重复提交", () => {
 
 const sessionRow = {
   key: "claude:a", tool: "claude", title: "支付重构", repo: "payments",
-  dir: "/work/payments", active: "刚刚", count: 12,
+  dir: "/work/payments", branch: "main", active: "刚刚", count: 12,
 };
 
 function renderLibrary(props) {
@@ -139,27 +139,29 @@ function renderLibrary(props) {
   );
 }
 
-test("会话行是双行:标题一行,项目 · Agent · 条数一行", () => {
+test("会话行是双行:标题一行,仓库名+分支图标+分支一行,无 Agent 名", () => {
   renderLibrary();
 
   assert.ok(screen.getByText("支付重构"));
-  const meta = screen.getByText(/payments · /);
-  assert.ok(meta.textContent.includes(TOOL_NAME.claude));
-  assert.ok(meta.textContent.includes("app:library.metaCount"));
+  assert.ok(screen.getByText("payments"));
+  assert.ok(screen.getByText("main"));
+  assert.equal(screen.queryByText(TOOL_NAME.claude), null);
+  const count = screen.getByText("app:library.metaCount");
+  assert.ok(count.className.includes("lib-count"));
 });
 
-test("选定项目范围后元信息不再重复项目名", () => {
+test("选定项目范围后元信息不再重复项目名,仍显示分支", () => {
   renderLibrary({ scopeKind: "project" });
 
-  assert.equal(screen.queryByText(/payments · /), null);
-  assert.ok(screen.getByText(new RegExp(`^${TOOL_NAME.claude} · `)));
+  assert.equal(screen.queryByText("payments"), null);
+  assert.ok(screen.getByText("main"));
 });
 
-test("选定 Agent 范围后元信息不再重复 Agent 名", () => {
+test("选定 Agent 范围后仍不显示 Agent 名", () => {
   renderLibrary({ scopeKind: "agent" });
 
-  const meta = screen.getByText(/^payments · /);
-  assert.equal(meta.textContent.includes(TOOL_NAME.claude), false);
+  assert.ok(screen.getByText("payments"));
+  assert.equal(screen.queryByText(TOOL_NAME.claude), null);
 });
 
 const projectGroup = (rows = [sessionRow]) => ({

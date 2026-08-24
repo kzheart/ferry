@@ -1,9 +1,10 @@
-//! 在系统文件管理器中定位会话文件。
+//! 在系统文件管理器中打开路径：目录直接打开，文件则在父目录中选中。
 
 #[tauri::command]
 pub(crate) async fn reveal_path(path: String) -> Result<(), String> {
-    if !std::path::Path::new(&path).exists() {
-        return Err("文件不存在".to_string());
+    let target = std::path::Path::new(&path);
+    if !target.exists() {
+        return Err("路径不存在".to_string());
     }
-    super::platform::reveal_path(std::path::Path::new(&path))
+    super::platform::reveal_path(target)
 }

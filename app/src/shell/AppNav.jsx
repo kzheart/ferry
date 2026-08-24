@@ -96,8 +96,9 @@ export function NavRow({
         whiteSpace: "nowrap" }}>{label}</span>
       {badge}
       {count != null && (
-        <span className="mono tnum" style={{ flex: "none", fontSize: 12,
-          color: "var(--tx5)", textAlign: "right", transition: "color .12s ease" }}>
+        <span className="mono tnum nav-count" style={{ flex: "none", fontSize: 12,
+          color: "var(--tx5)", textAlign: "right",
+          transition: "color .12s ease, opacity .12s ease" }}>
           {count}
         </span>
       )}

@@ -109,3 +109,27 @@ test("续聊只有一条入口,点击把会话交给回调", () => {
   assert.ok(picked);
   assert.equal(picked.tool, "claude");
 });
+
+test("有项目目录时可在 Finder 中显示", () => {
+  const items = createSessionContextMenu(createInput({
+    sessionsByKey: {
+      "claude:native-1": {
+        id: "native-1",
+        ref: "fsr_current",
+        tool: "claude",
+        title: "Session",
+        path: "/tmp/session.jsonl",
+        dir: "/Users/kzheart/code/ferry",
+      },
+    },
+  }));
+  const reveal = items.find(item => item.label === "app:ctx.revealInFinder");
+  assert.equal(reveal.disabled, false);
+});
+
+test("没有项目目录时禁用在 Finder 中显示", () => {
+  const items = createSessionContextMenu(createInput());
+  const reveal = items.find(item => item.label === "app:ctx.revealInFinder");
+  assert.equal(reveal.disabled, true);
+  assert.equal(reveal.disabledHint, "app:ctx.noProjectDir");
+});

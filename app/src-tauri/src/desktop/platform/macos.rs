@@ -10,8 +10,12 @@ use std::{
 use super::{TerminalLaunch, TerminalPreference};
 
 pub(super) fn reveal_path(path: &Path) -> Result<(), String> {
-    let output = Command::new("open")
-        .arg("-R")
+    // 目录:直接打开(进入项目);文件:在父目录中选中(open -R)。
+    let mut command = Command::new("open");
+    if path.is_file() {
+        command.arg("-R");
+    }
+    let output = command
         .arg(path)
         .output()
         .map_err(|error| error.to_string())?;

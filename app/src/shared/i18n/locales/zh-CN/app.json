@@ -73,6 +73,7 @@
     "deleteSession": "删除会话…",
     "onlyDesktop": "仅桌面版可用",
     "noSessionFile": "该来源没有独立会话文件",
+    "noProjectDir": "该会话没有关联项目目录",
     "more": "更多",
     "favoriteProject": "收藏到导航栏",
     "unfavoriteProject": "取消收藏",

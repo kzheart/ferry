@@ -27,6 +27,7 @@ use crate::adapters::contracts::{
 use crate::contracts::session_ref::is_opaque_session_ref;
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
+use crate::system::git;
 use crate::system::paths::{is_within, realpath_strict};
 
 use super::scan_progress::TRACKER;
@@ -211,10 +212,23 @@ pub struct IndexedMessage {
 }
 
 /// 会话行的 UI 出参：原始行 + opaque ref 与内容 revision。
+///
+/// 若扫描行未带 `branch`，按 `dir` 现读一次 `.git/HEAD`（进程内按目录缓存）。
 pub fn session_dto(record: &IndexedSession) -> Map<String, Value> {
     let mut payload = record.row.clone();
     payload.insert("ref".into(), Value::from(record.opaque_ref.as_str()));
     payload.insert("revision".into(), Value::from(record.revision.as_str()));
+    let has_branch = payload
+        .get("branch")
+        .and_then(Value::as_str)
+        .is_some_and(|branch| !branch.is_empty());
+    if !has_branch {
+        if let Some(dir) = payload.get("dir").and_then(Value::as_str) {
+            if let Some(branch) = git::branch_of(dir) {
+                payload.insert("branch".into(), Value::from(branch));
+            }
+        }
+    }
     payload
 }
 
