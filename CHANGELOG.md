@@ -14,6 +14,46 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.4] - 2026-08-24
+
+### Added
+
+- **Usage trend & agent comparison** — the overview's habit section now charts
+  30-day usage (tokens or cost) stacked by agent, alongside a per-agent
+  comparison, replacing the model-shift and migration-flow charts.
+- **Git branch in sessions** — session rows and the detail header show the
+  git branch a session ran on.
+- **Resume buttons in detail** — the session detail offers a split button that
+  copies a resume command for the same agent or hands the session off to
+  another one, and onboarding now points to it.
+
+### Changed
+
+- **Rhythm card redesign** — the session start-time rose chart is now a
+  clock-aligned tick dial: tick length encodes session count, a day arc and an
+  active-window arc frame the dial, and the peak hour is labeled in the
+  center. A stats line below shows the peak hour and active window, which is
+  no longer hidden for schedules wider than 10 hours.
+- **Usage accounting** — token statistics and pricing now follow the same
+  rules as Tokscale, so numbers match across tools.
+- **Cursor is browse & migrate-out only** — Cursor sessions can be read and
+  migrated to other agents, but Cursor is no longer offered as a migration
+  target.
+
+### Removed
+
+- **Migration history page** — migrated sessions are instead annotated with
+  their origin in the session detail.
+- **Manual refresh button** — the detail header refreshes on its own.
+
+### Fixed
+
+- **Codex session activity** — a session's last-active time now follows its
+  messages and usage events instead of file modification times, which kept
+  idle sessions from looking active.
+- **Ferry skill for Claude** — the desktop integration installs the Ferry
+  skill entry for Claude Code again.
+
 ## [0.8.3] - 2026-08-24
 
 ### Added
