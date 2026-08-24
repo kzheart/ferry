@@ -193,6 +193,15 @@ fn truthy_str(value: Option<&Value>) -> Option<String> {
     }
 }
 
+/// 会话“活跃时间”只跟真实对话/用量走。`thread_settings_applied` 之类的设置
+/// 写入会改文件 mtime，但不能把整段历史 token 甩进“今天”。
+fn bump_activity(activity_ms: &mut Option<i64>, record: &Value) {
+    let Some(ms) = iso_ms(record.get("timestamp").unwrap_or(&Value::Null)) else {
+        return;
+    };
+    *activity_ms = Some(activity_ms.map_or(ms, |cur| cur.max(ms)));
+}
+
 /// 解析一条 rollout 的扫描行；没有可见消息时返回空表（等价 Python 的 `{}`）。
 fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
     let mut sid = path
@@ -219,6 +228,7 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
     let mut user_fork = false;
     let mut inherited_baseline: Option<CodexTotals> = None;
     let mut created: Option<i64> = None;
+    let mut activity_ms: Option<i64> = None;
 
     let Ok(lines) = iter_lines(path) else {
         return Ok(ScanOutcome::Skipped);
@@ -369,6 +379,7 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
             }
             previous_totals = next_totals;
             add_model_tokens(&mut by_model, &model, &tokens);
+            bump_activity(&mut activity_ms, &record);
         }
         if record_type == "session_meta" && !has_meta {
             sid = payload
@@ -422,6 +433,7 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
             && payload.get("type").and_then(Value::as_str) == Some("message")
         {
             count += 1;
+            bump_activity(&mut activity_ms, &record);
             let text = payload
                 .get("content")
                 .and_then(Value::as_array)
@@ -460,15 +472,14 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
     if !dominant.is_empty() {
         model = dominant;
     }
+    // 优先用消息/用量事件时间；缺时间戳时才回退 mtime（旧文件或异常行）。
+    let updated_ms = activity_ms.unwrap_or((stat.mtime_ns / 1_000_000) as i64);
     let mut row = ScanRow::new();
     row.insert("tool".into(), Value::from("codex"));
     row.insert("id".into(), Value::from(sid.as_str()));
     row.insert("title".into(), Value::from(title));
     row.insert("dir".into(), Value::from(cwd));
-    row.insert(
-        "updated".into(),
-        Value::from((stat.mtime_ns / 1_000_000) as i64),
-    );
+    row.insert("updated".into(), Value::from(updated_ms));
     row.insert("created".into(), created.map_or(Value::Null, Value::from));
     row.insert("count".into(), Value::from(count));
     row.insert("size".into(), Value::from(stat.size as i64));
@@ -755,5 +766,40 @@ mod tests {
             ],
         );
         assert_eq!(meta_of(&path)["tokens"], json!(null));
+    }
+
+    #[test]
+    fn updated_follows_message_activity_not_later_settings_mtime() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = write(
+            temp.path(),
+            "rollout-a.jsonl",
+            &[
+                json!({"timestamp": "2026-08-07T00:43:00Z", "type": "session_meta",
+                       "payload": {"id": "a", "cwd": "/w"}}),
+                json!({"timestamp": "2026-08-07T13:31:45Z", "type": "response_item",
+                       "payload": {"type": "message", "role": "user",
+                       "content": [{"type": "input_text", "text": "go"}]}}),
+                json!({"timestamp": "2026-08-07T13:31:46Z", "type": "event_msg",
+                       "payload": {"type": "token_count", "info": {
+                           "total_token_usage": {
+                               "input_tokens": 100, "cached_input_tokens": 40,
+                               "output_tokens": 10},
+                           "last_token_usage": {
+                               "input_tokens": 100, "cached_input_tokens": 40,
+                               "output_tokens": 10}}}}),
+                // 设置回写会刷新文件 mtime，但不能把会话“活跃日”推到今天。
+                json!({"timestamp": "2026-08-23T17:56:53Z", "type": "event_msg",
+                       "payload": {"type": "thread_settings_applied",
+                       "thread_settings": {"model": "gpt-5.6-terra"}}}),
+            ],
+        );
+        let row = meta_of(&path);
+        assert_eq!(row["updated"], json!(1786109506000i64));
+        assert!(
+            row["updated"].as_i64().unwrap()
+                < crate::adapters::shared::scanner::iso_ms(&json!("2026-08-23T17:56:53Z"))
+                    .unwrap()
+        );
     }
 }

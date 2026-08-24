@@ -1,11 +1,11 @@
 //! 基于文件修订信息的扫描缓存。
 //!
-//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 7`）是**兼容面**：`version`
+//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 8`）是**兼容面**：`version`
 //! 不变就必须能读旧文件，字段名与取值口径不可悄悄改；改口径就得升 `version`。
 //!
 //! ```jsonc
 //! {
-//!   "<path>":  {"version": 7, "mtime": <st_mtime_ns>, "size": <bytes>,
+//!   "<path>":  {"version": 8, "mtime": <st_mtime_ns>, "size": <bytes>,
 //!               "meta": <扫描行 | null>},
 //!   "digests": {"<path>": {"dev": .., "ino": .., "mtime": <st_mtime_ns>,
 //!                          "size": .., "sha256": "<hex>"}}
@@ -24,7 +24,8 @@ use crate::system::paths::home_dir;
 
 const DIGESTS_KEY: &str = "digests";
 /// 缓存条目格式版本；改条目形状必须升它，否则旧条目会被当成新条目读。
-pub const SCAN_CACHE_VERSION: i64 = 7;
+/// v8：Codex `updated` 改为消息/用量活动时间，不再跟文件 mtime（设置写入会误伤“今日”）。
+pub const SCAN_CACHE_VERSION: i64 = 8;
 const MAX_SCAN_ENTRIES: usize = 20_000;
 const MAX_DIGEST_ENTRIES: usize = 20_000;
 
@@ -359,7 +360,7 @@ mod tests {
         let stored: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(
             stored["/tmp/a.jsonl"],
-            json!({"version": 7, "mtime": 10, "size": 20, "meta": {"id": "a"}})
+            json!({"version": 8, "mtime": 10, "size": 20, "meta": {"id": "a"}})
         );
         assert_eq!(
             stored["digests"]["/tmp/a.jsonl"],

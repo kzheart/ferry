@@ -140,8 +140,6 @@ export function computeToday({ sessions = [], prices = {}, idx, now = Date.now()
   const weekMax = Math.max(1, ...week.map(d => d.count));
   week.forEach(d => { d.level = heatLevel(d.count, weekMax); });
 
-  const topModel = byModel[0]?.model || null;
-  const topModelPct = byModel[0]?.pct || 0;
   return {
     day: today,
     asOf: now,
@@ -151,8 +149,8 @@ export function computeToday({ sessions = [], prices = {}, idx, now = Date.now()
     cost: costTotal,
     composition,
     byAgent, byModel, costByModel, byProject,
-    topModel,
-    topModelPct,
+    topModel: byModel[0]?.model || null,
+    topModelPct: byModel[0]?.pct || 0,
     compare: {
       current, yesterday,
       tokensPct: changeOf(current.tokens, yesterday.tokens),
