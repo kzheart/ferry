@@ -514,11 +514,6 @@ impl EngineService for Engine {
         Ok(Value::Array(history::list_entries(&self.op_ports)?))
     }
 
-    fn delete_migration_history(&self, id: &Value) -> EngineResult<Value> {
-        // Python 直接把原值绑进 SQL；非字符串匹配不到任何行。
-        Ok(history::delete(id.as_str().unwrap_or_default(), &self.op_ports)?.to_value())
-    }
-
     fn pricing(&self, force: &Value) -> EngineResult<Value> {
         let result = pricing::pricing(python_truthy(force), false);
         let mut payload = Map::new();

@@ -9,7 +9,6 @@ export const RAIL_ITEMS = [
   { key: "overview" },
   { key: "askferry", feature: "builtin-agent" },
   { key: "library" },
-  { key: "history" },
 ];
 
 export const DEFAULT_RAIL_ORDER = RAIL_ITEMS.map(item => item.key);

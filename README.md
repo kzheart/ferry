@@ -99,14 +99,10 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 - **影响预览** —— 看清哪些原生保留、哪些降级、哪些丢失，再决定是否执行。
 - **原生输出** —— 按目标 Agent 的原生格式写入会话。
 - **接续命令** —— Ferry 会给出可直接粘贴到终端继续对话的命令。
-- **迁移历史** —— 每次迁移都有记录，可追溯会话来源和迁移代价。
+- **来源可追溯** —— 迁来的会话在详情里标明由哪个 Agent 迁入。
 
 <div align="center">
   <img src="./docs/screenshots/migrate.png" alt="迁移影响预览" width="88%" />
-</div>
-
-<div align="center">
-  <img src="./docs/screenshots/history.png" alt="迁移历史" width="88%" />
 </div>
 
 ### 续聊到其他 Agent

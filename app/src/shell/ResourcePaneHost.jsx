@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Spinner } from "../shared/ui/icons.jsx";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
 import { AgentSessionList } from "../modules/askferry/public.js";
-import { HistoryList, LibraryList, Pane, StaleScanNotice } from "./ResourcePane.jsx";
+import { LibraryList, Pane, StaleScanNotice } from "./ResourcePane.jsx";
 import { DisplayMenu } from "./LibraryPaneMenus.jsx";
 
 export function ResourcePaneHost({
@@ -13,11 +13,8 @@ export function ResourcePaneHost({
   collapsed,
   width,
   resizing,
-  filterOpen,
   onOpenSearch,
-  onFilter,
   library,
-  history,
   agent,
 }) {
   const { t } = useTranslation();
@@ -44,9 +41,8 @@ export function ResourcePaneHost({
       backLabel={t("app:nav.backToAll")}
       displayLabel={pane.displayLabel}
       displayDot={pane.filterCount > 0}
-      displayOn={isLibrary ? displayOpen : (filterOpen || pane.filterCount > 0)}
+      displayOn={displayOpen}
       onDisplay={event => {
-        if (!isLibrary) { onFilter(event); return; }
         displayRef.current = event.currentTarget;
         setDisplayOpen(value => !value);
       }}
@@ -82,10 +78,6 @@ export function ResourcePaneHost({
               onRowRenameSubmit={library.onRowRenameSubmit}
               onRowRenameCancel={library.onRowRenameCancel} />
           </>)}
-      {view === "history" && (
-        <HistoryList groups={history.groups} empty={history.filtered.length === 0}
-          filtered={filtered} onDelete={history.onDelete}
-          onClear={history.onClear} />)}
       {view === "askferry" && (
         <AgentSessionList sessions={agent.sessions} />)}
     </Pane>

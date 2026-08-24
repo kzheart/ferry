@@ -41,9 +41,8 @@ test("maps migration, edit and usage details without stringifying them", () => {
     view: "library", sessionId: undefined, ref: "fsr_b", tool: "codex",
     locator: "fml_1",
   });
-  assert.deepEqual(navigationActionFor(migration), {
-    view: "history", migrationId: "op_m", ref: "fsr_a",
-  });
+  // 没有产物会话的迁移记录没有可去之处:迁移历史已无独立页面
+  assert.equal(navigationActionFor(migration), null);
   assert.deepEqual(navigationActionFor(usage), {
     view: "overview", timeRange: { from: 1, to: 2 },
     agents: ["codex"], projects: null,

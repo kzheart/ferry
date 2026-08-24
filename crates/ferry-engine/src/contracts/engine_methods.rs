@@ -47,7 +47,6 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
     "resume",
     "models",
     "history",
-    "history_delete",
     "pricing",
     "show",
     "session_asset",
@@ -149,12 +148,6 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
             dispatch: Dispatch::ParallelRead,
-        }),
-        "history_delete" => Some(EngineMethodPolicy {
-            kind: MethodKind::Mutation,
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-            dispatch: Dispatch::Serial,
         }),
         "pricing" => Some(EngineMethodPolicy {
             kind: MethodKind::IndexRefresh,

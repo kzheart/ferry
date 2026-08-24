@@ -23,6 +23,7 @@ import { ContextStatusChip } from "./SessionContext.jsx";
 export default function SessionDetailHeader({
   meta,
   data,
+  migrationOrigin,
   onResume,
   onResumeElsewhere,
   canResume,
@@ -186,6 +187,19 @@ export default function SessionDetailHeader({
                 {TOOL_NAME[meta.tool]}
               </b>
             </span>
+            {/* 迁移产物的出处:历史页已移除,来源就落在这条元信息里 */}
+            {migrationOrigin && (
+              <span
+                title={fmtTime(migrationOrigin.time, tt)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                  color: "var(--tx4)" }}
+              >
+                <MigrateIcon size={12} />
+                {tt("browser:session.migratedFrom", {
+                  tool: TOOL_NAME[migrationOrigin.src] || migrationOrigin.src,
+                })}
+              </span>
+            )}
             {(repo || branch) && (
               <span
                 title={meta.dir || undefined}

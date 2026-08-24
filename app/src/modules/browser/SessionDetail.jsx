@@ -22,6 +22,7 @@ export default memo(function SessionDetail({
   meta,
   data,
   error,
+  migrationOrigin,
   onOpenMigrate,
   onResume,
   onResumeElsewhere,
@@ -128,6 +129,7 @@ export default memo(function SessionDetail({
         <SessionDetailHeader
           meta={meta}
           data={data}
+          migrationOrigin={migrationOrigin}
           onResume={onResume}
           onResumeElsewhere={onResumeElsewhere}
           canResume={canResume}

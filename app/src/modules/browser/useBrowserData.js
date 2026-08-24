@@ -80,8 +80,6 @@ export function useBrowserData() {
   const loadHistory = () => engine("history")
     .then(rows => { setHistoryRows(rows); persist({ history: rows }); })
     .catch(() => {});
-  // 只删 Ferry 自己的迁移记录,已迁到目标工具里的会话不受影响
-  const deleteHistory = id => engine("history_delete", { id }).then(loadHistory);
   const loadPricing = () => engine("pricing")
     .then(p => { setPricing(p); persist({ pricing: p }); })
     .catch(() => {});
@@ -159,7 +157,7 @@ export function useBrowserData() {
   }, []);
 
   return { env, scan, scanning, scanReady, historyRows,
-    pricing, doScan, loadHistory, deleteHistory };
+    pricing, doScan, loadHistory };
 }
 
 /** 扫描进度单独订阅:进度每 350ms 变一次,挂在根组件上等于全树重渲染。

@@ -15,11 +15,8 @@ export function useAppKeyboardShortcuts({
   onDelete,
   onResume,
   libraryVisibleIds,
-  historyVisibleIds,
   selectedSessionId,
-  selectedHistoryId,
   selectSession,
-  selectHistory,
 }) {
   useEffect(() => {
     const onKeyDown = event => {
@@ -77,20 +74,15 @@ export function useAppKeyboardShortcuts({
 
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       event.preventDefault();
-      const ids = view === "library"
-        ? libraryVisibleIds
-        : view === "history"
-          ? historyVisibleIds
-          : [];
+      if (view !== "library") return;
+      const ids = libraryVisibleIds;
       if (!ids.length) return;
-      const selected = view === "library" ? selectedSessionId : selectedHistoryId;
-      const currentIndex = ids.indexOf(selected);
+      const currentIndex = ids.indexOf(selectedSessionId);
       const step = event.key === "ArrowDown" ? 1 : -1;
       const nextIndex = currentIndex < 0
         ? 0
         : Math.max(0, Math.min(ids.length - 1, currentIndex + step));
-      if (view === "library") selectSession(ids[nextIndex]);
-      else selectHistory(ids[nextIndex]);
+      selectSession(ids[nextIndex]);
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -98,7 +90,6 @@ export function useAppKeyboardShortcuts({
   }, [
     currentSession,
     dismissers,
-    historyVisibleIds,
     libraryVisibleIds,
     multiIds,
     onBatchDelete,
@@ -109,9 +100,7 @@ export function useAppKeyboardShortcuts({
     onToggleSidebar,
     onResume,
     paneAvailable,
-    selectHistory,
     selectSession,
-    selectedHistoryId,
     selectedSessionId,
     sessionsByKey,
     view,

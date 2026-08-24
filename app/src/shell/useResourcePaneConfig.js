@@ -13,11 +13,6 @@ export function useResourcePaneConfig({
   libraryTitle,
   libraryCount,
   libraryDisplayDirty,
-  historyItems,
-  historyQuery,
-  setHistoryQuery,
-  historyFilterCount,
-  historyTokens,
 }) {
   const needle = agentQuery.trim().toLowerCase();
   const ferrySessions = useMemo(
@@ -57,16 +52,6 @@ export function useResourcePaneConfig({
         onQuery: (e) => setLibraryQuery(e.target.value),
         filterCount: libraryDisplayDirty,
         displayLabel: t("app:display.menu"),
-      },
-      history: {
-        title: t("app:pane.historyTitle"),
-        count: String(historyItems.length),
-        placeholder: t("app:pane.historyPlaceholder"),
-        query: historyQuery,
-        onQuery: (e) => setHistoryQuery(e.target.value),
-        filterCount: historyFilterCount,
-        tokens: historyTokens,
-        displayLabel: t("app:pane.filterButton"),
       },
     }[view] || null;
 

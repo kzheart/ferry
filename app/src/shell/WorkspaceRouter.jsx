@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { Overview } from "../modules/overview/public.js";
 import { SessionDetail } from "../modules/browser/public.js";
-import { HistoryDetail } from "../modules/migration/public.js";
+import { migrationOriginFor } from "../modules/migration/public.js";
 import { FirstRun } from "../modules/onboarding/public.js";
 import { AskFerry } from "../modules/askferry/public.js";
 import { useAppChrome } from "../shared/capabilities/appChrome.jsx";
@@ -15,14 +15,13 @@ import { useFeature } from "../shared/capabilities/features.jsx";
 export function WorkspaceRouter({
   historyRows,
   pricing,
-  historySelection,
   agentAttachments,
   onAgentAttachmentsChange,
   onFirstDone,
   scanningLabel,
   emptyLibraryLabel,
 }) {
-  const { peek, search, deletion } = useBrowserState();
+  const { peek, search } = useBrowserState();
   const { floatChat } = useOperationsState();
   const { settings } = useAppChrome();
   const builtinAgent = useFeature("builtin-agent");
@@ -36,9 +35,13 @@ export function WorkspaceRouter({
     () => ({
       ...peek.actions,
       loadingMore: peek.loadingMore,
-      onDeleteHistory: deletion.onDeleteHistory,
     }),
-    [peek.actions, peek.loadingMore, deletion.onDeleteHistory],
+    [peek.actions, peek.loadingMore],
+  );
+  // 迁移产物的出处:迁移历史页已移除,来源改为落在会话详情的元信息行里
+  const migrationOrigin = useMemo(
+    () => (peek.meta ? migrationOriginFor(historyRows, peek.meta) : null),
+    [historyRows, peek.meta],
   );
 
   return (
@@ -59,6 +62,7 @@ export function WorkspaceRouter({
             meta={peek.meta}
             data={peek.detail?.data}
             error={peek.detail?.error}
+            migrationOrigin={migrationOrigin}
             onOpenMigrate={detailActions.onOpenMigrate}
             navigationTarget={peek.navigationTarget}
             onLoadMore={detailActions.onLoadMore}
@@ -80,12 +84,6 @@ export function WorkspaceRouter({
             {settings.scanning ? scanningLabel : emptyLibraryLabel}
           </div>
         ))}
-      {view === "history" && (
-        <HistoryDetail
-          h={historySelection}
-          onDelete={detailActions.onDeleteHistory}
-        />
-      )}
       {view === "askferry" && (
         <AskFerry
           scanSessions={sessions}

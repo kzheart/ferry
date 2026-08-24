@@ -69,7 +69,6 @@ import App from "./AppController.jsx";
 const WORKSPACES = [
   { key: "overview", pane: false },
   { key: "library", pane: true },
-  { key: "history", pane: true },
   { key: "askferry", pane: true },
 ];
 
@@ -83,7 +82,7 @@ async function mountApp() {
 const railItem = (container, key) =>
   container.querySelector(`[data-rail-key="${key}"]`);
 
-test("主壳能挂载,四个工作区的导航项都在", async () => {
+test("主壳能挂载,三个工作区的导航项都在", async () => {
   const { container } = await mountApp();
 
   assert.ok(container.querySelector('[data-ferry-win="1"]'));
@@ -92,7 +91,7 @@ test("主壳能挂载,四个工作区的导航项都在", async () => {
   }
 });
 
-test("四个工作区逐一切过去都能渲染,资源栏按工作区出现或隐藏", async () => {
+test("三个工作区逐一切过去都能渲染,资源栏按工作区出现或隐藏", async () => {
   const { container } = await mountApp();
 
   for (const { key, pane } of WORKSPACES) {
@@ -110,7 +109,7 @@ test("四个工作区逐一切过去都能渲染,资源栏按工作区出现或�
 test("回到起点仍然正常,说明工作区切换没有留下坏状态", async () => {
   const { container } = await mountApp();
 
-  for (const key of ["library", "askferry", "history", "library"]) {
+  for (const key of ["library", "askferry", "overview", "library"]) {
     await act(async () => { railItem(container, key).click(); });
   }
   assert.ok(container.querySelector("[data-pane-scroll]"));
@@ -122,7 +121,7 @@ test("内置 AI 助手关着时导航轨没有对话入口,其余工作区照旧
     const { container } = await mountApp();
 
     assert.equal(railItem(container, "askferry"), null, "对话入口不该出现");
-    for (const key of ["overview", "library", "history"]) {
+    for (const key of ["overview", "library"]) {
       assert.ok(railItem(container, key), `缺少导航项 ${key}`);
     }
   } finally {

@@ -104,14 +104,10 @@ anything is written.
 - **Impact preview** — See what maps natively, what gets downgraded, and what drops, before you commit.
 - **Native output** — Sessions are written in the target agent's own format.
 - **Resume command** — Ferry hands back a terminal command to continue the conversation immediately.
-- **Migration history** — Every migration is recorded, so you can trace where a session came from and what it cost to bring it across.
+- **Traceable origin** — Migrated sessions are labeled with the agent they came from, right in the session detail.
 
 <div align="center">
   <img src="./docs/screenshots/migrate.png" alt="Migration impact preview" width="88%" />
-</div>
-
-<div align="center">
-  <img src="./docs/screenshots/history.png" alt="Migration history" width="88%" />
 </div>
 
 ### Resume in Another Agent

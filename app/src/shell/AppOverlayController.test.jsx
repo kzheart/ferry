@@ -38,7 +38,7 @@ const editingSurface = {
 // browser 域的入参已从 props 下沉为 Context。用例仍按命名空间构造同一份数据,
 // 这里按 key 分流:browser 那几个进 Provider,其余照旧作为 props。
 const BROWSER_STATE_KEYS = [
-  "peek", "search", "contextMenu", "deletion", "tags", "filters",
+  "peek", "search", "contextMenu", "deletion", "tags",
 ];
 const OPERATIONS_STATE_KEYS = [
   "migration", "editing", "floatChat",
@@ -85,30 +85,19 @@ function baseProps(overrides = {}) {
     editing: { diff: null, dirtyOps: [], confirmApply: false, setDiff: noop, setConfirmApply: noop, apply: noop },
     search: {
       open: false, pane: null, view: "library",
-      ferrySessions: [], historyGroups: [], libraryGroups: [],
-      selectHistory: noop, setMultiSelection: noop, selectSession: noop, setOpen: noop,
+      ferrySessions: [], libraryGroups: [],
+      setMultiSelection: noop, selectSession: noop, setOpen: noop,
     },
     contextMenu: { value: null, items: null, setValue: noop },
     deletion: {
       sessionConfirmation: null, batchConfirmation: null,
       cancelSessionDeletion: noop, confirmSessionDeletion: noop,
       cancelBatchDeletion: noop, confirmBatchDeletion: noop,
-      history: null, setHistory: noop, deleteHistory: async () => {},
-      selectedHistoryId: null, selectHistory: noop,
     },
     tags: { selection: null, setSelection: noop, metaFor: () => ({}), updateMetadata: noop },
     toast: { value: null, setValue: noop },
     railTip: { value: null, railOnly: false },
     settings: { open: false, value: {}, setOpen: noop, setView: noop, openGuide: noop },
-    filters: {
-      popover: null, anchor: null, onClose: noop,
-      history: {
-        value: null,
-        tools: ["claude", "codex", "opencode", "pi", "grok", "cursor"],
-        onChange: noop,
-        onClear: noop,
-      },
-    },
     guide: { step: 0, onGo: noop, onFinish: noop },
     ...overrides,
   };
@@ -138,31 +127,6 @@ test("资料库视图的搜索结果先清空多选再选中会话", () => {
 
   fireEvent.click(screen.getByText("会话 A"));
   assert.deepEqual(calls, [["multi", []], ["select", "claude:a"]]);
-});
-
-test("历史视图的搜索结果展平分组并拼出迁移方向", () => {
-  const selected = [];
-  render(
-    <AppOverlayController
-      {...baseProps({
-        search: {
-          ...baseProps().search,
-          open: true,
-          pane: searchPane,
-          view: "history",
-          historyGroups: [
-            { rows: [{ id: "h1", title: "迁移一", tool: "claude", from: "claude", to: "codex" }] },
-            { rows: [{ id: "h2", title: "迁移二", tool: "codex", from: "codex", to: "opencode" }] },
-          ],
-          selectHistory: id => selected.push(id),
-        },
-      })}
-    />,
-  );
-
-  assert.ok(screen.getByText("claude → codex"));
-  fireEvent.click(screen.getByText("迁移二"));
-  assert.deepEqual(selected, ["h2"]);
 });
 
 test("Ask Ferry 视图的无标题会话回落到占位文案", () => {
@@ -358,52 +322,6 @@ test("批量标签弹层不带初始值,提交时逐个会话并入且去重", a
   ]);
 });
 
-test("删除正在查看的迁移历史时先清空选中", () => {
-  const calls = [];
-  render(
-    <AppOverlayController
-      {...baseProps({
-        deletion: {
-          ...baseProps().deletion,
-          history: { _id: 7, id: "h7", src: "claude", dst: "codex" },
-          selectedHistoryId: 7,
-          selectHistory: value => calls.push(["selectHistory", value]),
-          setHistory: value => calls.push(["close", value]),
-          deleteHistory: async id => { calls.push(["delete", id]); },
-        },
-      })}
-    />,
-  );
-
-  fireEvent.click(screen.getByText("overlays:historyDelete.confirm"));
-  assert.deepEqual(calls, [
-    ["selectHistory", null],
-    ["close", null],
-    ["delete", "h7"],
-  ]);
-});
-
-test("删除未选中的迁移历史不动选中状态", () => {
-  const calls = [];
-  render(
-    <AppOverlayController
-      {...baseProps({
-        deletion: {
-          ...baseProps().deletion,
-          history: { _id: 7, id: "h7", src: "claude", dst: "codex" },
-          selectedHistoryId: 9,
-          selectHistory: value => calls.push(["selectHistory", value]),
-          setHistory: value => calls.push(["close", value]),
-          deleteHistory: async id => { calls.push(["delete", id]); },
-        },
-      })}
-    />,
-  );
-
-  fireEvent.click(screen.getByText("overlays:historyDelete.confirm"));
-  assert.deepEqual(calls, [["close", null], ["delete", "h7"]]);
-});
-
 test("就地预览要同时有 id 和已加载的会话才打开", () => {
   const { container, rerender } = render(
     <AppOverlayController
@@ -428,18 +346,4 @@ test("就地预览要同时有 id 和已加载的会话才打开", () => {
     />,
   );
   assert.notEqual(container.innerHTML, "");
-});
-
-test("筛选弹层只剩迁移历史一个,由 popover 的取值决定", () => {
-  const filters = {
-    ...baseProps().filters,
-    history: { ...baseProps().filters.history, value: { src: [], time: "all" } },
-  };
-  const { rerender } = render(
-    <AppOverlayController {...baseProps({ filters: { ...filters, popover: "hist" } })} />,
-  );
-  assert.ok(screen.getByText("overlays:filter.targetTool"));
-
-  rerender(<AppOverlayController {...baseProps({ filters: { ...filters, popover: null } })} />);
-  assert.equal(screen.queryByText("overlays:filter.targetTool"), null);
 });

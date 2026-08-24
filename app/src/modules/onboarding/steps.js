@@ -82,13 +82,6 @@ const GUIDE_STEPS = [
     bodyKey: "onboarding:guide.migrateBody",
   },
   {
-    target: "pane",
-    view: "history",
-    side: "right",
-    titleKey: "onboarding:guide.historyTitle",
-    bodyKey: "onboarding:guide.historyBody",
-  },
-  {
     target: "rail-askferry",
     view: "askferry",
     side: "right",

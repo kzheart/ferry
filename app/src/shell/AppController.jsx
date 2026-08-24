@@ -19,7 +19,6 @@ import {
 import { useAskFerry } from "../modules/askferry/public.js";
 import { UpdateBadge, useAppUpdater, useSettings } from "../modules/settings/public.js";
 import { useSessionEditing } from "../modules/editing/public.js";
-import { useHistoryResourcePane } from "../modules/migration/public.js";
 import { initialWorkspace, useOnboarding } from "../modules/onboarding/public.js";
 import { useDesktopChrome } from "./useDesktopChrome.js";
 import { AppNav } from "./AppNav.jsx";
@@ -50,7 +49,6 @@ export default function App() {
     scanReady,
     doScan,
     loadHistory,
-    deleteHistory,
   } = useBrowserData();
 
   const [view, setView] = useState(initialWorkspace);
@@ -68,11 +66,8 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState("prefs");
   const [aq, setAq] = useState("");
 
-  const [popover, setPopover] = useState(null); // 'lib'|'hist'
-  const popAnchor = useRef(null); // 筛选按钮 rect,弹层锚定用
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
-  const [histDel, setHistDel] = useState(null);
   const [renameFor, setRenameFor] = useState(null); // 行内重命名中的会话
   const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -197,29 +192,6 @@ export default function App() {
     setView("library");
     setSettingsOpen(false);
   }, [selectLibScope]);
-  const history = useHistoryResourcePane({
-    historyRows,
-    t,
-    toolIds: TOOLS,
-    toolNames: TOOL_NAME,
-  });
-  const {
-    query: hq,
-    setQuery: setHq,
-    filter: histF,
-    setFilter: setHistF,
-    items: histItems,
-    filtered: histFiltered,
-    groups: histGroups,
-    selected: histSel,
-    selectedId: histSelectedId,
-    select: selectHistory,
-    visibleIds: historyVisibleIds,
-    toolIds: historyToolIds,
-    filterCount: histFilterCount,
-    tokens: histTokens,
-    clear: clearHistF,
-  } = history;
   const deletion = useSessionDeletion({
     clearSelection,
     discardCachedDetail,
@@ -290,7 +262,6 @@ export default function App() {
     setToast,
     setView,
     setSettingsOpen,
-    setPopover,
     setNavigationTarget,
     setPeekId,
     setMigration: setMig,
@@ -316,18 +287,12 @@ export default function App() {
     libraryTitle: libScopeLabel,
     libraryCount: libScopeCount,
     libraryDisplayDirty: libDisplayDirty,
-    historyItems: histItems,
-    historyQuery: hq,
-    setHistoryQuery: setHq,
-    historyFilterCount: histFilterCount,
-    historyTokens: histTokens,
   });
 
   const rail = useRailNavigation({
     labels: {
       overview: t("app:rail.overview"),
       library: t("app:rail.library"),
-      history: t("app:rail.history"),
       askferry: t("askferry:rail"),
     },
     storageKey: "ferry-rail-order",
@@ -354,9 +319,7 @@ export default function App() {
         open: Boolean(deletion.sessionConfirmation),
         dismiss: deletion.cancelSessionDeletion,
       },
-      { open: Boolean(histDel), dismiss: () => setHistDel(null) },
       { open: settingsOpen, dismiss: () => setSettingsOpen(false) },
-      { open: Boolean(popover), dismiss: () => setPopover(null) },
       { open: confirmApply, dismiss: () => setConfirmApply(false) },
       { open: Boolean(diff), dismiss: () => setDiff(null) },
       { open: Boolean(mig), dismiss: () => setMig(null) },
@@ -378,28 +341,23 @@ export default function App() {
     onDelete: askDelete,
     onResume: detailActs.onResume,
     libraryVisibleIds,
-    historyVisibleIds,
     selectedSessionId: selId,
-    selectedHistoryId: histSelectedId,
     selectSession: select,
-    selectHistory,
   });
 
 
 
 
   const { browserState, operationsState, appChrome } = useWorkspaceState({
-    applyEdit, clearHistF, confirmApply,
-    ctxItems, ctxMenu, cur, deleteHistory, deletion, detail, detailActs,
+    applyEdit, confirmApply,
+    ctxItems, ctxMenu, cur, deletion, detail, detailActs,
     detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
-    histDel, histF, histGroups, histSel, histSelectedId, historyToolIds,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
-    onboarding, openConfig, paneCfg, peekEntity, peekId,
-    popAnchor, popover, rail,
-    scan, scanning, searchOpen, select, selectHistory, selId,
+    onboarding, openConfig, paneCfg, peekEntity, peekId, rail,
+    scan, scanning, searchOpen, select, selId,
     sessions, setConfirmApply, setCtxMenu, setDiff,
-    setFloatChatOpen, setHistDel, setHistF, setMetaFor, setMig,
-    setMultiSel, setPeekId, setPopover,
+    setFloatChatOpen, setMetaFor, setMig,
+    setMultiSel, setPeekId,
     setSearchOpen, setSettings, setSettingsOpen, setSettingsSection, setTagFor,
     setToast, setView,
     settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
@@ -454,7 +412,6 @@ export default function App() {
               if (key === "library") selectLibScope({ kind: "all" });
               setView(key);
               setSettingsOpen(false);
-              setPopover(null);
             }}
             onRescan={() => {
               doScan();
@@ -482,15 +439,7 @@ export default function App() {
               collapsed={sidebar.collapsed}
               width={paneLayout.width}
               resizing={paneLayout.resizing}
-              filterOpen={popover === { library: "lib", history: "hist" }[view]}
               onOpenSearch={() => setSearchOpen(true)}
-              onFilter={(e) => {
-                popAnchor.current = e.currentTarget.getBoundingClientRect();
-                setPopover((value) => {
-                  const key = { library: "lib", history: "hist" }[view];
-                  return value === key ? null : key;
-                });
-              }}
               library={{
                 scanning,
                 scope: libScope,
@@ -522,13 +471,6 @@ export default function App() {
                 onRowRenameSubmit,
                 onRowRenameCancel,
               }}
-              history={{
-                groups: histGroups,
-                filtered: histFiltered,
-                onDelete: (id) =>
-                  setHistDel(histItems.find((item) => item._id === id)),
-                onClear: clearHistF,
-              }}
               agent={{ sessions: ferrySessions }}
             />
           )
@@ -547,7 +489,6 @@ export default function App() {
         <WorkspaceRouter
           historyRows={historyRows}
           pricing={pricing}
-          historySelection={histSel}
           agentAttachments={agentAttachments}
           onAgentAttachmentsChange={setAgentAttachments}
           onFirstDone={onboarding.completeFirstRun}

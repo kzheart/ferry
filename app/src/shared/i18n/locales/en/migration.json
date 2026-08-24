@@ -111,24 +111,5 @@
     "start": "Start migration",
     "next": "Next",
     "done": "Done"
-  },
-  "history": {
-    "empty": "No migration records yet — click \"Migrate…\" in a session detail",
-    "rangeToTurn": "Up to turn {{n}}",
-    "rangeFull": "Full session",
-    "rangeWithCount": "{{range}} · {{n}} msgs",
-    "fieldRange": "Migration scope",
-    "fieldSrcToDst": "Source tool → Target tool",
-    "fieldTree": "Session tree",
-    "treeMeta": "{{n}} nodes{{detail}}",
-    "impactReport": "Migration impact",
-    "verdict": "Verification result",
-    "validationUnavailable": "This legacy record has no saved structure-validation detail",
-    "rollbackTitle": "Rollback info",
-    "rollbackDesc": "Structure validation did not pass, Ferry rolled back automatically, no artifacts kept in {{tool}}. The source session is intact; fix the issue and retry.",
-    "retainedTitle": "Artifact kept",
-    "retainedDesc": "The probe did not pass, but structure validation did, so the artifact is kept in {{tool}}. Probe failures often come from the target environment (CLI missing, timeout, model unavailable) — you can resume it as is, or delete this record and retry.",
-    "continueIn": "Delivered · continue in {{tool}}",
-    "delete": "Delete this record"
   }
 }

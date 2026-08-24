@@ -52,10 +52,6 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
         }),
-        "history_delete" => Some(EngineMethodPolicy {
-            timeout: TimeoutClass::Normal,
-            retry: RetryPolicy::Never,
-        }),
         "pricing" => Some(EngineMethodPolicy {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
@@ -138,7 +134,6 @@ pub(crate) const UI_ENGINE_METHODS: &[&str] = &[
     "resume",
     "models",
     "history",
-    "history_delete",
     "pricing",
     "show",
     "session_asset",

@@ -25,11 +25,8 @@ function setup(overrides = {}) {
     onDelete: noop,
     onResume: noop,
     libraryVisibleIds: [],
-    historyVisibleIds: [],
     selectedSessionId: null,
-    selectedHistoryId: null,
     selectSession: noop,
-    selectHistory: noop,
     ...overrides,
   }));
   return calls;

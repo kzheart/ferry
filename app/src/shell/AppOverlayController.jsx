@@ -13,11 +13,10 @@ import { useSessionContentSearch } from "./useSessionContentSearch.js";
 export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
   const { toast, settings, guide } = useAppChrome();
-  const { peek, search, contextMenu, deletion, tags, filters } =
-    useBrowserState();
+  const { peek, search, contextMenu, deletion, tags } = useBrowserState();
   const { migration, editing, floatChat } = useOperationsState();
   const updateAnnouncement = useUpdateAnnouncement();
-  const isLibrarySearch = search.view !== "askferry" && search.view !== "history";
+  const isLibrarySearch = search.view !== "askferry";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
   const contentSearch = useSessionContentSearch(
     search.pane?.query,
@@ -42,17 +41,7 @@ export function AppOverlayController({ t }) {
           meta: session.model_id,
           onClick: () => ferry.openSession(session.session_id),
         }))
-      : search.view === "history"
-        ? search.historyGroups
-            .flatMap((group) => group.rows)
-            .map((item) => ({
-              id: item.id,
-              title: item.title,
-              tool: item.tool,
-              meta: `${item.from} → ${item.to}`,
-              onClick: () => search.selectHistory(item.id),
-            }))
-        : search.libraryGroups
+      : search.libraryGroups
             .flatMap((group) => group.rows)
             .map((row) => ({
               id: row.key,
@@ -158,18 +147,6 @@ export function AppOverlayController({ t }) {
         onCancel: deletion.cancelSessionDeletion,
         onConfirm: deletion.confirmSessionDeletion,
       }}
-      historyDelete={{
-        history: deletion.history,
-        onCancel: () => deletion.setHistory(null),
-        onConfirm: () => {
-          if (deletion.history._id === deletion.selectedHistoryId) {
-            deletion.selectHistory(null);
-          }
-          const id = deletion.history.id;
-          deletion.setHistory(null);
-          deletion.deleteHistory(id).catch(() => {});
-        },
-      }}
       batchDelete={{
         prepared: deletion.batchConfirmation,
         onCancel: deletion.cancelBatchDeletion,
@@ -223,15 +200,6 @@ export function AppOverlayController({ t }) {
           settings.setView("firstrun");
         },
         onClose: () => settings.setOpen(false),
-      }}
-      historyFilter={{
-        open: filters.popover === "hist",
-        value: filters.history.value,
-        tools: filters.history.tools,
-        onChange: filters.history.onChange,
-        anchor: filters.anchor,
-        onClose: filters.onClose,
-        onClear: filters.history.onClear,
       }}
       guide={guide}
       updateAnnouncement={{

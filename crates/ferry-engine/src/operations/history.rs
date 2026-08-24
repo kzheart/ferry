@@ -4,7 +4,6 @@
 
 use serde_json::Value;
 
-use crate::operations::history_store::HistoryDeletion;
 use crate::operations::plan_store::token_urlsafe;
 use crate::operations::types::{EngineResult, Ports};
 use crate::storage::database::state_database;
@@ -23,10 +22,4 @@ pub fn list_entries(ports: &Ports) -> EngineResult<Vec<Value>> {
     state_database(ports.state_dir())?
         .migration_history
         .list_all()
-}
-
-pub fn delete(history_id: &str, ports: &Ports) -> EngineResult<HistoryDeletion> {
-    state_database(ports.state_dir())?
-        .migration_history
-        .delete(history_id)
 }

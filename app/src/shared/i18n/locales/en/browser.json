@@ -2,6 +2,7 @@
   "session": {
     "untitled": "(Untitled session)",
     "source": "Source",
+    "migratedFrom": "Migrated from {{tool}}",
     "messages": "{{n}} messages",
     "active": "Active {{time}}",
     "jumpToLatest": "Jump to latest",

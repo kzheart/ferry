@@ -8,7 +8,6 @@ export const UI_ENGINE_METHODS = [
   "resume",
   "models",
   "history",
-  "history_delete",
   "pricing",
   "show",
   "session_asset",

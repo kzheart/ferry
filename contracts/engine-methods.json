@@ -89,16 +89,6 @@
       "dispatch": "parallel-read"
     },
     {
-      "name": "history_delete",
-      "kind": "mutation",
-      "callers": [
-        "ui"
-      ],
-      "timeout": "normal",
-      "retry": "never",
-      "dispatch": "serial"
-    },
-    {
       "name": "pricing",
       "kind": "index-refresh",
       "callers": [

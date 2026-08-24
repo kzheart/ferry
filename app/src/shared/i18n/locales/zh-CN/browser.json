@@ -2,6 +2,7 @@
   "session": {
     "untitled": "(无标题会话)",
     "source": "来源",
+    "migratedFrom": "由 {{tool}} 迁入",
     "messages": "{{n}} 条消息",
     "active": "活跃 {{time}}",
     "jumpToLatest": "跳到最新",

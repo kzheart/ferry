@@ -4,11 +4,7 @@ import {
   SessionPeekSheet,
 } from "../modules/browser/public.js";
 import { ApplyConfirm, DiffSheet } from "../modules/editing/public.js";
-import {
-  HistoryDeleteConfirm,
-  HistoryFilter,
-  MigrateSheet,
-} from "../modules/migration/public.js";
+import { MigrateSheet } from "../modules/migration/public.js";
 import { FloatingAgentPanel } from "../modules/askferry/public.js";
 import { Guide } from "../modules/onboarding/public.js";
 import { SettingsPage, UpdateAnnouncement } from "../modules/settings/public.js";
@@ -26,12 +22,10 @@ export function AppOverlays({
   search,
   contextMenu,
   sessionDelete,
-  historyDelete,
   batchDelete,
   tags,
   toast,
   settings,
-  historyFilter,
   guide,
   updateAnnouncement = { value: null },
 }) {
@@ -114,13 +108,6 @@ export function AppOverlays({
           onConfirm={sessionDelete.onConfirm}
         />
       )}
-      {historyDelete.history && (
-        <HistoryDeleteConfirm
-          history={historyDelete.history}
-          onCancel={historyDelete.onCancel}
-          onConfirm={historyDelete.onConfirm}
-        />
-      )}
       {batchDelete.prepared && (
         <BatchDeleteConfirm
           prepared={batchDelete.prepared}
@@ -158,16 +145,6 @@ export function AppOverlays({
           onOpenGuide={settings.onOpenGuide}
           onFirstRun={settings.onFirstRun}
           onClose={settings.onClose}
-        />
-      )}
-      {historyFilter.open && (
-        <HistoryFilter
-          f={historyFilter.value}
-          setF={historyFilter.onChange}
-          tools={historyFilter.tools}
-          anchor={historyFilter.anchor}
-          onClose={historyFilter.onClose}
-          onClear={historyFilter.onClear}
         />
       )}
       {guide.step > 0 && (

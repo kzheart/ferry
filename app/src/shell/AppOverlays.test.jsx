@@ -18,12 +18,10 @@ function closedOverlays() {
     search: { open: false, pane: null, results: [] },
     contextMenu: { open: false, items: null },
     sessionDelete: { prepared: null },
-    historyDelete: { history: null },
     batchDelete: { prepared: null },
     tags: { selection: null },
     toast: { value: null },
     settings: { open: false },
-    historyFilter: { open: false },
     guide: { step: 0 },
   };
 }
@@ -152,26 +150,6 @@ test("搜索面板缺少 pane 配置时不渲染", () => {
   const { container } = renderOverlays({
     search: { open: true, pane: null, results: [], onClose: () => {} },
   });
-  assert.equal(container.innerHTML, "");
-});
-
-// 会话库的筛选浮层已整体删除(范围进导航栏、显示选项进资源栏菜单),
-// 这一层只剩迁移历史那一个
-test("迁移历史的筛选弹层按自己的开关出现", () => {
-  const { container, rerender } = renderOverlays({
-    historyFilter: {
-      open: true,
-      value: { src: [], time: "all" },
-      tools: ["claude", "codex"],
-      anchor: null,
-      onChange: () => {},
-      onClose: () => {},
-      onClear: () => {},
-    },
-  });
-  assert.ok(screen.getByText("overlays:filter.sourceTools"));
-
-  rerender(<AppOverlays {...closedOverlays()} />);
   assert.equal(container.innerHTML, "");
 });
 

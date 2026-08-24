@@ -170,10 +170,11 @@ export function navigationActionFor(entity) {
       return { view: "library", sessionId: entity.sessionId, ref: entity.ref,
         tool: entity.tool, locator: entity.locator, turn: entity.turn };
     case FERRY_ENTITY.migration:
+      // 没有产物会话就没有可去之处:迁移历史已无独立页面
       return entity.targetSessionId || entity.savedAs
         ? { view: "library", sessionId: entity.targetSessionId,
             ref: entity.savedAs, tool: entity.targetTool }
-        : { view: "history", migrationId: entity.id, ref: entity.ref };
+        : null;
     case FERRY_ENTITY.edit:
       return { view: "library", sessionId: entity.sessionId, ref: entity.ref,
         tool: entity.tool, locator: entity.locators[0],

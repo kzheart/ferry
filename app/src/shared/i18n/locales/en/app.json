@@ -8,7 +8,6 @@
   "rail": {
     "overview": "Overview",
     "library": "Sessions",
-    "history": "Migrations",
     "settings": "Settings"
   },
   "detail": {
@@ -91,18 +90,9 @@
     "project": "Project",
     "metaCount": "{{n}} msgs"
   },
-  "historyToken": {
-    "target": "Target {{tool}}",
-    "today": "Today",
-    "yesterday": "Yesterday",
-    "earlier": "Earlier"
-  },
   "pane": {
-    "filterButton": "Filter",
     "libraryTitle": "Sessions",
     "libraryPlaceholder": "Search sessions, dirs, commands…",
-    "historyTitle": "Migration history",
-    "historyPlaceholder": "Search migration records…",
     "search": "Search"
   },
   "prompt": {

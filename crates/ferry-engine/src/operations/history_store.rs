@@ -1,33 +1,12 @@
 //! Ferry 迁移历史的 SQLite 存储。
-//!
-//! `delete` 的 DELETE 与 COUNT 必须在同一个 `BEGIN IMMEDIATE` 事务里，
-//! 否则 `remaining` 会读到别的写入者提交后的数字（§2.3 第 17 条）。
 
 use std::sync::Arc;
 
 use rusqlite::params;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::operations::types::{EngineError, EngineResult};
 use crate::storage::database::StateConnector;
-
-/// `delete()` 的返回三元组。
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct HistoryDeletion {
-    pub deleted: bool,
-    pub id: String,
-    pub remaining: i64,
-}
-
-impl HistoryDeletion {
-    pub fn to_value(&self) -> Value {
-        let mut payload = Map::new();
-        payload.insert("deleted".into(), Value::from(self.deleted));
-        payload.insert("id".into(), Value::from(self.id.as_str()));
-        payload.insert("remaining".into(), Value::from(self.remaining));
-        Value::Object(payload)
-    }
-}
 
 #[derive(Debug)]
 pub struct MigrationHistoryStore {
@@ -83,25 +62,6 @@ impl MigrationHistoryStore {
         })
     }
 
-    pub fn delete(&self, history_id: &str) -> EngineResult<HistoryDeletion> {
-        self.connector.with_connection(|connection| {
-            connection.execute_batch("BEGIN IMMEDIATE")?;
-            let deleted = connection.execute(
-                "DELETE FROM migration_history WHERE history_id = ?",
-                params![history_id],
-            )? == 1;
-            let remaining: i64 =
-                connection.query_row("SELECT COUNT(*) FROM migration_history", [], |row| {
-                    row.get(0)
-                })?;
-            connection.execute_batch("COMMIT")?;
-            Ok(HistoryDeletion {
-                deleted,
-                id: history_id.to_string(),
-                remaining,
-            })
-        })
-    }
 }
 
 #[cfg(test)]
@@ -162,30 +122,4 @@ mod tests {
         assert_eq!(entries, vec![expected]);
     }
 
-    #[test]
-    fn delete_reports_the_remaining_count_from_the_same_transaction() {
-        let (_dir, database) = database();
-        database
-            .migration_history
-            .append("history_a", &json!({}))
-            .unwrap();
-        database
-            .migration_history
-            .append("history_b", &json!({}))
-            .unwrap();
-
-        let removed = database.migration_history.delete("history_a").unwrap();
-        assert_eq!(
-            removed,
-            HistoryDeletion {
-                deleted: true,
-                id: "history_a".into(),
-                remaining: 1,
-            }
-        );
-
-        let missing = database.migration_history.delete("history_a").unwrap();
-        assert!(!missing.deleted);
-        assert_eq!(missing.remaining, 1);
-    }
 }

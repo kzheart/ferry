@@ -43,7 +43,6 @@ function render(props, { ferry, editingSurface } = {}) {
       loadingMore: detailActions?.loadingMore,
     },
     search: { view, scanSessions: sessions },
-    deletion: { onDeleteHistory: detailActions?.onDeleteHistory },
   };
   const operationsState = { floatChat: { onNavigate, onOpenConfig } };
   const appChrome = {
@@ -79,12 +78,11 @@ function baseProps(overrides = {}) {
     selectedSessionId: null,
     detailMeta: {},
     detail: null,
-    detailActions: { refreshing: false, loadingMore: false, onDeleteHistory: noop },
+    detailActions: { refreshing: false, loadingMore: false },
     scope: "all",
     ops: [],
     dirtyOps: [],
     applying: false,
-    historySelection: null,
     ferry: null,
     agentAttachments: [],
     onAgentAttachmentsChange: noop,
@@ -114,25 +112,28 @@ test("未知 view 不渲染任何工作区", () => {
   assert.equal(container.innerHTML, "");
 });
 
-test("迁移历史工作区的删除按钮接的是详情动作里的 onDeleteHistory", () => {
-  const calls = [];
+test("迁移产物会话的详情头部标出迁入来源", () => {
+  const surface = {
+    scope: null, setScope: noop, ops: [], dirtyOps: [], addOp: noop, removeOp: noop,
+    updateOp: noop, startReplyEdit: noop, replyEditError: () => null,
+    onOpenDiff: noop, onApply: noop, applying: false, onDiscardAll: noop,
+  };
   render(
     baseProps({
-      view: "history",
-      historySelection: {
-        _id: 1, id: "h1", src: "claude", dst: "codex",
-        title: "一次迁移", created_at: "2026-01-01T00:00:00Z",
-      },
-      detailActions: {
-        refreshing: false, loadingMore: false,
-        onDeleteHistory: () => calls.push("delete"),
-      },
+      view: "library",
+      historyRows: [{
+        id: "h1", src: "opencode", dst: "claude", source_id: "src-1",
+        session_id: "s1", time: "2026-01-01T00:00:00Z",
+      }],
+      currentSession: { id: "s1", tool: "claude", title: "会话" },
+      selectedSessionId: "s1",
+      detailMeta: { id: "s1", tool: "claude", title: "会话" },
+      detail: { data: { messages: [], turns: [] } },
     }),
+    { editingSurface: surface },
   );
 
-  const trigger = screen.getByTitle("migration:history.delete");
-  trigger.click();
-  assert.deepEqual(calls, ["delete"]);
+  assert.ok(screen.getByText("browser:session.migratedFrom"));
 });
 
 test("对话工作区从 Context 取 Ferry Runtime 句柄,不再由路由层转交", () => {

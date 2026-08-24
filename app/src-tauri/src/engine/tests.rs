@@ -58,8 +58,6 @@ fn sensitive_agent_methods_are_not_generic_rpc_methods() {
     assert!(validate_engine_request_caller(r#"{"method":"scan"}"#).is_ok());
     assert!(validate_engine_request_caller(r#"{"method":"agent_prompt"}"#).is_err());
     assert!(validate_engine_request_caller(r#"{"method":"session_read"}"#).is_err());
-    // 删除迁移记录只动 Ferry 自己的历史文件,不写目标工具的会话
-    assert!(validate_engine_request_caller(r#"{"method":"history_delete"}"#).is_ok());
 }
 
 #[test]

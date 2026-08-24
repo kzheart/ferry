@@ -31,7 +31,6 @@ function baseProps(overrides = {}) {
     resizing: false,
     filterOpen: false,
     onOpenSearch: noop,
-    onFilter: noop,
     library: {
       scanning: false, sessions: [], scanningLabel: "扫描中",
       scope: { kind: "all" },
@@ -43,7 +42,6 @@ function baseProps(overrides = {}) {
       selectedId: null, multiSel: [],
       onRowClick: noop, onRowPin: noop, onRowDelete: noop, onRowMore: noop,
     },
-    history: { groups: [], filtered: [], onDelete: noop, onClear: noop },
     agent: { sessions: [] },
     ...overrides,
   };
@@ -63,33 +61,12 @@ test("外壳渲染范围名与计数,搜索按钮接到全文面板", () => {
   assert.deepEqual(calls, ["search"]);
 });
 
-// 会话库的筛选浮层已删除:那个按钮现在开的是本地的「显示选项」菜单,
-// 只有迁移历史还走 onFilter 的老弹层。
-test("会话库的显示选项就地开菜单,不再调 onFilter", () => {
-  const calls = [];
-  render(
-    <ResourcePaneHost {...baseProps({ onFilter: () => calls.push("filter") })} />,
-  );
+// 会话库的筛选浮层已删除:那个按钮开的是本地的「显示选项」菜单。
+test("会话库的显示选项就地开菜单", () => {
+  render(<ResourcePaneHost {...baseProps()} />);
 
   fireEvent.click(screen.getByTitle("app:display.menu"));
-  assert.deepEqual(calls, []);
   assert.ok(screen.getByText("app:display.groupProject"));
-});
-
-test("迁移历史的筛选按钮仍然接到 onFilter 弹层", () => {
-  const calls = [];
-  render(
-    <ResourcePaneHost
-      {...baseProps({
-        view: "history",
-        pane: { ...baseProps().pane, displayLabel: "app:pane.filterButton" },
-        onFilter: () => calls.push("filter"),
-      })}
-    />,
-  );
-
-  fireEvent.click(screen.getByTitle("app:pane.filterButton"));
-  assert.deepEqual(calls, ["filter"]);
 });
 
 test("会话库的搜索框常驻,清除走的是 pane.onQuery", () => {
@@ -285,16 +262,4 @@ test("扫描失败但上次结果还在:列表照常渲染,顶部说明这是旧
   assert.ok(screen.getByText("engine offline"));
   fireEvent.click(screen.getByText("common:empty.retryScan"));
   assert.deepEqual(rescans, [1]);
-});
-
-test("迁移历史的真空态讲清楚记录从哪来,且不给清除筛选", () => {
-  render(
-    <ResourcePaneHost
-      {...baseProps({ view: "history", history: { groups: [], filtered: [], onDelete: noop, onClear: noop } })}
-    />,
-  );
-
-  assert.ok(screen.getByText("common:empty.historyNone"));
-  assert.ok(screen.getByText("common:empty.historyNoneHint"));
-  assert.equal(screen.queryByText("common:empty.clearFilter"), null);
 });

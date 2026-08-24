@@ -77,7 +77,6 @@ pub trait EngineService: Send + Sync {
     fn resume_command(&self, tool: &Value, reference: &Value) -> EngineResult<Value>;
     fn list_models(&self, tool: &Value) -> EngineResult<Value>;
     fn migration_history(&self) -> EngineResult<Value>;
-    fn delete_migration_history(&self, id: &Value) -> EngineResult<Value>;
     fn pricing(&self, force: &Value) -> EngineResult<Value>;
     fn show_session(
         &self,
@@ -141,7 +140,6 @@ const DISPATCH_METHOD_NAMES: &[&str] = &[
     "resume",
     "models",
     "history",
-    "history_delete",
     "pricing",
     "show",
     "session_asset",
@@ -277,7 +275,6 @@ impl RpcDispatcher {
             "resume" => service.resume_command(required(params, "tool")?, required(params, "ref")?),
             "models" => service.list_models(required(params, "tool")?),
             "history" => service.migration_history(),
-            "history_delete" => service.delete_migration_history(required(params, "id")?),
             "pricing" => service.pricing(&default_of(params, "force", Value::Bool(false))),
             "show" => service.show_session(
                 required(params, "tool")?,
@@ -495,9 +492,6 @@ mod tests {
         }
         fn migration_history(&self) -> EngineResult<Value> {
             self.record("history", Value::Null)
-        }
-        fn delete_migration_history(&self, id: &Value) -> EngineResult<Value> {
-            self.record("history_delete", recorded!("h", "id" => id))
         }
         fn pricing(&self, force: &Value) -> EngineResult<Value> {
             self.record("pricing", recorded!("p", "force" => force))
@@ -909,7 +903,6 @@ mod tests {
             ("resume", json!({"tool": "claude", "ref": "r"})),
             ("models", json!({"tool": "claude"})),
             ("history", json!({})),
-            ("history_delete", json!({"id": "history_x"})),
             ("pricing", json!({})),
             ("show", json!({"tool": "claude", "ref": "r"})),
             (
