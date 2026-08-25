@@ -255,7 +255,10 @@ mod tests {
         tracker.end();
         // 扫描结束后 finalizing 上报同样忽略。
         tracker.advance_finalize(3);
-        assert_eq!(tracker.snapshot()["finalizing"]["processed"], Value::from(5));
+        assert_eq!(
+            tracker.snapshot()["finalizing"]["processed"],
+            Value::from(5)
+        );
         assert_eq!(tracker.snapshot()["state"], Value::from("idle"));
     }
 

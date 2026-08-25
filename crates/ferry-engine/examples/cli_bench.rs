@@ -89,7 +89,9 @@ fn search_request(query: &str, limit: i64, tool_outputs: bool) -> ContentSearchR
 
 /// 取第一条命中的 `(tool, ref)`，给 read 用。
 fn first_hit(engine: &Arc<ferry_engine::app::Engine>, query: &str) -> Option<(String, String)> {
-    let result = engine.content_search(&search_request(query, 5, false)).ok()?;
+    let result = engine
+        .content_search(&search_request(query, 5, false))
+        .ok()?;
     let session = result.get("sessions")?.as_array()?.first()?;
     Some((
         session.get("tool")?.as_str()?.to_string(),
@@ -169,7 +171,10 @@ fn cmd_build(home: &str) {
 fn query_cases() -> Vec<(&'static str, ContentSearchRequest)> {
     vec![
         ("search/short-term", search_request("sqlite", 10, false)),
-        ("search/multi-term", search_request("sqlite index revision", 10, false)),
+        (
+            "search/multi-term",
+            search_request("sqlite index revision", 10, false),
+        ),
         ("search/large-limit", search_request("error", 50, false)),
         ("search/tool-outputs", search_request("cargo", 10, true)),
         (
@@ -254,14 +259,15 @@ fn cmd_interfere(_home: &str, window_secs: u64) {
             let kind = kind.to_string();
             std::thread::spawn(move || {
                 let request = search_request("sqlite", 10, false);
-                let read = first_hit(&engine, "sqlite").map(|(tool, reference)| SessionReadRequest {
-                    tool: Value::from(tool),
-                    reference: Value::from(reference),
-                    limit: Value::from(40i64),
-                    include_tool_outputs: Value::Bool(false),
-                    inert: Value::Bool(false),
-                    ..SessionReadRequest::default()
-                });
+                let read =
+                    first_hit(&engine, "sqlite").map(|(tool, reference)| SessionReadRequest {
+                        tool: Value::from(tool),
+                        reference: Value::from(reference),
+                        limit: Value::from(40i64),
+                        include_tool_outputs: Value::Bool(false),
+                        inert: Value::Bool(false),
+                        ..SessionReadRequest::default()
+                    });
                 let mut samples = Vec::new();
                 while !stop.load(Ordering::Relaxed) {
                     let started = Instant::now();
@@ -318,15 +324,13 @@ fn cmd_cli(home: &str, binary: &str, rounds: usize) {
 
     // read 需要一个本进程 daemon 现签的 fsr_ ref。
     let (_, hit) = run(&["search", "sqlite", "--limit", "1"]);
-    let reference = serde_json::from_str::<Value>(&hit)
-        .ok()
-        .and_then(|value| {
-            let session = value.get("sessions")?.as_array()?.first()?.clone();
-            Some((
-                session.get("tool")?.as_str()?.to_string(),
-                session.get("ref")?.as_str()?.to_string(),
-            ))
-        });
+    let reference = serde_json::from_str::<Value>(&hit).ok().and_then(|value| {
+        let session = value.get("sessions")?.as_array()?.first()?.clone();
+        Some((
+            session.get("tool")?.as_str()?.to_string(),
+            session.get("ref")?.as_str()?.to_string(),
+        ))
+    });
 
     let mut cases: Vec<(&str, Vec<&str>)> = vec![
         ("cli/env", vec!["env"]),
@@ -335,17 +339,28 @@ fn cmd_cli(home: &str, binary: &str, rounds: usize) {
         ("cli/usage-all", vec!["usage"]),
         ("cli/usage-since", vec!["usage", "--since", "2026-08-01"]),
         ("cli/search-short", vec!["search", "sqlite"]),
-        ("cli/search-multi", vec!["search", "sqlite", "index", "revision"]),
+        (
+            "cli/search-multi",
+            vec!["search", "sqlite", "index", "revision"],
+        ),
         ("cli/search-large", vec!["search", "error", "--limit", "50"]),
-        ("cli/search-metadata", vec!["search", "--agent", "codex", "--limit", "50"]),
+        (
+            "cli/search-metadata",
+            vec!["search", "--agent", "codex", "--limit", "50"],
+        ),
     ];
     let owned;
     if let Some((tool, reference)) = reference.as_ref() {
         owned = (tool.clone(), reference.clone());
-        cases.push(("cli/read-context", vec!["read", &owned.0, &owned.1, "--limit", "40"]));
+        cases.push((
+            "cli/read-context",
+            vec!["read", &owned.0, &owned.1, "--limit", "40"],
+        ));
         cases.push((
             "cli/read-terms",
-            vec!["read", &owned.0, &owned.1, "--limit", "40", "--terms", "sqlite"],
+            vec![
+                "read", &owned.0, &owned.1, "--limit", "40", "--terms", "sqlite",
+            ],
         ));
     }
 
@@ -368,7 +383,11 @@ fn main() {
         .unwrap_or(7);
     match argv.first().map(String::as_str) {
         Some("build") => cmd_build(&home),
-        Some("query") => cmd_query(&home, argv.get(1).map(String::as_str).unwrap_or("query"), rounds),
+        Some("query") => cmd_query(
+            &home,
+            argv.get(1).map(String::as_str).unwrap_or("query"),
+            rounds,
+        ),
         Some("cli") => cmd_cli(
             &home,
             argv.get(1).expect("用法: cli <ferry-engine 可执行文件>"),

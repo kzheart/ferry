@@ -61,7 +61,6 @@ impl MigrationHistoryStore {
             Ok(entries)
         })
     }
-
 }
 
 #[cfg(test)]
@@ -121,5 +120,4 @@ mod tests {
         expected["id"] = json!("history_legacy");
         assert_eq!(entries, vec![expected]);
     }
-
 }

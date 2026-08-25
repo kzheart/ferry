@@ -798,8 +798,7 @@ mod tests {
         assert_eq!(row["updated"], json!(1786109506000i64));
         assert!(
             row["updated"].as_i64().unwrap()
-                < crate::adapters::shared::scanner::iso_ms(&json!("2026-08-23T17:56:53Z"))
-                    .unwrap()
+                < crate::adapters::shared::scanner::iso_ms(&json!("2026-08-23T17:56:53Z")).unwrap()
         );
     }
 }

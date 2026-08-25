@@ -24,13 +24,17 @@ pub fn branch_of(dir: &str) -> Option<String> {
         return None;
     }
     {
-        let guard = cache().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = cache()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(cached) = guard.get(key) {
             return cached.clone();
         }
     }
     let resolved = resolve_branch(Path::new(key));
-    let mut guard = cache().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     guard.insert(key.to_string(), resolved.clone());
     resolved
 }
@@ -114,10 +118,7 @@ mod tests {
 
     #[test]
     fn parse_head_shortens_detached_sha() {
-        assert_eq!(
-            parse_head("abcdef0123456789\n").as_deref(),
-            Some("abcdef0")
-        );
+        assert_eq!(parse_head("abcdef0123456789\n").as_deref(), Some("abcdef0"));
     }
 
     #[test]

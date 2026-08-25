@@ -1509,7 +1509,10 @@ fn run_converger(
             // 失败也记为已处理：每 5 秒重试同一个错误只会刷日志，
             // 等下一次 generation 变化再来。
             Err(error) => {
-                crate::server::serve::log_warning(&format!("内容索引自愈失败: {}", error.message()));
+                crate::server::serve::log_warning(&format!(
+                    "内容索引自愈失败: {}",
+                    error.message()
+                ));
                 synced = snapshot_generation;
             }
         }
@@ -1834,7 +1837,8 @@ mod tests {
 
         // 多字节字符按字符计，不按字节。
         let mut wide = Message::new("user");
-        wide.blocks.push(Block::text("中".repeat(RECORD_TEXT_CAP + 5)));
+        wide.blocks
+            .push(Block::text("中".repeat(RECORD_TEXT_CAP + 5)));
         let (text, _, clipped) = extract(&wide);
         assert_eq!(text.chars().count(), RECORD_TEXT_CAP);
         assert!(clipped);
