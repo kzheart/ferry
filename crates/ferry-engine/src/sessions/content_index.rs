@@ -379,6 +379,10 @@ fn write_transaction(
 struct WorkerState {
     /// 按插入序去重；`popitem()` 取**最后**一项（LIFO）。
     queued: Vec<(SessionKey, IndexedSession)>,
+    /// 已被 take_batch 取走、写入尚未完成的会话（键 → revision）。取走的
+    /// 会话既不在 queued 也没落 revision，并发 sync 会把同一 revision 重复
+    /// 入队——写幂等所以只是纯浪费，但批大小 4 会把浪费放大 4 倍。
+    in_flight: HashMap<SessionKey, String>,
     running: bool,
     closed: bool,
 }
@@ -672,6 +676,7 @@ impl ContentIndex {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             worker.queued.clear();
+            worker.in_flight.clear();
             worker.closed = true;
         }
         // 后台线程见 closed 即返回；最多等 5 秒。
@@ -999,7 +1004,15 @@ impl ContentIndex {
             let key = (record.tool.clone(), record.canonical_ref.clone());
             match worker.queued.iter_mut().find(|(seen, _)| *seen == key) {
                 Some(slot) => slot.1 = record.clone(),
-                None => worker.queued.push((key, record.clone())),
+                None => {
+                    // 同一 revision 正在写入中就不再排队；revision 变了仍要
+                    // 排（内容更新不能丢）。写失败的会话会从 in_flight 移除
+                    // 且 revision 不落库，下轮对账自然重试。
+                    if worker.in_flight.get(&key) == Some(&record.revision) {
+                        continue;
+                    }
+                    worker.queued.push((key, record.clone()));
+                }
             }
         }
         if worker.running {
@@ -1033,9 +1046,10 @@ impl ContentIndex {
         let mut batch = Vec::new();
         let mut bytes = 0i64;
         while batch.len() < BUILD_BATCH_SESSIONS && bytes < BUILD_BATCH_BYTES {
-            let Some((_, record)) = worker.queued.pop() else {
+            let Some((key, record)) = worker.queued.pop() else {
                 break;
             };
+            worker.in_flight.insert(key, record.revision.clone());
             bytes += session_size_estimate(&record);
             batch.push(record);
         }
@@ -1057,6 +1071,17 @@ impl ContentIndex {
             // `except sqlite3.Error`）：写失败降级逐条重试，只丢真正失败的
             // 那条（已按 ref 记日志），不拖垮同批健康会话与整条队列。
             let _ = self.write_batch_degrading(&parsed);
+            // 写入结束（无论成败）后解除在途标记：成功的下轮对账靠 revision
+            // 去重，失败的允许重新入队重试。
+            let mut worker = self
+                .worker
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            for record in &batch {
+                worker
+                    .in_flight
+                    .remove(&(record.tool.clone(), record.canonical_ref.clone()));
+            }
         }
     }
 
@@ -1484,6 +1509,77 @@ mod tests {
             },
             failed,
         }
+    }
+
+    /// 空实现的装配件：in_flight 去重测试只操作队列，不真正扫描/读取。
+    fn stub_index() -> Arc<AgentSessionIndex> {
+        use crate::adapters::contracts::{ScanCache, ScanRow};
+        use crate::jsonutil::FileStat;
+        use std::path::Path;
+
+        struct StubCache;
+        impl ScanCache for StubCache {
+            fn get(&self, _: &Path, _: &FileStat) -> Option<Option<ScanRow>> {
+                None
+            }
+            fn put(&self, _: &Path, _: &FileStat, _: Option<ScanRow>) {}
+            fn get_digest(&self, _: &Path, _: &FileStat) -> Option<String> {
+                None
+            }
+            fn put_digest(&self, _: &Path, _: &FileStat, _: &str) {}
+            fn flush(&self) {}
+        }
+        struct StubPorts;
+        impl super::super::index::SessionPorts for StubPorts {
+            fn adapter(
+                &self,
+                name: &str,
+            ) -> DomainResult<&crate::adapters::contracts::AgentAdapter> {
+                Err(DomainError::tool_unknown(name))
+            }
+            fn adapters(&self) -> Vec<String> {
+                Vec::new()
+            }
+            fn cache_factory(&self) -> Arc<dyn ScanCache> {
+                Arc::new(StubCache)
+            }
+        }
+        Arc::new(AgentSessionIndex::new(Arc::new(StubPorts)))
+    }
+
+    /// 回归：take_batch 取走的在途批不能被并发 sync 以同一 revision 重复
+    /// 入队（写幂等，重复只是纯浪费，但批大小 4 把浪费放大 4 倍）；
+    /// revision 变了仍要照常入队。
+    #[test]
+    fn in_flight_sessions_are_not_requeued_for_the_same_revision() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        let index = stub_index();
+        // 占住 running，阻止 enqueue 拉起真正的后台线程。
+        content.worker.lock().unwrap().running = true;
+
+        let record = parsed("/a", "text", 0).record;
+        content.enqueue(&index, std::slice::from_ref(&record));
+        assert_eq!(content.worker.lock().unwrap().queued.len(), 1);
+
+        // 模拟 worker 取走这一批：既不在 queued，也尚未落 revision。
+        let batch = content.take_batch().unwrap();
+        assert_eq!(batch.len(), 1);
+        {
+            let worker = content.worker.lock().unwrap();
+            assert!(worker.queued.is_empty());
+            assert_eq!(worker.in_flight.len(), 1);
+        }
+
+        // 同 revision 再入队：跳过。
+        content.enqueue(&index, std::slice::from_ref(&record));
+        assert!(content.worker.lock().unwrap().queued.is_empty());
+
+        // 新 revision 必须照常入队。
+        let mut newer = record.clone();
+        newer.revision = "r2".into();
+        content.enqueue(&index, std::slice::from_ref(&newer));
+        assert_eq!(content.worker.lock().unwrap().queued.len(), 1);
     }
 
     /// 回归：批事务里的毒会话不能连坐同批健康会话。
