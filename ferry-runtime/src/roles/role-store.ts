@@ -63,9 +63,7 @@ export const DEFAULT_ROLE: Role = Object.freeze({
 });
 
 /** 出厂内置角色:可以被改写,但改写只是覆盖层,原始定义永远留在这里供恢复默认。 */
-const BUILTIN_ROLES: readonly Role[] = Object.freeze([
-  DEFAULT_ROLE,
-]);
+const BUILTIN_ROLES: readonly Role[] = Object.freeze([DEFAULT_ROLE]);
 
 const builtinRole = (id: string) =>
   BUILTIN_ROLES.find((role) => role.id === id);

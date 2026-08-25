@@ -76,9 +76,7 @@ describe("FileRoleStore", () => {
     });
 
     const restored = new FileRoleStore(path);
-    expect(await restored.list()).toMatchObject([
-      { name: "我的 Ferry" },
-    ]);
+    expect(await restored.list()).toMatchObject([{ name: "我的 Ferry" }]);
     expect(await restored.reset("default")).toMatchObject({ name: "Ferry" });
     expect(await restored.list()).toMatchObject([
       { id: "default", builtin: true, name: "Ferry", persona: "" },

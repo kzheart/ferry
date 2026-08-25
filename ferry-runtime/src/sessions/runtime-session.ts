@@ -31,10 +31,7 @@ import {
   type ToolRequestContext,
 } from "../tools/catalog.js";
 import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
-import type {
-  PersistedSession,
-  SessionStore,
-} from "./session-store.js";
+import type { PersistedSession, SessionStore } from "./session-store.js";
 
 type AgentId = (typeof AGENT_IDS)[number];
 type AgentCapability = (typeof AGENT_CAPABILITIES)[AgentId][number];
@@ -178,10 +175,7 @@ export class RuntimeSession {
       steeringMode: "one-at-a-time",
       followUpMode: "one-at-a-time",
       initialState: {
-        systemPrompt: systemPrompt(
-          this.resolvedPersona,
-          this.resolvedSkills,
-        ),
+        systemPrompt: systemPrompt(this.resolvedPersona, this.resolvedSkills),
         model: backend.model,
         thinkingLevel: selection.thinking ?? "off",
         tools: [

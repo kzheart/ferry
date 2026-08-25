@@ -269,7 +269,9 @@ fn engine_package_version(engine: &Path) -> Option<String> {
 fn cli_status(app: &AppHandle) -> CliStatus {
     let engine = current_engine_path(app);
     let engine_path = engine.as_ref().map(|path| path.display().to_string());
-    let package_version = engine.as_ref().and_then(|path| engine_package_version(path));
+    let package_version = engine
+        .as_ref()
+        .and_then(|path| engine_package_version(path));
     let link = match platform::cli_link_path() {
         Ok(link) => link,
         Err(reason) => {

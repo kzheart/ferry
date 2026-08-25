@@ -2,16 +2,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{
-    copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
-    install_skill_links, parse_engine_lock, parse_engine_package_version, parse_skill_version,
-    points_to_ferry_engine, remove_skill_dir, remove_skill_group, remove_skill_links,
-    service_status, skill_dirs_present, skill_link_targets, skill_target, skill_target_status,
-    skill_version_at, skills_need_sync, validate_skill_link_slots, cli_needs_sync, SkillTarget,
+    cli_needs_sync, copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
+    parse_engine_lock, parse_engine_package_version, parse_skill_version, points_to_ferry_engine,
+    remove_skill_dir, remove_skill_group, service_status, skill_dirs_present, skill_link_targets,
+    skill_target, skill_target_status, skill_version_at, skills_need_sync, SkillTarget,
     BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
-// 只有 symlink 用例用到它,Windows 下不 cfg 掉会触发 -D unused-imports。
+// symlink 用例只在 Unix 上跑;Windows 下这些 import 会触发 -D unused-imports。
 #[cfg(unix)]
-use super::same_target;
+use super::{install_skill_links, remove_skill_links, same_target, validate_skill_link_slots};
 
 static SCRATCH_SEQUENCE: AtomicU32 = AtomicU32::new(0);
 
@@ -96,7 +95,10 @@ fn engine_package_version_comes_from_version_stdout() {
         .as_deref(),
         Some("0.8.4"),
     );
-    assert_eq!(parse_engine_package_version("{\"version\":\"0.1.0\"}"), None);
+    assert_eq!(
+        parse_engine_package_version("{\"version\":\"0.1.0\"}"),
+        None
+    );
     assert_eq!(parse_engine_package_version("not-json"), None);
 }
 
