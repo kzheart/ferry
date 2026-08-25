@@ -65,7 +65,6 @@ impl MigrationHistoryStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::storage::database::StateDatabase;
     use serde_json::json;
 

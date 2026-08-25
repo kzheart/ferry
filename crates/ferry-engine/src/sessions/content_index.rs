@@ -412,7 +412,7 @@ static READER_OPEN_FAILURES: AtomicU64 = AtomicU64::new(0);
 
 /// 限流：首次与之后每 1024 次返回 true。
 fn should_log(count: u64) -> bool {
-    count == 1 || count % 1024 == 0
+    count == 1 || count.is_multiple_of(1024)
 }
 
 pub struct ContentIndex {

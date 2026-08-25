@@ -453,14 +453,14 @@ fn merge_sources(sources: Vec<(&'static str, HashMap<String, Price>)>) -> Map<St
         for (key, price) in data {
             let normalized = normalize_model(&key);
             if !result.contains_key(&normalized)
-                || result[&normalized]["source"] == Value::from("Built-in")
+                || result[&normalized].get("source").and_then(Value::as_str) == Some("Built-in")
             {
                 result.insert(normalized.clone(), price.to_value(source, &key));
             }
             let part = normalize_model(model_part(&normalized));
             let replace = canonical
                 .get(&part)
-                .map_or(true, |(current_rank, _, current, _)| {
+                .is_none_or(|(current_rank, _, current, _)| {
                     source_rank < *current_rank
                         || (source_rank == *current_rank
                             && key_preference(&normalized) < key_preference(current))
