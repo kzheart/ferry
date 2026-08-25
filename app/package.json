@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "runtime:build": "npm --prefix ../ferry-runtime run build",
-    "desktop": "npm run runtime:build && tauri dev"
+    "desktop": "npm run runtime:build && tauri dev",
+    "fresh": "node ../scripts/fresh-start.mjs",
+    "desktop:fresh": "node ../scripts/fresh-start.mjs && npm run desktop"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
