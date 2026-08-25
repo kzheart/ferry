@@ -255,6 +255,33 @@ fn parse_session(index: &Arc<AgentSessionIndex>, record: &IndexedSession) -> Par
     }
 }
 
+/// scanner 报不出真实体积时的保守估计。cursor/opencode 恒写 `size:0`，
+/// grok 只 stat 了 summary.json（比正文小几个量级）：这些行若按 0 计，
+/// [`SYNC_BYTE_LIMIT`] / [`BUILD_BATCH_BYTES`] 两道内存护栏对它们恒过，
+/// 前台一次并行解析 32 个巨型会话的结果会同时堆在内存里。
+const FALLBACK_SESSION_BYTES: i64 = 2 * 1024 * 1024;
+
+fn session_size_estimate(record: &IndexedSession) -> i64 {
+    match record.row.get("size").and_then(Value::as_i64) {
+        Some(size) if size > 0 => size,
+        _ => FALLBACK_SESSION_BYTES,
+    }
+}
+
+/// 并行解析一批会话；单条不进线程池，就地解析。
+fn parse_batch(index: &Arc<AgentSessionIndex>, batch: &[IndexedSession]) -> Vec<ParsedSession> {
+    if batch.len() == 1 {
+        return vec![parse_session(index, &batch[0])];
+    }
+    BUILD_POOL.install(|| {
+        use rayon::prelude::*;
+        batch
+            .par_iter()
+            .map(|record| parse_session(index, record))
+            .collect()
+    })
+}
+
 fn like_pattern(needle: &str) -> String {
     let escaped = needle
         .replace('\\', "\\\\")
@@ -691,29 +718,21 @@ impl ContentIndex {
         }
         let mut unresolved = pending.len();
         if !pending.is_empty() {
-            let total_bytes: i64 = pending
-                .iter()
-                .map(|record| record.row.get("size").and_then(Value::as_i64).unwrap_or(0))
-                .sum();
+            let total_bytes: i64 = pending.iter().map(session_size_estimate).sum();
             if !prefer_background
                 && !self.building()
                 && pending.len() <= SYNC_SESSION_LIMIT
                 && total_bytes <= SYNC_BYTE_LIMIT
             {
-                // 前台补完：写失败不再让整个搜索 RPC 挂掉——降级逐条写入，
-                // 成功的部分立即可搜，失败的留在 pending 计数里下轮重试。
-                let parsed: Vec<ParsedSession> = if pending.len() == 1 {
-                    vec![parse_session(index, &pending[0])]
-                } else {
-                    BUILD_POOL.install(|| {
-                        use rayon::prelude::*;
-                        pending
-                            .par_iter()
-                            .map(|record| parse_session(index, record))
-                            .collect()
-                    })
-                };
-                unresolved = self.write_batch_degrading(&parsed).len();
+                // 前台补完，与后台同口径按批分段：峰值内存只保留一批的解析
+                // 结果，不再一次性持有 32 份。写失败不让整个搜索 RPC 挂掉——
+                // 降级逐条写入，成功的部分立即可搜，失败的留在 pending 计数
+                // 里下轮重试。
+                unresolved = 0;
+                for chunk in pending.chunks(BUILD_BATCH_SESSIONS) {
+                    let parsed = parse_batch(index, chunk);
+                    unresolved += self.write_batch_degrading(&parsed).len();
+                }
             } else {
                 self.enqueue(index, &pending);
             }
@@ -992,7 +1011,7 @@ impl ContentIndex {
             let Some((_, record)) = worker.queued.pop() else {
                 break;
             };
-            bytes += record.row.get("size").and_then(Value::as_i64).unwrap_or(0);
+            bytes += session_size_estimate(&record);
             batch.push(record);
         }
         Some(batch)
@@ -1008,17 +1027,7 @@ impl ContentIndex {
             }
             // 读+解析是纯 CPU/IO 混合负载且互不依赖，先并行做完；写仍串行，
             // 一批一个事务。
-            let parsed: Vec<ParsedSession> = if batch.len() == 1 {
-                vec![parse_session(index, &batch[0])]
-            } else {
-                BUILD_POOL.install(|| {
-                    use rayon::prelude::*;
-                    batch
-                        .par_iter()
-                        .map(|record| parse_session(index, record))
-                        .collect()
-                })
-            };
+            let parsed = parse_batch(index, &batch);
             // 后台构建吞掉 sqlite 错误并记日志（Python `_drain` 的
             // `except sqlite3.Error`）：写失败降级逐条重试，只丢真正失败的
             // 那条（已按 ref 记日志），不拖垮同批健康会话与整条队列。
