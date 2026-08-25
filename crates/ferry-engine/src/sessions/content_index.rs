@@ -398,6 +398,17 @@ struct ReaderPool {
 /// 只读连接上限。检索本身是 CPU 密集的，开太多只会互相抢核。
 const MAX_READERS: usize = 4;
 
+/// 只读路径回落写连接的累计次数；回落是正确的降级，但持续回落意味着读写
+/// 分离失效（池被占满/只读连接开不出来），必须能在日志里看见。
+static READ_FALLBACKS: AtomicU64 = AtomicU64::new(0);
+/// 只读连接打开失败的累计次数。
+static READER_OPEN_FAILURES: AtomicU64 = AtomicU64::new(0);
+
+/// 限流：首次与之后每 1024 次返回 true。
+fn should_log(count: u64) -> bool {
+    count == 1 || count % 1024 == 0
+}
+
 pub struct ContentIndex {
     path: PathBuf,
     database: Mutex<Database>,
@@ -470,12 +481,19 @@ impl ContentIndex {
         }
         match Self::open_reader(&self.path) {
             Ok(connection) => Some(connection),
-            Err(_) => {
+            Err(error) => {
                 let mut pool = self
                     .readers
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 pool.opened -= 1;
+                drop(pool);
+                let count = READER_OPEN_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
+                if should_log(count) {
+                    crate::server::serve::log_warning(&format!(
+                        "内容索引只读连接打开失败(累计 {count} 次): {error}"
+                    ));
+                }
                 None
             }
         }
@@ -516,6 +534,13 @@ impl ContentIndex {
             return self.with_db(action);
         }
         let Some(connection) = self.checkout_reader() else {
+            // 回落写连接语义正确但会重新与写事务抢锁；留下可观测的痕迹。
+            let count = READ_FALLBACKS.fetch_add(1, Ordering::Relaxed) + 1;
+            if should_log(count) {
+                crate::server::serve::log_warning(&format!(
+                    "内容索引只读连接不可用, 回落写连接(累计 {count} 次)"
+                ));
+            }
             return self.with_db(action);
         };
         // RAII 归还：action panic 时也不能泄漏 opened 名额，否则 MAX_READERS
