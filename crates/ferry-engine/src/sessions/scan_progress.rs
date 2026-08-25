@@ -24,6 +24,9 @@ struct ProgressState {
     order: Vec<String>,
     tools: std::collections::HashMap<String, ToolProgress>,
     current: Option<String>,
+    /// finalizing 阶段（身份摘要/索引整理）的行级进度，与 tools 的读取计数无关。
+    finalize_processed: i64,
+    finalize_total: i64,
 }
 
 pub struct ScanProgressTracker {
@@ -63,14 +66,27 @@ impl ScanProgressTracker {
             .iter()
             .map(|name| (name.clone(), ToolProgress::default()))
             .collect();
+        state.finalize_processed = 0;
+        state.finalize_total = 0;
     }
 
     /// 文件读取结束，进入索引整理阶段（index_rows/落盘）。
-    pub fn finalize(&self) {
+    /// `total` 是待整理的行数，供 UI 把这一阶段画成有终点的进度条。
+    pub fn finalize(&self, total: i64) {
         let mut state = self.locked();
         if state.running {
             state.phase = "finalizing";
             state.current = None;
+            state.finalize_processed = 0;
+            state.finalize_total = total;
+        }
+    }
+
+    /// finalizing 阶段的行级推进；不在该阶段的上报一律忽略。
+    pub fn advance_finalize(&self, count: i64) {
+        let mut state = self.locked();
+        if state.running && state.phase == "finalizing" {
+            state.finalize_processed += count;
         }
     }
 
@@ -164,6 +180,10 @@ impl ScanProgressTracker {
         payload.insert("processed".into(), Value::from(processed));
         payload.insert("total".into(), Value::from(total));
         payload.insert("tools".into(), Value::Object(tools));
+        let mut finalizing = Map::new();
+        finalizing.insert("processed".into(), Value::from(state.finalize_processed));
+        finalizing.insert("total".into(), Value::from(state.finalize_total));
+        payload.insert("finalizing".into(), Value::Object(finalizing));
         payload
     }
 }
@@ -223,9 +243,19 @@ mod tests {
         assert_eq!(snapshot["total"], Value::from(12));
         assert_eq!(snapshot["tools"]["codex"]["total"], Value::from(2));
         assert_eq!(snapshot["tools"]["claude"]["done"], Value::Bool(true));
-        tracker.finalize();
-        assert_eq!(tracker.snapshot()["phase"], Value::from("finalizing"));
+        tracker.finalize(12);
+        let finalizing = tracker.snapshot();
+        assert_eq!(finalizing["phase"], Value::from("finalizing"));
+        assert_eq!(finalizing["finalizing"]["total"], Value::from(12));
+        tracker.advance_finalize(5);
+        assert_eq!(
+            tracker.snapshot()["finalizing"]["processed"],
+            Value::from(5)
+        );
         tracker.end();
+        // 扫描结束后 finalizing 上报同样忽略。
+        tracker.advance_finalize(3);
+        assert_eq!(tracker.snapshot()["finalizing"]["processed"], Value::from(5));
         assert_eq!(tracker.snapshot()["state"], Value::from("idle"));
     }
 

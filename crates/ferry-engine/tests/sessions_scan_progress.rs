@@ -61,8 +61,15 @@ fn scan_jsonl_reports_progress_through_the_registered_tracker() {
     assert_eq!(snapshot["tools"]["claude"]["total"], Value::from(7));
 
     TRACKER.finish_tool("claude");
-    TRACKER.finalize();
-    assert_eq!(TRACKER.snapshot()["phase"], Value::from("finalizing"));
+    TRACKER.finalize(7);
+    let finalizing = TRACKER.snapshot();
+    assert_eq!(finalizing["phase"], Value::from("finalizing"));
+    assert_eq!(finalizing["finalizing"]["total"], Value::from(7));
+    TRACKER.advance_finalize(3);
+    assert_eq!(
+        TRACKER.snapshot()["finalizing"]["processed"],
+        Value::from(3)
+    );
     TRACKER.end();
     let idle = TRACKER.snapshot();
     assert_eq!(idle["state"], Value::from("idle"));

@@ -4,10 +4,50 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ferry</title>
+  <script>
+    // 启动画面的主题判定:必须内联同步执行(themeBootstrap 是 module script,
+    // 要等网络请求;dev 模式下 vite 冷转换期间它还没到)。themeBootstrap 稍后
+    // 仍会跑一遍,额外负责 Tauri 窗口材质,两边判定逻辑保持一致。
+    try {
+      var s = JSON.parse(localStorage.getItem("ferry-settings") || "{}");
+      var dark = s.theme === "dark"
+        || (s.theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      document.documentElement.style.background = dark ? "#141416" : "#FBFCFD";
+    } catch (e) { /* 无有效缓存时保持默认浅色 */ }
+  </script>
+  <style>
+    /* 静态启动画面:不依赖任何 bundle,index.html 一到就渲染;React 首帧
+       挂载到 #root 时被整体替换。色值与 app.css 的 --accent/--bg 对齐。 */
+    #root { position: fixed; inset: 0; }
+    .boot { position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      background: #FBFCFD; color: #1C2530; }
+    html[data-theme="dark"] .boot { background: #141416; color: #E8E9EB; }
+    .boot svg { display: block; animation: bootbob 2.6s ease-in-out infinite alternate; }
+    .boot i { display: block; width: 72px; height: 2px; border-radius: 99px;
+      background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 9px);
+      opacity: .35; animation: bootroute 1.5s linear infinite; }
+    @keyframes bootbob { from { transform: translateY(-1.4px) rotate(-.6deg); }
+      to { transform: translateY(1.4px) rotate(.6deg); } }
+    @keyframes bootroute { to { background-position: -9px 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .boot svg, .boot i { animation: none; }
+    }
+  </style>
   <script type="module" src="/src/themeBootstrap.js"></script>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="boot" aria-hidden="true">
+      <svg width="40" height="33" viewBox="0 0 16 13" fill="currentColor">
+        <path d="M1 8.2h14L12.8 12H3.2L1 8.2Z" />
+        <path d="M8.9 1.2 13.2 7H8.9V1.2Z" opacity=".85" />
+        <rect x="8.1" y="1" width="1" height="6.2" rx=".5" />
+      </svg>
+      <i></i>
+    </div>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

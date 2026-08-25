@@ -135,6 +135,21 @@ test("第六站扫描:进入即触发扫描并开始轮询;引擎还在读取时
   expect(buttonWith("onboarding:wizard.enterNow").disabled).toBe(true);
 });
 
+test("收尾阶段展示整理进度而不是已满的工具条,主按钮仍禁用", async () => {
+  progressPayload = {
+    state: "running", phase: "finalizing", processed: 2039, total: 2039,
+    tools: { claude: { processed: 2039, total: 2039, done: true } },
+    finalizing: { processed: 800, total: 2039 },
+    content_index: { ready: false, reason: "not_scanned" },
+  };
+  await gotoScanStation();
+  expect(screen.getByText("onboarding:wizard.scanTitleFinalizing")).toBeTruthy();
+  expect(screen.getByText(/scanReadDone/)).toBeTruthy();
+  expect(screen.getByText("onboarding:wizard.finalizingFrac")).toBeTruthy();
+  expect(screen.queryByText("onboarding:wizard.scanReadingHint")).toBeFalsy();
+  expect(buttonWith("onboarding:wizard.enterNow").disabled).toBe(true);
+});
+
 test("引擎读取完成后进入索引视图,不依赖前端那次 scan 调用的生死", async () => {
   // scanning 全程 false、从未翻转过——过去的实现在这里会永远卡在读取页
   await gotoScanStation();

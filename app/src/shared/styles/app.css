@@ -816,11 +816,37 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 }
 .fw-arrive { animation: fwarrive 4.6s ease-in-out infinite; }
 @keyframes fwarrive { 0%, 78% { transform: scale(1); } 86% { transform: scale(1.1); } 94%, 100% { transform: scale(1); } }
+/* 索引完成印记:虚线航线绕行一周后落定成实线圆环,对号靠港并微弹 */
+.fw-seal circle {
+  fill: none; stroke: var(--ok); stroke-width: 2; stroke-linecap: round;
+  stroke-dasharray: 3 4.6; stroke-dashoffset: 57;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  animation: fwroutecurl .55s cubic-bezier(.5,.1,.3,1) forwards;
+}
+.fw-seal path {
+  fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-linecap: round;
+  stroke-linejoin: round; stroke-dasharray: 14; stroke-dashoffset: 14;
+  animation: fwcheckdraw .3s .5s cubic-bezier(.3,.9,.4,1) forwards;
+}
+.fw-seal { animation: fwsealpop .5s .55s cubic-bezier(.34,1.56,.64,1); }
+/* r=9 的周长约 56.5,取 57 收尾以免留缝 */
+@keyframes fwroutecurl {
+  60% { stroke-dasharray: 3 4.6; stroke-dashoffset: 12; }
+  100% { stroke-dasharray: 57 0; stroke-dashoffset: 0; }
+}
+@keyframes fwcheckdraw { to { stroke-dashoffset: 0; } }
+@keyframes fwsealpop {
+  0% { transform: scale(1); } 55% { transform: scale(1.16); } 100% { transform: scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
   @keyframes fwslide-fwd { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fwslide-back { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fwfadeup { from { opacity: 0; } to { opacity: 1; } }
   .fw-harbor-icon, .fw-wave svg, .fw-route, .fw-boat, .fw-sweep, .fw-rowlit,
-  .fw-cross, .fw-arrive { animation: none !important; }
+  .fw-cross, .fw-arrive,
+  .fw-seal, .fw-seal circle, .fw-seal path { animation: none !important; }
   .fw-cross { opacity: 1; }
+  /* 动画关掉后直接呈现终态:实线圆环 + 完整对号 */
+  .fw-seal circle { stroke-dasharray: 57; stroke-dashoffset: 0; }
+  .fw-seal path { stroke-dashoffset: 0; }
 }

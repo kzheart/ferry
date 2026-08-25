@@ -23,7 +23,7 @@ use crate::operations::{history, metadata, verification};
 use crate::runtime::sessions as runtime_sessions;
 use crate::server::notify::Notifier;
 use crate::server::rpc::{ContentSearchRequest, EngineService, SessionReadRequest};
-use crate::sessions::content_index::ContentIndex;
+use crate::sessions::content_index::{ContentIndex, CoverageConverger};
 use crate::sessions::index::{AgentSessionIndex, IndexedSession, SessionPorts};
 use crate::sessions::live::LiveIndexService;
 use crate::sessions::search::SearchRequest;
@@ -220,6 +220,7 @@ pub struct Engine {
     operations: OperationService,
     content_index: Option<Arc<ContentIndex>>,
     live: Mutex<Option<Arc<LiveIndexService>>>,
+    converger: Mutex<Option<CoverageConverger>>,
 }
 
 impl Engine {
@@ -237,6 +238,7 @@ impl Engine {
             operations,
             content_index,
             live: Mutex::new(None),
+            converger: Mutex::new(None),
         }
     }
 
@@ -248,10 +250,18 @@ impl Engine {
         self.content_index.as_ref()
     }
 
-    /// 等价 `EngineService.close()`：live → operations → content_index。
+    /// 等价 `EngineService.close()`：live → converger → operations → content_index。
     pub fn close(&self) {
         if let Some(live) = self.live_service() {
             live.stop();
+        }
+        let converger = self
+            .converger
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(converger) = converger {
+            converger.stop();
         }
         self.operations.shutdown();
         if let Some(content_index) = &self.content_index {
@@ -272,6 +282,17 @@ impl Engine {
             .live
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(live);
+        // live 只刷新元数据索引;内容索引的缺口原本只有启动预热和内容搜索会补,
+        // agent 活跃写入期间覆盖度会停在 pending>0 无人推进。自愈线程盯
+        // generation,静默期后把缺口交给后台构建,让 ready 最终收敛。
+        if let Some(content_index) = &self.content_index {
+            *self
+                .converger
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(
+                CoverageConverger::spawn(Arc::clone(content_index), Arc::clone(&self.index)),
+            );
+        }
     }
 
     /// serve 启动预热：先扫库，再把内容索引的缺口交给后台线程。

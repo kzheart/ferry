@@ -382,6 +382,42 @@ function HandoffStep({ t }) {
 // 终点站:扫描与索引。阶段一读会话元数据(分工具进度),阶段二建全文索引
 // (百分比 + 剩余时间)。索引就绪时上层自动进入,这里只负责展示。
 function ScanStep({ metaDone, progress, ci, t }) {
+  // 收尾阶段:文件读完了,引擎在算身份摘要/整理索引(首启冷扫描时是大头)。
+  // 六条已满的工具条收起来,换成一条有终点的整理进度,避免「条满了还转圈」的假死感。
+  if (!metaDone && progress?.state === "running" && progress?.phase === "finalizing") {
+    const fin = progress.finalizing || {};
+    const fTotal = fin.total || 0;
+    const fDone = Math.min(fin.processed || 0, fTotal);
+    const fPct = fTotal > 0 ? Math.min(100, Math.round(fDone / fTotal * 100)) : 0;
+    return (
+      <>
+        <div style={stepTitle}>{t("onboarding:wizard.scanTitleFinalizing")}</div>
+        <div style={{ ...stepDesc, marginBottom: 6 }}>{t("onboarding:wizard.scanDescFinalizing")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600,
+          color: "var(--ok-deep)", margin: "10px 0 4px" }}>
+          ✓ {t("onboarding:wizard.scanReadDone", { count: progress.total ?? 0 })}
+        </div>
+        {fTotal > 0 ? (
+          <>
+            <div style={{ height: 6, borderRadius: 99, background: "var(--inset)",
+              overflow: "hidden", margin: "14px 0 10px" }}>
+              <i style={{ display: "block", height: "100%", borderRadius: 99,
+                width: `${fPct}%`, background: "var(--accent)", transition: "width .3s" }} />
+            </div>
+            <div style={{ fontSize: 12, color: "var(--tx4)", fontVariantNumeric: "tabular-nums" }}>
+              {t("onboarding:wizard.finalizingFrac", { done: fDone, total: fTotal })}
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+            fontWeight: 600, color: "var(--tx4)", marginTop: 8 }}>
+            <Spinner size={12} accent="var(--accent)" />
+            {t("onboarding:wizard.finalizingHint")}
+          </div>
+        )}
+      </>
+    );
+  }
   if (!metaDone) {
     const tools = progress?.state === "running" ? Object.entries(progress.tools || {}) : [];
     return (
@@ -420,7 +456,8 @@ function ScanStep({ metaDone, progress, ci, t }) {
   }
 
   const total = ci ? (ci.indexed_sessions || 0) + (ci.pending_sessions || 0) : 0;
-  const pct = ci && total > 0 ? Math.min(100, Math.round(ci.indexed_sessions / total * 100)) : 0;
+  // 未就绪时封顶 99:索引一就绪上层就自动进入了,这里永远不该显示 100%。
+  const pct = ci && total > 0 ? Math.min(99, Math.floor(ci.indexed_sessions / total * 100)) : 0;
   return (
     <>
       <div style={stepTitle}>{t("onboarding:wizard.scanTitleIndexing")}</div>

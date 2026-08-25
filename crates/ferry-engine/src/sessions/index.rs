@@ -675,10 +675,20 @@ impl AgentSessionIndex {
                 tools.insert(name.clone(), Value::Object(status));
                 TRACKER.finish_tool(name);
             }
-            TRACKER.finalize();
+            TRACKER.finalize(scanned.len() as i64);
             cache.flush();
             let records = self.index_rows(&scanned, None)?;
-            // 扫描主体完成后才做各 adapter 的维护，避免与扫描争抢 CPU。
+            {
+                let mut state = self.locked();
+                state.tool_status = tools.clone();
+                state.bootstrapped = true;
+            }
+            Ok(records)
+        })();
+        TRACKER.end();
+        // 维护放在 end() 之后：它只加速后续增量扫描，不影响本轮结果，
+        // 不该把进度上的「扫描中」拖长——首启向导正盯着这个状态放行用户。
+        if outcome.is_ok() {
             for name in &names {
                 let Ok(adapter) = self.ports.adapter(name) else {
                     continue;
@@ -691,14 +701,7 @@ impl AgentSessionIndex {
                     let _ = error;
                 }
             }
-            {
-                let mut state = self.locked();
-                state.tool_status = tools.clone();
-                state.bootstrapped = true;
-            }
-            Ok(records)
-        })();
-        TRACKER.end();
+        }
         outcome.map(|records| (tools, records))
     }
 
@@ -1221,20 +1224,21 @@ impl AgentSessionIndex {
         scanned: &[(String, ScanRow)],
         digest_store: &dyn ScanCache,
     ) -> DomainResult<Vec<Canonicalized>> {
+        // 首启冷扫描时这里是收尾阶段的大头，逐行上报让向导能画出有终点的
+        // 进度条；不在 finalizing 阶段的上报由 TRACKER 自行忽略。
+        let step = |(tool, row): &(String, ScanRow)| {
+            let result = self.canonicalize(tool, row, digest_store);
+            TRACKER.advance_finalize(1);
+            result
+        };
         if scanned.len() < PARALLEL_CANONICALIZE_THRESHOLD {
-            return scanned
-                .iter()
-                .map(|(tool, row)| self.canonicalize(tool, row, digest_store))
-                .collect();
+            return scanned.iter().map(step).collect();
         }
         // 摘要之间互不依赖，且哈希与文件读取都是 IO/CPU 混合负载，先并行算完，
         // 再在锁内串行做签发与淘汰。
         CANONICALIZE_POOL.install(|| {
             use rayon::prelude::*;
-            scanned
-                .par_iter()
-                .map(|(tool, row)| self.canonicalize(tool, row, digest_store))
-                .collect()
+            scanned.par_iter().map(step).collect()
         })
     }
 

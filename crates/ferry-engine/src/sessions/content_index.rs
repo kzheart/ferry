@@ -1422,6 +1422,100 @@ impl ContentIndex {
     }
 }
 
+// ---------- 覆盖度自愈 ----------
+
+/// 元数据索引 generation 变化后，静默这么久才补内容索引：正在刷屏的会话
+/// 每条消息都推 generation，防抖避免对热会话反复重建。
+const CONVERGE_DEBOUNCE: Duration = Duration::from_secs(10);
+/// 自愈线程的心跳间隔；generation 没变时每拍只读一个内存计数，零 IO。
+const CONVERGE_POLL: Duration = Duration::from_secs(5);
+
+/// 内容索引覆盖度自愈线程。
+///
+/// live 监听只刷新元数据索引，`sync` 原本只在启动预热和内容搜索时运行——
+/// agent 活跃写入期间 revision 不断前移，覆盖度停在 `pending>0, building:false`
+/// 没人推进，进度胶囊会无限期挂着。这个线程盯 generation：变化后防抖一段
+/// 静默期，再把缺口交给后台构建（`prefer_background`，从不在这条线程上解析）。
+pub struct CoverageConverger {
+    shared: Arc<(Mutex<bool>, std::sync::Condvar)>,
+    handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+impl CoverageConverger {
+    pub fn spawn(content: Arc<ContentIndex>, index: Arc<AgentSessionIndex>) -> Self {
+        let shared = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let thread_shared = Arc::clone(&shared);
+        let handle = std::thread::Builder::new()
+            .name("content-converge".into())
+            .spawn(move || run_converger(&content, &index, &thread_shared))
+            .ok();
+        Self {
+            shared,
+            handle: Mutex::new(handle),
+        }
+    }
+
+    pub fn stop(&self) {
+        {
+            let (stop, signal) = &*self.shared;
+            *stop.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = true;
+            signal.notify_all();
+        }
+        let handle = self
+            .handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn run_converger(
+    content: &Arc<ContentIndex>,
+    index: &Arc<AgentSessionIndex>,
+    shared: &Arc<(Mutex<bool>, std::sync::Condvar)>,
+) {
+    let mut seen = index.generation();
+    // 启动那一代由 serve 的预热 sync 负责，这里只追之后的变化。
+    let mut synced = seen;
+    let mut stable_since = Instant::now();
+    loop {
+        {
+            let (stop, signal) = &**shared;
+            let guard = stop.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let (guard, _) = signal
+                .wait_timeout(guard, CONVERGE_POLL)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if *guard {
+                return;
+            }
+        }
+        let generation = index.generation();
+        if generation != seen {
+            seen = generation;
+            stable_since = Instant::now();
+            continue;
+        }
+        if generation == synced || stable_since.elapsed() < CONVERGE_DEBOUNCE {
+            continue;
+        }
+        let Some((_tools, records, snapshot_generation)) = index.snapshot_with_status() else {
+            continue;
+        };
+        match content.sync(index, &records, true) {
+            Ok(_) => synced = snapshot_generation,
+            // 失败也记为已处理：每 5 秒重试同一个错误只会刷日志，
+            // 等下一次 generation 变化再来。
+            Err(error) => {
+                crate::server::serve::log_warning(&format!("内容索引自愈失败: {}", error.message()));
+                synced = snapshot_generation;
+            }
+        }
+    }
+}
+
 fn read_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MatchRow> {
     Ok(MatchRow {
         id: row.get(0)?,

@@ -5,6 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BoatGlyph, useIndexProgress } from "../modules/onboarding/public.js";
 
+/** 完成印记:虚线航线收拢成圆环,对号靠港。动效见 app.css 的 .fw-seal。 */
+function SealGlyph() {
+  return (
+    <svg className="fw-seal" width="14" height="14" viewBox="0 0 22 22" aria-hidden>
+      <circle cx="11" cy="11" r="9" />
+      <path d="M6.8 11.4 9.8 14.4 15.2 8.4" />
+    </svg>
+  );
+}
+
 export function IndexProgressPill() {
   const { t } = useTranslation();
   const { contentIndex: ci } = useIndexProgress({ interval: 3000 });
@@ -31,14 +41,16 @@ export function IndexProgressPill() {
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 24,
         padding: "0 11px", borderRadius: 99, border: "1px solid var(--ok)",
         fontSize: 11, fontWeight: 600, color: "var(--ok-deep)", flex: "none" }}>
-        ✓ {t("app:indexPill.done")}
+        <SealGlyph /> {t("app:indexPill.done")}
       </span>
     );
   }
 
   const total = (ci.indexed_sessions || 0) + (ci.pending_sessions || 0);
   if (!total) return null;
-  const pct = Math.min(100, Math.round((ci.indexed_sessions || 0) / total * 100));
+  // 未就绪时封顶 99:「100%」只留给真正完成——尾巴上还剩几个会话时
+  // 四舍五入到 100 会让胶囊看起来像卡死。
+  const pct = Math.min(99, Math.floor((ci.indexed_sessions || 0) / total * 100));
 
   return (
     <span title={t("app:indexPill.tip", { indexed: ci.indexed_sessions, total })}
