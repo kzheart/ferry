@@ -383,6 +383,10 @@ pub struct ContentIndex {
     /// 复核（见 [`Self::with_db`]）。
     unavailable_flag: AtomicBool,
     closed_flag: AtomicBool,
+    /// 写连接已成功打开并确认过 schema（建库/迁移在 [`Self::open`] 里）。
+    /// 只读路径不跑迁移，必须先由写连接把 schema 摆正，否则升级后的第一批
+    /// 只读查询会撞上旧 `user_version` 的表结构而报错。
+    schema_ready: AtomicBool,
 }
 
 impl ContentIndex {
@@ -398,6 +402,7 @@ impl ContentIndex {
             worker: Mutex::new(WorkerState::default()),
             unavailable_flag: AtomicBool::new(false),
             closed_flag: AtomicBool::new(false),
+            schema_ready: AtomicBool::new(false),
         }
     }
 
@@ -477,6 +482,12 @@ impl ContentIndex {
         {
             return Ok(None);
         }
+        // schema 只有写连接会建/迁移。写连接还没成功打开过时（例如 daemon
+        // 刚启动、schema 升级后第一批只读查询先到），先借道 with_db 把库摆
+        // 正，否则只读连接会在旧 `user_version` 的表结构上直接报错。
+        if !self.schema_ready.load(Ordering::Acquire) {
+            return self.with_db(action);
+        }
         let Some(connection) = self.checkout_reader() else {
             return self.with_db(action);
         };
@@ -546,6 +557,8 @@ impl ContentIndex {
             }
         }
         let connection = guard.connection.as_ref().expect("上一步已装载");
+        // 连接在手即 schema 已确认（open() 里跑过 ensure_schema）。
+        self.schema_ready.store(true, Ordering::Release);
         action(connection)
             .map(Some)
             .map_err(|error| DomainError::internal(format!("内容索引查询失败: {error}")))
@@ -1525,6 +1538,24 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    /// 回归：只读路径不跑迁移，旧 `user_version` 的库上第一批只读查询必须
+    /// 先借道写连接把 schema 摆正，而不是在旧表结构上直接报错
+    /// （表现为 daemon 启动窗口内 `daemon.status` 瞬时报 internal）。
+    #[test]
+    fn read_only_path_migrates_schema_before_first_query() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("content-index.sqlite3");
+        {
+            let connection = Connection::open(&path).unwrap();
+            connection.execute_batch("PRAGMA user_version = 1").unwrap();
+        }
+        let content = Arc::new(ContentIndex::new(Some(path)));
+        // 不先走任何写路径，直接只读查询。
+        let stored = content.stored_revisions().unwrap();
+        assert!(stored.is_empty());
+        assert!(content.indexed_session_keys().unwrap().is_some());
     }
 
     #[test]
