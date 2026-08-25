@@ -28,7 +28,7 @@
 </p>
 
 <div align="center">
-  <img src="./assets/screenshots/browser.png" alt="Ferry session browser" width="92%" />
+  <img src="./assets/screenshots/en/browser.png" alt="Ferry session browser" width="92%" />
 </div>
 
 ---
@@ -92,7 +92,7 @@ grouped by recency and tagged with their source agent.
 - **Local metadata**: Rename, tag, and pin sessions without touching the originals. Deletions are backed up and undoable.
 
 <div align="center">
-  <img src="./assets/screenshots/search.png" alt="Command palette" width="88%" />
+  <img src="./assets/screenshots/en/search.png" alt="Command palette" width="88%" />
 </div>
 
 ### Cross-Agent Migration
@@ -107,7 +107,7 @@ anything is written.
 - **Traceable origin** — Migrated sessions are labeled with the agent they came from, right in the session detail.
 
 <div align="center">
-  <img src="./assets/screenshots/migrate.png" alt="Migration impact preview" width="88%" />
+  <img src="./assets/screenshots/en/migrate.png" alt="Migration impact preview" width="88%" />
 </div>
 
 ### Resume in Another Agent
@@ -159,11 +159,11 @@ Understand your coding-agent habits over time:
 - **Activity heatmap** — A 52-week view of your daily coding activity.
 
 <div align="center">
-  <img src="./assets/screenshots/overview.png" alt="Overview dashboard" width="88%" />
+  <img src="./assets/screenshots/en/overview.png" alt="Overview dashboard" width="88%" />
 </div>
 
 <div align="center">
-  <img src="./assets/screenshots/overview-detail.png" alt="Cost and project breakdown" width="88%" />
+  <img src="./assets/screenshots/en/overview-detail.png" alt="Cost and project breakdown" width="88%" />
 </div>
 
 ### Session Editing
