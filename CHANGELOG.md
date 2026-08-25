@@ -14,6 +14,37 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.5] - 2026-08-25
+
+### Added
+
+- **First-run wizard** — onboarding is now a full-window six-station flow that
+  ends at the library scan and content-index progress.
+- **Index progress in the toolbar** — finalize progress stays visible, coverage
+  can self-heal, and completion gets a short animation.
+- **Auto-sync for CLI & skills** — after the first manual install, later app
+  launches quietly refresh an already-installed `ferry` command and skill group;
+  uninstall still sticks until you install again.
+
+### Changed
+
+- **Independent CLI & skill versions** — the app, `ferry` CLI package, and skill
+  `version:` fields no longer have to share one number; only what actually
+  changed needs a bump.
+- **Session library default** — the library groups by time instead of project.
+
+### Fixed
+
+- **Cursor resume** — Cursor sessions no longer offer a terminal resume command
+  that cannot work for that agent.
+- **Post-onboarding index hint** — the silent indexing tip after first run no
+  longer misfires.
+
+### Performance
+
+- **Content index builds** — full-library indexing is substantially faster
+  through read/write separation, batched commits, and related engine work.
+
 ## [0.8.4] - 2026-08-24
 
 ### Added
