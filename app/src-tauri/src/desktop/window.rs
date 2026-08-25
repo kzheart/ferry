@@ -4,6 +4,7 @@
 //! 轻则红绿灯闪动,重则 stack overflow。前端 44px 拖拽区可继续用;
 //! 红绿灯落在原生 ~32pt 条带内,这是 macOS overlay 标题栏的常态。
 
+#[cfg(target_os = "macos")]
 pub(crate) fn install(_window: &tauri::Window) {}
 
 pub(crate) fn handle_window_event(_window: &tauri::Window, _event: &tauri::WindowEvent) {}
