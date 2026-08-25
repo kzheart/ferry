@@ -1,4 +1,4 @@
-// 会话浏览域的壳状态:预览、搜索、右键菜单、删除确认、重命名、标签、筛选。
+// 会话浏览域的壳状态:预览、搜索、右键菜单、重命名、标签、筛选。
 //
 // 这些字段原先由 workspaceOverlayProps.buildOverlayProps 组装成一个 80 参数的
 // 大对象,再穿过 AppController -> AppOverlayController / WorkspaceRouter 层层

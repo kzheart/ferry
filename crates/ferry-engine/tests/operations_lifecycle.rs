@@ -1,8 +1,7 @@
 //! Operation 生命周期的端到端复刻（对照 `tests/test_operations.py` 的关键场景）。
 //!
 //! 覆盖：冻结计划 + 一次性批准、cancel 零写入、TTL 惰性过期、崩溃恢复、
-//! 审计序列、metadata 独立 CAS、edit 事务的两道 revision 门禁与快照还原、
-//! delete 三重门禁 + evict 回调。
+//! 审计序列、metadata 独立 CAS、edit 事务的两道 revision 门禁与快照还原。
 //!
 //! 这里用假 adapter / 假索引把 operations 单独拎出来跑，不依赖 WP-C/WP-D。
 
@@ -180,15 +179,7 @@ impl SessionVerifier for FakeVerifier {
     }
 }
 
-#[derive(Default)]
-struct LifecycleState {
-    deleted: Mutex<Vec<String>>,
-    fail: AtomicBool,
-}
-
-struct FakeLifecycle {
-    state: Arc<LifecycleState>,
-}
+struct FakeLifecycle;
 
 impl SessionLifecycle for FakeLifecycle {
     fn resume_descriptor(&self, _session_id: &str, _cwd: &str) -> DomainResult<Map<String, Value>> {
@@ -201,18 +192,6 @@ impl SessionLifecycle for FakeLifecycle {
 
     fn validation_ref(&self, session_id: &str, _dest: &Path) -> DomainResult<String> {
         Ok(session_id.to_string())
-    }
-
-    fn delete(&self, _adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
-        if self.state.fail.load(Ordering::SeqCst) {
-            return Err(DomainError::agent_request_invalid("删除失败"));
-        }
-        self.state
-            .deleted
-            .lock()
-            .unwrap()
-            .push(reference.to_string());
-        Ok(Map::new())
     }
 }
 
@@ -263,7 +242,7 @@ fn manifest(edit_operations: &[&str]) -> AgentManifest {
         icon: "claude".into(),
         source_path: "~/.claude/projects".into(),
         // 顺序必须是 AGENT_CAPABILITIES 的有序子集。
-        capabilities: ["browse", "resume", "edit", "delete", "prompt", "models"]
+        capabilities: ["browse", "resume", "edit", "prompt", "models"]
             .iter()
             .map(|value| (*value).to_string())
             .collect(),
@@ -304,7 +283,6 @@ struct IndexState {
     revision: Mutex<String>,
     session_id: Mutex<String>,
     missing: AtomicBool,
-    evicted: Mutex<Vec<String>>,
 }
 
 struct FakeResolver {
@@ -352,15 +330,6 @@ impl SessionResolver for FakeResolver {
         })
     }
 
-    fn evict(&self, _tool: &str, canonical_ref: &str) -> DomainResult<()> {
-        self.state
-            .evicted
-            .lock()
-            .unwrap()
-            .push(canonical_ref.to_string());
-        Ok(())
-    }
-
     fn read_indexed_session(&self, record: &IndexedSession) -> DomainResult<Session> {
         Ok(Session::new("claude", &record.canonical_ref, "/tmp"))
     }
@@ -377,7 +346,6 @@ struct Harness {
     index: Resolver,
     clock: Arc<TestClock>,
     editor: Arc<EditorState>,
-    lifecycle: Arc<LifecycleState>,
     index_state: Arc<IndexState>,
 }
 
@@ -393,7 +361,6 @@ impl Harness {
             revision: Mutex::new("revision-1".into()),
             ..EditorState::default()
         });
-        let lifecycle_state = Arc::new(LifecycleState::default());
         let adapter = AgentAdapter::builder()
             .browser(Arc::new(FakeBrowser))
             .editor(Arc::new(FakeEditor {
@@ -401,9 +368,7 @@ impl Harness {
                 state: Arc::clone(&editor_state),
             }))
             .verifier(Arc::new(FakeVerifier))
-            .lifecycle(Arc::new(FakeLifecycle {
-                state: Arc::clone(&lifecycle_state),
-            }))
+            .lifecycle(Arc::new(FakeLifecycle))
             .models(Arc::new(FakeModels))
             .build(manifest(edit_operations))
             .expect("假 adapter 装配失败");
@@ -425,7 +390,6 @@ impl Harness {
                 now: Mutex::new(1_000),
             }),
             editor: editor_state,
-            lifecycle: lifecycle_state,
             index_state,
             _dir: dir,
         }
@@ -782,124 +746,6 @@ fn replace_reply_requires_the_editor_operation() {
         .unwrap_err();
     assert_eq!(error.error_type(), "OperationUnsupportedError");
     assert_eq!(harness.commits(), 0);
-}
-
-#[test]
-fn delete_plan_is_read_only_and_apply_deletes_permanently() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let plan = service
-        .plan(&json!({"kind": "delete", "tool": "claude", "refs": ["fsr_abcdefgh"]}))
-        .unwrap();
-
-    assert_eq!(plan["kind"], json!("delete"));
-    assert_eq!(plan["risk"], json!("high"));
-    assert_eq!(plan["preview"]["permanent"], json!(true));
-    assert_eq!(plan["preview"]["totals"]["count"], json!(1));
-    assert_eq!(plan["preview"]["excluded"], json!([]));
-    assert_eq!(plan["affected_refs"], json!(["fsr_abcdefgh"]));
-    assert!(harness.lifecycle.deleted.lock().unwrap().is_empty());
-
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    let result = &applied["result"];
-    assert_eq!(
-        result["succeeded"],
-        json!([{"tool": "claude", "ref": "fsr_abcdefgh"}])
-    );
-    assert_eq!(result["skipped"], json!([]));
-    assert_eq!(result["failed"], json!([]));
-    assert!(!serde_json::to_string(result)
-        .unwrap()
-        .contains("recovery_id"));
-    assert_eq!(
-        harness.lifecycle.deleted.lock().unwrap().clone(),
-        ["/tmp/transcript.jsonl"]
-    );
-    // 删除成功立即 evict，推 removal delta。
-    assert_eq!(
-        harness.index_state.evicted.lock().unwrap().clone(),
-        ["/tmp/transcript.jsonl"]
-    );
-}
-
-#[test]
-fn delete_apply_skips_sessions_changed_after_plan() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let plan = service
-        .plan(&json!({"kind": "delete", "tool": "claude", "refs": ["fsr_abcdefgh"]}))
-        .unwrap();
-    *harness.index_state.revision.lock().unwrap() = "index-revision-2".into();
-
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    let result = &applied["result"];
-    assert_eq!(result["succeeded"], json!([]));
-    assert_eq!(
-        result["skipped"],
-        json!([{"tool": "claude", "ref": "fsr_abcdefgh", "cause": "changed"}])
-    );
-    assert!(harness.lifecycle.deleted.lock().unwrap().is_empty());
-}
-
-#[test]
-fn delete_apply_skips_sessions_protected_after_plan() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let plan = service
-        .plan(&json!({"kind": "delete", "tool": "claude", "refs": ["fsr_abcdefgh"]}))
-        .unwrap();
-
-    let mut patch = Map::new();
-    patch.insert("pinned".into(), Value::Bool(true));
-    metadata::set_entry("claude", "private-id", &patch, &harness.ports).unwrap();
-
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    assert_eq!(
-        applied["result"]["skipped"],
-        json!([{
-            "tool": "claude", "ref": "fsr_abcdefgh",
-            "cause": "protected", "protection": "pinned",
-        }])
-    );
-    assert!(harness.lifecycle.deleted.lock().unwrap().is_empty());
-}
-
-#[test]
-fn delete_plan_excludes_protected_sessions_at_plan_time() {
-    let harness = Harness::new();
-    let mut patch = Map::new();
-    patch.insert("pinned".into(), Value::Bool(true));
-    metadata::set_entry("claude", "private-id", &patch, &harness.ports).unwrap();
-    let service = harness.service();
-
-    let plan = service
-        .plan(&json!({"kind": "delete", "tool": "claude", "refs": ["fsr_abcdefgh"]}))
-        .unwrap();
-
-    assert_eq!(plan["preview"]["totals"]["count"], json!(0));
-    assert_eq!(plan["preview"]["excluded"][0]["cause"], json!("pinned"));
-    // targets 为空 → apply 什么都不删。
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    assert_eq!(applied["result"]["succeeded"], json!([]));
-    assert!(harness.lifecycle.deleted.lock().unwrap().is_empty());
-}
-
-#[test]
-fn delete_batch_keeps_going_after_a_single_failure() {
-    let harness = Harness::new();
-    let service = harness.service();
-    let plan = service
-        .plan(&json!({"kind": "delete", "tool": "claude", "refs": ["fsr_abcdefgh"]}))
-        .unwrap();
-    harness.lifecycle.fail.store(true, Ordering::SeqCst);
-
-    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
-    assert_eq!(applied["status"], json!("applied"));
-    assert_eq!(
-        applied["result"]["failed"],
-        json!([{"tool": "claude", "ref": "fsr_abcdefgh", "error": "删除失败"}])
-    );
-    assert_eq!(applied["result"]["succeeded"], json!([]));
 }
 
 #[test]

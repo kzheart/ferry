@@ -1,13 +1,10 @@
-//! OpenCode 会话生命周期：数据库型删除（快照后经 CLI 清理，不可撤销）。
-//!
-//! OpenCode 不是文件型会话，所以**不能**复用 `delete_file_session`：删除必须走
-//! 官方 `opencode session delete`，且要按子树自底向上逐个删。
+//! OpenCode 会话生命周期：resume 与迁移清理。
 
 use std::path::Path;
 
-use serde_json::{Map, Value};
+#[cfg(test)]
+use serde_json::Value;
 
-use crate::adapters::contracts::AgentAdapter;
 use crate::adapters::shared::lifecycle::BaseLifecycle;
 use crate::errors::DomainResult;
 
@@ -70,42 +67,11 @@ impl BaseLifecycle for OpenCodeLifecycle {
     fn validation_ref(&self, session_id: &str, _dest: &Path) -> DomainResult<String> {
         Ok(session_id.to_string())
     }
-
-    /// 永久删除：没有快照，官方 CLI 删完即不可撤销。
-    fn delete(&self, _adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
-        self.cleanup(reference, Path::new(""))?;
-        let mut result = Map::new();
-        result.insert("ok".into(), Value::Bool(true));
-        Ok(result)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::DomainError;
-    use std::sync::{Arc, Mutex};
-
-    #[derive(Default)]
-    struct RecordingCli {
-        deleted: Mutex<Vec<String>>,
-    }
-
-    impl store::NativeCli for RecordingCli {
-        fn run_command(&self, _args: &[&str], _cwd: Option<&Path>) -> DomainResult<String> {
-            Ok(String::new())
-        }
-        fn export_session(&self, _session_id: &str) -> DomainResult<Value> {
-            Err(DomainError::internal("不该走 CLI 导出"))
-        }
-        fn import_payload(&self, _: &Value, _: &str, _: &str) -> DomainResult<()> {
-            Ok(())
-        }
-        fn delete_session(&self, session_id: &str, _cwd: Option<&str>) -> DomainResult<()> {
-            self.deleted.lock().unwrap().push(session_id.to_string());
-            Ok(())
-        }
-    }
 
     #[test]
     fn resume_descriptor_uses_the_session_flag() {
@@ -128,23 +94,5 @@ mod tests {
                 .unwrap(),
             "ses_1"
         );
-    }
-
-    #[test]
-    fn delete_falls_back_to_the_single_id_when_the_tree_is_unreadable() {
-        let _guard = store::tests::exclusive();
-        let cli = Arc::new(RecordingCli::default());
-        store::install_cli(cli.clone());
-        // 库不存在 → reader::read 失败 → 只删这一个 id。
-        store::set_database_path_override(Some(std::path::PathBuf::from(
-            "/nonexistent/ferry-opencode.db",
-        )));
-        let lifecycle = OpenCodeLifecycle::new("opencode");
-        let adapter = super::super::adapter::build().expect("adapter 可装配");
-        let result = lifecycle.delete(&adapter, "ses_1").unwrap();
-        store::set_database_path_override(None);
-        store::reset_cli();
-        assert_eq!(result["ok"], Value::Bool(true));
-        assert_eq!(*cli.deleted.lock().unwrap(), ["ses_1"]);
     }
 }

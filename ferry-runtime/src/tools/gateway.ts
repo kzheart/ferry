@@ -22,8 +22,6 @@ const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   usage: 25_000,
   migrate: 125_000,
   session_edit: 125_000,
-  // 批量删除最多 100 个会话,给足引擎逐条执行的时间
-  session_delete: 300_000,
   // 略大于 Rust 侧 24h 的挂起超时,让那边先触发、把 answered:false 作为结构化结果送回来
   ask_user: 86_400_000 + 30_000,
   agent_prompt: 400_000,

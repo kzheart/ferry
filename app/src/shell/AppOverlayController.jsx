@@ -13,7 +13,7 @@ import { useSessionContentSearch } from "./useSessionContentSearch.js";
 export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
   const { toast, settings, guide } = useAppChrome();
-  const { peek, search, contextMenu, deletion, tags } = useBrowserState();
+  const { peek, search, contextMenu, tags } = useBrowserState();
   const { migration, editing, floatChat } = useOperationsState();
   const updateAnnouncement = useUpdateAnnouncement();
   const isLibrarySearch = search.view !== "askferry";
@@ -141,16 +141,6 @@ export function AppOverlayController({ t }) {
         y: contextMenu.value?.y,
         items: contextMenu.items,
         onClose: () => contextMenu.setValue(null),
-      }}
-      sessionDelete={{
-        prepared: deletion.sessionConfirmation,
-        onCancel: deletion.cancelSessionDeletion,
-        onConfirm: deletion.confirmSessionDeletion,
-      }}
-      batchDelete={{
-        prepared: deletion.batchConfirmation,
-        onCancel: deletion.cancelBatchDeletion,
-        onConfirm: deletion.confirmBatchDeletion,
       }}
       tags={{
         selection: tags.selection,

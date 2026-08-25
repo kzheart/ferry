@@ -960,26 +960,6 @@ impl AgentSessionIndex {
         sink(&Value::Object(payload));
     }
 
-    /// 删除会话后的定点摘除：立刻移出索引并推 removal delta。
-    /// `(tool, canonical)` → ref 映射保留为墓碑。
-    pub fn evict(&self, tool: &str, canonical_ref: &str) {
-        let mut state = self.locked();
-        let key = (tool.to_string(), canonical_ref.to_string());
-        let Some(opaque) = state.opaque_by_key.get(&key).cloned() else {
-            return;
-        };
-        if !state.by_opaque.contains_key(&opaque) {
-            return;
-        }
-        state.remove_record(&opaque);
-        state.drop_message_locators(&opaque);
-        if !state.bootstrapped {
-            return;
-        }
-        state.generation += 1;
-        self.publish(state.generation, &[], std::slice::from_ref(&opaque));
-    }
-
     /// 把 opaque ref 换回索引记录。
     ///
     /// `pin_content = true`（Agent 读取与编辑路径）要求会话内容与签发时一字未
@@ -1830,29 +1810,6 @@ pub(crate) mod golden_tests {
         let deltas = harness.deltas.lock().unwrap();
         assert_eq!(deltas.len(), 2);
         assert_eq!(deltas[1]["generation"], Value::from(2));
-    }
-
-    #[test]
-    fn evict_removes_in_place_and_bumps_the_generation() {
-        let harness = harness();
-        let records = harness.index.refresh().expect("首扫成功");
-        let target = records[0].clone();
-        harness.index.evict(&target.tool, &target.canonical_ref);
-
-        assert_eq!(harness.index.generation(), 1);
-        let deltas = harness.deltas.lock().unwrap();
-        assert_eq!(deltas.len(), 1);
-        assert_eq!(
-            deltas[0]["removals"],
-            Value::Array(vec![Value::from(target.opaque_ref.as_str())])
-        );
-        // 定点摘除后 resolve 报 unknown_ref。
-        let error = harness
-            .index
-            .resolve(&target.tool, &target.opaque_ref, false)
-            .unwrap_err();
-        assert_eq!(error.params()["reason"], Value::from("unknown_ref"));
-        assert_eq!(error.params()["recovery"], Value::from(REF_RECOVERY_HINT));
     }
 
     #[test]

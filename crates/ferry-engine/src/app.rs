@@ -195,11 +195,6 @@ impl SessionResolver for IndexResolver {
         })
     }
 
-    fn evict(&self, tool: &str, canonical_ref: &str) -> DomainResult<()> {
-        self.index.evict(tool, canonical_ref);
-        Ok(())
-    }
-
     fn read_indexed_session(
         &self,
         record: &OperationSession,
@@ -289,9 +284,10 @@ impl Engine {
             *self
                 .converger
                 .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(
-                CoverageConverger::spawn(Arc::clone(content_index), Arc::clone(&self.index)),
-            );
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(CoverageConverger::spawn(
+                Arc::clone(content_index),
+                Arc::clone(&self.index),
+            ));
         }
     }
 

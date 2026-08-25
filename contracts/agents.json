@@ -5,7 +5,6 @@
     "migration-source",
     "migration-target",
     "edit",
-    "delete",
     "prompt",
     "models"
   ],
@@ -24,7 +23,6 @@
         "migration-source",
         "migration-target",
         "edit",
-        "delete",
         "prompt",
         "models"
       ],
@@ -52,7 +50,6 @@
         "migration-source",
         "migration-target",
         "edit",
-        "delete",
         "prompt",
         "models"
       ],
@@ -80,7 +77,6 @@
         "migration-source",
         "migration-target",
         "edit",
-        "delete",
         "prompt",
         "models"
       ],
@@ -106,7 +102,6 @@
         "migration-source",
         "migration-target",
         "edit",
-        "delete",
         "prompt",
         "models"
       ],
@@ -131,7 +126,6 @@
         "resume",
         "migration-source",
         "migration-target",
-        "delete",
         "prompt",
         "models"
       ],

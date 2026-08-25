@@ -1,5 +1,5 @@
 // 破坏性操作确认框:说明文案 + 彩色圆点要点列表 + 红色确认按钮。
-// 会话删除 / 批量删除 / 迁移记录删除共用同一骨架,只有文案与要点不同。
+// 破坏性确认共用同一骨架,只有文案与要点不同。
 import { useTranslation } from "react-i18next";
 
 import { ConfirmBox } from "./ConfirmBox.jsx";

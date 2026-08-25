@@ -3,7 +3,7 @@ import { useCallback, useRef } from "react";
 /**
  * 会话库资源栏的行级交互。
  *
- * 这里不拥有会话详情、元数据写入或删除事务；它只把列表手势转换为上层协调器
+ * 这里不拥有会话详情或元数据写入；它只把列表手势转换为上层协调器
  * 提供的领域动作，确保虚拟化行可以获得稳定的回调身份。
  */
 export function useLibraryResourcePaneActions({
@@ -14,7 +14,6 @@ export function useLibraryResourcePaneActions({
   setMultiIds,
   onSelect,
   onTogglePin,
-  onDelete,
   onOpenMenu,
   onStartRename,
   onSubmitRename,
@@ -60,10 +59,6 @@ export function useLibraryResourcePaneActions({
     const session = sessionsByKey[key];
     if (session) onTogglePin(session);
   };
-  actions.current.delete = key => {
-    const session = sessionsByKey[key];
-    if (session) onDelete(session);
-  };
   actions.current.startRename = key => {
     const session = sessionsByKey[key];
     if (session) onStartRename(session);
@@ -79,7 +74,6 @@ export function useLibraryResourcePaneActions({
     onRowClick: useCallback((key, event) => actions.current.click(key, event), []),
     onRowMore: useCallback((key, event) => actions.current.more(key, event), []),
     onRowPin: useCallback(key => actions.current.pin(key), []),
-    onRowDelete: useCallback(key => actions.current.delete(key), []),
     onRowRename: useCallback(key => actions.current.startRename(key), []),
     onRowRenameSubmit: useCallback((key, value) => actions.current.submitRename(key, value), []),
     onRowRenameCancel: useCallback(() => actions.current.cancelRename(), []),

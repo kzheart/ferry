@@ -9,8 +9,8 @@ mod validation;
 use self::request::{operation_plan_id_request, operation_plan_request};
 use self::validation::{agent_has_capability, is_known_agent, validate_opaque_ref, validate_reply};
 use crate::contracts::operations::{
-    DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput,
-    MigrationOperationPlanInput, OperationPlanInput,
+    EditOperationPlanInput, MetadataOperationPlanInput, MigrationOperationPlanInput,
+    OperationPlanInput,
 };
 use crate::contracts::operations::{EDIT_OPERATION_KINDS, OPERATION_KINDS};
 use crate::engine::engine_request_blocking;
@@ -177,26 +177,6 @@ fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Resu
     Ok(())
 }
 
-fn validate_delete_operation_input(input: &DeleteOperationPlanInput) -> Result<(), String> {
-    if !is_known_agent(&input.tool) {
-        return Err("Delete Operation Agent 标识无效".to_owned());
-    }
-    if !agent_has_capability(&input.tool, "delete") {
-        return Err("Delete Operation Agent 不支持删除".to_owned());
-    }
-    if input.refs.is_empty() || input.refs.len() > 100 {
-        return Err("Delete Operation refs 必须是 1 到 100 项".to_owned());
-    }
-    let mut seen = std::collections::HashSet::new();
-    for reference in &input.refs {
-        validate_opaque_ref(reference, "Delete Operation")?;
-        if !seen.insert(reference) {
-            return Err("Delete Operation refs 不允许重复".to_owned());
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     if !OPERATION_KINDS.contains(&input.kind()) {
         return Err("Operation kind 未在共享契约中声明".to_owned());
@@ -205,7 +185,6 @@ pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Resul
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
         OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
-        OperationPlanInput::Delete(delete) => validate_delete_operation_input(delete),
     }
 }
 
@@ -463,24 +442,5 @@ mod tests {
             "kind": "metadata", "tool": "claude", "ref": "", "patch": {"pinned": true},
         }))
         .is_err());
-    }
-
-    #[test]
-    fn delete_follows_the_declared_delete_capability() {
-        // claude 声明了 delete;cursor 没有。
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [REF]})).is_ok());
-        assert!(validate(json!({"kind": "delete", "tool": "cursor", "refs": [REF]})).is_err());
-    }
-
-    #[test]
-    fn delete_rejects_unknown_agent_and_invalid_refs() {
-        assert!(validate(json!({"kind": "delete", "tool": "unknown", "refs": [REF]})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": []})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [""]})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": ["a b"]})).is_err());
-        assert!(validate(json!({"kind": "delete", "tool": "claude", "refs": [REF, REF]})).is_err());
-        assert!(
-            validate(json!({"kind": "delete", "tool": "claude", "refs": vec![REF; 101]})).is_err()
-        );
     }
 }

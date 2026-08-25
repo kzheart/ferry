@@ -17,8 +17,6 @@ function closedOverlays() {
     editing: { diff: null, dirtyOps: [], confirmApply: false },
     search: { open: false, pane: null, results: [] },
     contextMenu: { open: false, items: null },
-    sessionDelete: { prepared: null },
-    batchDelete: { prepared: null },
     tags: { selection: null },
     toast: { value: null },
     settings: { open: false },
@@ -92,40 +90,6 @@ test("右键菜单的禁用项不触发动作", () => {
 
   fireEvent.click(screen.getByText("迁移"));
   assert.deepEqual(calls, []);
-});
-
-test("单会话删除确认永远是永久删除语义", () => {
-  const calls = [];
-  const bag = {
-    prepared: {
-      session: { id: "s1", title: "会话", tool: "claude", tree_count: 1 },
-      plan: { preview: { excluded: [] } },
-    },
-    onCancel: () => calls.push("cancel"),
-    onConfirm: () => calls.push("confirm"),
-  };
-  renderOverlays({ sessionDelete: bag });
-  assert.ok(screen.getByText("overlays:delete.bulletIrreversible"));
-  fireEvent.click(screen.getByText("overlays:delete.confirmIrreversible"));
-  assert.deepEqual(calls, ["confirm"]);
-});
-
-test("批量删除与单条删除是两个独立弹层", () => {
-  const calls = [];
-  renderOverlays({
-    batchDelete: {
-      prepared: [
-        { session: { id: "a" }, plan: { preview: {} } },
-        { session: { id: "b" }, plan: { preview: {} } },
-      ],
-      onCancel: () => calls.push("cancel"),
-      onConfirm: () => calls.push("confirm"),
-    },
-  });
-
-  assert.equal(screen.queryByText("overlays:delete.title"), null);
-  fireEvent.click(screen.getByText("overlays:delete.confirmBatch"));
-  assert.deepEqual(calls, ["confirm"]);
 });
 
 test("搜索面板把结果条目的点击接到各自的 onClick", () => {

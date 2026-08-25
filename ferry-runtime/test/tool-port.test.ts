@@ -30,8 +30,6 @@ const migrateTool = tools.find((tool) => tool.name === "migrate")!;
 const migrateSchema = migrateTool.parameters;
 const agentPromptTool = tools.find((tool) => tool.name === "agent_prompt")!;
 const agentPromptSchema = agentPromptTool.parameters;
-const sessionDeleteTool = tools.find((tool) => tool.name === "session_delete")!;
-const sessionDeleteSchema = sessionDeleteTool.parameters;
 const askUserTool = tools.find((tool) => tool.name === "ask_user")!;
 const askUserSchema = askUserTool.parameters;
 
@@ -99,82 +97,6 @@ describe("Ferry mutation tool schemas", () => {
     expect(Check(migrateSchema, { ...migration, intent: "invalid" })).toBe(
       false,
     );
-  });
-
-  it("validates session_delete tool, refs and intent shape", () => {
-    expect(
-      Check(sessionDeleteSchema, {
-        tool: "claude",
-        refs: ["fsr_session"],
-        intent: "preview",
-      }),
-    ).toBe(true);
-    expect(
-      Check(sessionDeleteSchema, {
-        tool: "claude",
-        refs: ["fsr_session_a", "fsr_session_b"],
-        intent: "execute",
-      }),
-    ).toBe(true);
-    expect(
-      Check(sessionDeleteSchema, {
-        tool: "claude",
-        refs: [],
-        intent: "preview",
-      }),
-    ).toBe(false);
-    expect(
-      Check(sessionDeleteSchema, {
-        tool: "claude",
-        ref: "fsr_session",
-        intent: "preview",
-      }),
-    ).toBe(false);
-    expect(
-      Check(sessionDeleteSchema, {
-        tool: "claude",
-        refs: ["fsr_session"],
-      }),
-    ).toBe(false);
-  });
-
-  it("gates session_delete on a per-batch preview burned by execute", async () => {
-    const invoke = vi.fn(async () => ({ ok: true }));
-    const deleteTool = createFerryTools({ invoke }, () => ({
-      sessionId: "session",
-      runId: "run",
-    })).find((tool) => tool.name === "session_delete")!;
-    const run = (input: Record<string, unknown>) =>
-      deleteTool.execute("call", input, undefined, undefined);
-
-    // Provider 未必真的执行 function schema:删除入口不能只靠 schema 兜底
-    await expect(
-      run({ tool: "nope", refs: ["fsr_session"], intent: "preview" }),
-    ).rejects.toThrow("requires a known tool");
-    await expect(
-      run({ tool: "codex", refs: ["fsr_a", "fsr_a"], intent: "preview" }),
-    ).rejects.toThrow("unique non-empty refs");
-    await expect(run({ tool: "codex", refs: ["fsr_session"] })).rejects.toThrow(
-      "intent preview or execute",
-    );
-    await expect(
-      run({ tool: "codex", refs: ["fsr_session"], intent: "execute" }),
-    ).rejects.toThrow("requires a successful preview");
-
-    await run({ tool: "codex", refs: ["fsr_a", "fsr_b"], intent: "preview" });
-    await expect(
-      run({ tool: "codex", refs: ["fsr_a"], intent: "execute" }),
-    ).rejects.toThrow("requires a successful preview");
-    await expect(
-      run({ tool: "claude", refs: ["fsr_a", "fsr_b"], intent: "execute" }),
-    ).rejects.toThrow("requires a successful preview");
-    // 顺序无关:指纹按排序后的 ref 集合计算
-    await run({ tool: "codex", refs: ["fsr_b", "fsr_a"], intent: "execute" });
-    // 同一批不能凭一次预览删两次
-    await expect(
-      run({ tool: "codex", refs: ["fsr_a", "fsr_b"], intent: "execute" }),
-    ).rejects.toThrow("requires a successful preview");
-    expect(invoke).toHaveBeenCalledTimes(2);
   });
 
   it("bounds ask_user option counts", () => {

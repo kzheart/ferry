@@ -18,7 +18,6 @@ export const TOOL_LEVEL = {
   usage: "read",
   migrate: "mutate",
   session_edit: "mutate",
-  session_delete: "mutate",
   ask_user: "read",
   bash: "mutate",
   agent_prompt: "mutate",

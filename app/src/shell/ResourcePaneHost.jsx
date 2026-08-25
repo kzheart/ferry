@@ -73,7 +73,7 @@ export function ResourcePaneHost({
               selectedId={library.selectedId} multiSel={library.multiSel}
               renamingKey={library.renamingKey}
               onRowClick={library.onRowClick} onRowPin={library.onRowPin}
-              onRowDelete={library.onRowDelete} onRowMore={library.onRowMore}
+              onRowMore={library.onRowMore}
               onRowRename={library.onRowRename}
               onRowRenameSubmit={library.onRowRenameSubmit}
               onRowRenameCancel={library.onRowRenameCancel} />

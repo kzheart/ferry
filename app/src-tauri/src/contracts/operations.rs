@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub(crate) const OPERATION_PLAN_ID_PREFIX: &str = "op_";
-pub(crate) const OPERATION_KINDS: &[&str] = &["edit", "migration", "metadata", "delete"];
+pub(crate) const OPERATION_KINDS: &[&str] = &["edit", "migration", "metadata"];
 pub(crate) const EDIT_OPERATION_KINDS: &[&str] =
     &["delete-turn", "rewrite", "replace-assistant-reply"];
 pub(crate) const OPERATION_STATUSES: &[&str] = &[
@@ -28,8 +28,6 @@ pub(crate) enum OperationPlanInput {
     Migration(MigrationOperationPlanInput),
     #[serde(rename = "metadata")]
     Metadata(MetadataOperationPlanInput),
-    #[serde(rename = "delete")]
-    Delete(DeleteOperationPlanInput),
 }
 
 impl OperationPlanInput {
@@ -38,7 +36,6 @@ impl OperationPlanInput {
             Self::Edit(_) => "edit",
             Self::Migration(_) => "migration",
             Self::Metadata(_) => "metadata",
-            Self::Delete(_) => "delete",
         }
     }
 }
@@ -70,13 +67,6 @@ pub(crate) struct MetadataOperationPlanInput {
     #[serde(rename = "ref")]
     pub(crate) reference: String,
     pub(crate) patch: MetadataPatch,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct DeleteOperationPlanInput {
-    pub(crate) tool: String,
-    pub(crate) refs: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize)]

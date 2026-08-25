@@ -1,6 +1,6 @@
 //! 统一操作计划生成。
 //!
-//! 四条 kind 分支共同的形状：能力门禁 → 解析索引记录 → 生成预览 →
+//! 三条 kind 分支共同的形状：能力门禁 → 解析索引记录 → 生成预览 →
 //! **再解析一次并比 revision**（预览期间源变了就拒绝）→ 交给 service 冻结落盘。
 //!
 //! 与 Python 的一处结构差异：Python 的 `_plan_*` 末尾直接调用注入的
@@ -18,9 +18,8 @@ use crate::operations::metadata_store::metadata_key;
 use crate::operations::migrate::MigrationService;
 use crate::operations::types::{EngineError, EngineResult, Ports, Resolver};
 use crate::operations::validation::{
-    validate_delete_input, validate_edit_input, validate_metadata_input, validate_migration_input,
+    validate_edit_input, validate_metadata_input, validate_migration_input,
 };
-use crate::sessions::safety::truncate_text;
 
 /// 冻结前的计划素材。
 #[derive(Clone, Debug, PartialEq)]
@@ -71,7 +70,6 @@ impl OperationPlanner {
             "edit" => self.plan_edit(value),
             "migration" => self.plan_migration(value),
             "metadata" => self.plan_metadata(value),
-            "delete" => self.plan_delete(value),
             // OPERATION_KINDS 已经过滤过，走到这里说明契约与分支表脱节。
             _ => Err(EngineError::Internal {
                 error_type: "AssertionError",
@@ -202,120 +200,6 @@ impl OperationPlanner {
             document_revision: None,
         })
     }
-
-    fn plan_delete(&self, value: &Value) -> EngineResult<PreparedPlan> {
-        let mut operation_input = validate_delete_input(value, &self.ports.adapters())?;
-        let tool = require_str(&operation_input, "tool")?;
-        self.ports.adapter(&tool)?.require_lifecycle("delete")?;
-        let metadata_rows = metadata::list_all(&self.ports)?;
-        let mut sessions = Vec::new();
-        let mut excluded = Vec::new();
-        let mut targets = Vec::new();
-        let mut total_size = 0_i64;
-        let refs = operation_input
-            .get("refs")
-            .and_then(Value::as_array)
-            .ok_or_else(|| EngineError::key_error("refs"))?
-            .clone();
-        for reference in &refs {
-            let reference = reference
-                .as_str()
-                .ok_or_else(|| EngineError::key_error("refs"))?;
-            let record = self.index.resolve(&tool, reference)?;
-            let session_id = record
-                .row
-                .get("id")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| DomainError::agent_request_invalid("会话缺少可用的原生 ID"))?
-                .to_string();
-            let title = truncate_text(
-                record
-                    .row
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
-                512,
-            )
-            .0;
-            let empty = Value::Object(Map::new());
-            let metadata_row = metadata_rows
-                .get(&metadata_key(&tool, &session_id))
-                .unwrap_or(&empty);
-            if let Some(cause) = protected_cause(metadata_row) {
-                let mut entry = Map::new();
-                entry.insert("tool".into(), Value::from(tool.as_str()));
-                entry.insert("ref".into(), Value::from(record.opaque_ref.as_str()));
-                entry.insert("title".into(), Value::from(title));
-                entry.insert("cause".into(), Value::from(cause));
-                excluded.push(Value::Object(entry));
-                continue;
-            }
-            // targets 只收未被排除的会话：它就是 apply 的删除名单，被保护规则
-            // 剔除的会话一旦混进来，预览说「已保护」而执行照删。
-            let mut target = Map::new();
-            target.insert("ref".into(), Value::from(record.opaque_ref.as_str()));
-            target.insert("session_id".into(), Value::from(session_id.as_str()));
-            target.insert("revision".into(), Value::from(record.revision.as_str()));
-            targets.push(Value::Object(target));
-
-            let size = record.row.get("size").and_then(Value::as_i64).unwrap_or(0);
-            total_size += size;
-            let mut entry = Map::new();
-            entry.insert("tool".into(), Value::from(tool.as_str()));
-            entry.insert("ref".into(), Value::from(record.opaque_ref.as_str()));
-            entry.insert("session_id".into(), Value::from(record.session_id()));
-            entry.insert("title".into(), Value::from(title));
-            entry.insert(
-                "project".into(),
-                record.row.get("dir").cloned().unwrap_or(Value::Null),
-            );
-            entry.insert("size".into(), Value::from(size));
-            entry.insert(
-                "updated".into(),
-                record.row.get("updated").cloned().unwrap_or(Value::Null),
-            );
-            sessions.push(Value::Object(entry));
-        }
-
-        {
-            let object = operation_input
-                .as_object_mut()
-                .ok_or_else(|| EngineError::key_error("input"))?;
-            object.insert("targets".into(), Value::Array(targets));
-        }
-        let mut totals = Map::new();
-        totals.insert("count".into(), Value::from(sessions.len() as i64));
-        totals.insert("size_bytes".into(), Value::from(total_size));
-        let mut preview = Map::new();
-        preview.insert("tool".into(), Value::from(tool.as_str()));
-        preview.insert("sessions".into(), Value::Array(sessions));
-        preview.insert("excluded".into(), Value::Array(excluded));
-        preview.insert("totals".into(), Value::Object(totals));
-        // 删除不可恢复：预览必须明说，审批卡靠它渲染永久删除警示。
-        preview.insert("permanent".into(), Value::Bool(true));
-
-        Ok(PreparedPlan {
-            input: operation_input,
-            preview: Value::Object(preview),
-            base_revision: "batch".into(),
-            document_revision: None,
-        })
-    }
-}
-
-/// 保护规则：pinned > archived > tagged。
-pub fn protected_cause(metadata_row: &Value) -> Option<&'static str> {
-    if metadata_row.get("pinned") == Some(&Value::Bool(true)) {
-        return Some("pinned");
-    }
-    if metadata_row.get("archived") == Some(&Value::Bool(true)) {
-        return Some("archived");
-    }
-    match metadata_row.get("tags") {
-        Some(Value::Array(tags)) if !tags.is_empty() => Some("tagged"),
-        _ => None,
-    }
 }
 
 fn require_str(value: &Value, key: &str) -> EngineResult<String> {
@@ -324,27 +208,4 @@ fn require_str(value: &Value, key: &str) -> EngineResult<String> {
         .and_then(Value::as_str)
         .map(str::to_string)
         .ok_or_else(|| EngineError::key_error(key))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn protection_precedence_matches_python() {
-        assert_eq!(
-            protected_cause(&json!({"pinned": true, "archived": true})),
-            Some("pinned")
-        );
-        assert_eq!(
-            protected_cause(&json!({"archived": true})),
-            Some("archived")
-        );
-        assert_eq!(protected_cause(&json!({"tags": ["a"]})), Some("tagged"));
-        assert_eq!(protected_cause(&json!({"tags": []})), None);
-        // 只有恒等 True 才算保护：字符串 "yes" 不是。
-        assert_eq!(protected_cause(&json!({"pinned": "yes"})), None);
-        assert_eq!(protected_cause(&json!({})), None);
-    }
 }

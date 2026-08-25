@@ -1,6 +1,5 @@
 //! 两阶段操作（plan/apply）的状态机、存储与执行。
 
-pub mod delete;
 pub mod edit;
 pub mod executor;
 pub mod history;

@@ -53,7 +53,6 @@ function renderRenaming(handlers) {
       renamingKey={row.key}
       onRowClick={() => {}}
       onRowPin={() => {}}
-      onRowDelete={() => {}}
       onRowMore={() => {}}
       onRowRename={() => {}}
       onRowRenameSubmit={() => {}}
@@ -129,7 +128,6 @@ function renderLibrary(props) {
       renamingKey={null}
       onRowClick={() => {}}
       onRowPin={() => {}}
-      onRowDelete={() => {}}
       onRowMore={() => {}}
       onRowRename={() => {}}
       onRowRenameSubmit={() => {}}

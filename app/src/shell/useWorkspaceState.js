@@ -8,7 +8,7 @@ import { useFeature } from "../shared/capabilities/features.jsx";
 
 export function useWorkspaceState({
   applyEdit, confirmApply,
-  ctxItems, ctxMenu, cur, deletion, detail, detailActs,
+  ctxItems, ctxMenu, cur, detail, detailActs,
   detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
   libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
   onboarding, openConfig, paneCfg, peekEntity, peekId, rail, scan,
@@ -52,14 +52,6 @@ export function useWorkspaceState({
         items: ctxItems,
         setValue: setCtxMenu,
       },
-      deletion: {
-        sessionConfirmation: deletion.sessionConfirmation,
-        batchConfirmation: deletion.batchConfirmation,
-        cancelSessionDeletion: deletion.cancelSessionDeletion,
-        confirmSessionDeletion: deletion.confirmSessionDeletion,
-        cancelBatchDeletion: deletion.cancelBatchDeletion,
-        confirmBatchDeletion: deletion.confirmBatchDeletion,
-      },
       tags: {
         selection: tagFor,
         setSelection: setTagFor,
@@ -71,7 +63,7 @@ export function useWorkspaceState({
       peekId, cur, selId, detailMeta, detail, detailActs, navigationTarget,
       loadingMore, searchOpen, paneCfg, view, ferrySessions,
       libGroups, sessions, select, ctxMenu,
-      ctxItems, deletion,
+      ctxItems,
       metaFor, setMetaFor, tagFor,
       setMultiSel,
     ],

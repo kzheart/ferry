@@ -319,7 +319,6 @@ mod tests {
                 "resume",
                 "migration-source",
                 "migration-target",
-                "delete",
                 "prompt",
                 "models"
             ]

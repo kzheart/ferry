@@ -1,7 +1,7 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
 
 pub const OPERATION_PLAN_ID_PREFIX: &str = "op_";
-pub const OPERATION_KINDS: &[&str] = &["edit", "migration", "metadata", "delete"];
+pub const OPERATION_KINDS: &[&str] = &["edit", "migration", "metadata"];
 pub const EDIT_OPERATION_KINDS: &[&str] = &["delete-turn", "rewrite", "replace-assistant-reply"];
 pub const OPERATION_STATUSES: &[&str] = &[
     "planned",
@@ -27,8 +27,6 @@ pub const OPERATION_INPUT_FIELDS: &[(&str, &str, &str)] = &[
     ("metadata", "tool", "agent-id"),
     ("metadata", "ref", "session-ref"),
     ("metadata", "patch", "metadata-patch"),
-    ("delete", "tool", "agent-id"),
-    ("delete", "refs", "session-ref[]"),
 ];
 
 /// 每行 = (op, 字段名, 类型描述符)。

@@ -1,13 +1,11 @@
-//! Claude 会话生命周期：resume、迁移清理、永久删除与 sidecar 归档策略。
+//! Claude 会话生命周期：resume 与迁移清理。
 
 use std::path::Path;
 
-use serde_json::{Map, Value};
+#[cfg(test)]
+use serde_json::Value;
 
-use crate::adapters::contracts::AgentAdapter;
-use crate::adapters::shared::lifecycle::{
-    delete_file_session, BaseLifecycle, FileSessionLifecycle,
-};
+use crate::adapters::shared::lifecycle::BaseLifecycle;
 use crate::errors::DomainResult;
 use crate::system::paths::home_dir;
 
@@ -46,21 +44,6 @@ impl BaseLifecycle for ClaudeLifecycle {
         for hit in hits.filter_map(Result::ok) {
             let _ = std::fs::remove_file(&hit);
             let _ = std::fs::remove_dir_all(hit.with_extension(""));
-        }
-        Ok(())
-    }
-
-    fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
-        delete_file_session(self, adapter, reference)
-    }
-}
-
-impl FileSessionLifecycle for ClaudeLifecycle {
-    /// subagents 与 journals 都挂在同名的无后缀目录下。
-    fn delete_sidecar(&self, path: &Path) -> DomainResult<()> {
-        let sidecar = path.with_extension("");
-        if sidecar.is_dir() {
-            let _ = std::fs::remove_dir_all(sidecar);
         }
         Ok(())
     }
@@ -113,16 +96,5 @@ mod tests {
         }
         assert!(!session.exists());
         assert!(!projects.join("sid").exists());
-    }
-
-    #[test]
-    fn delete_sidecar_is_a_noop_without_a_directory() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("s.jsonl");
-        std::fs::write(&path, "{}\n").unwrap();
-        ClaudeLifecycle::new("claude")
-            .delete_sidecar(&path)
-            .unwrap();
-        assert!(path.exists());
     }
 }

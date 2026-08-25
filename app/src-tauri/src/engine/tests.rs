@@ -4,8 +4,8 @@ use super::{
     validate_engine_request_caller, validate_engine_response_id, FERRY_IPC_PROTOCOL,
 };
 use crate::contracts::operations::{
-    DeleteOperationPlanInput, EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch,
-    MigrationOperationPlanInput, OperationPlanInput,
+    EditOperationPlanInput, MetadataOperationPlanInput, MetadataPatch, MigrationOperationPlanInput,
+    OperationPlanInput,
 };
 use crate::operations::request::{
     operation_plan_id_request, operation_plan_request, validate_plan_id,
@@ -194,32 +194,6 @@ fn operation_accepts_strict_tagged_metadata_input() {
             .and_then(serde_json::Value::as_bool),
         Some(true)
     );
-}
-
-#[test]
-fn operation_accepts_strict_tagged_delete_input() {
-    let input = OperationPlanInput::Delete(DeleteOperationPlanInput {
-        tool: "claude".to_owned(),
-        refs: vec!["fsr_fixture".to_owned()],
-    });
-    assert!(validate_operation_plan_input(&input).is_ok());
-
-    let request = operation_plan_request(&input, validate_operation_plan_input).unwrap();
-    let value: serde_json::Value = serde_json::from_str(&request).unwrap();
-    assert_eq!(
-        value
-            .pointer("/params/input/kind")
-            .and_then(serde_json::Value::as_str),
-        Some("delete")
-    );
-    assert!(value.pointer("/params/input/refs/0").is_some());
-    assert!(value.pointer("/params/input/ops").is_none());
-
-    let unknown = OperationPlanInput::Delete(DeleteOperationPlanInput {
-        tool: "unknown".to_owned(),
-        refs: vec!["fsr_fixture".to_owned()],
-    });
-    assert!(validate_operation_plan_input(&unknown).is_err());
 }
 
 #[test]

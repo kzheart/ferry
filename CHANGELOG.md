@@ -42,6 +42,8 @@ fails validation if its version has no section.
 
 ### Removed
 
+- **Session deletion** — Ferry no longer deletes source-agent sessions; the
+  library actions, batch workflow, Agent tool, and engine capability are gone.
 - **Migration history page** — migrated sessions are instead annotated with
   their origin in the session detail.
 - **Manual refresh button** — the detail header refreshes on its own.

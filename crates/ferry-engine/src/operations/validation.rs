@@ -5,7 +5,6 @@
 
 use serde_json::{Map, Value};
 
-use crate::contracts::session_ref::is_opaque_session_ref;
 use crate::errors::DomainError;
 use crate::operations::types::{AssistantReply, EngineResult};
 use crate::sessions::safety::{validate_agent_edit_ops, validate_json_shape};
@@ -209,48 +208,6 @@ pub fn validate_metadata_input(value: &Value) -> EngineResult<Value> {
     result.insert("tool".into(), Value::from(tool));
     result.insert("ref".into(), Value::from(reference));
     result.insert("patch".into(), Value::Object(patch.clone()));
-    canonicalized(&Value::Object(result))
-}
-
-// ---------------------------------------------------------------------------
-// delete
-// ---------------------------------------------------------------------------
-
-pub fn validate_delete_input(value: &Value, adapters: &[String]) -> EngineResult<Value> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| request_error("operation input 必须是 object"))?;
-    let allowed = ["kind", "tool", "refs"];
-    let unknown = unknown_fields(object, &allowed);
-    if !unknown.is_empty() {
-        return Err(unknown_field_error("delete operation 包含未知字段", unknown).into());
-    }
-    let tool = object
-        .get("tool")
-        .and_then(Value::as_str)
-        .filter(|tool| adapters.iter().any(|declared| declared == tool))
-        .ok_or_else(|| request_error("delete tool 非法"))?;
-    let refs = object
-        .get("refs")
-        .and_then(Value::as_array)
-        .filter(|refs| (1..=100).contains(&refs.len()))
-        .ok_or_else(|| request_error("delete refs 必须是 1 到 100 项的数组"))?;
-    let mut seen: Vec<&str> = Vec::with_capacity(refs.len());
-    for reference in refs {
-        let reference = reference
-            .as_str()
-            .filter(|text| is_opaque_session_ref(text))
-            .ok_or_else(|| request_error("delete ref 非法"))?;
-        if seen.contains(&reference) {
-            return Err(request_error("delete refs 不允许重复").into());
-        }
-        seen.push(reference);
-    }
-
-    let mut result = Map::new();
-    result.insert("kind".into(), Value::from("delete"));
-    result.insert("tool".into(), Value::from(tool));
-    result.insert("refs".into(), Value::Array(refs.clone()));
     canonicalized(&Value::Object(result))
 }
 
@@ -480,47 +437,6 @@ mod tests {
         assert_eq!(
             validate_metadata_input(&value).unwrap_err().message(),
             "metadata name 非法"
-        );
-    }
-
-    #[test]
-    fn delete_input_rejects_duplicates_and_non_opaque_refs() {
-        let base = json!({"kind": "delete", "tool": "claude"});
-        let mut value = base.clone();
-        value["refs"] = json!(["fsr_abcdefgh", "fsr_abcdefgh"]);
-        assert_eq!(
-            validate_delete_input(&value, &adapters())
-                .unwrap_err()
-                .message(),
-            "delete refs 不允许重复"
-        );
-
-        let mut value = base.clone();
-        value["refs"] = json!(["/tmp/a.jsonl"]);
-        assert_eq!(
-            validate_delete_input(&value, &adapters())
-                .unwrap_err()
-                .message(),
-            "delete ref 非法"
-        );
-
-        let mut value = base.clone();
-        value["refs"] = json!([]);
-        assert_eq!(
-            validate_delete_input(&value, &adapters())
-                .unwrap_err()
-                .message(),
-            "delete refs 必须是 1 到 100 项的数组"
-        );
-
-        let mut value = base;
-        value["tool"] = json!("nope");
-        value["refs"] = json!(["fsr_abcdefgh"]);
-        assert_eq!(
-            validate_delete_input(&value, &adapters())
-                .unwrap_err()
-                .message(),
-            "delete tool 非法"
         );
     }
 

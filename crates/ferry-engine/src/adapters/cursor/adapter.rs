@@ -2,7 +2,7 @@
 //!
 //! Cursor 提供 `browse` + `migration-source` + `resume`：浏览与迁出对它的存储
 //! 严格只读。没有 `migration-target`：不再往 `state.vscdb` 写入会话。也没有
-//! edit / delete / probe：就地编辑与永久删除会改写 Cursor 自己的记录，探针需要
+//! edit / probe：就地编辑会改写 Cursor 自己的记录，探针需要
 //! 一个跑得起来的 CLI Agent。
 //!
 //! 它与 opencode 一样是 `storage_kind == "id"`——会话不落文件，引用就是
@@ -113,7 +113,7 @@ mod tests {
         ] {
             assert!(adapter.has_component(component), "缺少组件 {component:?}");
         }
-        // 就地编辑、永久删除、探针与迁入写入一律不装。
+        // 就地编辑、探针与迁入写入一律不装。
         for component in [
             Component::Editor,
             Component::Verifier,
@@ -124,7 +124,6 @@ mod tests {
         }
         assert!(adapter.require_editor().is_err());
         assert!(adapter.require_lifecycle("resume").is_ok());
-        assert!(adapter.require_lifecycle("delete").is_err());
         assert!(adapter.require_migration_target().is_err());
     }
 

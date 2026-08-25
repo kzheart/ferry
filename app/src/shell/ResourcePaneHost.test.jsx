@@ -8,7 +8,7 @@ import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
 import { FerryRuntimeProvider } from "../shared/capabilities/ferryRuntime.jsx";
 import { ResourcePaneHost } from "./ResourcePaneHost.jsx";
 
-// 对话列表的打开/新建/置顶/删除直接取 Ferry Runtime 句柄。
+// 对话列表的打开/新建/置顶直接取 Ferry Runtime 句柄。
 const ferry = {
   activeId: null, openSession: () => {}, newChat: () => {},
   pin: async () => {}, deleteSession: async () => {}, reportError: () => {},
@@ -40,7 +40,7 @@ function baseProps(overrides = {}) {
       onDisplayChange: noop, groupMode: "project",
       groups: [], collapsedGroups: {}, onToggleGroup: noop, onClear: noop,
       selectedId: null, multiSel: [],
-      onRowClick: noop, onRowPin: noop, onRowDelete: noop, onRowMore: noop,
+      onRowClick: noop, onRowPin: noop, onRowMore: noop,
     },
     agent: { sessions: [] },
     ...overrides,

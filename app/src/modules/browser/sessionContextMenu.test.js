@@ -20,7 +20,6 @@ function createInput(overrides = {}) {
     updateMetadata: () => {},
     setTagSelection: () => {},
     setRename: () => {},
-    setBatchDelete: () => {},
     setMultiIds: () => {},
     setAgentAttachments: () => {},
     setView: () => {},
@@ -31,7 +30,6 @@ function createInput(overrides = {}) {
     settings: { terminalApp: "Terminal" },
     isFeatureEnabled: () => true,
     t: (key, params) => params?.n ? `${key}:${params.n}` : key,
-    askDelete: () => {},
     ...overrides,
   };
 }
@@ -49,7 +47,7 @@ test("会话菜单把重命名动作交给 browser 能力调用方", () => {
   assert.equal(renamed.id, "native-1");
 });
 
-test("多选菜单只暴露批量标签、删除和取消动作", () => {
+test("多选菜单只暴露批量标签和取消动作", () => {
   const input = createInput({
     menu: { key: "claude:native-1", multi: true },
     multiIds: ["claude:native-1"],
@@ -58,11 +56,11 @@ test("多选菜单只暴露批量标签、删除和取消动作", () => {
 
   assert.deepEqual(
     items.filter(item => !item.sep).map(item => item.label),
-    ["app:ctx.addTags", "app:ctx.deleteN:1", "app:ctx.cancelMulti"],
+    ["app:ctx.addTags", "app:ctx.cancelMulti"],
   );
 });
 
-test("缺少能力的会话不显示恢复、迁移和删除动作", () => {
+test("缺少能力的会话不显示恢复和迁移动作", () => {
   const input = createInput({
     menu: { key: "readonly:native-1" },
     sessionsByKey: {
@@ -80,7 +78,6 @@ test("缺少能力的会话不显示恢复、迁移和删除动作", () => {
   assert.equal(labels.includes("app:ctx.resumeTerminal"), false);
   assert.equal(labels.includes("app:ctx.copyResume"), false);
   assert.equal(labels.includes("app:ctx.migrateTo"), false);
-  assert.equal(labels.includes("app:ctx.deleteSession"), false);
 });
 
 test("标了 feature 的菜单项跟着开关走,没标的照旧", () => {

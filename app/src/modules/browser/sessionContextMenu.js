@@ -26,7 +26,6 @@ export function createSessionContextMenu({
   updateMetadata,
   setTagSelection,
   setRename,
-  setBatchDelete,
   setMultiIds,
   setAgentAttachments,
   setView,
@@ -38,7 +37,6 @@ export function createSessionContextMenu({
   settings,
   isFeatureEnabled,
   t,
-  askDelete,
 }) {
   const session = menu ? sessionsByKey[menu.key] : null;
   const metadata = session ? metaFor(session) : {};
@@ -47,19 +45,11 @@ export function createSessionContextMenu({
     .filter(Boolean);
 
   if (menu?.multi) {
-    const canDeleteAll = multipleSessions.every(session =>
-      supportsAgentCapability(session.tool, "delete"));
     return [
       {
         label: t("app:ctx.addTags"),
         onClick: () => setTagSelection({ sessions: multipleSessions, batch: true }),
       },
-      { sep: true },
-      ...(canDeleteAll ? [{
-        label: t("app:ctx.deleteN", { n: multipleSessions.length }),
-        danger: true,
-        onClick: () => setBatchDelete(multipleSessions),
-      }] : []),
       { sep: true },
       {
         label: t("app:ctx.cancelMulti"),
@@ -157,12 +147,5 @@ export function createSessionContextMenu({
       disabledHint: t("app:ctx.noProjectDir"),
       onClick: () => revealPath(session.dir).catch(() => {}),
     },
-    { sep: true },
-    ...(supportsAgentCapability(session.tool, "delete") ? [{
-      label: t("app:ctx.deleteSession"),
-      hint: "⌫",
-      danger: true,
-      onClick: () => askDelete(session),
-    }] : []),
   ], isFeatureEnabled);
 }

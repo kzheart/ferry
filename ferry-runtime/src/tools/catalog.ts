@@ -138,10 +138,6 @@ const migrationSources = AGENT_IDS.filter((tool) =>
 const promptAgents = AGENT_IDS.filter((tool) =>
   supportsAgentCapability(tool, "prompt"),
 );
-const deleteAgents = AGENT_IDS.filter((tool) =>
-  supportsAgentCapability(tool, "delete"),
-);
-
 function supportedSessionEditOperations(tool: AgentId): string[] {
   return AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
     exposedSessionEditOperations.has(operation),
@@ -196,7 +192,6 @@ export const FERRY_TOOL_NAMES = [
   "usage",
   "migrate",
   "session_edit",
-  "session_delete",
   "ask_user",
   "agent_prompt",
   "bash",
@@ -219,11 +214,6 @@ interface FerryToolPort {
     args: Record<string, unknown>,
     context: ToolRequestContext,
   ): Promise<unknown>;
-}
-
-function sessionDeleteFingerprint(input: Record<string, unknown>): string {
-  const refs = [...(input.refs as string[])].sort();
-  return JSON.stringify([input.tool, refs]);
 }
 
 function validateAskUserInput(input: Record<string, unknown>): void {
@@ -343,14 +333,6 @@ const schemas = {
   // Function-tool providers require an object root. Conditional constraints
   // live inside oneOf while the execution boundary validates them again.
   session_edit: sessionEditSchema,
-  session_delete: Type.Object(
-    {
-      tool: agentEnum(deleteAgents),
-      refs: Type.Array(opaqueSessionRef, { minItems: 1, maxItems: 100 }),
-      intent: operationIntent,
-    },
-    { additionalProperties: false },
-  ),
   ask_user: askUserSchema,
   agent_prompt: Type.Object(
     {
@@ -383,7 +365,6 @@ const descriptions: Record<FerryToolName, string> = {
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
   session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
-  session_delete: `PERMANENTLY delete whole sessions (targets: ${deleteAgents.join(", ")}). There is NO undo and NO recovery snapshot — once executed the sessions are gone. intent is required: preview lists exactly what would be removed (title, session id, size) plus protected sessions that will be excluded (pinned/archived/tagged), without changing anything; execute creates an approval-gated permanent deletion of that list. refs takes 1-100 fsr_ refs from one tool — batch every session the user confirmed into a single call instead of deleting one by one. Always preview the exact same tool+refs first — execute without a matching successful preview is rejected. Only delete sessions the user explicitly identified or confirmed; for questions like "how many old sessions do I have", answer with session_search/usage instead of starting a deletion. To remove individual turns inside a session use session_edit.`,
   ask_user:
     "Ask the user to choose among 2-6 options or provide custom text. This tool only collects information and does not authorize deletion or any other mutation. The user may not answer; when answered is false, do not assume a selection and continue safely.",
   agent_prompt: `Resume and actively drive a native Coding Agent session (${promptAgents.join(", ")}). This is a high-privilege mutation: the target Agent may run commands, use its configured tools, and modify the workspace and native session without a separate Ferry approval. Pass an fsr_ ref from session_search and the prompt to execute. The returned next_ref replaces the old ref after every started run; always use next_ref for the next call because the previous ref becomes stale. Calls execute sequentially and are never safe to retry automatically.`,
@@ -395,7 +376,6 @@ export function createFerryTools(
   getContext: () => Omit<ToolRequestContext, "toolCallId" | "onUpdate">,
   allowedTools: readonly FerryToolName[] = FERRY_TOOL_NAMES,
 ): AgentTool[] {
-  const previewedDeletes = new Set<string>();
   return allowedTools.map((name) => ({
     name,
     label: name,
@@ -433,35 +413,6 @@ export function createFerryTools(
           throw new Error("session_edit metadata patch does not accept intent");
         if (hasOps) validateSessionEditOperations(input);
       }
-      if (name === "session_delete") {
-        if (
-          typeof input.tool !== "string" ||
-          !(deleteAgents as readonly string[]).includes(input.tool) ||
-          !Array.isArray(input.refs) ||
-          input.refs.length < 1 ||
-          input.refs.length > 100 ||
-          input.refs.some(
-            (ref) => typeof ref !== "string" || ref.length === 0,
-          ) ||
-          new Set(input.refs).size !== input.refs.length
-        ) {
-          throw new Error(
-            `session_delete requires a known tool (${deleteAgents.join(", ")}) and 1-100 unique non-empty refs`,
-          );
-        }
-        if (input.intent !== "preview" && input.intent !== "execute") {
-          throw new Error("session_delete requires intent preview or execute");
-        }
-        if (
-          input.intent === "execute" &&
-          !previewedDeletes.has(sessionDeleteFingerprint(input))
-        ) {
-          throw new Error(
-            "session_delete execute requires a successful preview of this exact tool+refs batch first; " +
-              'run session_delete with intent "preview" before execute',
-          );
-        }
-      }
       if (name === "ask_user") validateAskUserInput(input);
       if (name === "bash" && String(input.command ?? "").trim().length === 0) {
         throw new Error("bash requires a non-empty command");
@@ -482,15 +433,6 @@ export function createFerryTools(
           },
         },
       );
-      if (name === "session_delete") {
-        // 预览授权只兑现一次:execute 成功后立刻作废,重放同一批必须重新 preview
-        const fingerprint = sessionDeleteFingerprint(input);
-        if (input.intent === "preview") {
-          previewedDeletes.add(fingerprint);
-        } else if (input.intent === "execute") {
-          previewedDeletes.delete(fingerprint);
-        }
-      }
       return {
         content: [{ type: "text", text: JSON.stringify(details) }],
         details,

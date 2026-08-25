@@ -22,18 +22,6 @@
     "confirmInplace": "Confirm in-place edit",
     "inplaceFootnote": "A backup is made before applying; if verification fails it is rolled back automatically, leaving no changes."
   },
-  "delete": {
-    "title": "Delete this session?",
-    "batchTitle": "Delete {{n}} selected sessions?",
-    "cancel": "Cancel",
-    "confirmIrreversible": "Delete permanently",
-    "confirmBatch": "Delete selected sessions",
-    "desc": "Session \"{{title}}\" ({{tool}}) will be removed from this machine.",
-    "bulletSub": "This session contains {{n}} sub-sessions, which will also be deleted.",
-    "bulletIrreversible": "Deletion is permanent — there is no recovery snapshot and it cannot be undone.",
-    "bulletBatchIrreversible": "{{n}} sessions will be permanently deleted and cannot be restored.",
-    "bulletBatchPartial": "Sessions are deleted one by one; completed deletions are not rolled back if a later one fails."
-  },
   "prompt": {
     "confirm": "OK",
     "cancel": "Cancel"

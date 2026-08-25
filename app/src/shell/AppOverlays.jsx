@@ -1,8 +1,4 @@
-import {
-  BatchDeleteConfirm,
-  SessionDeleteConfirm,
-  SessionPeekSheet,
-} from "../modules/browser/public.js";
+import { SessionPeekSheet } from "../modules/browser/public.js";
 import { ApplyConfirm, DiffSheet } from "../modules/editing/public.js";
 import { MigrateSheet } from "../modules/migration/public.js";
 import { FloatingAgentPanel } from "../modules/askferry/public.js";
@@ -21,8 +17,6 @@ export function AppOverlays({
   editing,
   search,
   contextMenu,
-  sessionDelete,
-  batchDelete,
   tags,
   toast,
   settings,
@@ -99,20 +93,6 @@ export function AppOverlays({
           y={contextMenu.y}
           items={contextMenu.items}
           onClose={contextMenu.onClose}
-        />
-      )}
-      {sessionDelete.prepared && (
-        <SessionDeleteConfirm
-          prepared={sessionDelete.prepared}
-          onCancel={sessionDelete.onCancel}
-          onConfirm={sessionDelete.onConfirm}
-        />
-      )}
-      {batchDelete.prepared && (
-        <BatchDeleteConfirm
-          prepared={batchDelete.prepared}
-          onCancel={batchDelete.onCancel}
-          onConfirm={batchDelete.onConfirm}
         />
       )}
       {tags.selection && (

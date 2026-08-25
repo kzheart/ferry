@@ -58,7 +58,7 @@ pub const COMPONENT_CAPABILITIES: &[(Component, &[&str])] = &[
     (Component::MigrationTarget, &["migration-target"]),
     (Component::Editor, &["edit"]),
     (Component::Verifier, &["prompt"]),
-    (Component::Lifecycle, &["resume", "delete"]),
+    (Component::Lifecycle, &["resume"]),
     (Component::Models, &["models"]),
 ];
 
@@ -416,12 +416,11 @@ pub trait ModelCatalog: Send + Sync {
     fn fallback(&self) -> Vec<Map<String, Value>>;
 }
 
-/// 会话生命周期策略：resume / 清理 / 校验引用 / 永久删除。
+/// 会话生命周期策略：resume / 迁移清理 / 校验引用。
 pub trait SessionLifecycle: Send + Sync {
     fn resume_descriptor(&self, session_id: &str, cwd: &str) -> DomainResult<Map<String, Value>>;
     fn cleanup(&self, session_id: &str, dest: &Path) -> DomainResult<()>;
     fn validation_ref(&self, session_id: &str, dest: &Path) -> DomainResult<String>;
-    fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>>;
 }
 
 /// Adapter 组装体。构造时执行 Python `__post_init__` 的 5 条校验。
@@ -573,7 +572,7 @@ impl AgentAdapter {
         Ok(self.verifier.as_deref().expect("require 已校验组件存在"))
     }
 
-    /// `capability` 只能是 `resume` 或 `delete`。
+    /// lifecycle 组件只服务 `resume` capability。
     pub fn require_lifecycle(&self, capability: &str) -> DomainResult<&dyn SessionLifecycle> {
         self.require(capability, Component::Lifecycle)?;
         Ok(self.lifecycle.as_deref().expect("require 已校验组件存在"))

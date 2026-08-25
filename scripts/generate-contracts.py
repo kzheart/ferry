@@ -89,7 +89,6 @@ AGENT_CAPABILITIES = (
     "migration-source",
     "migration-target",
     "edit",
-    "delete",
     "prompt",
     "models",
 )
@@ -350,7 +349,6 @@ def load_operations() -> dict[str, object]:
         "positive-integer?",
         "positive-integer|string",
         "session-ref",
-        "session-ref[]",
         "string",
         "string?",
         "string[]?",
@@ -1055,7 +1053,6 @@ def _typescript_field(field: str, descriptor: str) -> str:
         "positive-integer": "number",
         "positive-integer|string": "number | string",
         "session-ref": "string",
-        "session-ref[]": "string[]",
         "string": "string",
         "string[]": "string[]",
     }[base]
@@ -1178,7 +1175,6 @@ def operations_rust(contract: dict[str, object]) -> str:
                 "metadata-patch": "MetadataPatch",
                 "positive-integer": "u32",
                 "session-ref": "String",
-                "session-ref[]": "Vec<String>",
                 "string": "String",
                 "string[]": "Vec<String>",
             }[base]

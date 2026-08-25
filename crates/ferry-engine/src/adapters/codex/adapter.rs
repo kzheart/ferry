@@ -148,7 +148,6 @@ mod tests {
             "migration-source",
             "migration-target",
             "edit",
-            "delete",
             "prompt",
             "models",
         ] {

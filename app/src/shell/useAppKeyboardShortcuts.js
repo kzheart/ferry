@@ -8,11 +8,7 @@ export function useAppKeyboardShortcuts({
   dismissers,
   view,
   currentSession,
-  multiIds,
-  sessionsByKey,
   onRename,
-  onBatchDelete,
-  onDelete,
   onResume,
   libraryVisibleIds,
   selectedSessionId,
@@ -56,15 +52,6 @@ export function useAppKeyboardShortcuts({
           onRename(currentSession);
           return;
         }
-        if (event.key === "Backspace" || event.key === "Delete") {
-          event.preventDefault();
-          if (multiIds.length > 1) {
-            onBatchDelete(multiIds.map(key => sessionsByKey[key]).filter(Boolean));
-          } else {
-            onDelete(currentSession);
-          }
-          return;
-        }
         if (event.key === "Enter") {
           event.preventDefault();
           onResume(currentSession);
@@ -91,9 +78,6 @@ export function useAppKeyboardShortcuts({
     currentSession,
     dismissers,
     libraryVisibleIds,
-    multiIds,
-    onBatchDelete,
-    onDelete,
     onFocusPaneSearch,
     onOpenSearch,
     onRename,
@@ -102,7 +86,6 @@ export function useAppKeyboardShortcuts({
     paneAvailable,
     selectSession,
     selectedSessionId,
-    sessionsByKey,
     view,
   ]);
 }

@@ -85,11 +85,10 @@ test("工具卡的勾选会写回草稿", () => {
   assert.ok(screen.getByLabelText("settings:roles.discard"));
 });
 
-test("delete 与 ask_user 工具进入角色能力清单,并可与高权限能力一起保存", async () => {
+test("ask_user 工具进入角色能力清单,并可与高权限能力一起保存", async () => {
   const calls = mount();
   fireEvent.click(screen.getByText("reader"));
 
-  fireEvent.click(screen.getByText("settings:roles.tool.session_delete.label"));
   fireEvent.click(screen.getByText("settings:roles.tool.ask_user.label"));
   fireEvent.click(screen.getByText("settings:roles.tool.agent_prompt.label"));
   fireEvent.click(screen.getByText("settings:roles.save"));

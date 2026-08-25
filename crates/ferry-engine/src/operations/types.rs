@@ -313,9 +313,6 @@ pub trait SessionResolver: Send + Sync {
         locator: &str,
     ) -> DomainResult<ResolvedMessageLocator>;
 
-    /// 等价 `AgentSessionIndex.evict(tool, canonical_ref)`：定点摘除并推 removal delta。
-    fn evict(&self, tool: &str, canonical_ref: &str) -> DomainResult<()>;
-
     /// 等价 `sessions.agent_read.read_indexed_session(index, record)`。
     fn read_indexed_session(&self, record: &IndexedSession) -> DomainResult<Session>;
 }

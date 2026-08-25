@@ -57,7 +57,7 @@
     "displayTitle": "Display options",
     "displayBody": "Grouping, time window, only-with-sub-sessions and only-with-migrations live here; change any of them and a dot lights up on the button. Which slice of sessions you are looking at is not here — that is the scope in the sidebar.",
     "contextMenuTitle": "Right-click to organize",
-    "contextMenuBody": "Right-click a session row to pin, archive, tag, or rename it, or favorite its project into the sidebar; you can also resume it in the terminal, migrate it to another agent, or copy its ID and resume command from here. ⌘-click to multi-select, then archive, tag, or delete in bulk.",
+    "contextMenuBody": "Right-click a session row to pin, archive, tag, or rename it, or favorite its project into the sidebar; you can also resume it in the terminal, migrate it to another agent, or copy its ID and resume command from here. ⌘-click to multi-select, then tag sessions in bulk.",
     "handoffTitle": "Resume this session",
     "handoffBody": "Click this button and it splits in two: the left copies the resume command for the original agent's terminal; the right copies a /ferry-resume instruction (also in the context menu) — paste it into any coding agent with the ferry-resume skill and it reads the history, writes a short takeover summary, and carries on. Nothing is written to any agent's store, so it works even when a native migration is refused (for example when the target does not support being migrated into).",
     "detailTitle": "Session detail and resume",

@@ -38,7 +38,7 @@ const editingSurface = {
 // browser 域的入参已从 props 下沉为 Context。用例仍按命名空间构造同一份数据,
 // 这里按 key 分流:browser 那几个进 Provider,其余照旧作为 props。
 const BROWSER_STATE_KEYS = [
-  "peek", "search", "contextMenu", "deletion", "tags",
+  "peek", "search", "contextMenu", "tags",
 ];
 const OPERATIONS_STATE_KEYS = [
   "migration", "editing", "floatChat",
@@ -89,11 +89,6 @@ function baseProps(overrides = {}) {
       setMultiSelection: noop, selectSession: noop, setOpen: noop,
     },
     contextMenu: { value: null, items: null, setValue: noop },
-    deletion: {
-      sessionConfirmation: null, batchConfirmation: null,
-      cancelSessionDeletion: noop, confirmSessionDeletion: noop,
-      cancelBatchDeletion: noop, confirmBatchDeletion: noop,
-    },
     tags: { selection: null, setSelection: noop, metaFor: () => ({}), updateMetadata: noop },
     toast: { value: null, setValue: noop },
     railTip: { value: null, railOnly: false },

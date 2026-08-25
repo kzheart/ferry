@@ -54,7 +54,6 @@
     "kindMigration": "Migration proposal",
     "kindEdit": "Edit original session",
     "kindMetadata": "Metadata change proposal",
-    "kindDelete": "Permanently delete sessions",
     "kindGeneric": "Write proposal",
     "applied": "Approved & applied",
     "applying": "Applying…",
@@ -66,20 +65,6 @@
     "expired": "Proposal expired — ask the agent to propose again",
     "approve": "Approve & apply",
     "reject": "Reject"
-  },
-  "deletion": {
-    "previewTitle": "Deletion list preview",
-    "totalCount": "To delete",
-    "totalSize": "Total size",
-    "tool": "Source agent",
-    "permanent": "Permanent deletion — no recovery snapshot; sessions cannot be brought back.",
-    "showSessions": "Show {{n}} sessions",
-    "hideSessions": "Hide session list",
-    "excluded": "{{n}} excluded (protected, will not be deleted)",
-    "causePinned": "Pinned",
-    "causeArchived": "Archived",
-    "causeTagged": "Has retention tag",
-    "causeGeneric": "Not eligible for deletion"
   },
   "choice": {
     "title": "Your choice",
@@ -151,15 +136,10 @@
       "usage": "Usage",
       "migrate": "Migrate",
       "session_edit": "Edit session",
-      "session_delete": "Delete sessions",
       "ask_user": "Ask the user",
       "bash": "Run command"
     },
     "verbIntent": {
-      "session_delete": {
-        "preview": "Preview deletion",
-        "execute": "Delete sessions"
-      },
       "session_edit": {
         "preview": "Preview edit",
         "execute": "Apply edit"

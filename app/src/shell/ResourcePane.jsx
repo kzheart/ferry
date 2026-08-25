@@ -2,10 +2,10 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ACCENT } from "../shared/ui/toolDisplay.js";
-import { supportsAgentCapability, TOOL_NAME } from "../shared/contracts/tools.js";
+import { TOOL_NAME } from "../shared/contracts/tools.js";
 import { libraryGroupExpanded } from "../modules/browser/public.js";
 import { ArrowRightIcon, BranchIcon, Caret, ChevronLeftIcon, CloseIcon, FilterIcon, MoreDots, PinIcon,
-  SearchIcon, StarIcon, ToolIcon, TrashIcon } from "../shared/ui/icons.jsx";
+  SearchIcon, StarIcon, ToolIcon } from "../shared/ui/icons.jsx";
 import { useDensityMetrics } from "../shared/ui/density.js";
 
 export function Pane({ collapsed, width, dragging, title, count,
@@ -311,9 +311,9 @@ function FolderRow({ group, expanded, height, favorite, onToggle, onFavorite, on
   );
 }
 
-// 会话行:双行 40px(标题 / 元信息),悬浮浮现操作按钮(置顶/删除/更多);双击标题就地重命名
+// 会话行:双行 40px(标题 / 元信息),悬浮浮现操作按钮(置顶/更多);双击标题就地重命名
 const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editing, showRepo,
-  guide, onRowClick, onRowPin, onRowDelete, onRowMore,
+  guide, onRowClick, onRowPin, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   const act = (fn, key) => e => { e.stopPropagation(); fn(key, e); };
@@ -415,9 +415,6 @@ const LibraryRow = memo(function LibraryRow({ r, height, selected, multi, editin
           title={r.pinned ? t("app:ctx.unpin") : t("app:ctx.pin")}
           style={r.pinned ? { color: ACCENT } : undefined}>
           <PinIcon filled={r.pinned} /></button>
-        {supportsAgentCapability(r.tool, "delete") && <button className="row-act-btn row-act-danger" onClick={act(onRowDelete, r.key)}
-          title={t("app:ctx.deleteSession")}>
-          <TrashIcon size={13} /></button>}
         <button className="row-act-btn" onClick={act(onRowMore, r.key)}
           title={t("app:ctx.more")}><MoreDots /></button>
       </span>
@@ -431,7 +428,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
   favorites = [], onFavoriteProject, onOnlyProject, onFolderMenu,
   onClear, onRescan, onFullTextSearch,
   selectedId, multiSel,
-  renamingKey, onRowClick, onRowPin, onRowDelete, onRowMore,
+  renamingKey, onRowClick, onRowPin, onRowMore,
   onRowRename, onRowRenameSubmit, onRowRenameCancel }) {
   const { t } = useTranslation();
   const metrics = useDensityMetrics();
@@ -477,7 +474,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
           <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
             editing={r.key === renamingKey} showRepo={showRepo}
             guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
-            onRowDelete={onRowDelete} onRowMore={onRowMore}
+            onRowMore={onRowMore}
             onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
             onRowRenameCancel={onRowRenameCancel} />
         ) });
@@ -507,7 +504,7 @@ export function LibraryList({ groups, collapsed, onToggle, empty, filtered, quer
         <LibraryRow r={r} height={ROW_H} selected={r.key === selectedId} multi={multiSet.has(r.key)}
           editing={r.key === renamingKey} showRepo={showRepo}
           guide={r.key === guideKey} onRowClick={onRowClick} onRowPin={onRowPin}
-          onRowDelete={onRowDelete} onRowMore={onRowMore}
+          onRowMore={onRowMore}
           onRowRename={onRowRename} onRowRenameSubmit={onRowRenameSubmit}
           onRowRenameCancel={onRowRenameCancel} />
       ) });

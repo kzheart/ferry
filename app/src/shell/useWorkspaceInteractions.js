@@ -32,7 +32,6 @@ export function useWorkspaceInteractions({
   setMenu,
   select,
   loadEntitySession,
-  deletion,
   editing,
   scope,
   loadMore,
@@ -50,16 +49,6 @@ export function useWorkspaceInteractions({
 }) {
   // 右键菜单是列表型入口:开关状态直接在这里取,不必由主壳层层转交。
   const isFeatureEnabled = useIsFeatureEnabled();
-  const askDelete = session => {
-    if (!supportsAgentCapability(session?.tool, "delete")) return;
-    deletion.requestSessionDeletion(session);
-  };
-  const askBatchDelete = sessions => {
-    if (!sessions.every(session =>
-      supportsAgentCapability(session?.tool, "delete"))) return;
-    deletion.requestBatchDeletion(sessions);
-  };
-
   // 会话卡片默认点击:就地在覆盖浮层里预览,不整页跳走(对话留在背景)。
   // usage / 迁移历史等无会话可预览的动作,在对话里不做导航。
   const peekEntity = (action, entity) => {
@@ -80,7 +69,6 @@ export function useWorkspaceInteractions({
     updateMetadata,
     setTagSelection,
     setRename,
-    setBatchDelete: askBatchDelete,
     setMultiIds,
     setAgentAttachments,
     setView,
@@ -99,7 +87,6 @@ export function useWorkspaceInteractions({
     settings,
     isFeatureEnabled,
     t,
-    askDelete,
   });
 
   const rowActions = useLibraryResourcePaneActions({
@@ -111,7 +98,6 @@ export function useWorkspaceInteractions({
     onSelect: select,
     onTogglePin: (session) =>
       updateMetadata(session, { pinned: !metaFor(session).pinned }),
-    onDelete: askDelete,
     onOpenMenu: setMenu,
     onStartRename: setRename,
     // 留空恢复原始标题(与旧弹窗语义一致);未改动则不写元数据
@@ -207,7 +193,6 @@ export function useWorkspaceInteractions({
   );
 
   return {
-    askDelete,
     peekEntity,
     contextMenuItems,
     detailActions,

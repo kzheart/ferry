@@ -3,8 +3,7 @@
   "kinds": [
     "edit",
     "migration",
-    "metadata",
-    "delete"
+    "metadata"
   ],
   "edit_operations": [
     "delete-turn",
@@ -43,10 +42,6 @@
       "tool": "agent-id",
       "ref": "session-ref",
       "patch": "metadata-patch"
-    },
-    "delete": {
-      "tool": "agent-id",
-      "refs": "session-ref[]"
     }
   },
   "edit_operation_fields": {

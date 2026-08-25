@@ -1,4 +1,4 @@
-// 破坏性操作与 Ask Ferry 域的壳状态:迁移、待应用编辑、浮动面板、
+// 写操作与 Ask Ferry 域的壳状态:迁移、待应用编辑、浮动面板、
 // Agent 会话重命名。
 //
 // 与 browserState 同源的动机:这些字段原先经 workspaceOverlayProps 组装后层层

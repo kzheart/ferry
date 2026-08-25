@@ -235,15 +235,6 @@ export function useSessionSelection({
     }
   };
 
-  const clearSelection = () => {
-    setSelectedId(null);
-    setDetail(null);
-  };
-
-  const discardCachedDetail = (session) => {
-    detailCache.current.delete(sessionIdentity(session));
-  };
-
   return {
     selectedId,
     setSelectedId,
@@ -255,7 +246,5 @@ export function useSessionSelection({
     loadEntitySession,
     refreshDetail,
     loadMore,
-    clearSelection,
-    discardCachedDetail,
   };
 }

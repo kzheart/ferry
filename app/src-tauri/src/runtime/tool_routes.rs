@@ -102,21 +102,6 @@ pub(super) fn resolve_tool_request(
             }
             _ => return None,
         },
-        "session_delete" => {
-            if !has_exact_keys(args, &["tool", "refs", "intent"], &[]) {
-                return None;
-            }
-            let execute = execution_intent(args)?;
-            ToolRequestRoute {
-                method: "operation.plan",
-                params: json!({"input": {
-                    "kind": "delete",
-                    "tool": args.get("tool")?,
-                    "refs": args.get("refs")?,
-                }}),
-                requires_approval: execute,
-            }
-        }
         _ => return None,
     })
 }
@@ -198,47 +183,6 @@ mod tests {
                 "ref": "fsr_a",
                 "ops": [{"op": "delete-turn", "turn": 1}],
             }})
-        );
-
-        for intent in ["preview", "execute"] {
-            let delete = resolve_tool_request(
-                "session_delete",
-                &map(json!({
-                    "tool": "codex",
-                    "refs": ["fsr_a", "fsr_b"],
-                    "intent": intent,
-                })),
-            )
-            .unwrap();
-            assert_eq!(delete.method, "operation.plan");
-            assert_eq!(delete.requires_approval, intent == "execute");
-            assert_eq!(
-                delete.params,
-                json!({"input": {
-                    "kind": "delete",
-                    "tool": "codex",
-                    "refs": ["fsr_a", "fsr_b"],
-                }})
-            );
-        }
-        assert_eq!(
-            resolve_tool_request(
-                "session_delete",
-                &map(json!({
-                    "tool": "codex",
-                    "refs": ["fsr_a"],
-                    "intent": "execute",
-                    "kind": "cleanup",
-                })),
-            ),
-            None
-        );
-        assert_eq!(
-            resolve_tool_request(
-                "session_delete",
-                &map(json!({"tool": "codex", "refs": ["fsr_a"]})),
-            ),
-            None
         );
 
         let metadata = resolve_tool_request(
@@ -341,12 +285,10 @@ mod tests {
 
     #[test]
     fn preview_never_requires_approval_and_execute_always_does() {
-        for name in ["migrate", "session_edit", "session_delete"] {
+        for name in ["migrate", "session_edit"] {
             let base = if name == "migrate" {
                 json!({"source_tool": "claude", "ref": "fsr_a",
                        "target_tool": "codex"})
-            } else if name == "session_delete" {
-                json!({"tool": "claude", "refs": ["fsr_a"]})
             } else {
                 json!({"tool": "claude", "ref": "fsr_a",
                        "ops": [{"op": "delete-turn", "turn": 1}]})

@@ -150,7 +150,7 @@ mod tests {
         // opencode 只支持 rewrite 一种编辑操作。
         assert_eq!(adapter.manifest.edit_operations, ["rewrite"]);
         assert!(adapter.require_editor().is_ok());
-        assert!(adapter.require_lifecycle("delete").is_ok());
+        assert!(adapter.require_lifecycle("resume").is_ok());
         assert!(adapter.require_verifier("prompt").is_ok());
     }
 

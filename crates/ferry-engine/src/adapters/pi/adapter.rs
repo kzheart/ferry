@@ -394,7 +394,7 @@ mod tests {
         assert!(adapter.require_editor().is_ok());
         assert!(adapter.require_migration_target().is_ok());
         assert!(adapter.require_verifier("prompt").is_ok());
-        assert!(adapter.require_lifecycle("delete").is_ok());
+        assert!(adapter.require_lifecycle("resume").is_ok());
         assert_eq!(
             adapter.manifest.edit_operations,
             ["delete-turn", "rewrite", "replace-assistant-reply"]

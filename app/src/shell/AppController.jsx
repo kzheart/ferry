@@ -12,7 +12,6 @@ import {
   sessionIdentity,
   useBrowserData,
   useLibraryResourcePane,
-  useSessionDeletion,
   useSessionMetadata,
   useSessionSelection,
 } from "../modules/browser/public.js";
@@ -106,8 +105,6 @@ export default function App() {
     loadEntitySession,
     refreshDetail,
     loadMore,
-    clearSelection,
-    discardCachedDetail,
   } = selection;
   const cur = selId ? byKey[selId] : null;
   const editing = useSessionEditing({
@@ -191,16 +188,6 @@ export default function App() {
     setView("library");
     setSettingsOpen(false);
   }, [selectLibScope]);
-  const deletion = useSessionDeletion({
-    clearSelection,
-    discardCachedDetail,
-    doScan,
-    selectedId: selId,
-    setMultiIds: setMultiSel,
-    setToast,
-    t,
-  });
-
   // 首次扫描完成后默认选中第一个会话
   useEffect(() => {
     if (!selId && sessions.length) select(sessionIdentity(sessions[0]));
@@ -226,7 +213,6 @@ export default function App() {
   }, [ferry.mutationVersion]);
 
   const {
-    askDelete,
     peekEntity,
     contextMenuItems: ctxItems,
     detailActions: detailActs,
@@ -234,7 +220,6 @@ export default function App() {
     onRowClick,
     onRowMore,
     onRowPin,
-    onRowDelete,
     onRowRename,
     onRowRenameSubmit,
     onRowRenameCancel,
@@ -254,7 +239,6 @@ export default function App() {
     setMenu: setCtxMenu,
     select,
     loadEntitySession,
-    deletion,
     editing,
     scope,
     loadMore,
@@ -310,14 +294,6 @@ export default function App() {
       { open: Boolean(ctxMenu), dismiss: () => setCtxMenu(null) },
       { open: Boolean(renameFor), dismiss: () => setRenameFor(null) },
       { open: Boolean(tagFor), dismiss: () => setTagFor(null) },
-      {
-        open: Boolean(deletion.batchConfirmation),
-        dismiss: deletion.cancelBatchDeletion,
-      },
-      {
-        open: Boolean(deletion.sessionConfirmation),
-        dismiss: deletion.cancelSessionDeletion,
-      },
       { open: settingsOpen, dismiss: () => setSettingsOpen(false) },
       { open: confirmApply, dismiss: () => setConfirmApply(false) },
       { open: Boolean(diff), dismiss: () => setDiff(null) },
@@ -333,11 +309,7 @@ export default function App() {
     ],
     view,
     currentSession: cur,
-    multiIds: multiSel,
-    sessionsByKey: byKey,
     onRename: setRenameFor,
-    onBatchDelete: deletion.requestBatchDeletion,
-    onDelete: askDelete,
     onResume: detailActs.onResume,
     libraryVisibleIds,
     selectedSessionId: selId,
@@ -349,7 +321,7 @@ export default function App() {
 
   const { browserState, operationsState, appChrome } = useWorkspaceState({
     applyEdit, confirmApply,
-    ctxItems, ctxMenu, cur, deletion, detail, detailActs,
+    ctxItems, ctxMenu, cur, detail, detailActs,
     detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
     libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
     onboarding, openConfig, paneCfg, peekEntity, peekId, rail,
@@ -465,7 +437,6 @@ export default function App() {
                 renamingKey: renameFor ? sessionIdentity(renameFor) : null,
                 onRowClick,
                 onRowPin,
-                onRowDelete,
                 onRowMore,
                 onRowRename,
                 onRowRenameSubmit,

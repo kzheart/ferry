@@ -1,4 +1,4 @@
-//! Codex 会话生命周期：清理、删除（含原生子会话树）策略。
+//! Codex 会话生命周期：resume 与迁移清理策略。
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -6,15 +6,11 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
-use crate::adapters::contracts::AgentAdapter;
-use crate::adapters::shared::editing::EditDocument;
-use crate::adapters::shared::lifecycle::{
-    delete_file_session, BaseLifecycle, FileSessionLifecycle,
-};
+use crate::adapters::shared::lifecycle::BaseLifecycle;
 use crate::adapters::shared::scanner::iter_lines;
 use crate::errors::DomainResult;
 
-use super::native::{discover_closure, CodexClosure, CodexStore};
+use super::native::{discover_closure, CodexStore};
 use super::registry::unregister_tree;
 
 /// Codex 生命周期策略。
@@ -78,38 +74,6 @@ impl BaseLifecycle for CodexLifecycle {
             let _ = fs::remove_file(path);
         }
         Ok(())
-    }
-
-    fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
-        delete_file_session(self, adapter, reference)
-    }
-}
-
-impl FileSessionLifecycle for CodexLifecycle {
-    /// 删除闭包里除自身外的全部 rollout 文件。
-    fn delete_children(&self, doc: &EditDocument, path: &Path) -> DomainResult<i64> {
-        let Some(closure) = doc
-            .context
-            .as_ref()
-            .and_then(|context| context.downcast_ref::<CodexClosure>())
-        else {
-            return Ok(0);
-        };
-        let mut ordered: Vec<&PathBuf> = closure.nodes.values().map(|node| &node.path).collect();
-        ordered.sort();
-        let mut deleted = 0i64;
-        for child in ordered {
-            if child.as_path() != path && child.exists() {
-                fs::remove_file(child).map_err(|error| {
-                    crate::errors::DomainError::internal(format!(
-                        "删除 Codex 子会话失败: {}: {error}",
-                        child.display()
-                    ))
-                })?;
-                deleted += 1;
-            }
-        }
-        Ok(deleted)
     }
 }
 

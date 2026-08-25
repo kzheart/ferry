@@ -244,24 +244,10 @@ pub fn public_plan(operation: &OperationPlan) -> EngineResult<Value> {
             format!("将 {source} 会话迁移到 {target}")
         }
         "metadata" => "修改会话元数据".to_string(),
-        "delete" => "永久删除原始会话（不可恢复）".to_string(),
         _ => "修改原始会话（执行前自动创建可恢复快照）".to_string(),
     };
     let affected_refs = if let Some(reference) = params.get("ref") {
         vec![reference.clone()]
-    } else if operation.kind == "delete" {
-        params
-            .get("targets")
-            .and_then(Value::as_array)
-            .ok_or_else(|| EngineError::key_error("targets"))?
-            .iter()
-            .map(|target| {
-                target
-                    .get("ref")
-                    .cloned()
-                    .ok_or_else(|| EngineError::key_error("ref"))
-            })
-            .collect::<EngineResult<Vec<Value>>>()?
     } else {
         Vec::new()
     };
@@ -361,15 +347,6 @@ mod tests {
         assert_eq!(migration["summary"], json!("将 claude 会话迁移到 opencode"));
         assert_eq!(migration["affected_refs"], json!([]));
         assert_eq!(migration["document_revision"], json!(null));
-
-        let delete = public_plan(&OperationPlan {
-            kind: "delete".into(),
-            input_json: r#"{"targets":[{"ref":"fsr_a"},{"ref":"fsr_b"}]}"#.into(),
-            ..base
-        })
-        .unwrap();
-        assert_eq!(delete["summary"], json!("永久删除原始会话（不可恢复）"));
-        assert_eq!(delete["affected_refs"], json!(["fsr_a", "fsr_b"]));
     }
 
     #[test]

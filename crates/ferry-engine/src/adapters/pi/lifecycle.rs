@@ -1,18 +1,14 @@
 //! Pi 文件型会话生命周期。
 //!
-//! 实现 `BaseLifecycle` 即自动满足 `contracts::SessionLifecycle`；
-//! 删除走 `FileSessionLifecycle` 的通用算法（`delete_file_session`），
-//! pi 没有子会话文件也没有 sidecar，两个钩子都用默认值。
+//! 实现 `BaseLifecycle` 即自动满足 `contracts::SessionLifecycle`。
 
 use std::fs;
 use std::path::Path;
 
-use serde_json::{Map, Value};
+#[cfg(test)]
+use serde_json::Value;
 
-use crate::adapters::contracts::AgentAdapter;
-use crate::adapters::shared::lifecycle::{
-    delete_file_session, BaseLifecycle, FileSessionLifecycle,
-};
+use crate::adapters::shared::lifecycle::BaseLifecycle;
 use crate::errors::DomainResult;
 
 pub struct PiLifecycle {
@@ -50,13 +46,7 @@ impl BaseLifecycle for PiLifecycle {
         let _ = fs::remove_file(dest);
         Ok(())
     }
-
-    fn delete(&self, adapter: &AgentAdapter, reference: &str) -> DomainResult<Map<String, Value>> {
-        delete_file_session(self, adapter, reference)
-    }
 }
-
-impl FileSessionLifecycle for PiLifecycle {}
 
 #[cfg(test)]
 mod tests {
@@ -119,23 +109,5 @@ mod tests {
         assert!(!path.exists());
         // 第二次不报错。
         BaseLifecycle::cleanup(&lifecycle, "sid", &path).unwrap();
-    }
-
-    #[test]
-    fn delete_is_permanent_and_leaves_no_snapshot() {
-        let root = tempfile::tempdir().unwrap();
-        let path = staged(root.path());
-        let backups = root.path().join("backups");
-        // 与 shared::lifecycle 的算法对照：editor.load → 删子会话 → 删 sidecar → unlink。
-        let adapter = super::super::adapter::build().unwrap();
-        let result = adapter
-            .require_lifecycle("delete")
-            .unwrap()
-            .delete(&adapter, &path.to_string_lossy())
-            .unwrap();
-        assert_eq!(result["ok"], Value::Bool(true));
-        assert_eq!(result["children"], Value::from(0));
-        assert!(!path.exists());
-        assert!(!backups.exists());
     }
 }

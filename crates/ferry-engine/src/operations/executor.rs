@@ -2,19 +2,15 @@
 //!
 //! 硬约束：
 //! - 每条分支都要在写之前重新解析索引并比 `base_revision`（§2.4）；
-//! - migration 的二次门禁：`rolled_back or structure.ok is not True → RuntimeError`（第 25 条）；
-//! - delete 三重门禁 + 单条失败不中断 + 成功后立刻 `index.evict`（第 26 条）。
+//! - migration 的二次门禁：`rolled_back or structure.ok is not True → RuntimeError`（第 25 条）。
 
 use serde_json::{Map, Value};
 
 use crate::errors::DomainError;
-use crate::operations::delete::SessionDeletionService;
 use crate::operations::edit::EditOperationHandler;
 use crate::operations::metadata;
-use crate::operations::metadata_store::metadata_key;
 use crate::operations::migrate::MigrationService;
 use crate::operations::plan_store::OperationPlan;
-use crate::operations::planner::protected_cause;
 use crate::operations::types::{EngineError, EngineResult, Ports, Resolver};
 
 pub struct OperationExecutor {
@@ -39,7 +35,6 @@ impl OperationExecutor {
             "edit" => self.apply_edit(operation).map(Value::Object),
             "migration" => self.apply_migration(operation).map(Value::Object),
             "metadata" => self.apply_metadata(operation).map(Value::Object),
-            "delete" => self.apply_delete(operation).map(Value::Object),
             other => {
                 let mut params = Map::new();
                 params.insert("kind".into(), Value::from(other));
@@ -142,116 +137,6 @@ impl OperationExecutor {
         let mut result = Map::new();
         result.insert("metadata".into(), Value::Object(applied));
         Ok(result)
-    }
-
-    fn apply_delete(&self, operation: &OperationPlan) -> EngineResult<Map<String, Value>> {
-        let params = operation.input()?;
-        let tool = str_param(&params, "tool")?;
-        // 计划期的保护审查挡不住批准前才被 pin/archive/打标签的会话：元数据与
-        // 会话内容 revision 无关，逐条 revision 比对不可能发现这种变化。
-        let metadata_rows = metadata::list_all(&self.ports)?;
-        let deletion = SessionDeletionService::new(Ports::clone(&self.ports));
-        let mut succeeded = Vec::new();
-        let mut skipped = Vec::new();
-        let mut failed = Vec::new();
-        let targets = params
-            .get("targets")
-            .and_then(Value::as_array)
-            .ok_or_else(|| EngineError::key_error("targets"))?
-            .clone();
-        for target in &targets {
-            let reference = target
-                .get("ref")
-                .and_then(Value::as_str)
-                .ok_or_else(|| EngineError::key_error("ref"))?;
-            match self.delete_one(&tool, target, reference, &metadata_rows, &deletion) {
-                Ok(Some(skip)) => skipped.push(skip),
-                Ok(None) => {
-                    let mut entry = Map::new();
-                    entry.insert("tool".into(), Value::from(tool.as_str()));
-                    entry.insert("ref".into(), Value::from(reference));
-                    succeeded.push(Value::Object(entry));
-                }
-                // 单条失败不中断批处理。
-                Err(error) => {
-                    let mut entry = Map::new();
-                    entry.insert("tool".into(), Value::from(tool.as_str()));
-                    entry.insert("ref".into(), Value::from(reference));
-                    entry.insert(
-                        "error".into(),
-                        Value::from(error.message().chars().take(500).collect::<String>()),
-                    );
-                    failed.push(Value::Object(entry));
-                }
-            }
-        }
-        let mut result = Map::new();
-        result.insert("succeeded".into(), Value::Array(succeeded));
-        result.insert("skipped".into(), Value::Array(skipped));
-        result.insert("failed".into(), Value::Array(failed));
-        Ok(result)
-    }
-
-    /// 三重门禁：保护规则复查 → ref 可解析 → session_id + revision 双比对。
-    ///
-    /// `Ok(Some(skip))` = 被跳过；`Ok(None)` = 已删除。
-    fn delete_one(
-        &self,
-        tool: &str,
-        target: &Value,
-        reference: &str,
-        metadata_rows: &Map<String, Value>,
-        deletion: &SessionDeletionService,
-    ) -> EngineResult<Option<Value>> {
-        let session_id = target
-            .get("session_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| EngineError::key_error("session_id"))?;
-        let empty = Value::Object(Map::new());
-        let metadata_row = metadata_rows
-            .get(&metadata_key(tool, session_id))
-            .unwrap_or(&empty);
-        if let Some(protection) = protected_cause(metadata_row) {
-            let mut skip = Map::new();
-            skip.insert("tool".into(), Value::from(tool));
-            skip.insert("ref".into(), Value::from(reference));
-            skip.insert("cause".into(), Value::from("protected"));
-            skip.insert("protection".into(), Value::from(protection));
-            return Ok(Some(Value::Object(skip)));
-        }
-        let record = match self.index.resolve(tool, reference) {
-            Ok(record) => record,
-            Err(error) if error.error_type == "AgentReferenceError" => {
-                let changed =
-                    error.params().get("reason").and_then(Value::as_str) == Some("session_changed");
-                let mut skip = Map::new();
-                skip.insert("tool".into(), Value::from(tool));
-                skip.insert("ref".into(), Value::from(reference));
-                skip.insert(
-                    "cause".into(),
-                    Value::from(if changed { "changed" } else { "not_found" }),
-                );
-                return Ok(Some(Value::Object(skip)));
-            }
-            Err(error) => return Err(error.into()),
-        };
-        let revision = target
-            .get("revision")
-            .and_then(Value::as_str)
-            .ok_or_else(|| EngineError::key_error("revision"))?;
-        if record.row.get("id").and_then(Value::as_str) != Some(session_id)
-            || record.revision != revision
-        {
-            let mut skip = Map::new();
-            skip.insert("tool".into(), Value::from(tool));
-            skip.insert("ref".into(), Value::from(reference));
-            skip.insert("cause".into(), Value::from("changed"));
-            return Ok(Some(Value::Object(skip)));
-        }
-        deletion.delete(tool, &record.canonical_ref)?;
-        // 删除后索引定点摘除并推 removal delta，不必等下一轮重扫。
-        self.index.evict(tool, &record.canonical_ref)?;
-        Ok(None)
     }
 }
 
