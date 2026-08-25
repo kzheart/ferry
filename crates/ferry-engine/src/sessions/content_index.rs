@@ -641,6 +641,7 @@ impl ContentIndex {
         if !stale.is_empty() {
             self.drop_sessions(&stale)?;
         }
+        let mut unresolved = pending.len();
         if !pending.is_empty() {
             let total_bytes: i64 = pending
                 .iter()
@@ -651,7 +652,8 @@ impl ContentIndex {
                 && pending.len() <= SYNC_SESSION_LIMIT
                 && total_bytes <= SYNC_BYTE_LIMIT
             {
-                // 前台补完路径不吞 sqlite 错误（Python 的 `sync` 也不捕获）。
+                // 前台补完：写失败不再让整个搜索 RPC 挂掉——降级逐条写入，
+                // 成功的部分立即可搜，失败的留在 pending 计数里下轮重试。
                 let parsed: Vec<ParsedSession> = if pending.len() == 1 {
                     vec![parse_session(index, &pending[0])]
                 } else {
@@ -663,8 +665,7 @@ impl ContentIndex {
                             .collect()
                     })
                 };
-                self.write_batch(&parsed)?;
-                pending.clear();
+                unresolved = self.write_batch_degrading(&parsed).len();
             } else {
                 self.enqueue(index, &pending);
             }
@@ -672,13 +673,13 @@ impl ContentIndex {
         let mut status = Map::new();
         status.insert(
             "ready".into(),
-            Value::Bool(pending.is_empty() && !self.building()),
+            Value::Bool(unresolved == 0 && !self.building()),
         );
         status.insert(
             "indexed_sessions".into(),
-            Value::from(records.len() - pending.len()),
+            Value::from(records.len() - unresolved),
         );
-        status.insert("pending_sessions".into(), Value::from(pending.len()));
+        status.insert("pending_sessions".into(), Value::from(unresolved));
         Ok(status)
     }
 
@@ -773,6 +774,54 @@ impl ContentIndex {
         Ok(())
     }
 
+    /// 单个会话的「删旧 + 插新 + 记账」；必须在事务里调用。
+    fn persist_session(
+        connection: &Connection,
+        parsed: &ParsedSession,
+        indexed_at: i64,
+    ) -> rusqlite::Result<()> {
+        let record = &parsed.record;
+        connection.execute(
+            "DELETE FROM records WHERE tool = ? AND ref = ?",
+            rusqlite::params![record.tool, record.canonical_ref],
+        )?;
+        {
+            // prepare_cached：整批（乃至整次构建）复用同一份编译好的
+            // 语句，避免每会话重新编译插入语句。
+            let mut statement = connection.prepare_cached(
+                "INSERT INTO records(tool, ref, message, turn, role, text, tool_text, clipped)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            )?;
+            for row in &parsed.rows {
+                statement.execute(rusqlite::params![
+                    record.tool,
+                    record.canonical_ref,
+                    row.message,
+                    row.turn,
+                    row.role,
+                    row.text,
+                    row.tool_text,
+                    row.clipped,
+                ])?;
+            }
+        }
+        let clipped_rows: i64 = parsed.rows.iter().map(|row| row.clipped).sum();
+        connection.execute(
+            "INSERT OR REPLACE INTO indexed_sessions(tool, ref, revision, record_rows,
+             clipped_rows, failed, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                record.tool,
+                record.canonical_ref,
+                record.revision,
+                parsed.rows.len() as i64,
+                clipped_rows,
+                parsed.failed,
+                indexed_at,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// 把一批已解析的会话写进一个事务。
     ///
     /// 批内每个会话的「删旧 + 插新 + 记账」在同一事务里，批中途失败整批回滚，
@@ -789,45 +838,7 @@ impl ContentIndex {
         let outcome = self.with_db(|connection| {
             write_transaction(connection, |connection| {
                 for parsed in batch {
-                    let record = &parsed.record;
-                    connection.execute(
-                        "DELETE FROM records WHERE tool = ? AND ref = ?",
-                        rusqlite::params![record.tool, record.canonical_ref],
-                    )?;
-                    {
-                        // prepare_cached：整批（乃至整次构建）复用同一份编译好的
-                        // 语句，避免每会话重新编译插入语句。
-                        let mut statement = connection.prepare_cached(
-                            "INSERT INTO records(tool, ref, message, turn, role, text, tool_text, clipped)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        )?;
-                        for row in &parsed.rows {
-                            statement.execute(rusqlite::params![
-                                record.tool,
-                                record.canonical_ref,
-                                row.message,
-                                row.turn,
-                                row.role,
-                                row.text,
-                                row.tool_text,
-                                row.clipped,
-                            ])?;
-                        }
-                    }
-                    let clipped_rows: i64 = parsed.rows.iter().map(|row| row.clipped).sum();
-                    connection.execute(
-                        "INSERT OR REPLACE INTO indexed_sessions(tool, ref, revision, record_rows,
-                         clipped_rows, failed, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        rusqlite::params![
-                            record.tool,
-                            record.canonical_ref,
-                            record.revision,
-                            parsed.rows.len() as i64,
-                            clipped_rows,
-                            parsed.failed,
-                            indexed_at,
-                        ],
-                    )?;
+                    Self::persist_session(connection, parsed, indexed_at)?;
                 }
                 Ok(())
             })
@@ -835,6 +846,53 @@ impl ContentIndex {
         WRITE_NANOS.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
         outcome?;
         Ok(())
+    }
+
+    /// 批量写入，失败自动降级：整批事务失败后逐条独立事务重试，只丢真正写
+    /// 失败的那条。返回仍然失败的会话键（已按 ref 记日志）。
+    ///
+    /// 单事务整批写是快路径；但批事务把 4 条会话「连坐」了——毒会话（比如某条
+    /// 记录触发 sqlite 错误）会让同批健康会话一起回滚，且 LIFO 分组稳定，下轮
+    /// 还是同一批人，健康会话永远建不进去。降级逐条后：
+    /// - 只有毒会话本身丢弃（revision 不落库，下轮对账重试）；
+    /// - 读取失败（`failed=1`）的记账独立落库，保证「按 revision 记账不空转」。
+    fn write_batch_degrading(&self, batch: &[ParsedSession]) -> Vec<SessionKey> {
+        if batch.is_empty() {
+            return Vec::new();
+        }
+        let batch_error = match self.write_batch(batch) {
+            Ok(()) => return Vec::new(),
+            Err(error) => error,
+        };
+        if batch.len() > 1 {
+            crate::server::serve::log_warning(&format!(
+                "内容索引批量写入失败, 降级为逐条重试: {} 条会话 {}",
+                batch.len(),
+                batch_error.message()
+            ));
+        }
+        let mut failed = Vec::new();
+        for parsed in batch {
+            let outcome = if batch.len() == 1 {
+                // 单条批不用重放：刚才那次失败就是它自己。
+                Err(batch_error.clone())
+            } else {
+                self.write_batch(std::slice::from_ref(parsed))
+            };
+            if let Err(error) = outcome {
+                crate::server::serve::log_warning(&format!(
+                    "内容索引写入失败(跳过, 下轮 revision 对账重试): {}/{}: {}",
+                    parsed.record.tool,
+                    parsed.record.canonical_ref,
+                    error.message()
+                ));
+                failed.push((
+                    parsed.record.tool.clone(),
+                    parsed.record.canonical_ref.clone(),
+                ));
+            }
+        }
+        failed
     }
 
     fn enqueue(self: &Arc<Self>, index: &Arc<AgentSessionIndex>, records: &[IndexedSession]) {
@@ -914,14 +972,9 @@ impl ContentIndex {
                 })
             };
             // 后台构建吞掉 sqlite 错误并记日志（Python `_drain` 的
-            // `except sqlite3.Error`）：一批建不起来不能拖垮整条队列。
-            if let Err(error) = self.write_batch(&parsed) {
-                crate::server::serve::log_warning(&format!(
-                    "内容索引后台构建失败: {} 条会话 {}",
-                    parsed.len(),
-                    error.message()
-                ));
-            }
+            // `except sqlite3.Error`）：写失败降级逐条重试，只丢真正失败的
+            // 那条（已按 ref 记日志），不拖垮同批健康会话与整条队列。
+            let _ = self.write_batch_degrading(&parsed);
         }
     }
 
@@ -1324,6 +1377,81 @@ mod tests {
             .map(Result::unwrap)
             .collect();
         assert_eq!(ids, vec![3]);
+    }
+
+    fn parsed(reference: &str, text: &str, failed: i64) -> ParsedSession {
+        use crate::adapters::contracts::StorageKind;
+        ParsedSession {
+            record: IndexedSession {
+                opaque_ref: format!("fsr_{reference}"),
+                tool: "claude".into(),
+                canonical_ref: reference.into(),
+                root: None,
+                storage_kind: StorageKind::File,
+                row: Map::new(),
+                revision: "r1".into(),
+                source_identity: Value::Null,
+            },
+            rows: if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![RecordRow {
+                    message: 1,
+                    turn: 1,
+                    role: "user".into(),
+                    text: text.into(),
+                    tool_text: String::new(),
+                    clipped: 0,
+                }]
+            },
+            failed,
+        }
+    }
+
+    /// 回归：批事务里的毒会话不能连坐同批健康会话。
+    ///
+    /// 整批事务失败后必须降级为逐条独立事务：健康会话与读取失败（failed=1）
+    /// 的记账各自落库，只有真正写失败的那条丢弃等下轮重试，搜索不受影响。
+    #[test]
+    fn poisoned_batch_write_degrades_to_per_session_transactions() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        // 用触发器构造一条稳定写失败的记录：text='POISON' 的插入必然报错。
+        content
+            .with_db(|connection| {
+                connection.execute_batch(
+                    "CREATE TRIGGER poison BEFORE INSERT ON records
+                     WHEN new.text = 'POISON'
+                     BEGIN SELECT RAISE(ABORT, 'poisoned row'); END;",
+                )?;
+                Ok(())
+            })
+            .unwrap()
+            .unwrap();
+        let batch = vec![
+            parsed("/healthy-1", "hello world", 0),
+            parsed("/poison", "POISON", 0),
+            parsed("/read-failed", "", 1),
+            parsed("/healthy-2", "goodbye", 0),
+        ];
+        let failed = content.write_batch_degrading(&batch);
+        assert_eq!(failed, vec![("claude".to_string(), "/poison".to_string())]);
+
+        let stored = content.stored_revisions().unwrap();
+        assert!(stored.contains_key(&("claude".into(), "/healthy-1".into())));
+        assert!(stored.contains_key(&("claude".into(), "/healthy-2".into())));
+        // 读取失败的 failed 记账独立落库，不被同批他人失败回滚。
+        assert!(stored.contains_key(&("claude".into(), "/read-failed".into())));
+        // 毒会话不落 revision，下轮对账重试。
+        assert!(!stored.contains_key(&("claude".into(), "/poison".into())));
+
+        // 搜索不因毒会话失败，健康内容立即可搜。
+        let (hits, _) = content.search(&["hello world".to_string()], false).unwrap();
+        assert_eq!(hits.len(), 1);
+
+        // 重跑同一批（模拟下一轮）：健康会话已入库幂等重写，毒会话仍只丢自己。
+        let failed = content.write_batch_degrading(&batch);
+        assert_eq!(failed.len(), 1);
     }
 
     #[test]
