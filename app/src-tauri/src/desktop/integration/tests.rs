@@ -8,9 +8,11 @@ use super::{
     skill_target, skill_target_status, skill_version_at, skills_need_sync, SkillTarget,
     BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
-// symlink 用例只在 Unix 上跑;Windows 下这些 import 会触发 -D unused-imports。
+// symlink / skill-link 用例按平台裁剪,避免 unsupported stub 在 Linux CI 上误红。
+#[cfg(target_os = "macos")]
+use super::{install_skill_links, remove_skill_links};
 #[cfg(unix)]
-use super::{install_skill_links, remove_skill_links, same_target, validate_skill_link_slots};
+use super::{same_target, validate_skill_link_slots};
 
 static SCRATCH_SEQUENCE: AtomicU32 = AtomicU32::new(0);
 
@@ -300,7 +302,7 @@ fn the_only_target_is_the_shared_skill_directory() {
     assert!(links[0].ends_with(".claude/skills"));
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 #[test]
 fn claude_links_point_to_the_shared_skill_group_and_count_toward_status() {
     let scratch = Scratch::new("claude-links");
@@ -351,7 +353,7 @@ fn claude_link_install_refuses_to_overwrite_user_owned_entries() {
     assert!(!claude.join("ferry").exists());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 #[test]
 fn claude_link_install_repairs_broken_links_but_not_links_to_other_targets() {
     let scratch = Scratch::new("claude-link-repair");
