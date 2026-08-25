@@ -647,10 +647,13 @@ impl AgentSessionIndex {
                 let scan_result = adapter
                     .require_browser()
                     .and_then(|browser| browser.scan(cache.as_ref()));
-                crate::server::serve::log_info(&format!(
-                    "扫库 {name}: {:.2}s",
-                    tool_started.elapsed().as_secs_f64()
-                ));
+                // 热扫描通常几十 ms 一家，逐家打日志只是噪声；慢了才值得看。
+                if tool_started.elapsed().as_secs_f64() >= 1.0 {
+                    crate::server::serve::log_info(&format!(
+                        "扫库 {name}: {:.2}s",
+                        tool_started.elapsed().as_secs_f64()
+                    ));
+                }
                 let mut status = Map::new();
                 match scan_result {
                     Ok(rows) => {
@@ -827,11 +830,14 @@ impl AgentSessionIndex {
         let canonical_rows = self.canonicalize_all(scanned, digest_store.as_ref())?;
         // 这一段在首次扫描里占了将近一半（本机 2041 行 6.2s / 冷扫描 12.6s），
         // 而且缓存命中后会掉到 0.05s——出问题时先看这行判断是不是摘要在重算。
-        crate::server::serve::log_info(&format!(
-            "规范化+身份: {:.2}s / {} 行",
-            canonicalize_started.elapsed().as_secs_f64(),
-            scanned.len()
-        ));
+        // 缓存命中的快路径不打日志，只有慢下来（重算摘要）才值得留痕。
+        if canonicalize_started.elapsed().as_secs_f64() >= 1.0 {
+            crate::server::serve::log_info(&format!(
+                "规范化+身份: {:.2}s / {} 行",
+                canonicalize_started.elapsed().as_secs_f64(),
+                scanned.len()
+            ));
+        }
         digest_store.flush();
 
         let mut records: Vec<IndexedSession> = Vec::new();

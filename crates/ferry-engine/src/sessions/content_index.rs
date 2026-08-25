@@ -68,6 +68,8 @@ static BUILD_POOL: LazyLock<rayon::ThreadPool> = LazyLock::new(|| {
 /// 往大调是两头都亏（解析抢核），别动。
 const BUILD_BATCH_SESSIONS: usize = 4;
 /// 一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
+/// 先判后加：首条无条件入批（否则超限的单条会话永远建不进去），之后每条
+/// 在累计未超限时才继续取，所以单批实际字节数可能超出上限一条会话的量。
 const BUILD_BATCH_BYTES: i64 = 64 * 1024 * 1024;
 
 /// 后台构建耗时分解（纳秒）；只给 `examples/cli_bench` 这类基准用。
@@ -1033,7 +1035,8 @@ impl ContentIndex {
         }
     }
 
-    /// 取下一批待建会话（LIFO，与单条出队时同序）。
+    /// 取下一批待建会话（LIFO，与单条出队时同序）；返回 `Some` 时批必非空
+    /// （queued 非空保证至少弹出一条）。
     fn take_batch(&self) -> Option<Vec<IndexedSession>> {
         let mut worker = self
             .worker
@@ -1061,9 +1064,6 @@ impl ContentIndex {
             let Some(batch) = self.take_batch() else {
                 return;
             };
-            if batch.is_empty() {
-                continue;
-            }
             // 读+解析是纯 CPU/IO 混合负载且互不依赖，先并行做完；写仍串行，
             // 一批一个事务。
             let parsed = parse_batch(index, &batch);
