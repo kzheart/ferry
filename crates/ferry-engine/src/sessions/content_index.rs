@@ -70,7 +70,7 @@ const BUILD_BATCH_SESSIONS: usize = 4;
 /// 一批的源文件字节上限：防止一批全是巨型会话把解析结果堆在内存里。
 const BUILD_BATCH_BYTES: i64 = 64 * 1024 * 1024;
 
-/// 后台构建耗时分解（纳秒）；只给 `examples/index_bench` 这类基准用。
+/// 后台构建耗时分解（纳秒）；只给 `examples/cli_bench` 这类基准用。
 static PARSE_NANOS: AtomicU64 = AtomicU64::new(0);
 static WRITE_NANOS: AtomicU64 = AtomicU64::new(0);
 

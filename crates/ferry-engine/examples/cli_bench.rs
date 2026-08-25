@@ -1,7 +1,8 @@
 //! 性能基准辅助工具（非产品代码）。
 //!
-//! 刻意只用**基线与优化分支都存在**的公开 API，好让同一份代码在两个版本上
-//! 编译出可比的两个二进制。分支专属的插桩计时留在 `index_bench` 里。
+//! 跨版本对比时在**各自的提交**上编译本文件：旧提交带旧版 cli_bench，
+//! 两个二进制天然可比。build 子命令顺带打印解析/写入的插桩计时
+//! （`build_timing`，原 `index_bench` 的功能已并入此处）。
 //!
 //! 必须用隔离的 HOME 跑，否则会写到用户正在运行的 `~/.ferry`。
 //!
@@ -149,9 +150,13 @@ fn cmd_build(home: &str) {
         .get("indexed_sessions")
         .and_then(Value::as_i64)
         .unwrap_or(0);
+    let (parse_nanos, write_nanos) = ferry_engine::sessions::content_index::build_timing();
     println!(
-        "index_idle={idle}\tindex_secs={build_secs:.2}\tindexed={indexed}\trate={:.2}/s",
-        indexed as f64 / build_secs
+        "index_idle={idle}\tindex_secs={build_secs:.2}\tindexed={indexed}\trate={:.2}/s\t\
+         parse_cpu_secs={:.1}\twrite_secs={:.1}",
+        indexed as f64 / build_secs,
+        parse_nanos as f64 / 1e9,
+        write_nanos as f64 / 1e9
     );
     println!(
         "settle_secs={settle_secs:.1}\tbytes_at_usable={usable_bytes}\tbytes_final={}",
