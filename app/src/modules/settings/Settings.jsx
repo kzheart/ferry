@@ -160,7 +160,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide }) {
 
       <GroupTitle>{t("settings:density.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title={t("settings:density.label")} desc={t("settings:density.desc")}>
+        <Row first title={t("settings:density.label")}>
           <Segmented value={density} label={t("settings:density.label")}
             options={[["compact", t("settings:density.compact")],
               ["standard", t("settings:density.standard")]]}
@@ -170,8 +170,7 @@ function Prefs({ s, set, guideSeen, onOpenGuide }) {
 
       <GroupTitle>{t("language.label")}</GroupTitle>
       <Card>
-        <Row first title={t("language.label")}
-          desc={localeValue ? undefined : t("settings:sections.followSystemDesc")}>
+        <Row first title={t("language.label")}>
           <Select value={localeValue}
             onChange={v => set({ locale: v || null })}>
             <option value="">{t("language.followSystem")}</option>
@@ -184,14 +183,14 @@ function Prefs({ s, set, guideSeen, onOpenGuide }) {
 
       <GroupTitle>{t("settings:terminal.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title={t("settings:terminal.app")} desc={t("settings:terminal.appDesc")}>
+        <Row first title={t("settings:terminal.app")}>
           <TerminalPicker value={s.terminalApp} onChange={v => set({ terminalApp: v })} t={t} />
         </Row>
       </Card>
 
       <GroupTitle>{t("settings:guideSection.groupTitle")}</GroupTitle>
       <Card>
-        <Row first title={t("settings:guideSection.guide")} desc={t("settings:guideSection.guideDesc")}>
+        <Row first title={t("settings:guideSection.guide")}>
           <button className="fbtn" style={{ height: 30, padding: "0 13px", fontSize: 12 }}
             onClick={onOpenGuide}>{guideSeen ? t("settings:guideSection.reviewGuide") : t("settings:guideSection.quickStart")}</button>
         </Row>
@@ -269,9 +268,6 @@ function Sources({ scan, env, scanning, onRescan }) {
           </div>
         </div>
       )}
-      <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55,
-        paddingLeft: 2 }}>
-        {t("settings:sources.footnote")}</div>
     </div>
   );
 }
@@ -297,11 +293,10 @@ function Updates({ s, set, updater }) {
     <div style={{  }}>
       <GroupTitle first>{t("settings:updates.groupVersion")}</GroupTitle>
       <Card>
-        <Row first title={t("settings:updates.currentVersion")}
-          desc={supported ? t("settings:updates.currentVersionDescDesktop") : t("settings:updates.currentVersionDescWeb")}>
+        <Row first title={t("settings:updates.currentVersion")}>
           <span className="mono" style={{ fontSize: 12, color: "var(--tx3b)" }}>v{currentVersion}</span>
         </Row>
-        <Row title={t("settings:updates.autoCheck")} desc={t("settings:updates.autoCheckDesc")}>
+        <Row title={t("settings:updates.autoCheck")}>
           <Toggle on={s.autoCheckUpdates} onChange={v => set({ autoCheckUpdates: v })} />
         </Row>
       </Card>
@@ -333,8 +328,6 @@ function Updates({ s, set, updater }) {
           </div>
         </div>
       </Card>
-      <div style={{ fontSize: 11, color: "var(--tx5)", marginTop: 10, lineHeight: 1.55, paddingLeft: 2 }}>
-        {t("settings:updates.footnote")}</div>
     </div>
   );
 }

@@ -66,7 +66,7 @@ const hoverText = async (stateText) => {
 
 test("已安装的 CLI:静止显示版本号,指上去才变成卸载", async () => {
   await mount();
-  expect(screen.getByText("settings:integration.cli.descInstalled")).toBeTruthy();
+  expect(screen.getByText("settings:integration.cli.title")).toBeTruthy();
   const node = await hoverText("settings:integration.cli.stateVersion");
   expect(node.textContent.trim()).toBe("settings:integration.cli.uninstall");
 });
@@ -137,8 +137,6 @@ test("skill 只有共享真身一行,Agent 原生入口由宿主处理", async (
   await mount();
   expect(screen.getByText("settings:integration.skills.rowTitle")).toBeTruthy();
   expect(screen.getByText("/home/u/.agents/skills")).toBeTruthy();
-  expect(screen.getByText("settings:integration.skills.groupHint")).toBeTruthy();
-  expect(screen.getByText("settings:integration.autoSyncHint")).toBeTruthy();
 });
 
 test("已装且是最新版:状态显示版本号,主动作是移除", async () => {

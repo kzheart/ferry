@@ -5,7 +5,6 @@
     "updates": "Updates",
     "railTitle": "Settings",
     "close": "Close settings (Esc)",
-    "followSystemDesc": "Auto-select based on system language",
     "providers": "Providers",
     "models": "Models",
     "roles": "Roles",
@@ -139,20 +138,16 @@
     "label": "Theme"
   },
   "experimental": {
-    "groupTitle": "Experimental features",
-    "groupDesc": "These features are still being polished. They are off by default and may change between versions.",
-    "togglesNote": "These switches only control visibility and reachability; they never delete existing data. Turning one off hides its entry points right away, and any process already running stops the next time you launch the app."
+    "groupTitle": "Experimental features"
   },
   "features": {
     "builtin-agent": {
-      "title": "Built-in AI assistant",
-      "desc": "Once enabled, Ask Ferry appears in the sidebar and the Provider / model / role / skill settings are unlocked."
+      "title": "Built-in AI assistant"
     }
   },
   "terminal": {
     "groupTitle": "Terminal",
     "app": "Open terminals with",
-    "appDesc": "Auto tries Warp, iTerm2, then Terminal. If the selected app is unavailable, Ferry falls back to Terminal.",
     "auto": "Auto",
     "terminal": "Terminal",
     "iterm": "iTerm2",
@@ -166,7 +161,6 @@
   "guideSection": {
     "groupTitle": "Onboarding",
     "guide": "Feature guide",
-    "guideDesc": "Replay the step-by-step walkthrough of navigation, session organizing, migration delivery, and agent integration",
     "reviewGuide": "Replay guide",
     "quickStart": "Quick start"
   },
@@ -179,19 +173,14 @@
     "connected": "Connected",
     "rescan": "Rescan",
     "scanning": "Scanning…",
-    "footnote": "Ferry automatically discovers session directories of supported tools on this machine. Source sessions stay read-only and are not modified.",
     "indexing": "Indexing {{done}}/{{total}}",
     "finalizing": "Building index…"
   },
   "updates": {
     "groupVersion": "Version",
     "currentVersion": "Current version",
-    "currentVersionDescDesktop": "Ferry desktop app",
-    "currentVersionDescWeb": "In-browser preview does not support in-app updates",
     "autoCheck": "Automatically check for updates",
-    "autoCheckDesc": "Checks after launch with a delay; a download button appears on the sidebar's Settings row when a new version is found",
     "groupStatus": "Update status",
-    "footnote": "One click downloads, installs and restarts — no further prompts. Download progress appears on the sidebar's Settings row, and what changed is shown after the restart.",
     "check": "Check for updates",
     "retryCheck": "Retry check",
     "update": "Download and restart",
@@ -303,7 +292,6 @@
     "deleteBulletSource": "The original source folder is untouched — you can import it again later"
   },
   "integration": {
-    "autoSyncHint": "Install the CLI and skills once; later launches refresh anything already installed. You can still uninstall or reinstall here anytime.",
     "cli": {
       "groupTitle": "Command line tool",
       "title": "ferry command",
@@ -329,7 +317,6 @@
       "groupTitle": "Skill installation",
       "groupDesc": "Bundled v{{version}}",
       "rowTitle": "Skill",
-      "groupHint": "Installs the source of truth into ~/.agents/skills, read directly by Codex, OpenCode, Pi, Grok and Cursor, and links it into Claude Code's ~/.claude/skills. Includes ferry and ferry-resume.",
       "stateNotInstalled": "Not installed",
       "stateInstalled": "Installed v{{version}}",
       "stateInstalledUnknown": "Installed",
@@ -348,7 +335,6 @@
   "density": {
     "groupTitle": "Density",
     "label": "Interface density",
-    "desc": "Standard is roomier; compact fits more on screen",
     "compact": "Compact",
     "standard": "Standard"
   }

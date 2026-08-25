@@ -112,18 +112,16 @@ test("被隐藏分区不能作为入口停留:回落到偏好设置", async () =
 // 「实验性功能」分区里那一行的开关。文案 key 由契约的 id 推出来,分区自己不写
 // 任何一个具体特性的名字。
 const featureToggle = (id) =>
-  screen.getByText(`settings:features.${id}.desc`)
+  screen.getByText(`settings:features.${id}.title`)
     .parentElement.parentElement.querySelector("button");
 
 test("实验分区由契约驱动:stage 为 experimental 的条目逐条渲染,初值来自宿主", async () => {
   await mount();
   await clickText("settings:sections.experimental");
   expect(calls.get).toBe(1);
-  // 标题与说明按 id 约定取,分区自己不写任何一个具体特性的名字
+  // 标题按 id 约定取,分区自己不写任何一个具体特性的名字
   expect(screen.getByText("settings:features.builtin-agent.title")).toBeTruthy();
   expect(featureToggle("builtin-agent").getAttribute("aria-pressed")).toBe("false");
-  // 生效时机是分区级的一条规则,不逐个特性抄
-  expect(screen.getByText("settings:experimental.togglesNote")).toBeTruthy();
 });
 
 test("打开开关:写宿主,四个助手分区当场出现,无需重启", async () => {

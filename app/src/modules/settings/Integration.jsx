@@ -57,10 +57,7 @@ function CliSection({ cli, onInstall, onUninstall, t }) {
   return (
     <>
       <Card>
-        <Row first className="sb-row" title={t("settings:integration.cli.title")}
-          desc={cli.installed
-            ? t("settings:integration.cli.descInstalled", { path: cli.link_path })
-            : t("settings:integration.cli.descNotInstalled")}>
+        <Row first className="sb-row" title={t("settings:integration.cli.title")}>
           {/* 更新态下卸载仍要可达,但它不该和「更新」抢位置 */}
           {outdated && (
             <GhostAction label={t("settings:integration.cli.uninstall")} onClick={onUninstall} />
@@ -166,14 +163,10 @@ export default function Integration() {
             onRemove={run(() => skillUninstall(target.id))} />
         ))}
       </Card>
-      <div style={{ ...mono, paddingLeft: 2 }}>
-        {t("settings:integration.skills.groupHint")}</div>
       {!bundled && status && (
         <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2 }}>
           {t("settings:integration.skills.bundleMissing")}</div>
       )}
-      <div style={{ ...mono, paddingLeft: 2, marginTop: 10 }}>
-        {t("settings:integration.autoSyncHint")}</div>
 
       {error && <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2, marginTop: 10 }}
         role="alert">{error}</div>}
