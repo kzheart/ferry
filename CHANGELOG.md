@@ -14,6 +14,22 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.8.6] - 2026-08-25
+
+### Fixed
+
+- **macOS fullscreen crash** — entering fullscreen or revealing the titlebar
+  no longer stack-overflows from fighting AppKit over the traffic-light
+  buttons.
+- **Traffic-light jitter on zoom** — maximizing the window no longer makes the
+  traffic lights jump vertically or horizontally; Ferry leaves their layout to
+  the system.
+
+### Changed
+
+- **Default window width** — the default desktop window is a bit wider (1280).
+- **Settings copy** — trimmed a few settings explanations for clearer reading.
+
 ## [0.8.5] - 2026-08-25
 
 ### Added
