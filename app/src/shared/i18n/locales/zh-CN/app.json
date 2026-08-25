@@ -73,6 +73,7 @@
     "copyId": "复制会话 ID",
     "copySessionReference": "复制会话引用",
     "copyResume": "复制接续命令",
+    "resumeCliUnavailable": "Cursor 没有按会话 ID 接续的终端命令;请改用「复制续聊指令」,或在 Cursor 聊天历史里打开",
     "revealInFinder": "在 Finder 中显示",
     "deleteSession": "删除会话…",
     "onlyDesktop": "仅桌面版可用",

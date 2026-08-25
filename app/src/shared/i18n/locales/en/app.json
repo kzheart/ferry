@@ -73,6 +73,7 @@
     "copyId": "Copy session ID",
     "copySessionReference": "Copy session reference",
     "copyResume": "Copy resume command",
+    "resumeCliUnavailable": "Cursor has no session-id resume CLI. Use “Copy resume instruction”, or open the chat from Cursor’s history",
     "revealInFinder": "Reveal in Finder",
     "deleteSession": "Delete session…",
     "onlyDesktop": "Desktop only",

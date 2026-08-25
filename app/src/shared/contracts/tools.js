@@ -15,6 +15,12 @@ export const supportsAgentCapability = (tool, capability) =>
 export const agentsWithCapability = capability =>
   TOOLS.filter(tool => supportsAgentCapability(tool, capability));
 
+// Cursor 等 IDE 没有「按会话 id 接续」的 CLI；engine 的 resume 描述符
+// 只会打开工作区（`cursor .`），不能真正回到那条会话。UI 应禁用接续命令
+// / 终端恢复，并提示改用续聊指令或在 IDE 聊天历史里打开。
+export const supportsSessionResumeCli = (tool) =>
+  supportsAgentCapability(tool, "resume") && tool !== "cursor";
+
 // 接续命令由 Engine lifecycle 生成；前端不拼装 shell 命令。
 export const resumeDescriptor = (tool, ref) =>
   engine("resume", { tool, ref });

@@ -6,6 +6,7 @@ import {
 import {
   TOOLS,
   supportsAgentCapability,
+  supportsSessionResumeCli,
   resumeDescriptor,
 } from "../../shared/contracts/tools.js";
 import { filterByFeatures } from "../../shared/capabilities/features.jsx";
@@ -97,6 +98,8 @@ export function createSessionContextMenu({
     ...(supportsAgentCapability(session.tool, "resume") ? [{
       label: t("app:ctx.resumeTerminal"),
       hint: "↩",
+      disabled: !supportsSessionResumeCli(session.tool),
+      disabledHint: t("app:ctx.resumeCliUnavailable"),
       onClick: () => resumeDescriptor(session.tool, sessionRef(session))
         .then(launch => openTerminal(launch, settings.terminalApp))
         .catch(() => {}),
@@ -142,6 +145,8 @@ export function createSessionContextMenu({
     },
     ...(supportsAgentCapability(session.tool, "resume") ? [{
       label: t("app:ctx.copyResume"),
+      disabled: !supportsSessionResumeCli(session.tool),
+      disabledHint: t("app:ctx.resumeCliUnavailable"),
       onClick: () => resumeDescriptor(session.tool, sessionRef(session))
         .then(descriptor => writeClipboardText(descriptor.display_command))
         .catch(() => {}),

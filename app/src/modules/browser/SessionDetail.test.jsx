@@ -115,3 +115,35 @@ test("打开终端失败时按钮给出失败态,而不是静静回到常态", a
 
   await waitFor(() => screen.getByTitle("browser:session.resumeFailed"));
 });
+
+test("Cursor 会话仍一分二,左边接续命令禁用并提示,右边续聊指令可用", async () => {
+  const written = [];
+  clipboard = async text => { written.push(text); };
+  const onResume = vi.fn(async () => {});
+  renderDetail({
+    meta: { id: "c1", tool: "cursor", title: "Cursor 会话", dir: "/tmp/proj", count: 2 },
+    onResume,
+    onResumeElsewhere: async () => ({ copied: true }),
+  });
+
+  // 仍是分裂按钮
+  fireEvent.click(screen.getByTitle("browser:session.resumeMenu"));
+
+  const copyBtn = document.querySelector(".fsplit-opt.l");
+  assert.ok(copyBtn);
+  assert.equal(copyBtn.disabled, true);
+  assert.equal(copyBtn.getAttribute("title"), "browser:session.resumeCliUnavailable");
+  fireEvent.click(copyBtn);
+  assert.deepEqual(written, []);
+
+  // 终端恢复也禁用
+  const terminal = [...document.querySelectorAll(".ftool-btn")]
+    .find(el => el.title === "browser:session.resumeCliUnavailable" && !el.className.includes("fsplit"));
+  assert.ok(terminal);
+  assert.equal(terminal.disabled, true);
+  fireEvent.click(terminal);
+  assert.equal(onResume.mock.calls.length, 0);
+
+  fireEvent.click(screen.getByTitle("browser:session.copyResumeElsewhere"));
+  await waitFor(() => screen.getByTitle("browser:session.copiedResumeElsewhere"));
+});

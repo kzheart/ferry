@@ -23,7 +23,8 @@
     "subSessionsLine": "{{tool}} 会话",
     "arrow": "→",
     "resumeFailed": "无法打开终端:{{error}}",
-    "copyResumeFailed": "取不到接续命令:{{error}}"
+    "copyResumeFailed": "取不到接续命令:{{error}}",
+    "resumeCliUnavailable": "Cursor 没有按会话 ID 接续的终端命令;请改用「复制续聊指令」,或在 Cursor 聊天历史里打开"
   },
   "tool": {
     "noOutput": "(无输出)",

@@ -110,6 +110,30 @@ test("续聊只有一条入口,点击把会话交给回调", () => {
   assert.equal(picked.tool, "claude");
 });
 
+test("Cursor 会话禁用终端接续与复制接续命令,并给出提示", () => {
+  const items = createSessionContextMenu(createInput({
+    menu: { key: "cursor:composer-1" },
+    sessionsByKey: {
+      "cursor:composer-1": {
+        id: "composer-1",
+        ref: "fsr_current",
+        tool: "cursor",
+        title: "Cursor session",
+        dir: "/Users/kzheart/code/ferry",
+      },
+    },
+  }));
+  const resumeTerminal = items.find(item => item.label === "app:ctx.resumeTerminal");
+  const copyResume = items.find(item => item.label === "app:ctx.copyResume");
+  const handoff = items.find(item => item.label === "app:ctx.copyResumeElsewhere");
+
+  assert.equal(resumeTerminal.disabled, true);
+  assert.equal(resumeTerminal.disabledHint, "app:ctx.resumeCliUnavailable");
+  assert.equal(copyResume.disabled, true);
+  assert.equal(copyResume.disabledHint, "app:ctx.resumeCliUnavailable");
+  assert.equal(handoff.disabled, undefined);
+});
+
 test("有项目目录时可在 Finder 中显示", () => {
   const items = createSessionContextMenu(createInput({
     sessionsByKey: {

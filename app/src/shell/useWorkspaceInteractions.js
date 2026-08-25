@@ -5,6 +5,7 @@ import { openTerminal } from "../platform/desktop/client.js";
 import {
   resumeDescriptor,
   supportsAgentCapability,
+  supportsSessionResumeCli,
 } from "../shared/contracts/tools.js";
 import {
   createSessionContextMenu,
@@ -152,7 +153,7 @@ export function useWorkspaceInteractions({
       sessionId: meta.id,
     }),
     resume: async (meta) => {
-      if (!supportsAgentCapability(meta?.tool, "resume")) return;
+      if (!supportsSessionResumeCli(meta?.tool)) return;
       setToast({
         kind: "run",
         title: t("app:toast.openingTerminal"),

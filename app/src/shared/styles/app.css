@@ -523,6 +523,9 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 .fsplit-opt.r { --dx: 17px; left: 17px; }
 .fsplit.open .fsplit-opt { opacity: 1; pointer-events: auto; transform: none; }
 .fsplit-opt:hover { background: var(--hov); color: var(--tx1); }
+.fsplit-opt:disabled,
+.fsplit.open .fsplit-opt:disabled { opacity: .4; cursor: default; }
+.fsplit-opt:disabled:hover { background: transparent; color: inherit; }
 /* 吸回合体:沿原路收回中心,淡出略滞后让「合体」可见 */
 .fsplit.closing .fsplit-opt {
   opacity: 0; transform: translate(calc(-1 * var(--dx)), -38px) scale(.35);

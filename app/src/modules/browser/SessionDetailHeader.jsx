@@ -1,7 +1,7 @@
 // 会话详情的 sticky 头部:标题与元信息、操作按钮(接续/续聊/迁移)、子会话行
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TOOL_NAME, resumeDescriptor } from "../../shared/contracts/tools.js";
+import { TOOL_NAME, resumeDescriptor, supportsSessionResumeCli } from "../../shared/contracts/tools.js";
 import { fmtSize } from "../../shared/ui/toolDisplay.js";
 import { fmtTime, repoOf, sessionRef } from "./sessionModel.js";
 import { writeClipboardText } from "../../platform/desktop/client.js";
@@ -41,8 +41,11 @@ export default function SessionDetailHeader({
   const repo = repoOf(meta.dir);
   const branch = meta.branch || "";
 
-  // 两个「复制续聊」动作都在时合并成一个分裂按钮;只剩一个时保持原来的单按钮
+  // 两个「复制续聊」动作都在时合并成一个分裂按钮;只剩一个时保持原来的单按钮。
+  // Cursor 没有按会话 id 的接续 CLI:仍一分二,只把左边接续命令禁用并提示。
+  const resumeCli = supportsSessionResumeCli(meta.tool);
   const merged = canResume && !!onResumeElsewhere;
+  const resumeUnavailable = tt("browser:session.resumeCliUnavailable");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuClosing, setMenuClosing] = useState(false);
   const splitRef = useRef(null);
@@ -91,6 +94,7 @@ export default function SessionDetailHeader({
   // 拿不到接续命令时不能先报"已复制":用户粘出来会是空的,却以为是自己操作错了。
   // 成败都只落在按钮上——这是本模块既有的反馈方式(见 SessionRound / SessionImagePreview)。
   const copyResume = async () => {
+    if (!resumeCli) return;
     try {
       const d = await resumeDescriptor(meta.tool, sessionRef(meta));
       await writeClipboardText(d.display_command);
@@ -114,7 +118,7 @@ export default function SessionDetailHeader({
   };
 
   const resumeInTerminal = async () => {
-    if (resuming) return;
+    if (!resumeCli || resuming) return;
     setResuming(true);
     setResumeError(null);
     try {
@@ -131,11 +135,20 @@ export default function SessionDetailHeader({
   const handoffFb = handoffState?.kind === "ok" ? "ok"
     : handoffState?.kind === "noskill" ? "warn"
       : handoffState?.kind === "fail" ? "err" : null;
-  const copyTitle = copyError
-    ? tt("browser:session.copyResumeFailed", { error: copyError })
-    : copied
-      ? tt("browser:session.copiedResume")
-      : tt("browser:session.copyResume");
+  const copyTitle = !resumeCli
+    ? resumeUnavailable
+    : copyError
+      ? tt("browser:session.copyResumeFailed", { error: copyError })
+      : copied
+        ? tt("browser:session.copiedResume")
+        : tt("browser:session.copyResume");
+  const terminalTitle = !resumeCli
+    ? resumeUnavailable
+    : resumeError
+      ? tt("browser:session.resumeFailed", { error: resumeError })
+      : resuming
+        ? tt("browser:session.resumingTerminal")
+        : tt("browser:session.resumeTerminal");
   const handoffTitle = handoffState?.kind === "fail"
     ? tt("browser:session.copyResumeElsewhereFailed", {
       error: handoffState.error,
@@ -246,14 +259,8 @@ export default function SessionDetailHeader({
           {canResume && <button
             className="ftool-btn"
             onClick={resumeInTerminal}
-            disabled={resuming}
-            title={
-              resumeError
-                ? tt("browser:session.resumeFailed", { error: resumeError })
-                : resuming
-                  ? tt("browser:session.resumingTerminal")
-                  : tt("browser:session.resumeTerminal")
-            }
+            disabled={!resumeCli || resuming}
+            title={terminalTitle}
             style={resumeError ? { color: "var(--err)" } : undefined}
           >
             {resuming ? <Spinner size={14} />
@@ -280,7 +287,8 @@ export default function SessionDetailHeader({
               <button
                 className={"fsplit-opt l" + (copyFb ? ` picked picked-${copyFb}` : "")}
                 title={copyTitle}
-                tabIndex={menuOpen ? 0 : -1}
+                disabled={!resumeCli}
+                tabIndex={menuOpen && resumeCli ? 0 : -1}
                 onClick={copyResume}
               >
                 <span className="oi"><CopyIcon size={14} /></span>
@@ -305,6 +313,7 @@ export default function SessionDetailHeader({
               {canResume && <button
                 className="ftool-btn"
                 onClick={copyResume}
+                disabled={!resumeCli}
                 title={copyTitle}
                 style={copied ? { color: "var(--ok)" }
                   : copyError ? { color: "var(--err)" } : undefined}
