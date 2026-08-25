@@ -486,7 +486,11 @@ impl EngineService for Engine {
     }
 
     fn scan_progress(&self) -> EngineResult<Value> {
-        Ok(Value::Object(scanning::scan_progress()))
+        // 首启向导与标题栏进度胶囊靠同一次轮询同时拿到两件事:元数据扫描
+        // 进度(会话列表何时可用)和内容索引覆盖度(全文搜索何时完整)。
+        let mut payload = scanning::scan_progress();
+        payload.insert("content_index".into(), self.content_index_status());
+        Ok(Value::Object(payload))
     }
 
     fn environment(&self) -> EngineResult<Value> {
