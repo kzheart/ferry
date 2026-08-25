@@ -402,8 +402,10 @@ fn install_skill_group(sources: &[PathBuf], target_dir: &Path) -> Result<Vec<Pat
 }
 
 /// 在 Agent 原生目录创建指向共享真身的入口。只覆盖两类安全对象:
-/// 1. 已经指向同一真身的链接;2. 断掉的 symlink。真实目录、文件或指向别处的链接都
-/// 视为用户资产,拒绝覆盖。
+/// 1. 已经指向同一真身的链接
+/// 2. 断掉的 symlink
+///
+/// 真实目录、文件或指向别处的链接都视为用户资产,拒绝覆盖。
 fn install_skill_links(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<(), String> {
     for link_root in link_targets {
         std::fs::create_dir_all(link_root)

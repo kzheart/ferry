@@ -341,7 +341,8 @@ fn claude_link_install_refuses_to_overwrite_user_owned_entries() {
         &claude.join("ferry-resume/SKILL.md"),
         "---\nname: ferry-resume\nversion: user\n---\n",
     );
-    let error = validate_skill_link_slots(&shared, &[claude.clone()]).expect_err("必须拒绝冲突");
+    let error = validate_skill_link_slots(&shared, std::slice::from_ref(&claude))
+        .expect_err("必须拒绝冲突");
     assert!(error.contains("不是 Ferry 管理的链接"));
     assert_eq!(
         skill_version_at(&claude.join("ferry-resume")).as_deref(),
@@ -360,10 +361,10 @@ fn claude_link_install_repairs_broken_links_but_not_links_to_other_targets() {
     std::fs::create_dir_all(&claude).expect("创建 Claude 目录");
     std::os::unix::fs::symlink(scratch.join("missing"), claude.join("ferry")).expect("创建断链");
 
-    install_skill_links(&shared, &[claude.clone()]).expect("修复断链");
+    install_skill_links(&shared, std::slice::from_ref(&claude)).expect("修复断链");
     assert!(same_target(&claude.join("ferry"), &shared.join("ferry")));
 
-    remove_skill_links(&shared, &[claude.clone()]).expect("先摘 Ferry 链接");
+    remove_skill_links(&shared, std::slice::from_ref(&claude)).expect("先摘 Ferry 链接");
     let other = scratch.join("other");
     std::fs::create_dir_all(&other).expect("创建其他目标");
     std::os::unix::fs::symlink(&other, claude.join("ferry")).expect("创建冲突链接");
