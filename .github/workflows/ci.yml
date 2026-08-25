@@ -53,32 +53,21 @@ jobs:
       - run: python -m ruff check tests scripts
       - run: python -m pytest
 
+  # 桌面宿主目前只发 macOS；Rust / Tauri 门禁与产品目标对齐，避免非 macOS 假失败。
   rust-quality:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Install Tauri system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           components: rustfmt, clippy
+          target: aarch64-apple-darwin
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: |
             app/src-tauri -> target
             crates/ferry-engine -> target
-          key: quality
+          key: quality-macos
       - run: cargo fmt --check
         working-directory: app/src-tauri
       - run: cargo clippy --all-targets --locked -- -D warnings
@@ -98,19 +87,11 @@ jobs:
         working-directory: crates/ferry-engine
 
   frozen-sidecar:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
-            binary: app/src-tauri/binaries/ferry-engine-x86_64-pc-windows-msvc.exe
-            runtime-binary: app/src-tauri/binaries/ferry-runtime-x86_64-pc-windows-msvc.exe
-          - os: macos-14
-            target: aarch64-apple-darwin
-            binary: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
-            runtime-binary: app/src-tauri/binaries/ferry-runtime-aarch64-apple-darwin
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-14
+    env:
+      BUILD_TARGET: aarch64-apple-darwin
+      SIDECAR_ENGINE: app/src-tauri/binaries/ferry-engine-aarch64-apple-darwin
+      SIDECAR_RUNTIME: app/src-tauri/binaries/ferry-runtime-aarch64-apple-darwin
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       # Python 只用于下面两个 smoke 步骤（shell: python），不再参与 sidecar 构建。
@@ -124,50 +105,33 @@ jobs:
           cache-dependency-path: ferry-runtime/package-lock.json
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
-          target: ${{ matrix.target }}
+          target: aarch64-apple-darwin
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: |
             app/src-tauri -> target
             crates/ferry-engine -> target
-          key: ${{ matrix.target }}
+          key: aarch64-apple-darwin
       - run: npm ci
         working-directory: ferry-runtime
       - run: npm run build:sea -- "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         working-directory: ferry-runtime
       - run: cargo build --release --locked --target "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         working-directory: crates/ferry-engine
-      # 命名必须是 ferry-engine-<target>[.exe]：tauri.conf.json 的 externalBin 依赖它。
+      # 命名必须是 ferry-engine-<target>：tauri.conf.json 的 externalBin 依赖它。
       - name: Place engine sidecar
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         run: |
-          suffix=""
-          case "$BUILD_TARGET" in *windows-msvc) suffix=".exe" ;; esac
           mkdir -p app/src-tauri/binaries
-          cp "crates/ferry-engine/target/$BUILD_TARGET/release/ferry-engine$suffix" \
-            "app/src-tauri/binaries/ferry-engine-$BUILD_TARGET$suffix"
+          cp "crates/ferry-engine/target/$BUILD_TARGET/release/ferry-engine" \
+            "app/src-tauri/binaries/ferry-engine-$BUILD_TARGET"
       - run: cargo check --locked --target "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         working-directory: app/src-tauri
       - run: cargo test --locked --target "$BUILD_TARGET"
-        shell: bash
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
         working-directory: app/src-tauri
       - name: Frozen sidecar smoke
         shell: python
         env:
-          SIDECAR: ${{ matrix.binary }}
+          SIDECAR: ${{ env.SIDECAR_ENGINE }}
         run: |
           import json, os, subprocess
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
@@ -200,7 +164,7 @@ jobs:
       - name: Ferry Runtime sidecar smoke
         shell: python
         env:
-          SIDECAR: ${{ matrix.runtime-binary }}
+          SIDECAR: ${{ env.SIDECAR_RUNTIME }}
         run: |
           import json, os, queue, subprocess, tempfile, threading
           protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
