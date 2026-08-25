@@ -4,7 +4,7 @@
 //! 宿主用它们做两件事:
 //!
 //! 1. **启动接管**:App 起来时把 CLI 拉起的 daemon 请下去,自己接管 socket——
-//!    App 优先级恒高于 daemon(docs/cli-skill-design.md §4.2);
+//!    App 优先级恒高于 daemon(.docs/cli-skill-design.md §4.2);
 //! 2. **设置页停 daemon**:手动停掉一个独立 daemon;对面若是 App 自己的引擎,
 //!    引擎会结构化拒绝,这里把它翻成 `app_mode` 交给前端出文案。
 //!

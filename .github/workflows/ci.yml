@@ -6,14 +6,14 @@ on:
       - "README*.md"
       - "CHANGELOG.md"
       - "LICENSE"
-      - "docs/**"
+      - ".docs/**"
       - "**.md"
   pull_request:
     paths-ignore:
       - "README*.md"
       - "CHANGELOG.md"
       - "LICENSE"
-      - "docs/**"
+      - ".docs/**"
       - "**.md"
 
 permissions:

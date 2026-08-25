@@ -27,7 +27,7 @@
 </p>
 
 <div align="center">
-  <img src="./docs/screenshots/browser.png" alt="Ferry 会话浏览" width="92%" />
+  <img src="./assets/screenshots/browser.png" alt="Ferry 会话浏览" width="92%" />
 </div>
 
 ---
@@ -88,7 +88,7 @@ Cursor 可作为迁移来源（把 Cursor 会话迁到其它 Agent），但不�
 - **本地元数据**：重命名、打标签、置顶，不修改原始文件。
 
 <div align="center">
-  <img src="./docs/screenshots/search.png" alt="命令面板" width="88%" />
+  <img src="./assets/screenshots/search.png" alt="命令面板" width="88%" />
 </div>
 
 ### 跨 Agent 迁移
@@ -102,7 +102,7 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 - **来源可追溯** —— 迁来的会话在详情里标明由哪个 Agent 迁入。
 
 <div align="center">
-  <img src="./docs/screenshots/migrate.png" alt="迁移影响预览" width="88%" />
+  <img src="./assets/screenshots/migrate.png" alt="迁移影响预览" width="88%" />
 </div>
 
 ### 续聊到其他 Agent
@@ -149,11 +149,11 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 - **活跃热力图** —— 52 周的每日编码活跃度一览。
 
 <div align="center">
-  <img src="./docs/screenshots/overview.png" alt="总览页" width="88%" />
+  <img src="./assets/screenshots/overview.png" alt="总览页" width="88%" />
 </div>
 
 <div align="center">
-  <img src="./docs/screenshots/overview-detail.png" alt="成本与项目分布" width="88%" />
+  <img src="./assets/screenshots/overview-detail.png" alt="成本与项目分布" width="88%" />
 </div>
 
 ### 会话编辑
@@ -236,9 +236,6 @@ npm run dev
 
 Rust 宿主分别监督会话引擎和 Ferry Runtime 两个 sidecar。外部 Coding Agent 是
 会话来源；内置助手是实验性功能，需在设置 → 实验性功能中手动开启。
-
-详见[架构文档](./docs/architecture.md)、[CLI 与 skill 设计](./docs/cli-skill-design.md)
-与[续聊设计](./docs/handoff-design.md)。
 
 ## 许可证
 

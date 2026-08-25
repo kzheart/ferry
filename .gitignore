@@ -6,15 +6,11 @@ designs/
 build/
 dist/
 app/src-tauri/binaries/
-docs/*
-!docs/screenshots/
-!docs/architecture.md
-!docs/refactoring-roadmap.md
 scripts/demo/
 .idea
 .plan
 node_modules/
-!docs/rust-engine-refactor-plan.md
 .opencode
 .claude
 .cursor
+.docs/

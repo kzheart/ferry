@@ -128,7 +128,7 @@ fn spawn_engine(resource_dir: &Path) -> Result<EngineProcess, String> {
 
 /// 共享形态的启动序列:先把在跑的 CLI daemon 请下去(App 优先级恒高于 daemon),
 /// 再带 `--socket` 起自己;绑定竞态给一次重试,仍失败就**降级为不共享**——
-/// 共享是增值能力,App 必须能起来(docs/cli-skill-design.md §4.2)。
+/// 共享是增值能力,App 必须能起来(.docs/cli-skill-design.md §4.2)。
 fn spawn_shared_engine(resource_dir: &Path, socket: &Path) -> Result<EngineProcess, String> {
     daemon::evict(socket);
     match spawn_engine_process(resource_dir, Some(socket)) {
