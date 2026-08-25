@@ -24,7 +24,8 @@ const baseStatus = () => ({
   cli: {
     supported: true, unsupported_reason: null, link_path: "/home/u/.local/bin/ferry",
     installed: false, link_target: null, points_to_current_engine: false,
-    engine_path: "/Apps/Ferry.app/ferry-engine", on_path: false,
+    engine_path: "/Apps/Ferry.app/ferry-engine",
+    package_version: "0.8.4", installed_package_version: null, on_path: false,
   },
   bundled_version: "0.8.0",
   skills: [

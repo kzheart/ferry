@@ -198,6 +198,10 @@ export interface CliStatus {
   link_target: string | null;
   points_to_current_engine: boolean;
   engine_path: string | null;
+  /** 本 App 当前引擎的 CLI 包版本，与 App 产品版本独立。 */
+  package_version: string | null;
+  /** 已装入口指向的二进制的 CLI 包版本。 */
+  installed_package_version: string | null;
   on_path: boolean;
 }
 

@@ -43,6 +43,10 @@ pub(crate) struct CliStatus {
     /// 指向的是不是**本 App 当前使用的**引擎二进制。false 且 installed=true 即「需要更新」。
     points_to_current_engine: bool,
     engine_path: Option<String>,
+    /// 本 App 当前引擎的 CLI 包版本(`ferry version` 的 `package` 字段),与 App 产品版本独立。
+    package_version: Option<String>,
+    /// 已装入口指向的二进制的包版本;与 `package_version` 同路径时复用,避免再跑一遍。
+    installed_package_version: Option<String>,
     /// 安装目录是否在 App 进程的 PATH 里。不在也算已安装,只是要提示配置 shell。
     on_path: bool,
 }
@@ -191,9 +195,8 @@ fn bundled_skill_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
         .collect()
 }
 
-/// 整组打包 skill 的版本。两份 SKILL.md 的 `version:` 与 App 版本对齐,不一致
-/// 说明发布时漏改了某一份——如实报最小的那个,让设置页显示「有新版本」而不是
-/// 假装已经最新。
+/// 整组打包 skill 的版本。两份 SKILL.md 的 `version:` 是 skill 自己的 semver,
+/// 与 App 产品版本无关;组内两份应对齐,不一致时取最小的那个,让设置页显示「有新版本」。
 fn bundled_group_version(app: &AppHandle) -> Option<String> {
     let mut versions: Vec<String> = Vec::new();
     for name in BUNDLED_SKILLS {
@@ -240,9 +243,33 @@ fn points_to_ferry_engine(target: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// `ferry version` stdout 里的 `package` 字段(CLI 包版本,与 App / ENGINE_VERSION 正交)。
+fn parse_engine_package_version(stdout: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(stdout).ok()?;
+    value
+        .get("package")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_owned)
+}
+
+/// 跑一次 `ferry-engine version`,读 CLI 包版本。失败时返回 None,不阻断状态页。
+fn engine_package_version(engine: &Path) -> Option<String> {
+    let output = std::process::Command::new(engine)
+        .arg("version")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_engine_package_version(&String::from_utf8_lossy(&output.stdout))
+}
+
 fn cli_status(app: &AppHandle) -> CliStatus {
     let engine = current_engine_path(app);
     let engine_path = engine.as_ref().map(|path| path.display().to_string());
+    let package_version = engine.as_ref().and_then(|path| engine_package_version(path));
     let link = match platform::cli_link_path() {
         Ok(link) => link,
         Err(reason) => {
@@ -254,6 +281,8 @@ fn cli_status(app: &AppHandle) -> CliStatus {
                 link_target: None,
                 points_to_current_engine: false,
                 engine_path,
+                package_version,
+                installed_package_version: None,
                 on_path: false,
             };
         }
@@ -264,6 +293,11 @@ fn cli_status(app: &AppHandle) -> CliStatus {
         (Some(target), Some(engine)) => same_target(target, engine),
         _ => false,
     };
+    let installed_package_version = match link_target.as_deref() {
+        Some(_) if points_to_current_engine => package_version.clone(),
+        Some(target) if points_to_ferry_engine(target) => engine_package_version(target),
+        _ => None,
+    };
     CliStatus {
         supported: true,
         unsupported_reason: None,
@@ -273,6 +307,8 @@ fn cli_status(app: &AppHandle) -> CliStatus {
         link_target: link_target.map(|path| path.display().to_string()),
         points_to_current_engine,
         engine_path,
+        package_version,
+        installed_package_version,
     }
 }
 
@@ -463,6 +499,87 @@ fn find_target(target_id: &str) -> Result<SkillTarget, String> {
         return Err(format!("未知的 skill 安装目标: {target_id}"));
     }
     Ok(target)
+}
+
+fn skill_dirs_present(target_dir: &Path) -> bool {
+    BUNDLED_SKILLS
+        .iter()
+        .all(|name| target_dir.join(name).is_dir())
+}
+
+/// 已有指向 ferry-engine 的入口、但还不是本 App 当前引擎时需要刷新。
+/// 普通文件、非 Ferry 链接、未安装 → 不自动动。
+fn cli_needs_sync(link_target: Option<&Path>, current_engine: Option<&Path>) -> bool {
+    match (link_target, current_engine) {
+        (Some(target), Some(engine)) => {
+            points_to_ferry_engine(target) && !same_target(target, engine)
+        }
+        _ => false,
+    }
+}
+
+/// 用户装过(整组已装或共享真身目录还在)且落后/残缺时刷新;从未装过不主动装。
+fn skills_need_sync(
+    installed: bool,
+    dirs_present: bool,
+    installed_version: Option<&str>,
+    bundled: Option<&str>,
+) -> bool {
+    let Some(bundled) = bundled else {
+        return false;
+    };
+    if !(installed || dirs_present) {
+        return false;
+    }
+    !installed || installed_version != Some(bundled)
+}
+
+fn sync_managed_cli(app: &AppHandle) -> Result<(), String> {
+    let link = match platform::cli_link_path() {
+        Ok(link) => link,
+        Err(_) => return Ok(()),
+    };
+    let link_target = std::fs::read_link(&link).ok();
+    let engine = current_engine_path(app);
+    if !cli_needs_sync(link_target.as_deref(), engine.as_deref()) {
+        return Ok(());
+    }
+    let engine = engine.ok_or_else(|| "找不到 Ferry 引擎二进制".to_owned())?;
+    platform::create_cli_link(&link, &engine)
+}
+
+fn sync_managed_skills(app: &AppHandle) -> Result<(), String> {
+    let target = skill_target()?;
+    let link_targets = skill_link_targets()?;
+    let status = skill_target_status(&target, &link_targets);
+    let bundled = bundled_group_version(app);
+    if !skills_need_sync(
+        status.installed,
+        skill_dirs_present(&target.path),
+        status.installed_version.as_deref(),
+        bundled.as_deref(),
+    ) {
+        return Ok(());
+    }
+    let sources = bundled_skill_dirs(app)?;
+    validate_skill_link_slots(&target.path, &link_targets)?;
+    install_skill_group(&sources, &target.path)?;
+    install_skill_links(&target.path, &link_targets)
+}
+
+/// 启动时静默刷新用户**已经装过**的 CLI / Skill。
+///
+/// - 从未安装、或用户手动卸干净 → 不动(首次仍走引导/设置页手动装)
+/// - 已装但指向旧引擎 / skill 版本落后 / 链接残缺 → 覆盖更新到本 App 打包内容
+///
+/// 失败只打日志,不阻断启动;两边彼此独立,一边失败不影响另一边。
+pub(crate) fn sync_managed_integrations(app: &AppHandle) {
+    if let Err(error) = sync_managed_cli(app) {
+        eprintln!("[ferry] CLI 自动同步失败: {error}");
+    }
+    if let Err(error) = sync_managed_skills(app) {
+        eprintln!("[ferry] Skill 自动同步失败: {error}");
+    }
 }
 
 fn engine_lock_path() -> Result<PathBuf, String> {

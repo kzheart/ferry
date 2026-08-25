@@ -270,7 +270,9 @@ function IntegrationStep({ t }) {
               </div>
             </div>
             {cli.supported && (cli.installed && !cliOutdated
-              ? <StateChip tone="ok" label={t("settings:integration.cli.stateInstalled")} />
+              ? <StateChip tone="ok" label={cli.installed_package_version
+                ? t("settings:integration.cli.stateVersion", { version: cli.installed_package_version })
+                : t("settings:integration.cli.stateInstalled")} />
               : (
                 <StateButton tone={cliOutdated ? "warn" : "idle"}
                   stateLabel={cliOutdated

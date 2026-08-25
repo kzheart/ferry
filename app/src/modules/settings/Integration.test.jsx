@@ -20,7 +20,8 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
 const CLI_INSTALLED = {
   supported: true, unsupported_reason: null, link_path: "/home/u/.local/bin/ferry",
   installed: true, link_target: "/Apps/Ferry.app/ferry-engine",
-  points_to_current_engine: true, engine_path: "/Apps/Ferry.app/ferry-engine", on_path: true,
+  points_to_current_engine: true, engine_path: "/Apps/Ferry.app/ferry-engine",
+  package_version: "0.8.4", installed_package_version: "0.8.4", on_path: true,
 };
 
 const baseStatus = () => ({
@@ -63,10 +64,10 @@ const hoverText = async (stateText) => {
   return node;
 };
 
-test("已安装的 CLI:静止显示已安装,指上去才变成卸载", async () => {
+test("已安装的 CLI:静止显示版本号,指上去才变成卸载", async () => {
   await mount();
   expect(screen.getByText("settings:integration.cli.descInstalled")).toBeTruthy();
-  const node = await hoverText("settings:integration.cli.stateInstalled");
+  const node = await hoverText("settings:integration.cli.stateVersion");
   expect(node.textContent.trim()).toBe("settings:integration.cli.uninstall");
 });
 
@@ -102,14 +103,15 @@ test("指向旧引擎:状态变旧引擎,主动作是更新,卸载仍然可达",
 test("装了但不在 PATH 时给出 shell 配置提示,状态仍算已安装", async () => {
   status.cli = { ...CLI_INSTALLED, on_path: false };
   await mount();
-  expect(screen.getByText("settings:integration.cli.stateInstalled")).toBeTruthy();
+  expect(screen.getByText("settings:integration.cli.stateVersion")).toBeTruthy();
   expect(screen.getByText("settings:integration.cli.pathHint")).toBeTruthy();
 });
 
 test("平台不支持时只展示宿主给的结构化原因", async () => {
   status.cli = { supported: false, unsupported_reason: "Windows 命令行工具安装尚未实现",
     link_path: null, installed: false, link_target: null,
-    points_to_current_engine: false, engine_path: null, on_path: false };
+    points_to_current_engine: false, engine_path: null,
+    package_version: null, installed_package_version: null, on_path: false };
   await mount();
   expect(screen.getByText("Windows 命令行工具安装尚未实现")).toBeTruthy();
   expect(buttonWith("settings:integration.cli.stateNotInstalled")).toBeFalsy();
@@ -136,6 +138,7 @@ test("skill 只有共享真身一行,Agent 原生入口由宿主处理", async (
   expect(screen.getByText("settings:integration.skills.rowTitle")).toBeTruthy();
   expect(screen.getByText("/home/u/.agents/skills")).toBeTruthy();
   expect(screen.getByText("settings:integration.skills.groupHint")).toBeTruthy();
+  expect(screen.getByText("settings:integration.autoSyncHint")).toBeTruthy();
 });
 
 test("已装且是最新版:状态显示版本号,主动作是移除", async () => {

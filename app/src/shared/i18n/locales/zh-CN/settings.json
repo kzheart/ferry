@@ -303,6 +303,7 @@
     "deleteBulletSource": "原始来源目录不受影响，之后可以重新导入"
   },
   "integration": {
+    "autoSyncHint": "首次需手动安装 CLI 与 Skill；之后每次打开 App 都会自动同步已安装的项。也可在此随时卸载或重装。",
     "cli": {
       "groupTitle": "命令行工具",
       "title": "ferry 命令",
@@ -310,6 +311,7 @@
       "descInstalled": "已安装到 {{path}}",
       "stateNotInstalled": "未安装",
       "stateInstalled": "已安装",
+      "stateVersion": "v{{version}}",
       "stateOutdated": "指向旧的引擎",
       "install": "安装",
       "update": "更新",
@@ -325,9 +327,9 @@
     },
     "skills": {
       "groupTitle": "Skill 安装",
-      "groupDesc": "随 App 打包 v{{version}}",
+      "groupDesc": "打包 v{{version}}",
       "rowTitle": "Skill",
-      "groupHint": "真身装到 ~/.agents/skills;Codex、OpenCode、Pi、Grok 与 Cursor 直接读取,并自动链接到 Claude Code 的 ~/.claude/skills。包含 ferry 与 ferry-resume 两个 skill。",
+      "groupHint": "真身装到 ~/.agents/skills;Codex、OpenCode、Pi、Grok 与 Cursor 直接读取,并自动链接到 Claude Code 的 ~/.claude/skills。包含 ferry 与 ferry-resume。",
       "stateNotInstalled": "未安装",
       "stateInstalled": "已安装 v{{version}}",
       "stateInstalledUnknown": "已安装",

@@ -15,8 +15,8 @@ PACKAGE = ROOT / "app/package.json"
 PACKAGE_LOCK = ROOT / "app/package-lock.json"
 CARGO = ROOT / "app/src-tauri/Cargo.toml"
 CARGO_LOCK = ROOT / "app/src-tauri/Cargo.lock"
-# ferry-engine 是独立 package（自带 Cargo.lock），版本必须跟着 app 一起走，
-# 否则打包出的 sidecar 与外壳自称的版本对不上。
+# ferry-engine（CLI）是独立 package，版本与 App 产品版本正交：App bump 不带动
+# engine；CLI 契约/行为变了再用 bump-engine。Cargo.toml ↔ Cargo.lock 仍须自洽。
 ENGINE_CARGO = ROOT / "crates/ferry-engine/Cargo.toml"
 ENGINE_CARGO_LOCK = ROOT / "crates/ferry-engine/Cargo.lock"
 CHANGELOG = ROOT / "CHANGELOG.md"
@@ -67,6 +67,16 @@ def cargo_lock_version(path: Path, name: str) -> str | None:
     return entry["version"] if entry else None
 
 
+def check_engine() -> str:
+    """校验 ferry-engine 自身 Cargo.toml ↔ Cargo.lock，不与 App 版本比较。"""
+    engine = cargo_version(ENGINE_CARGO)
+    if not SEMVER.fullmatch(engine):
+        raise ValueError(f"invalid ferry-engine version: {engine}")
+    if cargo_lock_version(ENGINE_CARGO_LOCK, "ferry-engine") != engine:
+        raise ValueError("crates/ferry-engine/Cargo.lock version is not synchronized")
+    return engine
+
+
 def check(tag: str | None = None) -> None:
     expected = package_version()
     if not SEMVER.fullmatch(expected):
@@ -76,11 +86,7 @@ def check(tag: str | None = None) -> None:
         raise ValueError(f"Cargo.toml version {actual} != package.json version {expected}")
     if cargo_lock_version(CARGO_LOCK, "ferry") != expected:
         raise ValueError("Cargo.lock ferry version is not synchronized")
-    engine = cargo_version(ENGINE_CARGO)
-    if engine != expected:
-        raise ValueError(f"ferry-engine Cargo.toml version {engine} != package.json version {expected}")
-    if cargo_lock_version(ENGINE_CARGO_LOCK, "ferry-engine") != expected:
-        raise ValueError("crates/ferry-engine/Cargo.lock version is not synchronized")
+    check_engine()
     package_lock = json.loads(PACKAGE_LOCK.read_text(encoding="utf-8"))
     if package_lock["version"] != expected or package_lock["packages"][""]["version"] != expected:
         raise ValueError("package-lock.json version is not synchronized")
@@ -91,15 +97,23 @@ def check(tag: str | None = None) -> None:
 
 
 def bump(version: str) -> None:
+    """只 bump App（package.json / Tauri）。CLI 用 bump-engine；skill 改 SKILL.md。"""
     if not SEMVER.fullmatch(version):
         raise ValueError(f"invalid version: {version}")
     replace_package_version(PACKAGE, version)
     replace_package_version(PACKAGE_LOCK, version)
     replace_cargo_package_version(CARGO, version)
     replace_cargo_lock_version(CARGO_LOCK, version)
+    check()
+
+
+def bump_engine(version: str) -> None:
+    """只 bump ferry-engine（CLI 包版本）。与 App 产品版本无关。"""
+    if not SEMVER.fullmatch(version):
+        raise ValueError(f"invalid version: {version}")
     replace_cargo_package_version(ENGINE_CARGO, version)
     replace_cargo_lock_version(ENGINE_CARGO_LOCK, version, name="ferry-engine")
-    check()
+    print(check_engine())
 
 
 def release_config(output: Path, repository: str, pubkey: str, targets: list[str]) -> None:
@@ -174,6 +188,8 @@ def main() -> None:
     check_parser.add_argument("--tag")
     bump_parser = commands.add_parser("bump")
     bump_parser.add_argument("version")
+    bump_engine_parser = commands.add_parser("bump-engine")
+    bump_engine_parser.add_argument("version")
     config_parser = commands.add_parser("config")
     config_parser.add_argument("--output", type=Path, required=True)
     config_parser.add_argument("--repository", required=True)
@@ -193,6 +209,8 @@ def main() -> None:
         check(args.tag)
     elif args.command == "bump":
         bump(args.version)
+    elif args.command == "bump-engine":
+        bump_engine(args.version)
     elif args.command == "config":
         release_config(
             args.output,

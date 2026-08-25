@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::{
     copy_tree, expand_home, find_target, install_skill_group, install_skill_into,
-    install_skill_links, parse_engine_lock, parse_skill_version, points_to_ferry_engine,
-    remove_skill_dir, remove_skill_group, remove_skill_links, service_status, skill_link_targets,
-    skill_target, skill_target_status, skill_version_at, validate_skill_link_slots, SkillTarget,
+    install_skill_links, parse_engine_lock, parse_engine_package_version, parse_skill_version,
+    points_to_ferry_engine, remove_skill_dir, remove_skill_group, remove_skill_links,
+    service_status, skill_dirs_present, skill_link_targets, skill_target, skill_target_status,
+    skill_version_at, skills_need_sync, validate_skill_link_slots, cli_needs_sync, SkillTarget,
     BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
 // 只有 symlink 用例用到它,Windows 下不 cfg 掉会触发 -D unused-imports。
@@ -84,6 +85,58 @@ fn skill_version_comes_from_the_frontmatter_top_level() {
         parse_skill_version("---\nname: ferry\n---\nversion: 9.9.9\n"),
         None
     );
+}
+
+#[test]
+fn engine_package_version_comes_from_version_stdout() {
+    assert_eq!(
+        parse_engine_package_version(
+            "{\n  \"version\": \"0.1.0\",\n  \"package\": \"0.8.4\",\n  \"contract_hash\": \"abc\"\n}\n"
+        )
+        .as_deref(),
+        Some("0.8.4"),
+    );
+    assert_eq!(parse_engine_package_version("{\"version\":\"0.1.0\"}"), None);
+    assert_eq!(parse_engine_package_version("not-json"), None);
+}
+
+#[test]
+fn cli_sync_only_refreshes_managed_ferry_engine_links() {
+    let scratch = Scratch::new("cli-sync");
+    let current = scratch.join("current/ferry-engine");
+    let outdated = scratch.join("old/ferry-engine");
+    write(&current, "engine");
+    write(&outdated, "old");
+    let other = scratch.join("bin/something-else");
+    write(&other, "other");
+
+    assert!(!cli_needs_sync(None, Some(&current)));
+    assert!(!cli_needs_sync(Some(&current), Some(&current)));
+    assert!(cli_needs_sync(Some(&outdated), Some(&current)));
+    // 用户自己的同名命令不碰
+    assert!(!cli_needs_sync(Some(&other), Some(&current)));
+}
+
+#[test]
+fn skill_sync_skips_never_installed_and_refreshes_outdated_or_broken() {
+    assert!(!skills_need_sync(false, false, None, Some("0.8.3")));
+    assert!(!skills_need_sync(true, true, Some("0.8.3"), Some("0.8.3")));
+    assert!(skills_need_sync(true, true, Some("0.8.0"), Some("0.8.3")));
+    assert!(skills_need_sync(true, true, None, Some("0.8.3")));
+    // 真身目录还在但链接残缺 → 当作已管理过,启动时修好
+    assert!(skills_need_sync(false, true, None, Some("0.8.3")));
+    assert!(!skills_need_sync(false, true, None, None));
+}
+
+#[test]
+fn skill_dirs_present_requires_the_whole_bundled_group() {
+    let scratch = Scratch::new("skill-dirs");
+    let root = scratch.join("skills");
+    assert!(!skill_dirs_present(&root));
+    std::fs::create_dir_all(root.join("ferry")).expect("ferry");
+    assert!(!skill_dirs_present(&root));
+    std::fs::create_dir_all(root.join("ferry-resume")).expect("ferry-resume");
+    assert!(skill_dirs_present(&root));
 }
 
 #[test]

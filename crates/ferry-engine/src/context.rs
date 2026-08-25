@@ -24,7 +24,8 @@ use crate::system::snapshots::data_dir;
 /// 引擎对外自称的版本号。
 ///
 /// 这是历史契约值，与 crate 版本正交：`version` RPC 是宿主的对照面，
-/// `CARGO_PKG_VERSION`（跟随 app 版本）不参与其中，两者不要互相同步。
+/// `CARGO_PKG_VERSION`（CLI 包版本，与 App 产品版本独立）不参与其中，
+/// 三者不要互相同步。
 pub const ENGINE_VERSION: &str = "0.1.0";
 
 /// 组合根持有的运行上下文。

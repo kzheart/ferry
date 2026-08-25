@@ -3,6 +3,9 @@
 // Claude Code 不扫描共享目录,宿主会同时在它的原生目录补受管理的 symlink。
 // 页面本身不认识任何路径:目标只用 id 指代,路径由宿主算好带回来。
 //
+// 首次安装在引导/本页手动完成;之后 App 启动会静默刷新已装过的 CLI/Skill,
+// 用户仍可在此卸载或重装。未装过的不会被自动装上。
+//
 // 反馈全部锚在操作点:每行只有一个 StateButton,它同时是状态显示、进度和结果。
 // 引擎状态/socket 路径/共享开关这些只有开发者关心的东西不在这里露出——正常工作
 // 时用户不需要知道引擎存在,真出问题时错误会落到页面底部的告警行。
@@ -40,9 +43,12 @@ function CliSection({ cli, onInstall, onUninstall, t }) {
   const linkDir = cli.link_path?.replace(/\/[^/]*$/, "") || "";
   const outdated = cli.installed && !cli.points_to_current_engine;
   // 三种状态各自只有一个「下一步」:没装就装,指向旧引擎就更新,装好了就只剩卸载。
+  // 版本号是 CLI 自己的包版本,与 App 产品版本无关。
   const state = !cli.installed ? t("settings:integration.cli.stateNotInstalled")
     : outdated ? t("settings:integration.cli.stateOutdatedShort")
-      : t("settings:integration.cli.stateInstalled");
+      : cli.installed_package_version
+        ? t("settings:integration.cli.stateVersion", { version: cli.installed_package_version })
+        : t("settings:integration.cli.stateInstalled");
   const primary = !cli.installed
     ? { label: t("settings:integration.cli.install"), pending: t("settings:integration.cli.installing"), run: onInstall }
     : outdated
@@ -166,6 +172,8 @@ export default function Integration() {
         <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2 }}>
           {t("settings:integration.skills.bundleMissing")}</div>
       )}
+      <div style={{ ...mono, paddingLeft: 2, marginTop: 10 }}>
+        {t("settings:integration.autoSyncHint")}</div>
 
       {error && <div style={{ ...mono, color: "var(--err-deep)", paddingLeft: 2, marginTop: 10 }}
         role="alert">{error}</div>}

@@ -303,6 +303,7 @@
     "deleteBulletSource": "The original source folder is untouched — you can import it again later"
   },
   "integration": {
+    "autoSyncHint": "Install the CLI and skills once; later launches refresh anything already installed. You can still uninstall or reinstall here anytime.",
     "cli": {
       "groupTitle": "Command line tool",
       "title": "ferry command",
@@ -310,6 +311,7 @@
       "descInstalled": "Installed at {{path}}",
       "stateNotInstalled": "Not installed",
       "stateInstalled": "Installed",
+      "stateVersion": "v{{version}}",
       "stateOutdated": "Points at an old engine",
       "install": "Install",
       "update": "Update",

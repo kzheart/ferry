@@ -23,6 +23,13 @@ pub fn run() {
                 engine::warm_up(app.handle().clone(), resource_dir.clone());
                 runtime::warm_up(app.handle().clone(), resource_dir);
             }
+            // 已装过的 CLI / Skill 随本 App 打包内容静默对齐;未装过的不主动装。
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    desktop::integration::sync_managed_integrations(&handle);
+                });
+            }
             #[cfg(target_os = "macos")]
             {
                 if let Some(win) = app.get_webview_window("main") {
