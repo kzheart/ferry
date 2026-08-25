@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -376,6 +376,13 @@ pub struct ContentIndex {
     database: Mutex<Database>,
     readers: Mutex<ReaderPool>,
     worker: Mutex<WorkerState>,
+    /// `Database::unavailable` / `Database::closed` 的无锁影子。只读入口每次
+    /// 都要看这两个标志；若走 `database` 互斥量，构建期该锁被批事务近乎连续
+    /// 占用，一次检索的百余次只读调用会各排一次批级队。原子读免锁；写侧在
+    /// 持锁置位的同一处同步 store，读到陈旧值也无害——回落路径仍会在锁下
+    /// 复核（见 [`Self::with_db`]）。
+    unavailable_flag: AtomicBool,
+    closed_flag: AtomicBool,
 }
 
 impl ContentIndex {
@@ -389,6 +396,8 @@ impl ContentIndex {
             }),
             readers: Mutex::new(ReaderPool::default()),
             worker: Mutex::new(WorkerState::default()),
+            unavailable_flag: AtomicBool::new(false),
+            closed_flag: AtomicBool::new(false),
         }
     }
 
@@ -461,16 +470,12 @@ impl ContentIndex {
         &self,
         action: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> DomainResult<Option<T>> {
+        // 写侧已判定不可用/已关闭时，读侧也必须如实说「没有索引」，
+        // 否则会拿着一条陈旧只读连接假装 ready。无锁读影子标志，
+        // 不与构建期的批事务抢 database 互斥量。
+        if self.unavailable_flag.load(Ordering::Acquire) || self.closed_flag.load(Ordering::Acquire)
         {
-            // 写侧已判定不可用/已关闭时，读侧也必须如实说「没有索引」，
-            // 否则会拿着一条陈旧只读连接假装 ready。
-            let guard = self
-                .database
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if guard.unavailable.is_some() || guard.closed {
-                return Ok(None);
-            }
+            return Ok(None);
         }
         let Some(connection) = self.checkout_reader() else {
             return self.with_db(action);
@@ -507,6 +512,7 @@ impl ContentIndex {
                 Ok(connection) => guard.connection = Some(connection),
                 Err(error) => {
                     guard.unavailable = Some(format!("content index unavailable: {error}"));
+                    self.unavailable_flag.store(true, Ordering::Release);
                     return Ok(None);
                 }
             }
@@ -595,6 +601,7 @@ impl ContentIndex {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.closed = true;
+        self.closed_flag.store(true, Ordering::Release);
         guard.connection = None;
     }
 
