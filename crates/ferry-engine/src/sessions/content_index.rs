@@ -7,7 +7,7 @@
 //! `~/.ferry/content-index.sqlite3` 的表结构由 `user_version` 标识（当前是 2），
 //! 改 schema 必须同时升它，否则旧库会被当成新库读。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -997,15 +997,16 @@ impl ContentIndex {
 
     /// 内容已入索引的会话集（排除读取失败的）；`None` 表示索引不可用。
     ///
-    /// 预过滤用它区分「索引说没有」与「索引还不知道」。
-    pub fn indexed_session_keys(&self) -> DomainResult<Option<Vec<SessionKey>>> {
+    /// 预过滤用它区分「索引说没有」与「索引还不知道」。返回集合而不是 Vec：
+    /// 调用方按候选逐条查成员，上万会话时线性 `contains` 是 O(n²)。
+    pub fn indexed_session_keys(&self) -> DomainResult<Option<HashSet<SessionKey>>> {
         self.with_read_db(|connection| {
             let mut statement =
                 connection.prepare("SELECT tool, ref FROM indexed_sessions WHERE failed = 0")?;
             let rows = statement.query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()
+            rows.collect::<rusqlite::Result<HashSet<_>>>()
         })
     }
 
@@ -1039,10 +1040,10 @@ impl ContentIndex {
         &self,
         literals: &[String],
         include_tool_outputs: bool,
-    ) -> DomainResult<Option<Vec<SessionKey>>> {
+    ) -> DomainResult<Option<HashSet<SessionKey>>> {
         let columns = columns_for(include_tool_outputs);
         self.with_read_db(|connection| {
-            let mut candidates: Option<Vec<SessionKey>> = None;
+            let mut candidates: Option<HashSet<SessionKey>> = None;
             for literal in literals {
                 let mut statement = connection.prepare(
                     "SELECT DISTINCT r.tool, r.ref FROM records_fts
@@ -1053,20 +1054,15 @@ impl ContentIndex {
                 let rows = statement.query_map([query], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })?;
-                let matched: Vec<SessionKey> = rows.collect::<rusqlite::Result<_>>()?;
+                let matched: HashSet<SessionKey> = rows.collect::<rusqlite::Result<_>>()?;
                 candidates = Some(match candidates {
                     None => matched,
-                    Some(previous) => {
-                        // 交集走集合：候选上千时逐条 `Vec::contains` 是 O(n²)。
-                        let matched: std::collections::HashSet<SessionKey> =
-                            matched.into_iter().collect();
+                    Some(mut previous) => {
+                        previous.retain(|key| matched.contains(key));
                         previous
-                            .into_iter()
-                            .filter(|key| matched.contains(key))
-                            .collect()
                     }
                 });
-                if candidates.as_ref().is_some_and(Vec::is_empty) {
+                if candidates.as_ref().is_some_and(HashSet::is_empty) {
                     break;
                 }
             }
@@ -1672,7 +1668,10 @@ mod tests {
             .sessions_matching_literals(&["alpha".into(), "beta".into()], false)
             .unwrap()
             .unwrap();
-        assert_eq!(matched, vec![("claude".to_string(), "/a".to_string())]);
+        assert_eq!(
+            matched,
+            HashSet::from([("claude".to_string(), "/a".to_string())])
+        );
         // 任一字面量无命中 → 空集。
         let empty = content
             .sessions_matching_literals(&["alpha".into(), "zzzz".into()], false)
@@ -1721,7 +1720,10 @@ mod tests {
             .unwrap();
         let keys = content.indexed_session_keys().unwrap().unwrap();
         // failed=1 的会话不算「已入索引」。
-        assert_eq!(keys, vec![("claude".to_string(), "/a".to_string())]);
+        assert_eq!(
+            keys,
+            HashSet::from([("claude".to_string(), "/a".to_string())])
+        );
         let clipped = content.clipped_rows_by_session().unwrap();
         assert_eq!(clipped.len(), 1);
         assert_eq!(clipped[&("claude".into(), "/a".into())], 2);

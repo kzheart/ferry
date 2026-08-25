@@ -5,7 +5,7 @@
 //! （扫描/跳过/失败与 skip_reason）、`content_index.*`（索引就绪度）。
 //! 模型只有拿到这些数字，才知道「没搜到」是不是等于「不存在」。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -152,7 +152,7 @@ fn scan_regex(
     compiled: &Regex,
     include_tool_outputs: bool,
     index: &Arc<AgentSessionIndex>,
-    candidates: Option<&[SessionKey]>,
+    candidates: Option<&HashSet<SessionKey>>,
     clipped_by_session: &HashMap<SessionKey, i64>,
 ) -> (HashMap<SessionKey, ContentHit>, Map<String, Value>) {
     let mut ordered: Vec<&Candidate> = filtered.iter().collect();
@@ -394,7 +394,7 @@ pub fn search_sessions(
             }
         };
         if let Some(compiled) = compiled.as_ref() {
-            let mut candidates: Option<Vec<SessionKey>> = None;
+            let mut candidates: Option<HashSet<SessionKey>> = None;
             let literals = if exhaustive {
                 Vec::new()
             } else {
@@ -412,8 +412,8 @@ pub fn search_sessions(
                     if let (Some(mut matched), Some(known)) = (matched, known) {
                         for candidate in &filtered {
                             let key = candidate.key();
-                            if !known.contains(&key) && !matched.contains(&key) {
-                                matched.push(key);
+                            if !known.contains(&key) {
+                                matched.insert(key);
                             }
                         }
                         candidates = Some(matched);
@@ -425,7 +425,7 @@ pub fn search_sessions(
                 compiled,
                 include_tool_outputs,
                 index,
-                candidates.as_deref(),
+                candidates.as_ref(),
                 &clipped_by_session,
             );
             content_hits = hits;
