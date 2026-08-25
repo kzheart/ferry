@@ -51,6 +51,9 @@ export default function App() {
   } = useBrowserData();
 
   const [view, setView] = useState(initialWorkspace);
+  // 只锁存进程启动时是否真的进入过首启向导。完成向导会立即写入持久化标记，
+  // 不能等切进主界面后再读；否则用户提前进入时也看不到首次索引的剩余进度。
+  const firstRunSession = useRef(view === "firstrun").current;
   const [navigationTarget, setNavigationTarget] = useState(null);
   const [peekId, setPeekId] = useState(null); // Ask Ferry 卡片就地预览的会话 id
   const [floatChatOpen, setFloatChatOpen] = useState(false); // 会话库右下角浮动 Agent 面板
@@ -454,7 +457,8 @@ export default function App() {
         dividerTitle={t("app:drag.hint")}
         sidebarCollapsed={view === "firstrun" ? true : sidebar.collapsed}
         toolbar={view === "firstrun" ? null : (
-          <WorkspaceToolbar collapsed={sidebar.collapsed} onToggle={sidebar.toggle} />
+          <WorkspaceToolbar collapsed={sidebar.collapsed} onToggle={sidebar.toggle}
+            showIndexProgress={firstRunSession} />
         )}
       >
         <WorkspaceRouter

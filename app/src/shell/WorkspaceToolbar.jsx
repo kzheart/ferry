@@ -5,7 +5,7 @@ import { IndexProgressPill } from "./IndexProgressPill.jsx";
 
 // 侧栏只有「在」与「不在」两态(导航栏 + 资源栏一起收),所以只需要一颗开关。
 // ⌘⇧S 之外的那条明路,不然收起来了就没人知道怎么展开。
-export function WorkspaceToolbar({ collapsed, onToggle }) {
+export function WorkspaceToolbar({ collapsed, onToggle, showIndexProgress = false }) {
   const { t } = useTranslation();
   return (
     <>
@@ -17,7 +17,7 @@ export function WorkspaceToolbar({ collapsed, onToggle }) {
         <SidebarIcon />
       </button>
       <div data-tauri-drag-region style={{ flex: 1, alignSelf: "stretch" }} />
-      <IndexProgressPill />
+      {showIndexProgress && <IndexProgressPill active />}
     </>
   );
 }

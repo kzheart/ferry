@@ -1,6 +1,6 @@
-// 标题栏索引进度胶囊:内容索引没就绪时常显(小船 + 百分比 + 剩余时间),
-// 完成后变绿打勾停 3 秒再消失——不弹 toast,不抢注意力。
-// 会话列表与浏览不依赖内容索引,胶囊只回答「全文搜索什么时候完整」。
+// 首次启动的索引进度胶囊:内容索引没就绪时常显(小船 + 百分比),
+// 完成后变绿打勾停 3 秒再永久退场。后续索引完全静默。
+// 会话列表与浏览不依赖内容索引,胶囊只回答首次启动时「全文搜索什么时候完整」。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BoatGlyph, useIndexProgress } from "../modules/onboarding/public.js";
@@ -15,28 +15,43 @@ function SealGlyph() {
   );
 }
 
-export function IndexProgressPill() {
+export function IndexProgressPill({ active = false }) {
   const { t } = useTranslation();
-  const { contentIndex: ci } = useIndexProgress({ interval: 3000 });
-  const [justDone, setJustDone] = useState(false);
+  const [phase, setPhase] = useState("tracking");
+  const { contentIndex: ci } = useIndexProgress({
+    active: active && phase === "tracking",
+    interval: 3000,
+  });
   const wasBusy = useRef(false);
 
   const ready = !!ci?.ready;
+  const hasProgress = ci != null;
+
+  // 只对首次索引的 busy -> ready 边沿展示完成态。若挂载时已经 ready，说明用户
+  // 在向导里等完了，直接退场即可；切到 done 后也立刻停止轮询，后续增量索引静默。
   useEffect(() => {
-    if (ci && !ready) { wasBusy.current = true; return undefined; }
-    if (ready && wasBusy.current) {
-      wasBusy.current = false;
-      setJustDone(true);
-      const timer = setTimeout(() => setJustDone(false), 3000);
-      return () => clearTimeout(timer);
+    if (!active || phase !== "tracking" || !hasProgress) return;
+    if (!ready) {
+      wasBusy.current = true;
+      return;
     }
-    return undefined;
-  }, [ci, ready]);
+    if (wasBusy.current) {
+      wasBusy.current = false;
+      setPhase("done");
+    } else {
+      setPhase("retired");
+    }
+  }, [active, hasProgress, phase, ready]);
 
-  if (!ci) return null;
+  useEffect(() => {
+    if (phase !== "done") return undefined;
+    const timer = setTimeout(() => setPhase("retired"), 3000);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
-  if (ready) {
-    if (!justDone) return null;
+  if (!active || phase === "retired") return null;
+
+  if (phase === "done") {
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 24,
         padding: "0 11px", borderRadius: 99, border: "1px solid var(--ok)",
@@ -45,6 +60,8 @@ export function IndexProgressPill() {
       </span>
     );
   }
+
+  if (!ci || ready) return null;
 
   const total = (ci.indexed_sessions || 0) + (ci.pending_sessions || 0);
   if (!total) return null;
