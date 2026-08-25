@@ -480,8 +480,36 @@ impl ContentIndex {
         let Some(connection) = self.checkout_reader() else {
             return self.with_db(action);
         };
-        let outcome = action(&connection);
-        self.return_reader(connection);
+        // RAII 归还：action panic 时也不能泄漏 opened 名额，否则 MAX_READERS
+        // 次 panic 后 checkout 永远失败，所有读永久静默回落写连接。
+        struct Lease<'a> {
+            index: &'a ContentIndex,
+            connection: Option<Connection>,
+        }
+        impl Drop for Lease<'_> {
+            fn drop(&mut self) {
+                let Some(connection) = self.connection.take() else {
+                    return;
+                };
+                if std::thread::panicking() {
+                    // 展开途中连接状态未知，保守丢弃，只归还名额。
+                    let mut pool = self
+                        .index
+                        .readers
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    pool.opened -= 1;
+                } else {
+                    self.index.return_reader(connection);
+                }
+            }
+        }
+        let lease = Lease {
+            index: self,
+            connection: Some(connection),
+        };
+        let outcome = action(lease.connection.as_ref().expect("上一行刚装载"));
+        drop(lease);
         outcome
             .map(Some)
             .map_err(|error| DomainError::internal(format!("内容索引查询失败: {error}")))
@@ -1727,6 +1755,35 @@ mod tests {
         let clipped = content.clipped_rows_by_session().unwrap();
         assert_eq!(clipped.len(), 1);
         assert_eq!(clipped[&("claude".into(), "/a".into())], 2);
+    }
+
+    /// 回归：action panic 不能泄漏只读连接名额——早期实现没有 unwind 守卫，
+    /// MAX_READERS 次 panic 后 opened 再也减不回去，所有读永久回落写连接。
+    #[test]
+    fn reader_slot_is_reclaimed_when_the_action_panics() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        // 先建库，让只读连接开得出来。
+        assert!(content.with_db(|_| Ok(())).unwrap().is_some());
+        for _ in 0..(MAX_READERS + 1) {
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = content.with_read_db(|_| -> rusqlite::Result<()> {
+                    panic!("模拟查询回调 panic");
+                });
+            }));
+            assert!(outcome.is_err());
+        }
+        // 名额全部收回：panic 路径丢弃连接并递减 opened。
+        {
+            let pool = content.readers.lock().unwrap();
+            assert_eq!(pool.opened, 0);
+            assert!(pool.idle.is_empty());
+        }
+        // 后续读仍走只读连接（会重新开出并归还到池）。
+        assert!(content.indexed_session_keys().unwrap().is_some());
+        let pool = content.readers.lock().unwrap();
+        assert_eq!(pool.opened, 1);
+        assert_eq!(pool.idle.len(), 1);
     }
 
     /// 读走独立只读连接后，必须仍然立刻看到写连接刚提交的内容——池化连接各有
