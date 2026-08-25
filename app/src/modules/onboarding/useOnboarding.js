@@ -13,7 +13,6 @@ export function useOnboarding({
   setView,
   closeSettings,
   closeMigration,
-  scan,
   isFeatureEnabled,
 }) {
   const [step, setStep] = useState(0);
@@ -47,10 +46,10 @@ export function useOnboarding({
     setView("library");
   };
 
+  // 扫描已经在向导终点站里跑过了,这里只负责落标记、切视图、接上导览
   const completeFirstRun = () => {
     localStorage.setItem(FIRST_RUN_KEY, "1");
     setView("library");
-    scan();
     if (!seen) timer.current = setTimeout(() => goStep(1), 300);
   };
 

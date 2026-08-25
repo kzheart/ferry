@@ -139,7 +139,7 @@ function TerminalPicker({ value, onChange, t }) {
   );
 }
 
-function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
+function Prefs({ s, set, guideSeen, onOpenGuide }) {
   const { t } = useTranslation();
   const localeValue = s.locale ?? "";
   // 密度不进 ferry-settings:它要在 React 挂载之前就落到根节点上(见 main.jsx),
@@ -194,10 +194,6 @@ function Prefs({ s, set, guideSeen, onOpenGuide, onFirstRun }) {
         <Row first title={t("settings:guideSection.guide")} desc={t("settings:guideSection.guideDesc")}>
           <button className="fbtn" style={{ height: 30, padding: "0 13px", fontSize: 12 }}
             onClick={onOpenGuide}>{guideSeen ? t("settings:guideSection.reviewGuide") : t("settings:guideSection.quickStart")}</button>
-        </Row>
-        <Row title={t("settings:guideSection.firstRun")} desc={t("settings:guideSection.firstRunDesc")}>
-          <button className="fbtn" style={{ height: 30, fontSize: 12 }}
-            onClick={onFirstRun}>{t("settings:guideSection.open")}</button>
         </Row>
       </Card>
     </div>
@@ -344,7 +340,7 @@ function Updates({ s, set, updater }) {
 }
 
 export default function SettingsPage({ settings, setSettings, scan, env, scanning,
-  onRescan, updater, guideSeen, onOpenGuide, onFirstRun, onClose, initialSection }) {
+  onRescan, updater, guideSeen, onOpenGuide, onClose, initialSection }) {
   const { t } = useTranslation();
   const features = useFeaturesList();
   const isFeatureEnabled = useIsFeatureEnabled();
@@ -415,7 +411,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
             <div className="fscroll" style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
               <div style={{ maxWidth: 620, margin: "0 auto" }}>
                 {section === "prefs" && <Prefs s={settings} set={setSettings} guideSeen={guideSeen}
-                  onOpenGuide={onOpenGuide} onFirstRun={onFirstRun} />}
+                  onOpenGuide={onOpenGuide} />}
                 {section === "integration" && <Integration />}
                 {section === "experimental" && <Experimental features={features} />}
                 {section === "sources" && <Sources scan={scan} env={env}

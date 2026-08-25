@@ -86,7 +86,6 @@ export default function App() {
     setView,
     closeSettings: () => setSettingsOpen(false),
     closeMigration: () => setMig(null),
-    scan: doScan,
     isFeatureEnabled,
   });
 
@@ -380,9 +379,10 @@ export default function App() {
         fontSize: 13,
       }}
     >
+      {/* 首启向导独占整个窗口:导航栏、资源栏、工具条全部让位,只留标题栏拖拽区 */}
       <AppShell
-        rail={
-          <AppNav
+        rail={view === "firstrun" ? null
+          : <AppNav
             collapsed={sidebar.collapsed}
             items={rail.items}
             activeView={view}
@@ -432,7 +432,7 @@ export default function App() {
           />
         }
         resourcePane={
-          paneCfg && (
+          view !== "firstrun" && paneCfg && (
             <ResourcePaneHost
               view={view}
               pane={paneCfg}
@@ -475,16 +475,16 @@ export default function App() {
             />
           )
         }
-        showDivider={Boolean(paneCfg)}
+        showDivider={view !== "firstrun" && Boolean(paneCfg)}
         dividerCollapsed={sidebar.collapsed}
         resizing={paneLayout.resizing}
         onResizeStart={paneLayout.startResize}
         onResizeReset={paneLayout.resetWidth}
         dividerTitle={t("app:drag.hint")}
-        sidebarCollapsed={sidebar.collapsed}
-        toolbar={
+        sidebarCollapsed={view === "firstrun" ? true : sidebar.collapsed}
+        toolbar={view === "firstrun" ? null : (
           <WorkspaceToolbar collapsed={sidebar.collapsed} onToggle={sidebar.toggle} />
-        }
+        )}
       >
         <WorkspaceRouter
           historyRows={historyRows}

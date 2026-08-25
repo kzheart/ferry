@@ -73,7 +73,10 @@ const WORKSPACES = [
 ];
 
 // 挂载期有若干条 IPC 在飞,让它们全部落地再断言。
+// 首启标记先落好:没有它会进首启向导,而向导独占整窗、导航轨不渲染,
+// 这里的冒烟对象是常态主壳。
 async function mountApp() {
+  localStorage.setItem("ferry-first-done", "1");
   let result;
   await act(async () => { result = render(<App />); });
   return result;

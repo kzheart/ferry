@@ -143,7 +143,6 @@ export function AppOverlays({
           onRescan={settings.onRescan}
           guideSeen={settings.guideSeen}
           onOpenGuide={settings.onOpenGuide}
-          onFirstRun={settings.onFirstRun}
           onClose={settings.onClose}
         />
       )}

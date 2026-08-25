@@ -5,6 +5,11 @@
     "scanning": "扫描中…",
     "rescan": "重新扫描"
   },
+  "indexPill": {
+    "busy": "索引中",
+    "done": "索引完成,全文搜索已就绪",
+    "tip": "已索引 {{indexed}} / {{total}} 个会话;浏览不受影响,搜索结果随索引逐步完整"
+  },
   "rail": {
     "overview": "总览",
     "library": "会话",

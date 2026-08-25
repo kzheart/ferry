@@ -5,6 +5,11 @@
     "scanning": "Scanning…",
     "rescan": "Rescan"
   },
+  "indexPill": {
+    "busy": "Indexing",
+    "done": "Indexing complete — full-text search ready",
+    "tip": "{{indexed}} / {{total}} sessions indexed; browsing is unaffected, search completes as indexing progresses"
+  },
   "rail": {
     "overview": "Overview",
     "library": "Sessions",

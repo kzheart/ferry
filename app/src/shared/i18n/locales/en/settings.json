@@ -172,10 +172,7 @@
     "guide": "Feature guide",
     "guideDesc": "Replay the step-by-step walkthrough of navigation, session organizing, migration delivery, and agent integration",
     "reviewGuide": "Replay guide",
-    "quickStart": "Quick start",
-    "firstRun": "First-run detection",
-    "firstRunDesc": "Replay the installation and session detection results for local tools",
-    "open": "Open"
+    "quickStart": "Quick start"
   },
   "sources": {
     "connectedTools": "Connected tools",

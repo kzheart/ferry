@@ -97,6 +97,10 @@ export function WorkspaceRouter({
         <FirstRun
           env={settings.env}
           scan={settings.scanResult}
+          prefs={settings.value}
+          onPrefs={settings.onChange}
+          onScan={settings.scan}
+          scanning={settings.scanning}
           onStart={onFirstDone}
         />
       )}

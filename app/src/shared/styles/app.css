@@ -777,3 +777,50 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 /* ---- 资源栏:范围标题与常驻搜索框 ---- */
 .lib-scope-title:hover { background: var(--fill4); }
 .lib-search:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---- 首启向导(FirstRun):渡轮动效 ---- */
+/* 换页:方向滑入;高度过渡由 JS 配合(定格旧高→过渡到新高→恢复 auto) */
+.fw-card { overflow: hidden; transition: height .3s cubic-bezier(.3,.7,.3,1); }
+.fw-fwd { animation: fwslide-fwd .28s cubic-bezier(.3,.7,.3,1); }
+.fw-back { animation: fwslide-back .28s cubic-bezier(.3,.7,.3,1); }
+@keyframes fwslide-fwd { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes fwslide-back { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+/* 级联入场:行内元素逐条淡入上移,延迟由内联 animation-delay 给 */
+.fw-st { opacity: 0; animation: fwfadeup .32s ease forwards; }
+@keyframes fwfadeup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* 船坞:应用图标驶入 + 随浪浮动,脚下波浪线流动 */
+.fw-harbor-icon { animation: fwsailin .7s cubic-bezier(.3,.8,.3,1), fwbob 3.2s 1s ease-in-out infinite alternate; }
+@keyframes fwsailin { from { opacity: 0; transform: translateX(-46px) rotate(-3deg); } to { opacity: 1; transform: none; } }
+@keyframes fwbob { from { transform: translateY(-1.4px) rotate(-.6deg); } to { transform: translateY(1.4px) rotate(.6deg); } }
+.fw-wave svg { animation: fwdrift 2.4s linear infinite; }
+@keyframes fwdrift { to { transform: translateX(-16px); } }
+/* 航线进度:虚线流动;小船换页时驶向下一站(left 过渡),自身轻微摇曳 */
+.fw-route { animation: fwroute 1.5s linear infinite; }
+@keyframes fwroute { to { background-position: -9px 0; } }
+.fw-boat { transition: left .55s cubic-bezier(.45,.05,.25,1); animation: fwbob 2.6s ease-in-out infinite alternate; }
+/* 声呐:高亮带扫过工具列表,行被扫到时泛微光(延迟继承级联包装层) */
+.fw-sweep { animation: fwsweep .6s ease-out .05s both; }
+@keyframes fwsweep { from { transform: translateY(-48px); opacity: 1; } 85% { opacity: 1; } to { transform: translateY(430px); opacity: 0; } }
+.fw-rowlit { animation: fwrowlit .7s ease both; animation-delay: inherit; }
+@keyframes fwrowlit { 0% { background: transparent; } 30% { background: color-mix(in srgb, var(--accent) 9%, transparent); } 100% { background: transparent; } }
+/* 安装成功:整行泛一层绿色涟漪确认落定 */
+.fw-flash { animation: fwrowflash .9s ease; }
+@keyframes fwrowflash { 0% { background: var(--ok-bg); border-color: var(--ok); } 100% { background: transparent; } }
+/* 渡运演示:小船载会话条从左码头开到右码头,靠岸时对方微涨 */
+.fw-cross { animation: fwcross 4.6s cubic-bezier(.45,.1,.45,.9) infinite; }
+@keyframes fwcross {
+  0%, 6% { transform: translateX(0); opacity: 0; }
+  12% { opacity: 1; }
+  82% { transform: translateX(268px); opacity: 1; }
+  90%, 100% { transform: translateX(268px); opacity: 0; }
+}
+.fw-arrive { animation: fwarrive 4.6s ease-in-out infinite; }
+@keyframes fwarrive { 0%, 78% { transform: scale(1); } 86% { transform: scale(1.1); } 94%, 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes fwslide-fwd { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fwslide-back { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fwfadeup { from { opacity: 0; } to { opacity: 1; } }
+  .fw-harbor-icon, .fw-wave svg, .fw-route, .fw-boat, .fw-sweep, .fw-rowlit,
+  .fw-cross, .fw-arrive { animation: none !important; }
+  .fw-cross { opacity: 1; }
+}

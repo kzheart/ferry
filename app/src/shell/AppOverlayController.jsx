@@ -195,10 +195,6 @@ export function AppOverlayController({ t }) {
           settings.setOpen(false);
           settings.openGuide();
         },
-        onFirstRun: () => {
-          settings.setOpen(false);
-          settings.setView("firstrun");
-        },
         onClose: () => settings.setOpen(false),
       }}
       guide={guide}

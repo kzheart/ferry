@@ -59,7 +59,7 @@ const mount = async (props = {}) => {
     <FerryRuntimeProvider value={ferry}>
       <SettingsPage settings={settings} setSettings={noop} scan={null} env={{}}
         scanning={false} onRescan={noop} updater={updater} guideSeen onOpenGuide={noop}
-        onFirstRun={noop} onClose={noop} {...props} />
+        onClose={noop} {...props} />
     </FerryRuntimeProvider>,
   );
   // 挂载期要回读一次宿主的开关,断言前先让它落地

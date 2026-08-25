@@ -172,10 +172,7 @@
     "guide": "功能引导",
     "guideDesc": "重新观看导航、会话整理、迁移交付与 Agent 集成的分步讲解",
     "reviewGuide": "重新查看引导",
-    "quickStart": "快速上手",
-    "firstRun": "首次启动检测",
-    "firstRunDesc": "重新查看本机各工具的安装与会话检测结果",
-    "open": "打开"
+    "quickStart": "快速上手"
   },
   "sources": {
     "connectedTools": "已连接的工具",
