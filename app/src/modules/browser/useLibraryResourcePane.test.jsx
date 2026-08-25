@@ -23,11 +23,11 @@ const setup = () => renderHook(() => useLibraryResourcePane({
 
 beforeEach(() => localStorage.clear());
 
-test("默认范围是全部、分组按项目,标题给出范围名与总数", () => {
+test("默认范围是全部、分组按时间,标题给出范围名与总数", () => {
   const { result } = setup();
 
   assert.deepEqual(result.current.scope, { kind: "all" });
-  assert.equal(result.current.groupMode, "project");
+  assert.equal(result.current.groupMode, "time");
   assert.equal(result.current.scopeLabel, "app:nav.allSessions");
   assert.equal(result.current.scopeCount, 3);
 });
@@ -107,7 +107,7 @@ test("清除同时归零范围、显示选项与搜索词", () => {
   act(() => result.current.clear());
 
   assert.deepEqual(result.current.scope, { kind: "all" });
-  assert.equal(result.current.display.group, "project");
+  assert.equal(result.current.display.group, "time");
   assert.equal(result.current.query, "");
   assert.equal(result.current.displayDirty, 0);
 });

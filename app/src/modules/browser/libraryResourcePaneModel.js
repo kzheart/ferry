@@ -189,7 +189,7 @@ export function matchesProjectFilter(entry, dir) {
 export const SCOPE_KINDS = ["all", "pinned", "agent", "project", "tag"];
 export const DEFAULT_SCOPE = { kind: "all" };
 export const DEFAULT_DISPLAY = {
-  group: "project",
+  group: "time",
   time: "all",
   subOnly: false,
   migOnly: false,

@@ -34,8 +34,9 @@ const sessions = [
 ];
 const scope = DEFAULT_SCOPE;
 const display = DEFAULT_DISPLAY;
-// 大多数用例只关心"按时间平铺"这条基线,分组方式单独有用例覆盖
-const byTime = { ...DEFAULT_DISPLAY, group: "time" };
+// 大多数用例只关心"按时间平铺"这条基线;项目文件夹树单独用 byProject 覆盖
+const byTime = DEFAULT_DISPLAY;
+const byProject = { ...DEFAULT_DISPLAY, group: "project" };
 
 test("会话库投影优先置顶，并按当前筛选分组", () => {
   const index = buildLibraryIndex({
@@ -74,7 +75,7 @@ const KEYS = ["claude\u0000a", "codex\u0000b", "claude\u0000c"];
 
 test("项目视图按完整 dir 分组，同名仓库各成一组且组内按最近活跃倒序", () => {
   const groups = buildLibraryGroups({
-    index: projectIndex(), scope, display, query: "", t,
+    index: projectIndex(), scope, display: byProject, query: "", t,
   });
 
   assert.deepEqual(groups.map(group => group.key), ["dir:/work/payments", "dir:/side/payments"]);
@@ -98,14 +99,14 @@ test("项目范围按完整 dir 精确匹配，旧的仓库名取值仍然可用
   // 选中某个项目后分组方式退回时间平铺:文件夹树只在「全部会话」下成立
   const byDir = buildLibraryGroups({
     index: projectIndex(), scope: { kind: "project", value: "/side/payments" },
-    display, query: "", t,
+    display: byProject, query: "", t,
   });
   assert.deepEqual(byDir.flatMap(group => group.rows.map(row => row.key)), [KEYS[2]]);
 
   // 存量状态里存的是仓库名(不含 "/"),两个同名目录都该留下
   const legacy = buildLibraryGroups({
     index: projectIndex(), scope: { kind: "project", value: "payments" },
-    display, query: "", t,
+    display: byProject, query: "", t,
   });
   assert.deepEqual(
     legacy.flatMap(group => group.rows.map(row => row.key)).sort(),
@@ -115,7 +116,7 @@ test("项目范围按完整 dir 精确匹配，旧的仓库名取值仍然可用
 
 test("搜索时命中的项目文件夹自动展开，折叠状态只在无搜索时生效", () => {
   const groups = buildLibraryGroups({
-    index: projectIndex(), scope, display, query: "", t,
+    index: projectIndex(), scope, display: byProject, query: "", t,
   });
   // 项目文件夹默认折叠,只有 /side/payments 被显式展开过
   const collapsed = { "dir:/side/payments": false };
@@ -128,7 +129,7 @@ test("搜索时命中的项目文件夹自动展开，折叠状态只在无搜�
 
 test("项目文件夹默认折叠，时间分组与置顶组默认展开", () => {
   const projectGroups = buildLibraryGroups({
-    index: projectIndex(), scope, display, query: "", t,
+    index: projectIndex(), scope, display: byProject, query: "", t,
   });
   assert.deepEqual(projectGroups.map(group => libraryGroupExpanded(group, {}, "")), [false, false]);
   assert.deepEqual(visibleLibraryIds(projectGroups, {}), []);
@@ -148,7 +149,7 @@ test("项目文件夹默认折叠，时间分组与置顶组默认展开", () =>
 
 test("首次进入项目视图时定位选中会话所在的文件夹", () => {
   const groups = buildLibraryGroups({
-    index: projectIndex(), scope, display, query: "", t,
+    index: projectIndex(), scope, display: byProject, query: "", t,
   });
 
   assert.equal(selectedProjectGroupKey(groups, KEYS[2]), "dir:/side/payments");
@@ -226,14 +227,14 @@ test("范围名给资源栏标题用,标签带 # 前缀", () => {
 // ---- 显示选项(Display) ----
 
 test("分组方式:文件夹树只在「全部会话」下成立", () => {
-  assert.equal(effectiveGroupMode({ kind: "all" }, display), "project");
-  assert.equal(effectiveGroupMode({ kind: "agent", value: "claude" }, display), "time");
-  assert.equal(effectiveGroupMode({ kind: "all" }, { ...display, group: "none" }), "none");
+  assert.equal(effectiveGroupMode({ kind: "all" }, byProject), "project");
+  assert.equal(effectiveGroupMode({ kind: "agent", value: "claude" }, byProject), "time");
+  assert.equal(effectiveGroupMode({ kind: "all" }, { ...byProject, group: "none" }), "none");
 });
 
 test("不分组时整条列表按更新时间排,没有任何分组头", () => {
   const groups = buildLibraryGroups({
-    index: projectIndex(), scope, display: { ...display, group: "none" }, query: "", t,
+    index: projectIndex(), scope, display: { ...byProject, group: "none" }, query: "", t,
   });
 
   assert.deepEqual(groups.map(group => group.kind), ["flat"]);
@@ -264,7 +265,7 @@ test("时间窗口与两个开关只影响列表,不改变范围", () => {
 
 test("显示选项被改过几项决定按钮上的圆点", () => {
   assert.equal(displayDirtyCount(DEFAULT_DISPLAY), 0);
-  assert.equal(displayDirtyCount({ ...DEFAULT_DISPLAY, group: "time" }), 1);
+  assert.equal(displayDirtyCount({ ...DEFAULT_DISPLAY, group: "project" }), 1);
   assert.equal(displayDirtyCount({ ...DEFAULT_DISPLAY, time: "last7", subOnly: true }), 2);
 });
 
@@ -318,7 +319,7 @@ test("旧筛选状态按优先级映射成范围,其余进显示选项", () => {
     migrateLegacyLibraryState({ filter: { tag: "待整理" }, toolIds: tools }).scope,
     { kind: "tag", value: "待整理" },
   );
-  // 「今天」这一档新的时间窗口里没有,同样丢弃;没存过视图分段时默认按项目
+  // 「今天」这一档新的时间窗口里没有,同样丢弃;没存过视图分段时默认按时间
   assert.deepEqual(
     migrateLegacyLibraryState({ filter: { time: "today" } }).display,
     DEFAULT_DISPLAY,
