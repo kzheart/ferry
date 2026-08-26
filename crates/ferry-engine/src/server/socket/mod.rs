@@ -433,6 +433,7 @@ fn shutdown_response(shared: &Shared, id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "windows")]
     use std::io::{BufRead, BufReader, Write};
 
     fn shared(mode: EngineMode) -> Arc<Shared> {
