@@ -34,7 +34,7 @@ use windows_sys::Win32::System::Threading::{
 pub(super) const SUPPORTED: bool = true;
 
 const PIPE_BUFFER: u32 = 64 * 1024;
-const CONNECT_RETRIES: usize = 50;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 const WAIT_PIPE_MS: u32 = 200;
 const GENERIC_READ: u32 = 0x8000_0000;
 const GENERIC_WRITE: u32 = 0x4000_0000;
@@ -160,14 +160,34 @@ fn wait_until_readable(file: &File, timeout: Option<Duration>) -> io::Result<()>
 
 fn open_existing_pipe(name: &str) -> io::Result<File> {
     let wide = to_wide(name);
-    for _ in 0..CONNECT_RETRIES {
+    let deadline = Instant::now() + CONNECT_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "命名管道忙，连接超时",
+            ));
+        }
+        let wait_ms = remaining.as_millis().min(WAIT_PIPE_MS as u128).max(1) as u32;
+        let ready = unsafe { WaitNamedPipeW(wide.as_ptr(), wait_ms) };
+        if ready == FALSE {
+            match unsafe { GetLastError() } {
+                ERROR_FILE_NOT_FOUND => {
+                    return Err(io::Error::new(io::ErrorKind::NotFound, "命名管道不存在"));
+                }
+                ERROR_PIPE_BUSY => continue,
+                _ if Instant::now() < deadline => continue,
+                other => return Err(io::Error::from_raw_os_error(other as i32)),
+            }
+        }
         let handle = create_file_w(wide.as_ptr());
         if handle != INVALID_HANDLE_VALUE && !handle.is_null() {
             return Ok(unsafe { File::from_raw_handle(handle) });
         }
         match unsafe { GetLastError() } {
             ERROR_PIPE_BUSY => {
-                let _ = unsafe { WaitNamedPipeW(wide.as_ptr(), WAIT_PIPE_MS) };
+                continue;
             }
             ERROR_FILE_NOT_FOUND => {
                 return Err(io::Error::new(io::ErrorKind::NotFound, "命名管道不存在"));
@@ -177,10 +197,6 @@ fn open_existing_pipe(name: &str) -> io::Result<File> {
             }
         }
     }
-    Err(io::Error::new(
-        io::ErrorKind::TimedOut,
-        "命名管道忙，连接超时",
-    ))
 }
 
 /// 必须走 CreateFileW：`std::fs` 会把 `\\.\pipe\` 规范化成 `\\?\`，管道打不开还会一直阻塞。
@@ -227,6 +243,23 @@ pub(super) fn connect(path: &Path) -> Result<Stream, String> {
     open_existing_pipe(pipe)
         .map(Stream::new)
         .map_err(|error| format!("无法连接 {pipe}: {error}"))
+}
+
+pub(super) fn listener_available(path: &Path) -> bool {
+    let Ok(pipe) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let pipe = pipe.trim();
+    if pipe.is_empty() {
+        return false;
+    }
+    let wide = to_wide(pipe);
+    if unsafe { WaitNamedPipeW(wide.as_ptr(), 0) } != FALSE {
+        return true;
+    }
+    // BUSY/timeout/access-denied still prove that the pipe exists. Only an
+    // absent pipe is stale. This check never consumes an accept instance.
+    (unsafe { GetLastError() }) != ERROR_FILE_NOT_FOUND
 }
 
 pub(super) fn process_alive(pid: u32) -> bool {
@@ -319,6 +352,7 @@ impl Write for Stream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader};
 
     #[test]
     fn stream_read_timeout_is_enforced() {
@@ -337,6 +371,49 @@ mod tests {
         let error = client.read(&mut [0u8; 1]).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
         drop(client);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn availability_probe_does_not_consume_the_pending_instance() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("engine.sock");
+        let listener = bind(&marker).unwrap();
+
+        assert!(listener_available(&marker));
+        assert!(listener_available(&marker));
+
+        let client = connect(&marker).expect("探活后仍应能连接");
+        let server = listener.accept().expect("pending instance 未被探活消费");
+        drop(client);
+        drop(server);
+    }
+
+    #[test]
+    fn cloned_stream_round_trips_a_line() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("engine.sock");
+        let listener = bind(&marker).unwrap();
+        let server = std::thread::spawn(move || {
+            let mut stream = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut request = String::new();
+            reader.read_line(&mut request).unwrap();
+            assert_eq!(request, "ping\n");
+            stream.write_all(b"pong\n").unwrap();
+            stream.flush().unwrap();
+        });
+
+        let mut client = connect(&marker).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut reader = BufReader::new(client.try_clone().unwrap());
+        client.write_all(b"ping\n").unwrap();
+        client.flush().unwrap();
+        let mut response = String::new();
+        reader.read_line(&mut response).unwrap();
+        assert_eq!(response, "pong\n");
         server.join().unwrap();
     }
 }

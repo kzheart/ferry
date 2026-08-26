@@ -213,10 +213,9 @@ fn connect_or_spawn(socket: &Path) -> Result<Client, Failure> {
         return Ok(client);
     }
     let lock_path = lock::lock_path();
-    // 持有者还活着（正在启动）就别再拉一个，等它把 socket 挂出来。
-    let holder_alive = lock::read(&lock_path).is_some_and(|record| {
-        record.socket == socket.display().to_string() && platform::process_alive(record.pid)
-    });
+    // 只要锁的持有者还活着就禁止再拉一个。Windows 路径可能只是斜杠、大小写或
+    // verbatim 前缀不同；用 display 字符串相等参与生死仲裁会制造第二个引擎。
+    let holder_alive = lock::read(&lock_path).is_some_and(|record| holder_is_alive(&record));
     if !holder_alive {
         clear_stale(socket, &lock_path);
         spawn_daemon(socket)?;
@@ -224,8 +223,12 @@ fn connect_or_spawn(socket: &Path) -> Result<Client, Failure> {
     wait_for_socket(socket)
 }
 
+fn holder_is_alive(record: &lock::LockRecord) -> bool {
+    platform::process_alive(record.pid)
+}
+
 fn clear_stale(socket: &Path, lock_path: &Path) {
-    if socket.exists() && platform::connect(socket).is_err() {
+    if socket.exists() && !platform::listener_available(socket) {
         let _ = std::fs::remove_file(socket);
     }
     if lock::read(lock_path).is_some_and(|record| !platform::process_alive(record.pid)) {
@@ -390,5 +393,17 @@ mod tests {
         assert_eq!(payload["params"]["message"], Value::from("连不上"));
         assert!(payload["params"]["recovery"].is_string());
         assert_eq!(failure.exit_code(), 2);
+    }
+
+    #[test]
+    fn live_holder_does_not_depend_on_socket_path_spelling() {
+        let record = lock::LockRecord {
+            pid: std::process::id(),
+            mode: EngineMode::App,
+            socket: r"C:/Users/example/.ferry/ENGINE.sock".into(),
+            version: "test".into(),
+            contract_hash: FERRY_CONTRACT_HASH.into(),
+        };
+        assert!(holder_is_alive(&record));
     }
 }

@@ -137,7 +137,7 @@
       ],
       "timeout": "lookup",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "runtime_sessions.load_all",
@@ -187,7 +187,7 @@
       ],
       "timeout": "lookup",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "session_read",
@@ -197,7 +197,7 @@
       ],
       "timeout": "lookup",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "usage_stats",
@@ -207,7 +207,7 @@
       ],
       "timeout": "lookup",
       "retry": "never",
-      "dispatch": "serial"
+      "dispatch": "parallel-read"
     },
     {
       "name": "agent_prompt",

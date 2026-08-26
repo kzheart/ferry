@@ -41,6 +41,13 @@ pub fn connect(path: &Path) -> Result<SocketStream, String> {
     imp::connect(path).map(SocketStream)
 }
 
+/// Whether a listener owns this endpoint without opening a client connection.
+/// Windows must not consume the only pending named-pipe instance during stale
+/// lock arbitration.
+pub fn listener_available(path: &Path) -> bool {
+    imp::listener_available(path)
+}
+
 /// 进程是否存活。用于陈旧锁判定。
 ///
 /// 拿不准时一律回 `true`（fail-closed）：宁可拒绝抢占，也不能清掉活实例的

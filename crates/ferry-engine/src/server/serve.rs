@@ -292,6 +292,7 @@ fn pump<R: BufRead>(
     lanes: &Lanes,
     policy: &LanePolicy,
     failures: &Arc<Mutex<Vec<String>>>,
+    pipelined: bool,
 ) {
     let in_flight = Arc::new(InFlight::default());
     for line in input.lines() {
@@ -310,7 +311,7 @@ fn pump<R: BufRead>(
         let handler = Arc::clone(handler);
         let write_line = Arc::clone(write_line);
         let failures = Arc::clone(failures);
-        let in_flight = Arc::clone(&in_flight);
+        let job_in_flight = Arc::clone(&in_flight);
         in_flight.enter();
         lanes.submit(
             lane,
@@ -322,9 +323,17 @@ fn pump<R: BufRead>(
                         .unwrap_or_else(|error| error.into_inner())
                         .push(error),
                 }
-                in_flight.leave();
+                job_in_flight.leave();
             }),
         );
+        if !pipelined {
+            // A synchronous Windows named-pipe handle cannot reliably service
+            // a worker write while this thread already has the next blocking
+            // read outstanding on a duplicate handle. Socket clients are
+            // request-response sequential, so finish this frame before reading
+            // the next one. Stdio keeps its existing pipelined behavior.
+            in_flight.wait_until_idle();
+        }
     }
     in_flight.wait_until_idle();
 }
@@ -354,7 +363,15 @@ pub fn serve_on<R: BufRead>(
     }
     let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let policy = contract_lane_policy();
-    pump(input, &write_line, &handler, &lanes, &policy, &failures);
+    pump(
+        input,
+        &write_line,
+        &handler,
+        &lanes,
+        &policy,
+        &failures,
+        true,
+    );
     // EOF：等在途请求结束再退出。
     lanes.shutdown();
 
@@ -378,7 +395,15 @@ pub fn serve_connection<R: BufRead>(
 ) -> Result<(), String> {
     let write_line = line_writer(output, "socket");
     let failures: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-    pump(input, &write_line, &handler, lanes, &policy, &failures);
+    pump(
+        input,
+        &write_line,
+        &handler,
+        lanes,
+        &policy,
+        &failures,
+        false,
+    );
     let failures = failures.lock().unwrap_or_else(|error| error.into_inner());
     match failures.first() {
         Some(error) => Err(error.clone()),
@@ -625,6 +650,43 @@ mod tests {
             .map(|line| line["id"].as_str().unwrap().to_string())
             .collect();
         assert_eq!(ids, ["fast", "slow"]);
+    }
+
+    #[test]
+    fn lookup_requests_do_not_wait_behind_pricing() {
+        let output = SharedBuffer::default();
+        let handler: ServeHandler = Arc::new(|request: &str| {
+            let value: Value = serde_json::from_str(request).unwrap();
+            if value["method"] == "pricing" {
+                std::thread::sleep(Duration::from_millis(80));
+            }
+            Ok(serde_json::json!({
+                "protocol": "ferry-ipc/1",
+                "id": value["id"],
+                "ok": true,
+                "result": null,
+            }))
+        });
+
+        serve(
+            format!(
+                "{}\n{}\n",
+                request("pricing", "pricing"),
+                request("lookup", "content_search")
+            )
+            .as_bytes(),
+            Box::new(output.clone()),
+            handler,
+            None,
+        )
+        .unwrap();
+
+        let ids: Vec<String> = output
+            .lines()
+            .iter()
+            .map(|line| line["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids, ["lookup", "pricing"]);
     }
 
     #[test]
