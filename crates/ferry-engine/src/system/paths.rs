@@ -11,21 +11,23 @@ pub fn process_environ() -> Environ {
     std::env::vars().collect()
 }
 
-/// `os.name` 的两个取值。
+/// 会影响存储布局的桌面平台。不要把 macOS 与 Linux 都压成 `posix`：两者的
+/// Cursor、配置目录约定不同，压平后测试只能偷偷依赖当前编译目标。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum OsFamily {
-    /// `os.name == "nt"`
+pub enum Platform {
     Windows,
-    /// `os.name == "posix"`
-    Posix,
+    MacOs,
+    Linux,
 }
 
-impl OsFamily {
+impl Platform {
     pub fn current() -> Self {
-        if cfg!(windows) {
+        if cfg!(target_os = "windows") {
             Self::Windows
+        } else if cfg!(target_os = "macos") {
+            Self::MacOs
         } else {
-            Self::Posix
+            Self::Linux
         }
     }
 }
@@ -70,13 +72,13 @@ pub fn expanduser(path: &str) -> PathBuf {
 
 /// 按当前进程环境展开路径模板。
 pub fn expand_location(spec: &str) -> PathBuf {
-    expand_location_with(spec, OsFamily::current(), &process_environ(), &home_dir())
+    expand_location_with(spec, Platform::current(), &process_environ(), &home_dir())
 }
 
 /// 可注入环境的路径展开，供单测与 adapter 共用同一套规则。
 pub fn expand_location_with(
     spec: &str,
-    platform: OsFamily,
+    platform: Platform,
     environ: &Environ,
     home: &Path,
 ) -> PathBuf {
@@ -99,30 +101,25 @@ fn normalize_windows_separators(path: PathBuf) -> PathBuf {
 }
 
 /// VS Code 风格的用户配置根（Cursor 的 `globalStorage` 就挂在这下面）。
-pub fn config_dir(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+pub fn config_dir(platform: Platform, environ: &Environ, home: &Path) -> PathBuf {
     match platform {
-        OsFamily::Windows => env_value(environ, "APPDATA")
+        Platform::Windows => env_value(environ, "APPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData").join("Roaming")),
-        OsFamily::Posix => {
-            if cfg!(target_os = "macos") {
-                home.join("Library").join("Application Support")
-            } else {
-                env_value(environ, "XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| home.join(".config"))
-            }
-        }
+        Platform::MacOs => home.join("Library").join("Application Support"),
+        Platform::Linux => env_value(environ, "XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config")),
     }
 }
 
 /// 本机数据根：OpenCode 的 SQLite 库、Windows 上的 Cursor CLI 安装目录。
-pub fn data_local_dir(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+pub fn data_local_dir(platform: Platform, environ: &Environ, home: &Path) -> PathBuf {
     match platform {
-        OsFamily::Windows => env_value(environ, "LOCALAPPDATA")
+        Platform::Windows => env_value(environ, "LOCALAPPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join("AppData").join("Local")),
-        OsFamily::Posix => env_value(environ, "XDG_DATA_HOME")
+        Platform::MacOs | Platform::Linux => env_value(environ, "XDG_DATA_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".local").join("share")),
     }
@@ -172,7 +169,7 @@ fn expand_percent_vars(spec: &str, environ: &Environ) -> String {
 
 fn expand_location_tokens(
     spec: &str,
-    platform: OsFamily,
+    platform: Platform,
     environ: &Environ,
     home: &Path,
 ) -> String {
@@ -254,7 +251,7 @@ fn env_value_ignore_ascii_case<'a>(environ: &'a Environ, key: &str) -> Option<&'
 ///
 /// OpenCode CLI 在 Windows 上仍走 XDG：`~/.local/share/opencode/opencode.db`，
 /// 不是 `%LOCALAPPDATA%`。桌面安装器有时会写 Local/Roaming，所以按「文件在不在」探测。
-pub fn opencode_database_path(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+pub fn opencode_database_path(platform: Platform, environ: &Environ, home: &Path) -> PathBuf {
     if let Some(override_path) = env_value(environ, "FERRY_OPENCODE_DB") {
         return expanduser(override_path);
     }
@@ -266,7 +263,7 @@ pub fn opencode_database_path(platform: OsFamily, environ: &Environ, home: &Path
         .join("share")
         .join("opencode")
         .join("opencode.db");
-    if platform != OsFamily::Windows {
+    if platform != Platform::Windows {
         return data_local_dir(platform, environ, home)
             .join("opencode")
             .join("opencode.db");
@@ -287,11 +284,9 @@ pub fn opencode_database_path(platform: OsFamily, environ: &Environ, home: &Path
 
 /// Cursor 的只读会话库位置（`state.vscdb`）。
 ///
-/// Cursor 是 VS Code 分支，globalStorage 的落位随桌面平台不同；[`OsFamily`] 只
-/// 区分 nt / posix，分不开 macOS 与 Linux，所以 posix 下按 macOS、Linux 两种
-/// 布局依次探测，取第一个存在的；都不存在时按当前编译目标给默认值，让
-/// `session.store_unavailable` 的提示指向本平台的正确位置。
-pub fn cursor_database_path(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+/// Cursor 是 VS Code 分支，globalStorage 的落位随桌面平台不同。平台由调用方
+/// 显式传入，Windows 上也能覆盖 macOS 布局测试，不再偷看当前编译目标。
+pub fn cursor_database_path(platform: Platform, environ: &Environ, home: &Path) -> PathBuf {
     if let Some(override_path) = env_value(environ, "FERRY_CURSOR_DB") {
         return expanduser(override_path);
     }
@@ -301,7 +296,7 @@ pub fn cursor_database_path(platform: OsFamily, environ: &Environ, home: &Path) 
             .join("globalStorage")
             .join("state.vscdb")
     };
-    if platform == OsFamily::Windows {
+    if platform == Platform::Windows {
         return leaf(config_dir(platform, environ, home));
     }
     let macos = leaf(home.join("Library").join("Application Support"));
@@ -310,15 +305,10 @@ pub fn cursor_database_path(platform: OsFamily, environ: &Environ, home: &Path) 
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".config")),
     );
-    for candidate in [&macos, &linux] {
-        if candidate.exists() {
-            return candidate.clone();
-        }
-    }
-    if cfg!(target_os = "macos") {
-        macos
-    } else {
-        linux
+    match platform {
+        Platform::MacOs => macos,
+        Platform::Linux => linux,
+        Platform::Windows => unreachable!(),
     }
 }
 
@@ -437,6 +427,31 @@ mod tests {
     }
 
     #[test]
+    fn config_roots_are_selected_by_injected_platform_not_build_host() {
+        let home = PathBuf::from("/home/u");
+        assert_eq!(
+            config_dir(Platform::MacOs, &environ(&[]), &home),
+            PathBuf::from("/home/u/Library/Application Support")
+        );
+        assert_eq!(
+            config_dir(
+                Platform::Linux,
+                &environ(&[("XDG_CONFIG_HOME", "/xdg/config")]),
+                &home
+            ),
+            PathBuf::from("/xdg/config")
+        );
+        assert_eq!(
+            config_dir(
+                Platform::Windows,
+                &environ(&[("APPDATA", r"C:\Roaming")]),
+                &home
+            ),
+            PathBuf::from(r"C:\Roaming")
+        );
+    }
+
+    #[test]
     fn is_within_uses_prefix_semantics_with_a_separator_guard() {
         let root = format!("{MAIN_SEPARATOR}a{MAIN_SEPARATOR}b");
         assert!(is_within(&root, &root));
@@ -455,19 +470,19 @@ mod tests {
         let home = PathBuf::from("/home/u");
         assert_eq!(
             opencode_database_path(
-                OsFamily::Posix,
+                Platform::Linux,
                 &environ(&[("FERRY_OPENCODE_DB", "/custom/db.sqlite")]),
                 &home
             ),
             PathBuf::from("/custom/db.sqlite")
         );
         assert_eq!(
-            opencode_database_path(OsFamily::Posix, &environ(&[]), &home),
+            opencode_database_path(Platform::Linux, &environ(&[]), &home),
             PathBuf::from("/home/u/.local/share/opencode/opencode.db")
         );
         assert_eq!(
             opencode_database_path(
-                OsFamily::Posix,
+                Platform::Linux,
                 &environ(&[("XDG_DATA_HOME", "/xdg")]),
                 &home
             ),
@@ -475,7 +490,7 @@ mod tests {
         );
         assert_eq!(
             opencode_database_path(
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("LOCALAPPDATA", "C:\\Local")]),
                 &home
             ),
@@ -496,7 +511,7 @@ mod tests {
         std::fs::write(&database, b"").unwrap();
         assert_eq!(
             opencode_database_path(
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("LOCALAPPDATA", local.to_str().unwrap())]),
                 &home
             ),
@@ -505,29 +520,29 @@ mod tests {
     }
 
     #[test]
-    fn cursor_path_probes_both_posix_layouts() {
+    fn cursor_path_follows_the_explicit_platform() {
         let home = PathBuf::from("/home/u");
         assert_eq!(
             cursor_database_path(
-                OsFamily::Posix,
+                Platform::Linux,
                 &environ(&[("FERRY_CURSOR_DB", "/custom/state.vscdb")]),
                 &home
             ),
             PathBuf::from("/custom/state.vscdb")
         );
-        // 两种 posix 布局都不存在时按编译目标给默认值。
-        let expected = if cfg!(target_os = "macos") {
-            "/home/u/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-        } else {
-            "/home/u/.config/Cursor/User/globalStorage/state.vscdb"
-        };
         assert_eq!(
-            cursor_database_path(OsFamily::Posix, &environ(&[]), &home),
-            PathBuf::from(expected)
+            cursor_database_path(Platform::Linux, &environ(&[]), &home),
+            PathBuf::from("/home/u/.config/Cursor/User/globalStorage/state.vscdb")
+        );
+        assert_eq!(
+            cursor_database_path(Platform::MacOs, &environ(&[]), &home),
+            PathBuf::from(
+                "/home/u/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+            )
         );
         assert_eq!(
             cursor_database_path(
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("APPDATA", "C:\\Roaming")]),
                 &home
             ),
@@ -536,17 +551,6 @@ mod tests {
                 .join("User")
                 .join("globalStorage")
                 .join("state.vscdb")
-        );
-        // 真实存在的 macOS 布局优先于 XDG 回落。
-        let root = tempfile::tempdir().unwrap();
-        let macos = root
-            .path()
-            .join("Library/Application Support/Cursor/User/globalStorage");
-        std::fs::create_dir_all(&macos).unwrap();
-        std::fs::write(macos.join("state.vscdb"), b"").unwrap();
-        assert_eq!(
-            cursor_database_path(OsFamily::Posix, &environ(&[]), root.path()),
-            macos.join("state.vscdb")
         );
     }
 
@@ -583,13 +587,13 @@ mod tests {
     fn location_templates_expand_posix_home_and_xdg() {
         let home = PathBuf::from("/home/u");
         assert_eq!(
-            expand_location_with("~/.claude/projects", OsFamily::Posix, &environ(&[]), &home),
+            expand_location_with("~/.claude/projects", Platform::Linux, &environ(&[]), &home),
             PathBuf::from("/home/u/.claude/projects")
         );
         assert_eq!(
             expand_location_with(
                 "{data_local}/opencode",
-                OsFamily::Posix,
+                Platform::Linux,
                 &environ(&[]),
                 &home
             ),
@@ -604,7 +608,7 @@ mod tests {
         assert_eq!(
             expand_location_with(
                 "{config}/Cursor/User/globalStorage",
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("APPDATA", r"C:\Roaming")]),
                 &home
             ),
@@ -616,7 +620,7 @@ mod tests {
         assert_eq!(
             expand_location_with(
                 "{data_local}/opencode",
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("LOCALAPPDATA", r"C:\Local")]),
                 &home
             ),
@@ -625,7 +629,7 @@ mod tests {
         assert_eq!(
             expand_location_with(
                 r"%APPDATA%/Cursor/User/globalStorage",
-                OsFamily::Windows,
+                Platform::Windows,
                 &environ(&[("APPDATA", r"C:\Roaming")]),
                 &home
             ),

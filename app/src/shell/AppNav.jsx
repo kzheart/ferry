@@ -228,7 +228,7 @@ export function AppNav({
         {sections.isOpen("favorites") && (favoriteProjects.length > 0 ? (
           favoriteProjects.map(project => (
             <NavRow key={project.dir} indent icon={<FolderGlyph size={metrics.navIcon} />}
-              label={project.repo} count={project.count} title={project.dir}
+              label={project.label || project.repo} count={project.count} title={project.dir}
               active={scopeActive("project") && scope.value === project.dir}
               draggable
               dragging={dragDir === project.dir}

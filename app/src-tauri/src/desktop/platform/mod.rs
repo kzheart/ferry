@@ -1,7 +1,7 @@
 //! 桌面平台能力边界。
 //!
-//! 业务命令只依赖这里暴露的能力；新增 Windows 实现时替换 windows.rs，
-//! 不需要把平台判断散落回 Tauri command 或会话逻辑。
+//! 业务命令只依赖这里暴露的能力；macOS 与 Windows 的系统调用分别留在各自
+//! 实现中，不把平台判断散落回 Tauri command 或会话逻辑。
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -28,8 +28,8 @@ pub(crate) fn reveal_path(path: &Path) -> Result<(), String> {
 }
 
 /// 已经由 Rust 边界验证的终端启动描述符。平台实现不能接受原始 shell 文本。
-/// args/cwd 只有 macOS 实现会读;其余平台是 fail-closed 占位,但字段属于
-/// 前端契约,不能按平台裁剪。
+/// args/cwd 由 macOS 与 Windows 的终端实现读取；字段属于跨平台前端契约，
+/// 不能按平台裁剪。
 #[derive(Deserialize)]
 pub(crate) struct TerminalLaunch {
     pub(crate) executable: String,

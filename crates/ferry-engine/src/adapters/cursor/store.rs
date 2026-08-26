@@ -13,7 +13,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::errors::{DomainError, DomainResult};
-use crate::system::paths::{cursor_database_path, home_dir, process_environ, OsFamily};
+use crate::system::paths::{cursor_database_path, home_dir, process_environ, Platform};
 use crate::system::sqlite;
 
 /// Ferry 当前支持的 Cursor 表结构。
@@ -46,7 +46,7 @@ pub fn database_path() -> PathBuf {
     if let Some(path) = DB_PATH_OVERRIDE.read().expect("库路径覆盖锁中毒").clone() {
         return path;
     }
-    cursor_database_path(OsFamily::current(), &process_environ(), &home_dir())
+    cursor_database_path(Platform::current(), &process_environ(), &home_dir())
 }
 
 /// 覆盖 [`database_path`]；`None` 恢复按环境解析。

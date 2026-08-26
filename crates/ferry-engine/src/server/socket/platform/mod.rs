@@ -1,9 +1,8 @@
 //! 本地 socket 的平台边界。
 //!
-//! 与 `desktop/platform` 同款规则：unix 有真实现（`std::os::unix::net`），其余
-//! 平台是显式的、可编译的 unsupported 占位，业务代码里不出现 `cfg` 分支。
-//! Windows 的命名管道（`\\.\pipe\ferry-engine-<user>`）是 P2 的事，落地时只换
-//! [`windows`] 一个模块。
+//! 与 `desktop/platform` 同款规则：Unix 走 domain socket，Windows 走命名管道，
+//! 其余平台是显式的、可编译的 unsupported 占位。业务代码只依赖本模块的统一接口，
+//! 不感知传输差异。
 
 use std::io::{Read, Write};
 use std::path::Path;

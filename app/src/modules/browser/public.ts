@@ -1,7 +1,10 @@
 export {
   bucketOf,
   fmtTime,
+  isWindowsProjectPath,
+  normalizeProjectPath,
   operationRef,
+  projectPathKey,
   repoOf,
   sessionRef,
 } from "./sessionModel.js";

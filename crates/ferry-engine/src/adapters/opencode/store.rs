@@ -15,7 +15,7 @@ use serde_json::{Map, Value};
 
 use crate::errors::{DomainError, DomainResult};
 use crate::system::executables;
-use crate::system::paths::{home_dir, opencode_database_path, process_environ, OsFamily};
+use crate::system::paths::{home_dir, opencode_database_path, process_environ, Platform};
 use crate::system::probes;
 use crate::system::sqlite;
 
@@ -77,7 +77,7 @@ pub fn database_path() -> PathBuf {
     if let Some(path) = DB_PATH_OVERRIDE.read().expect("库路径覆盖锁中毒").clone() {
         return path;
     }
-    opencode_database_path(OsFamily::current(), &process_environ(), &home_dir())
+    opencode_database_path(Platform::current(), &process_environ(), &home_dir())
 }
 
 /// 覆盖 [`database_path`]；`None` 恢复按环境解析。
