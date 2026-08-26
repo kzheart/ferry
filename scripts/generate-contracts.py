@@ -96,7 +96,7 @@ AGENT_CAPABILITIES = (
 
 def load_shared_skill_paths() -> list[str]:
     """跨工具共享的技能仓库(如 ~/.agents/skills):不属于任何一个 agent。"""
-    document = json.loads(AGENTS_SOURCE.read_text())
+    document = json.loads(AGENTS_SOURCE.read_text(encoding="utf-8"))
     paths = document.get("shared_skill_paths", [])
     if (
         not isinstance(paths, list)
@@ -108,7 +108,7 @@ def load_shared_skill_paths() -> list[str]:
 
 
 def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
-    document = json.loads(AGENTS_SOURCE.read_text())
+    document = json.loads(AGENTS_SOURCE.read_text(encoding="utf-8"))
     if set(document) != {"agents", "capabilities", "shared_skill_paths"}:
         raise ValueError(
             "contracts/agents.json 顶层键必须是 "
@@ -186,7 +186,7 @@ def load_agents(edit_operations: list[str]) -> list[dict[str, object]]:
 
 
 def load_engine_methods() -> list[dict[str, object]]:
-    document = json.loads(ENGINE_METHODS_SOURCE.read_text())
+    document = json.loads(ENGINE_METHODS_SOURCE.read_text(encoding="utf-8"))
     methods = document.get("methods")
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/engine-methods.json 必须包含非空 methods 数组")
@@ -237,7 +237,7 @@ def load_engine_methods() -> list[dict[str, object]]:
 
 
 def load_runtime_methods() -> list[dict[str, object]]:
-    document = json.loads(RUNTIME_METHODS_SOURCE.read_text())
+    document = json.loads(RUNTIME_METHODS_SOURCE.read_text(encoding="utf-8"))
     methods = document.get("methods")
     if not isinstance(methods, list) or not methods:
         raise ValueError("contracts/runtime-methods.json 必须包含非空 methods 数组")
@@ -259,7 +259,7 @@ def load_runtime_methods() -> list[dict[str, object]]:
 
 
 def load_ipc() -> dict[str, object]:
-    document = json.loads(IPC_SOURCE.read_text())
+    document = json.loads(IPC_SOURCE.read_text(encoding="utf-8"))
     expected = {
         "protocol": "ferry-ipc/1",
         "request": {
@@ -287,7 +287,7 @@ def load_ipc() -> dict[str, object]:
 
 
 def load_session_ref() -> dict[str, object]:
-    document = json.loads(SESSION_REF_SOURCE.read_text())
+    document = json.loads(SESSION_REF_SOURCE.read_text(encoding="utf-8"))
     expected = {
         "opaque_prefix": "fsr_",
         "minimum_length": 8,
@@ -300,7 +300,7 @@ def load_session_ref() -> dict[str, object]:
 
 
 def load_operations() -> dict[str, object]:
-    document = json.loads(OPERATIONS_SOURCE.read_text())
+    document = json.loads(OPERATIONS_SOURCE.read_text(encoding="utf-8"))
     expected_keys = {
         "plan_id_prefix",
         "kinds",
@@ -402,7 +402,7 @@ def load_operations() -> dict[str, object]:
 
 
 def load_events() -> list[dict[str, object]]:
-    document = json.loads(EVENTS_SOURCE.read_text())
+    document = json.loads(EVENTS_SOURCE.read_text(encoding="utf-8"))
     events = document.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("contracts/events.json 必须包含非空 events 数组")
@@ -428,7 +428,7 @@ def load_events() -> list[dict[str, object]]:
 
 
 def load_errors() -> list[dict[str, object]]:
-    document = json.loads(ERRORS_SOURCE.read_text())
+    document = json.loads(ERRORS_SOURCE.read_text(encoding="utf-8"))
     errors = document.get("errors")
     if not isinstance(errors, list) or not errors:
         raise ValueError("contracts/errors.json 必须包含非空 errors 数组")
@@ -469,7 +469,7 @@ def load_errors() -> list[dict[str, object]]:
 
 def load_features() -> dict[str, object]:
     """特性开关的唯一事实源：stage 词表 + 特性表。"""
-    document = json.loads(FEATURES_SOURCE.read_text())
+    document = json.loads(FEATURES_SOURCE.read_text(encoding="utf-8"))
     if set(document) != {"stages", "features"}:
         raise ValueError("contracts/features.json 顶层键必须是 stages/features")
     stages = document["stages"]
@@ -2014,7 +2014,11 @@ def main() -> int:
         load_errors(),
         load_features(),
     )
-    stale = [path for path, content in contents.items() if not path.exists() or path.read_text() != content]
+    stale = [
+        path
+        for path, content in contents.items()
+        if not path.exists() or path.read_text(encoding="utf-8") != content
+    ]
     if args.check:
         if stale:
             relative = ", ".join(str(path.relative_to(ROOT)) for path in stale)
@@ -2022,7 +2026,7 @@ def main() -> int:
         return 0
     for path, content in contents.items():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
     return 0
 
 

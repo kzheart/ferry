@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _methods():
-    document = json.loads((ROOT / "contracts/runtime-methods.json").read_text())
+    document = json.loads(
+        (ROOT / "contracts/runtime-methods.json").read_text(encoding="utf-8")
+    )
     return document["methods"]
 
 
@@ -23,7 +25,9 @@ def test_runtime_router_exactly_implements_contract_methods():
     implemented = {
         method
         for router in routers
-        for method in re.findall(r'case "([^"]+)":', router.read_text())
+        for method in re.findall(
+            r'case "([^"]+)":', router.read_text(encoding="utf-8")
+        )
     }
     assert implemented == expected
 
@@ -36,11 +40,11 @@ def test_internal_runtime_commands_never_enter_webview_allowlist():
 
     frontend = (
         ROOT / "app/src/shared/contracts/generated/runtime-methods.ts"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     for method in public:
         assert json.dumps(method) in frontend
     for method in internal:
         assert json.dumps(method) not in frontend
 
-    host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text()
+    host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text(encoding="utf-8")
     assert "runtime_methods::is_public(method)" in host

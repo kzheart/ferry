@@ -14,6 +14,32 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.9.0] - 2026-08-27
+
+### Added
+
+- **Windows desktop support** — Ferry now ships as a native x64 NSIS installer
+  for Windows 10 and 11, including the desktop app, engine, runtime, CLI setup,
+  skill installation, terminal launch, and platform-native process handling.
+- **Global session search** — the search palette now searches the complete
+  library independently of the current sidebar scope and shows a clear loading
+  state while full-text results are pending.
+
+### Changed
+
+- **Cross-platform boundaries** — shell execution, filesystem detection, path
+  handling, sockets, and process cleanup now use explicit Windows and macOS
+  implementations so platform behavior can evolve independently.
+
+### Fixed
+
+- **Windows engine sharing** — CLI commands reuse the desktop app's engine
+  without spawning a competing daemon, consuming named-pipe listeners, or
+  hanging behind long-running background requests.
+- **Duplicate project folders** — equivalent Windows path spellings are
+  normalized before grouping, while genuinely different folders with the same
+  name show enough parent path to remain distinguishable.
+
 ## [0.8.6] - 2026-08-25
 
 ### Fixed

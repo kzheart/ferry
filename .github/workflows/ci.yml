@@ -93,7 +93,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@e18b497796c12b097a38f9edb9d0641fb99eee32 # v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: |
             app/src-tauri -> target
@@ -117,6 +117,7 @@ jobs:
     env:
       BUILD_TARGET: x86_64-pc-windows-msvc
       SIDECAR_ENGINE: app/src-tauri/binaries/ferry-engine-x86_64-pc-windows-msvc.exe
+      SIDECAR_RUNTIME: app/src-tauri/binaries/ferry-runtime-x86_64-pc-windows-msvc.exe
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

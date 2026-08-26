@@ -40,7 +40,7 @@ jobs:
           if required:
               raise SystemExit("missing release secrets: " + ", ".join(sorted(required)))
 
-  build:
+  build-macos:
     needs: validate
     runs-on: macos-14
     steps:
@@ -170,8 +170,76 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  build-windows:
+    needs: validate
+    runs-on: windows-latest
+    env:
+      BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288ca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            ferry-runtime/package-lock.json
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          target: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: |
+            app/src-tauri -> target
+            crates/ferry-engine -> target
+          key: release-x86_64-pc-windows-msvc
+      - run: npm ci
+        working-directory: app
+      - run: npm ci
+        working-directory: ferry-runtime
+      - run: npm run build:sea -- "$env:BUILD_TARGET"
+        working-directory: ferry-runtime
+      - run: cargo build --release --locked --target "$env:BUILD_TARGET"
+        working-directory: crates/ferry-engine
+      - name: Place engine sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force app/src-tauri/binaries | Out-Null
+          Copy-Item "crates/ferry-engine/target/$env:BUILD_TARGET/release/ferry-engine.exe" `
+            "app/src-tauri/binaries/ferry-engine-$env:BUILD_TARGET.exe"
+      - name: Generate Windows release config
+        env:
+          REPOSITORY: ${{ github.repository }}
+          UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: >-
+          python scripts/release.py config
+          --output app/src-tauri/tauri.release.conf.json
+          --repository "$env:REPOSITORY"
+          --pubkey "$env:UPDATER_PUBLIC_KEY"
+          --targets nsis
+      - name: Build NSIS installer and signed updater artifact
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >-
+          npm run tauri build --
+          --target "$env:BUILD_TARGET"
+          --config src-tauri/tauri.release.conf.json
+        working-directory: app
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-windows-x86_64
+          path: |
+            app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
-    needs: [validate, build]
+    needs: [validate, build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -213,7 +281,12 @@ jobs:
         shell: bash
         run: |
           shopt -s globstar nullglob
-          assets=(release-assets/**/*.dmg release-assets/**/*.gz release-assets/**/*.sig release-assets/latest.json)
+          assets=(release-assets/**/*.dmg release-assets/**/*.exe release-assets/**/*.gz release-assets/**/*.sig release-assets/latest.json)
+          if (( ${#assets[@]} < 6 )); then
+            echo "release asset set is incomplete" >&2
+            printf '%s\n' "${assets[@]}" >&2
+            exit 1
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
             gh release edit "$RELEASE_TAG" --notes-file release-notes.md --title "Ferry $RELEASE_VERSION"

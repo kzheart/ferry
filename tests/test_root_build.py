@@ -51,8 +51,24 @@ def test_engine_is_built_from_its_own_manifest():
     ]
 
 
+def test_local_tauri_build_disables_updater_artifacts_without_key(monkeypatch):
+    monkeypatch.delenv("TAURI_SIGNING_PRIVATE_KEY", raising=False)
+    assert build.tauri_build_command() == [
+        "npm", "run", "tauri", "--", "build",
+        "--config", '{"bundle":{"createUpdaterArtifacts":false}}',
+    ]
+
+
+def test_tauri_build_keeps_updater_artifacts_when_signing_key_exists(monkeypatch):
+    monkeypatch.setenv("TAURI_SIGNING_PRIVATE_KEY", "secret")
+    assert build.tauri_build_command() == [
+        "npm", "run", "tauri", "--", "build",
+    ]
+
+
 def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
     calls = []
+    monkeypatch.delenv("TAURI_SIGNING_PRIVATE_KEY", raising=False)
     monkeypatch.setattr(build, "verify_toolchain", lambda target: None)
     monkeypatch.setattr(build, "install_engine_binary", lambda target: None)
     monkeypatch.setattr(
@@ -76,7 +92,7 @@ def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
             build.ROOT,
         ),
         (
-            ["npm", "run", "tauri", "--", "build"],
+            build.tauri_build_command(),
             build.APP,
         ),
     ]
