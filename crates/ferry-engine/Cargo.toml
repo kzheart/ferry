@@ -45,3 +45,13 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 # 探针超时要终止整个进程组（setsid + killpg），标准库没有对应封装。
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# 命名管道、进程存活、控制台关闭信号。只在 windows.rs 里用。
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }

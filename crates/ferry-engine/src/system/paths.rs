@@ -57,15 +57,150 @@ pub fn home_dir() -> PathBuf {
     PathBuf::from("/")
 }
 
-/// 等价 `Path.expanduser()`：只展开前导 `~` 与 `~/`（`~user` 不支持，保持原样）。
+/// 契约与 adapter 共用的路径入口：展开 `~`、`{home}` / `{config}` /
+/// `{data_local}` / `{localappdata}`、以及 `%VAR%`。
+///
+/// `{config}` 对齐 VS Code / Cursor（`dirs::config_dir`）：macOS 是
+/// `~/Library/Application Support`，Linux 是 `~/.config`，Windows 是 `%APPDATA%`。
+/// `{data_local}` 对齐 XDG data 与 `%LOCALAPPDATA%`。契约里只写一份模板，
+/// 运行时再落到当前平台——不要再为每个 Agent 写死 macOS 路径。
 pub fn expanduser(path: &str) -> PathBuf {
-    if path == "~" {
-        return home_dir();
+    expand_location(path)
+}
+
+/// 按当前进程环境展开路径模板。
+pub fn expand_location(spec: &str) -> PathBuf {
+    expand_location_with(spec, OsFamily::current(), &process_environ(), &home_dir())
+}
+
+/// 可注入环境的路径展开，供单测与 adapter 共用同一套规则。
+pub fn expand_location_with(
+    spec: &str,
+    platform: OsFamily,
+    environ: &Environ,
+    home: &Path,
+) -> PathBuf {
+    let with_env = expand_percent_vars(spec, environ);
+    let with_tokens = expand_location_tokens(&with_env, platform, environ, home);
+    normalize_windows_separators(expand_tilde(&with_tokens, home))
+}
+
+fn normalize_windows_separators(path: PathBuf) -> PathBuf {
+    if !cfg!(windows) {
+        return path;
     }
-    let separators: &[char] = &['/', MAIN_SEPARATOR];
+    let text = path.to_string_lossy();
+    let windows_rooted = text.chars().nth(1) == Some(':') || text.starts_with(r"\\");
+    if windows_rooted && text.contains('/') {
+        PathBuf::from(text.replace('/', r"\"))
+    } else {
+        path
+    }
+}
+
+/// VS Code 风格的用户配置根（Cursor 的 `globalStorage` 就挂在这下面）。
+pub fn config_dir(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+    match platform {
+        OsFamily::Windows => env_value(environ, "APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData").join("Roaming")),
+        OsFamily::Posix => {
+            if cfg!(target_os = "macos") {
+                home.join("Library").join("Application Support")
+            } else {
+                env_value(environ, "XDG_CONFIG_HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| home.join(".config"))
+            }
+        }
+    }
+}
+
+/// 本机数据根：OpenCode 的 SQLite 库、Windows 上的 Cursor CLI 安装目录。
+pub fn data_local_dir(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
+    match platform {
+        OsFamily::Windows => env_value(environ, "LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join("AppData").join("Local")),
+        OsFamily::Posix => env_value(environ, "XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local").join("share")),
+    }
+}
+
+/// Windows `canonicalize` 会加上 `\\?\` 前缀；UI 与 SQLite 都不该看到它。
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path
+    }
+}
+
+/// 给 UI / 状态栏看的路径，去掉 Windows 长路径前缀。
+pub fn display_path(path: &Path) -> String {
+    strip_verbatim_prefix(path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn expand_percent_vars(spec: &str, environ: &Environ) -> String {
+    let chars: Vec<char> = spec.chars().collect();
+    let mut out = String::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '%' {
+            if let Some(relative_end) = chars[index + 1..].iter().position(|&ch| ch == '%') {
+                let name: String = chars[index + 1..index + 1 + relative_end].iter().collect();
+                if !name.is_empty() {
+                    if let Some(value) = env_value_ignore_ascii_case(environ, &name) {
+                        out.push_str(value);
+                        index += name.chars().count() + 2;
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    out
+}
+
+fn expand_location_tokens(
+    spec: &str,
+    platform: OsFamily,
+    environ: &Environ,
+    home: &Path,
+) -> String {
+    let home_text = home.to_string_lossy();
+    let config_text = config_dir(platform, environ, home)
+        .to_string_lossy()
+        .into_owned();
+    let data_local_text = data_local_dir(platform, environ, home)
+        .to_string_lossy()
+        .into_owned();
+    spec.replace("{home}", home_text.as_ref())
+        .replace("{config}", &config_text)
+        .replace("{data_local}", &data_local_text)
+        .replace("{localappdata}", &data_local_text)
+}
+
+fn expand_tilde(path: &str, home: &Path) -> PathBuf {
+    if path == "~" {
+        return home.to_path_buf();
+    }
+    let separators: &[char] = &['/', '\\', MAIN_SEPARATOR];
     if let Some(rest) = path.strip_prefix('~') {
         if rest.starts_with(separators) {
-            return home_dir().join(rest.trim_start_matches(separators));
+            let mut out = home.to_path_buf();
+            for part in rest.split(['/', '\\']).filter(|part| !part.is_empty()) {
+                out.push(part);
+            }
+            return out;
         }
     }
     PathBuf::from(path)
@@ -103,21 +238,51 @@ fn env_value<'a>(environ: &'a Environ, key: &str) -> Option<&'a str> {
         .filter(|value| !value.is_empty())
 }
 
+fn env_value_ignore_ascii_case<'a>(environ: &'a Environ, key: &str) -> Option<&'a str> {
+    if let Some(value) = env_value(environ, key) {
+        return Some(value);
+    }
+    environ.iter().find_map(|(candidate, value)| {
+        candidate
+            .eq_ignore_ascii_case(key)
+            .then_some(value.as_str())
+            .filter(|value| !value.is_empty())
+    })
+}
+
 /// opencode 的只读会话库位置。
+///
+/// OpenCode CLI 在 Windows 上仍走 XDG：`~/.local/share/opencode/opencode.db`，
+/// 不是 `%LOCALAPPDATA%`。桌面安装器有时会写 Local/Roaming，所以按「文件在不在」探测。
 pub fn opencode_database_path(platform: OsFamily, environ: &Environ, home: &Path) -> PathBuf {
     if let Some(override_path) = env_value(environ, "FERRY_OPENCODE_DB") {
         return expanduser(override_path);
     }
-    let data_home = if platform == OsFamily::Windows {
-        env_value(environ, "LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join("AppData").join("Local"))
-    } else {
-        env_value(environ, "XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".local").join("share"))
-    };
-    data_home.join("opencode").join("opencode.db")
+    if let Some(override_path) = env_value(environ, "OPENCODE_DB") {
+        return expanduser(override_path);
+    }
+    let xdg = home
+        .join(".local")
+        .join("share")
+        .join("opencode")
+        .join("opencode.db");
+    if platform != OsFamily::Windows {
+        return data_local_dir(platform, environ, home)
+            .join("opencode")
+            .join("opencode.db");
+    }
+    let local = data_local_dir(platform, environ, home)
+        .join("opencode")
+        .join("opencode.db");
+    let roaming = config_dir(platform, environ, home)
+        .join("opencode")
+        .join("opencode.db");
+    for candidate in [&xdg, &local, &roaming] {
+        if candidate.exists() {
+            return candidate.clone();
+        }
+    }
+    xdg
 }
 
 /// Cursor 的只读会话库位置（`state.vscdb`）。
@@ -137,10 +302,7 @@ pub fn cursor_database_path(platform: OsFamily, environ: &Environ, home: &Path) 
             .join("state.vscdb")
     };
     if platform == OsFamily::Windows {
-        let roaming = env_value(environ, "APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join("AppData").join("Roaming"));
-        return leaf(roaming);
+        return leaf(config_dir(platform, environ, home));
     }
     let macos = leaf(home.join("Library").join("Application Support"));
     let linux = leaf(
@@ -240,7 +402,10 @@ pub(crate) mod testing {
 
         /// 最常见的用法：把 `HOME` 指向沙箱。
         pub(crate) fn home(path: impl AsRef<OsStr>) -> Self {
-            Self::acquire().set("HOME", path)
+            let guard = Self::acquire().set("HOME", path.as_ref());
+            #[cfg(windows)]
+            let guard = guard.set("USERPROFILE", path.as_ref());
+            guard
         }
     }
 
@@ -314,9 +479,28 @@ mod tests {
                 &environ(&[("LOCALAPPDATA", "C:\\Local")]),
                 &home
             ),
-            PathBuf::from("C:\\Local")
+            home.join(".local")
+                .join("share")
                 .join("opencode")
                 .join("opencode.db")
+        );
+    }
+
+    #[test]
+    fn opencode_windows_uses_an_existing_localappdata_store() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let local = root.path().join("local");
+        std::fs::create_dir_all(local.join("opencode")).unwrap();
+        let database = local.join("opencode").join("opencode.db");
+        std::fs::write(&database, b"").unwrap();
+        assert_eq!(
+            opencode_database_path(
+                OsFamily::Windows,
+                &environ(&[("LOCALAPPDATA", local.to_str().unwrap())]),
+                &home
+            ),
+            database
         );
     }
 
@@ -392,6 +576,79 @@ mod tests {
         assert_eq!(
             grok_home(&environ(&[]), &home),
             PathBuf::from("/home/u/.grok")
+        );
+    }
+
+    #[test]
+    fn location_templates_expand_posix_home_and_xdg() {
+        let home = PathBuf::from("/home/u");
+        assert_eq!(
+            expand_location_with("~/.claude/projects", OsFamily::Posix, &environ(&[]), &home),
+            PathBuf::from("/home/u/.claude/projects")
+        );
+        assert_eq!(
+            expand_location_with(
+                "{data_local}/opencode",
+                OsFamily::Posix,
+                &environ(&[]),
+                &home
+            ),
+            PathBuf::from("/home/u/.local/share/opencode")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn location_templates_resolve_windows_roots() {
+        let home = PathBuf::from(r"C:\Users\u");
+        assert_eq!(
+            expand_location_with(
+                "{config}/Cursor/User/globalStorage",
+                OsFamily::Windows,
+                &environ(&[("APPDATA", r"C:\Roaming")]),
+                &home
+            ),
+            PathBuf::from(r"C:\Roaming")
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+        );
+        assert_eq!(
+            expand_location_with(
+                "{data_local}/opencode",
+                OsFamily::Windows,
+                &environ(&[("LOCALAPPDATA", r"C:\Local")]),
+                &home
+            ),
+            PathBuf::from(r"C:\Local").join("opencode")
+        );
+        assert_eq!(
+            expand_location_with(
+                r"%APPDATA%/Cursor/User/globalStorage",
+                OsFamily::Windows,
+                &environ(&[("APPDATA", r"C:\Roaming")]),
+                &home
+            ),
+            PathBuf::from(r"C:\Roaming")
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+        );
+    }
+
+    #[test]
+    fn strip_verbatim_prefix_drops_windows_long_path_marker() {
+        assert_eq!(
+            strip_verbatim_prefix(PathBuf::from(r"\\?\C:\Users\a\state.vscdb")),
+            PathBuf::from(r"C:\Users\a\state.vscdb")
+        );
+        assert_eq!(
+            strip_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\db")),
+            PathBuf::from(r"\\server\share\db")
+        );
+        assert_eq!(
+            strip_verbatim_prefix(PathBuf::from("/tmp/db")),
+            PathBuf::from("/tmp/db")
         );
     }
 }

@@ -8,3 +8,4 @@ pub mod paths;
 pub mod pricing;
 pub mod probes;
 pub mod snapshots;
+pub mod sqlite;

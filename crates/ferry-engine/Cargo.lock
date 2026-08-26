@@ -217,6 +217,7 @@ dependencies = [
  "thiserror",
  "ureq",
  "walkdir",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

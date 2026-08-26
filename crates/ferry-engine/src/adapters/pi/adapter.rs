@@ -252,7 +252,8 @@ mod tests {
             .to_string();
         let target = root.join(case).join(format!("{stem}.jsonl"));
         fs::create_dir_all(target.parent().unwrap()).unwrap();
-        fs::copy(&source, &target).unwrap();
+        let content = fs::read_to_string(&source).unwrap().replace("\r\n", "\n");
+        fs::write(&target, content).unwrap();
         let handle = fs::File::options().write(true).open(&target).unwrap();
         let pinned = std::time::UNIX_EPOCH + std::time::Duration::from_secs(FIXED_MTIME);
         handle
@@ -298,10 +299,8 @@ mod tests {
                 let mut wanted = expected.as_object().unwrap().clone();
                 wanted.remove("path");
                 assert_eq!(Value::Object(trimmed), Value::Object(wanted), "case={case}");
-                assert!(actual_path.as_str().unwrap().ends_with(&format!(
-                    "{case}/{}",
-                    path.file_name().unwrap().to_string_lossy()
-                )));
+                assert!(Path::new(actual_path.as_str().unwrap())
+                    .ends_with(Path::new(case).join(path.file_name().unwrap())));
             }
         }
     }

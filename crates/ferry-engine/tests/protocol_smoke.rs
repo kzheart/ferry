@@ -282,6 +282,8 @@ fn env_reports_exactly_the_contract_agent_ids() {
     for (tool, info) in response["result"].as_object().expect("是 object") {
         assert!(info["installed"].is_boolean(), "{tool} 的 installed 非布尔");
         assert!(info["broken"].is_boolean(), "{tool} 的 broken 非布尔");
+        assert!(info["store"].is_boolean(), "{tool} 的 store 非布尔");
+        assert!(info["cli"].is_boolean(), "{tool} 的 cli 非布尔");
         assert!(
             info["path"].is_string() || info["path"].is_null(),
             "{tool} 的 path 形状不对"

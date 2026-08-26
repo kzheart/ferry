@@ -917,7 +917,7 @@ fn relative_agent_path(child_path: &Path, parent_dir: &Path) -> String {
         .strip_prefix(parent_dir)
         .unwrap_or(child_path)
         .to_string_lossy()
-        .into_owned()
+        .replace('\\', "/")
 }
 
 fn is_ancestor(parent_of: &[Option<usize>], candidate: usize, mut node: usize) -> bool {

@@ -1091,10 +1091,19 @@ mod tests {
     #[test]
     fn slug_folds_every_non_alphanumeric_character() {
         // 不存在的路径走词法归一：空格等非字母数字字符统一折成 '-'。
+        #[cfg(unix)]
         assert_eq!(slug("/ferry nx/a b"), "-ferry-nx-a-b");
+        #[cfg(windows)]
+        assert_eq!(slug(r"C:\ferry nx\a b"), "C--ferry-nx-a-b");
         // `..` 与重复斜杠先被 resolve_lexically 归一，再折字符。
+        #[cfg(unix)]
         assert_eq!(slug("/ferry nx/x/../y"), "-ferry-nx-y");
+        #[cfg(windows)]
+        assert_eq!(slug(r"C:\ferry nx\x\..\y"), "C--ferry-nx-y");
+        #[cfg(unix)]
         assert_eq!(slug("/ferry nx//z"), "-ferry-nx-z");
+        #[cfg(windows)]
+        assert_eq!(slug(r"C:\ferry nx\\z"), "C--ferry-nx-z");
     }
 
     #[test]

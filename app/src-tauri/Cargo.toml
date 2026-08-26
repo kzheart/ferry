@@ -30,3 +30,11 @@ fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 libc = "0.2"
 # 窗口层 NSVisualEffectView 毛玻璃(配合 tauri.macos.conf.json 的 transparent + macOSPrivateApi)
 window-vibrancy = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# OpenProcess / 命名管道客户端 / 读超时。平台细节收在 desktop/platform/windows.rs。
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }

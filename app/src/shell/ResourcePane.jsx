@@ -7,6 +7,7 @@ import { libraryGroupExpanded } from "../modules/browser/public.js";
 import { ArrowRightIcon, BranchIcon, Caret, ChevronLeftIcon, CloseIcon, FilterIcon, MoreDots, PinIcon,
   SearchIcon, StarIcon, ToolIcon } from "../shared/ui/icons.jsx";
 import { useDensityMetrics } from "../shared/ui/density.js";
+import { TITLEBAR_INSET } from "../shared/ui/platform.js";
 
 export function Pane({ collapsed, width, dragging, title, count,
   query, onQuery, searchInline, placeholder, onOpenSearch, onClearSearch,
@@ -35,7 +36,7 @@ export function Pane({ collapsed, width, dragging, title, count,
           ? "opacity .12s ease, visibility 0s linear .2s"
           : "opacity .12s ease" }}>
         {/* 通高侧栏:顶部 44px 归红绿灯,整块可拖拽窗口 */}
-        <div data-tauri-drag-region style={{ height: 44, flex: "none" }} />
+        <div data-tauri-drag-region style={{ height: TITLEBAR_INSET, flex: "none" }} />
         <div style={{ flex: "none", padding: "0 10px 0" }}>
           {/* 标题行:范围名 + 计数,右侧搜索与显示选项两个图标按钮 */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28 }}>

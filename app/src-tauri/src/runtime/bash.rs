@@ -116,6 +116,32 @@ pub(super) fn apply(plan_id: &str) -> Result<Value, String> {
     run(&entry)
 }
 
+fn inherit_env_keys() -> &'static [&'static str] {
+    if cfg!(windows) {
+        &[
+            "PATH",
+            "PATHEXT",
+            "SYSTEMROOT",
+            "SystemRoot",
+            "SYSTEMDRIVE",
+            "COMSPEC",
+            "USERNAME",
+            "USERPROFILE",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+            "HOME",
+            "LANG",
+            "TERM",
+        ]
+    } else {
+        &["PATH", "HOME", "LANG", "TERM"]
+    }
+}
+
 fn shell() -> (&'static str, &'static str) {
     if cfg!(windows) {
         ("cmd", "/C")
@@ -144,7 +170,7 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         .stderr(Stdio::piped());
     // 环境从零开始,只塞回跑一条命令真正需要的几个变量
     command.env_clear();
-    for key in ["PATH", "HOME", "LANG", "TERM"] {
+    for key in inherit_env_keys() {
         if let Ok(value) = std::env::var(key) {
             command.env(key, value);
         }
@@ -153,6 +179,7 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         .cwd
         .clone()
         .or_else(|| std::env::var("HOME").ok())
+        .or_else(|| std::env::var("USERPROFILE").ok())
         .unwrap_or_else(|| ".".to_owned());
     command.current_dir(&directory);
     #[cfg(unix)]

@@ -180,7 +180,7 @@ pub fn connect(socket: &Path) -> Result<Client, Failure> {
         return Err(transport(
             "transport_unsupported",
             "当前平台尚未实现本地 socket 传输",
-            "Windows 命名管道待实现；请在 App 内使用 Ferry",
+            "请在 Ferry App 内使用，或升级到支持本平台传输的引擎",
         ));
     }
     let client = connect_or_spawn(socket)?;
@@ -196,7 +196,7 @@ pub fn attach(socket: &Path) -> Result<Client, Failure> {
         return Err(transport(
             "transport_unsupported",
             "当前平台尚未实现本地 socket 传输",
-            "Windows 命名管道待实现；请在 App 内使用 Ferry",
+            "请在 Ferry App 内使用，或升级到支持本平台传输的引擎",
         ));
     }
     Client::open(socket).map_err(|_| {
@@ -323,7 +323,16 @@ fn detach(command: &mut std::process::Command) {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn detach(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW);
+}
+
+#[cfg(not(any(unix, windows)))]
 fn detach(_command: &mut std::process::Command) {}
 
 /// 契约哈希握手：不一致的 daemon 换掉，不一致的 App 报错。

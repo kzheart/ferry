@@ -6,12 +6,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 use crate::adapters::shared::scanner::{iter_lines, split_jsonl_lines};
 use crate::adapters::shared::writing::python_json_dumps;
 use crate::jsonutil::sha256_hex;
+use crate::system::sqlite;
 
 use super::topology::rollout_files;
 
@@ -266,13 +267,8 @@ fn rollout_identity(path: &Path) -> CloneResult<NativeRollout> {
 }
 
 fn open_readonly(db_path: &Path) -> CloneResult<Connection> {
-    let resolved = fs::canonicalize(db_path).unwrap_or_else(|_| db_path.to_path_buf());
-    let uri = format!("file:{}?mode=ro", resolved.display());
-    Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-    )
-    .map_err(|error| CodexCloneError(format!("读取 Codex 注册库失败: {error}")))
+    sqlite::open_readonly(db_path)
+        .map_err(|error| CodexCloneError(format!("读取 Codex 注册库失败: {error}")))
 }
 
 fn db_edges(db_path: Option<&PathBuf>) -> CloneResult<HashSet<(String, String)>> {

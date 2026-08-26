@@ -9,7 +9,9 @@
         "minWidth": 1000,
         "minHeight": 680,
         "decorations": true,
-        "transparent": false
+        "transparent": false,
+        "titleBarStyle": "Visible",
+        "hiddenTitle": false
       }
     ]
   },

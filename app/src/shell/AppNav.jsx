@@ -6,6 +6,7 @@ import { ACCENT } from "../shared/ui/toolDisplay.js";
 import { useFerryRuntime } from "../shared/capabilities/ferryRuntime.jsx";
 import { Caret, PinIcon, RailGlyph, RescanIcon, Spinner, ToolIcon } from "../shared/ui/icons.jsx";
 import { useDensityMetrics } from "../shared/ui/density.js";
+import { TITLEBAR_INSET } from "../shared/ui/platform.js";
 
 // 宽度由密度变量决定(standard 240 / compact 208)
 const NAV_WIDTH = "var(--nav-w)";
@@ -175,7 +176,7 @@ export function AppNav({
         transition: collapsed
           ? "opacity .12s ease, visibility 0s linear .2s"
           : "opacity .12s ease" }}>
-      <div data-tauri-drag-region style={{ height: 44, alignSelf: "stretch", flex: "none" }} />
+      <div data-tauri-drag-region style={{ height: TITLEBAR_INSET, alignSelf: "stretch", flex: "none" }} />
 
       <div className="fscroll nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto",
         display: "flex", flexDirection: "column", alignItems: "stretch", gap: 1 }}>

@@ -86,6 +86,32 @@ jobs:
       - run: cargo check --locked
         working-directory: crates/ferry-engine
 
+  rust-quality-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12b097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: |
+            app/src-tauri -> target
+            crates/ferry-engine -> target
+          key: quality-windows
+      - run: cargo fmt --check
+        working-directory: app/src-tauri
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: app/src-tauri
+      - run: cargo test --locked
+        working-directory: app/src-tauri
+      - run: cargo fmt --check
+        working-directory: crates/ferry-engine
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: crates/ferry-engine
+      - run: cargo test --locked
+        working-directory: crates/ferry-engine
+
   frozen-sidecar:
     runs-on: macos-14
     env:
