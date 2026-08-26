@@ -872,15 +872,25 @@ impl RolloutCache {
 
     fn evict(&mut self) {
         loop {
+            // 单条上限独立于 LRU 次序：并发读取可能让超大条目不再位于队首。
+            if let Some(oversized) = self
+                .order
+                .iter()
+                .find(|key| {
+                    self.entries
+                        .get(*key)
+                        .is_some_and(|entry| entry.size > CACHE_MAX_ENTRY_SOURCE_BYTES)
+                })
+                .cloned()
+            {
+                self.order.retain(|key| key != &oversized);
+                self.entries.remove(&oversized);
+                continue;
+            }
             let total: u64 = self.entries.values().map(|entry| entry.size).sum();
             let over_entries = self.entries.len() > CACHE_MAX_ENTRIES;
             let over_total = total > CACHE_MAX_TOTAL_SOURCE_BYTES;
-            let over_single = self
-                .order
-                .first()
-                .and_then(|key| self.entries.get(key))
-                .is_some_and(|entry| entry.size > CACHE_MAX_ENTRY_SOURCE_BYTES);
-            if !over_entries && !over_total && !over_single {
+            if !over_entries && !over_total {
                 return;
             }
             if self.order.is_empty() {
@@ -1188,12 +1198,14 @@ mod tests {
         let path = write_rollout(dir.path(), "rollout-large.jsonl", &records);
         clear_cache();
         assert_eq!(cached_read_one(&path).unwrap().source_id, "large");
+        let key = path.to_string_lossy().into_owned();
         assert!(
             parse_cache()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .entries
-                .is_empty(),
+                .get(&key)
+                .is_none(),
             "超过单条上限的 parser 不得常驻"
         );
     }
