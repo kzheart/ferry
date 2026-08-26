@@ -201,6 +201,19 @@ export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }
   });
 }
 
+// 全局搜索的标题命中:不受侧栏范围、显示选项、筛选框影响。空查询按最近活跃取前 N 条。
+export function globalSearchRows(index, query, limit = 60) {
+  const needle = String(query || "").trim().toLowerCase();
+  const matched = needle
+    ? index.filter(entry => entry.hay.includes(needle))
+    : index;
+  return matched
+    .slice()
+    .sort((left, right) => right.updated - left.updated)
+    .slice(0, limit)
+    .map(entry => entry.row);
+}
+
 const TIME_BUCKETS = {
   all: BUCKETS,
   today: ["today"],

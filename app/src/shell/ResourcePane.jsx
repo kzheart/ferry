@@ -15,7 +15,7 @@ export function Pane({ collapsed, width, dragging, title, count,
   onBack, backLabel, listKey, headerExtra, children }) {
   const { t } = useTranslation();
   const searchRef = useRef(null);
-  // ⌘F / 搜索按钮都落到这个常驻输入框上;⌘K 仍是跨库的全文命令面板
+  // ⌘F 聚焦常驻筛选框;标题行搜索按钮打开全文 / 命令面板
   useEffect(() => {
     if (!searchInline) return undefined;
     const focus = () => searchRef.current?.focus();

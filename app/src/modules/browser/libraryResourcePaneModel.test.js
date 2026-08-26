@@ -9,6 +9,7 @@ import {
   displayDirtyCount,
   effectiveGroupMode,
   favoriteProjectRows,
+  globalSearchRows,
   libraryGroupExpanded,
   libraryProjects,
   libraryScopeCounts,
@@ -94,6 +95,20 @@ test("同名仓库在项目清单里被标记为需要父路径消歧，并按�
   assert.deepEqual(projects.map(project => project.ambiguous), [true, true]);
   assert.deepEqual(projects[0].tools, ["claude", "codex"]);
   assert.equal(projects[0].count, 2);
+});
+
+test("全局搜索命中全量索引,不受范围或侧栏筛选影响", () => {
+  const index = projectIndex();
+  const scoped = buildLibraryGroups({
+    index, scope: { kind: "project", value: "/work/payments" },
+    display: byProject, query: "payment", t,
+  });
+  assert.equal(scoped.flatMap(group => group.rows).length, 2);
+
+  const globalHits = globalSearchRows(index, "payment");
+  assert.deepEqual(globalHits.map(row => row.key).sort(), [...KEYS].sort());
+  const recent = globalSearchRows(index, "");
+  assert.equal(recent[0].key, KEYS[0]);
 });
 
 test("项目范围按完整 dir 精确匹配，旧的仓库名取值仍然可用", () => {

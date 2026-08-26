@@ -85,7 +85,7 @@ function baseProps(overrides = {}) {
     editing: { diff: null, dirtyOps: [], confirmApply: false, setDiff: noop, setConfirmApply: noop, apply: noop },
     search: {
       open: false, pane: null, view: "library",
-      ferrySessions: [], libraryGroups: [],
+      ferrySessions: [], libraryIndex: [],
       setMultiSelection: noop, selectSession: noop, setOpen: noop,
     },
     contextMenu: { value: null, items: null, setValue: noop },
@@ -110,8 +110,12 @@ test("资料库视图的搜索结果先清空多选再选中会话", () => {
           open: true,
           pane: searchPane,
           view: "library",
-          libraryGroups: [
-            { rows: [{ key: "claude:a", title: "会话 A", tool: "claude", repo: "ferry" }] },
+          libraryIndex: [
+            {
+              hay: "会话 a",
+              updated: 2,
+              row: { key: "claude:a", title: "会话 A", tool: "claude", repo: "ferry" },
+            },
           ],
           setMultiSelection: value => calls.push(["multi", value]),
           selectSession: key => calls.push(["select", key]),
@@ -122,6 +126,36 @@ test("资料库视图的搜索结果先清空多选再选中会话", () => {
 
   fireEvent.click(screen.getByText("会话 A"));
   assert.deepEqual(calls, [["multi", []], ["select", "claude:a"]]);
+});
+
+test("全局搜索不跟侧栏范围走,只按面板自己的查询词过滤", () => {
+  render(
+    <AppOverlayController
+      {...baseProps({
+        search: {
+          ...baseProps().search,
+          open: true,
+          pane: { ...searchPane, query: "beta" },
+          view: "library",
+          libraryIndex: [
+            {
+              hay: "alpha /work/payments",
+              updated: 2,
+              row: { key: "claude:a", title: "Alpha", tool: "claude", repo: "payments" },
+            },
+            {
+              hay: "beta /side/search",
+              updated: 1,
+              row: { key: "codex:b", title: "Beta", tool: "codex", repo: "search" },
+            },
+          ],
+        },
+      })}
+    />,
+  );
+
+  assert.ok(screen.getByText("Beta"));
+  assert.equal(screen.queryByText("Alpha"), null);
 });
 
 test("Ask Ferry 视图的无标题会话回落到占位文案", () => {
@@ -154,13 +188,13 @@ test("搜索结果截断到 60 条", () => {
           open: true,
           pane: searchPane,
           view: "library",
-          libraryGroups: [
-            {
-              rows: Array.from({ length: 80 }, (_, index) => ({
-                key: `k${index}`, title: `会话 ${index}`, tool: "claude", repo: "ferry",
-              })),
+          libraryIndex: Array.from({ length: 80 }, (_, index) => ({
+            hay: `会话 ${index}`,
+            updated: 80 - index,
+            row: {
+              key: `k${index}`, title: `会话 ${index}`, tool: "claude", repo: "ferry",
             },
-          ],
+          })),
         },
       })}
     />,
@@ -186,8 +220,12 @@ const contentSearchProps = (overrides = {}) => ({
     { tool: "claude", id: "a", ref: "fsr_a" },
     { tool: "claude", id: "b", ref: "fsr_b" },
   ],
-  libraryGroups: [
-    { rows: [{ key: idKey("a"), title: "会话 A", tool: "claude", repo: "ferry" }] },
+  libraryIndex: [
+    {
+      hay: "会话 a 检索",
+      updated: 2,
+      row: { key: idKey("a"), title: "会话 A", tool: "claude", repo: "ferry" },
+    },
   ],
   ...overrides,
 });
@@ -256,13 +294,36 @@ test("内容索引未就绪时给出构建中提示,而不是当成无结果", a
   };
   render(
     <AppOverlayController
-      {...baseProps({ search: contentSearchProps({ libraryGroups: [] }) })}
+      {...baseProps({ search: contentSearchProps({ libraryIndex: [] }) })}
     />,
   );
   await settleSearch();
 
   assert.ok(screen.getByText("app:search.indexing"));
   assert.equal(screen.queryByText("app:search.empty"), null);
+});
+
+test("全文检索未返回前不闪无匹配,显示正在搜索", async () => {
+  engineCalls.length = 0;
+  engineResponse = {
+    query: "检索",
+    sessions: [],
+    content_index: { ready: true },
+  };
+  render(
+    <AppOverlayController
+      {...baseProps({ search: contentSearchProps({ libraryIndex: [] }) })}
+    />,
+  );
+
+  assert.ok(screen.getByText("app:search.searching"));
+  assert.ok(document.querySelector("[data-searching]"));
+  assert.equal(screen.queryByText("app:search.empty"), null);
+
+  await settleSearch();
+
+  assert.equal(screen.queryByText("app:search.searching"), null);
+  assert.ok(screen.getByText("app:search.empty"));
 });
 
 test("单会话标签弹层带出已有标签,提交时整组替换", async () => {

@@ -25,6 +25,7 @@ export {
   DEFAULT_SCOPE,
   displayDirtyCount,
   effectiveGroupMode,
+  globalSearchRows,
   libraryGroupExpanded,
   libraryScopeCounts,
   migrateLegacyLibraryState,
