@@ -1200,12 +1200,11 @@ mod tests {
         assert_eq!(cached_read_one(&path).unwrap().source_id, "large");
         let key = path.to_string_lossy().into_owned();
         assert!(
-            parse_cache()
+            !parse_cache()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .entries
-                .get(&key)
-                .is_none(),
+                .contains_key(&key),
             "超过单条上限的 parser 不得常驻"
         );
     }
