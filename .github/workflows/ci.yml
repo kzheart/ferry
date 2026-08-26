@@ -53,7 +53,7 @@ jobs:
       - run: python -m ruff check tests scripts
       - run: python -m pytest
 
-  # 桌面宿主目前只发 macOS；Rust / Tauri 门禁与产品目标对齐，避免非 macOS 假失败。
+  # 两个桌面目标各自原生编译；平台实现不能靠另一端的编译器“顺便”覆盖。
   rust-quality:
     runs-on: macos-14
     steps:
@@ -85,6 +85,92 @@ jobs:
         working-directory: crates/ferry-engine
       - run: cargo check --locked
         working-directory: crates/ferry-engine
+
+  rust-quality-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: |
+            app/src-tauri -> target
+            crates/ferry-engine -> target
+          key: quality-windows
+      - run: cargo fmt --check
+        working-directory: app/src-tauri
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: app/src-tauri
+      - run: cargo test --locked
+        working-directory: app/src-tauri
+      - run: cargo fmt --check
+        working-directory: crates/ferry-engine
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: crates/ferry-engine
+      - run: cargo test --locked
+        working-directory: crates/ferry-engine
+
+  frozen-sidecar-windows:
+    runs-on: windows-latest
+    env:
+      BUILD_TARGET: x86_64-pc-windows-msvc
+      SIDECAR_ENGINE: app/src-tauri/binaries/ferry-engine-x86_64-pc-windows-msvc.exe
+      SIDECAR_RUNTIME: app/src-tauri/binaries/ferry-runtime-x86_64-pc-windows-msvc.exe
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ferry-runtime/package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+        with:
+          target: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: |
+            app/src-tauri -> target
+            crates/ferry-engine -> target
+          key: frozen-x86_64-pc-windows-msvc
+      - run: npm ci
+        working-directory: ferry-runtime
+      # SEA 必须在目标平台原生生成；脚本本身包含 runtime RPC smoke。
+      - run: npm run build:sea -- "$env:BUILD_TARGET"
+        working-directory: ferry-runtime
+      - run: cargo build --release --locked --target "$env:BUILD_TARGET"
+        working-directory: crates/ferry-engine
+      - name: Place engine sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force app/src-tauri/binaries | Out-Null
+          Copy-Item "crates/ferry-engine/target/$env:BUILD_TARGET/release/ferry-engine.exe" `
+            $env:SIDECAR_ENGINE
+      - run: cargo check --locked --target "$env:BUILD_TARGET"
+        working-directory: app/src-tauri
+      - name: Frozen engine sidecar smoke
+        shell: python
+        env:
+          SIDECAR: ${{ env.SIDECAR_ENGINE }}
+        run: |
+          import json, os, subprocess
+          protocol = json.load(open("contracts/ipc.json", encoding="utf-8"))["protocol"]
+          request = {
+              "protocol": protocol, "id": "ci-health",
+              "method": "health", "params": {},
+          }
+          process = subprocess.run(
+              [os.environ["SIDECAR"], "rpc"],
+              input=json.dumps(request) + "\n", text=True,
+              capture_output=True, check=True, timeout=30)
+          response = json.loads(process.stdout.split("\n", 1)[0])
+          assert response["ok"] is True, (response, process.stderr)
+          assert response["protocol"] == protocol, response
+          assert response["result"]["service"] == "engine", response
 
   frozen-sidecar:
     runs-on: macos-14

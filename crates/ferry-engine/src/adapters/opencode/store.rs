@@ -10,13 +10,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 use crate::errors::{DomainError, DomainResult};
 use crate::system::executables;
-use crate::system::paths::{home_dir, opencode_database_path, process_environ, OsFamily};
+use crate::system::paths::{home_dir, opencode_database_path, process_environ, Platform};
 use crate::system::probes;
+use crate::system::sqlite;
 
 /// `run_command` 的超时（Python `timeout=120`）。
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
@@ -76,7 +77,7 @@ pub fn database_path() -> PathBuf {
     if let Some(path) = DB_PATH_OVERRIDE.read().expect("库路径覆盖锁中毒").clone() {
         return path;
     }
-    opencode_database_path(OsFamily::current(), &process_environ(), &home_dir())
+    opencode_database_path(Platform::current(), &process_environ(), &home_dir())
 }
 
 /// 覆盖 [`database_path`]；`None` 恢复按环境解析。
@@ -228,20 +229,18 @@ pub fn open_database() -> DomainResult<Connection> {
             &format!("数据库不存在: {}", path.display()),
         ));
     }
-    let resolved = std::fs::canonicalize(&path).unwrap_or(path);
-    let uri = format!("file:{}?mode=ro", resolved.display());
-    let connection = Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-    )
-    .and_then(|connection| {
-        // Python 显式 `BEGIN`：整个读取过程锁定一个快照，避免读到半个写事务。
-        connection.execute_batch("BEGIN")?;
-        Ok(connection)
-    })
-    .map_err(|error| {
-        DomainError::session_store_unavailable("opencode", &format!("数据库不可只读访问: {error}"))
-    })?;
+    let connection = sqlite::open_readonly(&path)
+        .and_then(|connection| {
+            // Python 显式 `BEGIN`：整个读取过程锁定一个快照，避免读到半个写事务。
+            connection.execute_batch("BEGIN")?;
+            Ok(connection)
+        })
+        .map_err(|error| {
+            DomainError::session_store_unavailable(
+                "opencode",
+                &format!("数据库不可只读访问: {error}"),
+            )
+        })?;
 
     for (table, required) in CURRENT_DB_COLUMNS {
         let columns = match table_columns(&connection, table) {

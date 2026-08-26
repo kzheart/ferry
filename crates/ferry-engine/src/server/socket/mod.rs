@@ -433,6 +433,7 @@ fn shutdown_response(shared: &Shared, id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Write};
 
     fn shared(mode: EngineMode) -> Arc<Shared> {
         Arc::new(Shared {
@@ -470,7 +471,12 @@ mod tests {
             assert_eq!(response["error"]["params"]["caller"], Value::from("cli"));
         }
         // callers 含 cli 的方法照旧进工作道。
-        assert!(immediate(&policy, "content_search").is_none());
+        for method in ["content_search", "session_read", "usage_stats"] {
+            assert!(
+                matches!(policy(&request(method)), Lane::Parallel),
+                "{method}"
+            );
+        }
         assert!(matches!(policy(&request("health")), Lane::Control));
         assert!(matches!(policy(&request("operation.plan")), Lane::Serial));
     }
@@ -518,5 +524,52 @@ mod tests {
         let raw = r#"{"protocol":"nope/9","id":"x","method":"daemon.shutdown","params":{}}"#;
         assert!(matches!(policy(raw), Lane::Serial));
         assert!(matches!(policy("not json"), Lane::Serial));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn worker_response_is_written_before_the_next_pipe_read() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("engine.sock");
+        let listener = platform::bind(&marker).unwrap();
+        let lanes = Lanes::new();
+        let server_lanes = Arc::clone(&lanes);
+        let server = std::thread::spawn(move || {
+            let stream = listener.accept().unwrap();
+            let reader = stream.try_clone().unwrap();
+            let handler: ServeHandler = Arc::new(|request| {
+                let value: Value = serde_json::from_str(request).unwrap();
+                Ok(serde_json::json!({"id": value["id"], "ok": true}))
+            });
+            let policy: LanePolicy = Arc::new(|_| Lane::Control);
+            serve_connection(
+                &server_lanes,
+                BufReader::new(reader),
+                Box::new(stream),
+                handler,
+                policy,
+            )
+            .unwrap();
+        });
+
+        let mut stream = platform::connect(&marker).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        stream
+            .write_all(b"{\"id\":\"one\"}\n")
+            .and_then(|()| stream.flush())
+            .unwrap();
+        let mut response = String::new();
+        reader.read_line(&mut response).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&response).unwrap()["id"],
+            "one"
+        );
+        drop(reader);
+        drop(stream);
+        server.join().unwrap();
+        lanes.shutdown();
     }
 }

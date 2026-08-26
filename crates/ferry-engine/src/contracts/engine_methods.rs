@@ -74,6 +74,10 @@ pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
     "show",
     "session_asset",
     "session_meta_list",
+    "session_search",
+    "content_search",
+    "session_read",
+    "usage_stats",
 ];
 
 /// 进独立轻量控制池的方法，不得被重读队列阻塞。
@@ -177,7 +181,7 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
-            dispatch: Dispatch::Serial,
+            dispatch: Dispatch::ParallelRead,
         }),
         "runtime_sessions.load_all" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
@@ -207,19 +211,19 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
-            dispatch: Dispatch::Serial,
+            dispatch: Dispatch::ParallelRead,
         }),
         "session_read" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
-            dispatch: Dispatch::Serial,
+            dispatch: Dispatch::ParallelRead,
         }),
         "usage_stats" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
-            dispatch: Dispatch::Serial,
+            dispatch: Dispatch::ParallelRead,
         }),
         "agent_prompt" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,

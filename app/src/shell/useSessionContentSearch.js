@@ -9,15 +9,16 @@ const MIN_QUERY_CHARS = 2;
 const RESULT_LIMIT = 20;
 
 export function useSessionContentSearch(query, enabled) {
-  const [result, setResult] = useState(null);
+  const [payload, setPayload] = useState({ query: "", status: "idle", data: null });
   const latestQuery = useRef("");
+  const trimmed = (query || "").trim();
+  const active = Boolean(enabled && trimmed.length >= MIN_QUERY_CHARS);
 
   useEffect(() => {
-    const trimmed = (query || "").trim();
     latestQuery.current = trimmed;
-    if (!enabled || trimmed.length < MIN_QUERY_CHARS) {
-      setResult(null);
-      return;
+    if (!active) {
+      setPayload({ query: trimmed, status: "idle", data: null });
+      return undefined;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -29,13 +30,21 @@ export function useSessionContentSearch(query, enabled) {
         .then(data => {
           // Engine 回显 query;对不上说明这条响应已被后续按键取代
           if (cancelled || data?.query !== latestQuery.current) return;
-          setResult(data);
+          setPayload({ query: trimmed, status: "ready", data });
         })
         // 索引没就绪或检索失败都不该让搜索框空掉,静默退回纯前端过滤
-        .catch(() => { if (!cancelled) setResult(null); });
+        .catch(() => {
+          if (!cancelled && latestQuery.current === trimmed) {
+            setPayload({ query: trimmed, status: "ready", data: null });
+          }
+        });
     }, DEBOUNCE_MS);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, enabled]);
+  }, [active, trimmed]);
 
-  return result;
+  const matches = payload.query === trimmed;
+  // 查询词一变,还没等到这篇的响应之前都算在搜:不能先画「无匹配」。
+  const pending = active && (!matches || payload.status !== "ready");
+  const result = matches && payload.status === "ready" ? payload.data : null;
+  return { pending, result };
 }

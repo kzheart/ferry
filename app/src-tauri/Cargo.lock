@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "ferry"
-version = "0.8.6"
+version = "0.9.0"
 dependencies = [
  "fix-path-env",
  "libc",
@@ -839,6 +839,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "window-vibrancy",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

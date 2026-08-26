@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { sessionIdentity } from "../modules/browser/public.js";
+import { sessionIdentity, globalSearchRows } from "../modules/browser/public.js";
 import { copyResumeCommand } from "../modules/migration/public.js";
 import { useUpdateAnnouncement } from "../modules/settings/public.js";
 import { useAppChrome } from "../shared/capabilities/appChrome.jsx";
@@ -18,8 +18,9 @@ export function AppOverlayController({ t }) {
   const updateAnnouncement = useUpdateAnnouncement();
   const isLibrarySearch = search.view !== "askferry";
   // 全文命中只在 library 视图追加;engine 给的是 ref,要换回列表用的 identity key
+  const paletteQuery = search.pane?.query || "";
   const contentSearch = useSessionContentSearch(
-    search.pane?.query,
+    paletteQuery,
     Boolean(search.open && isLibrarySearch),
   );
   const identityByRef = useMemo(
@@ -32,17 +33,23 @@ export function AppOverlayController({ t }) {
     [search.scanSessions],
   );
 
+  const needle = paletteQuery.trim().toLowerCase();
   const filteredResults = (
     search.view === "askferry"
-      ? search.ferrySessions.map((session) => ({
-          id: session.session_id,
-          title: session.title || t("askferry:chat.untitled"),
-          tool: null,
-          meta: session.model_id,
-          onClick: () => ferry.openSession(session.session_id),
-        }))
-      : search.libraryGroups
-            .flatMap((group) => group.rows)
+      ? (search.ferrySessions || [])
+          .filter((session) =>
+            !needle
+            || (session.title || "").toLowerCase().includes(needle)
+            || (session.session_id || "").toLowerCase().includes(needle)
+            || (session.model_id || "").toLowerCase().includes(needle))
+          .map((session) => ({
+            id: session.session_id,
+            title: session.title || t("askferry:chat.untitled"),
+            tool: null,
+            meta: session.model_id,
+            onClick: () => ferry.openSession(session.session_id),
+          }))
+      : globalSearchRows(search.libraryIndex || [], paletteQuery)
             .map((row) => ({
               id: row.key,
               title: row.title,
@@ -58,7 +65,7 @@ export function AppOverlayController({ t }) {
   // 标题已经命中的会话不重复出现在「全文匹配」里
   const alreadyListed = new Set(filteredResults.map((result) => result.id));
   const contentResults = isLibrarySearch
-    ? (contentSearch?.sessions || []).flatMap((hit) => {
+    ? (contentSearch.result?.sessions || []).flatMap((hit) => {
         const key = identityByRef.get(hit.ref);
         if (!key || alreadyListed.has(key)) return [];
         alreadyListed.add(key);
@@ -81,7 +88,7 @@ export function AppOverlayController({ t }) {
   const searchResults = [...filteredResults, ...contentResults];
   // 索引还在建的时候「没结果」是误导:明说一句,别让用户以为真的搜不到
   const searchNotice =
-    isLibrarySearch && contentSearch?.content_index?.ready === false
+    isLibrarySearch && contentSearch.result?.content_index?.ready === false
       ? t("app:search.indexing")
       : null;
 
@@ -133,6 +140,7 @@ export function AppOverlayController({ t }) {
         pane: search.pane,
         results: searchResults,
         notice: searchNotice,
+        searching: Boolean(isLibrarySearch && contentSearch.pending),
         onClose: () => search.setOpen(false),
       }}
       contextMenu={{

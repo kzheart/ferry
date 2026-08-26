@@ -10,7 +10,7 @@ import {
   ToolIcon,
 } from "../../shared/ui/icons.jsx";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
-import { sessionAttachmentKey } from "../browser/public.js";
+import { repoOf, sessionAttachmentKey } from "../browser/public.js";
 import { ModeMenu, ModelMenu } from "./AgentMenus.jsx";
 
 function MentionMenu({ query, sessions, onPick }) {
@@ -32,7 +32,7 @@ function MentionMenu({ query, sessions, onPick }) {
           <span style={{ fontSize: 12, color: "var(--tx1)", flex: 1, minWidth: 0,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {s.title || s.id}</span>
-          <span style={{ fontSize: 10.5, color: "var(--tx5)" }}>{s.dir?.split("/").pop()}</span>
+          <span style={{ fontSize: 10.5, color: "var(--tx5)" }}>{repoOf(s.dir)}</span>
         </div>
       ))}
     </div>

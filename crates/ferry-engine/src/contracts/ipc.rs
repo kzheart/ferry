@@ -2,7 +2,7 @@
 
 pub const FERRY_IPC_PROTOCOL: &str = "ferry-ipc/1";
 pub const FERRY_CONTRACT_HASH: &str =
-    "sha256:f2e74e83523a8a4860f83c29f8c21ea6e8d874a0bf329a4af53fa84c933348ad";
+    "sha256:2a61a534e1e27e48edde9811d884da8a11ef80875d5f3862939619eab0bd79d2";
 
 /// 请求信封的字段集合必须精确相等：多一个字段即 rpc.invalid_request。
 pub const REQUEST_REQUIRED_FIELDS: &[&str] = &["protocol", "id", "method", "params"];

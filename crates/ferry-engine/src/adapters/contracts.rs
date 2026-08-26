@@ -17,7 +17,7 @@ use crate::contracts::agents::AGENT_CAPABILITIES;
 use crate::errors::{DomainError, DomainResult};
 use crate::events::Event;
 use crate::model::{Session, ToolCall};
-use crate::system::paths::{expanduser, is_within, realpath_strict};
+use crate::system::paths::{expand_location, is_within, realpath_strict};
 
 /// 扫描行：adapter 输出的原生会话摘要（Python 的 `dict`）。
 pub type ScanRow = Map<String, Value>;
@@ -98,6 +98,11 @@ impl AgentManifest {
             executables: owned(contract.executables),
             fallback_bin_dirs: owned(contract.fallback_bin_dirs),
         }
+    }
+
+    /// 契约模板落到当前平台后的会话根（给 UI / watch 用，不要直接展示 `{config}/...`）。
+    pub fn resolved_source_path(&self) -> PathBuf {
+        expand_location(&self.source_path)
     }
 
     /// 与 Python `to_dict()` 逐字段一致的 DTO。
@@ -196,7 +201,7 @@ fn resolved_root(source_path: &str) -> Option<String> {
     {
         return cached.clone();
     }
-    let resolved = realpath_strict(&expanduser(source_path))
+    let resolved = realpath_strict(&expand_location(source_path))
         .ok()
         .map(|path| path.to_string_lossy().into_owned());
     RESOLVED_ROOTS
@@ -228,7 +233,7 @@ pub fn filesystem_reference(
         .as_str()
         .filter(|value| !value.is_empty())?;
     let root = resolved_root(source_path)?;
-    let path = realpath_strict(&expanduser(raw)).ok()?;
+    let path = realpath_strict(&expand_location(raw)).ok()?;
     let path_text = path.to_string_lossy().into_owned();
     let type_ok = match kind {
         StorageKind::File => path.is_file(),

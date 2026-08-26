@@ -126,3 +126,22 @@ test("鼠标移动过后再按方向键,重新交还键盘控制", () => {
 
   assert.equal(highlighted(), "会话 6");
 });
+
+test("检索进行中画骨架和正在搜索,不闪无结果", () => {
+  renderPalette({
+    results: [],
+    searching: true,
+    searchingLabel: "正在搜索…",
+  });
+
+  assert.ok(screen.getByText("正在搜索…"));
+  assert.ok(container.querySelector("[data-searching]"));
+  assert.equal(screen.queryByText("无结果"), null);
+});
+
+test("检索结束后仍无命中才显示无结果", () => {
+  renderPalette({ results: [], searching: false });
+
+  assert.ok(screen.getByText("无结果"));
+  assert.equal(container.querySelector("[data-searching]"), null);
+});

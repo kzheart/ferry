@@ -8,13 +8,13 @@
 
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
-use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::errors::{DomainError, DomainResult};
-use crate::system::paths::{cursor_database_path, home_dir, process_environ, OsFamily};
+use crate::system::paths::{cursor_database_path, home_dir, process_environ, Platform};
+use crate::system::sqlite;
 
 /// Ferry 当前支持的 Cursor 表结构。
 ///
@@ -46,7 +46,7 @@ pub fn database_path() -> PathBuf {
     if let Some(path) = DB_PATH_OVERRIDE.read().expect("库路径覆盖锁中毒").clone() {
         return path;
     }
-    cursor_database_path(OsFamily::current(), &process_environ(), &home_dir())
+    cursor_database_path(Platform::current(), &process_environ(), &home_dir())
 }
 
 /// 覆盖 [`database_path`]；`None` 恢复按环境解析。
@@ -56,14 +56,8 @@ pub fn set_database_path_override(path: Option<PathBuf>) {
 
 /// 只读打开，不校验结构（扫描路径用：库缺失/损坏只让 cursor 一栏空着）。
 pub fn open_readonly(path: &std::path::Path) -> rusqlite::Result<Connection> {
-    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let uri = format!("file:{}?mode=ro", resolved.display());
-    let connection = Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-    )?;
+    let connection = sqlite::open_readonly(path)?;
     // IDE 正在写时不要立刻失败；只读连接不会阻塞它。
-    connection.busy_timeout(Duration::from_secs(5))?;
     connection.pragma_update(None, "query_only", 1)?;
     Ok(connection)
 }
@@ -279,5 +273,21 @@ pub(crate) mod tests {
         let error = open_database().unwrap_err();
         set_database_path_override(None);
         assert_eq!(error.code, "session.store_unavailable");
+    }
+
+    #[test]
+    fn windows_readonly_open_can_read_a_real_cursor_database() {
+        let _guard = exclusive();
+        set_database_path_override(None);
+        let path = database_path();
+        if !path.exists() {
+            return;
+        }
+        let connection = open_readonly(&path).expect("只读打开 Cursor 库不应因 Windows 路径失败");
+        validate_schema(&connection).expect("本机 Cursor 库应是 Ferry 认识的结构");
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM composerHeaders", [], |row| row.get(0))
+            .unwrap();
+        assert!(count >= 0);
     }
 }

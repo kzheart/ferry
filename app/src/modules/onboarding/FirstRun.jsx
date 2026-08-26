@@ -182,9 +182,10 @@ function ToolsStep({ env, scan, t }) {
         {TOOLS.map((tool, i) => {
           const info = env?.[tool] || {};
           const found = scan?.tools?.[tool];
-          const installed = info.installed;
+          const installed = !!(info.installed || info.store);
+          const path = found?.path || info.store_path || info.path;
           const detect = found?.ok
-            ? t("onboarding:welcome.detectWithSessions", { path: found.path, count: found.count })
+            ? t("onboarding:welcome.detectWithSessions", { path, count: found.count })
             : installed ? t("onboarding:welcome.detectInstalled")
               : t("onboarding:welcome.detectNotFound");
           return (

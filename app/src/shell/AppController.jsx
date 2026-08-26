@@ -69,6 +69,7 @@ export default function App() {
   const [aq, setAq] = useState("");
 
   const [searchOpen, setSearchOpen] = useState(false); // 搜索命令面板
+  const [searchQuery, setSearchQuery] = useState("");
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
   const [renameFor, setRenameFor] = useState(null); // 行内重命名中的会话
   const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
@@ -181,6 +182,7 @@ export default function App() {
     collapsedGroups,
     toggleGroup: onToggleGroup,
     visibleIds: libraryVisibleIds,
+    index: libIndex,
     clear: clearLibF,
     multiIds: multiSel,
     setMultiIds: setMultiSel,
@@ -274,6 +276,13 @@ export default function App() {
     libraryCount: libScopeCount,
     libraryDisplayDirty: libDisplayDirty,
   });
+  const searchPane = useMemo(() => ({
+    query: searchQuery,
+    onQuery: event => setSearchQuery(event.target.value),
+    placeholder: view === "askferry"
+      ? t("askferry:pane.placeholder")
+      : t("app:search.placeholder"),
+  }), [searchQuery, view, t]);
 
   const rail = useRailNavigation({
     labels: {
@@ -325,10 +334,10 @@ export default function App() {
   const { browserState, operationsState, appChrome } = useWorkspaceState({
     applyEdit, confirmApply,
     ctxItems, ctxMenu, cur, detail, detailActs,
-    detailMeta, diff, dirtyOps, doScan, env, ferrySessions, floatChatOpen,
-    libGroups, loadHistory, loadingMore, metaFor, mig, navigationTarget,
-    onboarding, openConfig, paneCfg, peekEntity, peekId, rail,
-    scan, scanning, searchOpen, select, selId,
+    detailMeta, diff, dirtyOps, doScan, env, ferrySessions: ferry.sessions, floatChatOpen,
+    loadHistory, loadingMore, metaFor, mig, navigationTarget,
+    onboarding, openConfig, peekEntity, peekId, rail,
+    scan, scanning, searchOpen, searchPane, libIndex, select, selId,
     sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setMetaFor, setMig,
     setMultiSel, setPeekId,

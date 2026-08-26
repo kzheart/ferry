@@ -28,7 +28,7 @@ use crate::contracts::session_ref::is_opaque_session_ref;
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
 use crate::system::git;
-use crate::system::paths::{is_within, realpath_strict};
+use crate::system::paths::{display_path, is_within, realpath_strict};
 
 use super::scan_progress::TRACKER;
 
@@ -501,6 +501,10 @@ impl Canonicalized {
     }
 }
 
+fn advertised_source_path(adapter: &AgentAdapter) -> Value {
+    Value::from(display_path(&adapter.manifest.resolved_source_path()))
+}
+
 impl AgentSessionIndex {
     pub fn new(ports: Arc<dyn SessionPorts>) -> Self {
         // Python 里 `adapters/shared/scanner.py` 在模块加载时就 import 了
@@ -641,7 +645,7 @@ impl AgentSessionIndex {
         let outcome = (|| -> DomainResult<Vec<IndexedSession>> {
             for name in &names {
                 let adapter = self.ports.adapter(name)?;
-                let source_path = Value::from(adapter.manifest.source_path.as_str());
+                let source_path = advertised_source_path(adapter);
                 TRACKER.start_tool(name);
                 let tool_started = std::time::Instant::now();
                 let scan_result = adapter
@@ -727,7 +731,7 @@ impl AgentSessionIndex {
     /// 只重扫一个工具并增量并入索引；delta 经 `on_delta` 推出。
     pub fn refresh_tool(&self, name: &str) -> DomainResult<()> {
         let adapter = self.ports.adapter(name)?;
-        let source_path = Value::from(adapter.manifest.source_path.as_str());
+        let source_path = advertised_source_path(adapter);
         let _guard = self
             .mutate_lock
             .lock()
@@ -769,10 +773,7 @@ impl AgentSessionIndex {
             "error".into(),
             Value::from(super::safety::truncate_text(error.message(), 200).0),
         );
-        status.insert(
-            "path".into(),
-            Value::from(adapter.manifest.source_path.as_str()),
-        );
+        status.insert("path".into(), advertised_source_path(adapter));
         self.locked()
             .tool_status
             .insert(name.to_string(), Value::Object(status));
@@ -1478,7 +1479,6 @@ pub(crate) mod golden_tests {
 
     impl FakeBrowser {
         fn materialize(root: &Path, golden: &Value) -> Self {
-            let root_text = root.to_string_lossy().into_owned();
             let mut rows = Vec::new();
             let mut members = HashMap::new();
             for row in golden["rows"].as_array().expect("黄金文件必须有 rows") {
@@ -1493,7 +1493,15 @@ pub(crate) mod golden_tests {
                     rows.push(row);
                     continue;
                 }
-                let path = raw.replace("<home>", &root_text);
+                let path = if let Some(rest) = raw.strip_prefix("<home>") {
+                    let mut resolved = root.to_path_buf();
+                    for part in rest.split(['/', '\\']).filter(|part| !part.is_empty()) {
+                        resolved.push(part);
+                    }
+                    resolved.to_string_lossy().into_owned()
+                } else {
+                    raw
+                };
                 let names: Vec<String> = row
                     .get("authoritative_members")
                     .and_then(Value::as_array)

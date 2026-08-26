@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import platform
 import re
 import shutil
@@ -59,6 +61,19 @@ def engine_build_command(target: str) -> list[str]:
     ]
 
 
+def tauri_build_command() -> list[str]:
+    command = ["npm", "run", "tauri", "--", "build"]
+    if not os.environ.get("TAURI_SIGNING_PRIVATE_KEY"):
+        # 本地构建没有发布私钥时仍应产出可安装的原生包。正式发布流水线注入
+        # 私钥后沿用 tauri.conf.json，继续生成带签名的 updater artifacts。
+        override = json.dumps(
+            {"bundle": {"createUpdaterArtifacts": False}},
+            separators=(",", ":"),
+        )
+        command.extend(["--config", override])
+    return command
+
+
 def engine_binary_paths(target: str) -> tuple[Path, Path]:
     """Rust 引擎产物路径与 Tauri externalBin 要求的落地路径。"""
     suffix = executable_suffix(target)
@@ -79,7 +94,10 @@ def install_engine_binary(target: str) -> Path:
 
 
 def run(command: list[str], *, cwd: Path = ROOT) -> None:
-    subprocess.run(command, cwd=cwd, check=True)
+    # Windows 的 npm 入口是 npm.cmd。subprocess 在 shell=False 时不会可靠地按
+    # PATHEXT 解析批处理文件,先展开成绝对路径后再执行。
+    executable = shutil.which(command[0]) or command[0]
+    subprocess.run([executable, *command[1:]], cwd=cwd, check=True)
 
 
 def verify_rust_target(target: str) -> None:
@@ -131,7 +149,7 @@ def build(target: str, *, install: bool = True) -> None:
     run(["npm", "run", "build:sea", "--", target], cwd=RUNTIME)
     run(engine_build_command(target))
     install_engine_binary(target)
-    run(["npm", "run", "tauri", "--", "build"], cwd=APP)
+    run(tauri_build_command(), cwd=APP)
 
 
 def main() -> None:

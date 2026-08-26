@@ -35,6 +35,10 @@ pub(super) fn connect(path: &Path) -> Result<Stream, String> {
         .map_err(|error| format!("无法连接 {}: {error}", path.display()))
 }
 
+pub(super) fn listener_available(path: &Path) -> bool {
+    connect(path).is_ok()
+}
+
 pub(super) fn process_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;

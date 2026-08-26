@@ -157,9 +157,25 @@ pub(super) fn create_cli_link(link: &Path, target: &Path) -> Result<(), String> 
     std::os::unix::fs::symlink(target, link).map_err(|error| format!("创建 CLI 入口失败: {error}"))
 }
 
+pub(super) fn remove_cli_link(link: &Path) -> Result<(), String> {
+    fs::remove_file(link).map_err(|error| format!("移除 CLI 入口失败: {error}"))
+}
+
+pub(super) fn resolve_cli_link(link: &Path) -> Option<PathBuf> {
+    fs::read_link(link).ok()
+}
+
+pub(super) fn cli_link_needs_rewrite(_link: &Path) -> bool {
+    false
+}
+
 pub(super) fn create_directory_link(link: &Path, target: &Path) -> Result<(), String> {
     std::os::unix::fs::symlink(target, link)
         .map_err(|error| format!("创建目录链接 {} 失败: {error}", link.display()))
+}
+
+pub(super) fn remove_directory_link(link: &Path) -> Result<(), String> {
+    fs::remove_file(link).map_err(|error| format!("移除目录链接 {} 失败: {error}", link.display()))
 }
 
 pub(super) fn process_alive(pid: u32) -> bool {

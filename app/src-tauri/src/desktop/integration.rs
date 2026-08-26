@@ -96,9 +96,16 @@ struct SkillTarget {
 }
 
 /// 契约里的 `~/...` 展开成绝对路径。只认开头的 `~/`,不做 `~user` 展开。
+/// 按 `/` 与 `\` 拆段再 join，避免 Windows 上留下 `C:\Users\x\.claude/skills` 这种混用分隔符。
 fn expand_home(raw: &str) -> Result<PathBuf, String> {
     match raw.strip_prefix("~/") {
-        Some(rest) => Ok(platform::home_dir()?.join(rest)),
+        Some(rest) => {
+            let mut path = platform::home_dir()?;
+            for part in rest.split(['/', '\\']).filter(|part| !part.is_empty()) {
+                path.push(part);
+            }
+            Ok(path)
+        }
         None => Ok(PathBuf::from(raw)),
     }
 }
@@ -290,7 +297,7 @@ fn cli_status(app: &AppHandle) -> CliStatus {
         }
     };
     // 断链也算「装过」:用户看到的是一个坏掉的入口,该给的是更新按钮而不是安装按钮。
-    let link_target = std::fs::read_link(&link).ok();
+    let link_target = platform::resolve_cli_link(&link);
     let points_to_current_engine = match (link_target.as_deref(), engine.as_deref()) {
         (Some(target), Some(engine)) => same_target(target, engine),
         _ => false,
@@ -324,9 +331,7 @@ fn skill_target_status(target: &SkillTarget, link_targets: &[PathBuf]) -> SkillT
         BUNDLED_SKILLS.iter().all(|name| {
             let source = target.path.join(name);
             let link = link_root.join(name);
-            std::fs::symlink_metadata(&link)
-                .map(|meta| meta.file_type().is_symlink() && same_target(&link, &source))
-                .unwrap_or(false)
+            same_target(&link, &source)
         })
     });
     let installed = dirs.iter().all(|dir| dir.is_dir()) && links_ready;
@@ -414,19 +419,9 @@ fn install_skill_links(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<()
             let source = shared_dir.join(name);
             let link = link_root.join(name);
             match std::fs::symlink_metadata(&link) {
-                Ok(meta) if meta.file_type().is_symlink() => {
-                    if same_target(&link, &source) {
-                        continue;
-                    }
-                    if link.exists() {
-                        return Err(format!(
-                            "{} 已链接到其他位置,为避免覆盖已停止安装",
-                            link.display()
-                        ));
-                    }
-                    std::fs::remove_file(&link).map_err(|error| {
-                        format!("移除断开的链接 {} 失败: {error}", link.display())
-                    })?;
+                Ok(_) if same_target(&link, &source) => continue,
+                Ok(_) if !link.exists() => {
+                    platform::remove_directory_link(&link)?;
                 }
                 Ok(_) => {
                     return Err(format!(
@@ -451,18 +446,15 @@ fn validate_skill_link_slots(shared_dir: &Path, link_targets: &[PathBuf]) -> Res
         for name in BUNDLED_SKILLS {
             let source = shared_dir.join(name);
             let link = link_root.join(name);
-            let Ok(meta) = std::fs::symlink_metadata(&link) else {
+            let Ok(_) = std::fs::symlink_metadata(&link) else {
                 continue;
             };
-            if !meta.file_type().is_symlink() {
+            if same_target(&link, &source) {
+                continue;
+            }
+            if link.exists() {
                 return Err(format!(
                     "{} 已存在且不是 Ferry 管理的链接,为避免覆盖已停止安装",
-                    link.display()
-                ));
-            }
-            if link.exists() && !same_target(&link, &source) {
-                return Err(format!(
-                    "{} 已链接到其他位置,为避免覆盖已停止安装",
                     link.display()
                 ));
             }
@@ -477,12 +469,11 @@ fn remove_skill_links(shared_dir: &Path, link_targets: &[PathBuf]) -> Result<(),
         for name in BUNDLED_SKILLS {
             let source = shared_dir.join(name);
             let link = link_root.join(name);
-            let Ok(meta) = std::fs::symlink_metadata(&link) else {
+            let Ok(_) = std::fs::symlink_metadata(&link) else {
                 continue;
             };
-            if meta.file_type().is_symlink() && same_target(&link, &source) {
-                std::fs::remove_file(&link)
-                    .map_err(|error| format!("移除 skill 入口 {} 失败: {error}", link.display()))?;
+            if same_target(&link, &source) {
+                platform::remove_directory_link(&link)?;
             }
         }
     }
@@ -543,9 +534,11 @@ fn sync_managed_cli(app: &AppHandle) -> Result<(), String> {
         Ok(link) => link,
         Err(_) => return Ok(()),
     };
-    let link_target = std::fs::read_link(&link).ok();
+    let link_target = platform::resolve_cli_link(&link);
     let engine = current_engine_path(app);
-    if !cli_needs_sync(link_target.as_deref(), engine.as_deref()) {
+    let stale_shim = platform::cli_link_needs_rewrite(&link)
+        && link_target.as_deref().is_some_and(points_to_ferry_engine);
+    if !cli_needs_sync(link_target.as_deref(), engine.as_deref()) && !stale_shim {
         return Ok(());
     }
     let engine = engine.ok_or_else(|| "找不到 Ferry 引擎二进制".to_owned())?;
@@ -651,14 +644,13 @@ pub(crate) async fn cli_install(app: AppHandle) -> Result<(), String> {
 pub(crate) async fn cli_uninstall() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(|| {
         let link = platform::cli_link_path()?;
-        let Ok(target) = std::fs::read_link(&link) else {
-            // 不是我们装的 symlink(或压根不存在)就什么都不做,绝不误删同名文件。
+        let Some(target) = platform::resolve_cli_link(&link) else {
             return Ok(());
         };
         if !points_to_ferry_engine(&target) {
             return Err(format!("{} 不是 Ferry 安装的入口,已跳过", link.display()));
         }
-        std::fs::remove_file(&link).map_err(|error| format!("移除 CLI 入口失败: {error}"))
+        platform::remove_cli_link(&link)
     })
     .await
     .map_err(|error| error.to_string())?

@@ -18,6 +18,10 @@ pub(super) fn connect(_path: &Path) -> Result<Stream, String> {
     Err("当前平台尚未实现本地 socket 传输".to_string())
 }
 
+pub(super) fn listener_available(_path: &Path) -> bool {
+    false
+}
+
 pub(super) fn process_alive(_pid: u32) -> bool {
     true
 }

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   CloseIcon,
   SearchIcon,
+  Spinner,
   ToolIcon,
 } from "../shared/ui/icons.jsx";
 
@@ -21,6 +22,8 @@ export function SearchPalette({
   recentLabel,
   emptyLabel,
   notice,
+  searching = false,
+  searchingLabel,
   onClose,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -48,7 +51,9 @@ export function SearchPalette({
         setSelectedIndex(index => Math.max(index - 1, 0));
       } else if (event.key === "Enter") {
         event.preventDefault();
-        results[selectedIndex]?.onClick?.();
+        const hit = results[selectedIndex];
+        if (!hit) return;
+        hit.onClick?.();
         onClose();
       }
     };
@@ -93,7 +98,13 @@ export function SearchPalette({
           borderBottom: "1px solid var(--line5)",
           flex: "none",
         }}>
-          <span style={{ color: "var(--tx4)", display: "inline-flex" }}>
+          <span
+            className={searching ? "lib-search-pulse" : undefined}
+            style={{
+              color: searching ? "var(--accent)" : "var(--tx4)",
+              display: "inline-flex",
+            }}
+          >
             <SearchIcon />
           </span>
           <input
@@ -129,7 +140,9 @@ export function SearchPalette({
               {notice}
             </div>
           )}
-          {results.length === 0 && !notice ? (
+          {searching && results.length === 0 ? (
+            <SearchSkeleton label={searchingLabel} />
+          ) : results.length === 0 && !notice ? (
             <div style={{
               padding: "26px 12px",
               textAlign: "center",
@@ -205,6 +218,26 @@ export function SearchPalette({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SearchSkeleton({ label }) {
+  return (
+    <div className="lib-search-skel" data-searching="true" aria-busy="true" aria-live="polite">
+      <div className="lib-search-skel-status">
+        <Spinner size={13} />
+        <span>{label}</span>
+      </div>
+      {["62%", "48%", "71%"].map((width) => (
+        <div key={width} className="lib-search-skel-row">
+          <div className="lib-search-skel-icon" />
+          <div className="lib-search-skel-bars">
+            <div className="lib-search-skel-bar" style={{ width }} />
+            <div className="lib-search-skel-bar lib-search-skel-bar-sub" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

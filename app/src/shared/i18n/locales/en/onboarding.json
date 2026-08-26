@@ -53,7 +53,7 @@
     "overviewTitle": "Overview: know your habits",
     "overviewBody": "Session count, token usage, estimated cost, and active-day streaks at a glance, switchable by tool and time range. Below: how your go-to model shifts over time and a 52-week activity heatmap.",
     "searchTitle": "Press ⌘K to search anywhere",
-    "searchBody": "Jump to any session by title, project directory, or command — full-text search over session content works too. Search and filter controls keep the same spot in the resource pane across modules.",
+    "searchBody": "The text field filters the current list. The search button jumps by title, project, or command — full-text search over session content works too.",
     "displayTitle": "Display options",
     "displayBody": "Grouping, time window, only-with-sub-sessions and only-with-migrations live here; change any of them and a dot lights up on the button. Which slice of sessions you are looking at is not here — that is the scope in the sidebar.",
     "contextMenuTitle": "Right-click to organize",

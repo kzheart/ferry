@@ -9,10 +9,12 @@ use super::{
     BUNDLED_SKILLS, SHARED_TARGET_ID,
 };
 // symlink / skill-link 用例按平台裁剪,避免 unsupported stub 在 Linux CI 上误红。
-#[cfg(target_os = "macos")]
-use super::{install_skill_links, remove_skill_links};
+#[cfg(any(unix, target_os = "windows"))]
+use super::same_target;
 #[cfg(unix)]
-use super::{same_target, validate_skill_link_slots};
+use super::validate_skill_link_slots;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use super::{install_skill_links, remove_skill_links};
 
 static SCRATCH_SEQUENCE: AtomicU32 = AtomicU32::new(0);
 
@@ -290,7 +292,11 @@ fn the_only_target_is_the_shared_skill_directory() {
     let target = skill_target().expect("目标");
     assert_eq!(target.id, SHARED_TARGET_ID);
     assert!(target.path.is_absolute());
-    assert!(target.path.ends_with(".agents/skills"));
+    assert!(target.path.ends_with("skills"));
+    assert!(target
+        .path
+        .parent()
+        .is_some_and(|parent| parent.ends_with(".agents")));
     // 别的 id 一律拒绝:webview 只该拿到状态里回报的那一个。
     assert_eq!(
         find_target(SHARED_TARGET_ID).expect("按 id 找回").path,
@@ -299,10 +305,13 @@ fn the_only_target_is_the_shared_skill_directory() {
     assert!(find_target("claude").is_err());
     let links = skill_link_targets().expect("Claude 链接目标");
     assert_eq!(links.len(), 1);
-    assert!(links[0].ends_with(".claude/skills"));
+    assert!(links[0].ends_with("skills"));
+    assert!(links[0]
+        .parent()
+        .is_some_and(|parent| parent.ends_with(".claude")));
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[test]
 fn claude_links_point_to_the_shared_skill_group_and_count_toward_status() {
     let scratch = Scratch::new("claude-links");
@@ -313,10 +322,6 @@ fn claude_links_point_to_the_shared_skill_group_and_count_toward_status() {
 
     for name in BUNDLED_SKILLS {
         let link = claude.join(name);
-        assert!(std::fs::symlink_metadata(&link)
-            .expect("入口元数据")
-            .file_type()
-            .is_symlink());
         assert!(same_target(&link, &shared.join(name)));
     }
 
@@ -371,7 +376,7 @@ fn claude_link_install_repairs_broken_links_but_not_links_to_other_targets() {
     std::fs::create_dir_all(&other).expect("创建其他目标");
     std::os::unix::fs::symlink(&other, claude.join("ferry")).expect("创建冲突链接");
     let error = install_skill_links(&shared, &[claude]).expect_err("不得覆盖其他链接");
-    assert!(error.contains("已链接到其他位置"));
+    assert!(error.contains("不是 Ferry 管理的链接"));
 }
 
 #[test]
@@ -382,7 +387,10 @@ fn only_a_leading_tilde_slash_expands() {
     );
     let expanded = expand_home("~/.claude/skills").expect("展开 ~");
     assert!(expanded.is_absolute());
-    assert!(expanded.ends_with(".claude/skills"));
+    assert!(expanded.ends_with("skills"));
+    assert!(expanded
+        .parent()
+        .is_some_and(|parent| parent.ends_with(".claude")));
 }
 
 #[test]
