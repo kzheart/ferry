@@ -21,7 +21,7 @@ const renderOverview = sessions => render(
 );
 
 test("新旧区块的 i18n key 两种语言对齐,旧 key 已删", () => {
-  for (const block of ["daily", "day", "agents"]) {
+  for (const block of ["daily", "day", "agents", "repo"]) {
     assert.deepEqual(Object.keys(zhCN[block]).sort(), Object.keys(en[block]).sort());
   }
   for (const locale of [zhCN, en]) {
@@ -61,4 +61,26 @@ test("无用量时 Agent 对比给出空态而不是空卡", () => {
   renderOverview([session({ tokens: tokens(0) })]);
 
   assert.ok(screen.getByText("overview:agents.empty"));
+});
+
+test("仓库排行可按会话数或 Token 切换排序", () => {
+  renderOverview([
+    session({ dir: "/code/ferry" }),
+    session({ dir: "/code/ferry" }),
+    session({ dir: "/code/klib", tokens: tokens(9000) }),
+  ]);
+
+  const order = () => {
+    const ferry = screen.getByTitle("ferry");
+    const klib = screen.getByTitle("klib");
+    return ferry.compareDocumentPosition(klib) & Node.DOCUMENT_POSITION_FOLLOWING
+      ? ["ferry", "klib"] : ["klib", "ferry"];
+  };
+
+  assert.ok(screen.getByRole("group", { name: "overview:repo.metric" }));
+  assert.deepEqual(order(), ["ferry", "klib"]);
+  fireEvent.click(screen.getByRole("button", { name: "overview:repo.tokens" }));
+  assert.deepEqual(order(), ["klib", "ferry"]);
+  fireEvent.click(screen.getByRole("button", { name: "overview:repo.sessions" }));
+  assert.deepEqual(order(), ["ferry", "klib"]);
 });

@@ -245,15 +245,8 @@ export function computeOverview({ sessions = [],
   // 热力图:近 52 周(按 updated 计天,GitHub 风格整年)
   const heatmap = buildHeatmap(sessions, now, 52);
 
-  // 仓库排行(按会话数,按工具拆分)
-  const repoMap = new Map();
-  scoped.forEach(s => {
-    const name = repoOf(s.dir); if (!name) return;
-    const r = repoMap.get(name) || { name, total: 0, byTool: {} };
-    r.total++; r.byTool[s.tool] = (r.byTool[s.tool] || 0) + 1;
-    repoMap.set(name, r);
-  });
-  const repos = [...repoMap.values()].sort((a, b) => b.total - a.total).slice(0, 6);
+  // 仓库排行:同时累计会话数与 token,UI 按指标切 Top 6
+  const repos = buildRepos(scoped);
 
   // 用量走势(7/30 天按日,全部按周)与 Agent 份额对比
   const daily = buildDaily(scoped, prices, idx, now, scope);
@@ -282,6 +275,35 @@ export function computeOverview({ sessions = [],
     empty: !sessions.length,
     hasUsage: total > 0,
   };
+}
+
+export const REPO_TOP_N = 6;
+
+// 按仓库累计会话数与 token,并按工具拆开;无项目目录的会话不进榜
+export function buildRepos(sessions) {
+  const repoMap = new Map();
+  sessions.forEach(s => {
+    const name = repoOf(s.dir); if (!name) return;
+    const r = repoMap.get(name) || {
+      name, sessions: 0, tokens: 0, byToolSessions: {}, byToolTokens: {},
+    };
+    const tk = sumTokens(s.tokens);
+    r.sessions++;
+    r.tokens += tk;
+    r.byToolSessions[s.tool] = (r.byToolSessions[s.tool] || 0) + 1;
+    r.byToolTokens[s.tool] = (r.byToolTokens[s.tool] || 0) + tk;
+    repoMap.set(name, r);
+  });
+  return [...repoMap.values()];
+}
+
+export function rankRepos(repos, metric = "sessions", limit = REPO_TOP_N) {
+  const key = metric === "tokens" ? "tokens" : "sessions";
+  const alt = key === "tokens" ? "sessions" : "tokens";
+  return repos
+    .filter(r => r[key] > 0)
+    .sort((a, b) => b[key] - a[key] || b[alt] - a[alt] || a.name.localeCompare(b.name))
+    .slice(0, limit);
 }
 
 // 近 n 天每日趋势(会话数 / token / 成本),供 KPI 迷你图

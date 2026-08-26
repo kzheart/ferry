@@ -14,6 +14,7 @@ import {
   heatLevel,
   matchPrice,
   modelUsageOf,
+  rankRepos,
   sumTokens,
 } from "./overviewModel.js";
 
@@ -461,4 +462,42 @@ test("computeOverview 作息分布统计高峰、深夜占比与活跃窗口", (
   ];
   const tight = computeOverview({ sessions: clustered, prices: PRICES, scope: "all", now: NOW });
   assert.equal(tight.activeWindow?.label, "15:00–19:00");
+});
+
+test("仓库排行同时累计会话数与 token,按指标排序会换榜", () => {
+  const sessions = [
+    session({ dir: "/code/ferry", tokens: tokens(100) }),
+    session({ dir: "/code/ferry", tool: "grok", tokens: tokens(50) }),
+    session({ dir: "/code/klib", tokens: tokens(9000) }),
+    session({ dir: "", tokens: tokens(99999) }),
+  ];
+  const { repos } = computeOverview({ sessions, prices: PRICES, now: NOW });
+  const byName = Object.fromEntries(repos.map(r => [r.name, r]));
+
+  assert.equal(repos.length, 2);
+  assert.equal(byName.ferry.sessions, 2);
+  assert.equal(byName.ferry.tokens, 150);
+  assert.equal(byName.ferry.byToolSessions.claude, 1);
+  assert.equal(byName.ferry.byToolSessions.grok, 1);
+  assert.equal(byName.ferry.byToolTokens.claude, 100);
+  assert.equal(byName.ferry.byToolTokens.grok, 50);
+  assert.equal(byName.klib.sessions, 1);
+  assert.equal(byName.klib.tokens, 9000);
+
+  assert.deepEqual(rankRepos(repos, "sessions").map(r => r.name), ["ferry", "klib"]);
+  assert.deepEqual(rankRepos(repos, "tokens").map(r => r.name), ["klib", "ferry"]);
+});
+
+test("仓库排行 Top 6,零 token 不进 token 榜", () => {
+  const sessions = Array.from({ length: 8 }, (_, i) =>
+    session({ dir: `/code/r${i}`, tokens: tokens(i === 0 ? 0 : 10 * (8 - i)) }));
+  const { repos } = computeOverview({ sessions, prices: PRICES, now: NOW });
+
+  assert.equal(repos.length, 8);
+  const bySess = rankRepos(repos, "sessions");
+  const byTok = rankRepos(repos, "tokens");
+  assert.equal(bySess.length, 6);
+  assert.equal(byTok.length, 6);
+  assert.ok(!byTok.some(r => r.name === "r0"));
+  assert.deepEqual(byTok.map(r => r.name), ["r1", "r2", "r3", "r4", "r5", "r6"]);
 });

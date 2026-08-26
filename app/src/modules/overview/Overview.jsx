@@ -9,7 +9,7 @@ import {
   formatInteger,
 } from "../../shared/i18n/numberFormat.js";
 import { ToolIcon, SortCaret, CheckIcon, RailGlyph, Spinner } from "../../shared/ui/icons.jsx";
-import { computeDayDetail, computeOverview, heatLevel } from "./overviewModel.js";
+import { computeDayDetail, computeOverview, heatLevel, rankRepos } from "./overviewModel.js";
 import { Card, CHART, card, num, Section, toolColor } from "./primitives.jsx";
 import TodayPanel from "./TodayPanel.jsx";
 
@@ -380,7 +380,16 @@ export default function Overview({ sessions = [],
   // 选中日期:热力图与用量走势共用,点同一天再点一次取消
   const [selectedDay, setSelectedDay] = useState(null);
   const [metric, setMetric] = useState("tokens");
+  const [repoMetric, setRepoMetric] = useState("sessions");
   const pickDay = day => setSelectedDay(cur => (cur === day ? null : day));
+  const rankedRepos = useMemo(
+    () => rankRepos(data.repos, repoMetric),
+    [data.repos, repoMetric],
+  );
+  const repoValue = r => (repoMetric === "tokens" ? r.tokens : r.sessions);
+  const repoByTool = r => (repoMetric === "tokens" ? r.byToolTokens : r.byToolSessions);
+  const fmtRepo = repoMetric === "tokens" ? fmtTokens : fmtInt;
+  const maxRepoValue = rankedRepos[0] ? repoValue(rankedRepos[0]) : 1;
   useEffect(() => { setSelectedDay(null); }, [tool]);
   const dayDetail = useMemo(() => {
     if (selectedDay == null) return null;
@@ -608,27 +617,36 @@ export default function Overview({ sessions = [],
             <Section title={t("overview:sec.projects")} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: "2 1 420px", minWidth: 0 }}>
-                <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")} fill>
-                  {/* 行 flex:1 均摊高度,与右侧 Agent 对比卡等高时行距自适应 */}
-                  <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 9 }}>
-                    {data.repos.map(r => {
-                      const maxTotal = data.repos[0]?.total || 1;
-                      return (
+                <Card title={t("overview:repo.title")} sub={t("overview:repo.sub")}
+                  extra={
+                    <div role="group" aria-label={t("overview:repo.metric")}
+                      style={{ display: "flex", background: "var(--track)", borderRadius: 6, padding: 2, gap: 2 }}>
+                      {segBtn(t("overview:repo.sessions"), repoMetric === "sessions", () => setRepoMetric("sessions"))}
+                      {segBtn(t("overview:repo.tokens"), repoMetric === "tokens", () => setRepoMetric("tokens"))}
+                    </div>
+                  } fill>
+                  {rankedRepos.length ? (
+                    <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: 9 }}>
+                      {rankedRepos.map(r => (
                         <div key={r.name} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 10,
                           alignItems: "center", flex: 1 }}>
                           <span title={r.name} style={{ fontSize: 12, color: "var(--tx2)", whiteSpace: "nowrap",
                             overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
                           <div style={{ height: 7, background: "var(--track)", borderRadius: 4, overflow: "hidden", display: "flex" }}>
                             {TOOLS.map(tl => {
-                              const w = (r.byTool[tl] || 0) / maxTotal * 100;
+                              const w = (repoByTool(r)[tl] || 0) / maxRepoValue * 100;
                               return w ? <i key={tl} style={{ display: "block", height: "100%", width: `${w}%`, background: toolColor(tl) }} /> : null;
                             })}
                           </div>
-                          <span style={{ fontSize: 11, color: "var(--tx3)", minWidth: 44, textAlign: "right", ...num }}>{fmtInt(r.total)}</span>
+                          <span style={{ fontSize: 11, color: "var(--tx3)", minWidth: 52, textAlign: "right", ...num }}>{fmtRepo(repoValue(r))}</span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "24px 8px", textAlign: "center", color: "var(--tx5)", fontSize: 12, flex: 1 }}>
+                      {t("overview:repo.empty")}
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 13, flexWrap: "wrap", fontSize: 11, color: "var(--tx3)", marginTop: 12 }}>
                     {TOOLS.map(tl => (
                       <span key={tl} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>

@@ -109,7 +109,11 @@
   },
   "repo": {
     "title": "Top repos",
-    "sub": "By sessions · Top 6"
+    "sub": "Top 6",
+    "metric": "Ranking metric",
+    "sessions": "Sessions",
+    "tokens": "Tokens",
+    "empty": "No repo usage in this range"
   },
   "agents": {
     "title": "Agents",

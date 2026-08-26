@@ -109,7 +109,11 @@
   },
   "repo": {
     "title": "仓库排行",
-    "sub": "按会话数 · Top 6"
+    "sub": "Top 6",
+    "metric": "排行指标",
+    "sessions": "会话数",
+    "tokens": "Token",
+    "empty": "当前区间没有仓库用量"
   },
   "agents": {
     "title": "Agent 对比",
