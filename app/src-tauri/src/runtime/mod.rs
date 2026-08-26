@@ -2,6 +2,7 @@ mod approval;
 pub(crate) mod bash;
 pub(crate) mod choice;
 mod gateway;
+mod shell_platform;
 mod tool_routes;
 
 use serde::Serialize;

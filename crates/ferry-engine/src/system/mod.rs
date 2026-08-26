@@ -2,6 +2,7 @@
 
 pub mod environment;
 pub mod executables;
+pub mod filesystem;
 pub mod git;
 pub mod models;
 pub mod paths;

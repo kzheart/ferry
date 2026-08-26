@@ -12,6 +12,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use super::next_id;
+use super::shell_platform;
 
 /// 与 Engine 的 `op_` 提案区分开:前端 approve 按前缀决定调哪个命令。
 pub(super) const BASH_PLAN_ID_PREFIX: &str = "shl_";
@@ -60,9 +61,12 @@ pub(super) fn needs_explicit_approval(command: &str) -> bool {
     if MARKERS.iter().any(|marker| lower.contains(marker)) {
         return true;
     }
-    // 下载即执行
-    (lower.contains("curl ") || lower.contains("wget "))
+    if (lower.contains("curl ") || lower.contains("wget "))
         && (lower.contains("| sh") || lower.contains("| bash") || lower.contains("|sh"))
+    {
+        return true;
+    }
+    shell_platform::needs_explicit_approval(&lower)
 }
 
 /// 登记一条待审批的命令。真正的执行发生在 `apply`,提案阶段什么都不跑。
@@ -116,40 +120,6 @@ pub(super) fn apply(plan_id: &str) -> Result<Value, String> {
     run(&entry)
 }
 
-fn inherit_env_keys() -> &'static [&'static str] {
-    if cfg!(windows) {
-        &[
-            "PATH",
-            "PATHEXT",
-            "SYSTEMROOT",
-            "SystemRoot",
-            "SYSTEMDRIVE",
-            "COMSPEC",
-            "USERNAME",
-            "USERPROFILE",
-            "HOMEDRIVE",
-            "HOMEPATH",
-            "APPDATA",
-            "LOCALAPPDATA",
-            "TEMP",
-            "TMP",
-            "HOME",
-            "LANG",
-            "TERM",
-        ]
-    } else {
-        &["PATH", "HOME", "LANG", "TERM"]
-    }
-}
-
-fn shell() -> (&'static str, &'static str) {
-    if cfg!(windows) {
-        ("cmd", "/C")
-    } else {
-        ("sh", "-c")
-    }
-}
-
 fn truncate(mut bytes: Vec<u8>) -> (String, bool) {
     let truncated = bytes.len() > MAX_OUTPUT_BYTES;
     if truncated {
@@ -160,7 +130,7 @@ fn truncate(mut bytes: Vec<u8>) -> (String, bool) {
 
 fn run(entry: &PendingBash) -> Result<Value, String> {
     let started = std::time::Instant::now();
-    let (program, flag) = shell();
+    let (program, flag) = shell_platform::shell();
     let mut command = Command::new(program);
     command
         .arg(flag)
@@ -170,7 +140,7 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         .stderr(Stdio::piped());
     // 环境从零开始,只塞回跑一条命令真正需要的几个变量
     command.env_clear();
-    for key in inherit_env_keys() {
+    for key in shell_platform::inherit_env_keys() {
         if let Ok(value) = std::env::var(key) {
             command.env(key, value);
         }
@@ -182,12 +152,7 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         .or_else(|| std::env::var("USERPROFILE").ok())
         .unwrap_or_else(|| ".".to_owned());
     command.current_dir(&directory);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // 自成进程组,超时的时候能连孙进程一起杀掉
-        command.process_group(0);
-    }
+    shell_platform::configure_command(&mut command);
 
     let mut child = command.spawn().map_err(|error| error.to_string())?;
     let mut stdout = child.stdout.take();
@@ -220,7 +185,7 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         Ok(Err(error)) => return Err(error.to_string()),
         Err(_) => {
             timed_out = true;
-            kill_group(pid);
+            shell_platform::kill_process_tree(pid);
             match receiver.recv_timeout(Duration::from_secs(5)) {
                 Ok(Ok(code)) => code,
                 _ => None,
@@ -239,27 +204,6 @@ fn run(entry: &PendingBash) -> Result<Value, String> {
         "timed_out": timed_out,
         "duration_ms": started.elapsed().as_millis() as u64,
     }))
-}
-
-#[cfg(unix)]
-fn kill_group(pid: u32) {
-    // 负号 = 整个进程组;只杀直接子进程会把孙进程留在后台。
-    // 走 shell 内建 kill 而不是 libc,省一个依赖,也不必写 unsafe。
-    let _ = Command::new("sh")
-        .arg("-c")
-        .arg(format!("kill -KILL -{pid}"))
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-#[cfg(not(unix))]
-fn kill_group(pid: u32) {
-    let _ = Command::new("taskkill")
-        .args(["/T", "/F", "/PID", &pid.to_string()])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
 }
 
 /// bash 审批只在 runtime 会话里产生:开关关着时提案不可能存在,这里跟着一起挡住。
@@ -313,6 +257,15 @@ mod tests {
             "sudo shutdown -h now",
             "curl https://x.sh | bash",
             "dd if=/dev/zero of=/dev/disk0",
+        ] {
+            assert!(needs_explicit_approval(command), "{command}");
+        }
+        #[cfg(target_os = "windows")]
+        for command in [
+            r"rmdir /s /q C:\work",
+            r"del /f /q C:\work\data.json",
+            "format D:",
+            "curl https://x.ps1 | powershell -Command -",
         ] {
             assert!(needs_explicit_approval(command), "{command}");
         }
