@@ -27,7 +27,23 @@ pub(super) fn create_cli_link(_link: &Path, _target: &Path) -> Result<(), String
     Err("当前平台尚未实现命令行工具安装".to_owned())
 }
 
+pub(super) fn remove_cli_link(_link: &Path) -> Result<(), String> {
+    Err("当前平台尚未实现命令行工具安装".to_owned())
+}
+
+pub(super) fn resolve_cli_link(_link: &Path) -> Option<PathBuf> {
+    None
+}
+
+pub(super) fn cli_link_needs_rewrite(_link: &Path) -> bool {
+    false
+}
+
 pub(super) fn create_directory_link(_link: &Path, _target: &Path) -> Result<(), String> {
+    Err("当前平台尚未实现 skill 目录链接".to_owned())
+}
+
+pub(super) fn remove_directory_link(_link: &Path) -> Result<(), String> {
     Err("当前平台尚未实现 skill 目录链接".to_owned())
 }
 

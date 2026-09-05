@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -25,6 +25,7 @@ use crate::adapters::shared::scanner::{
 use crate::errors::DomainResult;
 use crate::jsonutil::FileStat;
 use crate::system::snapshots::data_dir;
+use crate::system::sqlite;
 
 use super::store;
 
@@ -289,13 +290,7 @@ pub fn scan(_cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
 }
 
 fn open_readonly(database: &Path) -> rusqlite::Result<Connection> {
-    let uri = format!("file:{}?mode=ro", database.display());
-    let connection = Connection::open_with_flags(
-        &uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-    )?;
-    connection.busy_timeout(std::time::Duration::from_secs(5))?;
-    Ok(connection)
+    sqlite::open_readonly(database)
 }
 
 // ---------------------------------------------------------------------------

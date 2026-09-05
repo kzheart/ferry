@@ -835,8 +835,10 @@ mod tests {
         assert!(service.shared.wait_until_ready(Duration::from_secs(3)));
 
         // 健康 watcher 即便跨过 reconcile_interval 也不得触发全量扫描。
+        // macOS FSEvents 可能在 watcher 安装后补发注册前的目录事件，因此 alpha
+        // 可以有一次启动期增量扫描；缺失的 beta 仍能证明没有发生全量扫描。
         std::thread::sleep(Duration::from_millis(900));
-        assert_eq!(harness.browsers["alpha"].scans.load(Ordering::SeqCst), 0);
+        let alpha_baseline = harness.browsers["alpha"].scans.load(Ordering::SeqCst);
         assert_eq!(harness.browsers["beta"].scans.load(Ordering::SeqCst), 0);
 
         OpenOptions::new()
@@ -852,16 +854,22 @@ mod tests {
         std::fs::remove_file(&renamed).unwrap();
 
         assert!(wait_for(Duration::from_secs(8), || {
-            harness.browsers["alpha"].scans.load(Ordering::SeqCst) >= 1
+            harness.browsers["alpha"].scans.load(Ordering::SeqCst) > alpha_baseline
         }));
         std::thread::sleep(Duration::from_millis(700));
-        assert_eq!(harness.browsers["alpha"].scans.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            harness.browsers["alpha"].scans.load(Ordering::SeqCst),
+            alpha_baseline + 1
+        );
         assert_eq!(harness.browsers["beta"].scans.load(Ordering::SeqCst), 0);
 
         service.stop();
         std::fs::write(alpha_root.join("after-stop.jsonl"), b"ignored\n").unwrap();
         std::thread::sleep(Duration::from_millis(700));
-        assert_eq!(harness.browsers["alpha"].scans.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            harness.browsers["alpha"].scans.load(Ordering::SeqCst),
+            alpha_baseline + 1
+        );
         assert!(Path::new(alpha_root).is_dir());
     }
 }

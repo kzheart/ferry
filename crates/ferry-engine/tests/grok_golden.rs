@@ -95,8 +95,12 @@ fn materialize(sandbox: &Path, case: &str) -> PathBuf {
     members.sort();
     for member in members {
         let name = member.file_name().expect("fixture 成员有文件名");
-        std::fs::copy(&member, target.join(name)).expect("拷贝 fixture 成员");
-        freeze(&target.join(name));
+        let destination = target.join(name);
+        let fixture = std::fs::read_to_string(&member)
+            .expect("读取 fixture 成员")
+            .replace("\r\n", "\n");
+        std::fs::write(&destination, fixture).expect("物化 fixture 成员");
+        freeze(&destination);
     }
     target
 }
@@ -104,7 +108,14 @@ fn materialize(sandbox: &Path, case: &str) -> PathBuf {
 /// 递归把沙箱绝对路径换成 `<home>`。
 fn normalize(value: &Value, sandbox: &str) -> Value {
     match value {
-        Value::String(text) => Value::from(text.replace(sandbox, SANDBOX_MARKER)),
+        Value::String(text) => {
+            let normalized = text.replace(sandbox, SANDBOX_MARKER);
+            Value::from(if normalized.contains(SANDBOX_MARKER) {
+                normalized.replace('\\', "/")
+            } else {
+                normalized
+            })
+        }
         Value::Array(items) => {
             Value::Array(items.iter().map(|item| normalize(item, sandbox)).collect())
         }

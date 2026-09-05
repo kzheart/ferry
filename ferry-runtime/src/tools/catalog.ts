@@ -368,7 +368,7 @@ const descriptions: Record<FerryToolName, string> = {
   ask_user:
     "Ask the user to choose among 2-6 options or provide custom text. This tool only collects information and does not authorize deletion or any other mutation. The user may not answer; when answered is false, do not assume a selection and continue safely.",
   agent_prompt: `Resume and actively drive a native Coding Agent session (${promptAgents.join(", ")}). This is a high-privilege mutation: the target Agent may run commands, use its configured tools, and modify the workspace and native session without a separate Ferry approval. Pass an fsr_ ref from session_search and the prompt to execute. The returned next_ref replaces the old ref after every started run; always use next_ref for the next call because the previous ref becomes stale. Calls execute sequentially and are never safe to retry automatically.`,
-  bash: "Run a shell command on the user's machine. The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.",
+  bash: `Run a command in the user's platform-native shell (${process.platform === "win32" ? "cmd.exe /C on Windows; use cmd syntax, not POSIX shell syntax" : "sh -c on macOS/Linux; use POSIX shell syntax"}). The command really executes; unless the session is in Auto mode every call needs the user's approval first, so keep commands single-purpose and explain destructive ones before proposing them. Returns exit_code, stdout and stderr; output over 64KB is truncated.`,
 };
 
 export function createFerryTools(

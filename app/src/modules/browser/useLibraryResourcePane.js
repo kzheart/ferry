@@ -228,6 +228,7 @@ export function useLibraryResourcePane({
     collapsedGroups,
     toggleGroup,
     visibleIds,
+    index,
     clear,
     multiIds,
     setMultiIds,

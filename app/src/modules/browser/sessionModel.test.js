@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { toTimeline } from "./sessionModel.js";
+import {
+  isWindowsProjectPath,
+  normalizeProjectPath,
+  projectPathKey,
+  repoOf,
+  toTimeline,
+} from "./sessionModel.js";
 
 test("toTimeline defers unreached compactions while more pages remain", () => {
   const rounds = [{ n: 1 }, { n: 2 }];
@@ -46,4 +52,26 @@ test("toTimeline merges same-turn compactions into one group item", () => {
     timeline[1].compactions.map(item => item.id),
     ["c1", "c2"],
   );
+});
+
+test("repoOf 取路径最后一段，Windows 反斜杠与 Unix 斜杠一样", () => {
+  assert.equal(repoOf("/work/payments"), "payments");
+  assert.equal(repoOf("D:\\code\\ferry"), "ferry");
+  assert.equal(repoOf("d:\\code\\ferry\\"), "ferry");
+  assert.equal(repoOf("C:/Users/12467/Desktop/rweixin"), "rweixin");
+  assert.equal(repoOf("ferry"), "ferry");
+  assert.equal(repoOf(""), "");
+});
+
+test("项目路径身份跨 Agent 统一 Windows 斜杠、设备前缀、盘符大小写和尾斜杠", () => {
+  assert.equal(normalizeProjectPath("c:/Users/me/work/app/"), "C:\\Users\\me\\work\\app");
+  assert.equal(normalizeProjectPath("\\\\?\\C:\\Users\\me\\work\\app"), "C:\\Users\\me\\work\\app");
+  assert.equal(
+    projectPathKey("C:\\Users\\Me\\work\\app"),
+    projectPathKey("c:/users/me/work/app/"),
+  );
+  assert.equal(normalizeProjectPath("/Users/me/work/app/"), "/Users/me/work/app");
+  assert.notEqual(projectPathKey("/Users/Me/app"), projectPathKey("/Users/me/app"));
+  assert.equal(isWindowsProjectPath("\\\\server\\share\\app"), true);
+  assert.equal(isWindowsProjectPath("/Users/me/app"), false);
 });

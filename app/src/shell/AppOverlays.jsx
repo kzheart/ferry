@@ -83,6 +83,8 @@ export function AppOverlays({
           recentLabel={search.pane.query ? null : t("app:search.recent")}
           emptyLabel={t("app:search.empty")}
           notice={search.notice}
+          searching={search.searching}
+          searchingLabel={t("app:search.searching")}
           results={search.results}
           onClose={search.onClose}
         />

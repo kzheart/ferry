@@ -9,9 +9,11 @@ import {
   displayDirtyCount,
   effectiveGroupMode,
   favoriteProjectRows,
+  globalSearchRows,
   libraryGroupExpanded,
   libraryProjects,
   libraryScopeCounts,
+  parentOf,
   migrateLegacyLibraryState,
   normalizeDisplay,
   normalizeFavoriteProjects,
@@ -79,7 +81,7 @@ test("项目视图按完整 dir 分组，同名仓库各成一组且组内按最
   });
 
   assert.deepEqual(groups.map(group => group.key), ["dir:/work/payments", "dir:/side/payments"]);
-  assert.deepEqual(groups.map(group => group.label), ["payments", "payments"]);
+  assert.deepEqual(groups.map(group => group.label), ["payments (work)", "payments (side)"]);
   assert.deepEqual(groups.map(group => group.parent), ["/work", "/side"]);
   assert.deepEqual(groups[0].rows.map(row => row.key), [KEYS[0], KEYS[1]]);
   assert.deepEqual(groups[0].tools, ["claude", "codex"]);
@@ -93,6 +95,20 @@ test("同名仓库在项目清单里被标记为需要父路径消歧，并按�
   assert.deepEqual(projects.map(project => project.ambiguous), [true, true]);
   assert.deepEqual(projects[0].tools, ["claude", "codex"]);
   assert.equal(projects[0].count, 2);
+});
+
+test("全局搜索命中全量索引,不受范围或侧栏筛选影响", () => {
+  const index = projectIndex();
+  const scoped = buildLibraryGroups({
+    index, scope: { kind: "project", value: "/work/payments" },
+    display: byProject, query: "payment", t,
+  });
+  assert.equal(scoped.flatMap(group => group.rows).length, 2);
+
+  const globalHits = globalSearchRows(index, "payment");
+  assert.deepEqual(globalHits.map(row => row.key).sort(), [...KEYS].sort());
+  const recent = globalSearchRows(index, "");
+  assert.equal(recent[0].key, KEYS[0]);
 });
 
 test("项目范围按完整 dir 精确匹配，旧的仓库名取值仍然可用", () => {
@@ -112,6 +128,53 @@ test("项目范围按完整 dir 精确匹配，旧的仓库名取值仍然可用
     legacy.flatMap(group => group.rows.map(row => row.key)).sort(),
     [...KEYS].sort(),
   );
+});
+
+test("Windows 路径在项目清单和分组里只显示文件夹名", () => {
+  const winSessions = [
+    { tool: "codex", id: "w1", title: "Win", dir: "D:\\code\\ferry", updated: now },
+    { tool: "claude", id: "w2", title: "Desk", dir: "C:\\Users\\12467\\Desktop\\rweixin", updated: now - 1 },
+    { tool: "opencode", id: "w3", title: "Desk 2", dir: "c:/Users/12467/Desktop/rweixin/", updated: now - 2 },
+  ];
+  const projects = libraryProjects(winSessions);
+  assert.deepEqual(projects.map(project => project.repo), ["ferry", "rweixin"]);
+  assert.equal(projects[1].count, 2, "不同 Agent 的斜杠和盘符大小写必须合成同一项目");
+  assert.equal(parentOf("D:\\code\\ferry"), "D:\\code");
+  assert.equal(parentOf("C:\\Users\\12467\\Desktop\\rweixin"), "C:\\Users\\12467\\Desktop");
+
+  const groups = buildLibraryGroups({
+    index: buildLibraryIndex({
+      sessions: winSessions, metadata: {}, migratedSessionKeys: new Set(), t,
+    }),
+    scope, display: byProject, query: "", t,
+  });
+  assert.deepEqual(groups.map(group => group.label), ["ferry", "rweixin"]);
+  assert.equal(groups[1].count, 2);
+
+  const filtered = buildLibraryGroups({
+    index: buildLibraryIndex({
+      sessions: winSessions, metadata: {}, migratedSessionKeys: new Set(), t,
+    }),
+    scope: { kind: "project", value: "D:\\code\\ferry" },
+    display: byTime, query: "", t,
+  });
+  assert.deepEqual(
+    filtered.flatMap(group => group.rows.map(row => row.id)),
+    ["w1"],
+  );
+});
+
+test("同名但不同路径的项目显示最短父目录，不再看起来像重复文件夹", () => {
+  const dated = [
+    { tool: "codex", id: "n1", title: "One", dir: "C:\\Chats\\2026-06-21\\new-chat", updated: now },
+    { tool: "codex", id: "n2", title: "Two", dir: "C:\\Chats\\2026-08-07\\new-chat", updated: now - 1 },
+  ];
+  const groups = buildLibraryGroups({
+    index: buildLibraryIndex({ sessions: dated, metadata: {}, migratedSessionKeys: new Set(), t }),
+    scope, display: byProject, query: "", t,
+  });
+  assert.deepEqual(groups.map(group => group.label),
+    ["new-chat (2026-06-21)", "new-chat (2026-08-07)"]);
 });
 
 test("搜索时命中的项目文件夹自动展开，折叠状态只在无搜索时生效", () => {
@@ -338,6 +401,10 @@ test("收藏值归一化:丢掉非字符串与重复项,顺序保持不变", () 
   assert.deepEqual(
     normalizeFavoriteProjects(["/a", "/b", "/a", 3, null, "", "/c"]),
     ["/a", "/b", "/c"],
+  );
+  assert.deepEqual(
+    normalizeFavoriteProjects(["C:\\Work\\Ferry", "c:/work/ferry/"]),
+    ["C:\\Work\\Ferry"],
   );
   assert.deepEqual(normalizeFavoriteProjects("nope"), []);
 });

@@ -213,16 +213,25 @@ fn freeze(path: &Path) {
 
 fn copy_frozen(source: &Path, target: &Path) {
     fs::create_dir_all(target.parent().expect("目标有父目录")).expect("目标目录可创建");
-    fs::copy(source, target).unwrap_or_else(|error| {
-        panic!("拷贝 {} 失败: {error}", source.display());
-    });
+    let fixture = fs::read_to_string(source)
+        .unwrap_or_else(|error| panic!("读取 {} 失败: {error}", source.display()))
+        .replace("\r\n", "\n");
+    fs::write(target, fixture)
+        .unwrap_or_else(|error| panic!("物化 {} 失败: {error}", source.display()));
     freeze(target);
 }
 
 /// 递归把沙箱绝对路径换成稳定字面量。
 fn normalize(value: &Value, home: &str) -> Value {
     match value {
-        Value::String(text) => Value::String(text.replace(home, SANDBOX_MARKER)),
+        Value::String(text) => {
+            let normalized = text.replace(home, SANDBOX_MARKER);
+            Value::String(if normalized.contains(SANDBOX_MARKER) {
+                normalized.replace('\\', "/")
+            } else {
+                normalized
+            })
+        }
         Value::Array(items) => {
             Value::Array(items.iter().map(|item| normalize(item, home)).collect())
         }
@@ -609,7 +618,9 @@ fn regenerate_or_verify_golden_baseline() {
                     fs::write(&path, &text).expect("基线可写");
                     continue;
                 }
-                let current = fs::read_to_string(&path).ok();
+                let current = fs::read_to_string(&path)
+                    .ok()
+                    .map(|value| value.replace("\r\n", "\n"));
                 if current.as_deref() != Some(text.as_str()) {
                     stale.push(format!("{kind}/{agent}/{case}.json"));
                 }

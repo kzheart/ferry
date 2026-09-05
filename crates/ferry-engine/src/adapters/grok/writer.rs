@@ -22,6 +22,7 @@ use crate::adapters::shared::scanner::{parse_iso8601_ms, split_jsonl_lines};
 use crate::adapters::shared::writing::{python_json_dumps, write_jsonl};
 use crate::errors::{DomainError, DomainResult};
 use crate::model::{tool_result_text, BlockKind, Message, Session, ToolCall, ToolResultStatus};
+use crate::system::filesystem::is_network_filesystem;
 use crate::system::paths::{grok_home, home_dir, process_environ};
 
 use super::blake3::blake3_hex;
@@ -251,31 +252,6 @@ fn hostname() -> String {
 #[cfg(not(unix))]
 fn hostname() -> String {
     std::env::var("COMPUTERNAME").unwrap_or_default()
-}
-
-/// 网络文件系统上 SQLite 的 WAL 不可靠，Grok 会按主机名分片索引；探测方式与
-/// Python 一致（`stat -f`）。
-fn is_network_filesystem(path: &Path) -> bool {
-    let display = path.to_string_lossy().into_owned();
-    let command: Vec<String> = if cfg!(target_os = "macos") {
-        vec!["/usr/bin/stat".into(), "-f".into(), "%T".into(), display]
-    } else {
-        vec![
-            "stat".into(),
-            "-f".into(),
-            "-c".into(),
-            "%T".into(),
-            display,
-        ]
-    };
-    let Ok(result) = crate::system::probes::run(&command, None, Duration::from_secs(3), None)
-    else {
-        return false;
-    };
-    let filesystem = result.stdout.trim().to_lowercase();
-    ["nfs", "smb", "cifs", "afp", "webdav", "sshfs"]
-        .iter()
-        .any(|marker| filesystem.contains(marker))
 }
 
 fn search_database_path(sessions_root: &Path) -> PathBuf {

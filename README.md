@@ -21,7 +21,8 @@
 <p align="center">
   <a href="https://github.com/kzheart/ferry/releases"><img src="https://img.shields.io/github/v/release/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&logo=github&label=Release" alt="Release" /></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri-8b5cf6?style=flat-square&labelColor=black&logo=tauri" alt="Tauri" />
-  <a href="#下载"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="平台" /></a>
+  <a href="#下载"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="macOS" /></a>
+  <a href="#下载"><img src="https://img.shields.io/badge/Windows-supported-2563eb?style=flat-square&labelColor=black" alt="Windows" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=License" alt="License" /></a>
   <img src="https://img.shields.io/github/last-commit/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=Last%20commit" alt="Last commit" />
 </p>
@@ -81,7 +82,7 @@ Cursor 可作为迁移来源（把 Cursor 会话迁到其它 Agent），但不�
 
 在一个统一的界面中浏览所有 Agent 的所有会话。会话按时间分组，标注来源 Agent。
 
-- **搜索**：按 `⌘K`，通过标题、目录或命令跳转到任意会话。
+- **搜索**：按 `⌘K`（macOS）或 `Ctrl+K`（Windows），通过标题、目录或命令跳转到任意会话。
 - **筛选**：按来源 Agent、时间范围或项目目录缩小范围。
 - **大规模**：为大会话库设计 —— 上千条会话的点击、滚动与筛选依然跟手。
 - **会话树**：完整对话拓扑，包含子会话（subagent）对话，会话内图片可直接预览。
@@ -178,8 +179,13 @@ Ferry 会在你确认之前把代价摆出来 —— *在写入之前*。
 | 平台 | 文件 |
 | --- | --- |
 | macOS（Apple Silicon） | `Ferry_<version>_aarch64.dmg` |
+| Windows 10/11（x64） | `Ferry_<version>_x64-setup.exe` |
 
 > **macOS**：首次打开若被系统拦截，在 **系统设置 → 隐私与安全性** 中允许运行即可。
+>
+> **Windows**：安装包目前没有 Authenticode 商业证书签名，因此 Microsoft Defender
+> SmartScreen 可能显示未知发布者。请确认文件来自本项目的 GitHub Releases，再选择
+> **更多信息 → 仍要运行**。应用内自动更新产物仍使用 Ferry 的更新密钥签名校验。
 
 Ferry 直接读取本机 Agent 的会话存储，不上传任何数据，也不需要注册账号。
 
@@ -193,9 +199,9 @@ Ferry 直接读取本机 Agent 的会话存储，不上传任何数据，也不�
 ```bash
 # 开发模式：构建原生引擎与编译后的 TypeScript runtime
 cargo build --manifest-path crates/ferry-engine/Cargo.toml
-cd ferry-runtime && npm ci
-cd ../app && npm ci
-npm run desktop
+npm --prefix ferry-runtime ci
+npm --prefix app ci
+npm --prefix app run desktop
 ```
 
 debug 宿主运行 `crates/ferry-engine/target/{debug,release}/ferry-engine`；
@@ -216,6 +222,16 @@ python scripts/build.py --skip-install
 根构建会校验原生 target 与工具链，生成两个 sidecar，再调用 Tauri。sidecar 只为
 `aarch64-apple-darwin` 或 `x86_64-pc-windows-msvc` 原生构建；交叉构建 sidecar 会被
 明确拒绝。
+
+在 macOS 或 Windows 上测试完整的首次启动流程：
+
+```bash
+npm --prefix app run desktop:fresh
+```
+
+这是开发用的破坏性命令：它会先停止 Ferry，再清除应用数据、会话索引、WebView
+存储、已安装的 `ferry` CLI，以及 Ferry 提供的 `ferry` / `ferry-resume` skill。
+只想查看清理范围时可运行 `npm --prefix app run fresh -- --dry-run`。
 
 仅前端开发：
 

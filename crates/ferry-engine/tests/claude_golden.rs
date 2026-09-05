@@ -29,6 +29,7 @@ static HOME_LOCK: Mutex<()> = Mutex::new(());
 struct HomeSandbox {
     _guard: MutexGuard<'static, ()>,
     previous: Option<String>,
+    previous_profile: Option<String>,
     root: tempfile::TempDir,
 }
 
@@ -37,10 +38,13 @@ impl HomeSandbox {
         let guard = HOME_LOCK.lock().unwrap_or_else(|error| error.into_inner());
         let root = tempfile::tempdir().expect("临时 HOME 可创建");
         let previous = std::env::var("HOME").ok();
+        let previous_profile = std::env::var("USERPROFILE").ok();
         unsafe { std::env::set_var("HOME", root.path()) };
+        unsafe { std::env::set_var("USERPROFILE", root.path()) };
         Self {
             _guard: guard,
             previous,
+            previous_profile,
             root,
         }
     }
@@ -55,6 +59,10 @@ impl Drop for HomeSandbox {
         match self.previous.take() {
             Some(value) => unsafe { std::env::set_var("HOME", value) },
             None => unsafe { std::env::remove_var("HOME") },
+        }
+        match self.previous_profile.take() {
+            Some(value) => unsafe { std::env::set_var("USERPROFILE", value) },
+            None => unsafe { std::env::remove_var("USERPROFILE") },
         }
     }
 }
@@ -126,7 +134,10 @@ fn materialize(home: &Path, case: &str) -> PathBuf {
         .join(case)
         .join(format!("{}.jsonl", native_stem(case)));
     std::fs::create_dir_all(target.parent().expect("目标有父目录")).expect("沙箱目录可创建");
-    std::fs::copy(fixture_dir(case).join("session.jsonl"), &target).expect("fixture 可复制");
+    let fixture = std::fs::read_to_string(fixture_dir(case).join("session.jsonl"))
+        .expect("fixture 可读取")
+        .replace("\r\n", "\n");
+    std::fs::write(&target, fixture).expect("fixture 可物化");
     freeze(&target);
     target
 }
@@ -149,13 +160,47 @@ fn freeze(path: &Path) {
     unsafe { libc::utimes(raw.as_ptr(), times.as_ptr()) };
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn freeze(path: &Path) {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::Storage::FileSystem::SetFileTime;
+
+    const WINDOWS_EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
+    let ticks = (FIXED_MTIME + WINDOWS_EPOCH_OFFSET_SECONDS) as u64 * 10_000_000;
+    let timestamp = FILETIME {
+        dwLowDateTime: ticks as u32,
+        dwHighDateTime: (ticks >> 32) as u32,
+    };
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .expect("fixture 可打开以设置 mtime");
+    let result = unsafe {
+        SetFileTime(
+            file.as_raw_handle(),
+            std::ptr::null(),
+            std::ptr::null(),
+            &timestamp,
+        )
+    };
+    assert_ne!(result, 0, "fixture mtime 可设置");
+}
+
+#[cfg(not(any(unix, windows)))]
 fn freeze(_path: &Path) {}
 
 /// 把沙箱绝对路径换成黄金文件里的稳定字面量。
 fn normalize_home(value: &Value, home: &str) -> Value {
     match value {
-        Value::String(text) => Value::String(text.replace(home, "<home>")),
+        Value::String(text) => {
+            let normalized = text.replace(home, "<home>");
+            Value::String(if normalized.contains("<home>") {
+                normalized.replace('\\', "/")
+            } else {
+                normalized
+            })
+        }
         Value::Array(items) => Value::Array(
             items
                 .iter()

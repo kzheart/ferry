@@ -123,9 +123,37 @@ fn apply_run_flags(command: &mut Command) {
     }
 }
 
+#[cfg(windows)]
+fn is_windows_batch(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".cmd") || lower.ends_with(".bat")
+}
+
 fn build_command(argv: &[String], cwd: Option<&Path>, env: Option<&[(String, String)]>) -> Command {
-    let mut command = Command::new(&argv[0]);
-    command.args(&argv[1..]);
+    let mut command = {
+        #[cfg(windows)]
+        {
+            if argv
+                .first()
+                .is_some_and(|program| is_windows_batch(program))
+            {
+                let mut command = Command::new("cmd.exe");
+                command.arg("/D").arg("/C");
+                command.args(argv);
+                command
+            } else {
+                let mut command = Command::new(&argv[0]);
+                command.args(&argv[1..]);
+                command
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let mut command = Command::new(&argv[0]);
+            command.args(&argv[1..]);
+            command
+        }
+    };
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }

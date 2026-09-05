@@ -1,4 +1,5 @@
 import { ACCENT } from "../shared/ui/toolDisplay.js";
+import { OVERLAY_TITLEBAR } from "../shared/ui/platform.js";
 
 export function AppShell({
   rail,
@@ -33,7 +34,7 @@ export function AppShell({
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
         {/* 侧栏收起后主区顶到窗口左上角,红绿灯就压在工具条上,得给它留出位置 */}
         <div data-tauri-drag-region style={{ height: 44, flex: "none", display: "flex", alignItems: "center",
-          gap: 12, padding: sidebarCollapsed ? "0 12px 0 78px" : "0 12px",
+          gap: 12, padding: sidebarCollapsed && OVERLAY_TITLEBAR ? "0 12px 0 78px" : "0 12px",
           transition: "padding .2s ease-out" }}>
           {toolbar}
         </div>

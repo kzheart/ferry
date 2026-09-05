@@ -1,7 +1,10 @@
 export {
   bucketOf,
   fmtTime,
+  isWindowsProjectPath,
+  normalizeProjectPath,
   operationRef,
+  projectPathKey,
   repoOf,
   sessionRef,
 } from "./sessionModel.js";
@@ -22,6 +25,7 @@ export {
   DEFAULT_SCOPE,
   displayDirtyCount,
   effectiveGroupMode,
+  globalSearchRows,
   libraryGroupExpanded,
   libraryScopeCounts,
   migrateLegacyLibraryState,

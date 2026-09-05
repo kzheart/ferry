@@ -13,6 +13,7 @@ use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
 use crate::model::{tool_result_text, AgentEdge, BlockKind, Session, ToolCall};
 use crate::system::paths::home_dir;
+use crate::system::sqlite;
 use crate::tool_ops::CanonicalOp;
 
 /// rollout 身份的磁盘缓存；条目格式版本固定为 2，改形状必须升版本。
@@ -497,14 +498,7 @@ fn registry_edges(root: &Path) -> HashMap<String, (String, String)> {
     if !db_path.exists() {
         return HashMap::new();
     }
-    let Ok(resolved) = fs::canonicalize(&db_path) else {
-        return HashMap::new();
-    };
-    let uri = format!("file:{}?mode=ro", resolved.display());
-    let Ok(connection) = rusqlite::Connection::open_with_flags(
-        &uri,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-    ) else {
+    let Ok(connection) = sqlite::open_readonly(&db_path) else {
         return HashMap::new();
     };
     let Ok(mut statement) = connection

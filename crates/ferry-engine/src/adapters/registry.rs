@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use crate::adapters::contracts::AgentAdapter;
 use crate::contracts::agents::AGENT_IDS;
 use crate::errors::{DomainError, DomainResult};
+use crate::system::executables;
 
 /// Adapter 装配函数：失败返回装配错误文本（对齐 Python 的 `ValueError`）。
 pub type AdapterBuilder = fn() -> Result<AgentAdapter, String>;
@@ -93,6 +94,24 @@ pub fn create_registry() -> Result<AdapterRegistry, String> {
             .map(|(_, build)| *build)
             .expect("上面已校验 builder 覆盖 AGENT_IDS");
         adapters.push(build()?);
+    }
+    for adapter in &adapters {
+        if adapter.manifest.fallback_bin_dirs.is_empty() {
+            continue;
+        }
+        let names: Vec<&str> = adapter
+            .manifest
+            .executables
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let directories: Vec<&str> = adapter
+            .manifest
+            .fallback_bin_dirs
+            .iter()
+            .map(String::as_str)
+            .collect();
+        executables::register_fallback_dirs(&names, &directories);
     }
     AdapterRegistry::new(adapters)
 }

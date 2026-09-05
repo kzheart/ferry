@@ -4,7 +4,7 @@
 //! `ferry-state.sqlite3` / `content-index.sqlite3`，双写场景必须在绑定这一步
 //! 就被挡掉。锁文件是 JSON `{pid, mode, socket, version, contract_hash}`，
 //! 正常退出时删除；被 kill -9 之类打断时留下陈旧锁，靠下一次启动的 pid 活性
-//! 校验兜底——所以锁文件本身不是真相，**pid 活性 + socket 可连**才是。
+//! 校验兜底。Windows 的探活不能建立真实管道连接，否则会消费 pending instance。
 
 use std::path::{Path, PathBuf};
 
@@ -126,8 +126,8 @@ pub fn occupant(socket: &Path, lock: &Path) -> Option<LockRecord> {
             return Some(record.clone());
         }
     }
-    // 锁丢了但确实有人在听：连得上就说明活着，不能清。
-    if socket.exists() && platform::connect(socket).is_ok() {
+    // 锁丢了但确实有人在听：非消费式探测命中就不能清。
+    if socket.exists() && platform::listener_available(socket) {
         return Some(record.unwrap_or(LockRecord {
             pid: 0,
             mode: EngineMode::App,

@@ -12,5 +12,12 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [react()],
   clearScreen: false,
-  server: { port: 5173, strictPort: true },
+  server: {
+    port: 5173,
+    strictPort: true,
+    watch: {
+      // Windows 上 Vite 默认会盯上 src-tauri/target 里的 .exe，触发 EBUSY 直接退出。
+      ignored: ["**/src-tauri/**"],
+    },
+  },
 });

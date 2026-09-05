@@ -2,6 +2,10 @@ import {
   BUCKETS,
   bucketOf,
   fmtTime,
+  isWindowsProjectPath,
+  normalizeProjectPath,
+  pathSegments,
+  projectPathKey,
   repoOf,
 } from "./sessionModel.js";
 import { sessionIdentity } from "./sessionAttachment.js";
@@ -9,10 +13,51 @@ import { sessionIdentity } from "./sessionAttachment.js";
 // 项目路径的父目录:同名仓库(多处 clone / monorepo 子包)只能靠它区分
 export function parentOf(dir) {
   if (!dir) return "";
-  const parts = String(dir).split("/").filter(Boolean);
+  const text = normalizeProjectPath(dir);
+  const parts = pathSegments(text);
   parts.pop();
   if (!parts.length) return "";
-  return `${String(dir).startsWith("/") ? "/" : ""}${parts.join("/")}`;
+  const sep = text.includes("\\") ? "\\" : "/";
+  const joined = parts.join(sep);
+  return text.startsWith("/") ? `/${joined}` : joined;
+}
+
+// 同名末级目录必须在可见文本里消歧，不能只把完整路径藏在 title 中。逐层增加
+// 父目录后缀，直到同名项可区分；这样常见情况只显示一段，不会把侧栏塞满绝对路径。
+function disambiguateProjectLabels(items) {
+  const byRepo = new Map();
+  for (const item of items) {
+    const repo = item.repo || repoOf(item.dir);
+    const key = isWindowsProjectPath(item.dir)
+      ? repo.toLowerCase() : repo;
+    const peers = byRepo.get(key) || [];
+    peers.push(item);
+    byRepo.set(key, peers);
+  }
+  for (const peers of byRepo.values()) {
+    peers.forEach(item => { item.ambiguous = peers.length > 1; });
+    if (peers.length === 1) {
+      peers[0].label = peers[0].repo || repoOf(peers[0].dir);
+      continue;
+    }
+    const parents = peers.map(item => pathSegments(parentOf(item.dir)));
+    const maxDepth = Math.max(...parents.map(parts => parts.length), 1);
+    let depth = 1;
+    for (; depth < maxDepth; depth += 1) {
+      const suffixes = parents.map((parts, index) => {
+        const suffix = parts.slice(-depth).join("/");
+        const windows = isWindowsProjectPath(peers[index].dir);
+        return windows ? suffix.toLowerCase() : suffix;
+      });
+      if (new Set(suffixes).size === suffixes.length) break;
+    }
+    peers.forEach((item, index) => {
+      const repo = item.repo || repoOf(item.dir);
+      const suffix = parents[index].slice(-depth).join("/") || parentOf(item.dir);
+      item.label = suffix ? `${repo} (${suffix})` : repo;
+    });
+  }
+  return items;
 }
 
 /**
@@ -24,15 +69,16 @@ export function parentOf(dir) {
 export function libraryProjects(sessions) {
   const byDir = new Map();
   for (const session of sessions) {
-    const dir = session.dir;
+    const dir = normalizeProjectPath(session.dir);
     if (!dir) continue;
-    const current = byDir.get(dir);
+    const key = projectPathKey(dir);
+    const current = byDir.get(key);
     if (current) {
       current.count += 1;
       current.updated = Math.max(current.updated, session.updated || 0);
       if (!current.tools.includes(session.tool)) current.tools.push(session.tool);
     } else {
-      byDir.set(dir, {
+      byDir.set(key, {
         dir,
         repo: repoOf(dir),
         parent: parentOf(dir),
@@ -44,12 +90,7 @@ export function libraryProjects(sessions) {
     }
   }
   const projects = [...byDir.values()].sort((left, right) => right.updated - left.updated);
-  const repoCounts = {};
-  projects.forEach(project => {
-    repoCounts[project.repo] = (repoCounts[project.repo] || 0) + 1;
-  });
-  projects.forEach(project => { project.ambiguous = repoCounts[project.repo] > 1; });
-  return projects;
+  return disambiguateProjectLabels(projects);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,9 +111,10 @@ export function normalizeFavoriteProjects(value) {
   const seen = new Set();
   const out = [];
   for (const item of value) {
-    const dir = typeof item === "string" ? item : "";
-    if (!dir || seen.has(dir)) continue;
-    seen.add(dir);
+    const dir = typeof item === "string" ? normalizeProjectPath(item) : "";
+    const key = projectPathKey(dir);
+    if (!dir || seen.has(key)) continue;
+    seen.add(key);
     out.push(dir);
   }
   return out;
@@ -85,9 +127,12 @@ export function seedFavoriteProjects(projects, count = FAVORITE_SEED_COUNT) {
 
 export function toggleFavoriteProject(favorites, dir) {
   if (!dir) return favorites;
-  return favorites.includes(dir)
-    ? favorites.filter(item => item !== dir)
-    : [...favorites, dir];
+  const normalized = normalizeProjectPath(dir);
+  const key = projectPathKey(normalized);
+  const exists = favorites.some(item => projectPathKey(item) === key);
+  return exists
+    ? favorites.filter(item => projectPathKey(item) !== key)
+    : [...favorites, normalized];
 }
 
 /**
@@ -111,8 +156,8 @@ export function reorderFavoriteProjects(favorites, dir, targetDir, position = "b
  * 已经没有任何会话的收藏项不渲染,但仍留在存储里——重新扫到就会自己回来。
  */
 export function favoriteProjectRows(projects, favorites) {
-  const byDir = new Map(projects.map(project => [project.dir, project]));
-  return favorites.map(dir => byDir.get(dir)).filter(Boolean);
+  const byDir = new Map(projects.map(project => [projectPathKey(project.dir), project]));
+  return favorites.map(dir => byDir.get(projectPathKey(dir))).filter(Boolean);
 }
 
 export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }) {
@@ -122,11 +167,12 @@ export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }
     const treeCount = session.tree_count || 1;
     // 引擎索引行带的是整棵树的消息数;缺字段(旧缓存/其它来源)时元信息行不显示条数
     const count = Number.isFinite(session.count) ? session.count : null;
+    const dir = normalizeProjectPath(session.dir);
     return {
       tool: session.tool,
       bucket: bucketOf(session.updated),
-      repo: repoOf(session.dir),
-      dir: session.dir || "",
+      repo: repoOf(dir),
+      dir,
       updated: session.updated || 0,
       tags,
       pinned: !!meta.pinned,
@@ -137,8 +183,8 @@ export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }
         key: sessionIdentity(session),
         id: session.id,
         title: meta.name || session.title || t("app:library.untitled"),
-        repo: repoOf(session.dir),
-        dir: session.dir,
+        repo: repoOf(dir),
+        dir,
         branch: session.branch || "",
         active: fmtTime(session.updated, t),
         tool: session.tool,
@@ -155,6 +201,19 @@ export function buildLibraryIndex({ sessions, metadata, migratedSessionKeys, t }
   });
 }
 
+// 全局搜索的标题命中:不受侧栏范围、显示选项、筛选框影响。空查询按最近活跃取前 N 条。
+export function globalSearchRows(index, query, limit = 60) {
+  const needle = String(query || "").trim().toLowerCase();
+  const matched = needle
+    ? index.filter(entry => entry.hay.includes(needle))
+    : index;
+  return matched
+    .slice()
+    .sort((left, right) => right.updated - left.updated)
+    .slice(0, limit)
+    .map(entry => entry.row);
+}
+
 const TIME_BUCKETS = {
   all: BUCKETS,
   today: ["today"],
@@ -163,17 +222,21 @@ const TIME_BUCKETS = {
 };
 
 // 项目视图的文件夹 key:必须带完整路径,仓库名会撞车
-export const projectGroupKey = dir => `dir:${dir}`;
+export const projectGroupKey = dir => `dir:${projectPathKey(dir).replace(/^(?:win|posix):/, "")}`;
 
 /**
  * 项目范围按完整 dir 比对。
  *
  * 旧版本把仓库名存进了 filter.dir(localStorage / 内存状态都可能残留),
- * 读到不含 "/" 的值就退回按仓库名匹配,不让存量用户看到空列表。
+ * 读到不像路径的值就退回按仓库名匹配,不让存量用户看到空列表。
+ * Windows 路径只有 `\`、没有 `/`，不能只靠斜杠判断。
  */
 export function matchesProjectFilter(entry, dir) {
   if (!dir) return true;
-  return String(dir).includes("/") ? entry.dir === dir : entry.repo === dir;
+  const text = String(dir);
+  return text.includes("/") || text.includes("\\")
+    ? projectPathKey(entry.dir) === projectPathKey(dir)
+    : entry.repo === dir;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +431,7 @@ export function buildLibraryGroups({ index, scope, display, query, t }) {
       group.entries.push(entry);
       byDir.set(key, group);
     }
-    [...byDir.values()]
+    disambiguateProjectLabels([...byDir.values()])
       .sort((left, right) => right.updated - left.updated)
       .forEach(group => {
         const entries = group.entries.slice().sort((left, right) => right.updated - left.updated);

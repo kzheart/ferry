@@ -1,9 +1,8 @@
 //! 本地 socket 的平台边界。
 //!
-//! 与 `desktop/platform` 同款规则：unix 有真实现（`std::os::unix::net`），其余
-//! 平台是显式的、可编译的 unsupported 占位，业务代码里不出现 `cfg` 分支。
-//! Windows 的命名管道（`\\.\pipe\ferry-engine-<user>`）是 P2 的事，落地时只换
-//! [`windows`] 一个模块。
+//! 与 `desktop/platform` 同款规则：Unix 走 domain socket，Windows 走命名管道，
+//! 其余平台是显式的、可编译的 unsupported 占位。业务代码只依赖本模块的统一接口，
+//! 不感知传输差异。
 
 use std::io::{Read, Write};
 use std::path::Path;
@@ -40,6 +39,13 @@ pub fn bind(path: &Path) -> Result<SocketListener, String> {
 /// 连接已有 socket。失败即「没有引擎在这个路径上监听」。
 pub fn connect(path: &Path) -> Result<SocketStream, String> {
     imp::connect(path).map(SocketStream)
+}
+
+/// Whether a listener owns this endpoint without opening a client connection.
+/// Windows must not consume the only pending named-pipe instance during stale
+/// lock arbitration.
+pub fn listener_available(path: &Path) -> bool {
+    imp::listener_available(path)
 }
 
 /// 进程是否存活。用于陈旧锁判定。

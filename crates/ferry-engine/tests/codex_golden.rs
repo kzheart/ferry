@@ -171,7 +171,10 @@ fn materialize(home: &Path, case_dir: &Path) -> PathBuf {
         .join("25")
         .join(format!("{stem}.jsonl"));
     fs::create_dir_all(target.parent().expect("有父目录")).expect("会话目录可创建");
-    fs::copy(case_dir.join("session.jsonl"), &target).expect("fixture 可拷贝");
+    let fixture = fs::read_to_string(case_dir.join("session.jsonl"))
+        .expect("fixture 可读取")
+        .replace("\r\n", "\n");
+    fs::write(&target, fixture).expect("fixture 可物化");
     freeze(&target);
     write_registry(&codex_home.join("state_5.sqlite"), case_dir, &target);
     target
@@ -180,7 +183,14 @@ fn materialize(home: &Path, case_dir: &Path) -> PathBuf {
 /// 把输出里残留的沙箱绝对路径换成稳定字面量。
 fn normalize(value: &Value, home: &str) -> Value {
     match value {
-        Value::String(text) => Value::String(text.replace(home, SANDBOX_MARKER)),
+        Value::String(text) => {
+            let normalized = text.replace(home, SANDBOX_MARKER);
+            Value::String(if normalized.contains(SANDBOX_MARKER) {
+                normalized.replace('\\', "/")
+            } else {
+                normalized
+            })
+        }
         Value::Array(items) => {
             Value::Array(items.iter().map(|item| normalize(item, home)).collect())
         }

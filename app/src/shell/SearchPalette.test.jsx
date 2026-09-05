@@ -21,7 +21,7 @@ function renderPalette(overrides = {}) {
     onClick: () => opened.push(result.id),
   }));
   const spy = vi.spyOn(Element.prototype, "scrollIntoView");
-  render(
+  const view = render(
     <SearchPalette
       placeholder="搜索"
       query=""
@@ -33,7 +33,7 @@ function renderPalette(overrides = {}) {
     />,
   );
   spy.mockClear(); // 忽略挂载时对首项的那次
-  return { spy, opened };
+  return { spy, opened, container: view.container };
 }
 
 test("↓ 让新高亮的结果滚进视口", () => {
@@ -120,4 +120,23 @@ test("鼠标移动过后再按方向键,重新交还键盘控制", () => {
 
   fireEvent.keyDown(window, { key: "Enter" });
   assert.deepEqual(opened, ["s6"]);
+});
+
+test("检索进行中画骨架和正在搜索,不闪无结果", () => {
+  const { container } = renderPalette({
+    results: [],
+    searching: true,
+    searchingLabel: "正在搜索…",
+  });
+
+  assert.ok(screen.getByText("正在搜索…"));
+  assert.ok(container.querySelector("[data-searching]"));
+  assert.equal(screen.queryByText("无结果"), null);
+});
+
+test("检索结束后仍无命中才显示无结果", () => {
+  const { container } = renderPalette({ results: [], searching: false });
+
+  assert.ok(screen.getByText("无结果"));
+  assert.equal(container.querySelector("[data-searching]"), null);
 });

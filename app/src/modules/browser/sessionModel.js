@@ -39,10 +39,51 @@ export function bucketOf(ms) {
   return "earlier";
 }
 
+// 按 `/` 或 `\` 拆路径段。Windows 会话 cwd 是 `D:\code\ferry`，只认斜杠会把整段
+// 路径当成仓库名画进侧栏。
+export function pathSegments(dir) {
+  return String(dir).replace(/^(?:\\\\\?\\|\/\/\?\/)/, "")
+    .replace(/\\/g, "/").split("/").filter(Boolean);
+}
+
+export function isWindowsProjectPath(dir) {
+  const text = String(dir || "").replace(/^(?:\\\\\?\\|\/\/\?\/)/, "");
+  return /^[A-Za-z]:[\\/]/.test(text) || /^(?:\\\\|\/\/)[^\\/]/.test(text);
+}
+
+// Agent 会把同一个 Windows cwd 写成 `C:\\work\\app`、`C:/work/app`，有时还
+// 带 Win32 的 `\\?\\` 前缀。项目身份不能直接使用这些原始字符串，否则跨 Agent
+// 的同一目录会被拆成多个文件夹。这里只做词法归一化，不访问文件系统：历史会话
+// 的目录可能已经不存在，也不能让符号链接解析改变 macOS 上的项目身份。
+export function normalizeProjectPath(dir) {
+  if (!dir) return "";
+  let text = String(dir).replace(/^(?:\\\\\?\\|\/\/\?\/)/, "");
+  const windows = isWindowsProjectPath(text);
+  if (windows) {
+    const unc = /^(?:\\\\|\/\/)/.test(text);
+    text = text.replace(/[\\/]+/g, "\\");
+    if (unc) text = `\\\\${text.replace(/^\\+/, "")}`;
+    if (/^[A-Za-z]:/.test(text)) text = `${text[0].toUpperCase()}${text.slice(1)}`;
+    while (text.endsWith("\\") && !/^[A-Za-z]:\\$/.test(text)) text = text.slice(0, -1);
+    return text;
+  }
+  text = text.replace(/\/{2,}/g, "/");
+  while (text.length > 1 && text.endsWith("/")) text = text.slice(0, -1);
+  return text;
+}
+
+// Windows 文件系统默认大小写不敏感；macOS 可能运行在大小写敏感卷上，因此只对
+// 明确长得像 Windows 的路径折叠大小写。
+export function projectPathKey(dir) {
+  const normalized = normalizeProjectPath(dir);
+  const windows = isWindowsProjectPath(normalized);
+  return `${windows ? "win" : "posix"}:${windows ? normalized.toLowerCase() : normalized}`;
+}
+
 export function repoOf(dir) {
   if (!dir) return "";
-  const parts = String(dir).split("/").filter(Boolean);
-  return parts[parts.length - 1] || dir;
+  const parts = pathSegments(dir);
+  return parts[parts.length - 1] || "";
 }
 
 // 会话引用只能由 Engine 签发；路径和各 Agent 原生 ID 不得进入 UI 调用链。

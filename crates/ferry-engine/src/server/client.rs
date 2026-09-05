@@ -180,7 +180,7 @@ pub fn connect(socket: &Path) -> Result<Client, Failure> {
         return Err(transport(
             "transport_unsupported",
             "当前平台尚未实现本地 socket 传输",
-            "Windows 命名管道待实现；请在 App 内使用 Ferry",
+            "请在 Ferry App 内使用，或升级到支持本平台传输的引擎",
         ));
     }
     let client = connect_or_spawn(socket)?;
@@ -196,7 +196,7 @@ pub fn attach(socket: &Path) -> Result<Client, Failure> {
         return Err(transport(
             "transport_unsupported",
             "当前平台尚未实现本地 socket 传输",
-            "Windows 命名管道待实现；请在 App 内使用 Ferry",
+            "请在 Ferry App 内使用，或升级到支持本平台传输的引擎",
         ));
     }
     Client::open(socket).map_err(|_| {
@@ -213,10 +213,9 @@ fn connect_or_spawn(socket: &Path) -> Result<Client, Failure> {
         return Ok(client);
     }
     let lock_path = lock::lock_path();
-    // 持有者还活着（正在启动）就别再拉一个，等它把 socket 挂出来。
-    let holder_alive = lock::read(&lock_path).is_some_and(|record| {
-        record.socket == socket.display().to_string() && platform::process_alive(record.pid)
-    });
+    // 只要锁的持有者还活着就禁止再拉一个。Windows 路径可能只是斜杠、大小写或
+    // verbatim 前缀不同；用 display 字符串相等参与生死仲裁会制造第二个引擎。
+    let holder_alive = lock::read(&lock_path).is_some_and(|record| holder_is_alive(&record));
     if !holder_alive {
         clear_stale(socket, &lock_path);
         spawn_daemon(socket)?;
@@ -224,8 +223,12 @@ fn connect_or_spawn(socket: &Path) -> Result<Client, Failure> {
     wait_for_socket(socket)
 }
 
+fn holder_is_alive(record: &lock::LockRecord) -> bool {
+    platform::process_alive(record.pid)
+}
+
 fn clear_stale(socket: &Path, lock_path: &Path) {
-    if socket.exists() && platform::connect(socket).is_err() {
+    if socket.exists() && !platform::listener_available(socket) {
         let _ = std::fs::remove_file(socket);
     }
     if lock::read(lock_path).is_some_and(|record| !platform::process_alive(record.pid)) {
@@ -323,7 +326,16 @@ fn detach(command: &mut std::process::Command) {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn detach(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW);
+}
+
+#[cfg(not(any(unix, windows)))]
 fn detach(_command: &mut std::process::Command) {}
 
 /// 契约哈希握手：不一致的 daemon 换掉，不一致的 App 报错。
@@ -381,5 +393,17 @@ mod tests {
         assert_eq!(payload["params"]["message"], Value::from("连不上"));
         assert!(payload["params"]["recovery"].is_string());
         assert_eq!(failure.exit_code(), 2);
+    }
+
+    #[test]
+    fn live_holder_does_not_depend_on_socket_path_spelling() {
+        let record = lock::LockRecord {
+            pid: std::process::id(),
+            mode: EngineMode::App,
+            socket: r"C:/Users/example/.ferry/ENGINE.sock".into(),
+            version: "test".into(),
+            contract_hash: FERRY_CONTRACT_HASH.into(),
+        };
+        assert!(holder_is_alive(&record));
     }
 }

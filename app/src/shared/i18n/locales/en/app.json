@@ -79,7 +79,7 @@
   },
   "pane": {
     "libraryTitle": "Sessions",
-    "libraryPlaceholder": "Search sessions, dirs, commands…",
+    "libraryPlaceholder": "Search sessions",
     "search": "Search"
   },
   "prompt": {
@@ -94,6 +94,8 @@
   "search": {
     "recent": "Recent",
     "empty": "No matches",
+    "placeholder": "Search sessions, dirs, commands…",
+    "searching": "Searching…",
     "fullText": "Full-text matches",
     "contentHit": "in content",
     "indexing": "Building the content index — full-text matches will appear once it is ready."

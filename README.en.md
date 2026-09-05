@@ -22,7 +22,8 @@
 <p align="center">
   <a href="https://github.com/kzheart/ferry/releases"><img src="https://img.shields.io/github/v/release/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&logo=github&label=Release" alt="Release" /></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri-8b5cf6?style=flat-square&labelColor=black&logo=tauri" alt="Tauri" />
-  <a href="#download"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="Platform" /></a>
+  <a href="#download"><img src="https://img.shields.io/badge/macOS-supported-8b5cf6?style=flat-square&labelColor=black" alt="macOS" /></a>
+  <a href="#download"><img src="https://img.shields.io/badge/Windows-supported-2563eb?style=flat-square&labelColor=black" alt="Windows" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=License" alt="License" /></a>
   <img src="https://img.shields.io/github/last-commit/kzheart/ferry?style=flat-square&labelColor=black&color=8b5cf6&label=Last%20commit" alt="Last commit" />
 </p>
@@ -85,7 +86,7 @@ use **Resume** (`ferry-resume`) instead.
 Browse every session from every agent in a single, consistent interface. Sessions are
 grouped by recency and tagged with their source agent.
 
-- **Search**: Hit `⌘K` to jump to any session by title, directory, or command.
+- **Search**: Hit `⌘K` on macOS or `Ctrl+K` on Windows to jump to any session by title, directory, or command.
 - **Filter**: Narrow by source agent, time range, or project directory.
 - **Scale**: Designed for large libraries — thousands of sessions stay responsive under click, scroll, and filter.
 - **Session tree**: Full conversation topology — including subagent dialogues — with inline image preview.
@@ -189,8 +190,15 @@ Modify conversations before you resume them:
 | Platform | File |
 | --- | --- |
 | macOS (Apple Silicon) | `Ferry_<version>_aarch64.dmg` |
+| Windows 10/11 (x64) | `Ferry_<version>_x64-setup.exe` |
 
 > **macOS**: If the app is blocked on first launch, allow it under **System Settings → Privacy & Security**.
+>
+> **Windows**: The installer is not currently signed with a commercial Authenticode
+> certificate, so Microsoft Defender SmartScreen may show an unknown-publisher warning.
+> Verify that the file came from this project's GitHub Releases, then choose
+> **More info → Run anyway**. In-app updater artifacts are still verified with Ferry's
+> updater signing key.
 
 Ferry reads your agents' local session stores directly. Nothing is uploaded, and no account is required.
 
@@ -205,9 +213,9 @@ alongside the Tauri shell.
 ```bash
 # Development builds the native engine and the compiled TypeScript runtime
 cargo build --manifest-path crates/ferry-engine/Cargo.toml
-cd ferry-runtime && npm ci
-cd ../app && npm ci
-npm run desktop
+npm --prefix ferry-runtime ci
+npm --prefix app ci
+npm --prefix app run desktop
 ```
 
 A debug host runs `crates/ferry-engine/target/{debug,release}/ferry-engine`;
@@ -229,6 +237,17 @@ The root build validates the native target and toolchain, creates both
 sidecars, then invokes Tauri. Sidecars are built natively for
 `aarch64-apple-darwin` or `x86_64-pc-windows-msvc`; cross-building a sidecar is
 intentionally rejected.
+
+To test the complete first-run flow on macOS or Windows:
+
+```bash
+npm --prefix app run desktop:fresh
+```
+
+This is a destructive development command. It stops Ferry, then removes app data,
+the session index, WebView storage, the installed `ferry` CLI, and Ferry's bundled
+`ferry` / `ferry-resume` skills. To preview the cleanup without deleting anything,
+run `npm --prefix app run fresh -- --dry-run`.
 
 For frontend-only development:
 

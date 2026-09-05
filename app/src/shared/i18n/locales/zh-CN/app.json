@@ -79,7 +79,7 @@
   },
   "pane": {
     "libraryTitle": "会话",
-    "libraryPlaceholder": "搜索会话、目录、命令…",
+    "libraryPlaceholder": "搜索会话",
     "search": "搜索"
   },
   "prompt": {
@@ -94,6 +94,8 @@
   "search": {
     "recent": "最近会话",
     "empty": "无匹配结果",
+    "placeholder": "搜索会话、目录、命令…",
+    "searching": "正在搜索…",
     "fullText": "全文匹配",
     "contentHit": "正文命中",
     "indexing": "内容索引构建中,建好后这里会出现全文匹配结果。"

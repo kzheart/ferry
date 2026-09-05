@@ -419,6 +419,8 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
   @keyframes fslide { from { opacity: 0; } to { opacity: 1; } }
   @keyframes fpop { from { opacity: 0; } to { opacity: 1; } }
   * { transition-property: opacity, background-color, color, border-color !important; }
+  .lib-search-skel-row { opacity: .75; animation: none; }
+  .lib-search-skel-row::after { animation: none; opacity: 0; }
 }
 
 /* 次要/破坏性动作:静止时不占视觉位置,指到这一行才淡入。
@@ -780,6 +782,72 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 /* ---- 资源栏:范围标题与常驻搜索框 ---- */
 .lib-scope-title:hover { background: var(--fill4); }
 .lib-search:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ⌘K 全文检索等待态:骨架行 + 扫光,避免先闪「无匹配」 */
+@keyframes fsearch-shimmer {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+.lib-search-pulse { animation: fbreath 1.4s ease-in-out infinite; color: var(--accent); }
+.lib-search-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 2px 8px;
+}
+.lib-search-skel-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 12px;
+  color: var(--tx4);
+  font-size: 13px;
+}
+.lib-search-skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 10px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  opacity: 0;
+  animation: fpop .28s ease forwards;
+}
+.lib-search-skel-row:nth-child(2) { animation-delay: .04s; }
+.lib-search-skel-row:nth-child(3) { animation-delay: .1s; }
+.lib-search-skel-row:nth-child(4) { animation-delay: .16s; }
+.lib-search-skel-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--fill4);
+  flex: none;
+}
+.lib-search-skel-bars {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.lib-search-skel-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fill4);
+}
+.lib-search-skel-bar-sub { width: 34%; opacity: .7; }
+.lib-search-skel-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tx1) 7%, transparent), transparent);
+  animation: fsearch-shimmer 1.2s ease-in-out infinite;
+}
+html[data-reduce="1"] .lib-search-pulse { animation: none; }
+html[data-reduce="1"] .lib-search-skel-row { opacity: .75; animation: none; }
+html[data-reduce="1"] .lib-search-skel-row::after { animation: none; opacity: 0; }
 
 /* ---- 首启向导(FirstRun):渡轮动效 ---- */
 /* 换页:方向滑入;高度过渡由 JS 配合(定格旧高→过渡到新高→恢复 auto) */

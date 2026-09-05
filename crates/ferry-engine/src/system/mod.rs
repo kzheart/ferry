@@ -2,9 +2,11 @@
 
 pub mod environment;
 pub mod executables;
+pub mod filesystem;
 pub mod git;
 pub mod models;
 pub mod paths;
 pub mod pricing;
 pub mod probes;
 pub mod snapshots;
+pub mod sqlite;
