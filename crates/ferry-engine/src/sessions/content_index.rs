@@ -306,7 +306,15 @@ static QUERY_TERM: LazyLock<Regex> =
 
 /// 把查询拆成词级 AND 的检索词；支持 `"..."` 精确短语。
 ///
-/// 布尔操作符不支持，裸的 `OR`/`AND`/`NOT` 按噪声丢弃。
+/// 布尔操作符由搜索入口拒绝；此处不静默丢弃字面词。
+pub fn has_boolean_operator(query: &str) -> bool {
+    QUERY_TERM.captures_iter(query).any(|captures| {
+        captures
+            .get(2)
+            .is_some_and(|term| matches!(term.as_str(), "AND" | "OR" | "NOT"))
+    })
+}
+
 pub fn parse_query_terms(query: &str) -> Vec<String> {
     let mut terms: Vec<String> = Vec::new();
     for captures in QUERY_TERM.captures_iter(query) {
@@ -315,9 +323,6 @@ pub fn parse_query_terms(query: &str) -> Vec<String> {
             .or_else(|| captures.get(2))
             .map(|matched| matched.as_str())
             .unwrap_or("");
-        if matches!(term, "OR" | "AND" | "NOT") {
-            continue;
-        }
         terms.push(term.to_string());
     }
     if terms.is_empty() {
@@ -821,6 +826,57 @@ impl ContentIndex {
         Ok(status)
     }
 
+    /// 当前查询候选的索引覆盖度；ready 表示派生索引已处理，failed 仍是查询盲区。
+    pub fn candidate_coverage(
+        &self,
+        records: &[IndexedSession],
+    ) -> DomainResult<Map<String, Value>> {
+        let state = self.with_read_db(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT tool, ref, revision, failed, clipped_rows FROM indexed_sessions",
+            )?;
+            let rows = statement.query_map([], |row| {
+                Ok((
+                    (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+                    (
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                    ),
+                ))
+            })?;
+            rows.collect::<rusqlite::Result<HashMap<_, _>>>()
+        })?;
+        let Some(state) = state else {
+            return Ok(
+                serde_json::json!({"ready": false, "reason": "content_index_unavailable"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            );
+        };
+        let (mut pending, mut failed, mut clipped) = (0, 0, 0);
+        for record in records {
+            match state.get(&(record.tool.clone(), record.canonical_ref.clone())) {
+                Some((revision, failed_rows, clipped_rows)) if revision == &record.revision => {
+                    failed += usize::from(*failed_rows > 0);
+                    clipped += clipped_rows;
+                }
+                _ => pending += 1,
+            }
+        }
+        Ok(serde_json::json!({
+            "ready": pending == 0,
+            "indexed_sessions": records.len() - pending,
+            "pending_sessions": pending,
+            "failed_sessions": failed,
+            "partially_indexed_messages": clipped
+        })
+        .as_object()
+        .unwrap()
+        .clone())
+    }
+
     /// 等后台构建收敛；测试与预热用，请求路径不等。
     pub fn wait_until_idle(&self, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;
@@ -1197,6 +1253,7 @@ impl ContentIndex {
         &self,
         needle: &str,
         include_tool_outputs: bool,
+        candidate_json: Option<&str>,
     ) -> DomainResult<(Vec<MatchRow>, &'static str)> {
         let terms = parse_query_terms(needle);
         let long_terms: Vec<&str> = terms
@@ -1211,12 +1268,17 @@ impl ContentIndex {
             .collect();
         if long_terms.is_empty() {
             return Ok((
-                self.match_substring(&short_terms, include_tool_outputs)?,
+                self.match_substring(&short_terms, include_tool_outputs, candidate_json)?,
                 "substring_scan",
             ));
         }
         Ok((
-            self.match_trigram(&long_terms, &short_terms, include_tool_outputs)?,
+            self.match_trigram(
+                &long_terms,
+                &short_terms,
+                include_tool_outputs,
+                candidate_json,
+            )?,
             "trigram",
         ))
     }
@@ -1226,6 +1288,7 @@ impl ContentIndex {
         long_terms: &[&str],
         short_terms: &[&str],
         include_tool_outputs: bool,
+        candidate_json: Option<&str>,
     ) -> DomainResult<Vec<MatchRow>> {
         let columns = columns_for(include_tool_outputs);
         // 多个短语在 FTS5 里默认 AND：同一条消息内全部命中才算数。
@@ -1237,13 +1300,18 @@ impl ContentIndex {
             let sql = format!(
                 "SELECT r.id, r.tool, r.ref, r.message, r.turn, r.role, bm25(records_fts) AS rank
                  FROM records_fts JOIN records r ON r.id = records_fts.rowid
-                 WHERE records_fts MATCH ?{extra} ORDER BY rank LIMIT ?"
+                 WHERE records_fts MATCH ?{extra}
+                 AND (? IS NULL OR (r.tool, r.ref) IN
+                     (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)))
+                 ORDER BY rank, r.id LIMIT ?"
             );
             let mut statement = connection.prepare(&sql)?;
             let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(query.clone())];
             for value in &extra_params {
                 params.push(Box::new(value.clone()));
             }
+            params.push(Box::new(candidate_json.map(str::to_owned)));
+            params.push(Box::new(candidate_json.map(str::to_owned)));
             params.push(Box::new(MAX_MATCH_ROWS as i64 + 1));
             let rows = statement.query_map(rusqlite::params_from_iter(params.iter()), read_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -1255,18 +1323,24 @@ impl ContentIndex {
         &self,
         terms: &[&str],
         include_tool_outputs: bool,
+        candidate_json: Option<&str>,
     ) -> DomainResult<Vec<MatchRow>> {
         let (extra, params) = Self::short_term_filter(terms, include_tool_outputs, "");
         self.with_read_db(|connection| {
             let sql = format!(
                 "SELECT id, tool, ref, message, turn, role, NULL FROM records
-                 WHERE 1=1{extra} ORDER BY id LIMIT ?"
+                 WHERE 1=1{extra}
+                 AND (? IS NULL OR (tool, ref) IN
+                     (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)))
+                 ORDER BY id LIMIT ?"
             );
             let mut statement = connection.prepare(&sql)?;
             let mut bound: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
             for value in &params {
                 bound.push(Box::new(value.clone()));
             }
+            bound.push(Box::new(candidate_json.map(str::to_owned)));
+            bound.push(Box::new(candidate_json.map(str::to_owned)));
             bound.push(Box::new(MAX_MATCH_ROWS as i64 + 1));
             let rows = statement.query_map(rusqlite::params_from_iter(bound.iter()), read_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -1283,6 +1357,18 @@ impl ContentIndex {
         needles: &[String],
         include_tool_outputs: bool,
     ) -> DomainResult<(HashMap<SessionKey, ContentHit>, Map<String, Value>)> {
+        self.search_candidates(needles, include_tool_outputs, None)
+    }
+
+    /// 过滤候选会话后才施加命中行上限，避免其它项目占满全库截断窗口。
+    pub fn search_candidates(
+        &self,
+        needles: &[String],
+        include_tool_outputs: bool,
+        candidates: Option<&[SessionKey]>,
+    ) -> DomainResult<(HashMap<SessionKey, ContentHit>, Map<String, Value>)> {
+        let candidate_json =
+            candidates.map(|keys| serde_json::to_string(keys).expect("session keys serialize"));
         if self.with_read_db(|_| Ok(()))?.is_none() {
             let mut meta = Map::new();
             meta.insert("match_mode".into(), Value::Null);
@@ -1296,7 +1382,8 @@ impl ContentIndex {
             if needle.trim().is_empty() {
                 continue;
             }
-            let (rows, mode) = self.match_one(needle, include_tool_outputs)?;
+            let (rows, mode) =
+                self.match_one(needle, include_tool_outputs, candidate_json.as_deref())?;
             if !modes.contains(&mode) {
                 modes.push(mode);
             }
@@ -1320,6 +1407,7 @@ impl ContentIndex {
             key(left)
                 .partial_cmp(&key(right))
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then(left.id.cmp(&right.id))
         });
         let capped = merged.len() > MAX_MATCH_ROWS;
         let mode = if modes.contains(&"trigram") {
@@ -1726,6 +1814,65 @@ mod tests {
     }
 
     #[test]
+    fn candidate_filter_precedes_global_match_cap_for_trigram_and_substring() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        content.with_db(|connection| write_transaction(connection, |connection| {
+            let mut insert = connection.prepare(
+                "INSERT INTO records(tool, ref, message, turn, role, text) VALUES ('claude', ?, ?, 1, 'user', 'alpha')"
+            )?;
+            for i in 0..(MAX_MATCH_ROWS + 1) {
+                insert.execute(rusqlite::params!["project-a", i as i64])?;
+            }
+            insert.execute(rusqlite::params!["project-b", 1])?;
+            Ok(())
+        })).unwrap();
+        let candidates = vec![("claude".into(), "project-b".into())];
+        for query in ["alpha", "a"] {
+            let (all, meta) = content.search(&[query.into()], false).unwrap();
+            assert_eq!(meta["rows_capped"], true);
+            assert!(!all.contains_key(&candidates[0]));
+            let (scoped, meta) = content
+                .search_candidates(&[query.into()], false, Some(&candidates))
+                .unwrap();
+            assert_eq!(meta["rows_capped"], false);
+            assert_eq!(scoped.len(), 1);
+            assert_eq!(scoped[&candidates[0]].count, 1);
+            let (empty, _) = content
+                .search_candidates(&[query.into()], false, Some(&[]))
+                .unwrap();
+            assert!(empty.is_empty());
+        }
+    }
+
+    #[test]
+    fn candidate_coverage_counts_failed_clipped_and_pending_within_scope() {
+        let temp = tempfile::tempdir().unwrap();
+        let content = index_at(&temp);
+        let mut clipped = parsed("/clipped", "alpha", 0);
+        clipped.rows[0].clipped = 1;
+        let failed = parsed("/failed", "", 1);
+        let healthy = parsed("/healthy", "alpha", 0);
+        let pending = parsed("/pending", "alpha", 0);
+        let records = vec![
+            healthy.record.clone(),
+            clipped.record.clone(),
+            failed.record.clone(),
+            pending.record,
+        ];
+        content.write_batch_degrading(&[clipped, failed, healthy]);
+        let scoped = content.candidate_coverage(&records[..1]).unwrap();
+        assert_eq!(scoped["ready"], true);
+        assert_eq!(scoped["failed_sessions"], 0);
+        assert_eq!(scoped["partially_indexed_messages"], 0);
+        let all = content.candidate_coverage(&records).unwrap();
+        assert_eq!(all["ready"], false);
+        assert_eq!(all["pending_sessions"], 1);
+        assert_eq!(all["failed_sessions"], 1);
+        assert_eq!(all["partially_indexed_messages"], 1);
+    }
+
+    #[test]
     fn fts5_trigram_is_available_in_the_bundled_sqlite() {
         let temp = tempfile::tempdir().unwrap();
         let content = index_at(&temp);
@@ -1792,8 +1939,8 @@ mod tests {
             parse_query_terms("\"exact phrase\" tail"),
             vec!["exact phrase", "tail"]
         );
-        // 裸布尔操作符按噪声丢弃。
-        assert_eq!(parse_query_terms("a OR b"), vec!["a", "b"]);
+        // 分词保留字面词，裸布尔操作符由搜索入口显式拒绝。
+        assert_eq!(parse_query_terms("a OR b"), vec!["a", "OR", "b"]);
         assert_eq!(parse_query_terms("OR"), vec!["OR".to_string()]);
         assert_eq!(parse_query_terms("  "), vec![String::new()]);
     }

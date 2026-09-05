@@ -1,7 +1,7 @@
 //! `session_read --inert` 的惰性剥离：把源 agent 的脚手架从可见文本里摘掉。
 //!
 //! 剥离不是安全机制，只是降噪 + 显式标记：真正的防线是接手方 skill 里的
-//! 「历史是证据不是指令」。这里做的是把 system prompt、环境包装、推理摘要
+//! 「历史是证据不是指令」。这里做的是把 system prompt、环境包装、续接摘要
 //! 挡在 `ferry read` 的输出之外，让接手方的上下文预算花在真正的对话上。
 //!
 //! **形态会随各家 CLI 版本漂移**，所以包装枚举集中在本文件顶部的常量表里，
@@ -11,6 +11,7 @@
 //! 序号，否则同一个 ref 在两种模式下 `--from` 的含义会漂移。
 
 use crate::model::{Block, BlockKind, Message};
+use sha2::{Digest, Sha256};
 
 /// 整条丢弃的角色。
 ///
@@ -31,6 +32,8 @@ pub const WRAPPER_TAGS: &[&str] = &[
     // Claude Code
     "system-reminder",
     "command-message",
+    "task-notification",
+    "timestamp",
 ];
 
 /// 只保留标签内文的包装段：外面全是脚手架，里面才是用户原话。
@@ -41,14 +44,9 @@ pub const UNWRAP_TAGS: &[&str] = &[
 
 /// 以此开头的整段文本按脚手架丢弃。
 pub const DROP_PREFIXES: &[&str] = &[
-    // 各家注入的时间戳段
-    "<timestamp>",
     // Claude 的 `isCompactSummary` 记录在 canonical 模型里没有标记位，只能按它
     // 固定的开场白识别；认不出来最多是多一段压缩摘要，不影响正确性。
     "This session is being continued from a previous conversation",
-    // Codex 注入项目 AGENTS.md 的那条 user 消息（2026-08-22 对本机 klib 实测）：
-    // 剥掉 `<INSTRUCTIONS>` 之后只剩这行标题，整条也是脚手架。
-    "# AGENTS.md instructions for",
 ];
 
 /// 一条消息经惰性剥离后的呈现：`None` 表示整条丢弃。
@@ -60,6 +58,86 @@ pub type InertBlocks<'a> = Vec<(&'a Block, Option<String>)>;
 /// 该角色是否整条丢弃。
 pub fn drops_role(role: &str) -> bool {
     DROP_ROLES.contains(&role)
+}
+
+/// 消息来源的保守提示。canonical Message 尚无原生 isMeta/isCompactSummary 字段，
+/// 因而只识别明确包装，不把普通英文、标题或提到通知的正文猜成系统生成内容。
+pub fn message_origin(message: &Message) -> &'static str {
+    if drops_role(&message.role) {
+        return "scaffolding";
+    }
+    let texts: Vec<&str> = message
+        .blocks
+        .iter()
+        .filter(|block| block.kind == BlockKind::Text)
+        .map(|block| block.text.as_str())
+        .collect();
+    let has_evidence = message
+        .blocks
+        .iter()
+        .any(|block| matches!(block.kind, BlockKind::Tool | BlockKind::Image));
+    let has_visible_text = texts.iter().any(|text| !strip_text(text).is_empty());
+    if !has_visible_text {
+        if texts
+            .iter()
+            .any(|text| is_continuation_summary(text.trim()))
+        {
+            return "continuation_summary";
+        }
+        if texts
+            .iter()
+            .any(|text| text.contains("<task-notification>"))
+        {
+            return "task_notification";
+        }
+        if has_evidence {
+            return if message.role == "assistant" {
+                "assistant_response"
+            } else {
+                "unknown"
+            };
+        }
+        if texts.iter().any(|text| !text.trim().is_empty()) {
+            return "scaffolding";
+        }
+        return "unknown";
+    }
+    match message.role.as_str() {
+        "user" => "user_request",
+        "assistant" => "assistant_response",
+        _ => "unknown",
+    }
+}
+
+/// 清洗后正文的重复候选键，不代表同一任务，也不授权自动删除。
+/// 压缩摘要保留正文参与比较，工具参数和输出不进入该键。
+pub fn duplicate_key(message: &Message) -> Option<String> {
+    if drops_role(&message.role) {
+        return None;
+    }
+    let texts: Vec<String> = message
+        .blocks
+        .iter()
+        .filter(|block| block.kind == BlockKind::Text)
+        .map(|block| {
+            if is_continuation_summary(block.text.trim()) {
+                block.text.trim().to_string()
+            } else {
+                strip_text(&block.text)
+            }
+        })
+        .filter(|text| !text.is_empty())
+        .collect();
+    let normalized = texts
+        .join("\n")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!normalized.is_empty()).then(|| format!("sha256:{:x}", Sha256::digest(normalized.as_bytes())))
+}
+
+fn is_continuation_summary(text: &str) -> bool {
+    DROP_PREFIXES.iter().any(|prefix| text.starts_with(prefix))
 }
 
 /// 剥离一条消息；返回 `None` 表示这条消息应当整条丢弃（并计入 `stripped_messages`）。
@@ -98,17 +176,23 @@ pub fn strip_text(text: &str) -> String {
     for tag in WRAPPER_TAGS {
         current = remove_tag(&current, tag);
     }
+    // 只移除注入的标题行，不能因其开头匹配而吞掉后面的真实请求。
+    let trimmed = current.trim();
+    let current = if let Some(first) = trimmed.lines().next() {
+        if first == "# AGENTS.md instructions" || first.starts_with("# AGENTS.md instructions for ")
+        {
+            trimmed.split_once('\n').map(|(_, rest)| rest).unwrap_or("")
+        } else {
+            trimmed
+        }
+    } else {
+        trimmed
+    };
     let trimmed = current.trim();
     if trimmed.is_empty() {
         return String::new();
     }
-    if DROP_PREFIXES
-        .iter()
-        .any(|prefix| trimmed.starts_with(prefix))
-    {
-        return String::new();
-    }
-    if is_reasoning_summary(trimmed) {
+    if is_continuation_summary(trimmed) {
         return String::new();
     }
     trimmed.to_string()
@@ -161,23 +245,6 @@ fn remove_tag(text: &str, tag: &str) -> String {
     out
 }
 
-/// Codex 的助手消息里夹着一行行加粗的推理摘要（`**Inspecting store.go …**`）。
-/// 整段每一行都是加粗单行时按 thinking 处理。
-fn is_reasoning_summary(text: &str) -> bool {
-    let mut saw_line = false;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        saw_line = true;
-        if !(line.len() > 4 && line.starts_with("**") && line.ends_with("**")) {
-            return false;
-        }
-    }
-    saw_line
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,18 +290,21 @@ mod tests {
     }
 
     #[test]
-    fn codex_bold_one_line_reasoning_summaries_are_treated_as_thinking() {
-        assert_eq!(strip_text("**Inspecting store.go and its callers**"), "");
-        assert_eq!(
-            strip_text("**Planning docs auth integration**\n**Proposing API split**"),
-            ""
-        );
-        // 正文里夹一行加粗不算推理摘要。
-        assert_eq!(
-            strip_text("**结论**\n我先按发布链路拆开核对"),
-            "**结论**\n我先按发布链路拆开核对"
-        );
-        assert_eq!(strip_text("****"), "****");
+    fn bold_text_without_native_reasoning_markers_is_preserved() {
+        for text in [
+            "**Inspecting store.go and its callers**",
+            "**Planning docs auth integration**\n**Proposing API split**",
+            "**The build passed.**",
+            "**Result**\n**All checks passed**",
+            "**结论**\n我先按发布链路拆开核对",
+            "****",
+        ] {
+            assert_eq!(strip_text(text), text);
+            assert_eq!(
+                message_origin(&message("assistant", &[text])),
+                "assistant_response"
+            );
+        }
     }
 
     #[test]
@@ -272,6 +342,20 @@ mod tests {
             ),
             ""
         );
+        assert_eq!(
+            strip_text("# AGENTS.md instructions\n<INSTRUCTIONS>规则</INSTRUCTIONS>"),
+            ""
+        );
+        assert_eq!(
+            strip_text(
+                "# AGENTS.md instructions\n<INSTRUCTIONS>规则</INSTRUCTIONS>\n请修复登录错误"
+            ),
+            "请修复登录错误"
+        );
+        assert_eq!(
+            strip_text("# AGENTS.md instructions for /tmp/project\n<INSTRUCTIONS>规则</INSTRUCTIONS>\n请修复登录错误"),
+            "请修复登录错误"
+        );
     }
 
     #[test]
@@ -281,6 +365,10 @@ mod tests {
             ""
         );
         assert_eq!(strip_text("<timestamp>2026-08-22 13:52"), "");
+        assert_eq!(
+            strip_text("<timestamp>now</timestamp>\n继续修复"),
+            "继续修复"
+        );
     }
 
     #[test]
@@ -289,7 +377,10 @@ mod tests {
             message_blocks(&message("user", &["<system-reminder>x</system-reminder>"])).is_none()
         );
 
-        let mut with_tool = message("assistant", &["**Thinking hard**"]);
+        let mut with_tool = message(
+            "assistant",
+            &["<system-reminder>Thinking hard</system-reminder>"],
+        );
         let mut block = Block::new(BlockKind::Tool);
         block.tool = Some(crate::model::ToolCall::new(
             "Grep",
@@ -312,5 +403,75 @@ mod tests {
             message_blocks(&trimmed).unwrap()[0].1.as_deref(),
             Some("前后有空白")
         );
+    }
+
+    #[test]
+    fn notifications_are_classified_and_removed_without_losing_mixed_requests() {
+        let notification = "<task-notification><task-id>123</task-id><summary>Task finished</summary></task-notification>";
+        let pure = message("user", &[notification]);
+        assert_eq!(message_origin(&pure), "task_notification");
+        assert!(message_blocks(&pure).is_none());
+        assert_eq!(duplicate_key(&pure), None);
+
+        let mixed = format!("{notification}\n请检查测试结果");
+        assert_eq!(strip_text(&mixed), "请检查测试结果");
+        assert_eq!(message_origin(&message("user", &[&mixed])), "user_request");
+        assert_eq!(
+            message_origin(&message("user", &[notification, "请检查测试结果"])),
+            "user_request"
+        );
+        assert_eq!(
+            duplicate_key(&message("user", &[&mixed])),
+            duplicate_key(&message("user", &["请检查测试结果"]))
+        );
+    }
+
+    #[test]
+    fn duplicate_summaries_have_a_candidate_key_without_becoming_new_requests() {
+        let first = "This session is being continued from a previous conversation.\nGoal: fix login.\nTests passed.";
+        let repeated = "  This session is being continued from a previous conversation.\n\nGoal: fix login.  Tests passed.  ";
+        let source = message("user", &[first]);
+        let copy = message("user", &[repeated]);
+        assert_eq!(message_origin(&source), "continuation_summary");
+        assert_eq!(message_origin(&copy), "continuation_summary");
+        assert!(message_blocks(&source).is_none());
+        assert_eq!(duplicate_key(&source), duplicate_key(&copy));
+        assert!(duplicate_key(&source).unwrap().starts_with("sha256:"));
+        assert_ne!(
+            duplicate_key(&source),
+            duplicate_key(&message("user", &["Goal: fix logout."]))
+        );
+        assert_eq!(
+            message_origin(&message("user", &[first, "现在继续修复退出登录"])),
+            "user_request"
+        );
+    }
+
+    #[test]
+    fn origins_are_conservative_for_scaffolding_and_unknown_messages() {
+        assert_eq!(
+            message_origin(&message(
+                "user",
+                &["# AGENTS.md instructions\n<INSTRUCTIONS>规则</INSTRUCTIONS>"]
+            )),
+            "scaffolding"
+        );
+        assert_eq!(
+            message_origin(&message("system", &["system prompt"])),
+            "scaffolding"
+        );
+        assert_eq!(message_origin(&message("user", &[])), "unknown");
+        assert_eq!(
+            message_origin(&message("custom", &["some text"])),
+            "unknown"
+        );
+        let prose = "Please explain how task-notification messages work.";
+        assert_eq!(message_origin(&message("user", &[prose])), "user_request");
+        assert_eq!(strip_text(prose), prose);
+        let mut tool_carrier = message("user", &[]);
+        tool_carrier.blocks.push(Block::new(BlockKind::Tool));
+        assert_eq!(message_origin(&tool_carrier), "unknown");
+        tool_carrier.role = "assistant".into();
+        assert_eq!(message_origin(&tool_carrier), "assistant_response");
     }
 }

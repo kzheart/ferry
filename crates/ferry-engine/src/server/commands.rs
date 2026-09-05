@@ -30,6 +30,7 @@ use crate::contracts::ipc::FERRY_CONTRACT_HASH;
 use crate::contracts::operations::{OPERATION_SUCCESS_STATUS, OPERATION_TERMINAL_STATUSES};
 use crate::server::args::{self, Parsed};
 use crate::server::client::{self, Client, Failure};
+use crate::server::help;
 
 /// `scan --wait` 的轮询间隔与默认超时。
 const SCAN_POLL: Duration = Duration::from_secs(2);
@@ -43,6 +44,7 @@ const APPLY_TIMEOUT: Duration = Duration::from_secs(600);
 /// 它们是维护者工具，继续走进程内路径。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClientCommand {
+    Help,
     Search,
     Read,
     Usage,
@@ -59,6 +61,7 @@ pub enum ClientCommand {
 impl ClientCommand {
     pub fn parse(value: &str) -> Option<Self> {
         Some(match value {
+            "help" | "--help" | "-h" => Self::Help,
             "search" => Self::Search,
             "read" => Self::Read,
             "usage" => Self::Usage,
@@ -89,13 +92,45 @@ enum Outcome {
 
 /// 执行一条客户端子命令，返回进程退出码。
 pub fn run(command: ClientCommand, argv: &[String]) -> Result<u8, String> {
+    if command == ClientCommand::Help
+        || argv
+            .iter()
+            .take_while(|arg| arg.as_str() != "--")
+            .any(|arg| arg == "--help" || arg == "-h")
+    {
+        let topic = if command == ClientCommand::Help {
+            argv.iter()
+                .find(|arg| !arg.starts_with('-'))
+                .map(String::as_str)
+        } else {
+            Some(match command {
+                ClientCommand::Search => "search",
+                ClientCommand::Read => "read",
+                ClientCommand::Usage => "usage",
+                ClientCommand::Resume => "resume",
+                ClientCommand::Migrate => "migrate",
+                ClientCommand::History => "history",
+                ClientCommand::Scan => "scan",
+                ClientCommand::Daemon => "daemon",
+                ClientCommand::Env => "env",
+                ClientCommand::Health => "health",
+                ClientCommand::Version => "version",
+                ClientCommand::Help => unreachable!(),
+            })
+        };
+        println!(
+            "{}",
+            help::render(topic, argv.iter().any(|arg| arg == "--json"))?
+        );
+        return Ok(0);
+    }
     // version 是本地信息：不需要引擎，也就不该为了它拉起引擎。
     if command == ClientCommand::Version {
         return Ok(emit(Outcome::Done(local_version())));
     }
     let socket = client::default_socket();
     let outcome = match command {
-        ClientCommand::Version => unreachable!("已在上面短路"),
+        ClientCommand::Help | ClientCommand::Version => unreachable!("已在上面短路"),
         ClientCommand::Daemon => daemon(&socket, argv)?,
         ClientCommand::Search => call(&socket, "content_search", search_params(argv)?),
         ClientCommand::Read => call(&socket, "session_read", read_params(argv)?),
@@ -198,20 +233,7 @@ fn insert_int(params: &mut Map<String, Value>, key: &str, value: Option<i64>) {
 ///
 /// 引擎的 `regex` 参数收的是模式串且与 `query` 互斥，所以两者只能发一个。
 fn search_params(argv: &[String]) -> Result<Value, String> {
-    let parsed = args::parse(
-        argv,
-        &[
-            "agent",
-            "project",
-            "session-id",
-            "since",
-            "until",
-            "limit",
-            "pattern",
-            "scope",
-        ],
-        &["regex", "exhaustive", "tool-outputs"],
-    )?;
+    let parsed = help::parse_options(argv, help::SEARCH_OPTIONS)?;
     let mut params = Map::new();
     let query = parsed.positionals().join(" ");
     if parsed.has("regex") {
@@ -236,6 +258,9 @@ fn search_params(argv: &[String]) -> Result<Value, String> {
         insert_list(&mut params, "patterns", Some(patterns));
     }
     insert_int(&mut params, "limit", parsed.int("limit")?);
+    if let Some(cursor) = parsed.value("cursor") {
+        params.insert("cursor".into(), Value::from(cursor));
+    }
     if let Some(scope) = parsed.value("scope") {
         params.insert("scope".into(), Value::from(scope));
     }
@@ -257,11 +282,7 @@ fn insert_time_range(params: &mut Map<String, Value>, parsed: &Parsed) -> Result
 }
 
 fn read_params(argv: &[String]) -> Result<Value, String> {
-    let parsed = args::parse(
-        argv,
-        &["from", "limit", "roles", "terms", "max-bytes"],
-        &["tool-outputs", "inert"],
-    )?;
+    let parsed = help::parse_options(argv, help::READ_OPTIONS)?;
     let roles = parsed.list("roles");
     let terms = parsed.list("terms");
     // 引擎只在 search 路径读 roles，context 路径拿到也不看：静默无效的过滤比
@@ -272,6 +293,9 @@ fn read_params(argv: &[String]) -> Result<Value, String> {
     let mut params = Map::new();
     params.insert("tool".into(), Value::from(parsed.positional(0, "tool")?));
     params.insert("ref".into(), Value::from(parsed.positional(1, "ref")?));
+    if let Some(cursor) = parsed.value("cursor") {
+        params.insert("cursor".into(), Value::from(cursor));
+    }
     insert_int(&mut params, "from_message", parsed.int("from")?);
     insert_int(&mut params, "limit", parsed.int("limit")?);
     insert_int(&mut params, "max_bytes", parsed.int("max-bytes")?);
@@ -619,6 +643,24 @@ mod tests {
             "regex 与 query 互斥，不能同时下发"
         );
         assert!(search_params(&argv(&["--regex"])).is_err());
+    }
+
+    #[test]
+    fn cursor_and_fixed_relative_time_can_be_replayed_losslessly() {
+        let params = search_params(&argv(&[
+            "topic",
+            "--cursor",
+            "next-page",
+            "--since",
+            "@1788628180589",
+        ]))
+        .unwrap();
+        assert_eq!(params["cursor"], Value::from("next-page"));
+        assert_eq!(params["time_range"]["from"], Value::from(1788628180589i64));
+        let params = read_params(&argv(&["claude", "fsr_a", "--cursor", "fragment-page"])).unwrap();
+        assert_eq!(params["cursor"], Value::from("fragment-page"));
+        let literal = search_params(&argv(&["--", "--help"])).unwrap();
+        assert_eq!(literal["query"], Value::from("--help"));
     }
 
     #[test]

@@ -197,11 +197,20 @@ def load_engine_methods() -> list[dict[str, object]]:
     allowed_dispatches = {"control", "parallel-read", "serial"}
     names: list[str] = []
     for method in methods:
-        if not isinstance(method, dict) or set(method) != required:
+        if (
+            not isinstance(method, dict)
+            or not required <= set(method)
+            or set(method) - required - {"wire_revision"}
+        ):
             raise ValueError(
-                "Engine 方法契约字段必须精确为 "
-                "name/kind/callers/timeout/retry/dispatch"
+                "Engine 方法契约必须包含 "
+                "name/kind/callers/timeout/retry/dispatch，仅允许额外 wire_revision"
             )
+        # 参数或 DTO 形态变化也必须更新握手摘要，避免新 CLI 连到忽略游标的旧引擎。
+        if "wire_revision" in method and (
+            type(method["wire_revision"]) is not int or method["wire_revision"] < 1
+        ):
+            raise ValueError("Engine wire_revision 必须为正整数")
         name = method["name"]
         if not isinstance(name, str) or not name:
             raise ValueError("Engine method name 必须非空")

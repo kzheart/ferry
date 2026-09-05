@@ -14,34 +14,27 @@ const results = Array.from({ length: 40 }, (_, i) => ({
   onClick: () => {},
 }));
 
-let container = null;
-
 function renderPalette(overrides = {}) {
+  const opened = [];
+  const rows = results.map(result => ({
+    ...result,
+    onClick: () => opened.push(result.id),
+  }));
   const spy = vi.spyOn(Element.prototype, "scrollIntoView");
-  const view = render(
+  render(
     <SearchPalette
       placeholder="搜索"
       query=""
       onQuery={() => {}}
-      results={results}
+      results={rows}
       emptyLabel="无结果"
       onClose={() => {}}
       {...overrides}
     />,
   );
-  container = view.container;
   spy.mockClear(); // 忽略挂载时对首项的那次
-  return { spy, container: view.container };
+  return { spy, opened };
 }
-
-// 高亮行靠背景色认:选中项是 --acc-soft2,其余是 transparent
-function highlighted() {
-  const row = [...container.querySelectorAll(".fscroll div[style]")]
-    .find(el => el.style.background === "var(--acc-soft2)");
-  return row?.textContent ?? null;
-}
-
-const scroller = () => container.querySelector(".fscroll");
 
 test("↓ 让新高亮的结果滚进视口", () => {
   const { spy } = renderPalette();
@@ -94,35 +87,37 @@ test("Enter 打开当前高亮项并关闭面板", () => {
 // 方向键会滚动列表,新行滑到静止的光标底下时浏览器照样派发 mouseenter。
 // 不设闸的话,键盘选中会被"划过"的行抢走,高亮看着像在乱蹦。
 test("方向键滚动后,未移动的鼠标划过某行不抢走键盘选中", () => {
-  renderPalette();
+  const { opened } = renderPalette();
 
   fireEvent.keyDown(window, { key: "ArrowDown" });
   fireEvent.keyDown(window, { key: "ArrowDown" });
   // 光标没动,只是列表滚上来了——mouseEnter 仍会派发
   fireEvent.mouseEnter(screen.getByText("会话 9").closest("div"));
 
-  assert.equal(highlighted(), "会话 2");
+  fireEvent.keyDown(window, { key: "Enter" });
+  assert.deepEqual(opened, ["s2"]);
 });
 
 test("鼠标真的移动过之后,hover 重新接管选中", () => {
-  renderPalette();
+  const { opened } = renderPalette();
 
   fireEvent.keyDown(window, { key: "ArrowDown" });
-  fireEvent.mouseMove(scroller());
+  fireEvent.mouseMove(screen.getByText("会话 9"));
   fireEvent.mouseEnter(screen.getByText("会话 9").closest("div"));
 
-  assert.equal(highlighted(), "会话 9");
+  fireEvent.keyDown(window, { key: "Enter" });
+  assert.deepEqual(opened, ["s9"]);
 });
 
 test("鼠标移动过后再按方向键,重新交还键盘控制", () => {
-  renderPalette();
+  const { opened } = renderPalette();
 
-  fireEvent.mouseMove(scroller());
+  fireEvent.mouseMove(screen.getByText("会话 5"));
   fireEvent.mouseEnter(screen.getByText("会话 5").closest("div"));
-  assert.equal(highlighted(), "会话 5");
 
   fireEvent.keyDown(window, { key: "ArrowDown" });
   fireEvent.mouseEnter(screen.getByText("会话 20").closest("div"));
 
-  assert.equal(highlighted(), "会话 6");
+  fireEvent.keyDown(window, { key: "Enter" });
+  assert.deepEqual(opened, ["s6"]);
 });

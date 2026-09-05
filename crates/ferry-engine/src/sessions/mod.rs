@@ -6,6 +6,7 @@ pub mod index;
 pub mod inert;
 pub mod live;
 pub mod read;
+mod read_cursor;
 pub mod reasoning;
 pub mod regex_search;
 pub mod safety;

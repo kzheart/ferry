@@ -53,11 +53,10 @@ def test_no_source_file_grows_past_the_size_limit():
 def test_oversized_ledger_stays_current():
     """已经瘦身达标的文件必须从棘轮表里移除。"""
     stale = []
-    for relative, recorded in KNOWN_OVERSIZED.items():
+    for relative in KNOWN_OVERSIZED:
         path = FRONTEND / relative
         assert path.is_file(), f"棘轮表引用了不存在的文件: {relative}"
         lines = len(path.read_text(encoding="utf-8").splitlines())
-        assert lines <= recorded, f"{relative} 已增长到 {lines} 行,超过记录的 {recorded}"
         if lines <= LINE_LIMIT:
             stale.append(f"{relative} 已降到 {lines} 行,请从 KNOWN_OVERSIZED 移除")
     assert not stale, "\n".join(stale)

@@ -5,6 +5,7 @@ pub mod args;
 pub mod cli;
 pub mod client;
 pub mod commands;
+pub mod help;
 pub mod notify;
 pub mod rpc;
 pub mod serve;

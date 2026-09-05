@@ -78,6 +78,10 @@ pub fn parse(argv: &[String], value_flags: &[&str], switches: &[&str]) -> Result
     let mut index = 0;
     while index < argv.len() {
         let argument = argv[index].as_str();
+        if argument == "--" {
+            parsed.positional.extend_from_slice(&argv[index + 1..]);
+            break;
+        }
         if let Some(body) = argument.strip_prefix("--") {
             let (name, inline) = match body.split_once('=') {
                 Some((name, value)) => (name, Some(value.to_string())),
@@ -121,6 +125,11 @@ pub fn parse_instant(text: &str, now_ms: i64) -> Result<i64, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("时间不能为空".to_string());
+    }
+    if let Some(epoch_ms) = text.strip_prefix('@') {
+        return epoch_ms
+            .parse::<i64>()
+            .map_err(|_| "@ 后必须为 epoch 毫秒整数".to_string());
     }
     if let Some(relative) = parse_relative(text)? {
         return Ok(now_ms - relative);

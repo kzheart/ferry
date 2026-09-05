@@ -667,6 +667,7 @@ impl EngineService for Engine {
     fn content_search(&self, request: &ContentSearchRequest) -> EngineResult<Value> {
         Ok(Value::Object(search::search_sessions(
             &SearchRequest {
+                cursor: Some(&request.cursor).filter(|value| !value.is_null()),
                 query: Some(&request.query),
                 agents: Some(&request.agents),
                 projects: Some(&request.projects),
@@ -697,6 +698,7 @@ impl EngineService for Engine {
             Some(&request.include_tool_outputs),
             Some(&request.max_bytes),
             Some(&request.inert),
+            Some(&request.cursor).filter(|value| !value.is_null()),
             &self.index,
         )?))
     }

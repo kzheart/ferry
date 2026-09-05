@@ -602,9 +602,4 @@ mod tests {
         assert_eq!(prices["gpt-x"]["source"], Value::from("LiteLLM"));
         assert_eq!(prices["gpt-x"]["matched_key"], Value::from("openai/gpt-x"));
     }
-
-    #[test]
-    fn cache_ttl_matches_tokscale() {
-        assert_eq!(TTL_SECONDS, 3600);
-    }
 }

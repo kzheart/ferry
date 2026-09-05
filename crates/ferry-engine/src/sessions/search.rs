@@ -9,14 +9,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use base64::Engine as _;
 use regex::Regex;
 use serde_json::{Map, Value};
 
 use crate::errors::{DomainError, DomainResult};
 
 use super::agent_read::read_indexed_session;
-use super::content_index::{parse_query_terms, ContentHit, ContentIndex, SessionKey};
-use super::index::{AgentSessionIndex, IndexedSession};
+use super::content_index::{
+    has_boolean_operator, parse_query_terms, ContentHit, ContentIndex, SessionKey,
+};
+use super::index::{stable_json, AgentSessionIndex, IndexedSession};
 use super::regex_search;
 use super::safety::{
     bounded_int, finalize_dto, now_ms, python_json_len, record_session_id, string_set,
@@ -84,6 +87,7 @@ fn validated_scope(scope: &str, needles: &[String], has_regex: bool) -> DomainRe
 /// 任一 pattern 命中即算命中，单个 pattern 内部仍是词级 AND。
 fn validated_patterns(query: &str, patterns: Option<&Value>) -> DomainResult<Vec<String>> {
     let mut needles = Vec::new();
+    validate_boolean_operators(query)?;
     if !query.trim().is_empty() {
         needles.push(query.trim().to_string());
     }
@@ -109,11 +113,80 @@ fn validated_patterns(query: &str, patterns: Option<&Value>) -> DomainResult<Vec
                     field("patterns"),
                 )
             })?;
+        validate_boolean_operators(text)?;
         if !text.trim().is_empty() {
             needles.push(text.trim().to_string());
         }
     }
     Ok(needles)
+}
+
+fn validate_boolean_operators(query: &str) -> DomainResult<()> {
+    if has_boolean_operator(query) {
+        let mut params = field("query");
+        params.insert("reason".into(), Value::from("unsupported_boolean_operator"));
+        params.insert(
+            "recovery".into(),
+            Value::from("OR 检索请使用多个 --pattern；字面 AND/OR/NOT 请加双引号"),
+        );
+        return Err(request_error("不支持裸 AND/OR/NOT 布尔操作符", params));
+    }
+    Ok(())
+}
+
+fn fingerprint(value: &Value) -> String {
+    crate::jsonutil::sha256_hex(stable_json(value).as_bytes())
+}
+
+fn cursor_error(reason: &str) -> DomainError {
+    let mut params = field("cursor");
+    params.insert("reason".into(), Value::from(reason));
+    params.insert(
+        "recovery".into(),
+        Value::from("移除 cursor，从第一页重新检索；续页必须使用相同查询和绝对时间范围"),
+    );
+    request_error("搜索游标无效、查询不一致或结果快照已变化", params)
+}
+
+fn encode_cursor(query: &str, snapshot: &str, offset: usize) -> Value {
+    Value::from(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&serde_json::json!({"v": 1, "query": query, "snapshot": snapshot, "offset": offset})).expect("cursor serializes")
+    ))
+}
+
+fn cursor_offset(
+    raw: Option<&Value>,
+    query: &str,
+    snapshot: &str,
+    total: usize,
+) -> DomainResult<usize> {
+    let Some(raw) = raw else {
+        return Ok(0);
+    };
+    let text = raw
+        .as_str()
+        .filter(|text| text.len() <= 2048)
+        .ok_or_else(|| cursor_error("cursor_invalid"))?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(text)
+        .map_err(|_| cursor_error("cursor_invalid"))?;
+    let value: Value =
+        serde_json::from_slice(&bytes).map_err(|_| cursor_error("cursor_invalid"))?;
+    if value["v"] != 1 {
+        return Err(cursor_error("cursor_invalid"));
+    }
+    if value["query"] != query {
+        return Err(cursor_error("cursor_mismatch"));
+    }
+    if value["snapshot"] != snapshot {
+        return Err(cursor_error("cursor_stale"));
+    }
+    let offset = value["offset"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .filter(|offset| *offset > 0 && *offset < total)
+        .ok_or_else(|| cursor_error("cursor_invalid"))?;
+    Ok(offset)
 }
 
 /// `isinstance(value, bool)` 的等价校验。
@@ -156,7 +229,12 @@ fn scan_regex(
     clipped_by_session: &HashMap<SessionKey, i64>,
 ) -> (HashMap<SessionKey, ContentHit>, Map<String, Value>) {
     let mut ordered: Vec<&Candidate> = filtered.iter().collect();
-    ordered.sort_by_key(|candidate| std::cmp::Reverse(candidate.updated));
+    ordered.sort_by(|left, right| {
+        right
+            .updated
+            .cmp(&left.updated)
+            .then(left.key().cmp(&right.key()))
+    });
     let deadline = Instant::now() + SCAN_TIME_BUDGET;
     let (mut scanned, mut skipped, mut read_failures, mut bytes_read) = (0i64, 0i64, 0i64, 0i64);
     let mut skip_reason: Option<&'static str> = None;
@@ -250,6 +328,7 @@ pub struct SearchRequest<'a> {
     pub session_ids: Option<&'a Value>,
     pub time_range: Option<&'a Value>,
     pub limit: Option<&'a Value>,
+    pub cursor: Option<&'a Value>,
     pub scope: Option<&'a Value>,
     pub include_tool_outputs: Option<&'a Value>,
     pub patterns: Option<&'a Value>,
@@ -296,7 +375,8 @@ pub fn search_sessions(
             field("exhaustive"),
         ));
     }
-    let allowed_agents = string_set(request.agents, "agents", 8, 32)?;
+    let mut allowed_agents = string_set(request.agents, "agents", 8, 32)?;
+    allowed_agents.sort_unstable();
     // Python 侧是 `{item.casefold() for item in ...}`：折叠后还要再去一次重。
     let mut allowed_projects: Vec<String> = string_set(request.projects, "projects", 20, 256)?
         .iter()
@@ -332,6 +412,11 @@ pub fn search_sessions(
         })
         .collect();
 
+    let query_signature = fingerprint(&serde_json::json!({
+        "needles": needles, "regex": raw_regex, "scope": scope,
+        "agents": allowed_agents, "projects": allowed_projects, "session_ids": allowed_session_ids,
+        "time_range": [start, end], "include_tool_outputs": include_tool_outputs, "exhaustive": exhaustive
+    }));
     let records = index.refresh_selected(&allowed_agents)?;
     // 元数据过滤前置：正则扫描只扫过滤后的会话，主循环复用同一份。
     let mut filtered: Vec<Candidate> = Vec::new();
@@ -352,7 +437,11 @@ pub fn search_sessions(
         if !allowed_agents.is_empty() && !allowed_agents.contains(&record.tool) {
             continue;
         }
-        if !allowed_projects.is_empty() && !allowed_projects.contains(&casefold(&project)) {
+        if !allowed_projects.is_empty()
+            && !allowed_projects.contains(&casefold(
+                row.get("dir").and_then(Value::as_str).unwrap_or_default(),
+            ))
+        {
             continue;
         }
         if !allowed_session_ids.is_empty()
@@ -388,7 +477,12 @@ pub fn search_sessions(
                 status
             }
             Some(content) => {
-                let status = content.sync(index, &records, false)?;
+                content.sync(index, &records, false)?;
+                let scoped_records: Vec<IndexedSession> = filtered
+                    .iter()
+                    .map(|candidate| candidate.record.clone())
+                    .collect();
+                let status = content.candidate_coverage(&scoped_records)?;
                 clipped_by_session = content.clipped_rows_by_session()?;
                 status
             }
@@ -402,7 +496,8 @@ pub fn search_sessions(
                     raw_regex.and_then(Value::as_str).unwrap_or_default(),
                 )
             };
-            if !literals.is_empty() {
+            // 旧 revision 的索引不能证明当前原文不存在字面词；未同步时退回有界原文扫描。
+            if !literals.is_empty() && status.get("ready") == Some(&Value::Bool(true)) {
                 if let Some(content) = content_index {
                     // 预过滤 = 字面量命中 ∪ 尚未入索引的会话：索引「说没有」
                     // 才可跳过，「还不知道」（构建中/刚写入）必须进扫描候选。
@@ -432,7 +527,9 @@ pub fn search_sessions(
             status.insert("match_mode".into(), Value::from("regex"));
             status.insert("regex_scan".into(), Value::Object(scan_meta));
         } else if let Some(content) = content_index {
-            let (hits, meta) = content.search(&needles, include_tool_outputs)?;
+            let candidate_keys: Vec<SessionKey> = filtered.iter().map(Candidate::key).collect();
+            let (hits, meta) =
+                content.search_candidates(&needles, include_tool_outputs, Some(&candidate_keys))?;
             content_hits = hits;
             for (key, value) in meta {
                 status.insert(key, value);
@@ -446,6 +543,7 @@ pub fn search_sessions(
         hit: Option<ContentHit>,
         rank: (i64, f64, i64),
         updated: i64,
+        key: SessionKey,
     }
 
     let mut matches: Vec<Scored> = Vec::new();
@@ -537,6 +635,7 @@ pub fn search_sessions(
             hit: content_hit,
             rank: (group, rank, -candidate.updated),
             updated: candidate.updated,
+            key: candidate.key(),
         });
     }
 
@@ -552,15 +651,89 @@ pub fn search_sessions(
                         .unwrap_or(std::cmp::Ordering::Equal),
                 )
                 .then(left.rank.2.cmp(&right.rank.2))
+                .then(left.key.cmp(&right.key))
         });
     } else {
-        matches.sort_by_key(|scored| std::cmp::Reverse(scored.updated));
+        matches.sort_by(|left, right| {
+            right
+                .updated
+                .cmp(&left.updated)
+                .then(left.key.cmp(&right.key))
+        });
     }
+
+    let mut reasons: Vec<&str> = Vec::new();
+    if index.snapshot_with_status().is_some_and(|(tools, _, _)| {
+        tools.iter().any(|(name, status)| {
+            (allowed_agents.is_empty() || allowed_agents.contains(name)) && status["ok"] == false
+        })
+    }) {
+        reasons.push("session_scan_failed");
+    }
+    if let Some(status) = content_status.as_ref() {
+        if let Some(scan) = status.get("regex_scan") {
+            if scan["skipped_sessions"].as_i64().unwrap_or(0) > 0 {
+                reasons.push("regex_scan_budget");
+            }
+            if scan["read_failures"].as_i64().unwrap_or(0) > 0 {
+                reasons.push("regex_read_failures");
+            }
+            if scan["clipped_sessions_not_scanned"].as_i64().unwrap_or(0) > 0 {
+                reasons.push("clipped_sessions_not_scanned");
+            }
+        } else {
+            if status.get("ready") != Some(&Value::Bool(true)) {
+                reasons.push("content_index_not_ready");
+            }
+            if status
+                .get("failed_sessions")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+                > 0
+            {
+                reasons.push("content_index_read_failures");
+            }
+            if status
+                .get("partially_indexed_messages")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+                > 0
+            {
+                reasons.push("partially_indexed_messages");
+            }
+            if status.get("rows_capped") == Some(&Value::Bool(true)) {
+                reasons.push("content_match_rows_capped");
+            }
+        }
+    }
+    let complete = reasons.is_empty();
+    // 游标钉住候选 revision、完整排序结果和覆盖度；索引收敛或源变化时显式拒绝旧页。
+    let mut revisions: Vec<Value> = filtered
+        .iter()
+        .map(|candidate| {
+            serde_json::json!([
+                candidate.record.tool,
+                candidate.record.canonical_ref,
+                candidate.record.revision
+            ])
+        })
+        .collect();
+    revisions.sort_by_key(stable_json);
+    let snapshot = fingerprint(&serde_json::json!({
+        "revisions": revisions,
+        "results": matches.iter().map(|scored| serde_json::json!({
+            "item": scored.item,
+            "hit": scored.hit.as_ref().map(|hit| serde_json::json!({"count": hit.count, "rank": hit.best_rank, "rows": hit.rows}))
+        })).collect::<Vec<_>>(),
+        "coverage": reasons
+    }));
+    let total_matches = matches.len();
+    let offset = cursor_offset(request.cursor, &query_signature, &snapshot, total_matches)?;
 
     // 摘要只为最终返回页生成，避免为未返回结果做额外读取。
     // regex 扫描的命中行自带原文摘要；词法命中回索引取上下文窗口。
     if content_active {
-        for scored in matches.iter_mut().take(limit) {
+        for scored in matches.iter_mut().skip(offset).take(limit) {
             let Some(hit) = scored.hit.as_ref() else {
                 continue;
             };
@@ -594,56 +767,79 @@ pub fn search_sessions(
         }
     }
 
-    let total_matches = matches.len();
-    let mut selected: Vec<Value> = Vec::new();
+    let mut result = serde_json::json!({
+        "sessions": [], "returned": 0, "total_matches": total_matches,
+        "total_matches_relation": if complete { "eq" } else { "gte" },
+        "has_more": false, "next_cursor": null,
+        "coverage": { "complete": complete, "reasons": reasons },
+        "resolved_time_range": { "from": start, "to": end },
+        "now": now_ms(),
+        "truncation": { "truncated": false, "reason": null, "budget_bytes": MAX_AGENT_DTO_BYTES }
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    if let Some(status) = content_status {
+        result.insert("content_index".into(), Value::Object(status));
+    }
+    let mut selected = Vec::new();
     let mut byte_limited = false;
-    for scored in matches.iter().take(limit) {
-        let mut probe = selected.clone();
-        probe.push(Value::Object(scored.item.clone()));
-        let mut candidate = Map::new();
-        candidate.insert("sessions".into(), Value::Array(probe));
-        candidate.insert("returned".into(), Value::from(selected.len() + 1));
-        candidate.insert(
-            "has_more".into(),
-            Value::Bool(total_matches > selected.len() + 1),
+    for scored in matches.iter().skip(offset).take(limit) {
+        selected.push(Value::Object(scored.item.clone()));
+        let mut probe = result.clone();
+        update_page(
+            &mut probe,
+            &selected,
+            offset,
+            total_matches,
+            &query_signature,
+            &snapshot,
         );
-        let mut truncation = Map::new();
-        truncation.insert("truncated".into(), Value::Bool(true));
-        truncation.insert("reason".into(), Value::from("byte_budget"));
-        truncation.insert("budget_bytes".into(), Value::from(MAX_AGENT_DTO_BYTES));
-        candidate.insert("truncation".into(), Value::Object(truncation));
-        if python_json_len(&Value::Object(candidate)) > MAX_AGENT_DTO_BYTES {
+        // 截断标记也算入预算，不依赖固定预留字节。
+        probe.insert("truncation".into(), serde_json::json!({"truncated": true, "reason": "byte_budget", "budget_bytes": MAX_AGENT_DTO_BYTES}));
+        if python_json_len(&Value::Object(probe)) > MAX_AGENT_DTO_BYTES {
+            selected.pop();
             byte_limited = true;
             break;
         }
-        selected.push(Value::Object(scored.item.clone()));
     }
+    if byte_limited && selected.is_empty() {
+        return Err(request_error("单个搜索结果超过响应预算", field("limit")));
+    }
+    update_page(
+        &mut result,
+        &selected,
+        offset,
+        total_matches,
+        &query_signature,
+        &snapshot,
+    );
+    if byte_limited {
+        result.insert("truncation".into(), serde_json::json!({"truncated": true, "reason": "byte_budget", "budget_bytes": MAX_AGENT_DTO_BYTES}));
+    }
+    finalize_dto(result)
+}
 
-    let returned = selected.len();
-    let mut result = Map::new();
-    result.insert("sessions".into(), Value::Array(selected));
-    result.insert("returned".into(), Value::from(returned));
-    // 只给 has_more 的话，模型没法判断自己看到的是全部还是九牛一毛。
-    result.insert("total_matches".into(), Value::from(total_matches));
-    result.insert("has_more".into(), Value::Bool(total_matches > returned));
-    // 相对时间窗要靠这个基准算，否则模型只能去 shell 里问 date。
-    result.insert("now".into(), Value::from(now_ms()));
-    let mut truncation = Map::new();
-    truncation.insert("truncated".into(), Value::Bool(byte_limited));
-    truncation.insert(
-        "reason".into(),
-        if byte_limited {
-            Value::from("byte_budget")
+fn update_page(
+    result: &mut Map<String, Value>,
+    selected: &[Value],
+    offset: usize,
+    total: usize,
+    query: &str,
+    snapshot: &str,
+) {
+    let next = offset + selected.len();
+    result.insert("sessions".into(), Value::Array(selected.to_vec()));
+    result.insert("returned".into(), Value::from(selected.len()));
+    result.insert("has_more".into(), Value::Bool(next < total));
+    result.insert(
+        "next_cursor".into(),
+        if next < total {
+            encode_cursor(query, snapshot, next)
         } else {
             Value::Null
         },
     );
-    truncation.insert("budget_bytes".into(), Value::from(MAX_AGENT_DTO_BYTES));
-    result.insert("truncation".into(), Value::Object(truncation));
-    if let Some(status) = content_status {
-        result.insert("content_index".into(), Value::Object(status));
-    }
-    finalize_dto(result)
 }
 
 /// UI 用 title 称呼元数据档位；两个词都收，避免前端再维护一张映射表。
@@ -780,8 +976,10 @@ pub fn search_sessions_for_ui(
         "has_more".into(),
         raw.get("has_more").cloned().unwrap_or(Value::Bool(false)),
     );
-    if let Some(status) = raw.get("content_index") {
-        result.insert("content_index".into(), status.clone());
+    for key in ["content_index", "coverage", "total_matches_relation"] {
+        if let Some(value) = raw.get(key) {
+            result.insert(key.into(), value.clone());
+        }
     }
     finalize_dto(result)
 }
@@ -1109,5 +1307,363 @@ mod tests {
         assert_eq!(row["message"], Value::Null);
         // 收窄后不再暴露 revision / record_count 之类的 agent 专用字段。
         assert!(row.get("revision").is_none());
+    }
+}
+
+#[cfg(test)]
+mod pagination_tests {
+    use super::*;
+    use crate::adapters::contracts::{
+        id_reference, AgentAdapter, AgentManifest, Fingerprint, NativeSessionReference, ScanCache,
+        ScanRow, SessionBrowser,
+    };
+    use crate::model::Session;
+    use serde_json::json;
+    use std::sync::Mutex;
+
+    struct Browser {
+        rows: Mutex<Vec<ScanRow>>,
+    }
+    impl SessionBrowser for Browser {
+        fn scan(&self, _: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
+            Ok(self.rows.lock().unwrap().clone())
+        }
+        fn read(&self, reference: &str) -> DomainResult<Session> {
+            let mut session = Session::new("opencode", reference, "/fixture");
+            if let Some(body) = self
+                .rows
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|row| row.get("id").and_then(Value::as_str) == Some(reference))
+                .and_then(|row| row.get("body"))
+                .and_then(Value::as_str)
+            {
+                let mut message = crate::model::Message::new("user");
+                message.blocks.push(crate::model::Block::text(body));
+                session.messages.push(message);
+            }
+            Ok(session)
+        }
+        fn resolve_ref(&self, reference: &str) -> DomainResult<String> {
+            Ok(reference.into())
+        }
+        fn fingerprint(&self, _: &str) -> DomainResult<Fingerprint> {
+            Ok(json!("fixture"))
+        }
+        fn agent_fingerprint(&self, reference: &str) -> DomainResult<Fingerprint> {
+            self.fingerprint(reference)
+        }
+        fn canonicalize(&self, row: &ScanRow) -> Option<NativeSessionReference> {
+            id_reference(row)
+        }
+        fn validate_read_scope(&self, _: &NativeSessionReference) -> DomainResult<()> {
+            Ok(())
+        }
+    }
+    struct Ports {
+        adapter: AgentAdapter,
+        cache: Arc<dyn ScanCache>,
+    }
+    impl super::super::index::SessionPorts for Ports {
+        fn adapter(&self, _: &str) -> DomainResult<&AgentAdapter> {
+            Ok(&self.adapter)
+        }
+        fn adapters(&self) -> Vec<String> {
+            vec!["opencode".into()]
+        }
+        fn cache_factory(&self) -> Arc<dyn ScanCache> {
+            self.cache.clone()
+        }
+    }
+    fn fixture(
+        count: usize,
+        large: bool,
+    ) -> (tempfile::TempDir, Arc<AgentSessionIndex>, Arc<Browser>) {
+        let temp = tempfile::tempdir().unwrap();
+        let browser = Arc::new(Browser { rows: Mutex::new((0..count).rev().map(|i| json!({
+            "id": format!("session-{i:04}"), "title": if large { "标".repeat(200) } else { "fixture".into() },
+            "dir": if large { "项".repeat(1024) } else { "/fixture".into() },
+            "model": if large { "模".repeat(120) } else { "test".into() },
+            "updated": 100, "size": 0, "count": 1
+        }).as_object().unwrap().clone()).collect()) });
+        let adapter = AgentAdapter::builder()
+            .browser(browser.clone())
+            .build(AgentManifest {
+                id: "opencode".into(),
+                display_name: "fixture".into(),
+                icon: "fixture".into(),
+                source_path: temp.path().to_string_lossy().into(),
+                capabilities: vec!["browse".into()],
+                edit_operations: vec![],
+                executables: vec![],
+                fallback_bin_dirs: vec![],
+            })
+            .unwrap();
+        let cache = Arc::new(super::super::scan_cache::ScanCache::new(Some(
+            temp.path().join("scan.json"),
+        )));
+        let index = Arc::new(AgentSessionIndex::new(Arc::new(Ports { adapter, cache })));
+        (temp, index, browser)
+    }
+
+    #[test]
+    fn same_timestamp_sessions_page_without_omissions_or_duplicates() {
+        let (_temp, index, _) = fixture(151, false);
+        let mut cursor = None;
+        let mut ids = Vec::new();
+        let mut pages = 0;
+        loop {
+            let result = search_sessions(
+                &SearchRequest {
+                    limit: Some(&json!(50)),
+                    cursor: cursor.as_ref(),
+                    ..Default::default()
+                },
+                &index,
+                None,
+            )
+            .unwrap();
+            assert_eq!(result["total_matches"], 151);
+            assert_eq!(result["total_matches_relation"], "eq");
+            assert_eq!(result["coverage"]["complete"], true);
+            ids.extend(
+                result["sessions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|item| item["session_id"].as_str().unwrap().to_string()),
+            );
+            pages += 1;
+            if result["has_more"] == false {
+                assert!(result["next_cursor"].is_null());
+                break;
+            }
+            cursor = Some(result["next_cursor"].clone());
+            assert!(pages < 5);
+        }
+        assert_eq!(pages, 4);
+        assert_eq!(
+            ids,
+            (0..151)
+                .map(|i| format!("session-{i:04}"))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn byte_budget_includes_cursor_and_metadata_and_continues_at_first_unreturned_item() {
+        let (_temp, index, _) = fixture(70, true);
+        let mut cursor = None;
+        let mut ids = HashSet::new();
+        let mut budget_pages = 0;
+        loop {
+            let result = search_sessions(
+                &SearchRequest {
+                    limit: Some(&json!(50)),
+                    cursor: cursor.as_ref(),
+                    ..Default::default()
+                },
+                &index,
+                None,
+            )
+            .unwrap();
+            assert!(python_json_len(&Value::Object(result.clone())) <= MAX_AGENT_DTO_BYTES);
+            assert!(result["returned"].as_u64().unwrap() > 0);
+            for row in result["sessions"].as_array().unwrap() {
+                assert!(ids.insert(row["session_id"].as_str().unwrap().to_string()));
+            }
+            if result["truncation"]["truncated"] == true {
+                budget_pages += 1;
+            }
+            if result["has_more"] == false {
+                break;
+            }
+            cursor = Some(result["next_cursor"].clone());
+        }
+        assert!(budget_pages > 0);
+        assert_eq!(ids.len(), 70);
+    }
+
+    #[test]
+    fn cursor_rejects_changed_query_snapshot_and_malformed_values() {
+        let (_temp, index, browser) = fixture(3, false);
+        let first = search_sessions(
+            &SearchRequest {
+                limit: Some(&json!(1)),
+                ..Default::default()
+            },
+            &index,
+            None,
+        )
+        .unwrap();
+        let cursor = &first["next_cursor"];
+        let changed = search_sessions(
+            &SearchRequest {
+                cursor: Some(cursor),
+                query: Some(&json!("fixture")),
+                ..Default::default()
+            },
+            &index,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(changed.params()["reason"], "cursor_mismatch");
+        // Changing only page size is supported.
+        let next = search_sessions(
+            &SearchRequest {
+                cursor: Some(cursor),
+                limit: Some(&json!(2)),
+                ..Default::default()
+            },
+            &index,
+            None,
+        )
+        .unwrap();
+        assert_eq!(next["returned"], 2);
+        browser.rows.lock().unwrap()[0].insert("updated".into(), json!(200));
+        let stale = search_sessions(
+            &SearchRequest {
+                cursor: Some(cursor),
+                ..Default::default()
+            },
+            &index,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(stale.params()["reason"], "cursor_stale");
+        for invalid in [Value::Null, json!(17), json!("garbage")] {
+            let error = search_sessions(
+                &SearchRequest {
+                    cursor: Some(&invalid),
+                    ..Default::default()
+                },
+                &index,
+                None,
+            )
+            .unwrap_err();
+            assert_eq!(error.params()["reason"], "cursor_invalid");
+        }
+    }
+
+    #[test]
+    fn incomplete_content_results_are_explicit_lower_bounds() {
+        let (_temp, index, _) = fixture(3, false);
+        let result = search_sessions(
+            &SearchRequest {
+                query: Some(&json!("fixture")),
+                ..Default::default()
+            },
+            &index,
+            None,
+        )
+        .unwrap();
+        assert_eq!(result["coverage"]["complete"], false);
+        assert_eq!(
+            result["coverage"]["reasons"],
+            json!(["content_index_not_ready"])
+        );
+        assert_eq!(result["total_matches_relation"], "gte");
+        assert_eq!(result["total_matches"], 3);
+    }
+
+    #[test]
+    fn stale_content_index_cannot_exclude_new_regex_matches() {
+        let (temp, index, browser) = fixture(1, false);
+        let path = temp.path().join("content.sqlite3");
+        let content = Arc::new(ContentIndex::new(Some(path.clone())));
+        let records = index.refresh().unwrap();
+        assert_eq!(
+            content.sync(&index, &records, false).unwrap()["ready"],
+            true
+        );
+        assert!(content
+            .sessions_matching_literals(&["newneedle".into()], false)
+            .unwrap()
+            .unwrap()
+            .is_empty());
+        // 留住旧索引，让下一次增量写明确失败；避免依赖后台线程调度制造竞态。
+        let connection = rusqlite::Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER reject_refresh BEFORE INSERT ON indexed_sessions
+             BEGIN SELECT RAISE(ABORT, 'fixture blocks refresh'); END;",
+            )
+            .unwrap();
+        {
+            let mut rows = browser.rows.lock().unwrap();
+            rows[0].insert("updated".into(), json!(200));
+            rows[0].insert(
+                "body".into(),
+                json!("newneedle only exists in current source"),
+            );
+        }
+        let result = search_sessions(
+            &SearchRequest {
+                regex: Some(&json!("newneedle")),
+                scope: Some(&json!("content")),
+                ..Default::default()
+            },
+            &index,
+            Some(&content),
+        )
+        .unwrap();
+        assert_eq!(result["content_index"]["ready"], false);
+        assert_eq!(result["content_index"]["pending_sessions"], 1);
+        assert_eq!(result["content_index"]["regex_scan"]["mode"], "full");
+        assert_eq!(result["content_index"]["regex_scan"]["scanned_sessions"], 1);
+        assert_eq!(result["returned"], 1);
+        assert_eq!(result["coverage"]["complete"], true);
+        assert_eq!(result["total_matches_relation"], "eq");
+        assert!(result["sessions"][0]["content_matches"][0]["snippet"]
+            .as_str()
+            .unwrap()
+            .contains("newneedle"));
+    }
+
+    #[test]
+    fn reordered_agent_filter_has_the_same_cursor_binding() {
+        let harness = crate::sessions::index::golden_tests::harness();
+        let first = search_sessions(
+            &SearchRequest {
+                agents: Some(&json!(["grok", "claude"])),
+                limit: Some(&json!(1)),
+                ..Default::default()
+            },
+            &harness.index,
+            None,
+        )
+        .unwrap();
+        let next = search_sessions(
+            &SearchRequest {
+                agents: Some(&json!(["claude", "grok"])),
+                cursor: Some(&first["next_cursor"]),
+                ..Default::default()
+            },
+            &harness.index,
+            None,
+        )
+        .unwrap();
+        assert_eq!(next["returned"], 5);
+    }
+
+    #[test]
+    fn boolean_operators_require_patterns_or_literal_quotes() {
+        for query in ["alpha OR beta", "AND", "alpha NOT beta"] {
+            assert_eq!(
+                validated_patterns(query, None).unwrap_err().params()["reason"],
+                "unsupported_boolean_operator"
+            );
+        }
+        assert!(validated_patterns("", Some(&json!(["alpha OR beta"]))).is_err());
+        assert_eq!(
+            validated_patterns("alpha \"OR\" beta", None).unwrap(),
+            vec!["alpha \"OR\" beta"]
+        );
+        assert_eq!(
+            parse_query_terms("alpha \"OR\" beta"),
+            vec!["alpha", "OR", "beta"]
+        );
+        assert!(validated_patterns("", Some(&json!(["alpha", "beta"]))).is_ok());
     }
 }

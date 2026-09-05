@@ -54,7 +54,11 @@ def test_engine_is_built_from_its_own_manifest():
 def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
     calls = []
     monkeypatch.setattr(build, "verify_toolchain", lambda target: None)
-    monkeypatch.setattr(build, "install_engine_binary", lambda target: None)
+    monkeypatch.setattr(
+        build,
+        "install_engine_binary",
+        lambda target: calls.append(("install_engine_binary", target)),
+    )
     monkeypatch.setattr(
         build,
         "run",
@@ -75,6 +79,7 @@ def test_root_build_runs_both_sidecars_before_tauri(monkeypatch):
             build.engine_build_command("aarch64-apple-darwin"),
             build.ROOT,
         ),
+        ("install_engine_binary", "aarch64-apple-darwin"),
         (
             ["npm", "run", "tauri", "--", "build"],
             build.APP,

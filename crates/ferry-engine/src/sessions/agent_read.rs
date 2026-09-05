@@ -1,13 +1,10 @@
 //! 供 Ferry Agent 使用的限量会话读取。
 //!
-//! 预算口径：DTO 上限 64 KiB，默认上下文预算 24 KiB；`take` 按 **UTF-8 字节**
-//! 计数（与 `safety::truncate_text` 的字符口径相对）。
+//! 预算口径：DTO 上限 64 KiB，默认上下文预算 24 KiB，按完整 JSON 的 UTF-8 字节计数。
 //!
-//! `fit_context_result` 的游标语义是分页正确性的关键：弹掉尾部消息时必须把
-//! `next_from_message` **下调**到被弹消息的编号，否则调用方按游标翻页会在同一
-//! 条消息上死循环；只剩一条时改为砍掉最大 text block 的一半而不是弹空。
+//! 消息级和 block 分片均使用绑定读取参数与内容快照的 next_cursor。
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::adapters::contracts::NativeSessionReference;
 use crate::errors::{DomainError, DomainResult};
@@ -15,54 +12,14 @@ use crate::model::{native_locator, tool_result_text, BlockKind, Message, Session
 
 use super::index::{AgentSessionIndex, IndexedSession};
 use super::safety::{
-    bounded_int, bounded_json, finalize_dto, python_json, python_json_len, record_session_id,
-    string_set, truncate_text, MAX_AGENT_DTO_BYTES,
+    bounded_int, python_json, python_json_len, record_session_id, string_set, truncate_text,
+    MAX_AGENT_DTO_BYTES,
 };
 
 pub const MAX_CONTENT_SEARCH_RESULTS: i64 = 50;
 pub const MAX_CONTEXT_MESSAGES: i64 = 50;
 pub const MAX_CONTEXT_BYTES: i64 = 64 * 1024;
 pub const DEFAULT_CONTEXT_BYTES: i64 = 24 * 1024;
-
-/// `_take`：按 UTF-8 字节裁剪；返回 (裁剪后文本, 剩余预算, 是否被裁)。
-fn take(text: &str, remaining: usize) -> (String, usize, bool) {
-    let encoded = text.as_bytes();
-    if encoded.len() <= remaining {
-        return (text.to_string(), remaining - encoded.len(), false);
-    }
-    // `decode(errors="ignore")` 等价：丢掉尾部不完整的码点。
-    let mut boundary = remaining.min(encoded.len());
-    while boundary > 0 && !text.is_char_boundary(boundary) {
-        boundary -= 1;
-    }
-    (text[..boundary].to_string(), 0, true)
-}
-
-/// `json.dumps({"truncated": True})` 的字节数。
-const TRUNCATED_MARKER_BYTES: usize = 19;
-
-/// `_take_json`。
-fn take_json(value: &Value, remaining: usize) -> (Value, usize, bool) {
-    if remaining < 32 {
-        return (Value::Object(Map::new()), remaining.saturating_sub(2), true);
-    }
-    let bounded = bounded_json(value, 128.max(remaining.min(12 * 1024)));
-    let encoded = python_json_len(&bounded);
-    if encoded <= remaining {
-        let changed = bounded != *value;
-        return (bounded, remaining - encoded, changed);
-    }
-    if TRUNCATED_MARKER_BYTES <= remaining {
-        let mut marker = Map::new();
-        marker.insert("truncated".into(), Value::Bool(true));
-        return (
-            Value::Object(marker),
-            remaining - TRUNCATED_MARKER_BYTES,
-            true,
-        );
-    }
-    (Value::Object(Map::new()), remaining.saturating_sub(2), true)
-}
 
 /// 读取前后各做一次 `validate_read_scope`，中间夹一次 `resolve` 的钉内容校验。
 ///
@@ -110,115 +67,87 @@ pub fn browser_locator_issuer<'a>(
     }
 }
 
-/// 仅剩一条消息仍超预算时继续压小它；无可再压返回 `false`。
-fn shrink_sole_message(item: &mut Value, truncation: &mut Value) -> bool {
-    let Some(blocks) = item.get_mut("blocks").and_then(Value::as_array_mut) else {
-        return false;
+use super::read_cursor::{self, Cursor, Position};
+
+/// 返回一个完整的可见 block；大 block 由分页层按其 JSON UTF-8 字节分片。
+fn visible_block(
+    block: &crate::model::Block,
+    replacement: Option<&str>,
+    outputs: bool,
+    number: usize,
+) -> Option<Value> {
+    let mut value = match block.kind {
+        BlockKind::Text => json!({"kind": "text", "text": replacement.unwrap_or(&block.text)}),
+        BlockKind::Tool => {
+            let call = block.tool.as_ref()?;
+            json!({"kind": "tool", "name": call.name, "op": call.op,
+                "status": call.result.as_ref().map(|result| status_text(result.status)),
+                "input": call.input,
+                "output": if outputs { tool_result_text(call.result.as_ref()) } else { "[omitted]".into() }})
+        }
+        BlockKind::Image => {
+            let image = block.image.as_ref()?;
+            json!({"kind": "image", "id": image.id, "mime_type": image.mime_type,
+                "filename": image.filename, "data": "[omitted]"})
+        }
+        _ => return None,
     };
-    // Python `max(texts, key=...)` 取**首个**最大值。
-    let mut largest: Option<usize> = None;
-    let mut largest_len = 0usize;
-    for (position, block) in blocks.iter().enumerate() {
-        if block.get("kind").and_then(Value::as_str) != Some("text") {
-            continue;
-        }
-        let Some(text) = block.get("text").and_then(Value::as_str) else {
-            continue;
-        };
-        if text.is_empty() {
-            continue;
-        }
-        if largest.is_none() || text.len() > largest_len {
-            largest = Some(position);
-            largest_len = text.len();
-        }
-    }
-    if let Some(position) = largest {
-        let text = blocks[position]["text"].as_str().unwrap_or("").to_string();
-        let mut half = text.len() / 2;
-        while half > 0 && !text.is_char_boundary(half) {
-            half -= 1;
-        }
-        let clipped = &text[..half];
-        bump(
-            truncation,
-            "omitted_bytes",
-            (text.len() - clipped.len()) as i64,
-        );
-        blocks[position]["text"] = Value::from(clipped);
-    } else if !blocks.is_empty() {
-        blocks.pop();
-        bump(truncation, "omitted_blocks", 1);
+    value["block"] = json!(number);
+    Some(value)
+}
+
+/// 原始 block 号保持不变，即使 inert 剥掉了前面的 block。
+fn visible_blocks(
+    message: &Message,
+    inert: bool,
+    outputs: bool,
+) -> Option<(Vec<Value>, usize, usize)> {
+    let rendered = if inert {
+        super::inert::message_blocks(message)?
     } else {
-        return false;
-    }
-    item["complete"] = Value::Bool(false);
-    truncation["truncated"] = Value::Bool(true);
-    true
-}
-
-fn bump(target: &mut Value, key: &str, delta: i64) {
-    let current = target.get(key).and_then(Value::as_i64).unwrap_or(0);
-    target[key] = Value::from(current + delta);
-}
-
-/// 逐步收缩直到落进预算；游标语义见模块文档。
-fn fit_context_result(mut result: Value, budget: usize) -> Map<String, Value> {
-    while python_json_len(&result) > budget {
-        let length = result["messages"].as_array().map(Vec::len).unwrap_or(0);
-        if length > 1 {
-            let removed = result["messages"]
-                .as_array_mut()
-                .expect("messages 恒为数组")
-                .pop()
-                .expect("length > 1");
-            let next_message = removed.get("message").cloned().unwrap_or(Value::Null);
-            let current_next = result
-                .get("next_from_message")
-                .cloned()
-                .unwrap_or(Value::Null);
-            result["next_from_message"] = match (current_next.as_i64(), next_message.as_i64()) {
-                (Some(current), Some(next)) => Value::from(current.min(next)),
-                _ => next_message,
-            };
-            let blocks = removed
-                .get("blocks")
-                .and_then(Value::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
-            let truncation = &mut result["truncation"];
-            bump(truncation, "omitted_blocks", blocks as i64);
-            truncation["truncated"] = Value::Bool(true);
-        } else if length == 1 {
-            let mut sole = result["messages"][0].take();
-            let mut truncation = result["truncation"].take();
-            let shrunk = shrink_sole_message(&mut sole, &mut truncation);
-            result["messages"][0] = sole;
-            result["truncation"] = truncation;
-            if shrunk {
-                continue;
-            }
-            result["title"] = Value::from("");
-            break;
+        message.blocks.iter().map(|block| (block, None)).collect()
+    };
+    let mut visible = Vec::new();
+    let mut omitted_blocks = 0;
+    let mut omitted_bytes = 0;
+    for (block, replacement) in rendered {
+        let number = message
+            .blocks
+            .iter()
+            .position(|original| std::ptr::eq(original, block))?
+            + 1;
+        if let Some(value) = visible_block(block, replacement.as_deref(), outputs, number) {
+            visible.push(value);
         } else {
-            result["title"] = Value::from("");
-            break;
+            omitted_blocks += 1;
+            omitted_bytes += serde_json::to_vec(block).expect("Block 可编码").len();
         }
     }
-    let remaining = result["messages"].as_array().cloned().unwrap_or_default();
-    result["returned_message_count"] = Value::from(remaining.len());
-    result["message_range"]["to"] = remaining
-        .last()
-        .and_then(|item| item.get("message").cloned())
-        .unwrap_or(Value::Null);
-    result.as_object().cloned().unwrap_or_default()
+    Some((visible, omitted_blocks, omitted_bytes))
 }
 
-/// `session_read` 的 context 档位。
-///
-/// `inert=true` 时按 [`super::inert`] 的常量表剥离源 agent 的脚手架：整条被剥空的
-/// 消息丢弃并计入 `truncation.stripped_messages`，但**消息编号与分页游标仍按原始
-/// 序号**，避免两种模式下 `--from` 的语义漂移。
+fn cursor_read_error(error: DomainError, continuing: bool) -> DomainError {
+    if continuing && error.params().get("reason").and_then(Value::as_str) == Some("session_changed")
+    {
+        read_cursor::error("cursor_stale", "会话已变化，请重新读取第一页")
+    } else {
+        error
+    }
+}
+
+fn read_record(
+    index: &AgentSessionIndex,
+    tool: &str,
+    reference: &str,
+    continuing: bool,
+) -> DomainResult<IndexedSession> {
+    index
+        .resolve(tool, reference, true)
+        .map_err(|error| cursor_read_error(error, continuing))
+}
+
+/// context 游标定位 (原消息、可见 block、block JSON 字节偏移)。分片的 text 按序
+/// 拼接后解析 JSON 即恢复原 block；工具 input/output 也不会被有损摘要替代。
 #[allow(clippy::too_many_arguments)]
 pub fn get_session_context(
     tool: &str,
@@ -228,11 +157,11 @@ pub fn get_session_context(
     include_tool_outputs: bool,
     max_bytes: Option<&Value>,
     inert: bool,
+    cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
-    let record = index.resolve(tool, opaque_ref, true)?;
     let first = bounded_int(from_message, 1, 1, 1_000_000, "from_message")?;
-    let count = bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")?;
+    let count = bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")? as usize;
     let budget = bounded_int(
         max_bytes,
         DEFAULT_CONTEXT_BYTES,
@@ -240,167 +169,38 @@ pub fn get_session_context(
         MAX_CONTEXT_BYTES,
         "max_bytes",
     )? as usize;
-    let session = read_indexed_session(index, &record, true)?;
+    let supplied = Cursor::decode(cursor)?;
+    let continuing = supplied.is_some();
+    let record = read_record(index, tool, opaque_ref, continuing)?;
+    let session = read_indexed_session(index, &record, true)
+        .map_err(|error| cursor_read_error(error, continuing))?;
+    let binding = read_cursor::digest(&json!([
+        "context",
+        tool,
+        opaque_ref,
+        first,
+        inert,
+        include_tool_outputs
+    ]));
+    let snapshot = read_cursor::digest(&json!([record.revision, session]));
+    let start = Cursor::resume(
+        supplied,
+        &binding,
+        &snapshot,
+        Position {
+            message: first as usize - 1,
+            block: 0,
+            offset: 0,
+        },
+    )?;
+    if continuing && start.message >= session.messages.len() {
+        return Err(read_cursor::error("cursor_invalid", "游标消息位置无效"));
+    }
     let total_turns = session
         .messages
         .iter()
         .filter(|message| message.role == "user")
-        .count() as i64;
-
-    let mut messages: Vec<Map<String, Value>> = Vec::new();
-    let mut current_turn = 0i64;
-    let mut remaining = budget;
-    let mut omitted_blocks = 0i64;
-    let mut omitted_bytes = 0i64;
-    let mut stripped_messages = 0i64;
-    let mut exhausted = false;
-    let selected_until = (session.messages.len() as i64).min(first - 1 + count);
-    // 游标锚在「本页扫过的最后一条」而不是「返回的最后一条」：惰性模式下整页
-    // 都可能被剥空，用返回值当游标会让调用方卡在同一页上。
-    let mut last_scanned = first - 1;
-
-    for (message_index, message) in session.messages.iter().enumerate() {
-        if message.role == "user" {
-            current_turn += 1;
-        }
-        let message_number = message_index as i64 + 1;
-        if message_number < first || message_number > selected_until {
-            continue;
-        }
-        last_scanned = message_number;
-        let rendered: super::inert::InertBlocks<'_> = if inert {
-            match super::inert::message_blocks(message) {
-                Some(blocks) => blocks,
-                None => {
-                    stripped_messages += 1;
-                    continue;
-                }
-            }
-        } else {
-            message.blocks.iter().map(|block| (block, None)).collect()
-        };
-        let mut blocks: Vec<Value> = Vec::new();
-        let mut message_clipped = false;
-        for (block, replacement) in &rendered {
-            let source_text = replacement.as_deref().unwrap_or(block.text.as_str());
-            let item: Option<Map<String, Value>> = match block.kind {
-                BlockKind::Text => {
-                    let (value, left, clipped) = take(source_text, remaining);
-                    remaining = left;
-                    if clipped {
-                        message_clipped = true;
-                        omitted_bytes += (source_text.len() - value.len()) as i64;
-                    }
-                    let mut entry = Map::new();
-                    entry.insert("kind".into(), Value::from("text"));
-                    entry.insert("text".into(), Value::from(value));
-                    Some(entry)
-                }
-                BlockKind::Tool if block.tool.is_some() => {
-                    let call = block.tool.as_ref().expect("已判定存在");
-                    let (tool_input, left, input_clipped) = take_json(&call.input, remaining);
-                    remaining = left;
-                    let mut entry = Map::new();
-                    entry.insert("kind".into(), Value::from("tool"));
-                    entry.insert("name".into(), Value::from(truncate_text(&call.name, 120).0));
-                    entry.insert(
-                        "op".into(),
-                        call.op
-                            .as_deref()
-                            .map(|op| Value::from(truncate_text(op, 120).0))
-                            .unwrap_or(Value::Null),
-                    );
-                    entry.insert(
-                        "status".into(),
-                        call.result
-                            .as_ref()
-                            .map(|result| {
-                                Value::from(truncate_text(status_text(result.status), 80).0)
-                            })
-                            .unwrap_or(Value::Null),
-                    );
-                    entry.insert("input".into(), tool_input);
-                    entry.insert("output".into(), Value::from("[omitted]"));
-                    let mut clipped = input_clipped;
-                    if include_tool_outputs && remaining > 0 {
-                        let output = tool_result_text(call.result.as_ref());
-                        let (value, left, output_clipped) = take(&output, remaining);
-                        remaining = left;
-                        entry.insert("output".into(), Value::from(value));
-                        clipped = clipped || output_clipped;
-                    }
-                    if clipped {
-                        message_clipped = true;
-                        omitted_blocks += 1;
-                    }
-                    Some(entry)
-                }
-                BlockKind::Image if block.image.is_some() => {
-                    let image = block.image.as_ref().expect("已判定存在");
-                    let mut entry = Map::new();
-                    entry.insert("kind".into(), Value::from("image"));
-                    entry.insert("id".into(), Value::from(truncate_text(&image.id, 200).0));
-                    entry.insert(
-                        "mime_type".into(),
-                        Value::from(truncate_text(&image.mime_type, 120).0),
-                    );
-                    entry.insert(
-                        "filename".into(),
-                        image
-                            .filename
-                            .as_deref()
-                            .filter(|value| !value.is_empty())
-                            .map(|value| Value::from(truncate_text(value, 1024).0))
-                            .unwrap_or(Value::Null),
-                    );
-                    entry.insert("data".into(), Value::from("[omitted]"));
-                    Some(entry)
-                }
-                _ => {
-                    omitted_blocks += 1;
-                    None
-                }
-            };
-            if let Some(entry) = item {
-                blocks.push(Value::Object(entry));
-            }
-            if remaining == 0 {
-                exhausted = true;
-                break;
-            }
-        }
-        let editable = message_is_rewritable(message);
-        let mut entry = Map::new();
-        entry.insert("message".into(), Value::from(message_number));
-        entry.insert("turn".into(), Value::from(current_turn));
-        entry.insert("role".into(), Value::from(message.role.as_str()));
-        entry.insert("blocks".into(), Value::Array(blocks));
-        entry.insert("editable".into(), Value::Bool(editable));
-        entry.insert("complete".into(), Value::Bool(!message_clipped));
-        if inert {
-            entry.insert("inert".into(), Value::Bool(true));
-        }
-        entry.insert(
-            "locator".into(),
-            Value::from(index.issue_message_locator(
-                &record,
-                &native_locator(message, message_index),
-                &message.role,
-                editable,
-            )?),
-        );
-        messages.push(entry);
-        if exhausted {
-            break;
-        }
-    }
-
-    let last_returned = messages
-        .last()
-        .and_then(|item| item.get("message").and_then(Value::as_i64))
-        .unwrap_or(first - 1);
-    let has_more = last_scanned < session.messages.len() as i64;
-    // 标题取自会话第一条可见消息，同样可能整段是脚手架：惰性模式下一并剥掉。
+        .count();
     let title_source = if inert {
         super::inert::strip_text(&session.title)
     } else {
@@ -408,61 +208,280 @@ pub fn get_session_context(
     };
     let (title, title_truncated) = truncate_text(&title_source, 200);
     let (project, project_truncated) = truncate_text(&session.cwd, 1024);
+    let base = json!({"tool": tool, "ref": opaque_ref,
+        "session_id": record_session_id(&record.row, Some(&session.source_id)),
+        "revision": record.revision, "title": title, "project": project,
+        "title_truncated": title_truncated, "project_truncated": project_truncated,
+        "message_count": session.messages.len(), "turn_count": total_turns,
+        "mode": "context"});
+    context_page(
+        &session,
+        base,
+        start,
+        count,
+        budget,
+        inert,
+        include_tool_outputs,
+        &binding,
+        &snapshot,
+        |message, message_index| {
+            index.issue_message_locator(
+                &record,
+                &native_locator(message, message_index),
+                &message.role,
+                message_is_rewritable(message),
+            )
+        },
+    )
+}
 
-    let mut result = Map::new();
-    result.insert("tool".into(), Value::from(tool));
-    result.insert("ref".into(), Value::from(opaque_ref));
-    result.insert(
-        "session_id".into(),
-        Value::from(record_session_id(&record.row, Some(&session.source_id))),
-    );
-    result.insert("title".into(), Value::from(title));
-    result.insert("project".into(), Value::from(project));
-    result.insert("title_truncated".into(), Value::Bool(title_truncated));
-    result.insert("project_truncated".into(), Value::Bool(project_truncated));
-    result.insert("revision".into(), Value::from(record.revision.as_str()));
-    result.insert("message_count".into(), Value::from(session.messages.len()));
-    result.insert("turn_count".into(), Value::from(total_turns));
-    result.insert("returned_message_count".into(), Value::from(messages.len()));
-    let mut range = Map::new();
-    range.insert("from".into(), Value::from(first));
-    range.insert(
-        "to".into(),
-        if messages.is_empty() {
-            Value::Null
-        } else {
-            Value::from(last_returned)
-        },
-    );
-    result.insert("message_range".into(), Value::Object(range));
-    result.insert(
-        "next_from_message".into(),
-        if has_more {
-            Value::from(last_scanned + 1)
-        } else {
-            Value::Null
-        },
-    );
-    if inert {
-        result.insert("inert".into(), Value::Bool(true));
+#[allow(clippy::too_many_arguments)]
+fn context_page(
+    session: &Session,
+    mut base: Value,
+    start: Position,
+    count: usize,
+    budget: usize,
+    inert: bool,
+    outputs: bool,
+    binding: &str,
+    snapshot: &str,
+    locator: impl Fn(&Message, usize) -> DomainResult<String>,
+) -> DomainResult<Map<String, Value>> {
+    let total = session.messages.len();
+    if start.message > total && (start.block > 0 || start.offset > 0) {
+        return Err(read_cursor::error("cursor_invalid", "游标消息位置无效"));
     }
-    result.insert(
-        "messages".into(),
-        Value::Array(messages.into_iter().map(Value::Object).collect()),
-    );
-    let mut truncation = Map::new();
-    truncation.insert(
-        "truncated".into(),
-        Value::Bool(exhausted || omitted_blocks > 0),
-    );
-    truncation.insert("omitted_blocks".into(), Value::from(omitted_blocks));
-    truncation.insert("omitted_bytes".into(), Value::from(omitted_bytes));
+    let mut position = start;
+    let mut messages = Vec::<Value>::new();
+    let mut stripped = 0usize;
+    let mut scanned = 0usize;
+    let omissions = std::cell::Cell::new((0usize, 0usize));
+    let mut byte_limited = false;
+    let mut current_turn = session
+        .messages
+        .iter()
+        .take(start.message)
+        .filter(|message| message.role == "user")
+        .count();
     if inert {
-        truncation.insert("stripped_messages".into(), Value::from(stripped_messages));
+        base["inert"] = json!(true);
     }
-    truncation.insert("budget_bytes".into(), Value::from(budget));
-    result.insert("truncation".into(), Value::Object(truncation));
-    Ok(fit_context_result(Value::Object(result), budget))
+    // 为低预算保留真正的消息载荷；元数据缩短必须明确标记。
+    for field in ["title", "project"] {
+        if python_json_len(&base) > budget / 3 {
+            base[field] = json!("");
+            base[format!("{field}_truncated")] = json!(true);
+        }
+    }
+    let finish = |messages: &[Value],
+                  next: Position,
+                  stripped: usize,
+                  byte_limited: bool|
+     -> Value {
+        let mut result = base.clone();
+        let has_more = next.message < total;
+        result["messages"] = json!(messages);
+        result["returned_message_count"] = json!(messages.len());
+        result["message_range"] = json!({"from": start.message + 1, "to": messages.last().map(|message| &message["message"])});
+        result["next_cursor"] = if has_more {
+            json!(Cursor::new(binding, snapshot, next).encode())
+        } else {
+            Value::Null
+        };
+        result["has_more"] = json!(has_more);
+        // 只有整条读完才可使用旧的消息级跳转；分片续读必须使用 next_cursor。
+        result["next_from_message"] = if has_more && next.block == 0 && next.offset == 0 {
+            json!(next.message + 1)
+        } else {
+            Value::Null
+        };
+        let (omitted_blocks, omitted_bytes) = omissions.get();
+        result["truncation"] = json!({"truncated": has_more || omitted_blocks > 0,
+            "omitted_blocks": omitted_blocks, "omitted_bytes": omitted_bytes,
+            "omission_scope": "unsupported_blocks_in_scanned_messages",
+            "budget_bytes": budget, "reason": if byte_limited { Some("byte_budget") } else if has_more { Some("message_limit") } else if omitted_blocks > 0 { Some("unsupported_blocks") } else { None }});
+        if inert {
+            result["truncation"]["stripped_messages"] = json!(stripped);
+        }
+        result
+    };
+    'messages: while position.message < total && scanned < count {
+        let message_index = position.message;
+        let message = &session.messages[message_index];
+        current_turn += usize::from(message.role == "user");
+        scanned += 1;
+        let Some((blocks, omitted_blocks, omitted_bytes)) = visible_blocks(message, inert, outputs)
+        else {
+            if position.block != 0 || position.offset != 0 {
+                return Err(read_cursor::error("cursor_invalid", "游标指向已剥离消息"));
+            }
+            stripped += 1;
+            position = Position {
+                message: message_index + 1,
+                block: 0,
+                offset: 0,
+            };
+            continue;
+        };
+        let (previous_blocks, previous_bytes) = omissions.get();
+        omissions.set((
+            previous_blocks + omitted_blocks,
+            previous_bytes + omitted_bytes,
+        ));
+        if (!blocks.is_empty() && position.block >= blocks.len())
+            || (blocks.is_empty() && (position.block != 0 || position.offset != 0))
+        {
+            return Err(read_cursor::error("cursor_invalid", "游标 block 位置无效"));
+        }
+        let mut item = json!({"message": message_index + 1, "turn": current_turn, "role": message.role,
+            "editable": message_is_rewritable(message), "locator": locator(message, message_index)?,
+            "blocks": [], "complete": false,
+            "origin": super::inert::message_origin(message), "duplicate_key": super::inert::duplicate_key(message)});
+        if inert {
+            item["inert"] = json!(true);
+        }
+        let mut returned_blocks = Vec::<Value>::new();
+        while position.block < blocks.len() {
+            let block = &blocks[position.block];
+            let encoded = serde_json::to_string(block).expect("Value 可编码");
+            if position.offset >= encoded.len() || !encoded.is_char_boundary(position.offset) {
+                return Err(read_cursor::error("cursor_invalid", "游标字节位置无效"));
+            }
+            let next_block = if position.block + 1 == blocks.len() {
+                Position {
+                    message: message_index + 1,
+                    block: 0,
+                    offset: 0,
+                }
+            } else {
+                Position {
+                    block: position.block + 1,
+                    offset: 0,
+                    ..position
+                }
+            };
+            let candidate = |value: Value, next: Position| {
+                let mut item = item.clone();
+                let mut page = messages.clone();
+                let mut trial = returned_blocks.clone();
+                trial.push(value);
+                item["blocks"] = json!(trial);
+                item["complete"] = json!(next.message > message_index);
+                page.push(item);
+                finish(&page, next, stripped, next.offset > 0)
+            };
+            if position.offset == 0
+                && python_json_len(&candidate(block.clone(), next_block)) <= budget
+            {
+                returned_blocks.push(block.clone());
+                position = next_block;
+                if position.message > message_index {
+                    break;
+                }
+                continue;
+            }
+            // 按完整 DTO 的实际编码大小二分，而非将正文长度误当成输出预算。
+            let fragment = |end: usize| {
+                json!({"kind": "fragment", "block": block["block"],
+                "fragment": {"encoding": "json", "offset_bytes": position.offset,
+                    "total_bytes": encoded.len(), "text": &encoded[position.offset..end], "complete": end == encoded.len()}})
+            };
+            let mut low = position.offset;
+            let mut high = encoded.len();
+            while low < high {
+                let mut end = low + (high - low).div_ceil(2);
+                while end > low && !encoded.is_char_boundary(end) {
+                    end -= 1;
+                }
+                if end == low {
+                    end = encoded[low..]
+                        .char_indices()
+                        .nth(1)
+                        .map(|(n, _)| low + n)
+                        .unwrap_or(encoded.len());
+                    if end > high {
+                        break;
+                    }
+                }
+                let next = if end == encoded.len() {
+                    next_block
+                } else {
+                    Position {
+                        offset: end,
+                        ..position
+                    }
+                };
+                if python_json_len(&candidate(fragment(end), next)) <= budget {
+                    low = end;
+                } else {
+                    high = end - 1;
+                }
+            }
+            if low == position.offset {
+                byte_limited = true;
+                if !returned_blocks.is_empty() {
+                    item["blocks"] = json!(returned_blocks);
+                    messages.push(item);
+                }
+                break 'messages;
+            }
+            returned_blocks.push(fragment(low));
+            position = if low == encoded.len() {
+                next_block
+            } else {
+                Position {
+                    offset: low,
+                    ..position
+                }
+            };
+            if position.offset > 0 {
+                byte_limited = true;
+                break;
+            }
+            if position.message > message_index {
+                break;
+            }
+        }
+        if blocks.is_empty() {
+            position = Position {
+                message: message_index + 1,
+                block: 0,
+                offset: 0,
+            };
+        }
+        item["blocks"] = json!(returned_blocks);
+        item["complete"] = json!(position.message > message_index);
+        let mut trial = messages.clone();
+        trial.push(item);
+        if python_json_len(&finish(&trial, position, stripped, byte_limited)) > budget {
+            position = Position {
+                message: message_index,
+                block: 0,
+                offset: 0,
+            };
+            byte_limited = true;
+            break;
+        }
+        messages = trial;
+        if byte_limited {
+            break;
+        }
+    }
+    if byte_limited && messages.is_empty() && position == start {
+        return Err(read_cursor::error(
+            "byte_budget_too_small",
+            "预算无法容纳消息及续页信息，请增大 max_bytes",
+        ));
+    }
+    let result = finish(&messages, position, stripped, byte_limited);
+    if python_json_len(&result) > budget {
+        return Err(read_cursor::error(
+            "byte_budget_too_small",
+            "预算无法容纳元数据，请增大 max_bytes",
+        ));
+    }
+    Ok(result.as_object().expect("object").clone())
 }
 
 fn status_text(status: crate::model::ToolResultStatus) -> &'static str {
@@ -532,9 +551,12 @@ pub fn search_session_content(
     limit: Option<&Value>,
     include_tool_outputs: bool,
     inert: bool,
+    max_bytes: Option<&Value>,
+    cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
-    let record = index.resolve(tool, opaque_ref, true)?;
+    let supplied = Cursor::decode(cursor)?;
+    let record = read_record(index, tool, opaque_ref, supplied.is_some())?;
     let wanted = string_set(terms, "terms", 20, 100)?;
     if wanted.is_empty() {
         let mut params = Map::new();
@@ -546,7 +568,8 @@ pub fn search_session_content(
             params,
         ));
     }
-    let allowed_roles = string_set(roles, "roles", 2, 16)?;
+    let mut allowed_roles = string_set(roles, "roles", 2, 16)?;
+    allowed_roles.sort();
     if allowed_roles
         .iter()
         .any(|role| role != "user" && role != "assistant")
@@ -568,7 +591,29 @@ pub fn search_session_content(
         .map(|term| (term.clone(), super::usage::casefold(term)))
         .collect();
 
-    let session = read_indexed_session(index, &record, true)?;
+    let session = read_indexed_session(index, &record, true)
+        .map_err(|error| cursor_read_error(error, supplied.is_some()))?;
+    let budget = bounded_int(
+        max_bytes,
+        MAX_AGENT_DTO_BYTES as i64,
+        1024,
+        MAX_CONTEXT_BYTES,
+        "max_bytes",
+    )? as usize;
+    let binding = read_cursor::digest(&json!([
+        "search",
+        tool,
+        opaque_ref,
+        sorted_terms,
+        allowed_roles,
+        inert,
+        include_tool_outputs
+    ]));
+    let snapshot = read_cursor::digest(&json!([record.revision, session]));
+    let start = Cursor::resume(supplied, &binding, &snapshot, Position::default())?;
+    if start.block != 0 || start.offset != 0 || start.message > session.messages.len() {
+        return Err(read_cursor::error("cursor_invalid", "搜索游标位置无效"));
+    }
     let total_turns = session
         .messages
         .iter()
@@ -577,8 +622,8 @@ pub fn search_session_content(
     let mut matches: Vec<Value> = Vec::new();
     let mut current_turn = 0i64;
     let mut total_matches = 0i64;
-    let mut byte_limited = false;
     let mut stripped_messages = 0i64;
+    let mut next_message = None;
 
     for (message_index, message) in session.messages.iter().enumerate() {
         if message.role == "user" {
@@ -605,7 +650,11 @@ pub fn search_session_content(
             continue;
         }
         total_matches += 1;
+        if message_index < start.message {
+            continue;
+        }
         if matches.len() >= maximum {
+            next_message.get_or_insert(message_index);
             continue;
         }
         let first_hit = hits
@@ -624,6 +673,14 @@ pub fn search_session_content(
         );
         let editable = message_is_rewritable(message);
         let mut item = Map::new();
+        item.insert(
+            "origin".into(),
+            json!(super::inert::message_origin(message)),
+        );
+        item.insert(
+            "duplicate_key".into(),
+            json!(super::inert::duplicate_key(message)),
+        );
         item.insert("message".into(), Value::from(message_index as i64 + 1));
         item.insert("turn".into(), Value::from(current_turn));
         item.insert("role".into(), Value::from(message.role.as_str()));
@@ -658,21 +715,11 @@ pub fn search_session_content(
         }
         let item = Value::Object(item);
 
-        let mut candidate = Map::new();
-        let mut probe = matches.clone();
-        probe.push(item.clone());
-        candidate.insert("matches".into(), Value::Array(probe));
-        candidate.insert("message_count".into(), Value::from(session.messages.len()));
-        candidate.insert("turn_count".into(), Value::from(total_turns));
-        candidate.insert("total_matches".into(), Value::from(total_matches));
-        if python_json_len(&Value::Object(candidate)) > MAX_AGENT_DTO_BYTES - 2048 {
-            byte_limited = true;
-            continue;
-        }
         matches.push(item);
     }
 
-    let has_more = total_matches > matches.len() as i64;
+    let has_more = next_message.is_some();
+
     let mut result = Map::new();
     result.insert("tool".into(), Value::from(tool));
     result.insert("ref".into(), Value::from(opaque_ref));
@@ -693,6 +740,23 @@ pub fn search_session_content(
     result.insert("total_matches".into(), Value::from(total_matches));
     result.insert("has_more".into(), Value::Bool(has_more));
     result.insert(
+        "next_cursor".into(),
+        next_message
+            .map(|message| {
+                json!(Cursor::new(
+                    &binding,
+                    &snapshot,
+                    Position {
+                        message,
+                        block: 0,
+                        offset: 0
+                    }
+                )
+                .encode())
+            })
+            .unwrap_or(Value::Null),
+    );
+    result.insert(
         "searched_scope".into(),
         Value::from(if include_tool_outputs {
             "visible_text_and_tool_outputs"
@@ -704,9 +768,7 @@ pub fn search_session_content(
     truncation.insert("truncated".into(), Value::Bool(has_more));
     truncation.insert(
         "reason".into(),
-        if byte_limited {
-            Value::from("byte_budget")
-        } else if has_more {
+        if has_more {
             Value::from("result_limit")
         } else {
             Value::Null
@@ -715,9 +777,56 @@ pub fn search_session_content(
     if inert {
         truncation.insert("stripped_messages".into(), Value::from(stripped_messages));
     }
-    truncation.insert("budget_bytes".into(), Value::from(MAX_AGENT_DTO_BYTES));
+    truncation.insert("budget_bytes".into(), Value::from(budget));
     result.insert("truncation".into(), Value::Object(truncation));
-    finalize_dto(result)
+    result.insert("mode".into(), json!("search"));
+    while python_json_len(&Value::Object(result.clone())) > budget {
+        let items = result
+            .get_mut("matches")
+            .and_then(Value::as_array_mut)
+            .expect("matches array");
+        if items.len() > 1 {
+            let removed = items.pop().expect("nonempty");
+            let next = removed["message"].as_u64().expect("message number") as usize - 1;
+            result.insert(
+                "next_cursor".into(),
+                json!(Cursor::new(
+                    &binding,
+                    &snapshot,
+                    Position {
+                        message: next,
+                        block: 0,
+                        offset: 0
+                    }
+                )
+                .encode()),
+            );
+            result.insert("has_more".into(), json!(true));
+        } else if let Some(item) = items.first_mut() {
+            let snippet = item["snippet"].as_str().expect("snippet");
+            if snippet.is_empty() {
+                return Err(read_cursor::error(
+                    "byte_budget_too_small",
+                    "预算无法容纳搜索命中，请增大 max_bytes",
+                ));
+            }
+            let mut boundary = snippet.len() / 2;
+            while !snippet.is_char_boundary(boundary) {
+                boundary -= 1;
+            }
+            item["snippet"] = json!(&snippet[..boundary]);
+            item["complete"] = json!(false);
+        } else {
+            return Err(read_cursor::error(
+                "byte_budget_too_small",
+                "预算无法容纳搜索元数据，请增大 max_bytes",
+            ));
+        }
+        result["returned"] = json!(result["matches"].as_array().expect("array").len());
+        result["truncation"]["truncated"] = json!(true);
+        result["truncation"]["reason"] = json!("byte_budget");
+    }
+    Ok(result)
 }
 
 /// `session_read` 分发：给了 `terms` 走内容检索，否则走上下文分页。
@@ -732,6 +841,7 @@ pub fn session_read(
     include_tool_outputs: Option<&Value>,
     max_bytes: Option<&Value>,
     inert: Option<&Value>,
+    cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
     let Some(reference) = reference.filter(|value| !value.is_empty()) else {
@@ -762,8 +872,9 @@ pub fn session_read(
         Some(_) => return Err(DomainError::agent_request_invalid("inert 必须是 boolean")),
     };
     let mut result = if terms.is_some_and(|value| !value.is_null()) {
-        let mut payload =
-            search_session_content(tool, reference, terms, roles, limit, outputs, lazy, index)?;
+        let mut payload = search_session_content(
+            tool, reference, terms, roles, limit, outputs, lazy, max_bytes, cursor, index,
+        )?;
         payload.insert("mode".into(), Value::from("search"));
         payload
     } else {
@@ -775,6 +886,7 @@ pub fn session_read(
             outputs,
             max_bytes,
             lazy,
+            cursor,
             index,
         )?;
         payload.insert("mode".into(), Value::from("context"));
@@ -796,31 +908,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn take_counts_utf8_bytes_and_never_splits_a_code_point() {
-        assert_eq!(take("abc", 10), ("abc".into(), 7, false));
-        assert_eq!(take("abc", 2), ("ab".into(), 0, true));
-        // 中文一个字 3 字节：预算 4 只能装下一个。
-        assert_eq!(take("中文", 4), ("中".into(), 0, true));
-        assert_eq!(take("中文", 6), ("中文".into(), 0, false));
-        assert_eq!(take("", 0), (String::new(), 0, false));
-    }
-
-    #[test]
-    fn take_json_degrades_to_a_marker_then_to_nothing() {
-        let (value, remaining, clipped) = take_json(&json!({"a": 1}), 1024);
-        assert_eq!(value, json!({"a": 1}));
-        assert!(!clipped);
-        assert_eq!(remaining, 1024 - dto_bytes(&json!({"a": 1})));
-        // 预算 < 32 直接返回空 object。
-        assert_eq!(take_json(&json!({"a": 1}), 10), (json!({}), 8, true));
-        // 预算够写 marker 但装不下内容。
-        let big = json!({"a": "x".repeat(500)});
-        let (value, _, clipped) = take_json(&big, 40);
-        assert_eq!(value, json!({"truncated": true}));
-        assert!(clipped);
-    }
-
     /// `session_read` 的分发默认值只在**缺键**时生效；键在而值为 `null`
     /// 会走到 `isinstance(None, bool)` 的假分支（`agent_read.py:400-401`）。
     #[test]
@@ -835,6 +922,7 @@ mod tests {
                 None,
                 None,
                 flag,
+                None,
                 None,
                 None,
                 &harness.index,
@@ -861,6 +949,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             &harness.index,
         )
         .unwrap_err();
@@ -868,79 +957,89 @@ mod tests {
     }
 
     #[test]
-    fn truncated_marker_size_matches_python() {
-        assert_eq!(
-            TRUNCATED_MARKER_BYTES,
-            // Python `json.dumps({"truncated": True})` 用默认分隔符：`{"truncated": true}`。
-            super::python_json(&json!({"truncated": true}), false).len()
-        );
+    fn canonical_thinking_omissions_are_reported_without_hiding_visible_bold_text() {
+        let mut session = Session::new("fixture", "thinking", "/fixture");
+        let mut message = Message::new("assistant");
+        let mut thinking = crate::model::Block::new(BlockKind::Thinking);
+        thinking.text = "fixture reasoning".into();
+        message.blocks.push(thinking);
+        message
+            .blocks
+            .push(crate::model::Block::text("**用户可见结论**"));
+        session.messages.push(message);
+        for inert in [false, true] {
+            let result = context_page(
+                &session,
+                json!({"mode": "context"}),
+                Position::default(),
+                20,
+                24576,
+                inert,
+                false,
+                "fixture",
+                "snapshot",
+                |_, _| Ok("fml_fixture".into()),
+            )
+            .unwrap();
+            assert_eq!(result["truncation"]["omitted_blocks"], 1);
+            assert!(result["truncation"]["omitted_bytes"].as_u64().unwrap() > 0);
+            assert_eq!(
+                result["truncation"]["omission_scope"],
+                "unsupported_blocks_in_scanned_messages"
+            );
+            assert_eq!(result["truncation"]["truncated"], true);
+            assert_eq!(result["has_more"], false);
+            let blocks = result["messages"][0]["blocks"].as_array().unwrap();
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(blocks[0]["text"], "**用户可见结论**");
+            assert_eq!(blocks[0]["block"], 2);
+        }
     }
 
     #[test]
-    fn fit_pops_the_tail_and_lowers_the_cursor() {
-        let result = json!({
-            "title": "t",
-            "next_from_message": 9,
-            "returned_message_count": 2,
-            "message_range": {"from": 1, "to": 2},
-            "messages": [
-                {"message": 1, "blocks": [{"kind": "text", "text": "a"}], "complete": true},
-                {"message": 2, "blocks": [{"kind": "text", "text": "x".repeat(400)}],
-                 "complete": true}
-            ],
-            "truncation": {"truncated": false, "omitted_blocks": 0, "omitted_bytes": 0,
-                           "budget_bytes": 200},
-        });
-        let fitted = fit_context_result(result, 200);
-        assert_eq!(fitted["messages"].as_array().unwrap().len(), 1);
-        // 游标下调到被弹消息的编号，而不是停在 9。
-        assert_eq!(fitted["next_from_message"], Value::from(2));
-        assert_eq!(fitted["returned_message_count"], Value::from(1));
-        assert_eq!(fitted["message_range"]["to"], Value::from(1));
-        assert_eq!(fitted["truncation"]["truncated"], Value::Bool(true));
-        // 弹掉尾部消息记 1 个 block；剩下的独苗继续压缩还会再记。
-        assert!(fitted["truncation"]["omitted_blocks"].as_i64().unwrap() >= 1);
-    }
-
-    #[test]
-    fn fit_halves_the_largest_text_when_a_single_message_remains() {
-        let result = json!({
-            "title": "t",
-            "next_from_message": null,
-            "returned_message_count": 1,
-            "message_range": {"from": 1, "to": 1},
-            "messages": [
-                {"message": 1, "complete": true, "blocks": [
-                    {"kind": "text", "text": "y".repeat(20)},
-                    {"kind": "text", "text": "x".repeat(400)}
-                ]}
-            ],
-            "truncation": {"truncated": false, "omitted_blocks": 0, "omitted_bytes": 0,
-                           "budget_bytes": 200},
-        });
-        let fitted = fit_context_result(result, 600);
-        let blocks = fitted["messages"][0]["blocks"].as_array().unwrap();
-        // 最大的那块被反复砍半，短的那块不动。
-        assert_eq!(blocks[0]["text"].as_str().unwrap().len(), 20);
-        assert!(blocks[1]["text"].as_str().unwrap().len() < 400);
-        assert_eq!(fitted["messages"][0]["complete"], Value::Bool(false));
-        assert!(fitted["truncation"]["omitted_bytes"].as_i64().unwrap() > 0);
-    }
-
-    #[test]
-    fn fit_gives_up_by_clearing_the_title() {
-        let result = json!({
-            "title": "t".repeat(500),
-            "next_from_message": null,
-            "returned_message_count": 0,
-            "message_range": {"from": 1, "to": null},
-            "messages": [],
-            "truncation": {"truncated": false, "omitted_blocks": 0, "omitted_bytes": 0,
-                           "budget_bytes": 10},
-        });
-        let fitted = fit_context_result(result, 10);
-        assert_eq!(fitted["title"], Value::from(""));
-        assert_eq!(fitted["message_range"]["to"], Value::Null);
+    fn fully_stripped_pages_still_advance_the_original_message_cursor() {
+        let mut session = Session::new("fixture", "stripped", "/fixture");
+        for text in ["<INSTRUCTIONS>scaffold</INSTRUCTIONS>", "actual request"] {
+            let mut message = Message::new("user");
+            message.blocks.push(crate::model::Block::text(text));
+            session.messages.push(message);
+        }
+        let binding = read_cursor::digest(&json!("query"));
+        let snapshot = read_cursor::digest(&json!("snapshot"));
+        let first = context_page(
+            &session,
+            json!({"mode": "context"}),
+            Position::default(),
+            1,
+            24576,
+            true,
+            false,
+            &binding,
+            &snapshot,
+            |_, _| Ok("fml_fixture".into()),
+        )
+        .unwrap();
+        assert_eq!(first["messages"], json!([]));
+        assert_eq!(first["next_from_message"], 2);
+        assert_eq!(first["truncation"]["stripped_messages"], 1);
+        let cursor = Cursor::decode(first.get("next_cursor")).unwrap();
+        let position = Cursor::resume(cursor, &binding, &snapshot, Position::default()).unwrap();
+        let second = context_page(
+            &session,
+            json!({"mode": "context"}),
+            position,
+            1,
+            24576,
+            true,
+            false,
+            &binding,
+            &snapshot,
+            |_, _| Ok("fml_fixture".into()),
+        )
+        .unwrap();
+        assert_eq!(second["messages"][0]["message"], 2);
+        assert_eq!(second["messages"][0]["blocks"][0]["text"], "actual request");
+        assert_eq!(second["next_cursor"], Value::Null);
     }
 
     #[test]

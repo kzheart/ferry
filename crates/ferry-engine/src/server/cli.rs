@@ -405,6 +405,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn help_is_available_without_constructing_or_connecting_an_engine() {
+        for args in [
+            vec!["--help"],
+            vec!["help", "search", "--json"],
+            vec!["read", "--help"],
+            vec!["migrate", "plan", "--help"],
+        ] {
+            let argv = args.into_iter().map(str::to_string).collect::<Vec<_>>();
+            assert_eq!(main(&argv, || panic!("离线帮助不应装配引擎")).unwrap(), 0);
+        }
+    }
+
+    #[test]
     fn maintainer_command_table_covers_every_subcommand() {
         let cases = [
             ("rpc", Command::Rpc),

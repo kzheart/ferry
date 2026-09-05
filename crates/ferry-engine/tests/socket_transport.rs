@@ -236,6 +236,125 @@ fn app_mode_engine_cannot_be_stopped_by_the_cli() {
 }
 
 #[test]
+fn cli_help_documents_cursors_and_rejects_unknown_topics_without_starting_an_engine() {
+    let sandbox = Sandbox::new();
+    for topic in ["search", "read"] {
+        let output = sandbox
+            .command()
+            .args(["help", topic, "--json"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let help: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(help["schema_version"], 1);
+        let command = &help["commands"][0];
+        assert_eq!(command["name"], topic);
+        let cursor = command["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|option| option["name"] == "cursor")
+            .expect("搜索与读取帮助应说明如何续页");
+        assert_eq!(cursor["value"], "TOKEN");
+        assert!(cursor["description"]
+            .as_str()
+            .unwrap()
+            .contains("next_cursor"));
+        assert!(!sandbox.socket().exists());
+        assert!(!sandbox.lock().exists());
+
+        let output = sandbox.command().args([topic, "--help"]).output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("--cursor"));
+        assert!(!sandbox.socket().exists());
+        assert!(!sandbox.lock().exists());
+    }
+
+    let output = sandbox
+        .command()
+        .args(["help", "invalid"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("invalid"));
+    assert!(!sandbox.socket().exists());
+    assert!(!sandbox.lock().exists());
+}
+
+#[test]
+fn cli_cursors_round_trip_through_the_socket() {
+    let sandbox = Sandbox::new();
+    let cli = |args: &[&str]| -> Value {
+        let output = sandbox.command().args(args).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+    let directory = sandbox.home().join(".claude/projects/paging");
+    std::fs::create_dir_all(&directory).unwrap();
+    for session in 0..3 {
+        let rows = (0..3).map(|message| format!("{}\n", json!({
+            "type": "user", "uuid": format!("s{session}-m{message}"),
+            "parentUuid": if message == 0 { None } else { Some(format!("s{session}-m{}", message - 1)) },
+            "sessionId": format!("session-{session}"), "cwd": "/fixture/paging",
+            "timestamp": "2026-09-01T00:00:00Z",
+            "message": {"role": "user", "content": format!("needle {message}")}
+        }))).collect::<String>();
+        std::fs::write(directory.join(format!("session-{session}.jsonl")), rows).unwrap();
+    }
+    let _engine = Engine::start(&sandbox, &["--socket"]);
+    let first = cli(&[
+        "search", "--agent", "claude", "--scope", "metadata", "--limit", "1",
+    ]);
+    assert_eq!(first["total_matches"], 3);
+    let second = cli(&[
+        "search",
+        "--agent",
+        "claude",
+        "--scope",
+        "metadata",
+        "--limit",
+        "2",
+        "--cursor",
+        first["next_cursor"].as_str().unwrap(),
+    ]);
+    assert_eq!(second["returned"], 2);
+    assert!(second["next_cursor"].is_null());
+    assert!(second["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| item["session_id"] != first["sessions"][0]["session_id"]));
+    let reference = first["sessions"][0]["ref"].as_str().unwrap();
+    let first = cli(&[
+        "read", "claude", reference, "--terms", "needle", "--limit", "1",
+    ]);
+    let second = cli(&[
+        "read",
+        "claude",
+        reference,
+        "--terms",
+        "needle",
+        "--limit",
+        "2",
+        "--cursor",
+        first["next_cursor"].as_str().unwrap(),
+    ]);
+    assert_eq!(first["matches"][0]["message"], 1);
+    assert_eq!(second["matches"][0]["message"], 2);
+    assert_eq!(second["matches"][1]["message"], 3);
+    assert!(second["next_cursor"].is_null());
+}
+
+#[test]
 fn the_thin_client_starts_a_daemon_and_can_stop_it() {
     let sandbox = Sandbox::new();
 

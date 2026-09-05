@@ -181,6 +181,7 @@
     },
     {
       "name": "content_search",
+      "wire_revision": 2,
       "kind": "read",
       "callers": [
         "cli"
@@ -191,6 +192,7 @@
     },
     {
       "name": "session_read",
+      "wire_revision": 2,
       "kind": "read",
       "callers": [
         "cli"

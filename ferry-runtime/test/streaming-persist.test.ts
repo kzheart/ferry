@@ -52,7 +52,7 @@ function assistant(
 }
 
 /** 每次回答切成 `chunks` 个 text_delta,用来观察提交次数是否随 token 数增长。 */
-function chunkedBackend(chunks: number) {
+function chunkedBackend(chunks: number, finishGate?: Promise<void>) {
   const streamFn: StreamFunction = () => {
     const stream = createAssistantMessageEventStream();
     const partial = assistant([], "stop");
@@ -68,14 +68,18 @@ function chunkedBackend(chunks: number) {
         partial: assistant([{ type: "text", text }], "stop"),
       });
     }
-    const complete = assistant([{ type: "text", text }], "stop");
-    stream.push({
-      type: "text_end",
-      contentIndex: 0,
-      content: text,
-      partial: complete,
-    });
-    stream.push({ type: "done", reason: "stop", message: complete });
+    const finish = () => {
+      const complete = assistant([{ type: "text", text }], "stop");
+      stream.push({
+        type: "text_end",
+        contentIndex: 0,
+        content: text,
+        partial: complete,
+      });
+      stream.push({ type: "done", reason: "stop", message: complete });
+    };
+    if (finishGate) void finishGate.then(finish);
+    else finish();
     return stream;
   };
   return (): AgentBackend => ({
@@ -132,19 +136,46 @@ describe("streaming persistence", () => {
   });
 
   it("persists the user message while the answer is still streaming", async () => {
-    const { store } = await runOnce(50);
-    const userCommit = store.commits.findIndex((commit) =>
-      commit.messages.some((entry) => entry.message.role === "user"),
-    );
-    const assistantCommit = store.commits.findIndex((commit) =>
-      commit.messages.some((entry) => entry.message.role === "assistant"),
-    );
-    // 用户消息必须早于助手回答落盘:流式中途崩溃时它仍要能被恢复出来。
-    expect(userCommit).toBeGreaterThanOrEqual(0);
-    expect(userCommit).toBeLessThan(assistantCommit);
-    const [restored] = await store.loadAll();
+    let finish!: () => void;
+    const finishGate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const store = new RecordingSessionStore();
+    const runtime = await AgentRuntime.create({
+      backendFactory: chunkedBackend(1, finishGate),
+      store,
+    });
+    let sawDelta!: () => void;
+    const firstDelta = new Promise<void>((resolve) => {
+      sawDelta = resolve;
+    });
+    const unsubscribe = runtime.subscribe((event) => {
+      if (event.session_id === "s1" && event.type === "content.delta") {
+        sawDelta();
+      }
+    });
+    try {
+      await runtime.createSession("s1");
+      await runtime.prompt("s1", "hello");
+      await firstDelta;
+
+      const [streaming] = await store.loadAll();
+      expect(streaming?.state.status).toBe("running");
+      expect(streaming?.state.messages).toMatchObject([
+        { role: "user", content: [{ type: "text", text: "hello" }] },
+      ]);
+      expect(
+        runtime.replay("s1", 0).some((event) => event.type === "run.completed"),
+      ).toBe(false);
+    } finally {
+      unsubscribe();
+      finish();
+      await runtime.waitForIdle("s1");
+    }
+
+    const [completed] = await store.loadAll();
     expect(
-      restored?.state.messages.some((entry) => entry.role === "user"),
+      completed?.state.messages.some((entry) => entry.role === "assistant"),
     ).toBe(true);
   });
 });

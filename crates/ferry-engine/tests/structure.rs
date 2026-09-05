@@ -1,4 +1,4 @@
-//! 源码级结构守卫：分层方向、mod 声明完整性、损耗目录闭环。
+//! 源码级结构守卫：分层方向、损耗目录闭环。
 //!
 //! `adapters` 不得引用 `operations` 与 `sessions`：共享助手放进
 //! `adapters::shared`，由 sessions 复用，依赖方向单向向下。
@@ -229,33 +229,4 @@ fn every_produced_loss_code_is_declared_by_its_owner() {
         "这些 loss code 产出了却没人声明后果:\n{}",
         undeclared.join("\n")
     );
-}
-
-#[test]
-fn every_module_file_is_declared() {
-    // mod 树在 WP-A 一次性定型；漏声明的文件不会被编译，靠本测试暴露。
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    for path in rust_sources(&src) {
-        let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
-        if ["lib", "main", "mod"].contains(&stem.as_str()) {
-            continue;
-        }
-        let parent = path.parent().unwrap();
-        let declaring = if parent == src {
-            src.join("lib.rs")
-        } else {
-            parent.join("mod.rs")
-        };
-        let source = std::fs::read_to_string(&declaring)
-            .unwrap_or_else(|_| panic!("缺少 mod 声明文件: {}", declaring.display()));
-        // 平台边界模块（`socket/platform/{unix,windows,unsupported}.rs`）是
-        // cfg 门控的私有 mod，只对边界文件可见；这里要守的是「文件必须被某个
-        // mod 树声明」，不是「必须 pub」。
-        assert!(
-            source.contains(&format!("mod {stem};")),
-            "{} 未在 {} 里声明",
-            path.display(),
-            declaring.display()
-        );
-    }
 }

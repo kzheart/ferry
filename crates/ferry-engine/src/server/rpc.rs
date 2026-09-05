@@ -36,6 +36,7 @@ pub const DEFAULT_AGENT_PROMPT_TIMEOUT_SEC: i64 = 360;
 /// `content_search` 的分发层参数包。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ContentSearchRequest {
+    pub cursor: Value,
     pub query: Value,
     pub agents: Value,
     pub projects: Value,
@@ -53,6 +54,7 @@ pub struct ContentSearchRequest {
 /// `session_read` 的分发层参数包。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SessionReadRequest {
+    pub cursor: Value,
     pub tool: Value,
     pub reference: Value,
     pub terms: Value,
@@ -307,6 +309,7 @@ impl RpcDispatcher {
                 required(params, "from_seq")?,
             ),
             "content_search" => service.content_search(&ContentSearchRequest {
+                cursor: optional(params, "cursor").clone(),
                 query: default_of(params, "query", Value::from("")),
                 agents: optional(params, "agents").clone(),
                 projects: optional(params, "projects").clone(),
@@ -324,6 +327,7 @@ impl RpcDispatcher {
                 exhaustive: default_of(params, "exhaustive", Value::Bool(false)),
             }),
             "session_read" => service.session_read(&SessionReadRequest {
+                cursor: optional(params, "cursor").clone(),
                 tool: required(params, "tool")?.clone(),
                 reference: required(params, "ref")?.clone(),
                 terms: optional(params, "terms").clone(),
@@ -567,6 +571,7 @@ mod tests {
             self.record(
                 "content_search",
                 recorded!("s",
+                    "cursor" => request.cursor,
                     "query" => request.query, "agents" => request.agents,
                     "projects" => request.projects,
                     "session_ids" => request.session_ids,
@@ -581,6 +586,7 @@ mod tests {
             self.record(
                 "session_read",
                 recorded!("r",
+                    "cursor" => request.cursor,
                     "tool" => request.tool, "ref" => request.reference,
                     "terms" => request.terms, "roles" => request.roles,
                     "from_message" => request.from_message, "limit" => request.limit,
@@ -887,6 +893,22 @@ mod tests {
 
         call(&engine, "session_search", json!({"query": "q"}), "x");
         assert_eq!(service.last().1["scope"], json!("any"));
+    }
+
+    #[test]
+    fn continuation_tokens_reach_search_and_read_unchanged() {
+        let service = Arc::new(Recorder::default());
+        let engine = dispatcher(Arc::clone(&service));
+        for method in ["content_search", "session_read"] {
+            let response = call(
+                &engine,
+                method,
+                json!({"tool":"claude", "ref":"fsr_a", "cursor":"opaque-page"}),
+                "page",
+            );
+            assert_eq!(response["ok"], json!(true));
+            assert_eq!(service.last().1["cursor"], json!("opaque-page"));
+        }
     }
 
     #[test]

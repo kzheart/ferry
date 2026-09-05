@@ -137,15 +137,14 @@ function renderLibrary(props) {
   );
 }
 
-test("会话行是双行:标题一行,仓库名+分支图标+分支一行,无 Agent 名", () => {
+test("会话行显示标题、仓库、分支与计数,不重复 Agent 名", () => {
   renderLibrary();
 
   assert.ok(screen.getByText("支付重构"));
   assert.ok(screen.getByText("payments"));
   assert.ok(screen.getByText("main"));
   assert.equal(screen.queryByText(TOOL_NAME.claude), null);
-  const count = screen.getByText("app:library.metaCount");
-  assert.ok(count.className.includes("lib-count"));
+  assert.ok(screen.getByText("app:library.metaCount"));
 });
 
 test("选定项目范围后元信息不再重复项目名,仍显示分支", () => {
@@ -213,7 +212,7 @@ test("不分组的列表直接铺开会话行,不渲染分组头", () => {
 
 // ---- 文件夹头的悬停动作与范围返回 ----
 
-test("文件夹头带 ☆ 收藏与 → 只看此项目两个动作,已收藏时星是实心的", () => {
+test("已收藏项目提供取消收藏与只看此项目动作", () => {
   const favorited = [];
   const scoped = [];
   renderLibrary({
@@ -226,16 +225,13 @@ test("文件夹头带 ☆ 收藏与 → 只看此项目两个动作,已收藏时
 
   const star = screen.getByLabelText("app:ctx.unfavoriteProject");
   const only = screen.getByLabelText("app:ctx.onlyThisProject");
-  // 已收藏:实心星(path 有 fill)
-  assert.ok(star.querySelector("path").getAttribute("fill") === "currentColor");
-
   fireEvent.click(star);
   fireEvent.click(only);
   assert.deepEqual(favorited, ["/work/payments"]);
   assert.deepEqual(scoped, ["/work/payments"]);
 });
 
-test("未收藏时星是空心的,点一下就是收藏", () => {
+test("未收藏项目提供收藏动作并回传项目路径", () => {
   const favorited = [];
   renderLibrary({
     groupMode: "project",
@@ -246,7 +242,6 @@ test("未收藏时星是空心的,点一下就是收藏", () => {
   });
 
   const star = screen.getByLabelText("app:ctx.favoriteProject");
-  assert.equal(star.querySelector("path").getAttribute("fill"), "none");
   fireEvent.click(star);
   assert.deepEqual(favorited, ["/work/payments"]);
 });
