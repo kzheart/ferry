@@ -107,6 +107,7 @@ const sessionEditSchema = Type.Unsafe({
     ref: opaqueSessionRef,
     ops: editOps,
     patch: metadataPatch,
+    title: Type.String({ minLength: 1, maxLength: 200 }),
     intent: operationIntent,
   },
   required: ["tool", "ref"],
@@ -114,12 +115,26 @@ const sessionEditSchema = Type.Unsafe({
   oneOf: [
     {
       required: ["ops", "intent"],
-      not: { required: ["patch"] },
+      not: { anyOf: [{ required: ["patch"] }, { required: ["title"] }] },
     },
     {
       required: ["patch"],
       not: {
-        anyOf: [{ required: ["ops"] }, { required: ["intent"] }],
+        anyOf: [
+          { required: ["ops"] },
+          { required: ["intent"] },
+          { required: ["title"] },
+        ],
+      },
+    },
+    {
+      required: ["title"],
+      not: {
+        anyOf: [
+          { required: ["ops"] },
+          { required: ["intent"] },
+          { required: ["patch"] },
+        ],
       },
     },
   ],
@@ -138,6 +153,24 @@ const migrationSources = AGENT_IDS.filter((tool) =>
 const promptAgents = AGENT_IDS.filter((tool) =>
   supportsAgentCapability(tool, "prompt"),
 );
+const renameAgents = AGENT_IDS.filter((tool) =>
+  supportsAgentCapability(tool, "rename"),
+);
+
+function validateSessionRename(input: Record<string, unknown>): void {
+  const tool = input.tool;
+  if (
+    typeof tool !== "string" ||
+    !(renameAgents as readonly string[]).includes(tool)
+  ) {
+    throw new Error(
+      `session_edit title (native rename) is only supported for: ${renameAgents.join(", ")}; for other sources rename through patch.name instead`,
+    );
+  }
+  if (typeof input.title !== "string" || input.title.trim().length === 0) {
+    throw new Error("session_edit title must be a non-empty string");
+  }
+}
 function supportedSessionEditOperations(tool: AgentId): string[] {
   return AGENT_EDIT_OPERATIONS[tool].filter((operation) =>
     exposedSessionEditOperations.has(operation),
@@ -364,7 +397,7 @@ const descriptions: Record<FerryToolName, string> = {
   usage:
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
-  session_edit: `Edit one session in place. Pass ops to rewrite or delete message turns, OR patch to change metadata (rename, pin, archive, tags) — exactly one. Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). Metadata patch does not accept intent. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
+  session_edit: `Edit one session in place. Pass exactly one of: ops to rewrite or delete message turns; title to rename the session natively (the new title is written into the source agent's own store, so its session list shows it too — supported for ${renameAgents.join(", ")}); or patch to change Ferry-side metadata (pin, archive, tags, or a Ferry-only name for sources without native rename such as cursor). Content ops available through this tool by source: ${sessionEditSupportDescription}. Content ops require intent: use preview to inspect the diff, or execute to create an approval-gated edit that rewrites the original after revision checks and a recovery snapshot (Auto mode applies synchronously). title and patch do not accept intent and are approval-gated. A native rename may report notes such as the agent needing a restart before it shows the new title — relay them. For rewrite ops, copy an editable message's fml_ locator exactly from a recent session_read and batch all intended rewrites into one call. Use title or patch only when the user explicitly asks to rename, pin, archive, or tag a session.`,
   ask_user:
     "Ask the user to choose among 2-6 options or provide custom text. This tool only collects information and does not authorize deletion or any other mutation. The user may not answer; when answered is false, do not assume a selection and continue safely.",
   agent_prompt: `Resume and actively drive a native Coding Agent session (${promptAgents.join(", ")}). This is a high-privilege mutation: the target Agent may run commands, use its configured tools, and modify the workspace and native session without a separate Ferry approval. Pass an fsr_ ref from session_search and the prompt to execute. The returned next_ref replaces the old ref after every started run; always use next_ref for the next call because the previous ref becomes stale. Calls execute sequentially and are never safe to retry automatically.`,
@@ -406,14 +439,20 @@ export function createFerryTools(
       if (name === "session_edit") {
         const hasOps = input.ops !== undefined;
         const hasPatch = input.patch !== undefined;
-        if (hasOps === hasPatch) {
-          throw new Error("session_edit requires exactly one of ops or patch");
+        const hasTitle = input.title !== undefined;
+        if ([hasOps, hasPatch, hasTitle].filter(Boolean).length !== 1) {
+          throw new Error(
+            "session_edit requires exactly one of ops, patch or title",
+          );
         }
         if (hasOps && input.intent !== "preview" && input.intent !== "execute")
           throw new Error("session_edit ops require intent preview or execute");
         if (hasPatch && input.intent !== undefined)
           throw new Error("session_edit metadata patch does not accept intent");
+        if (hasTitle && input.intent !== undefined)
+          throw new Error("session_edit title does not accept intent");
         if (hasOps) validateSessionEditOperations(input);
+        if (hasTitle) validateSessionRename(input);
       }
       if (name === "ask_user") validateAskUserInput(input);
       if (name === "bash" && String(input.command ?? "").trim().length === 0) {

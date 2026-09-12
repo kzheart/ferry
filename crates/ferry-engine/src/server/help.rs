@@ -94,6 +94,7 @@ const COMMANDS: &[CommandSpec] = &[
     CommandSpec { name: "usage", usage: "ferry usage [--agent a,b] [--project PATH] [--since TIME] [--until TIME]", description: "Token 与估算费用", options: &[], notes: "费用是估算值；未定价模型不计费用。项目路径精确匹配，时间为 UTC。" },
     CommandSpec { name: "resume", usage: "ferry resume <tool> <ref>", description: "返回在原 agent 续聊的终端命令", options: &[], notes: "此命令只返回描述，不执行目标 agent。跨 agent 接续使用 ferry-resume skill。" },
     CommandSpec { name: "migrate", usage: "ferry migrate plan <tool> <ref> --to <target> [--max-turn N] [--full]\nferry migrate apply <plan_id>\nferry migrate status <plan_id>\nferry migrate cancel <plan_id>", description: "预览、执行和查询原生迁移", options: &[], notes: "plan 不写源会话；检查影响并得到明确确认后 apply。计划十分钟过期。" },
+    CommandSpec { name: "rename", usage: "ferry rename <tool> <ref> <title...> [--plan]", description: "改会话标题并写回原 agent 的存储", options: &[], notes: "支持 claude/codex/opencode/pi/grok；cursor 只读，请用桌面端的本地重命名。\n默认直接执行；--plan 只打印 before/after 预览。结果 native.notes 说明对方是否需重启才显示新标题。" },
     CommandSpec { name: "scan", usage: "ferry scan [--wait] [--timeout SEC] [--full]", description: "刷新会话索引", options: &[], notes: "--wait 等待内容索引就绪，默认超时 600 秒；--full 原始全库 DTO 无界。" },
     CommandSpec { name: "daemon", usage: "ferry daemon status|stop", description: "检查或停止 CLI 后台引擎", options: &[], notes: "不自动启动引擎；stop 不能停止桌面 App 的引擎。" },
     CommandSpec { name: "history", usage: "ferry history", description: "列出迁移历史", options: &[], notes: "返回 JSON 数组。" },

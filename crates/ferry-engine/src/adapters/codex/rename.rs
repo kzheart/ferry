@@ -78,8 +78,18 @@ fn wait_response(
     }
 }
 
+/// `codex app-server proxy` 连的控制套接字：只有 `codex app-server daemon` 在跑时才存在。
+/// Codex Desktop 内嵌的 app-server 走 stdio，不开这个套接字，所以桌面在跑也可能没有它。
+fn control_socket(home: &Path) -> std::path::PathBuf {
+    home.join("app-server-control")
+        .join("app-server-control.sock")
+}
+
 /// 通过 `codex app-server proxy` 调 `thread/name/set`。
-fn rename_via_app_server(thread_id: &str, title: &str) -> Result<(), String> {
+fn rename_via_app_server(home: &Path, thread_id: &str, title: &str) -> Result<(), String> {
+    if !control_socket(home).exists() {
+        return Err("app-server daemon 未运行".into());
+    }
     let executable = executables::resolve("codex").ok_or("找不到 codex 可执行文件")?;
     let mut child = Command::new(executable)
         .args(["app-server", "proxy"])
@@ -177,12 +187,12 @@ pub fn rename_rollout(path: &Path, title: &str) -> DomainResult<Map<String, Valu
     let thread_id = thread_id_of(path)
         .ok_or_else(|| DomainError::internal("Codex rollout 文件名不含线程 id"))?;
     let mut notes: Vec<Value> = Vec::new();
-    let via = match rename_via_app_server(&thread_id, title) {
+    let via = match rename_via_app_server(&store.home, &thread_id, title) {
         Ok(()) => "app-server",
         Err(reason) => {
             rename_in_store(&store, &thread_id, title)?;
             notes.push(Value::from(format!(
-                "{RESTART_NOTE}（app-server 不可用: {reason}）"
+                "{RESTART_NOTE}（未走 app-server: {reason}）"
             )));
             "state-db"
         }

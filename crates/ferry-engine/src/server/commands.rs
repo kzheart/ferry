@@ -50,6 +50,7 @@ pub enum ClientCommand {
     Usage,
     Resume,
     Migrate,
+    Rename,
     History,
     Scan,
     Daemon,
@@ -67,6 +68,7 @@ impl ClientCommand {
             "usage" => Self::Usage,
             "resume" => Self::Resume,
             "migrate" => Self::Migrate,
+            "rename" => Self::Rename,
             "history" => Self::History,
             "scan" => Self::Scan,
             "daemon" => Self::Daemon,
@@ -109,6 +111,7 @@ pub fn run(command: ClientCommand, argv: &[String]) -> Result<u8, String> {
                 ClientCommand::Usage => "usage",
                 ClientCommand::Resume => "resume",
                 ClientCommand::Migrate => "migrate",
+                ClientCommand::Rename => "rename",
                 ClientCommand::History => "history",
                 ClientCommand::Scan => "scan",
                 ClientCommand::Daemon => "daemon",
@@ -141,6 +144,7 @@ pub fn run(command: ClientCommand, argv: &[String]) -> Result<u8, String> {
         ClientCommand::Health => call(&socket, "health", empty()),
         ClientCommand::Scan => scan(&socket, argv)?,
         ClientCommand::Migrate => migrate(&socket, argv)?,
+        ClientCommand::Rename => rename(&socket, argv)?,
     };
     Ok(emit(outcome))
 }
@@ -352,6 +356,47 @@ fn migrate_plan_params(argv: &[String]) -> Result<(Value, bool), String> {
     let mut params = Map::new();
     params.insert("input".into(), Value::Object(input));
     Ok((Value::Object(params), parsed.has("full")))
+}
+
+/// `ferry rename <tool> <ref> <title...> [--plan]`：标题写回对方 Agent 的存储。
+///
+/// 标题可以是多个位置参数（shell 不加引号也能用），按空格拼接；`--plan` 只生成
+/// 计划并打印预览（before/after），不执行。
+fn rename_plan_params(argv: &[String]) -> Result<(Value, bool), String> {
+    let parsed = args::parse(argv, &[], &["plan"])?;
+    let tool = parsed.positional(0, "tool")?;
+    let reference = parsed.positional(1, "ref")?;
+    let title = parsed.positionals()[2..].join(" ");
+    if title.trim().is_empty() {
+        return Err("缺少 <title>：ferry rename <tool> <ref> <title...>".into());
+    }
+    let mut input = Map::new();
+    input.insert("kind".into(), Value::from("rename"));
+    input.insert("tool".into(), Value::from(tool));
+    input.insert("ref".into(), Value::from(reference));
+    input.insert("title".into(), Value::from(title));
+    let mut params = Map::new();
+    params.insert("input".into(), Value::Object(input));
+    Ok((Value::Object(params), parsed.has("plan")))
+}
+
+/// 改名默认一步到位：plan 后立刻 apply，打印终态；`--plan` 只看预览。
+fn rename(socket: &Path, argv: &[String]) -> Result<Outcome, String> {
+    let (params, plan_only) = rename_plan_params(argv)?;
+    let planned = match call(socket, "operation.plan", params) {
+        Outcome::Done(plan) => plan,
+        other => return Ok(other),
+    };
+    if plan_only {
+        return Ok(Outcome::Done(planned));
+    }
+    let plan_id = planned
+        .get("plan_id")
+        .cloned()
+        .ok_or("引擎返回的计划缺少 plan_id")?;
+    let mut apply_params = Map::new();
+    apply_params.insert("plan_id".into(), plan_id);
+    Ok(migrate_apply(socket, Value::Object(apply_params)))
 }
 
 fn plan_id_params(argv: &[String]) -> Result<Value, String> {
@@ -567,6 +612,7 @@ mod tests {
             ("usage", ClientCommand::Usage),
             ("resume", ClientCommand::Resume),
             ("migrate", ClientCommand::Migrate),
+            ("rename", ClientCommand::Rename),
             ("history", ClientCommand::History),
             ("scan", ClientCommand::Scan),
             ("daemon", ClientCommand::Daemon),

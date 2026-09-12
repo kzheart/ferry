@@ -68,8 +68,12 @@ pub(super) fn resolve_tool_request(
                 requires_approval: execute,
             }
         }
-        "session_edit" => match (args.contains_key("ops"), args.contains_key("patch")) {
-            (true, false) => {
+        "session_edit" => match (
+            args.contains_key("ops"),
+            args.contains_key("patch"),
+            args.contains_key("title"),
+        ) {
+            (true, false, false) => {
                 if !has_exact_keys(args, &["tool", "ref", "ops", "intent"], &[]) {
                     return None;
                 }
@@ -85,7 +89,7 @@ pub(super) fn resolve_tool_request(
                     requires_approval: execute,
                 }
             }
-            (false, true) => {
+            (false, true, false) => {
                 if !has_exact_keys(args, &["tool", "ref", "patch"], &[]) {
                     return None;
                 }
@@ -96,6 +100,22 @@ pub(super) fn resolve_tool_request(
                         "tool": args.get("tool")?,
                         "ref": args.get("ref")?,
                         "patch": args.get("patch")?,
+                    }}),
+                    requires_approval: true,
+                }
+            }
+            // 原生标题写回：改的是 Agent 自己的存储，与元数据一样必须经用户批准。
+            (false, false, true) => {
+                if !has_exact_keys(args, &["tool", "ref", "title"], &[]) {
+                    return None;
+                }
+                ToolRequestRoute {
+                    method: "operation.plan",
+                    params: json!({"input": {
+                        "kind": "rename",
+                        "tool": args.get("tool")?,
+                        "ref": args.get("ref")?,
+                        "title": args.get("title")?,
                     }}),
                     requires_approval: true,
                 }
@@ -196,6 +216,27 @@ mod tests {
         .unwrap();
         assert_eq!(metadata.method, "operation.plan");
         assert!(metadata.requires_approval);
+
+        let rename = resolve_tool_request(
+            "session_edit",
+            &map(json!({"tool": "codex", "ref": "fsr_a", "title": "新标题"})),
+        )
+        .unwrap();
+        assert_eq!(rename.method, "operation.plan");
+        assert!(rename.requires_approval);
+        assert_eq!(
+            rename.params,
+            json!({"input": {"kind": "rename", "tool": "codex", "ref": "fsr_a", "title": "新标题"}})
+        );
+        assert_eq!(
+            resolve_tool_request(
+                "session_edit",
+                &map(
+                    json!({"tool": "codex", "ref": "fsr_a", "title": "x", "patch": {"pinned": true}})
+                ),
+            ),
+            None
+        );
 
         let prompt = resolve_tool_request(
             "agent_prompt",

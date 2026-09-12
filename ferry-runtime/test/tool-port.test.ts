@@ -266,6 +266,53 @@ describe("Ferry mutation tool schemas", () => {
     ).rejects.toThrow("ops require intent");
   });
 
+  it("accepts a native title rename only for agents that can write it back", async () => {
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        title: "新标题",
+      }),
+    ).toBe(true);
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        title: "新标题",
+        patch: { pinned: true },
+      }),
+    ).toBe(false);
+    expect(
+      Check(sessionEditSchema, {
+        tool: "codex",
+        ref: "fsr_session",
+        title: "新标题",
+        intent: "execute",
+      }),
+    ).toBe(false);
+
+    const invoke = vi.fn(async () => ({}));
+    const editTool = createFerryTools({ invoke }, () => ({
+      sessionId: "session",
+      runId: "run",
+    })).find((tool) => tool.name === "session_edit")!;
+    const execute = (params: Record<string, unknown>) =>
+      editTool.execute("call", params, undefined, undefined);
+
+    await expect(
+      execute({ tool: "cursor", ref: "fsr_session", title: "x" }),
+    ).rejects.toThrow("only supported for");
+    await expect(
+      execute({ tool: "codex", ref: "fsr_session", title: "   " }),
+    ).rejects.toThrow("non-empty");
+    await expect(
+      execute({ tool: "codex", ref: "fsr_session", title: "x", intent: "execute" }),
+    ).rejects.toThrow("title does not accept intent");
+    expect(invoke).not.toHaveBeenCalled();
+    await execute({ tool: "codex", ref: "fsr_session", title: "新标题" });
+    expect(invoke).toHaveBeenCalledOnce();
+  });
+
   it("rejects source-unsupported content operations before invoking the port", async () => {
     const invoke = vi.fn(async () => ({}));
     const editTool = createFerryTools({ invoke }, () => ({
