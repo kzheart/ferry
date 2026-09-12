@@ -7,7 +7,9 @@ use crate::contracts::events::{event_policy, EventSource};
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::desktop::{host_settings, platform};
 use crate::process::client::{JsonlProcessClient, PendingResponses};
-use crate::process::command::{bundled_sidecar_command, configure_background};
+#[cfg(not(debug_assertions))]
+use crate::process::command::bundled_sidecar_command;
+use crate::process::command::configure_background;
 use crate::process::error::ProcessError;
 use crate::process::handshake::verify_handshake;
 use crate::process::logging::{host_log, sidecar_stderr};
@@ -326,24 +328,25 @@ pub(crate) fn engine_request_blocking(
 }
 
 fn engine_command(resource_dir: &Path) -> Result<Command, String> {
-    let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-engine");
-    if let Some(command) = command {
-        return Ok(command);
-    }
-
+    // 开发模式只跑仓库内、契约与本进程一致的引擎产物。tauri dev 会把 binaries/
+    // 里的打包 sidecar 复制到 target/debug/，那是旧快照，绝不能先于仓库产物被选中。
     #[cfg(debug_assertions)]
     {
-        let _ = candidates;
-        // 开发模式跑仓库内的引擎产物；没有产物就是没有引擎,不存在回退路径。
+        let _ = resource_dir;
         crate::process::command::local_engine_command()
-            .ok_or_else(crate::process::command::missing_local_engine_message)
     }
 
     #[cfg(not(debug_assertions))]
-    Err(crate::process::command::missing_sidecar_message(
-        "引擎",
-        &candidates,
-    ))
+    {
+        let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-engine");
+        if let Some(command) = command {
+            return Ok(command);
+        }
+        Err(crate::process::command::missing_sidecar_message(
+            "引擎",
+            &candidates,
+        ))
+    }
 }
 
 /// 应用启动即预热常驻引擎:引擎冷启动与 webview 启动并行,

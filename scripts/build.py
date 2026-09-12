@@ -141,6 +141,13 @@ def verify_toolchain(target: str) -> None:
     verify_rust_target(target)
 
 
+def build_engine_only(target: str) -> None:
+    """只构建并安装引擎 sidecar：`npm run desktop` 用它保证开发模式的引擎与源码契约一致。"""
+    verify_rust_target(target)
+    run(engine_build_command(target))
+    install_engine_binary(target)
+
+
 def build(target: str, *, install: bool = True) -> None:
     verify_toolchain(target)
     if install:
@@ -162,11 +169,19 @@ def main() -> None:
         action="store_true",
         help="reuse existing npm dependencies",
     )
+    parser.add_argument(
+        "--engine-only",
+        action="store_true",
+        help="build the engine sidecar only (used by npm run desktop)",
+    )
     args = parser.parse_args()
     target = args.target or native_target(
         platform.system(),
         platform.machine(),
     )
+    if args.engine_only:
+        build_engine_only(target)
+        return
     build(target, install=not args.skip_install)
 
 

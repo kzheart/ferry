@@ -19,11 +19,13 @@ def test_runtime_sidecar_name_is_consistent_and_keeps_windows_packaging():
 
     host = (ROOT / "app/src-tauri/src/runtime/mod.rs").read_text(encoding="utf-8")
     assert 'bundled_sidecar_command(resource_dir, "ferry-runtime")' in host
-    assert "ferry-runtime/dist/server/server.js" in host
+    # 开发模式只跑仓库 dist，不看 target/debug 里 tauri 复制的旧 sidecar 快照。
+    assert "local_runtime_command()" in host
     command = (
         ROOT / "app/src-tauri/src/process/command.rs"
     ).read_text(encoding="utf-8")
     assert 'executable_name_for("ferry-runtime", true)' in command
+    assert "ferry-runtime/dist/server/server.js" in command
     assert '"ferry-runtime.exe"' in command
 
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

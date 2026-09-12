@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "runtime:build": "npm --prefix ../ferry-runtime run build",
-    "desktop": "npm run runtime:build && tauri dev",
+    "engine:build": "python3 ../scripts/build.py --engine-only --skip-install",
+    "desktop": "npm run runtime:build && npm run engine:build && tauri dev",
     "fresh": "node ../scripts/fresh-start.mjs",
     "desktop:fresh": "node ../scripts/fresh-start.mjs && npm run desktop"
   },

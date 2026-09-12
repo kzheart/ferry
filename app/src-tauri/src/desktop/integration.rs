@@ -14,6 +14,7 @@ use tauri::{AppHandle, Manager};
 use super::{host_settings, platform};
 use crate::contracts::agents::{AGENT_SKILL_PATHS, SHARED_SKILL_PATHS};
 use crate::engine::daemon::{self, DaemonError};
+#[cfg(not(debug_assertions))]
 use crate::process::command::sidecar_candidates;
 
 /// 随 App 打包的 skill 目录名,同时也是各 skill 的 name。
@@ -215,20 +216,18 @@ fn bundled_group_version(app: &AppHandle) -> Option<String> {
 /// 本 App 当前会启动的那个引擎二进制。与 `engine::engine_command` 同一套查找顺序,
 /// 区别只是这里要的是路径而不是 Command。
 fn current_engine_path(app: &AppHandle) -> Option<PathBuf> {
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        if let Some(path) = sidecar_candidates(&resource_dir, "ferry-engine")
-            .into_iter()
-            .find(|path| path.is_file())
-        {
-            return Some(path);
-        }
-    }
     #[cfg(debug_assertions)]
     {
+        let _ = app;
         crate::process::command::local_engine_path()
     }
     #[cfg(not(debug_assertions))]
-    None
+    {
+        let resource_dir = app.path().resource_dir().ok()?;
+        sidecar_candidates(&resource_dir, "ferry-engine")
+            .into_iter()
+            .find(|path| path.is_file())
+    }
 }
 
 /// 目录是否在 App 进程的 PATH 里。GUI 启动的 PATH 已由 fix-path-env 从登录 shell 恢复,

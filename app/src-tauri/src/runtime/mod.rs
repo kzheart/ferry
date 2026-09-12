@@ -21,7 +21,9 @@ use crate::contracts::features::Feature;
 use crate::contracts::ipc::{FERRY_CONTRACT_HASH, FERRY_IPC_PROTOCOL};
 use crate::contracts::runtime_methods;
 use crate::process::client::{JsonlProcessClient, PendingResponses};
-use crate::process::command::{bundled_sidecar_command, configure_background};
+#[cfg(not(debug_assertions))]
+use crate::process::command::bundled_sidecar_command;
+use crate::process::command::configure_background;
 use crate::process::error::ProcessError;
 use crate::process::framing::JsonlWriter;
 use crate::process::handshake::verify_handshake;
@@ -427,26 +429,25 @@ pub(crate) fn warm_up(app: tauri::AppHandle, resource_dir: PathBuf) {
 }
 
 fn runtime_binary_command(resource_dir: &Path) -> Result<Command, String> {
-    let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-runtime");
-    if let Some(command) = command {
-        return Ok(command);
-    }
-
+    // 开发模式只跑 ferry-runtime/dist：`npm run desktop` 每次都重建它。
+    // target/debug/ 里 tauri 复制的打包 sidecar 是旧快照，不能被先选中。
     #[cfg(debug_assertions)]
     {
-        let _ = candidates;
-        let root = crate::process::command::repository_root();
-        let mut command = Command::new("node");
-        command.arg(root.join("ferry-runtime/dist/server/server.js"));
-        command.current_dir(root);
-        Ok(command)
+        let _ = resource_dir;
+        crate::process::command::local_runtime_command()
     }
 
     #[cfg(not(debug_assertions))]
-    Err(crate::process::command::missing_sidecar_message(
-        "Ferry Runtime",
-        &candidates,
-    ))
+    {
+        let (command, candidates) = bundled_sidecar_command(resource_dir, "ferry-runtime");
+        if let Some(command) = command {
+            return Ok(command);
+        }
+        Err(crate::process::command::missing_sidecar_message(
+            "Ferry Runtime",
+            &candidates,
+        ))
+    }
 }
 #[cfg(test)]
 mod tests {
