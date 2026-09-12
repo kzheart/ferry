@@ -17,7 +17,7 @@ use crate::errors::{DomainError, DomainResult};
 use super::api::{self, ApiFactory, OpenCodeApiClient};
 use super::store;
 
-pub const RESTART_NOTE: &str = "OpenCode 正在运行时需重启后才会显示新标题";
+pub const RESTART_NOTE: &str = "重启 OpenCode 后才会显示新标题";
 
 pub struct OpenCodeRenamer {
     api_factory: ApiFactory,

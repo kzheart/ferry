@@ -24,7 +24,7 @@
     "metaUpdated": "已更新",
     "metaUpdatedDesc": "已对 {{n}} 个会话生效。",
     "renamed": "已重命名",
-    "renamedDesc": "标题已写入 {{agent}} 的会话存储。",
+    "renamedDesc": "已同步到 {{agent}}",
     "renameFail": "重命名失败",
     "openingTerminal": "正在打开终端…",
     "openingTerminalDesc": "正在恢复「{{title}}」",

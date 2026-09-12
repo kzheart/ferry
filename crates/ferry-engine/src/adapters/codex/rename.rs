@@ -26,7 +26,7 @@ use super::native::{table_columns, CodexStore};
 pub struct CodexRenamer;
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(6);
-pub const RESTART_NOTE: &str = "Codex 正在运行时需重启后才会显示新标题";
+pub const RESTART_NOTE: &str = "重启 Codex 后才会显示新标题";
 
 /// `rollout-<时间戳>-<uuid>.jsonl` → `<uuid>`。
 pub(super) fn thread_id_of(path: &Path) -> Option<String> {
@@ -191,9 +191,9 @@ pub fn rename_rollout(path: &Path, title: &str) -> DomainResult<Map<String, Valu
         Ok(()) => "app-server",
         Err(reason) => {
             rename_in_store(&store, &thread_id, title)?;
-            notes.push(Value::from(format!(
-                "{RESTART_NOTE}（未走 app-server: {reason}）"
-            )));
+            // 原因只进日志级别的 via 字段，不进用户可见的提示。
+            let _ = reason;
+            notes.push(Value::from(RESTART_NOTE));
             "state-db"
         }
     };

@@ -123,7 +123,7 @@ export function useWorkspaceInteractions({
           desc: [
             t("app:toast.renamedDesc", { agent: TOOL_NAME[session.tool] || session.tool }),
             ...notes,
-          ].join(" "),
+          ].join("，"),
         });
         // Codex 等把标题存在数据库里,文件监听收不到变化,主动刷一次列表。
         rescan?.();

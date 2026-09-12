@@ -24,7 +24,7 @@
     "metaUpdated": "Updated",
     "metaUpdatedDesc": "Applied to {{n}} sessions.",
     "renamed": "Renamed",
-    "renamedDesc": "The title was written to the {{agent}} session store.",
+    "renamedDesc": "Synced to {{agent}}",
     "renameFail": "Rename failed",
     "openingTerminal": "Opening terminal…",
     "openingTerminalDesc": "Resuming “{{title}}”",
