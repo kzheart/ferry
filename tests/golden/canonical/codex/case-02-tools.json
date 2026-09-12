@@ -200,5 +200,5 @@
   "root_id": "fixture-codex-tools",
   "source_id": "fixture-codex-tools",
   "source_tool": "codex",
-  "title": ""
+  "title": "Run the fixture shell, write, and read operations."
 }

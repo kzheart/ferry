@@ -69,15 +69,24 @@ export interface MetadataOperationInput {
   patch: MetadataPatch;
 }
 
+export interface RenameOperationInput {
+  kind: "rename";
+  tool: AgentId;
+  ref: string;
+  title: string;
+}
+
 export type OperationInput =
   | EditOperationInput
   | MigrationOperationInput
-  | MetadataOperationInput;
+  | MetadataOperationInput
+  | RenameOperationInput;
 export const OPERATION_PLAN_ID_PREFIX = "op_" as const;
 export const OPERATION_KINDS = [
   "edit",
   "migration",
   "metadata",
+  "rename",
 ] as const;
 export const EDIT_OPERATION_KINDS = [
   "delete-turn",

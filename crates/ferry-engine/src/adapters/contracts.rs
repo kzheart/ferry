@@ -32,6 +32,7 @@ pub enum Component {
     MigrationSource,
     MigrationTarget,
     Editor,
+    Renamer,
     Verifier,
     Lifecycle,
     Models,
@@ -44,6 +45,7 @@ impl Component {
             Self::MigrationSource => "migration_source",
             Self::MigrationTarget => "migration_target",
             Self::Editor => "editor",
+            Self::Renamer => "renamer",
             Self::Verifier => "verifier",
             Self::Lifecycle => "lifecycle",
             Self::Models => "models",
@@ -57,6 +59,7 @@ pub const COMPONENT_CAPABILITIES: &[(Component, &[&str])] = &[
     (Component::MigrationSource, &["migration-source"]),
     (Component::MigrationTarget, &["migration-target"]),
     (Component::Editor, &["edit"]),
+    (Component::Renamer, &["rename"]),
     (Component::Verifier, &["prompt"]),
     (Component::Lifecycle, &["resume"]),
     (Component::Models, &["models"]),
@@ -421,6 +424,15 @@ pub trait ModelCatalog: Send + Sync {
     fn fallback(&self) -> Vec<Map<String, Value>>;
 }
 
+/// 原生标题写回：把用户在 Ferry 里改的标题写进 Agent 自己的存储，让对方界面同步。
+///
+/// `reference` 是 adapter 的 canonical ref（文件路径 / 目录 / 原生 id）；`title`
+/// 已由 operations 层做过非空与长度校验。返回值原样进 `result.native`，
+/// 至少包含 `title`；写回成功但对方界面需要重启才能看到时，用 `notes` 数组说明。
+pub trait SessionRenamer: Send + Sync {
+    fn rename(&self, reference: &str, title: &str) -> DomainResult<Map<String, Value>>;
+}
+
 /// 会话生命周期策略：resume / 迁移清理 / 校验引用。
 pub trait SessionLifecycle: Send + Sync {
     fn resume_descriptor(&self, session_id: &str, cwd: &str) -> DomainResult<Map<String, Value>>;
@@ -436,6 +448,7 @@ pub struct AgentAdapter {
     pub migration_source: Option<Arc<dyn MigrationSource>>,
     pub migration_target: Option<Arc<dyn MigrationTarget>>,
     pub editor: Option<Arc<dyn SessionEditor>>,
+    pub renamer: Option<Arc<dyn SessionRenamer>>,
     pub verifier: Option<Arc<dyn SessionVerifier>>,
     pub lifecycle: Option<Arc<dyn SessionLifecycle>>,
     pub models: Option<Arc<dyn ModelCatalog>>,
@@ -448,6 +461,7 @@ pub struct AgentAdapterBuilder {
     migration_source: Option<Arc<dyn MigrationSource>>,
     migration_target: Option<Arc<dyn MigrationTarget>>,
     editor: Option<Arc<dyn SessionEditor>>,
+    renamer: Option<Arc<dyn SessionRenamer>>,
     verifier: Option<Arc<dyn SessionVerifier>>,
     lifecycle: Option<Arc<dyn SessionLifecycle>>,
     models: Option<Arc<dyn ModelCatalog>>,
@@ -474,6 +488,11 @@ impl AgentAdapterBuilder {
         self
     }
 
+    pub fn renamer(mut self, value: Arc<dyn SessionRenamer>) -> Self {
+        self.renamer = Some(value);
+        self
+    }
+
     pub fn verifier(mut self, value: Arc<dyn SessionVerifier>) -> Self {
         self.verifier = Some(value);
         self
@@ -496,6 +515,7 @@ impl AgentAdapterBuilder {
             migration_source: self.migration_source,
             migration_target: self.migration_target,
             editor: self.editor,
+            renamer: self.renamer,
             verifier: self.verifier,
             lifecycle: self.lifecycle,
             models: self.models,
@@ -526,6 +546,7 @@ impl AgentAdapter {
             Component::MigrationSource => self.migration_source.is_some(),
             Component::MigrationTarget => self.migration_target.is_some(),
             Component::Editor => self.editor.is_some(),
+            Component::Renamer => self.renamer.is_some(),
             Component::Verifier => self.verifier.is_some(),
             Component::Lifecycle => self.lifecycle.is_some(),
             Component::Models => self.models.is_some(),
@@ -569,6 +590,11 @@ impl AgentAdapter {
     pub fn require_editor(&self) -> DomainResult<&dyn SessionEditor> {
         self.require("edit", Component::Editor)?;
         Ok(self.editor.as_deref().expect("require 已校验组件存在"))
+    }
+
+    pub fn require_renamer(&self) -> DomainResult<&dyn SessionRenamer> {
+        self.require("rename", Component::Renamer)?;
+        Ok(self.renamer.as_deref().expect("require 已校验组件存在"))
     }
 
     /// verifier 组件只服务 `prompt` capability。

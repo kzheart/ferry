@@ -137,6 +137,7 @@ export default function App() {
     metaFor,
     reloadMetadata,
     updateMetadata: setMetaFor,
+    renameSession,
   } = useSessionMetadata({ setToast, t });
   const migratedSessionKeys = useMemo(
     () =>
@@ -237,6 +238,8 @@ export default function App() {
     metadata: metaMap,
     metaFor,
     updateMetadata: setMetaFor,
+    renameSession,
+    rescan: doScan,
     multiIds: multiSel,
     setMultiIds: setMultiSel,
     libraryVisibleIds,

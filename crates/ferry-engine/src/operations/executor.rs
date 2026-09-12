@@ -35,6 +35,7 @@ impl OperationExecutor {
             "edit" => self.apply_edit(operation).map(Value::Object),
             "migration" => self.apply_migration(operation).map(Value::Object),
             "metadata" => self.apply_metadata(operation).map(Value::Object),
+            "rename" => self.apply_rename(operation).map(Value::Object),
             other => {
                 let mut params = Map::new();
                 params.insert("kind".into(), Value::from(other));
@@ -136,6 +137,67 @@ impl OperationExecutor {
             metadata::compare_and_set_entry(&tool, &session_id, &expected, &patch, &self.ports)?;
         let mut result = Map::new();
         result.insert("metadata".into(), Value::Object(applied));
+        Ok(result)
+    }
+}
+
+impl OperationExecutor {
+    /// 标题写回：重新解析并比 `base_revision`，交给 adapter 的 renamer 写原生存储，
+    /// 再清掉 Ferry 本地 metadata 里的 `name` 覆盖——否则旧的本地改名会继续遮住
+    /// 刚写进对方存储的新标题。
+    fn apply_rename(&self, operation: &OperationPlan) -> EngineResult<Map<String, Value>> {
+        let params = operation.input()?;
+        let tool = str_param(&params, "tool")?;
+        let reference = str_param(&params, "ref")?;
+        let title = str_param(&params, "title")?;
+        let session_id = str_param(&params, "session_id")?;
+        let record = match self.index.resolve(&tool, &reference) {
+            Ok(record) => record,
+            Err(error) if error.error_type == "AgentReferenceError" => {
+                return Err(DomainError::concurrent_modification(
+                    "会话在改名计划生成后已变化，请重新计划",
+                )
+                .into())
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if record.revision != operation.base_revision {
+            return Err(DomainError::concurrent_modification(
+                "会话在改名计划生成后已变化，请重新计划",
+            )
+            .into());
+        }
+        if record.session_id() != session_id {
+            return Err(DomainError::concurrent_modification(
+                "会话标识在改名计划生成后已变化，请重新计划",
+            )
+            .into());
+        }
+        let adapter = self.ports.adapter(&tool)?;
+        let renamer = adapter.require_renamer()?;
+        let native = renamer.rename(&record.canonical_ref, &title)?;
+
+        let metadata_key = metadata::key(&tool, &session_id);
+        let had_local_name = metadata::list_all(&self.ports)?
+            .get(&metadata_key)
+            .and_then(Value::as_object)
+            .is_some_and(|entry| entry.contains_key("name"));
+        let metadata_after = if had_local_name {
+            let mut patch = Map::new();
+            patch.insert("name".into(), Value::from(""));
+            metadata::set_entry(&tool, &session_id, &patch, &self.ports)?
+        } else {
+            metadata::list_all(&self.ports)?
+                .get(&metadata_key)
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default()
+        };
+
+        let mut result = Map::new();
+        result.insert("title".into(), Value::from(title));
+        result.insert("native".into(), Value::Object(native));
+        result.insert("metadata".into(), Value::Object(metadata_after));
         Ok(result)
     }
 }

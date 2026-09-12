@@ -478,20 +478,30 @@ fn decode_transcript(path: &Path, is_child: bool) -> DomainResult<DecodeResult> 
             session.lose("session.malformed_record", params);
         }
     }
+    let mut custom_title = String::new();
+    let mut ai_title = String::new();
     for record in &lines {
-        if record_type(record) == Some("ai-title") {
-            if let Some(title) = record.get("title").filter(|title| truthy(Some(title))) {
-                session.title = title.as_str().unwrap_or_default().to_string();
+        match record_type(record) {
+            Some("custom-title") => {
+                let candidate = text_field(record, "customTitle").unwrap_or_default();
+                if !candidate.trim().is_empty() {
+                    custom_title = candidate.trim().to_string();
+                }
             }
-        }
-        if record_type(record) == Some("fork-context-ref") {
-            session.forked_from_id = text_field(record, "parentLastUuid");
-            session.parent_id = text_field(record, "parentSessionId");
+            Some("ai-title") => {
+                let candidate = text_field(record, "aiTitle").unwrap_or_default();
+                if !candidate.trim().is_empty() {
+                    ai_title = candidate.trim().to_string();
+                }
+            }
+            Some("fork-context-ref") => {
+                session.forked_from_id = text_field(record, "parentLastUuid");
+                session.parent_id = text_field(record, "parentSessionId");
+            }
+            _ => {}
         }
     }
-    if session.title.is_empty() {
-        session.title = derived_title(&lines);
-    }
+    session.title = super::scanner::pick_title(custom_title, ai_title, derived_title(&lines));
 
     let mut pending: HashMap<Option<String>, PendingTool> = HashMap::new();
     let mut pending_order: Vec<Option<String>> = Vec::new();
@@ -1203,7 +1213,7 @@ mod tests {
         write_session(
             &path,
             &[
-                json!({"type": "ai-title", "title": "Named"}),
+                json!({"type": "ai-title", "aiTitle": "Named", "sessionId": "sid"}),
                 json!({"type": "fork-context-ref", "parentLastUuid": "p9",
                        "parentSessionId": "psid"}),
                 json!({"uuid": "u1", "type": "user", "sessionId": "sid",

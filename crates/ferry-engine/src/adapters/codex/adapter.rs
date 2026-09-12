@@ -23,6 +23,7 @@ use super::lifecycle::CodexLifecycle;
 use super::migration::CodexMigrationTarget;
 use super::models::CodexModels;
 use super::probe::CodexVerifier;
+use super::rename::CodexRenamer;
 use super::topology::rollout_files;
 use super::{reader, scanner, tool_calls};
 
@@ -125,6 +126,7 @@ pub fn build() -> Result<AgentAdapter, String> {
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
         .migration_target(Arc::new(CodexMigrationTarget))
         .editor(Arc::new(CodexBackend))
+        .renamer(Arc::new(CodexRenamer))
         .verifier(Arc::new(CodexVerifier))
         .lifecycle(Arc::new(CodexLifecycle::new(executable)))
         .models(Arc::new(CodexModels))
@@ -148,6 +150,7 @@ mod tests {
             "migration-source",
             "migration-target",
             "edit",
+            "rename",
             "prompt",
             "models",
         ] {

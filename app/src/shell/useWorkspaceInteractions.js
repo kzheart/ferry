@@ -6,6 +6,7 @@ import {
   resumeDescriptor,
   supportsAgentCapability,
   supportsSessionResumeCli,
+  TOOL_NAME,
 } from "../shared/contracts/tools.js";
 import {
   createSessionContextMenu,
@@ -25,6 +26,8 @@ export function useWorkspaceInteractions({
   metadata,
   metaFor,
   updateMetadata,
+  renameSession,
+  rescan,
   multiIds,
   setMultiIds,
   libraryVisibleIds,
@@ -100,12 +103,37 @@ export function useWorkspaceInteractions({
       updateMetadata(session, { pinned: !metaFor(session).pinned }),
     onOpenMenu: setMenu,
     onStartRename: setRename,
-    // 留空恢复原始标题(与旧弹窗语义一致);未改动则不写元数据
-    onSubmitRename: (session, value) => {
+    // 留空恢复原始标题(与旧弹窗语义一致);未改动则不写元数据。
+    // 支持原生写回的 Agent 直接改对方存储,让它自己的界面也跟着变;
+    // Cursor 等只读来源仍只改 Ferry 本地元数据。
+    onSubmitRename: async (session, value) => {
       setRename(null);
       const name = value.trim();
       if (name === (metaFor(session).name || session.title || "")) return;
-      updateMetadata(session, { name });
+      if (!name || !renameSession || !supportsAgentCapability(session.tool, "rename")) {
+        updateMetadata(session, { name });
+        return;
+      }
+      try {
+        const result = await renameSession(session, name);
+        const notes = Array.isArray(result?.native?.notes) ? result.native.notes : [];
+        setToast({
+          kind: "ok",
+          title: t("app:toast.renamed"),
+          desc: [
+            t("app:toast.renamedDesc", { agent: TOOL_NAME[session.tool] || session.tool }),
+            ...notes,
+          ].join(" "),
+        });
+        // Codex 等把标题存在数据库里,文件监听收不到变化,主动刷一次列表。
+        rescan?.();
+      } catch (error) {
+        setToast({
+          kind: "fail",
+          title: t("app:toast.renameFail"),
+          desc: error.message,
+        });
+      }
     },
     onCancelRename: () => setRename(null),
   });

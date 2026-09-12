@@ -24,6 +24,7 @@ use super::lifecycle::OpenCodeLifecycle;
 use super::migration::OpenCodeMigrationTarget;
 use super::models::OpenCodeModels;
 use super::probe::OpenCodeVerifier;
+use super::rename::OpenCodeRenamer;
 use super::{reader, scanner};
 
 /// OpenCode 私有的损耗语义（共享目录里没有的 code 在这里声明）。
@@ -109,6 +110,7 @@ pub fn build() -> Result<AgentAdapter, String> {
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
         .migration_target(Arc::new(OpenCodeMigrationTarget))
         .editor(Arc::new(OpenCodeBackend::new()))
+        .renamer(Arc::new(OpenCodeRenamer::new()))
         .verifier(Arc::new(OpenCodeVerifier))
         .lifecycle(Arc::new(OpenCodeLifecycle::new(executable)))
         .models(Arc::new(OpenCodeModels))

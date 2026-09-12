@@ -510,6 +510,7 @@ pub(crate) mod testing {
         pub fail_rollback: Mutex<bool>,
         pub supports: Mutex<bool>,
         pub busy: Mutex<bool>,
+        pub titles: Mutex<Vec<(String, String)>>,
     }
 
     pub(crate) struct Client(pub Arc<Recorder>);
@@ -547,6 +548,19 @@ pub(crate) mod testing {
                 )));
             }
             Ok(())
+        }
+
+        fn supports_session_update(&self) -> DomainResult<bool> {
+            Ok(*self.0.supports.lock().unwrap())
+        }
+
+        fn set_title(&self, session_id: &str, title: &str) -> DomainResult<Value> {
+            self.0
+                .titles
+                .lock()
+                .unwrap()
+                .push((session_id.into(), title.into()));
+            Ok(serde_json::json!({"id": session_id, "title": title}))
         }
     }
 

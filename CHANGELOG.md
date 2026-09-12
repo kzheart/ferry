@@ -14,6 +14,31 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [Unreleased]
+
+### Added
+
+- **Native session renaming** — renaming a session in Ferry now writes the new
+  title into the agent's own store, so Claude Code, Codex, OpenCode, Pi Agent and
+  Grok Build show the same title in their own session lists. Claude Code and Pi
+  get an appended title record, Codex goes through its app-server (falling back
+  to the registry database), OpenCode uses the official session update API, and
+  Grok rewrites `summary.json` with the manual-title flag so auto-titling leaves
+  it alone. Cursor stays read-only and keeps the Ferry-local name.
+
+### Fixed
+
+- **Claude Code titles** — sessions renamed with `/rename` or auto-titled by
+  Claude Code were shown with the first prompt instead; Ferry now reads the
+  `customTitle` / `aiTitle` records with Claude Code's own priority.
+- **Codex titles** — Ferry now shows the thread name Codex itself displays
+  (from its registry database) instead of always truncating the first prompt.
+- **Cursor titles** — the assistant's status subtitle (often literally "New chat")
+  is no longer used as a session title; unnamed sessions fall back to the first
+  prompt like every other agent.
+- **Pi Agent titles** — session names are read in file order with cleared names
+  honoured, matching pi's own `/name` semantics.
+
 ## [0.9.0] - 2026-08-27
 
 ### Added

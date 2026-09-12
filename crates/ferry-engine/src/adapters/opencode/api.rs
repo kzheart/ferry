@@ -33,6 +33,12 @@ pub trait OpenCodeApiClient: Send {
 
     /// 会话正在运行时拒绝原地编辑。
     fn assert_idle(&self, session_id: &str) -> DomainResult<()>;
+
+    /// `/doc` 里 `/session/{sessionID}` 是否声明了 `patch`（`session.update`，可改 title）。
+    fn supports_session_update(&self) -> DomainResult<bool>;
+
+    /// `PATCH /session/{s}` 带 `{"title": ...}`；返回更新后的 Session 对象。
+    fn set_title(&self, session_id: &str, title: &str) -> DomainResult<Value>;
 }
 
 /// `cwd → 客户端` 的工厂；单测替换成假实现。
@@ -265,6 +271,25 @@ impl OpenCodeApiClient for OpenCodeApi {
             )));
         }
         Ok(())
+    }
+
+    fn supports_session_update(&self) -> DomainResult<bool> {
+        let doc = self.request("GET", "/doc", None)?;
+        let route = doc
+            .get("paths")
+            .and_then(Value::as_object)
+            .and_then(|paths| paths.get("/session/{sessionID}"))
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_else(Map::new);
+        Ok(route.contains_key("patch"))
+    }
+
+    fn set_title(&self, session_id: &str, title: &str) -> DomainResult<Value> {
+        let path = format!("/session/{session_id}");
+        let mut body = Map::new();
+        body.insert("title".into(), Value::from(title));
+        self.request("PATCH", &self.scoped(&path), Some(&Value::Object(body)))
     }
 }
 

@@ -23,6 +23,7 @@ use super::migration::ClaudeMigrationTarget;
 use super::models::ClaudeModels;
 use super::probe::ClaudeVerifier;
 use super::reader;
+use super::rename::ClaudeRenamer;
 use super::scanner;
 
 /// claude 没有私有的损耗 code：reader 产生的 `session.malformed_record` /
@@ -152,6 +153,7 @@ pub fn build() -> Result<AgentAdapter, String> {
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
         .migration_target(Arc::new(ClaudeMigrationTarget))
         .editor(Arc::new(ClaudeBackend))
+        .renamer(Arc::new(ClaudeRenamer))
         .verifier(Arc::new(ClaudeVerifier))
         .lifecycle(Arc::new(ClaudeLifecycle::new(executable)))
         .models(Arc::new(ClaudeModels))

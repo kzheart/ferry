@@ -24,6 +24,7 @@ use super::migration::PiMigrationTarget;
 use super::models::PiModels;
 use super::probe::PiVerifier;
 use super::reader;
+use super::rename::PiRenamer;
 use super::scanner;
 
 /// 运行期的 pi 会话根（顺序即查找优先级）。
@@ -183,6 +184,7 @@ pub fn build() -> Result<AgentAdapter, String> {
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
         .migration_target(Arc::new(PiMigrationTarget))
         .editor(Arc::new(PiBackend))
+        .renamer(Arc::new(PiRenamer))
         .verifier(Arc::new(PiVerifier))
         .lifecycle(Arc::new(PiLifecycle::new(executable)))
         .models(Arc::new(PiModels))

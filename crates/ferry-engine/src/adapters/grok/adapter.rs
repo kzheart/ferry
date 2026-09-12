@@ -23,6 +23,7 @@ use super::migration::GrokMigrationTarget;
 use super::models::GrokModels;
 use super::probe::GrokVerifier;
 use super::reader::read as read_bundle;
+use super::rename::GrokRenamer;
 use super::scanner::{agent_fingerprint, fingerprint, scan, sessions_root};
 use super::store::{authoritative_history, read_text};
 
@@ -257,6 +258,7 @@ pub fn build() -> Result<AgentAdapter, String> {
         .browser(browser.clone())
         .migration_source(Arc::new(TreeMigrationSource::new(browser)))
         .migration_target(Arc::new(GrokMigrationTarget))
+        .renamer(Arc::new(GrokRenamer))
         .verifier(Arc::new(GrokVerifier))
         .lifecycle(Arc::new(GrokLifecycle::new(executable)))
         .models(Arc::new(GrokModels))
@@ -319,6 +321,7 @@ mod tests {
                 "resume",
                 "migration-source",
                 "migration-target",
+                "rename",
                 "prompt",
                 "models"
             ]

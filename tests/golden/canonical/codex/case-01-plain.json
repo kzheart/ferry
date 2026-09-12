@@ -52,5 +52,5 @@
   "root_id": "fixture-codex-plain",
   "source_id": "fixture-codex-plain",
   "source_tool": "codex",
-  "title": ""
+  "title": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools."
 }

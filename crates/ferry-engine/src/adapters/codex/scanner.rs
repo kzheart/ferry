@@ -1,6 +1,6 @@
 //! Codex rollout 文件扫描。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -15,7 +15,8 @@ use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
 use crate::system::paths::expanduser;
 
-use super::native::discover_closure;
+use super::native::{discover_closure, CodexStore};
+use super::titles;
 use super::topology;
 
 /// Codex 的累计/单次 usage 原始桶。`output_tokens` 已包含 reasoning，不能再把
@@ -503,9 +504,32 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
 }
 
 /// 扫描 `~/.codex/sessions/*/*/*/rollout-*.jsonl`。
+///
+/// 标题在扫描缓存**之后**叠加：rollout 文件里没有标题，Codex 界面显示的名字在注册库
+/// `threads.name`；改名只动数据库不动文件，按文件 stat 缓存的行会一直陈旧。
 pub fn scan(cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
     let pattern = expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl");
-    scan_jsonl(&pattern.to_string_lossy(), cache, &meta)
+    let mut rows = scan_jsonl(&pattern.to_string_lossy(), cache, &meta)?;
+    let store = CodexStore::for_rollout(&expanduser("~/.codex/sessions/rollout.jsonl"));
+    overlay_titles(&mut rows, &titles::thread_names(&store));
+    Ok(rows)
+}
+
+/// 有原生名字的行用名字覆盖首句回退。
+pub(super) fn overlay_titles(rows: &mut [ScanRow], names: &HashMap<String, String>) {
+    if names.is_empty() {
+        return;
+    }
+    for row in rows {
+        let Some(name) = row
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| names.get(id))
+        else {
+            continue;
+        };
+        row.insert("title".into(), Value::from(name.as_str()));
+    }
 }
 
 /// 计算 Codex 可达会话 closure（含 registry）的只读指纹。

@@ -351,16 +351,13 @@ pub fn read(path: &str) -> DomainResult<Session> {
     // call_id → (消息下标, block 下标)；插入序即 Python dict 的迭代序。
     let mut calls: Vec<(String, (usize, usize))> = Vec::new();
     let mut last_message_id: Option<String> = None;
+    // 标题口径与 scanner 一致：整文件最后一条 session_info，空串=清除。
+    session.title = super::scanner::session_name(&loaded.entries).unwrap_or_default();
     for entry in branch {
         let kind = entry.get("type").and_then(Value::as_str);
         let id = entry_id(entry).to_string();
         match kind {
-            Some("session_info") => {
-                if let Some(name) = entry.get("name").and_then(Value::as_str) {
-                    session.title = name.to_string();
-                }
-                continue;
-            }
+            Some("session_info") => continue,
             Some("model_change") => {
                 session.model_provider = entry
                     .get("provider")

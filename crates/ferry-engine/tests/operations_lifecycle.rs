@@ -15,7 +15,8 @@ use serde_json::{json, Map, Value};
 
 use ferry_engine::adapters::contracts::{
     AgentAdapter, AgentManifest, Fingerprint, ModelCatalog, ModelDiscovery, NativeSessionReference,
-    ScanCache, ScanRow, SessionBrowser, SessionEditor, SessionLifecycle, SessionVerifier,
+    ScanCache, ScanRow, SessionBrowser, SessionEditor, SessionLifecycle, SessionRenamer,
+    SessionVerifier,
 };
 use ferry_engine::adapters::shared::editing::EditDocument;
 use ferry_engine::errors::{DomainError, DomainResult};
@@ -59,6 +60,7 @@ struct EditorState {
     last_ops: Mutex<Vec<Value>>,
     replies: Mutex<Vec<Value>>,
     restored: Mutex<Vec<String>>,
+    renames: Mutex<Vec<(String, String)>>,
 }
 
 struct FakeEditor {
@@ -235,6 +237,25 @@ impl ModelCatalog for FakeModels {
     }
 }
 
+/// 假的标题写回：把收到的 (ref, title) 记下来，返回 adapter 约定的最小结果。
+struct FakeRenamer {
+    state: Arc<EditorState>,
+}
+
+impl SessionRenamer for FakeRenamer {
+    fn rename(&self, reference: &str, title: &str) -> DomainResult<Map<String, Value>> {
+        self.state
+            .renames
+            .lock()
+            .unwrap()
+            .push((reference.to_string(), title.to_string()));
+        let mut result = Map::new();
+        result.insert("title".into(), Value::from(title));
+        result.insert("notes".into(), json!(["needs restart"]));
+        Ok(result)
+    }
+}
+
 fn manifest(edit_operations: &[&str]) -> AgentManifest {
     AgentManifest {
         id: "claude".into(),
@@ -242,7 +263,7 @@ fn manifest(edit_operations: &[&str]) -> AgentManifest {
         icon: "claude".into(),
         source_path: "~/.claude/projects".into(),
         // 顺序必须是 AGENT_CAPABILITIES 的有序子集。
-        capabilities: ["browse", "resume", "edit", "prompt", "models"]
+        capabilities: ["browse", "resume", "edit", "rename", "prompt", "models"]
             .iter()
             .map(|value| (*value).to_string())
             .collect(),
@@ -365,6 +386,9 @@ impl Harness {
             .browser(Arc::new(FakeBrowser))
             .editor(Arc::new(FakeEditor {
                 operations: edit_operations.to_vec(),
+                state: Arc::clone(&editor_state),
+            }))
+            .renamer(Arc::new(FakeRenamer {
                 state: Arc::clone(&editor_state),
             }))
             .verifier(Arc::new(FakeVerifier))
@@ -818,4 +842,70 @@ fn unknown_plan_id_is_rejected() {
     }
     let error: EngineError = service.status(&json!("op_missing")).unwrap_err();
     assert_eq!(error.message(), "operation plan 不存在或已因重启失效");
+}
+
+#[test]
+fn rename_writes_the_native_title_and_clears_the_local_override() {
+    let harness = Harness::new();
+    let service = harness.service();
+    // 先留一条本地改名，模拟用户以前在 Ferry 里重命名过。
+    let mut patch = Map::new();
+    patch.insert("name".into(), Value::from("本地旧名"));
+    metadata::set_entry("claude", "private-id", &patch, &harness.ports).unwrap();
+
+    let plan = service
+        .plan(&json!({
+            "kind": "rename",
+            "tool": "claude",
+            "ref": "fsr_abcdefgh",
+            "title": "  新的   标题 ",
+        }))
+        .unwrap();
+    assert_eq!(plan["status"], json!("planned"));
+    assert_eq!(plan["risk"], json!("low"));
+    assert_eq!(plan["preview"]["before"], json!("标题"));
+    assert_eq!(plan["preview"]["after"], json!("新的 标题"));
+    assert_eq!(plan["preview"]["session_id"], json!("private-id"));
+    assert!(plan["document_revision"].is_null());
+
+    let applied = apply_and_wait(&service, &plan["plan_id"]).unwrap();
+    assert_eq!(applied["status"], json!("applied"));
+    assert_eq!(applied["result"]["title"], json!("新的 标题"));
+    assert_eq!(
+        applied["result"]["native"]["notes"],
+        json!(["needs restart"])
+    );
+    assert_eq!(
+        harness.editor.renames.lock().unwrap().as_slice(),
+        &[("/tmp/transcript.jsonl".to_string(), "新的 标题".to_string())]
+    );
+    // 本地覆盖被清掉，列表回到显示原生标题。
+    let all = metadata::list_all(&harness.ports).unwrap();
+    assert!(
+        all.get(&metadata::key("claude", "private-id"))
+            .and_then(Value::as_object)
+            .is_none_or(|entry| !entry.contains_key("name")),
+        "metadata name 应被清除: {all:?}"
+    );
+    assert_eq!(harness.commits(), 0, "改名不走编辑事务");
+}
+
+#[test]
+fn rename_rejects_blank_titles_and_stale_revisions() {
+    let harness = Harness::new();
+    let service = harness.service();
+    let blank = service
+        .plan(&json!({"kind": "rename", "tool": "claude", "ref": "fsr_abcdefgh", "title": "  "}))
+        .unwrap_err();
+    assert_eq!(blank.error_type(), "AgentRequestError");
+
+    let plan = service
+        .plan(&json!({"kind": "rename", "tool": "claude", "ref": "fsr_abcdefgh", "title": "ok"}))
+        .unwrap();
+    *harness.index_state.revision.lock().unwrap() = "index-revision-2".into();
+    let error = apply_and_wait(&service, &plan["plan_id"]).unwrap_err();
+    assert_eq!(error.error_type(), "ConcurrentModificationError");
+    let status = service.status(&plan["plan_id"]).unwrap();
+    assert_eq!(status["status"], json!("failed"));
+    assert!(harness.editor.renames.lock().unwrap().is_empty());
 }

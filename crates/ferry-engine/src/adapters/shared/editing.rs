@@ -123,6 +123,20 @@ pub fn write_jsonl(path: &Path, records: &[Value]) -> std::io::Result<()> {
     fs::rename(&temporary, path)
 }
 
+/// 往 JSONL 末尾追加一条记录：`O_APPEND` 单次 write，不重写文件。
+///
+/// 与 [`write_jsonl`] 的全量重写不同，这条路径专供「正在被 Agent 追加写的会话」
+/// 上的幂等元数据（如标题记录）：rename 覆盖会让对方进程继续往孤儿 inode 写，
+/// 追加则与它自己的 `appendFile` 语义一致。
+pub fn append_jsonl_line(path: &Path, record: &Value) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut line = super::writing::python_json_dumps(record);
+    line.push('\n');
+    let mut file = fs::OpenOptions::new().append(true).open(path)?;
+    file.write_all(line.as_bytes())?;
+    file.flush()
+}
+
 /// 替换回复里出现 spawn/task 工具 → 拒绝：子 Agent 会改变会话树。
 pub fn reject_replacement_spawn(reply: &Value) -> DomainResult<()> {
     let items = reply.get("items").and_then(Value::as_array);

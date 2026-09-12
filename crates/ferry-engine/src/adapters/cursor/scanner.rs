@@ -20,11 +20,11 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::adapters::contracts::{ScanCache, ScanRow};
-use crate::adapters::shared::scanner::session_roots;
+use crate::adapters::shared::scanner::{clip_text_default, session_roots};
 use crate::errors::DomainResult;
 use crate::jsonutil::FileStat;
 
-use super::native_schema::{ComposerData, Head};
+use super::native_schema::{Bubble, ComposerData, Head};
 use super::store;
 
 /// 库戳记：`[(路径, dev, ino, mtime_ns, size)]`，取不到 stat 时是 `[路径, null]`。
@@ -52,15 +52,51 @@ impl NativeSession {
             .filter(|value| !value.is_empty())
     }
 
-    fn title(&self) -> String {
+    /// 会话名：`head.name`（AI 命名或用户重命名）→ `composerData.name` 冗余副本。
+    ///
+    /// **不**用 `subtitle` 兜底：它是 Cursor 界面上标题下方那行灰字（「Edited a.html」
+    /// 或最后一句回复），没有名字时字面就是 "New chat"，当标题会误导。
+    fn name(&self) -> Option<String> {
         let data_name = self.data.as_ref().and_then(|data| data.name.as_deref());
         self.head
             .name
             .as_deref()
             .or(data_name)
-            .or(self.head.subtitle.as_deref())
-            .unwrap_or_default()
-            .to_string()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    }
+
+    /// 没有名字时与其他 adapter 同口径：首条用户 bubble 正文截 80 字。
+    fn first_prompt(&self, connection: &Connection) -> String {
+        let Some(data) = self.data.as_ref() else {
+            return String::new();
+        };
+        for header in data
+            .headers
+            .iter()
+            .filter(|header| header.kind == 1)
+            .take(5)
+        {
+            if header.bubble_id.is_empty() {
+                continue;
+            }
+            let key = format!("bubbleId:{}:{}", self.id, header.bubble_id);
+            let Ok(Some(raw)) = store::disk_kv(connection, &key) else {
+                continue;
+            };
+            let Ok(bubble) = serde_json::from_str::<Bubble>(&raw) else {
+                continue;
+            };
+            if bubble.kind == 1 && !bubble.text.trim().is_empty() {
+                return clip_text_default(&bubble.text);
+            }
+        }
+        String::new()
+    }
+
+    fn title(&self, connection: &Connection) -> String {
+        self.name().unwrap_or_else(|| self.first_prompt(connection))
     }
 
     /// 工作目录：head 优先，缺失时回落 composerData（v16 只有 40/176 带它）。
@@ -156,7 +192,7 @@ pub fn scan(_cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
             let mut row = ScanRow::new();
             row.insert("tool".into(), Value::from("cursor"));
             row.insert("id".into(), Value::from(session.id.as_str()));
-            row.insert("title".into(), Value::from(session.title()));
+            row.insert("title".into(), Value::from(session.title(&connection)));
             row.insert("dir".into(), Value::from(session.cwd()));
             row.insert("updated".into(), Value::from(session.updated));
             row.insert("created".into(), Value::from(session.created));

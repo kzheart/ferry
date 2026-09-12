@@ -9,6 +9,7 @@ pub mod models;
 pub mod native_schema;
 pub mod probe;
 pub mod reader;
+pub mod rename;
 pub mod rewind;
 pub mod scanner;
 pub mod store;

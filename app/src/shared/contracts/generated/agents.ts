@@ -1,5 +1,5 @@
 // 此文件由 scripts/generate-contracts.py 生成，请勿手改。
-export const AGENT_CAPABILITIES = ["browse", "resume", "migration-source", "migration-target", "edit", "prompt", "models"] as const;
+export const AGENT_CAPABILITIES = ["browse", "resume", "migration-source", "migration-target", "edit", "rename", "prompt", "models"] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 export const AGENTS = {
   "claude": {
@@ -11,6 +11,7 @@ export const AGENTS = {
       "migration-source",
       "migration-target",
       "edit",
+      "rename",
       "prompt",
       "models"
     ],
@@ -29,6 +30,7 @@ export const AGENTS = {
       "migration-source",
       "migration-target",
       "edit",
+      "rename",
       "prompt",
       "models"
     ],
@@ -47,6 +49,7 @@ export const AGENTS = {
       "migration-source",
       "migration-target",
       "edit",
+      "rename",
       "prompt",
       "models"
     ],
@@ -63,6 +66,7 @@ export const AGENTS = {
       "migration-source",
       "migration-target",
       "edit",
+      "rename",
       "prompt",
       "models"
     ],
@@ -80,6 +84,7 @@ export const AGENTS = {
       "resume",
       "migration-source",
       "migration-target",
+      "rename",
       "prompt",
       "models"
     ],

@@ -103,16 +103,13 @@ fn meta(path: &Path, stat: &FileStat) -> ScanRow {
     }
     branch.reverse();
 
-    let mut title = String::new();
+    // 与 pi 自己的 getSessionName() 同口径：整文件行序（不按分支）取最后一条
+    // session_info，name 去首尾空白；空串表示显式清除标题，随后回退首条用户消息。
+    let mut title = session_name(entries).unwrap_or_default();
     let mut count = 0i64;
     let mut model = String::new();
     let mut tokens = empty_tokens();
     for record in &branch {
-        if record.get("type").and_then(Value::as_str) == Some("session_info") {
-            if let Some(name) = record.get("name").filter(|value| truthy(value)) {
-                title = python_str(name);
-            }
-        }
         if record.get("type").and_then(Value::as_str) != Some("message") {
             continue;
         }
@@ -186,6 +183,23 @@ fn meta(path: &Path, stat: &FileStat) -> ScanRow {
     );
     row.insert("model".into(), Value::from(model));
     row
+}
+
+/// 文件里最后一条 `session_info` 的 `name`（trim 后），空串视为无名。
+pub(super) fn session_name(entries: &[Value]) -> Option<String> {
+    entries
+        .iter()
+        .rev()
+        .find(|entry| entry.get("type").and_then(Value::as_str) == Some("session_info"))
+        .map(|entry| {
+            entry
+                .get("name")
+                .map(python_str)
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        })
+        .filter(|name| !name.is_empty())
 }
 
 /// 扫描全部 pi 会话根。

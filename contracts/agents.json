@@ -5,6 +5,7 @@
     "migration-source",
     "migration-target",
     "edit",
+    "rename",
     "prompt",
     "models"
   ],
@@ -23,6 +24,7 @@
         "migration-source",
         "migration-target",
         "edit",
+        "rename",
         "prompt",
         "models"
       ],
@@ -50,6 +52,7 @@
         "migration-source",
         "migration-target",
         "edit",
+        "rename",
         "prompt",
         "models"
       ],
@@ -77,6 +80,7 @@
         "migration-source",
         "migration-target",
         "edit",
+        "rename",
         "prompt",
         "models"
       ],
@@ -102,6 +106,7 @@
         "migration-source",
         "migration-target",
         "edit",
+        "rename",
         "prompt",
         "models"
       ],
@@ -126,6 +131,7 @@
         "resume",
         "migration-source",
         "migration-target",
+        "rename",
         "prompt",
         "models"
       ],

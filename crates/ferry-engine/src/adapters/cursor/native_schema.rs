@@ -76,6 +76,9 @@ pub struct ModelConfig {
 pub struct ConversationHeader {
     #[serde(default, rename = "bubbleId")]
     pub bubble_id: String,
+    /// 与 bubble 的 `type` 同义：1 = user，2 = assistant。
+    #[serde(default, rename = "type")]
+    pub kind: i64,
 }
 
 /// `composerData:<composerId>`。

@@ -18,7 +18,7 @@ use crate::operations::metadata_store::metadata_key;
 use crate::operations::migrate::MigrationService;
 use crate::operations::types::{EngineError, EngineResult, Ports, Resolver};
 use crate::operations::validation::{
-    validate_edit_input, validate_metadata_input, validate_migration_input,
+    validate_edit_input, validate_metadata_input, validate_migration_input, validate_rename_input,
 };
 
 /// 冻结前的计划素材。
@@ -70,6 +70,7 @@ impl OperationPlanner {
             "edit" => self.plan_edit(value),
             "migration" => self.plan_migration(value),
             "metadata" => self.plan_metadata(value),
+            "rename" => self.plan_rename(value),
             // OPERATION_KINDS 已经过滤过，走到这里说明契约与分支表脱节。
             _ => Err(EngineError::Internal {
                 error_type: "AssertionError",
@@ -150,6 +151,52 @@ impl OperationPlanner {
         }
         Ok(PreparedPlan {
             input: operation_input,
+            preview: Value::Object(preview),
+            base_revision: after.revision,
+            document_revision: None,
+        })
+    }
+
+    /// 标题写回：能力门禁 → 解析 → 预览「改前/改后」→ 二次解析比 revision。
+    ///
+    /// 预览里的 `before` 取扫描行标题（即 Agent 原生标题或首句回退），不看 Ferry
+    /// 本地的 metadata `name`：这条操作改的是对方的存储，预览也应当对照对方现状。
+    fn plan_rename(&self, value: &Value) -> EngineResult<PreparedPlan> {
+        let operation_input = validate_rename_input(value)?;
+        let tool = require_str(&operation_input, "tool")?;
+        let reference = require_str(&operation_input, "ref")?;
+        let title = require_str(&operation_input, "title")?;
+        let adapter = self.ports.adapter(&tool)?;
+        adapter.require_renamer()?;
+        let before = self.index.resolve(&tool, &reference)?;
+        let session_id = before.session_id();
+        if session_id.is_empty() {
+            return Err(DomainError::agent_request_invalid("会话缺少可用的原生 id").into());
+        }
+        let current_title = before
+            .row
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let mut preview = Map::new();
+        preview.insert("tool".into(), Value::from(tool.as_str()));
+        preview.insert("ref".into(), Value::from(reference.as_str()));
+        preview.insert("session_id".into(), Value::from(session_id.as_str()));
+        preview.insert("before".into(), Value::from(current_title));
+        preview.insert("after".into(), Value::from(title.as_str()));
+
+        let after = self.index.resolve(&tool, &reference)?;
+        if before.revision != after.revision {
+            return Err(DomainError::concurrent_modification(PLAN_RACE_MESSAGE).into());
+        }
+        let mut input = operation_input;
+        input
+            .as_object_mut()
+            .ok_or_else(|| EngineError::key_error("input"))?
+            .insert("session_id".into(), Value::from(session_id.as_str()));
+        Ok(PreparedPlan {
+            input,
             preview: Value::Object(preview),
             base_revision: after.revision,
             document_revision: None,

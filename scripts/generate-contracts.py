@@ -89,6 +89,7 @@ AGENT_CAPABILITIES = (
     "migration-source",
     "migration-target",
     "edit",
+    "rename",
     "prompt",
     "models",
 )

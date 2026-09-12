@@ -244,6 +244,7 @@ pub fn public_plan(operation: &OperationPlan) -> EngineResult<Value> {
             format!("将 {source} 会话迁移到 {target}")
         }
         "metadata" => "修改会话元数据".to_string(),
+        "rename" => "修改会话标题并同步到 Agent".to_string(),
         _ => "修改原始会话（执行前自动创建可恢复快照）".to_string(),
     };
     let affected_refs = if let Some(reference) = params.get("ref") {
@@ -260,11 +261,13 @@ pub fn public_plan(operation: &OperationPlan) -> EngineResult<Value> {
     payload.insert("summary".into(), Value::from(summary));
     payload.insert(
         "risk".into(),
-        Value::from(if operation.kind == "metadata" {
-            "low"
-        } else {
-            "high"
-        }),
+        Value::from(
+            if operation.kind == "metadata" || operation.kind == "rename" {
+                "low"
+            } else {
+                "high"
+            },
+        ),
     );
     payload.insert("affected_refs".into(), Value::Array(affected_refs));
     payload.insert(

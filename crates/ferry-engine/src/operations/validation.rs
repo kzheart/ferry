@@ -211,6 +211,50 @@ pub fn validate_metadata_input(value: &Value) -> EngineResult<Value> {
     canonicalized(&Value::Object(result))
 }
 
+/// 标题写回允许的最大字符数；与 metadata `name` 的上限一致。
+pub const MAX_TITLE_CHARS: usize = 200;
+
+/// 把用户输入折成一行标题：压平空白、去首尾空格。各 Agent 原生的 rename 都做
+/// 等价规范化（Pi 去换行、Codex/Grok 拒绝空白与控制字符），这里统一在入口做一次。
+pub fn normalize_title(raw: &str) -> String {
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+pub fn validate_rename_input(value: &Value) -> EngineResult<Value> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| request_error("operation input 必须是 object"))?;
+    let allowed = ["kind", "tool", "ref", "title"];
+    let unknown = unknown_fields(object, &allowed);
+    if !unknown.is_empty() {
+        return Err(unknown_field_error("rename operation 包含未知字段", unknown).into());
+    }
+    let tool =
+        bounded_string(object.get("tool"), 64).ok_or_else(|| request_error("rename tool 非法"))?;
+    let reference = bounded_string(object.get("ref"), 512)
+        .filter(|text| all_chars_at_least(text, 33))
+        .ok_or_else(|| request_error("rename ref 非法"))?;
+    let title = object
+        .get("title")
+        .and_then(Value::as_str)
+        .map(normalize_title)
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| request_error("rename title 不能为空"))?;
+    if title.chars().count() > MAX_TITLE_CHARS {
+        return Err(request_error(format!("rename title 超过 {MAX_TITLE_CHARS} 字符")).into());
+    }
+    if title.chars().any(char::is_control) {
+        return Err(request_error("rename title 不能包含控制字符").into());
+    }
+
+    let mut result = Map::new();
+    result.insert("kind".into(), Value::from("rename"));
+    result.insert("tool".into(), Value::from(tool));
+    result.insert("ref".into(), Value::from(reference));
+    result.insert("title".into(), Value::from(title));
+    canonicalized(&Value::Object(result))
+}
+
 // ---------------------------------------------------------------------------
 // ops
 // ---------------------------------------------------------------------------

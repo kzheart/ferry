@@ -56,6 +56,17 @@ fn text_of(value: Option<&Value>) -> &str {
     value.and_then(Value::as_str).unwrap_or("")
 }
 
+/// 标题优先级：用户命名 > AI 命名 > 首句回退。scanner 与 reader 共用同一条规则。
+pub(super) fn pick_title(custom: String, ai: String, derived: String) -> String {
+    if !custom.is_empty() {
+        custom
+    } else if !ai.is_empty() {
+        ai
+    } else {
+        derived
+    }
+}
+
 /// 单个 JSONL 会话文件 → 扫描行；不是会话（无 user/assistant 记录）时返回空 map。
 fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> {
     let Ok(lines) = iter_lines(path) else {
@@ -64,6 +75,10 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     let mut cwd = String::new();
     let mut branch = String::new();
     let mut title = String::new();
+    // Claude Code 自己的解析顺序：custom-title（用户 /rename）> ai-title（自动
+    // 生成）> 首条用户提问；同类记录取文件里最后一条（last-wins）。
+    let mut custom_title = String::new();
+    let mut ai_title = String::new();
     let mut count = 0i64;
     let mut by_model: Vec<(String, Tokens)> = Vec::new();
     // Claude Code 的流式落盘会把同一 API 回复（message.id + requestId）写多行；
@@ -158,9 +173,15 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
                 }
             }
             Some("ai-title") => {
-                let candidate = text_of(record.get("title"));
+                let candidate = text_of(record.get("aiTitle")).trim();
                 if !candidate.is_empty() {
-                    title = candidate.to_string();
+                    ai_title = candidate.to_string();
+                }
+            }
+            Some("custom-title") => {
+                let candidate = text_of(record.get("customTitle")).trim();
+                if !candidate.is_empty() {
+                    custom_title = candidate.to_string();
                 }
             }
             _ => {}
@@ -170,6 +191,7 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     if count == 0 {
         return Ok(ScanOutcome::Row(ScanRow::new()));
     }
+    let title = pick_title(custom_title, ai_title, title);
     for (_, (model, tokens)) in seen_usage {
         if by_model.iter().all(|(name, _)| *name != model) {
             by_model.push((model.clone(), empty_tokens()));
@@ -430,13 +452,34 @@ mod tests {
             &[
                 json!({"type": "user", "message": {"role": "user",
                        "content": "<command-name>skip</command-name>"}}),
-                json!({"type": "ai-title", "title": "Real Title"}),
+                // 真实字段名是 aiTitle，不是 title。
+                json!({"type": "ai-title", "aiTitle": "Real Title", "sessionId": "sess"}),
             ],
         );
         let ScanOutcome::Row(row) = meta(&path, &stat_of(&path), &base).unwrap() else {
             panic!("应当解析出扫描行");
         };
         assert_eq!(row["title"], json!("Real Title"));
+    }
+
+    #[test]
+    fn custom_title_beats_ai_title_and_the_last_record_wins() {
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().join("projects");
+        let path = base.join("slug/sess.jsonl");
+        write(
+            &path,
+            &[
+                json!({"type": "user", "message": {"role": "user", "content": "first ask"}}),
+                json!({"type": "custom-title", "customTitle": "Old Name", "sessionId": "sess"}),
+                json!({"type": "ai-title", "aiTitle": "Robot Name", "sessionId": "sess"}),
+                json!({"type": "custom-title", "customTitle": " New Name ", "sessionId": "sess"}),
+            ],
+        );
+        let ScanOutcome::Row(row) = meta(&path, &stat_of(&path), &base).unwrap() else {
+            panic!("应当解析出扫描行");
+        };
+        assert_eq!(row["title"], json!("New Name"));
     }
 
     #[test]

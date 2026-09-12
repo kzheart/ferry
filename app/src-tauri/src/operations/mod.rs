@@ -10,7 +10,7 @@ use self::request::{operation_plan_id_request, operation_plan_request};
 use self::validation::{agent_has_capability, is_known_agent, validate_opaque_ref, validate_reply};
 use crate::contracts::operations::{
     EditOperationPlanInput, MetadataOperationPlanInput, MigrationOperationPlanInput,
-    OperationPlanInput,
+    OperationPlanInput, RenameOperationPlanInput,
 };
 use crate::contracts::operations::{EDIT_OPERATION_KINDS, OPERATION_KINDS};
 use crate::engine::engine_request_blocking;
@@ -177,6 +177,27 @@ fn validate_metadata_operation_input(input: &MetadataOperationPlanInput) -> Resu
     Ok(())
 }
 
+fn validate_rename_operation_input(input: &RenameOperationPlanInput) -> Result<(), String> {
+    if !is_known_agent(&input.tool) {
+        return Err("Rename Operation Agent 标识无效".to_owned());
+    }
+    if !agent_has_capability(&input.tool, "rename") {
+        return Err("该 Agent 不支持原生标题写回".to_owned());
+    }
+    validate_opaque_ref(&input.reference, "Rename Operation")?;
+    let title = input.title.trim();
+    if title.is_empty() {
+        return Err("Rename Operation title 不能为空".to_owned());
+    }
+    if title.chars().count() > 200 {
+        return Err("Rename Operation title 过长".to_owned());
+    }
+    if title.chars().any(char::is_control) {
+        return Err("Rename Operation title 含控制字符".to_owned());
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Result<(), String> {
     if !OPERATION_KINDS.contains(&input.kind()) {
         return Err("Operation kind 未在共享契约中声明".to_owned());
@@ -185,6 +206,7 @@ pub(crate) fn validate_operation_plan_input(input: &OperationPlanInput) -> Resul
         OperationPlanInput::Edit(edit) => validate_edit_operation_input(edit),
         OperationPlanInput::Migration(migration) => validate_migration_operation_input(migration),
         OperationPlanInput::Metadata(metadata) => validate_metadata_operation_input(metadata),
+        OperationPlanInput::Rename(rename) => validate_rename_operation_input(rename),
     }
 }
 
@@ -430,6 +452,35 @@ mod tests {
         assert!(validate(metadata(json!({"tags": vec!["a"; 21]}))).is_err());
         assert!(validate(metadata(json!({"tags": [""]}))).is_err());
         assert!(validate(metadata(json!({"tags": ["标".repeat(65)]}))).is_err());
+    }
+
+    #[test]
+    fn rename_accepts_a_plain_title_for_capable_agents_only() {
+        assert!(validate(json!({
+            "kind": "rename", "tool": "claude", "ref": REF, "title": "新标题",
+        }))
+        .is_ok());
+        // Cursor 没有 rename 能力：Ferry 不往它的库里写。
+        assert!(validate(json!({
+            "kind": "rename", "tool": "cursor", "ref": REF, "title": "x",
+        }))
+        .is_err());
+        assert!(validate(json!({
+            "kind": "rename", "tool": "claude", "ref": REF, "title": "   ",
+        }))
+        .is_err());
+        assert!(validate(json!({
+            "kind": "rename", "tool": "claude", "ref": REF, "title": "名".repeat(201),
+        }))
+        .is_err());
+        assert!(validate(json!({
+            "kind": "rename", "tool": "claude", "ref": REF, "title": "a\u{7}b",
+        }))
+        .is_err());
+        assert!(validate(json!({
+            "kind": "rename", "tool": "claude", "ref": "", "title": "x",
+        }))
+        .is_err());
     }
 
     #[test]

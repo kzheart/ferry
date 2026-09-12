@@ -12,6 +12,7 @@ pub mod native_schema;
 pub mod payload;
 pub mod probe;
 pub mod reader;
+pub mod rename;
 pub mod scanner;
 pub mod store;
 pub mod tool_calls;

@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusqlite::Connection;
 use serde_json::{Map, Value};
 
+use crate::adapters::shared::scanner::clip_text_default;
 use crate::errors::{DomainError, DomainResult};
 use crate::model::{
     AgentEdge, Block, BlockKind, ContextCompaction, Message, Session, Timestamp, ToolCall,
@@ -328,12 +329,14 @@ fn read_one(connection: &Connection, session_id: &str) -> DomainResult<Session> 
     let native = load(connection, session_id)?;
 
     let mut session = Session::new("cursor", session_id, workspace_path(&native));
+    // 与 scanner 同口径：name 冗余副本兜底，不用 subtitle；缺名时下面回退首条提问。
     session.title = native
         .head
         .name
         .clone()
         .or_else(|| native.data.name.clone())
-        .or_else(|| native.head.subtitle.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
         .unwrap_or_default();
     session.model = native.data.model().map(str::to_string);
     if let Some(info) = native.head.subagent_info.as_ref() {
@@ -377,6 +380,25 @@ fn read_one(connection: &Connection, session_id: &str) -> DomainResult<Session> 
             continue;
         };
         append(&mut session, &bubble, &header.bubble_id, index);
+    }
+
+    if session.title.is_empty() {
+        session.title = session
+            .messages
+            .iter()
+            .filter(|message| message.role == "user")
+            .map(|message| {
+                message
+                    .blocks
+                    .iter()
+                    .filter(|block| block.kind == BlockKind::Text)
+                    .map(|block| block.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .find(|text| !text.trim().is_empty())
+            .map(|text| clip_text_default(&text))
+            .unwrap_or_default();
     }
 
     for (reason, count) in [("dangling_bubble", dangling), ("invalid_bubble", malformed)] {

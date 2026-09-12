@@ -31,6 +31,7 @@ fn visible_text(value: &Value) -> Option<&str> {
     value.as_str().filter(|text| !text.trim().is_empty())
 }
 
+use super::native::CodexStore;
 use super::{tool_calls, tool_results, topology};
 
 const SKIP_USER_PREFIX: [&str; 4] = [
@@ -968,7 +969,11 @@ pub fn read(path: &str, sessions_dir: Option<&Path>) -> DomainResult<Session> {
     let rollout = fs::canonicalize(&expanded).unwrap_or(expanded);
     let lock = tree_lock(&rollout.to_string_lossy());
     let _guard = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    topology::read_tree(&rollout, &cached_read_one, sessions_dir)
+    let mut tree = topology::read_tree(&rollout, &cached_read_one, sessions_dir)?;
+    // rollout 不存标题：名字来自注册库，缺名时按 scanner 口径回退首句。
+    let names = super::titles::thread_names(&CodexStore::for_rollout(&rollout));
+    super::titles::apply_titles(&mut tree, &names);
+    Ok(tree)
 }
 
 #[cfg(test)]
