@@ -1,59 +1,59 @@
-/** SKILL.md 的 frontmatter 解析。技能库与候选发现共用,故独立成文件。 */
+/** 技能格式由 pi 解析；Ferry 只保留本地导入的资源边界。 */
+import {
+  FileError,
+  err,
+  loadSkills,
+  ok,
+  type Result,
+  type FileInfo,
+} from "@earendil-works/pi-agent-core";
+import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/node";
+import { join, resolve } from "node:path";
 
 export const SKILL_MANIFEST = "SKILL.md";
+export const MAX_MANIFEST_BYTES = 256 * 1024;
 
-interface SkillDocument {
-  name: string;
-  description: string;
-}
+/** 每次扫描独立创建，防止外部技能软链循环导致递归无法结束。 */
+export class SkillExecutionEnv extends NodeExecutionEnv {
+  private readonly visitedDirectories = new Set<string>();
 
-const MAX_NAME = 200;
-const MAX_DESCRIPTION = 500;
-
-function clip(value: string, maximum: number) {
-  const text = value.replace(/\s+/g, " ").trim();
-  return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
-}
-
-/** 只认 --- 包围的首个块里的 name/description 两个标量键;不引 yaml 依赖。 */
-function frontmatter(markdown: string): Record<string, string> {
-  const lines = markdown.split(/\r?\n/);
-  if (lines[0]?.trim() !== "---") return {};
-  const end = lines.findIndex(
-    (line, index) => index > 0 && line.trim() === "---",
-  );
-  if (end < 0) return {};
-  const fields: Record<string, string> = {};
-  for (const line of lines.slice(1, end)) {
-    const match = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(line);
-    if (!match?.[1]) continue;
-    let value = (match[2] ?? "").trim();
-    // 去掉成对引号,不做转义解析——技能元信息不该复杂到需要它
-    if (value.length >= 2 && (value.startsWith('"') || value.startsWith("'"))) {
-      if (value.at(-1) === value[0]) value = value.slice(1, -1);
-    }
-    fields[match[1].toLowerCase()] = value;
+  constructor() {
+    super({ cwd: process.cwd() });
   }
-  return fields;
+
+  override async listDir(
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<Result<FileInfo[], FileError>> {
+    const canonical = await this.canonicalPath(path);
+    if (!canonical.ok) return canonical;
+    if (this.visitedDirectories.has(canonical.value)) return ok([]);
+    this.visitedDirectories.add(canonical.value);
+    return super.listDir(path, signal);
+  }
+
+  override async readTextFile(
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<Result<string, FileError>> {
+    const info = await this.fileInfo(path);
+    if (!info.ok) return info;
+    if (info.value.size > MAX_MANIFEST_BYTES) {
+      return err(new FileError("invalid", "skill document is too large", path));
+    }
+    return super.readTextFile(path, signal);
+  }
 }
 
-/** frontmatter 缺失时,name 回落目录名、description 回落正文首个非空段落。 */
-export function parseSkillDocument(
-  markdown: string,
-  fallbackName: string,
-): SkillDocument {
-  const fields = frontmatter(markdown);
-  const body = markdown.startsWith("---")
-    ? markdown.slice(markdown.indexOf("\n---", 3) + 4)
-    : markdown;
-  const paragraph =
-    body
-      .split(/\r?\n\s*\r?\n/)
-      .map((block) => block.replace(/^#+\s*/gm, "").trim())
-      .find((block) => block.length > 0) ?? "";
-  const name = fields.name ? clip(fields.name, MAX_NAME) : "";
-  const description = fields.description
-    ? clip(fields.description, MAX_DESCRIPTION)
-    : clip(paragraph, MAX_DESCRIPTION);
-  return { name: name || fallbackName, description };
+export async function loadSkillDocument(directory: string) {
+  const filePath = join(resolve(directory), SKILL_MANIFEST);
+  const loaded = await loadSkills(new SkillExecutionEnv(), resolve(directory));
+  const skill = loaded.skills.find((item) => item.filePath === filePath);
+  if (!skill) {
+    const diagnostic = loaded.diagnostics.find(
+      (item) => item.path === filePath,
+    );
+    throw new Error(diagnostic?.message ?? "skill has no valid SKILL.md");
+  }
+  return skill;
 }

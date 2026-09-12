@@ -101,7 +101,8 @@ pub trait EngineService: Send + Sync {
         limit: &Value,
         scope: &Value,
     ) -> EngineResult<Value>;
-    fn load_runtime_sessions(&self) -> EngineResult<Value>;
+    fn list_runtime_sessions(&self) -> EngineResult<Value>;
+    fn load_runtime_session(&self, session_id: &Value) -> EngineResult<Value>;
     fn commit_runtime_session(&self, update: &Value) -> EngineResult<Value>;
     fn delete_runtime_session(&self, session_id: &Value) -> EngineResult<Value>;
     fn truncate_runtime_session(
@@ -147,7 +148,8 @@ const DISPATCH_METHOD_NAMES: &[&str] = &[
     "session_asset",
     "session_meta_list",
     "session_search",
-    "runtime_sessions.load_all",
+    "runtime_sessions.list",
+    "runtime_sessions.load",
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",
@@ -296,7 +298,10 @@ impl RpcDispatcher {
                 optional(params, "limit"),
                 &default_of(params, "scope", Value::from("any")),
             ),
-            "runtime_sessions.load_all" => service.load_runtime_sessions(),
+            "runtime_sessions.list" => service.list_runtime_sessions(),
+            "runtime_sessions.load" => {
+                service.load_runtime_session(required(params, "session_id")?)
+            }
             "runtime_sessions.commit" => {
                 service.commit_runtime_session(required(params, "update")?)
             }
@@ -540,8 +545,14 @@ mod tests {
                           "limit" => limit, "scope" => scope),
             )
         }
-        fn load_runtime_sessions(&self) -> EngineResult<Value> {
-            self.record("runtime_sessions.load_all", Value::Null)
+        fn list_runtime_sessions(&self) -> EngineResult<Value> {
+            self.record("runtime_sessions.list", Value::Null)
+        }
+        fn load_runtime_session(&self, session_id: &Value) -> EngineResult<Value> {
+            self.record(
+                "runtime_sessions.load",
+                recorded!("l", "session_id" => session_id),
+            )
         }
         fn commit_runtime_session(&self, update: &Value) -> EngineResult<Value> {
             self.record(
@@ -933,7 +944,8 @@ mod tests {
             ),
             ("session_meta_list", json!({})),
             ("session_search", json!({"query": "q"})),
-            ("runtime_sessions.load_all", json!({})),
+            ("runtime_sessions.list", json!({})),
+            ("runtime_sessions.load", json!({"session_id": "s"})),
             ("runtime_sessions.commit", json!({"update": {}})),
             ("runtime_sessions.delete", json!({"session_id": "s"})),
             (

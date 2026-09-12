@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const statusColor = {
-  pending: "var(--accent)",
-  answered: "var(--ok)",
-  unanswered: "var(--tx5)",
-};
+import "./agentChoice.css";
 
 export function AgentChoiceCard({ item, onRespond }) {
   const { t } = useTranslation();
+  const questionId = useId();
+  const detailsId = useId();
+  const cardRef = useRef(null);
+  const previousHeight = useRef(null);
+  const heightAnimation = useRef(null);
+  const [error, setError] = useState("");
   const [selected, setSelected] = useState(item.selected || []);
   const [customText, setCustomText] = useState(item.customText || "");
   const [submitting, setSubmitting] = useState(false);
@@ -30,6 +32,30 @@ export function AgentChoiceCard({ item, onRespond }) {
     }
   }, [item.status, item.selected, item.customText]);
 
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const from = heightAnimation.current
+      ? card.getBoundingClientRect().height
+      : previousHeight.current;
+    heightAnimation.current?.cancel();
+    heightAnimation.current = null;
+    const to = card.getBoundingClientRect().height;
+    previousHeight.current = to;
+    if (!from || from === to || typeof card.animate !== "function"
+        || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = card.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 170,
+      easing: "ease-out",
+    });
+    heightAnimation.current = animation;
+    animation.onfinish = () => {
+      if (heightAnimation.current === animation) heightAnimation.current = null;
+    };
+  }, [expanded, item.status]);
+
+  useEffect(() => () => heightAnimation.current?.cancel(), []);
+
   const toggle = value => {
     if (!pending) return;
     setSelected(current => {
@@ -44,8 +70,11 @@ export function AgentChoiceCard({ item, onRespond }) {
   const respond = async answer => {
     if (submitting) return;
     setSubmitting(true);
+    setError("");
     try {
       await onRespond(answer);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setSubmitting(false);
     }
@@ -71,195 +100,86 @@ export function AgentChoiceCard({ item, onRespond }) {
       ? t("askferry:choice.unanswered")
       : t("askferry:choice.title");
 
+  const optionContent = option => (
+    <span className="agent-choice-option-copy">
+      <span className="agent-choice-option-title">
+        <span>{option?.label || ""}</span>
+        {option?.recommended && (
+          <span className="agent-choice-recommended">{t("askferry:choice.recommended")}</span>
+        )}
+      </span>
+      {option?.description && <span className="agent-choice-description">{option.description}</span>}
+    </span>
+  );
+
   return (
-    <div className="fcard" style={{
-      padding: "13px 14px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10,
-      maxWidth: 560,
-      borderLeft: `3px solid ${statusColor[item.status] || statusColor.pending}`,
-    }}>
-      <div
-        role={open ? undefined : "button"}
-        tabIndex={open ? undefined : 0}
-        aria-expanded={open ? undefined : expanded}
-        onClick={open ? undefined : () => setExpanded(value => !value)}
-        onKeyDown={open ? undefined : event => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setExpanded(value => !value);
-          }
-        }}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          cursor: open ? "default" : "pointer",
-          minWidth: 0,
-        }}
-      >
-        <span style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: statusColor[item.status] || statusColor.pending,
-          flex: "none",
-        }} />
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tx1)", flex: "none" }}>
-          {title}
-        </span>
-        {item.multiSelect && open && (
-          <span style={{ fontSize: 11, color: "var(--tx5)" }}>
-            {t("askferry:choice.multiSelect")}
+    <section ref={cardRef} className={`agent-choice ${open ? "is-pending" : "is-complete"}`} aria-labelledby={questionId}>
+      {open ? (
+        <>
+          <div className="agent-choice-eyebrow">
+            <span>{title}</span>
+            {item.multiSelect && <span>{t("askferry:choice.multiSelect")}</span>}
+          </div>
+          <div id={questionId} className="agent-choice-question selectable">{item.question}</div>
+        </>
+      ) : (
+        <button className="agent-choice-summary" aria-expanded={expanded} aria-controls={detailsId}
+          onClick={() => setExpanded(value => !value)}>
+          <span className="agent-choice-status">{title}</span>
+          <span className="agent-choice-summary-copy">
+            <span id={questionId} className="agent-choice-summary-question">{item.question}</span>
+            {summary && <span className="agent-choice-answer">{summary}</span>}
           </span>
-        )}
-        {collapsed && summary && (
-          <span style={{
-            fontSize: 11.5,
-            color: "var(--tx4)",
-            flex: 1,
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {summary}
-          </span>
-        )}
-        {!open && (
-          <span style={{
-            marginLeft: "auto",
-            flex: "none",
-            fontSize: 9,
-            color: "var(--tx5)",
-            transform: expanded ? "rotate(90deg)" : "none",
-            transition: "transform .12s ease",
-          }}>
-            ▶
-          </span>
-        )}
-      </div>
+          <svg className="agent-choice-chevron" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16">
+            <path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
 
-      {collapsed ? null : (
-      <>
-      <div className="selectable" style={{
-        color: "var(--tx2)",
-        fontSize: 13,
-        lineHeight: 1.55,
-        whiteSpace: "pre-wrap",
-      }}>
-        {item.question}
-      </div>
-
-      <fieldset disabled={!pending} style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        border: 0,
-        padding: 0,
-        margin: 0,
-      }}>
-        <legend style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: -1,
-          overflow: "hidden",
-          clip: "rect(0, 0, 0, 0)",
-          whiteSpace: "nowrap",
-          border: 0,
-        }}>
-          {item.question}
-        </legend>
-        {(item.options || []).map((option, index) => {
-          const value = option?.label || "";
-          const checked = selected.includes(value);
-          return (
-            <label key={`${index}-${value}`} style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 9,
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: `1px solid ${checked ? "var(--accent)" : "var(--line2)"}`,
-              background: checked ? "color-mix(in srgb, var(--accent) 9%, transparent)" : "transparent",
-              cursor: pending ? "pointer" : "default",
-              opacity: option ? 1 : .6,
-            }}>
-              <input
-                type={item.multiSelect ? "checkbox" : "radio"}
-                name={`choice-${item.requestId}`}
-                checked={checked}
-                onChange={() => toggle(value)}
-                style={{ marginTop: 2, accentColor: "var(--accent)" }}
-              />
-              <span style={{ minWidth: 0, flex: 1 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 7,
-                  color: "var(--tx1)", fontSize: 12.5, fontWeight: 600 }}>
-                  <span>{value}</span>
-                  {option?.recommended && (
-                    <span style={{ color: "var(--accent)", fontSize: 10.5, fontWeight: 500 }}>
-                      {t("askferry:choice.recommended")}
-                    </span>
-                  )}
+      {!collapsed && <div id={detailsId} className="agent-choice-details">
+        {open ? <>
+          <fieldset disabled={!pending} className="agent-choice-options" aria-labelledby={questionId}>
+            {(item.options || []).map((option, index) => {
+              const value = option?.label || "";
+              const checked = selected.includes(value);
+              return (
+                <label key={`${index}-${value}`} className={`agent-choice-option ${checked ? "is-selected" : ""}`}>
+                  <input type={item.multiSelect ? "checkbox" : "radio"}
+                    name={`choice-${item.requestId}`} checked={checked} onChange={() => toggle(value)} />
+                  {optionContent(option)}
+                </label>
+              );
+            })}
+          </fieldset>
+          {item.allowCustom && <textarea className="agent-choice-custom selectable" value={customText}
+            disabled={!pending} onChange={event => setCustomText(event.target.value)}
+            aria-label={t("askferry:choice.customPlaceholder")}
+            placeholder={t("askferry:choice.customPlaceholder")} rows={2} />}
+          {error && <div className="agent-choice-error" role="alert">{error}</div>}
+          <div className="agent-choice-actions">
+            <button className="fbtn agent-choice-skip" disabled={submitting} onClick={skip}>
+              {t("askferry:choice.skip")}
+            </button>
+            <button className="fbtn fbtn-primary" disabled={!canSubmit || submitting} onClick={submit}>
+              {submitting ? t("askferry:choice.submitting") : t("askferry:choice.submit")}
+            </button>
+          </div>
+        </> : <>
+          <ul className="agent-choice-record">
+            {(item.options || []).map((option, index) => {
+              const checked = (item.selected || []).includes(option?.label);
+              return <li key={`${index}-${option?.label}`} className={checked ? "is-selected" : ""}>
+                <span className="agent-choice-record-mark" aria-label={checked ? t("askferry:choice.answered") : undefined}>
+                  {checked ? "✓" : "·"}
                 </span>
-                {option?.description && (
-                  <span className="selectable" style={{ display: "block", marginTop: 2,
-                    color: "var(--tx4)", fontSize: 11.5, lineHeight: 1.45 }}>
-                    {option.description}
-                  </span>
-                )}
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-
-      {item.allowCustom && (
-        <textarea
-          className="selectable"
-          value={customText}
-          disabled={!pending}
-          onChange={event => setCustomText(event.target.value)}
-          placeholder={t("askferry:choice.customPlaceholder")}
-          rows={2}
-          style={{
-            resize: "vertical",
-            minHeight: 48,
-            width: "100%",
-            boxSizing: "border-box",
-            padding: "8px 9px",
-            borderRadius: 7,
-            border: "1px solid var(--line2)",
-            background: "var(--bg)",
-            color: "var(--tx1)",
-            font: "inherit",
-            fontSize: 12,
-          }}
-        />
-      )}
-
-      {item.status === "unanswered" && (
-        <div style={{ color: "var(--tx5)", fontSize: 11.5 }}>
-          {t("askferry:choice.noAnswer")}
-        </div>
-      )}
-
-      {open && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 1 }}>
-          <button className="fbtn" disabled={submitting} onClick={skip}>
-            {t("askferry:choice.skip")}
-          </button>
-          <button className="fbtn fbtn-primary" disabled={!canSubmit || submitting}
-            onClick={submit}>
-            {submitting ? t("askferry:choice.submitting") : t("askferry:choice.submit")}
-          </button>
-        </div>
-      )}
-      </>
-      )}
-    </div>
+                {optionContent(option)}
+              </li>;
+            })}
+          </ul>
+          {item.customText?.trim() && <p className="agent-choice-note selectable">{item.customText}</p>}
+          {item.status === "unanswered" && <p className="agent-choice-description">{t("askferry:choice.noAnswer")}</p>}
+        </>}
+      </div>}
+    </section>
   );
 }

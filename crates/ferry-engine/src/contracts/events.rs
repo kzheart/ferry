@@ -22,6 +22,8 @@ pub const FERRY_EVENT_TYPES: &[&str] = &[
     "choice.requested",
     "choice.resolved",
     "content.delta",
+    "content.thinking",
+    "context.compacted",
     "engine.request",
     "operation.applied",
     "operation.failed",
@@ -31,11 +33,13 @@ pub const FERRY_EVENT_TYPES: &[&str] = &[
     "run.failed",
     "run.interrupted",
     "run.started",
+    "run.usage",
     "runtime.disconnected",
     "session.created",
     "session.model_changed",
     "session.renamed",
     "sessions.changed",
+    "tool.cancel",
     "tool.completed",
     "tool.progress",
     "tool.request",
@@ -77,6 +81,14 @@ pub fn event_policy(event_type: &str) -> Option<EventPolicy> {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),
+        "content.thinking" => Some(EventPolicy {
+            source: EventSource::Runtime,
+            forward_to_ui: true,
+        }),
+        "context.compacted" => Some(EventPolicy {
+            source: EventSource::Runtime,
+            forward_to_ui: true,
+        }),
         "engine.request" => Some(EventPolicy {
             source: EventSource::Runtime,
             forward_to_ui: false,
@@ -113,6 +125,10 @@ pub fn event_policy(event_type: &str) -> Option<EventPolicy> {
             source: EventSource::Runtime,
             forward_to_ui: true,
         }),
+        "run.usage" => Some(EventPolicy {
+            source: EventSource::Runtime,
+            forward_to_ui: true,
+        }),
         "runtime.disconnected" => Some(EventPolicy {
             source: EventSource::Host,
             forward_to_ui: true,
@@ -132,6 +148,10 @@ pub fn event_policy(event_type: &str) -> Option<EventPolicy> {
         "sessions.changed" => Some(EventPolicy {
             source: EventSource::Engine,
             forward_to_ui: true,
+        }),
+        "tool.cancel" => Some(EventPolicy {
+            source: EventSource::Runtime,
+            forward_to_ui: false,
         }),
         "tool.completed" => Some(EventPolicy {
             source: EventSource::Runtime,

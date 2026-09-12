@@ -63,7 +63,12 @@ export class SkillService {
     }
     const wanted = new Set([...roleSkillIds, ...listing.global]);
     return listing.skills
-      .filter((skill) => wanted.has(skill.id) && !skill.broken)
+      .filter(
+        (skill) =>
+          wanted.has(skill.id) &&
+          !skill.broken &&
+          !skill.disableModelInvocation,
+      )
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 

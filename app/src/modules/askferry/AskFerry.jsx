@@ -45,7 +45,13 @@ export default function AskFerry({ scanSessions, onOpenConfig,
   }, [ferry.lastError, ferry.clearError]);
 
   const composerProps = { ...composer.composerProps, scanSessions, running, mode,
-    onOpenConfig, health };
+    onOpenConfig, health,
+    activity: t(items.some(item => item.kind === "choice" && item.status === "pending")
+      ? "askferry:composer.waitingChoice"
+      : items.some(item => item.kind === "approval" && item.status === "pending")
+        ? "askferry:composer.waitingApproval"
+        : items.some(item => item.kind === "tool" && item.status === "running")
+          ? "askferry:composer.usingTools" : "askferry:composer.working") };
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
@@ -91,9 +97,18 @@ export default function AskFerry({ scanSessions, onOpenConfig,
           justifyContent: "center", padding: "0 24px 60px" }}>
           <div style={{ width: "100%", maxWidth: 640, margin: "0 auto" }}>
             <div style={{ fontSize: 22, fontWeight: 600, color: "var(--tx1)",
-              textAlign: "center", letterSpacing: "-.01em", marginBottom: 22 }}>
+              textAlign: "center", letterSpacing: "-.01em", marginBottom: 8 }}>
               {t("askferry:empty.title")}</div>
+            <p className="agent-empty-description">{t("askferry:empty.description")}</p>
             <AgentComposer {...composerProps} autoFocus />
+            <div className="agent-starters">
+              {["find", "usage", "review"].map(key => (
+                <button key={key} className="agent-starter" onClick={() => {
+                  composer.setText(t(`askferry:empty.${key}Prompt`));
+                  composer.taRef.current?.focus();
+                }}>{t(`askferry:empty.${key}`)}<span aria-hidden="true">↗</span></button>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
@@ -114,7 +129,9 @@ export default function AskFerry({ scanSessions, onOpenConfig,
           </div>
 
           {/* 底部输入区 */}
-          <div style={{ flex: "none", padding: "0 24px 16px" }}>
+          <div style={{ flex: "none", padding: "0 24px 16px", position: "relative" }}>
+            {composer.showScrollToBottom && <button className="agent-back-to-latest"
+              onClick={composer.scrollToBottom}>{t("askferry:chat.backToLatest")} ↓</button>}
             <div style={{ maxWidth: 680, margin: "0 auto" }}>
               <AgentComposer {...composerProps} />
             </div>

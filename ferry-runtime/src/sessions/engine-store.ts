@@ -1,12 +1,14 @@
 import type {
   PersistedSession,
+  SessionSummary,
   SessionCommit,
   SessionStore,
 } from "./session-store.js";
 import type { EventEnvelope } from "../server/messages.js";
 
 export type RuntimeEngineMethod =
-  | "runtime_sessions.load_all"
+  | "runtime_sessions.list"
+  | "runtime_sessions.load"
   | "runtime_sessions.commit"
   | "runtime_sessions.delete"
   | "runtime_sessions.truncate";
@@ -20,18 +22,23 @@ export type RuntimeEngineInvoke = (
 export class EngineSessionStore implements SessionStore {
   constructor(private readonly invoke: RuntimeEngineInvoke) {}
 
-  async loadAll() {
-    const result = await this.invoke(
-      "runtime_sessions.load_all",
-      {},
-      "runtime",
-    );
+  async list(): Promise<SessionSummary[]> {
+    const result = await this.invoke("runtime_sessions.list", {}, "runtime");
     if (!Array.isArray(result))
       throw new Error("runtime session store returned invalid data");
-    return result as Array<{
+    return result as SessionSummary[];
+  }
+
+  async load(sessionId: string) {
+    const result = await this.invoke(
+      "runtime_sessions.load",
+      { session_id: sessionId },
+      sessionId,
+    );
+    return result as {
       state: PersistedSession;
       events: EventEnvelope[];
-    }>;
+    } | null;
   }
 
   async commit(update: SessionCommit) {

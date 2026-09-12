@@ -179,7 +179,7 @@ fn daemon_socket_serves_cli_methods_and_refuses_the_rest() {
     assert!(search["result"]["sessions"].is_array());
 
     // callers 矩阵：不含 cli 的方法在分发之前就被拒。
-    for method in ["show", "session_search", "runtime_sessions.load_all"] {
+    for method in ["show", "session_search", "runtime_sessions.list"] {
         let refused = session.call(method, json!({}));
         assert_eq!(refused["ok"], Value::Bool(false), "{method}: {refused}");
         assert_eq!(

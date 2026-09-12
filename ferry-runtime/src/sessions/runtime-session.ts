@@ -1,5 +1,6 @@
 import {
   Agent,
+  formatSkillsForSystemPrompt,
   type AgentEvent,
   type AgentMessage,
 } from "@earendil-works/pi-agent-core";
@@ -22,7 +23,6 @@ import type { ApplyPolicy } from "../roles/role-store.js";
 import {
   providerFailure,
   boundedEvents,
-  boundedMessages,
   summarizeToolResult,
 } from "../security/limits.js";
 import {
@@ -32,6 +32,12 @@ import {
 } from "../tools/catalog.js";
 import { createSkillTool, type SkillReadResult } from "../tools/skill-tool.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
+import {
+  compactContext,
+  contextReserveTokens,
+  type ContextCheckpoint,
+} from "./context.js";
+import { WriteQueue } from "../storage/write-queue.js";
 
 type AgentId = (typeof AGENT_IDS)[number];
 type AgentCapability = (typeof AGENT_CAPABILITIES)[AgentId][number];
@@ -69,6 +75,8 @@ interface ResolvedSkill {
   id: string;
   name: string;
   description: string;
+  filePath: string;
+  disableModelInvocation?: boolean;
 }
 
 interface TerminalResult {
@@ -76,30 +84,14 @@ interface TerminalResult {
   payload: Record<string, unknown>;
 }
 
-/** 系统提示里只放名称与说明,正文由模型自己调 skill 工具取——几十个技能全量注入会吃掉几万 token。 */
-const SKILL_CATALOG_MAX_BYTES = 8 * 1024;
-
 function skillCatalog(skills: readonly ResolvedSkill[]) {
-  if (skills.length === 0) return "";
-  const header =
-    "Available skills. Call the skill tool with a skill id before acting on a task that matches one of these:";
-  const lines: string[] = [];
-  let bytes = Buffer.byteLength(header);
-  let dropped = 0;
-  for (const skill of skills) {
-    const line = `- ${skill.id} · ${skill.name}：${skill.description}`;
-    const size = Buffer.byteLength(line) + 1;
-    if (bytes + size > SKILL_CATALOG_MAX_BYTES) {
-      dropped += 1;
-      continue;
-    }
-    bytes += size;
-    lines.push(line);
-  }
-  if (dropped > 0) {
-    lines.push(`- (${dropped} more skills omitted; ask the user to trim them)`);
-  }
-  return `${header}\n${lines.join("\n")}`;
+  if (!skills.length) return "";
+  return (
+    "Call the skill tool with the listed skill name as skill_id before using a skill.\n" +
+    formatSkillsForSystemPrompt(
+      skills.map((skill) => ({ ...skill, name: skill.id, content: "" })),
+    )
+  );
 }
 
 function systemPrompt(persona: string, skills: readonly ResolvedSkill[]) {
@@ -133,13 +125,20 @@ export function normalizeAutoTitle(raw: string | null | undefined) {
 
 export class RuntimeSession {
   readonly events: EventEnvelope[];
-  readonly agent: Agent;
+  private agentInstance: Agent | undefined;
+  private restoredMessages: AgentMessage[];
   nextSeq: number;
   activeRunId: string | null;
   private persistedEventSeq: number;
   private persistedMessageCount: number;
   private terminalResult: TerminalResult | null = null;
   private runPromise: Promise<void> | null = null;
+  private readonly writes = new WriteQueue();
+  private abortRequested = false;
+  private runOwner: string | null = null;
+  private disposed = false;
+  private editing = false;
+  private contextCheckpoint: ContextCheckpoint | undefined;
   private containsImages: boolean;
   private title: string | null;
   private titleLocked: boolean;
@@ -150,14 +149,14 @@ export class RuntimeSession {
     state: PersistedSession | undefined,
     events: EventEnvelope[],
     private readonly runtime: RuntimeSessionHost,
-    backend: AgentBackend,
+    private backend: AgentBackend | (() => AgentBackend),
     private selection: ModelSelection,
     private readonly roleId: string,
     private readonly resolvedPersona: string,
     private readonly resolvedTools: FerryToolName[],
     private readonly resolvedApplyPolicy: ApplyPolicy,
     private readonly resolvedSkills: ResolvedSkill[] = [],
-    readSkill?: (id: string) => Promise<SkillReadResult>,
+    private readonly readSkill?: (id: string) => Promise<SkillReadResult>,
   ) {
     this.events = events;
     this.nextSeq = state?.next_seq ?? 1;
@@ -168,16 +167,53 @@ export class RuntimeSession {
     this.titleLocked = state?.title_locked ?? false;
     this.pinned = state?.pinned ?? false;
     this.activeRunId = null;
-    this.agent = new Agent({
-      sessionId: id,
-      streamFn: backend.streamFn,
-      toolExecution: "sequential",
+    this.restoredMessages = state?.messages ?? [];
+    this.contextCheckpoint = state?.context_checkpoint;
+  }
+
+  get agent(): Agent {
+    if (this.agentInstance) return this.agentInstance;
+    const backend =
+      typeof this.backend === "function" ? this.backend() : this.backend;
+    const agent = new Agent({
+      sessionId: this.id,
+      streamFn: (model, context, options) => {
+        const current =
+          typeof this.backend === "function" ? this.backend() : this.backend;
+        return current.streamFn(model, context, {
+          ...options,
+          timeoutMs: 120_000,
+          maxRetries: 2,
+          maxTokens: Math.min(model.maxTokens, contextReserveTokens(model)),
+        });
+      },
+      transformContext: async (messages, signal) => {
+        const current =
+          typeof this.backend === "function" ? this.backend() : this.backend;
+        if (!current.models) return messages;
+        const transformed = await compactContext(
+          messages,
+          this.contextCheckpoint,
+          current.models,
+          current.model,
+          agent.state.systemPrompt,
+          signal,
+        );
+        if (transformed.checkpoint) {
+          this.contextCheckpoint = transformed.checkpoint;
+          await this.emit("context.compacted", {
+            message_count: messages.length,
+          });
+        }
+        return transformed.messages;
+      },
+      toolExecution: "parallel",
       steeringMode: "one-at-a-time",
       followUpMode: "one-at-a-time",
       initialState: {
         systemPrompt: systemPrompt(this.resolvedPersona, this.resolvedSkills),
         model: backend.model,
-        thinkingLevel: selection.thinking ?? "off",
+        thinkingLevel: this.selection.thinking ?? "off",
         tools: [
           ...createFerryTools(
             {
@@ -199,29 +235,36 @@ export class RuntimeSession {
             },
             this.resolvedTools,
           ),
-          ...(this.resolvedSkills.length > 0 && readSkill
+          ...(this.resolvedSkills.length > 0 && this.readSkill
             ? [
                 createSkillTool(
-                  readSkill,
+                  this.readSkill,
                   this.resolvedSkills.map((skill) => skill.id),
                 ),
               ]
             : []),
         ],
-        messages: state?.messages ?? [],
+        messages: this.restoredMessages,
       },
     });
-    this.agent.subscribe((event) => this.onAgentEvent(event));
+    agent.subscribe((event) => this.onAgentEvent(event));
+    this.agentInstance = agent;
+    return agent;
+  }
+
+  private get messages() {
+    return this.agentInstance?.state.messages ?? this.restoredMessages;
   }
 
   get isRunning() {
-    return this.runPromise !== null;
+    return this.runOwner !== null || this.editing;
   }
 
   async emit(
     type: RuntimeEventType,
     payload: Record<string, unknown>,
     runId = this.activeRunId,
+    beforePublish?: () => void,
   ) {
     const event: EventEnvelope = {
       protocol: PROTOCOL_VERSION,
@@ -234,6 +277,7 @@ export class RuntimeSession {
     };
     this.events.push(event);
     await this.persistIfCommittable(type);
+    beforePublish?.();
     this.runtime.publish(event);
     return event;
   }
@@ -244,16 +288,20 @@ export class RuntimeSession {
    * 落盘)之外,其余 delta 的提交全是零内容空写。只在真有未落盘内容时才写。
    */
   private async persistIfCommittable(type: RuntimeEventType) {
-    if (type === "content.delta" && !this.hasUncommittedContent()) return;
+    if (
+      (type === "content.delta" || type === "content.thinking") &&
+      !this.hasUncommittedContent()
+    )
+      return;
     await this.persist();
   }
 
   private hasUncommittedContent() {
-    const lastMessage = this.agent.state.messages.at(-1);
+    const lastMessage = this.messages.at(-1);
     const committableMessageCount =
       lastMessage?.role === "assistant"
-        ? this.agent.state.messages.length - 1
-        : this.agent.state.messages.length;
+        ? this.messages.length - 1
+        : this.messages.length;
     return (
       committableMessageCount > this.persistedMessageCount ||
       this.lastCommittableEventSeq() > this.persistedEventSeq
@@ -261,6 +309,7 @@ export class RuntimeSession {
   }
 
   async prompt(text: string, images: ImageContent[] = [], displayText = text) {
+    this.assertAvailable();
     if (this.isRunning) {
       throw new ProtocolError(
         "run_in_progress",
@@ -268,44 +317,75 @@ export class RuntimeSession {
       );
     }
     const runId = this.runtime.newId();
-    if (images.length > 0) this.containsImages = true;
     this.activeRunId = runId;
+    this.runOwner = runId;
+    this.abortRequested = false;
     this.terminalResult = null;
-    await this.emit(
-      "run.started",
-      { prompt: displayText, image_count: images.length },
-      runId,
+    if (images.length > 0) this.containsImages = true;
+    try {
+      await this.emit(
+        "run.started",
+        {
+          prompt: displayText,
+          image_count: images.length,
+          message_ordinal: this.messages.length,
+        },
+        runId,
+      );
+    } catch (error) {
+      this.activeRunId = null;
+      this.runOwner = null;
+      throw error;
+    }
+    const task = this.run(runId, text, images);
+    this.runPromise = task;
+    // The request has already returned its run id; observe asynchronous storage failures.
+    void task.catch((error) =>
+      console.error("runtime run failed", this.id, error),
     );
-    let task!: Promise<void>;
-    task = (async () => {
+    return runId;
+  }
+
+  private async run(runId: string, text: string, images: ImageContent[]) {
+    try {
       try {
-        await this.agent.prompt(text, images);
+        if (!this.abortRequested) await this.agent.prompt(text, images);
       } catch (error) {
         this.terminalResult = {
           type: "run.failed",
           payload: { message: providerFailure(error) },
         };
       }
-      const terminal = this.terminalResult ?? {
-        type: "run.failed" as const,
-        payload: { message: "agent ended without a terminal result" },
-      };
+      const terminal = this.abortRequested
+        ? { type: "run.cancelled" as const, payload: {} }
+        : (this.terminalResult ?? {
+            type: "run.failed" as const,
+            payload: { message: "agent ended without a terminal result" },
+          });
       this.activeRunId = null;
-      await this.persist();
-      if (this.runPromise === task) this.runPromise = null;
-      await this.emit(terminal.type, terminal.payload, runId);
+      this.agentInstance?.clearAllQueues();
+      await this.emit(terminal.type, terminal.payload, runId, () => {
+        this.runOwner = null;
+        this.runPromise = null;
+      });
       if (terminal.type === "run.completed") await this.autoTitle();
-    })();
-    this.runPromise = task;
-    return runId;
+    } finally {
+      if (this.runOwner === runId) {
+        this.agentInstance?.clearAllQueues();
+        this.activeRunId = null;
+        this.runOwner = null;
+        this.runPromise = null;
+      }
+    }
   }
 
   /**
    * 编辑历史用户消息并从那一点重发:丢弃该消息(含)之后的全部事件与
    * agent 消息,持久层同步删除后走正常 prompt。seq 指向该用户消息对应的
-   * run.started / user.message 事件。
+   * run.started 事件；运行中追加的 steer/follow-up 消息不支持编辑。
    */
   async editResend(seq: number, text: string, displayText = text) {
+    this.assertAvailable();
     if (this.isRunning) {
       throw new ProtocolError(
         "run_in_progress",
@@ -313,9 +393,7 @@ export class RuntimeSession {
       );
     }
     const index = this.events.findIndex(
-      (event) =>
-        event.seq === seq &&
-        (event.type === "run.started" || event.type === "user.message"),
+      (event) => event.seq === seq && event.type === "run.started",
     );
     if (index < 0) {
       throw new ProtocolError(
@@ -323,29 +401,46 @@ export class RuntimeSession {
         "seq does not reference a user message",
       );
     }
-    // 事件里第 N 个用户消息事件,对应 agent.state.messages 里第 N 条 user 消息;
-    // 从这条消息起截断(排队后从未进入 messages 的 steer 极端情形下取不到索引,
-    // 则消息数组无需截断)。
-    const priorUserEvents = this.events
-      .slice(0, index)
-      .filter(
-        (event) =>
-          event.type === "run.started" || event.type === "user.message",
-      ).length;
-    const userIndexes = this.agent.state.messages.flatMap((message, i) =>
-      message.role === "user" ? [i] : [],
-    );
-    const cut =
-      userIndexes[priorUserEvents] ?? this.agent.state.messages.length;
-    this.events.length = index;
-    this.nextSeq = seq;
-    this.agent.state.messages = this.agent.state.messages.slice(0, cut);
-    this.persistedEventSeq = Math.min(
-      this.persistedEventSeq,
-      this.events.at(-1)?.seq ?? 0,
-    );
-    this.persistedMessageCount = Math.min(this.persistedMessageCount, cut);
-    await this.runtime.store.truncate(this.id, cut, seq);
+    const ordinal = this.events[index]!.payload.message_ordinal;
+    if (
+      !Number.isInteger(ordinal) ||
+      typeof ordinal !== "number" ||
+      ordinal < 0 ||
+      ordinal > this.messages.length
+    ) {
+      throw new ProtocolError(
+        "invalid_params",
+        "message cannot be edited without a history position",
+      );
+    }
+    this.editing = true;
+    try {
+      await this.writes.run(() =>
+        this.runtime.store.truncate(this.id, ordinal, seq),
+      );
+      this.events.length = index;
+      this.nextSeq = seq;
+      this.contextCheckpoint = undefined;
+      this.restoredMessages = this.messages.slice(0, ordinal);
+      if (this.agentInstance)
+        this.agentInstance.state.messages = this.restoredMessages;
+      this.containsImages = this.restoredMessages.some(
+        (message) =>
+          (message.role === "user" || message.role === "toolResult") &&
+          Array.isArray(message.content) &&
+          message.content.some((part) => part.type === "image"),
+      );
+      this.persistedEventSeq = Math.min(
+        this.persistedEventSeq,
+        this.events.at(-1)?.seq ?? 0,
+      );
+      this.persistedMessageCount = Math.min(
+        this.persistedMessageCount,
+        ordinal,
+      );
+    } finally {
+      this.editing = false;
+    }
     return this.prompt(text, [], displayText);
   }
 
@@ -353,7 +448,9 @@ export class RuntimeSession {
     if (!this.isRunning) {
       throw new ProtocolError("no_active_run", "session has no active run");
     }
-    this.agent.abort();
+    this.abortRequested = true;
+    this.agentInstance?.clearAllQueues();
+    this.agentInstance?.abort();
   }
 
   steer(text: string, displayText = text) {
@@ -377,7 +474,7 @@ export class RuntimeSession {
   }
 
   finalText() {
-    const message = [...this.agent.state.messages]
+    const message = [...this.messages]
       .reverse()
       .find((item) => item.role === "assistant");
     if (!message || message.role !== "assistant") return "";
@@ -396,7 +493,7 @@ export class RuntimeSession {
       status: this.isRunning ? "running" : "idle",
       active_run_id: this.activeRunId,
       latest_seq: this.nextSeq - 1,
-      queued_messages: this.agent.hasQueuedMessages(),
+      queued_messages: this.agentInstance?.hasQueuedMessages() ?? false,
       contains_images: this.containsImages,
       title: this.title,
       title_locked: this.titleLocked,
@@ -416,6 +513,7 @@ export class RuntimeSession {
   }
 
   async selectModel(selection: ModelSelection, backend: AgentBackend) {
+    this.assertAvailable();
     if (this.isRunning) {
       throw new ProtocolError(
         "run_in_progress",
@@ -428,9 +526,11 @@ export class RuntimeSession {
         "the conversation contains images but the target model does not support image input",
       );
     }
-    this.agent.streamFunction = backend.streamFn;
-    this.agent.state.model = backend.model;
-    this.agent.state.thinkingLevel = selection.thinking ?? "off";
+    this.backend = backend;
+    if (this.agentInstance) {
+      this.agentInstance.state.model = backend.model;
+      this.agentInstance.state.thinkingLevel = selection.thinking ?? "off";
+    }
     this.selection = selection;
     await this.persist();
     await this.emit("session.model_changed", {
@@ -442,6 +542,7 @@ export class RuntimeSession {
   }
 
   async rename(title: string) {
+    this.assertAvailable();
     const next = title.trim();
     if (!next || next.length > 200) {
       throw new ProtocolError(
@@ -482,7 +583,7 @@ export class RuntimeSession {
     }
     const title = normalizeAutoTitle(generated);
     // 生成期间用户可能已经手动改名了,再查一次锁
-    if (!title || this.titleLocked || this.title) return;
+    if (!title || this.titleLocked || this.title || this.disposed) return;
     this.title = title;
     await this.persist();
     await this.emit(
@@ -492,7 +593,22 @@ export class RuntimeSession {
     );
   }
 
+  async dispose() {
+    this.disposed = true;
+    await this.writes.settled();
+  }
+
+  cancelDisposal() {
+    this.disposed = false;
+  }
+
+  private assertAvailable() {
+    if (this.disposed)
+      throw new ProtocolError("session_not_found", "session was deleted");
+  }
+
   async pin(pinned: boolean) {
+    this.assertAvailable();
     this.pinned = pinned;
     await this.persist();
     return this.summary();
@@ -502,11 +618,19 @@ export class RuntimeSession {
     switch (event.type) {
       case "message_update": {
         const update = event.assistantMessageEvent;
-        if (update.type === "text_delta") {
-          await this.emit("content.delta", { delta: update.delta });
+        if (update.type === "text_delta" || update.type === "thinking_delta") {
+          await this.emit(
+            update.type === "text_delta" ? "content.delta" : "content.thinking",
+            { delta: update.delta },
+          );
         }
         break;
       }
+      case "message_end":
+        if (event.message.role === "assistant") {
+          await this.emit("run.usage", { usage: event.message.usage });
+        }
+        break;
       case "tool_execution_start":
         await this.emit("tool.started", {
           tool_call_id: event.toolCallId,
@@ -551,26 +675,29 @@ export class RuntimeSession {
     }
   }
 
-  private async persist() {
-    const lastMessage = this.agent.state.messages.at(-1);
+  private persist() {
+    return this.writes.run(() => this.commit());
+  }
+
+  private async commit() {
+    const lastMessage = this.messages.at(-1);
     const committableMessageCount =
       this.activeRunId &&
-      this.events.at(-1)?.type === "content.delta" &&
+      ["content.delta", "content.thinking"].includes(
+        this.events.at(-1)?.type ?? "",
+      ) &&
       lastMessage?.role === "assistant"
-        ? this.agent.state.messages.length - 1
-        : this.agent.state.messages.length;
+        ? this.messages.length - 1
+        : this.messages.length;
     const committableEventSeq = this.activeRunId
       ? this.lastCommittableEventSeq()
       : (this.events.at(-1)?.seq ?? 0);
-    const messages = boundedMessages(
-      this.agent.state.messages.slice(
-        this.persistedMessageCount,
-        committableMessageCount,
-      ),
-    ).map((message, offset) => ({
-      ordinal: this.persistedMessageCount + offset,
-      message,
-    }));
+    const messages = this.messages
+      .slice(this.persistedMessageCount, committableMessageCount)
+      .map((message, offset) => ({
+        ordinal: this.persistedMessageCount + offset,
+        message,
+      }));
     const events = boundedEvents(
       this.events.filter(
         (event) =>
@@ -580,6 +707,9 @@ export class RuntimeSession {
     );
     await this.runtime.store.commit({
       metadata: {
+        ...(this.contextCheckpoint
+          ? { context_checkpoint: this.contextCheckpoint }
+          : {}),
         session_id: this.id,
         provider_id: this.selection.provider,
         model_id: this.selection.model,
@@ -607,7 +737,10 @@ export class RuntimeSession {
 
   private lastCommittableEventSeq() {
     let index = this.events.length - 1;
-    while (index >= 0 && this.events[index]!.type === "content.delta") {
+    while (
+      index >= 0 &&
+      ["content.delta", "content.thinking"].includes(this.events[index]!.type)
+    ) {
       index -= 1;
     }
     return this.events[index]?.seq ?? 0;

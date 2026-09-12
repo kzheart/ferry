@@ -463,7 +463,7 @@ mod tests {
         for method in [
             "show",
             "session_search",
-            "runtime_sessions.load_all",
+            "runtime_sessions.list",
             "agent_prompt",
         ] {
             let response = immediate(&policy, method).expect("必须被传输层拦下");

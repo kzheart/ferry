@@ -102,7 +102,7 @@ export async function dispatchSessionCommand(
     case "events.replay":
       return {
         handled: true,
-        result: runtime.replay(
+        result: await runtime.replay(
           requireString(params, "session_id", 128),
           requireInteger(params, "after_seq"),
         ),

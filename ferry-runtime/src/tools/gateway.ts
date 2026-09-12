@@ -61,6 +61,19 @@ export class RuntimeGateway {
       return this.options.toolHandler(name, args, context);
     }
     const requestId = this.options.newId();
+    let dispatched = false;
+    let cancellation: string | undefined;
+    const cancelHost = (reason: string) => {
+      cancellation = reason;
+      if (dispatched) {
+        this.options.events.emit(
+          "tool.cancel",
+          { request_id: requestId, reason },
+          context.sessionId,
+          context.runId,
+        );
+      }
+    };
     let abortListener: (() => void) | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const result = new Promise<unknown>((resolve, reject) => {
@@ -77,8 +90,9 @@ export class RuntimeGateway {
         cleanup,
       });
       abortListener = () => {
-        this.pending.delete(requestId);
+        if (!this.pending.delete(requestId)) return;
         cleanup();
+        cancelHost("aborted");
         reject(new Error("tool request aborted"));
       };
       if (context.signal?.aborted) {
@@ -90,27 +104,35 @@ export class RuntimeGateway {
         timeout = setTimeout(() => {
           if (!this.pending.delete(requestId)) return;
           cleanup();
+          cancelHost("timeout");
           reject(new Error("tool gateway timed out"));
         }, this.deadlines[name]);
       }
     });
     if (!this.pending.has(requestId)) return result;
-    try {
-      await this.options.emitToolRequest(context.sessionId, context.runId, {
-        request_id: requestId,
-        tool_call_id: context.toolCallId,
-        name,
-        args,
-        apply_policy: context.applyPolicy,
-      });
-    } catch (error) {
-      const pending = this.pending.get(requestId);
-      this.pending.delete(requestId);
-      pending?.cleanup();
-      pending?.reject(
-        error instanceof Error ? error : new Error("tool request failed"),
-      );
-    }
+    const dispatch = async () => {
+      try {
+        await this.options.emitToolRequest(context.sessionId, context.runId, {
+          request_id: requestId,
+          tool_call_id: context.toolCallId,
+          name,
+          args,
+          apply_policy: context.applyPolicy,
+        });
+        // Keep cancellation ordered after request publication, including when
+        // persistence delays publication while the caller has already aborted.
+        dispatched = true;
+        if (cancellation) cancelHost(cancellation);
+      } catch (error) {
+        const pending = this.pending.get(requestId);
+        this.pending.delete(requestId);
+        pending?.cleanup();
+        pending?.reject(
+          error instanceof Error ? error : new Error("tool request failed"),
+        );
+      }
+    };
+    void dispatch();
     return result;
   }
 

@@ -208,9 +208,9 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
       <span style={traceIconWrap}>
         {running ? <Spinner size={12} /> : <TraceIcon name={item.name} />}
       </span>
-      <div onClick={() => setOpen(value => !value)}
+      <button type="button" className="agent-tool-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}
         style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 22,
-          cursor: "default", fontSize: 12 }}>
+          cursor: "pointer", fontSize: 12, width: "100%", border: 0, background: "transparent", padding: "4px 0", textAlign: "left", fontFamily: "inherit" }}>
         <span style={{ color: "var(--tx2)", fontWeight: 500, flex: "none" }}>{verb}</span>
         {level === "mutate" && (
           <span data-tool-level="mutate" style={{ fontSize: 9.5, fontWeight: 600,
@@ -235,7 +235,7 @@ export const AgentToolRow = memo(function AgentToolRow({ item, onNavigate }) {
           <span style={{ fontSize: 10.5, color: "var(--tx5)", flex: "none" }}>
             {formatDuration(item.startedAt, item.endedAt)}</span>)}
         <Caret open={open} size={8} />
-      </div>
+      </button>
 
       {open && merged && (
         <div style={{ display: "flex", flexDirection: "column", gap: 3,

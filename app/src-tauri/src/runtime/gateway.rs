@@ -27,6 +27,7 @@ pub(super) fn complete_tool_request(
     resource_dir: &Path,
     stdin: &JsonlWriter,
     event: &Value,
+    request: &super::tool_lifecycle::ToolRequest,
 ) {
     let session_id = event
         .get("session_id")
@@ -55,8 +56,25 @@ pub(super) fn complete_tool_request(
         .and_then(|value| value.get("tool_call_id"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    if request.is_cancelled() {
+        send_gateway_result(
+            stdin,
+            session_id,
+            request_id,
+            Err("tool request aborted".to_owned()),
+        );
+        return;
+    }
     if name == "ask_user" {
-        let outcome = choice::propose(app, session_id, run_id, request_id, tool_call_id, &args);
+        let outcome = choice::propose(
+            app,
+            session_id,
+            run_id,
+            request_id,
+            tool_call_id,
+            &args,
+            request,
+        );
         send_gateway_result(stdin, session_id, request_id, outcome);
         return;
     }
@@ -66,10 +84,13 @@ pub(super) fn complete_tool_request(
     let mutation = is_bash || is_mutating_tool(name, &args);
     let forced_approval = forces_explicit_approval(name, &args);
     let mut outcome = if is_bash {
-        bash::propose(&args)
+        bash::propose(&args, request.clone())
     } else {
         route_tool(resource_dir, name, args, run_id)
     };
+    if request.is_cancelled() {
+        outcome = Err("tool request aborted".to_owned());
+    }
     if mutation {
         if let Ok(operation) = outcome.clone() {
             let auto =
@@ -118,6 +139,9 @@ pub(super) fn complete_tool_request(
                     }
                 }
             } else {
+                if is_bash {
+                    request.await_approval();
+                }
                 emit_host_event(
                     app,
                     json!({
@@ -371,7 +395,7 @@ mod tests {
     fn runtime_engine_gateway_is_an_exact_allowlist() {
         for method in [
             "agent_prompt",
-            "runtime_sessions.load_all",
+            "runtime_sessions.list",
             "runtime_sessions.commit",
             "runtime_sessions.delete",
         ] {

@@ -11,6 +11,9 @@ export interface PersistedSession {
   status: "idle" | "running";
   active_run_id: string | null;
   messages: AgentMessage[];
+  context_checkpoint?: import("./context.js").ContextCheckpoint;
+  created_at?: string;
+  updated_at?: string;
   title?: string | null;
   /** 用户手动改过名:自动命名从此不再覆盖。 */
   title_locked?: boolean;
@@ -24,7 +27,12 @@ export interface PersistedSession {
   resolved_skills?: string[];
 }
 
-type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
+export type PersistedSessionMetadata = Omit<PersistedSession, "messages">;
+
+export type SessionSummary = Omit<
+  PersistedSessionMetadata,
+  "context_checkpoint"
+>;
 
 export interface SessionCommit {
   metadata: PersistedSessionMetadata;
@@ -34,9 +42,10 @@ export interface SessionCommit {
 }
 
 export interface SessionStore {
-  loadAll(): Promise<
-    Array<{ state: PersistedSession; events: EventEnvelope[] }>
-  >;
+  list(): Promise<SessionSummary[]>;
+  load(
+    sessionId: string,
+  ): Promise<{ state: PersistedSession; events: EventEnvelope[] } | null>;
   commit(update: SessionCommit): Promise<void>;
   delete(sessionId: string): Promise<void>;
   /** 编辑重发:删掉 ordinal >= fromOrdinal 的消息与 seq >= fromSeq 的事件。 */
@@ -54,8 +63,20 @@ export class EphemeralSessionStore implements SessionStore {
     { state: PersistedSession; events: EventEnvelope[] }
   >();
 
-  async loadAll() {
-    return [...this.records.values()].map((record) => structuredClone(record));
+  async list() {
+    return [...this.records.values()].map(({ state }) => {
+      const {
+        messages: _messages,
+        context_checkpoint: _checkpoint,
+        ...metadata
+      } = state;
+      return structuredClone(metadata);
+    });
+  }
+
+  async load(sessionId: string) {
+    const record = this.records.get(sessionId);
+    return record ? structuredClone(record) : null;
   }
 
   async commit(update: SessionCommit) {
@@ -73,6 +94,8 @@ export class EphemeralSessionStore implements SessionStore {
     this.records.set(snapshot.metadata.session_id, {
       state: {
         ...snapshot.metadata,
+        created_at: existing?.state.created_at ?? snapshot.timestamp,
+        updated_at: snapshot.timestamp,
         messages: [...messages.entries()]
           .sort(([a], [b]) => a - b)
           .map(([, value]) => value),

@@ -3,6 +3,7 @@ pub(crate) mod bash;
 pub(crate) mod choice;
 mod gateway;
 mod shell_platform;
+mod tool_lifecycle;
 mod tool_routes;
 
 use serde::Serialize;
@@ -261,6 +262,15 @@ fn read_runtime_output(
             if policy.source != EventSource::Runtime {
                 continue;
             }
+            if event_type == "tool.cancel" {
+                tool_lifecycle::cancel(
+                    value["session_id"].as_str().unwrap_or(""),
+                    value["run_id"].as_str().unwrap_or(""),
+                    value["payload"]["request_id"].as_str().unwrap_or(""),
+                );
+                bash::discard_cancelled();
+                continue;
+            }
             if event_type == "engine.request" {
                 let worker_resource = resource_dir.clone();
                 let worker_stdin = stdin.clone();
@@ -274,6 +284,8 @@ fn read_runtime_output(
                     forget_auto_policy(session_id);
                     let run_id = value.get("run_id").and_then(Value::as_str).unwrap_or("");
                     choice::finish_run(session_id, run_id);
+                    tool_lifecycle::finish_run(session_id, run_id, event_type == "run.completed");
+                    bash::discard_cancelled();
                 }
             }
             if policy.forward_to_ui {
@@ -283,8 +295,21 @@ fn read_runtime_output(
                 let worker_app = app.clone();
                 let worker_resource = resource_dir.clone();
                 let worker_stdin = stdin.clone();
+                let request = tool_lifecycle::ToolRequest::register(
+                    value["session_id"].as_str().unwrap_or(""),
+                    value["run_id"].as_str().unwrap_or(""),
+                    value["payload"]["request_id"].as_str().unwrap_or(""),
+                );
                 std::thread::spawn(move || {
-                    complete_tool_request(&worker_app, &worker_resource, &worker_stdin, &value)
+                    complete_tool_request(
+                        &worker_app,
+                        &worker_resource,
+                        &worker_stdin,
+                        &value,
+                        &request,
+                    );
+                    request.finish_dispatch();
+                    bash::discard_cancelled();
                 });
             }
             continue;
@@ -298,6 +323,8 @@ fn read_runtime_output(
     ));
     // 进程没了就不会再有 run 终态事件,挂起的选择要在这里了结。
     choice::cancel_all();
+    tool_lifecycle::cancel_all();
+    bash::discard_cancelled();
     emit_host_event(
         &app,
         json!({

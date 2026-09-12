@@ -127,7 +127,7 @@ describe("AgentRuntime", () => {
     expect(new Set(eventSeqs).size).toBe(eventSeqs.length);
     expect(new Set(messageOrdinals).size).toBe(messageOrdinals.length);
     expect(eventSeqs).toEqual(
-      runtime.replay("s1", 0).map((event) => event.seq),
+      (await runtime.replay("s1", 0)).map((event) => event.seq),
     );
   });
 
@@ -272,7 +272,7 @@ describe("AgentRuntime", () => {
     await withSkills.prompt("s-loaded", "hi");
     await withSkills.waitForIdle("s-loaded");
     expect(loaded.seen[0]).toContain("skill");
-    expect(loaded.prompts[0]).toContain("code-review · 代码评审：逐条核对变更");
+    expect(loaded.prompts[0]).toContain("<name>code-review</name>");
   });
 
   it("registers only the role tool whitelist and forwards its apply policy", async () => {
@@ -330,7 +330,7 @@ describe("AgentRuntime", () => {
     const { run_id } = await runtime.prompt("s1", "hello");
     await runtime.waitForIdle("s1");
 
-    const events = runtime.replay("s1", 0);
+    const events = await runtime.replay("s1", 0);
     expect(events.some((event) => event.type === "content.delta")).toBe(true);
     expect(events.at(-1)?.type).toBe("run.completed");
     expect(events.every((event) => event.protocol === PROTOCOL_VERSION)).toBe(
@@ -342,7 +342,7 @@ describe("AgentRuntime", () => {
     expect(events.map((event) => event.seq)).toEqual(
       events.map((_, index) => index + 1),
     );
-    expect(runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
+    expect(await runtime.replay("s1", events[1]!.seq)).toEqual(events.slice(2));
   });
 
   it("edit_resend truncates memory and store history, then reruns", async () => {
@@ -354,13 +354,13 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "second");
     await runtime.waitForIdle("s1");
 
-    const target = runtime
-      .replay("s1", 0)
-      .filter((event) => event.type === "run.started")[1]!;
+    const target = (await runtime.replay("s1", 0)).filter(
+      (event) => event.type === "run.started",
+    )[1]!;
     await runtime.editResend("s1", target.seq, "second-edited");
     await runtime.waitForIdle("s1");
 
-    const replayed = runtime.replay("s1", 0);
+    const replayed = await runtime.replay("s1", 0);
     expect(
       replayed
         .filter((event) => event.type === "run.started")
@@ -371,7 +371,7 @@ describe("AgentRuntime", () => {
       replayed.map((_, index) => index + 1),
     );
     // 持久层与内存一致,消息数组也从截断点重写
-    const [record] = await store.loadAll();
+    const record = await store.load("s1");
     expect(record!.events.map((event) => event.seq)).toEqual(
       replayed.map((event) => event.seq),
     );
@@ -401,9 +401,9 @@ describe("AgentRuntime", () => {
     const { run_id } = await runtime.prompt("s1", "error: schema");
     await runtime.waitForIdle("s1");
 
-    const failure = runtime
-      .replay("s1", 0)
-      .find((event) => event.run_id === run_id && event.type === "run.failed");
+    const failure = (await runtime.replay("s1", 0)).find(
+      (event) => event.run_id === run_id && event.type === "run.failed",
+    );
     expect(failure?.payload.message).toContain("400: invalid tool schema");
     expect(failure?.payload.message).toContain("/Users/private/config");
     expect(failure?.payload.message).toContain("sk-1234567890abcdef");
@@ -420,9 +420,9 @@ describe("AgentRuntime", () => {
     );
     await runtime.waitForIdle("s1");
 
-    const started = runtime
-      .replay("s1", 0)
-      .find((event) => event.type === "run.started");
+    const started = (await runtime.replay("s1", 0)).find(
+      (event) => event.type === "run.started",
+    );
     expect(started?.payload.prompt).toBe("@「支付重构」\ninspect");
   });
 
@@ -440,7 +440,7 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
-    const types = runtime.replay("s1", 0).map((event) => event.type);
+    const types = (await runtime.replay("s1", 0)).map((event) => event.type);
     expect(calls).toEqual(["session_search"]);
     expect(types).toContain("tool.started");
     expect(types).toContain("tool.progress");
@@ -465,9 +465,9 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
-    const completed = runtime
-      .replay("s1", 0)
-      .find((event) => event.type === "tool.completed");
+    const completed = (await runtime.replay("s1", 0)).find(
+      (event) => event.type === "tool.completed",
+    );
     expect(completed?.payload.result).toMatchObject({
       details: {
         sessions: [
@@ -498,7 +498,7 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
-    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
+    expect((await runtime.replay("s1", 0)).at(-1)?.type).toBe("run.completed");
   });
 
   it("returns agent_prompt text and next_ref through the Runtime gateway", async () => {
@@ -537,8 +537,9 @@ describe("AgentRuntime", () => {
     await runtime.waitForIdle("s1");
 
     expect(
-      runtime.replay("s1", 0).find((event) => event.type === "tool.completed")
-        ?.payload,
+      (await runtime.replay("s1", 0)).find(
+        (event) => event.type === "tool.completed",
+      )?.payload,
     ).toMatchObject({
       result: {
         details: {
@@ -591,7 +592,7 @@ describe("AgentRuntime", () => {
     ]);
     await restored.deleteSession("s1");
     expect(restored.listSessions()).toEqual([]);
-    expect(await store.loadAll()).toEqual([]);
+    expect(await store.list()).toEqual([]);
   });
 
   it("auto-names a session after its first completed run", async () => {
@@ -614,9 +615,9 @@ describe("AgentRuntime", () => {
       title: "检索会话历史",
       title_locked: false,
     });
-    const renamed = runtime
-      .replay("s1", 0)
-      .filter((event) => event.type === "session.renamed");
+    const renamed = (await runtime.replay("s1", 0)).filter(
+      (event) => event.type === "session.renamed",
+    );
     expect(renamed).toHaveLength(1);
     expect(renamed[0]?.payload).toEqual({
       session_id: "s1",
@@ -672,7 +673,7 @@ describe("AgentRuntime", () => {
     await runtime.createSession("s1");
     await runtime.renameSession("s1", "手动标题");
 
-    expect(runtime.replay("s1", 0).at(-1)).toMatchObject({
+    expect((await runtime.replay("s1", 0)).at(-1)).toMatchObject({
       type: "session.renamed",
       payload: { session_id: "s1", title: "手动标题", auto: false },
     });
@@ -689,7 +690,7 @@ describe("AgentRuntime", () => {
     await runtime.waitForIdle("s1");
 
     expect(runtime.state("s1").title).toBeNull();
-    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.completed");
+    expect((await runtime.replay("s1", 0)).at(-1)?.type).toBe("run.completed");
 
     const blank = await createRuntime({ titleGenerator: async () => "   " });
     await blank.createSession("s2");
@@ -697,7 +698,9 @@ describe("AgentRuntime", () => {
     await blank.waitForIdle("s2");
     expect(blank.state("s2").title).toBeNull();
     expect(
-      blank.replay("s2", 0).some((event) => event.type === "session.renamed"),
+      (await blank.replay("s2", 0)).some(
+        (event) => event.type === "session.renamed",
+      ),
     ).toBe(false);
 
     // 压根没配生成器时同样落到无标题。
@@ -717,7 +720,7 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "error: boom");
     await runtime.waitForIdle("s1");
 
-    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.failed");
+    expect((await runtime.replay("s1", 0)).at(-1)?.type).toBe("run.failed");
     expect(generated).toBe(0);
     expect(runtime.state("s1").title).toBeNull();
   });
@@ -739,7 +742,7 @@ describe("AgentRuntime", () => {
     await runtime.prompt("s1", "tool:search");
     await runtime.waitForIdle("s1");
 
-    const events = runtime.replay("s1", 0);
+    const events = await runtime.replay("s1", 0);
     expect(
       events.find((event) => event.type === "tool.completed")?.payload,
     ).toMatchObject({ is_error: true });
@@ -761,7 +764,9 @@ describe("AgentRuntime", () => {
     await runtime.waitForIdle("s1");
 
     expect(
-      runtime.replay("s1", 0).filter((event) => event.type === "run.completed"),
+      (await runtime.replay("s1", 0)).filter(
+        (event) => event.type === "run.completed",
+      ),
     ).toHaveLength(2);
   });
 
@@ -792,7 +797,7 @@ describe("AgentRuntime", () => {
     runtime.abort("s1");
     await runtime.waitForIdle("s1");
 
-    expect(runtime.replay("s1", 0).at(-1)?.type).toBe("run.cancelled");
+    expect((await runtime.replay("s1", 0)).at(-1)?.type).toBe("run.cancelled");
   });
 
   it.each([
@@ -809,8 +814,7 @@ describe("AgentRuntime", () => {
     enqueue(runtime);
     await runtime.waitForIdle("s1");
 
-    const text = runtime
-      .replay("s1", 0)
+    const text = (await runtime.replay("s1", 0))
       .filter((event) => event.type === "content.delta")
       .map((event) => event.payload.delta)
       .join("");
@@ -843,7 +847,7 @@ describe("AgentRuntime", () => {
     await commitSnapshot(store, state, events);
 
     const runtime = await createRuntime({ store });
-    expect(runtime.replay("s1", 0).map((event) => event.type)).toEqual([
+    expect((await runtime.replay("s1", 0)).map((event) => event.type)).toEqual([
       "run.started",
       "run.interrupted",
     ]);

@@ -1,8 +1,7 @@
 // Ask Ferry 状态中枢:订阅 ferry-runtime-event,维护会话列表与每会话时间线,
 // 打开会话时用 events.replay 回放(seq 去重保证与实时流合并一致)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { onRuntimeEvent, operationApply, runtime, shellApply }
-  from "../../platform/desktop/client.js";
+import { onRuntimeEvent, operationApply, runtime, shellApply } from "../../platform/desktop/client.js";
 import { applyEvent, emptyLog, operationKey, patchApproval }
   from "./agentChatModel.js";
 import { submitChoice } from "./choiceResponse.js";
@@ -44,6 +43,8 @@ export function useAskFerry() {
   // 回放期间到达的实时事件先入队,回放完成后按 seq 合并,避免丢历史
   const loadingRef = useRef(new Map());
   const refreshRef = useRef(() => {});
+  const connectedRef = useRef(false);
+  const reconnectTimerRef = useRef(null);
 
   // 流式期间每个 token 一次 setLogs,就是每个 token 一次渲染。delta 先入缓冲,
   // 按帧合并成一次 setLogs;非 delta 事件到达时先冲刷缓冲再处理,事件顺序与
@@ -132,8 +133,9 @@ export function useAskFerry() {
   useEffect(() => {
     if (!available) return;
     let un;
+    let disposed = false;
     onRuntimeEvent(ev => {
-      if (!ev || typeof ev !== "object") return;
+      if (disposed || !ev || typeof ev !== "object") return;
       if (ev.type === "runtime.disconnected") {
         // 进程退出:运行中的时间线就地标记 interrupted,不自动重放
         flushDeltas();
@@ -149,8 +151,16 @@ export function useAskFerry() {
         });
         setSessions(list => list.map(s =>
           s.status === "running" ? { ...s, status: "idle" } : s));
-        // 稍后重新探测:health 请求会让 supervisor 惰性重启 sidecar 并刷新凭据状态
-        setTimeout(() => refreshRef.current(), 500);
+        setHealth(null);
+        // 只为已连接过的进程恢复一次；启动失败也会发 disconnected，
+        // 无条件重新 health 会让握手失败变成每 500ms 一次的无限重启。
+        if (connectedRef.current) {
+          connectedRef.current = false;
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            refreshRef.current();
+          }, 500);
+        }
         return;
       }
       if (ev.session_id === "runtime") {
@@ -219,13 +229,24 @@ export function useAskFerry() {
         }));
       }
       if (ev.type === "operation.applied") setMutationVersion(value => value + 1);
-    }).then(u => { un = u; });
-    return () => un?.();
+    }).then(u => { if (disposed) u(); else un = u; });
+    return () => {
+      disposed = true;
+      un?.();
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
   }, [available]);
 
   // ----- 启动:健康检查 + 会话列表 -----
   const refresh = useCallback(async () => {
     if (!available) return;
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     try {
       const [h, list, roleList] = await Promise.all([
         runtime("health"), runtime("sessions.list"),
@@ -236,7 +257,10 @@ export function useAskFerry() {
       if (!(roleList || []).some(role => role.id === selectedRoleId)) {
         setSelectedRoleId("default");
       }
+      connectedRef.current = true;
+      setLastError(null);
     } catch (error) {
+      connectedRef.current = false;
       setLastError(error);
     }
   }, [available]);

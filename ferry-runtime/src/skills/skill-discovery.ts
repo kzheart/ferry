@@ -2,19 +2,26 @@
  * 候选发现:扫描外部 coding agent 的技能目录。
  * 只读——这里产出的东西不是 Ferry 的技能,必须经 SkillLibrary.install 复制进库才算数。
  */
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
+import { loadSourcedSkills } from "@earendil-works/pi-agent-core";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import {
   AGENT_IDS,
   AGENT_LABELS,
   AGENT_SKILL_PATHS,
   SHARED_SKILL_PATHS,
 } from "../server/generated/agents.js";
-import { SKILL_MANIFEST, parseSkillDocument } from "./skill-document.js";
+import { SKILL_MANIFEST, SkillExecutionEnv } from "./skill-document.js";
 
 const MAX_CANDIDATES_PER_SOURCE = 200;
-const MAX_MANIFEST_BYTES = 256 * 1024;
 
 export interface SkillSource {
   id: string;
@@ -75,45 +82,6 @@ function customSources(scanSources: readonly string[]): SkillSource[] {
   }));
 }
 
-async function scan(source: SkillSource): Promise<SkillCandidate[]> {
-  let items: string[];
-  try {
-    items = (await readdir(source.path))
-      .filter((name) => !name.startsWith("."))
-      .sort()
-      .slice(0, MAX_CANDIDATES_PER_SOURCE);
-  } catch {
-    return [];
-  }
-  source.available = true;
-  const candidates: SkillCandidate[] = [];
-  for (const name of items) {
-    const directory = join(source.path, name);
-    const manifest = join(directory, SKILL_MANIFEST);
-    try {
-      // 用 stat 而不是 lstat/Dirent:~/.claude/skills 这类目录常常整个是软链农场,
-      // 按 lstat 语义判目录会把它们全部漏掉
-      if (!(await stat(directory)).isDirectory()) continue;
-      const info = await stat(manifest);
-      if (!info.isFile() || info.size > MAX_MANIFEST_BYTES) continue;
-      const document = parseSkillDocument(
-        await readFile(manifest, "utf8"),
-        name,
-      );
-      candidates.push({
-        candidateId: `${source.id}:${name}`,
-        name: document.name,
-        description: document.description,
-        source: source.id,
-        path: directory,
-      });
-    } catch {
-      continue;
-    }
-  }
-  return candidates;
-}
-
 /** 同一份技能被多个 CLI 软链时只留一条:否则 go-plan 会在列表里出现三次。 */
 async function dedupe(candidates: SkillCandidate[]): Promise<SkillCandidate[]> {
   const seen = new Set<string>();
@@ -132,21 +100,56 @@ async function dedupe(candidates: SkillCandidate[]): Promise<SkillCandidate[]> {
   return unique;
 }
 
-/**
- * 目录不存在(比如没装 Claude Code)只是 available:false,不是错误。
- * includeBuiltin=false 用于测试:否则结果会取决于开发者主目录里装了什么。
- */
-export async function discover(
+/** 来源状态不读取技能正文；会话解析与配置列表不应顺带扫描所有外部技能。 */
+export async function listSources(
   scanSources: readonly string[] = [],
   includeBuiltin = true,
-): Promise<{ sources: SkillSource[]; candidates: SkillCandidate[] }> {
+): Promise<SkillSource[]> {
   const sources = [
     ...(includeBuiltin ? builtinSources() : []),
     ...customSources(scanSources),
   ];
-  const candidates: SkillCandidate[] = [];
   for (const source of sources) {
-    candidates.push(...(await scan(source)));
+    try {
+      source.available = (await stat(source.path)).isDirectory();
+    } catch {
+      source.available = false;
+    }
+  }
+  return sources;
+}
+
+/** 缺失目录只是 available:false；测试关闭内置来源，避免读取开发者的技能库。 */
+export async function discover(
+  scanSources: readonly string[] = [],
+  includeBuiltin = true,
+): Promise<{ sources: SkillSource[]; candidates: SkillCandidate[] }> {
+  const sources = await listSources(scanSources, includeBuiltin);
+  const loaded = await loadSourcedSkills(
+    new SkillExecutionEnv(),
+    sources
+      .filter((source) => source.available)
+      .map((source) => ({
+        path: source.path,
+        source,
+      })),
+  );
+  const counts = new Map<string, number>();
+  const candidates: SkillCandidate[] = [];
+  for (const { skill, source } of loaded.skills) {
+    // Ferry 导入的是完整技能目录，不把来源根目录下的普通 Markdown 当成独立技能。
+    if (basename(skill.filePath) !== SKILL_MANIFEST) continue;
+    const count = counts.get(source.id) ?? 0;
+    if (count >= MAX_CANDIDATES_PER_SOURCE) continue;
+    counts.set(source.id, count + 1);
+    const directory = dirname(skill.filePath);
+    candidates.push({
+      candidateId: `${source.id}:${relative(source.path, directory) || "."}`,
+      name: skill.name,
+      description: skill.description,
+      source: source.id,
+      path: directory,
+    });
   }
   return { sources, candidates: await dedupe(candidates) };
 }

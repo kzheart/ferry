@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { SessionStore } from "../sessions/session-store.js";
+import type {
+  SessionSummary,
+  SessionStore,
+} from "../sessions/session-store.js";
 import { EphemeralSessionStore } from "../sessions/session-store.js";
 import { RuntimeSession } from "../sessions/runtime-session.js";
 import type {
@@ -61,6 +64,10 @@ export class AgentRuntime {
   readonly skillService: SkillService;
   readonly now: () => Date;
   private readonly sessions = new Map<string, RuntimeSession>();
+  private readonly summaries = new Map<string, SessionSummary>();
+  private readonly loading = new Map<string, Promise<RuntimeSession>>();
+  private restored = false;
+  private readonly deleting = new Set<string>();
   private readonly events: RuntimeEventBus;
   private readonly backendFactory: BackendFactory;
   private readonly providerHost: ProviderHost | undefined;
@@ -107,11 +114,11 @@ export class AgentRuntime {
       emitAuth: (event) => this.events.emit(event.type, event.payload),
       idFactory: this.idFactory,
       isProviderInUse: (providerId) =>
-        [...this.sessions.values()].some(
-          (session) => session.state().provider_id === providerId,
+        this.listSessions().some(
+          (session) => session.provider_id === providerId,
         ),
-      selectSessionModel: (sessionId, selection, backend) =>
-        this.session(sessionId).selectModel(selection, backend),
+      selectSessionModel: async (sessionId, selection, backend) =>
+        (await this.loadSession(sessionId)).selectModel(selection, backend),
     });
   }
 
@@ -139,39 +146,64 @@ export class AgentRuntime {
   }
 
   async restore() {
-    if (this.sessions.size > 0) {
+    if (this.restored)
       throw new ProtocolError(
         "already_restored",
         "runtime sessions already restored",
       );
+    for (const metadata of await this.store.list())
+      this.summaries.set(metadata.session_id, metadata);
+    this.restored = true;
+  }
+
+  private async loadSession(id: string): Promise<RuntimeSession> {
+    if (this.deleting.has(id))
+      throw new ProtocolError("session_not_found", "session is being deleted");
+    const loaded = this.sessions.get(id);
+    if (loaded) return loaded;
+    const pending = this.loading.get(id);
+    if (pending) return pending;
+    if (!this.summaries.has(id))
+      throw new ProtocolError("session_not_found", "session not found");
+    const task = this.restoreSession(id);
+    this.loading.set(id, task);
+    try {
+      return await task;
+    } finally {
+      this.loading.delete(id);
     }
-    for (const record of await this.store.loadAll()) {
-      const selection: ModelSelection = {
-        provider: record.state.provider_id,
-        model: record.state.model_id,
-        ...(record.state.thinking_level
-          ? { thinking: record.state.thinking_level as ThinkingLevel }
-          : {}),
-      };
-      const session = new RuntimeSession(
-        record.state.session_id,
-        record.state,
-        record.events,
-        this,
-        this.backendFactory(selection),
-        selection,
-        record.state.role_id ?? DEFAULT_ROLE_ID,
-        record.state.resolved_persona ?? "",
-        (record.state.resolved_tools ?? FERRY_TOOL_NAMES).filter(
-          (name): name is FerryToolName =>
-            (FERRY_TOOL_NAMES as readonly string[]).includes(name),
-        ),
-        record.state.resolved_apply_policy ?? "auto",
-        // 重新解析:持久化的只是 id,技能可能在上次运行之后被删掉了
-        await this.skillService.resolveFor(record.state.resolved_skills ?? []),
-        (id) => this.skillService.read(id),
-      );
-      this.sessions.set(session.id, session);
+  }
+
+  private async restoreSession(id: string) {
+    const record = await this.store.load(id);
+    if (!record)
+      throw new ProtocolError("session_not_found", "session not found");
+    const selection: ModelSelection = {
+      provider: record.state.provider_id,
+      model: record.state.model_id,
+      ...(record.state.thinking_level
+        ? { thinking: record.state.thinking_level as ThinkingLevel }
+        : {}),
+    };
+    const session = new RuntimeSession(
+      id,
+      record.state,
+      record.events,
+      this,
+      () => this.backendFactory(selection),
+      selection,
+      record.state.role_id ?? DEFAULT_ROLE_ID,
+      record.state.resolved_persona ?? "",
+      (record.state.resolved_tools ?? FERRY_TOOL_NAMES).filter(
+        (name): name is FerryToolName =>
+          (FERRY_TOOL_NAMES as readonly string[]).includes(name),
+      ),
+      record.state.resolved_apply_policy ?? "auto",
+      await this.skillService.resolveFor(record.state.resolved_skills ?? []),
+      (skillId) => this.skillService.read(skillId),
+    );
+    this.sessions.set(id, session);
+    try {
       if (record.state.status === "running" && record.state.active_run_id) {
         await session.emit(
           "run.interrupted",
@@ -179,6 +211,10 @@ export class AgentRuntime {
           record.state.active_run_id,
         );
       }
+      return session;
+    } catch (error) {
+      this.sessions.delete(id);
+      throw error;
     }
   }
 
@@ -200,7 +236,11 @@ export class AgentRuntime {
     requestedRoleId = DEFAULT_ROLE_ID,
   ) {
     const id = requestedId ?? this.newId();
-    if (this.sessions.has(id))
+    if (
+      this.sessions.has(id) ||
+      this.summaries.has(id) ||
+      this.deleting.has(id)
+    )
       throw new ProtocolError("session_exists", "session already exists");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id))
       throw new ProtocolError("invalid_params", "invalid session_id");
@@ -252,7 +292,7 @@ export class AgentRuntime {
     images: ImageContent[] = [],
     displayText = text,
   ) {
-    const session = this.session(sessionId);
+    const session = await this.loadSession(sessionId);
     const state = session.state();
     const configured = this.providerHost
       ? await this.providerHost.isConfigured(state.provider_id)
@@ -281,7 +321,7 @@ export class AgentRuntime {
     text: string,
     displayText = text,
   ) {
-    const session = this.session(sessionId);
+    const session = await this.loadSession(sessionId);
     const state = session.state();
     const configured = this.providerHost
       ? await this.providerHost.isConfigured(state.provider_id)
@@ -307,24 +347,39 @@ export class AgentRuntime {
   }
 
   async renameSession(sessionId: string, title: string) {
-    return this.session(sessionId).rename(title);
+    return (await this.loadSession(sessionId)).rename(title);
   }
 
   async pinSession(sessionId: string, pinned: boolean) {
-    return this.session(sessionId).pin(pinned);
+    return (await this.loadSession(sessionId)).pin(pinned);
   }
 
   async deleteSession(sessionId: string) {
-    const session = this.session(sessionId);
-    if (session.isRunning) {
+    if (!this.sessions.has(sessionId) && !this.summaries.has(sessionId)) {
+      throw new ProtocolError("session_not_found", "session not found");
+    }
+    const session = this.sessions.get(sessionId);
+    if (session?.isRunning || this.loading.has(sessionId)) {
       throw new ProtocolError(
         "run_in_progress",
-        "cannot delete a running session",
+        "cannot delete a running or loading session",
       );
     }
-    this.sessions.delete(sessionId);
-    await this.store.delete(sessionId);
-    return { session_id: sessionId, deleted: true };
+    if (this.deleting.has(sessionId))
+      throw new ProtocolError("session_not_found", "session is being deleted");
+    this.deleting.add(sessionId);
+    try {
+      await session?.dispose();
+      await this.store.delete(sessionId);
+      this.sessions.delete(sessionId);
+      this.summaries.delete(sessionId);
+      return { session_id: sessionId, deleted: true };
+    } catch (error) {
+      session?.cancelDisposal();
+      throw error;
+    } finally {
+      this.deleting.delete(sessionId);
+    }
   }
 
   abort(sessionId: string) {
@@ -343,12 +398,39 @@ export class AgentRuntime {
   }
 
   state(sessionId: string) {
-    return this.session(sessionId).state();
+    const session = this.sessions.get(sessionId);
+    if (session) return session.state();
+    const metadata = this.summaries.get(sessionId);
+    if (!metadata)
+      throw new ProtocolError("session_not_found", "session not found");
+    return {
+      session_id: sessionId,
+      provider_id: metadata.provider_id,
+      model_id: metadata.model_id,
+      status: "idle",
+      active_run_id: null,
+      latest_seq: metadata.next_seq - 1,
+      queued_messages: false,
+      contains_images: metadata.contains_images,
+      title: metadata.title ?? null,
+      title_locked: metadata.title_locked ?? false,
+      pinned: metadata.pinned ?? false,
+      thinking_level: metadata.thinking_level ?? "off",
+      role_id: metadata.role_id ?? DEFAULT_ROLE_ID,
+      apply_policy: metadata.resolved_apply_policy ?? "auto",
+    };
   }
 
   listSessions() {
-    return [...this.sessions.values()]
-      .map((session) => session.summary())
+    return [...new Set([...this.summaries.keys(), ...this.sessions.keys()])]
+      .map(
+        (id) =>
+          this.sessions.get(id)?.summary() ?? {
+            ...this.state(id),
+            created_at: this.summaries.get(id)?.created_at ?? null,
+            updated_at: this.summaries.get(id)?.updated_at ?? null,
+          },
+      )
       .sort((left, right) =>
         String(right.updated_at ?? "").localeCompare(
           String(left.updated_at ?? ""),
@@ -356,8 +438,8 @@ export class AgentRuntime {
       );
   }
 
-  replay(sessionId: string, afterSeq: number) {
-    return this.session(sessionId).events.filter(
+  async replay(sessionId: string, afterSeq: number) {
+    return (await this.loadSession(sessionId)).events.filter(
       (event) => event.seq > afterSeq,
     );
   }

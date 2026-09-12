@@ -46,9 +46,9 @@ describe.skipIf(!process.env[DEEPSEEK_API_KEY_ENV]?.trim())(
         );
         await runtime.waitForIdle("deepseek-smoke");
 
-        const events = runtime
-          .replay("deepseek-smoke", 0)
-          .filter((event) => event.run_id === run_id);
+        const events = (await runtime.replay("deepseek-smoke", 0)).filter(
+          (event) => event.run_id === run_id,
+        );
         const terminal = events.at(-1);
         expect(terminal, JSON.stringify(terminal?.payload)).toMatchObject({
           type: "run.completed",

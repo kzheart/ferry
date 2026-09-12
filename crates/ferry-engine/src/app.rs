@@ -636,10 +636,14 @@ impl EngineService for Engine {
         )?))
     }
 
-    fn load_runtime_sessions(&self) -> EngineResult<Value> {
-        Ok(Value::Array(runtime_sessions::load_all(
+    fn list_runtime_sessions(&self) -> EngineResult<Value> {
+        Ok(Value::Array(runtime_sessions::list(
             self.op_ports.state_dir(),
         )?))
+    }
+
+    fn load_runtime_session(&self, session_id: &Value) -> EngineResult<Value> {
+        runtime_sessions::load(session_id, self.op_ports.state_dir())
     }
 
     fn commit_runtime_session(&self, update: &Value) -> EngineResult<Value> {

@@ -72,7 +72,11 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Lookup,
             retry: RetryPolicy::Never,
         }),
-        "runtime_sessions.load_all" => Some(EngineMethodPolicy {
+        "runtime_sessions.list" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+        }),
+        "runtime_sessions.load" => Some(EngineMethodPolicy {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,
         }),
@@ -147,7 +151,8 @@ pub(crate) fn is_ui_engine_method(method: &str) -> bool {
 
 /// Ferry Runtime 允许经网关转发到 Engine 的方法白名单。
 pub(crate) const RUNTIME_GATEWAY_METHODS: &[&str] = &[
-    "runtime_sessions.load_all",
+    "runtime_sessions.list",
+    "runtime_sessions.load",
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",

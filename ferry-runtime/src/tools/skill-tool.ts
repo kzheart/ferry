@@ -2,11 +2,16 @@
  * skill 工具:按需读取技能正文。
  * 读的是 Ferry 自己数据目录下、用户明确导入的文件,在 runtime 本地执行,不经 RuntimeGateway。
  */
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  formatSkillInvocation,
+  type AgentTool,
+} from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
 
 export interface SkillReadResult {
   name: string;
+  description: string;
+  filePath: string;
   body: string;
   files: string[];
 }
@@ -38,13 +43,23 @@ export function createSkillTool(
         throw new Error(`skill ${id} is not available in this session`);
       }
       const skill = await read(id);
-      const text =
-        skill.files.length > 1
-          ? `${skill.body}\n\n---\nBundled files: ${skill.files.join(", ")}`
-          : skill.body;
+      const text = formatSkillInvocation(
+        {
+          name: skill.name,
+          description: skill.description,
+          filePath: skill.filePath,
+          content: skill.body,
+        },
+        `Bundled files (absolute paths):\n${skill.files.map((path) => `- ${path}`).join("\n")}`,
+      );
       return {
         content: [{ type: "text" as const, text }],
-        details: { skill_id: id, name: skill.name, files: skill.files },
+        details: {
+          skill_id: id,
+          name: skill.name,
+          file_path: skill.filePath,
+          files: skill.files,
+        },
       };
     },
   };

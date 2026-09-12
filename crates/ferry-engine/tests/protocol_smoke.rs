@@ -349,7 +349,7 @@ fn serial_requests_keep_their_input_order() {
     let mut serve = Serve::start(&sandbox);
     // scan 是串行池里最慢的一条（全量扫库），后面跟一条几乎瞬时的串行请求。
     serve.send("scan", "s1", json!({}));
-    serve.send("runtime_sessions.load_all", "s2", json!({}));
+    serve.send("runtime_sessions.list", "s2", json!({}));
     serve.send("session_meta_list", "s3", json!({}));
     // s3 走 parallel-read 池，可以随时完成（甚至先于 s2）；串行保序只约束
     // s1 相对 s2 的顺序，所以按到达序收齐三条再断言相对位置。

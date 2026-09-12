@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AutoModeIcon,
@@ -12,6 +12,7 @@ import {
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { repoOf, sessionAttachmentKey } from "../browser/public.js";
 import { ModeMenu, ModelMenu } from "./AgentMenus.jsx";
+import "./agentComposer.css";
 
 function MentionMenu({ query, sessions, onPick }) {
   const q = query.toLowerCase();
@@ -41,9 +42,11 @@ function MentionMenu({ query, sessions, onPick }) {
 
 export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions,
   onPickMention, onKeyDown, onPaste, onSend, onSteer, running, mode, onOpenConfig,
-  health, autoFocus, attachments, onRemoveAttachment }) {
+  health, autoFocus, attachments, onRemoveAttachment, activity }) {
   const { t } = useTranslation();
   const ferry = useFerryRuntime();
+  const modeAnchorRef = useRef(null);
+  const modelAnchorRef = useRef(null);
   const [modeOpen, setModeOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const hasContent = !!text.trim() || attachments.length > 0;
@@ -56,11 +59,21 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
   const effort = health?.thinking && health.thinking !== "off" ? health.thinking : null;
   const needsSetup = noCredential || !(ferry.models || []).length;
   useEffect(() => { if (autoFocus) taRef.current?.focus(); }, [autoFocus, taRef]);
+  useLayoutEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(180, Math.max(44, el.scrollHeight))}px`;
+  }, [text, taRef]);
   return (
-    <div style={{ position: "relative" }}>
+    <div className="agent-composer-shell">
       {mention && (
         <MentionMenu query={mention.query} sessions={scanSessions} onPick={onPickMention} />)}
-      <div className="chat-composer" style={{ padding: "12px 12px 8px 16px" }}>
+      {running && <div className="agent-composer-activity" role="status">
+        <span className="agent-activity-dot" />
+        {activity || t("askferry:composer.working")}
+      </div>}
+      <div className="chat-composer agent-composer">
         {!!attachments.length && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingBottom: 9 }}>
             {attachments.map(item => (
@@ -79,7 +92,7 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
             ))}
           </div>
         )}
-        <textarea ref={taRef} value={text}
+        <textarea className="agent-composer-input" aria-label={t("askferry:composer.placeholder")} ref={taRef} value={text}
           rows={Math.min(8, Math.max(1, text.split("\n").length))}
           onChange={e => setTextValue(e.target.value)} onKeyDown={onKeyDown} onPaste={onPaste}
           placeholder={ferry.available ? t("askferry:composer.placeholder")
@@ -88,12 +101,14 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
           style={{ width: "100%", border: "none", outline: "none", resize: "none",
             background: "transparent", fontSize: 13.5, lineHeight: 1.55, color: "var(--tx1)",
             fontFamily: "inherit", padding: 0 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6 }}>
+        <div className="agent-composer-toolbar">
           <div style={{ position: "relative" }}>
             {modeOpen && (
-              <ModeMenu mode={mode} onClose={() => setModeOpen(false)}
+              <ModeMenu anchorRef={modeAnchorRef} mode={mode} onClose={() => setModeOpen(false)}
                 onPick={k => { ferry.setMode(k); setModeOpen(false); }} />)}
-            <button className="chat-ghost-btn" onClick={() => setModeOpen(v => !v)}>
+            <button ref={modeAnchorRef} className="chat-ghost-btn" aria-haspopup="menu" aria-expanded={modeOpen}
+              title={t(mode === "auto" ? "askferry:mode.autoDesc" : "askferry:mode.manualDesc")}
+              onClick={() => { setModelOpen(false); setModeOpen(v => !v); }}>
               <span style={{ display: "inline-flex",
                 color: mode === "auto" ? "var(--warn)" : "var(--tx3b)" }}>
                 {mode === "auto" ? <AutoModeIcon size={13} /> : <ManualModeIcon size={13} />}
@@ -102,12 +117,12 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
               <Caret size={8} open={false} />
             </button>
           </div>
-          <div style={{ position: "relative" }}>
+          <div className="agent-model-control" style={{ position: "relative" }}>
             {modelOpen && !needsSetup && (
-              <ModelMenu health={health} onManage={() => onOpenConfig("models")}
+              <ModelMenu anchorRef={modelAnchorRef} health={health} onManage={() => onOpenConfig("models")}
                 onClose={() => setModelOpen(false)} />)}
-            <button className="chat-ghost-btn"
-              onClick={() => needsSetup ? onOpenConfig() : setModelOpen(v => !v)}>
+            <button ref={modelAnchorRef} className="chat-ghost-btn" aria-haspopup="menu" aria-expanded={modelOpen}
+              onClick={() => { setModeOpen(false); needsSetup ? onOpenConfig() : setModelOpen(v => !v); }}>
               {needsSetup ? (
                 <span style={{ width: 5, height: 5, borderRadius: "50%",
                   background: "var(--warn)", flex: "none" }} />
@@ -116,26 +131,30 @@ export function AgentComposer({ text, setTextValue, taRef, mention, scanSessions
                 {needsSetup ? t("askferry:model.setup")
                   : (modelLabel || t("askferry:model.pick"))}</span>
               {effort && (
-                <span style={{ color: "var(--tx5)", flex: "none" }}>
+                <span className="agent-effort-badge" title={t("askferry:model.effort")}>
                   {t(`askferry:model.effort_${effort}`)}</span>)}
               <Caret size={8} open={false} />
             </button>
           </div>
           <span style={{ flex: 1 }} />
           {running && hasContent && (
-            <button className="chat-ghost-btn" onClick={onSteer}>
+            <button className="chat-ghost-btn" title={t("askferry:composer.steerHint")} onClick={onSteer}>
               {t("askferry:composer.steer")}</button>
           )}
           {running && (
-            <button className="chat-round-btn" title={t("askferry:composer.stop")}
+            <button className="chat-round-btn agent-stop-btn" title={t("askferry:composer.stop")}
               onClick={ferry.abort}><StopFillIcon /></button>
           )}
           {(!running || hasContent) && (
-            <button className="chat-round-btn" disabled={!canSend}
+            <button className={`chat-round-btn agent-send-btn${running ? " is-queued" : ""}`} disabled={!canSend}
               title={running ? t("askferry:composer.followUp") : t("askferry:composer.send")}
-              onClick={onSend}><SendArrowIcon /></button>
+              onClick={onSend}><SendArrowIcon />{running && <span>{t("askferry:composer.followUp")}</span>}</button>
           )}
         </div>
+      </div>
+      <div className="agent-composer-hint">
+        <span>{t(running ? "askferry:composer.queueHint" : "askferry:composer.mentionHint")}</span>
+        <span className="agent-keyboard-hint">{t("askferry:composer.keyboardHint")}</span>
       </div>
     </div>
   );

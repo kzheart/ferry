@@ -140,7 +140,17 @@
       "dispatch": "parallel-read"
     },
     {
-      "name": "runtime_sessions.load_all",
+      "name": "runtime_sessions.list",
+      "kind": "read",
+      "callers": [
+        "runtime"
+      ],
+      "timeout": "normal",
+      "retry": "safe-read",
+      "dispatch": "serial"
+    },
+    {
+      "name": "runtime_sessions.load",
       "kind": "read",
       "callers": [
         "runtime"

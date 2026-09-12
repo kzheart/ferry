@@ -7,14 +7,13 @@ import {
   copyFile,
   lstat,
   mkdir,
-  readFile,
   readdir,
   realpath,
   rename,
   rm,
 } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { SKILL_MANIFEST, parseSkillDocument } from "./skill-document.js";
+import { SKILL_MANIFEST, loadSkillDocument } from "./skill-document.js";
 
 export const SKILL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -26,13 +25,14 @@ export const SKILL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const MAX_IMPORT_FILES = 2_000;
 const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORT_DEPTH = 12;
-const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_SKILLS = 200;
 
 export interface SkillEntry {
   id: string;
   name: string;
   description: string;
+  filePath: string;
+  disableModelInvocation: boolean;
   bytes: number;
   files: number;
   originLabel: string | null;
@@ -42,6 +42,8 @@ export interface SkillEntry {
 export interface SkillContent {
   id: string;
   name: string;
+  description: string;
+  filePath: string;
   body: string;
   files: string[];
 }
@@ -144,7 +146,7 @@ export class SkillLibrary {
     id: string,
     originLabel: string | null,
   ): Promise<SkillEntry> {
-    const directory = join(this.root, id);
+    const directory = await this.directoryOf(id);
     const accumulator: Measured = { files: [], bytes: 0 };
     let broken = false;
     try {
@@ -155,27 +157,22 @@ export class SkillLibrary {
     const manifest = accumulator.files.find(
       (file) => file.relative === SKILL_MANIFEST,
     );
-    if (!manifest) {
-      return {
-        id,
-        name: id,
-        description: "",
-        bytes: accumulator.bytes,
-        files: accumulator.files.length,
-        originLabel,
-        broken: true,
-      };
+    let document;
+    try {
+      if (manifest) document = await loadSkillDocument(directory);
+    } catch {
+      broken = true;
     }
-    const source = await readFile(manifest.absolute, "utf8");
-    const document = parseSkillDocument(source, id);
     return {
       id,
-      name: document.name,
-      description: document.description,
+      name: document?.name ?? id,
+      description: document?.description ?? "",
+      filePath: join(directory, SKILL_MANIFEST),
+      disableModelInvocation: document?.disableModelInvocation ?? false,
       bytes: accumulator.bytes,
       files: accumulator.files.length,
       originLabel,
-      broken: broken || Buffer.byteLength(source) > MAX_MANIFEST_BYTES,
+      broken: broken || !document,
     };
   }
 
@@ -207,6 +204,7 @@ export class SkillLibrary {
     if (!accumulator.files.some((file) => file.relative === SKILL_MANIFEST)) {
       throw new Error("skill source has no SKILL.md");
     }
+    await loadSkillDocument(source);
     const id = await this.claimId(normalizeSkillId(desiredId), overwrite);
     const staging = join(this.root, `.tmp-${randomUUID()}`);
     try {
@@ -255,15 +253,14 @@ export class SkillLibrary {
       (file) => file.relative === SKILL_MANIFEST,
     );
     if (!manifest) throw new Error("skill has no SKILL.md");
-    const source = await readFile(manifest.absolute, "utf8");
-    if (Buffer.byteLength(source) > MAX_MANIFEST_BYTES) {
-      throw new Error("skill document is too large");
-    }
+    const document = await loadSkillDocument(directory);
     return {
       id,
-      name: parseSkillDocument(source, id).name,
-      body: source,
-      files: accumulator.files.map((file) => file.relative).sort(),
+      name: document.name,
+      description: document.description,
+      filePath: document.filePath,
+      body: document.content,
+      files: accumulator.files.map((file) => file.absolute).sort(),
     };
   }
 }

@@ -8,6 +8,7 @@ import { CheckIcon, CloseIcon, CopyIcon, PencilIcon, SendArrowIcon, Spinner }
 import { AgentToolRow } from "./AgentToolTrace.jsx";
 import { ApprovalCard } from "./AgentApprovalCard.jsx";
 import { AgentChoiceCard } from "./AgentChoiceCard.jsx";
+import { AgentRunStatus } from "./AgentRunStatus.jsx";
 
 function IconBtn({ title, onClick, children }) {
   return (
@@ -120,6 +121,13 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
   if (item.kind === "user") {
     return <UserMessage item={item} sessionId={sessionId} />;
   }
+  if (item.kind === "thinking") {
+    return <details className="selectable chat-msg chat-thinking">
+      <summary>{t(item.streaming ? "askferry:chat.thinking" : "askferry:chat.thinkingProcess")}
+        {item.streaming && <Spinner size={12} />}</summary>
+      <Markdown text={item.text} />
+    </details>;
+  }
   if (item.kind === "assistant") {
     return (
       <div className="selectable chat-msg">
@@ -152,20 +160,7 @@ function AgentChatItemView({ item, sessionId, onNavigate }) {
     );
   }
   if (item.kind === "status") {
-    const status = {
-      "run.failed": [
-        "var(--err-text)",
-        t("askferry:chat.runFailed", { message: item.message || "" }),
-      ],
-      "run.cancelled": ["var(--tx5)", t("askferry:chat.runCancelled")],
-      "run.interrupted": ["var(--warn-text)", t("askferry:chat.runInterrupted")],
-    };
-    const [color, label] = status[item.type] || ["var(--tx5)", item.type];
-    return (
-      <div style={{ fontSize: 11.5, color, textAlign: "center", padding: "2px 0" }}>
-        {label}
-      </div>
-    );
+    return <AgentRunStatus item={item} />;
   }
   return null;
 }

@@ -387,6 +387,7 @@ export class ProviderHost {
     const model = this.model(selection);
     return {
       model,
+      models: this.models,
       streamFn: this.models.streamSimple.bind(this.models),
       provider: model.provider,
       modelId: model.id,

@@ -96,9 +96,9 @@ test("作答后卡片折叠成一行摘要,点标题行才展开", () => {
       customText: "备注", allowCustom: true })}
     onRespond={vi.fn()} />);
 
-  // 折叠态只留标题 + 答案摘要,问题和选项都不渲染
+  // 折叠态保留问题上下文和答案,选项收起
   expect(screen.getByText("全部 · 备注")).toBeTruthy();
-  expect(screen.queryAllByText("清理哪些会话?")).toHaveLength(0);
+  expect(screen.getByText("清理哪些会话?")).toBeTruthy();
   expect(screen.queryByText("旧会话")).toBe(null);
 
   fireEvent.click(screen.getByText("askferry:choice.answered"));
@@ -113,7 +113,7 @@ test("pending 卡片不折叠,也没有展开开关", () => {
   expect(screen.queryByRole("button", { expanded: false })).toBe(null);
 });
 
-test("已作答的卡片只读:没有按钮,输入被禁用,回显既有答案", () => {
+test("已作答的卡片展开为只读记录,没有表单控件", () => {
   const onRespond = vi.fn(async () => {});
   render(<AgentChoiceCard
     item={card({ status: "answered", answered: true, selected: ["全部"],
@@ -125,8 +125,10 @@ test("已作答的卡片只读:没有按钮,输入被禁用,回显既有答案",
   expect(screen.queryByText("askferry:choice.submit")).toBe(null);
   expect(screen.queryByText("askferry:choice.skip")).toBe(null);
   expect(screen.getByText("askferry:choice.answered")).toBeTruthy();
-  expect(screen.getByPlaceholderText("askferry:choice.customPlaceholder").value)
-    .toBe("备注");
+  expect(screen.queryByRole("textbox")).toBe(null);
+  expect(screen.queryByRole("radio")).toBe(null);
+  expect(screen.getByRole("list")).toBeTruthy();
+  expect(screen.getByText("备注")).toBeTruthy();
 
   // 只读态点选项不应该产生任何应答
   fireEvent.click(screen.getByText("旧会话"));
@@ -141,4 +143,18 @@ test("未作答态给出运行已结束的说明,同样不可再操作", () => {
   fireEvent.click(screen.getByText("askferry:choice.unanswered"));
   expect(screen.getByText("askferry:choice.noAnswer")).toBeTruthy();
   expect(screen.queryByText("askferry:choice.submit")).toBe(null);
+});
+
+
+test("提交失败后保留选择并允许重试", async () => {
+  const onRespond = vi.fn().mockRejectedValueOnce(new Error("连接中断")).mockResolvedValueOnce(undefined);
+  render(<AgentChoiceCard item={card()} onRespond={onRespond} />);
+  fireEvent.click(screen.getByText("全部"));
+  await act(async () => { fireEvent.click(submitButton()); });
+  expect(screen.getByRole("alert").textContent).toBe("连接中断");
+  expect(screen.getByRole("radio", { name: "全部" }).checked).toBe(true);
+  expect(submitButton().disabled).toBe(false);
+  await act(async () => { fireEvent.click(submitButton()); });
+  expect(onRespond).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBe(null);
 });

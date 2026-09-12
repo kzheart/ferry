@@ -35,7 +35,7 @@ export const toolLevel = item => {
 
 const sealAssistant = items => {
   const last = items[items.length - 1];
-  if (last?.kind === "assistant" && last.streaming) {
+  if ((last?.kind === "assistant" || last?.kind === "thinking") && last.streaming) {
     items[items.length - 1] = { ...last, streaming: false };
   }
 };
@@ -169,12 +169,22 @@ export function applyEvent(log, ev) {
     case "user.message":
       items.push({ kind: "user", text: p.text ?? "", sub: p.kind, seq: ev.seq });
       break;
+    case "context.compacted":
+      sealAssistant(items);
+      items.push({ kind: "status", type: ev.type });
+      break;
+    case "run.usage":
+      log.usage = p.usage;
+      break;
+    case "content.thinking":
     case "content.delta": {
+      const kind = ev.type === "content.thinking" ? "thinking" : "assistant";
       const last = items[items.length - 1];
-      if (last?.kind === "assistant" && last.streaming) {
+      if (last?.kind === kind && last.streaming && last.runId === ev.run_id) {
         items[items.length - 1] = { ...last, text: last.text + (p.delta || "") };
       } else {
-        items.push({ kind: "assistant", text: p.delta || "", streaming: true, runId: ev.run_id });
+        sealAssistant(items);
+        items.push({ kind, text: p.delta || "", streaming: true, runId: ev.run_id });
       }
       break;
     }

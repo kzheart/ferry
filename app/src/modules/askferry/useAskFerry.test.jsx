@@ -12,6 +12,7 @@ let sessionList = [];
 // 记录 runtime 命令调用,创建类断言用
 const runtimeCalls = [];
 let createdCount = 0;
+let runtimeFailure = null;
 
 // bash 提案与 Engine 提案共用同一张审批卡,分流只看 plan_id 前缀——这条走错就会
 // 把 shell 命令送进 Engine 的 operation 状态机。
@@ -23,6 +24,11 @@ vi.mock("../../platform/desktop/client.js", async (importOriginal) => ({
   },
   runtime: async (method, params) => {
     runtimeCalls.push({ method, params });
+    if (runtimeFailure) {
+      if (method === "health") emit({ type: "runtime.disconnected" });
+      throw runtimeFailure;
+    }
+    if (method === "roles.list") return [];
     if (method === "sessions.list") return sessionList;
     // 回放接口返回事件数组;打开会话要靠它把时间线建出来
     if (method === "events.replay") return [];
@@ -367,4 +373,63 @@ test("跳过(answered:false)记成未作答,不写入任何选择", async () => 
   });
   expect(choiceCalls[0].answer.answered).toBe(false);
   harness.unmount();
+});
+
+
+test("启动握手失败不会因 disconnected 无限重启", async () => {
+  vi.useFakeTimers();
+  let harness;
+  try {
+    runtimeCalls.length = 0;
+    runtimeFailure = new Error("runtime handshake failed");
+    harness = await mountWithSessions([]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(runtimeCalls.filter(call => call.method === "health")).toHaveLength(1);
+    expect(harness.get().lastError).toBe(runtimeFailure);
+  } finally {
+    harness?.unmount();
+    runtimeFailure = null;
+    vi.useRealTimers();
+  }
+});
+
+test("已连接进程断开只自动恢复一次，失败后可手动刷新恢复", async () => {
+  vi.useFakeTimers();
+  let harness;
+  try {
+    runtimeCalls.length = 0;
+    harness = await mountWithSessions([]);
+    runtimeFailure = new Error("runtime handshake failed");
+    await act(async () => {
+      emit({ type: "runtime.disconnected" });
+      emit({ type: "runtime.disconnected" });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(runtimeCalls.filter(call => call.method === "health")).toHaveLength(2);
+    expect(harness.get().lastError).toBe(runtimeFailure);
+    expect(harness.get().health).toBe(null);
+    runtimeFailure = null;
+    await act(async () => { await harness.get().refresh(); });
+    expect(runtimeCalls.filter(call => call.method === "health")).toHaveLength(3);
+    expect(harness.get().lastError).toBe(null);
+    expect(harness.get().health).toEqual({});
+  } finally {
+    harness?.unmount();
+    runtimeFailure = null;
+    vi.useRealTimers();
+  }
+});
+
+test("卸载后取消尚未执行的重连", async () => {
+  vi.useFakeTimers();
+  try {
+    runtimeCalls.length = 0;
+    const harness = await mountWithSessions([]);
+    await act(async () => emit({ type: "runtime.disconnected" }));
+    harness.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(runtimeCalls.filter(call => call.method === "health")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });

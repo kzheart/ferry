@@ -159,13 +159,15 @@ describe("streaming persistence", () => {
       await runtime.prompt("s1", "hello");
       await firstDelta;
 
-      const [streaming] = await store.loadAll();
+      const streaming = await store.load("s1");
       expect(streaming?.state.status).toBe("running");
       expect(streaming?.state.messages).toMatchObject([
         { role: "user", content: [{ type: "text", text: "hello" }] },
       ]);
       expect(
-        runtime.replay("s1", 0).some((event) => event.type === "run.completed"),
+        (await runtime.replay("s1", 0)).some(
+          (event) => event.type === "run.completed",
+        ),
       ).toBe(false);
     } finally {
       unsubscribe();
@@ -173,7 +175,7 @@ describe("streaming persistence", () => {
       await runtime.waitForIdle("s1");
     }
 
-    const [completed] = await store.loadAll();
+    const completed = await store.load("s1");
     expect(
       completed?.state.messages.some((entry) => entry.role === "assistant"),
     ).toBe(true);

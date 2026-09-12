@@ -1,4 +1,4 @@
-import type { AuthType, Model } from "@earendil-works/pi-ai";
+import type { AuthType, Model, Models } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import {
   ProtocolError,
@@ -16,6 +16,7 @@ import type { ProviderHost } from "./provider-host.js";
 
 export interface AgentBackend {
   model: Model<string>;
+  models?: Models;
   streamFn: StreamFn;
   provider?: string;
   modelId?: string;

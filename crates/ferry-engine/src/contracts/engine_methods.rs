@@ -52,7 +52,8 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
     "session_asset",
     "session_meta_list",
     "session_search",
-    "runtime_sessions.load_all",
+    "runtime_sessions.list",
+    "runtime_sessions.load",
     "runtime_sessions.commit",
     "runtime_sessions.delete",
     "runtime_sessions.truncate",
@@ -183,7 +184,13 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             retry: RetryPolicy::Never,
             dispatch: Dispatch::ParallelRead,
         }),
-        "runtime_sessions.load_all" => Some(EngineMethodPolicy {
+        "runtime_sessions.list" => Some(EngineMethodPolicy {
+            kind: MethodKind::Read,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+            dispatch: Dispatch::Serial,
+        }),
+        "runtime_sessions.load" => Some(EngineMethodPolicy {
             kind: MethodKind::Read,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::SafeRead,

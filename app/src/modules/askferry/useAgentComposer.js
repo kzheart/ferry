@@ -22,6 +22,18 @@ export function useAgentComposer({
   const taRef = useRef(null);
   const scrollRef = useRef(null);
   const stickRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const scrollToBottom = () => {
+    stickRef.current = true;
+    setShowScrollToBottom(false);
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [ferry.activeId]);
 
   // 新消息时贴底滚动(用户上翻后不打扰)
   useEffect(() => {
@@ -31,7 +43,10 @@ export function useAgentComposer({
 
   const onScroll = () => {
     const el = scrollRef.current;
-    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (el) {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      setShowScrollToBottom(!stickRef.current);
+    }
   };
 
   const updateText = value => {
@@ -92,7 +107,7 @@ export function useAgentComposer({
     const prompt = buildSessionPrompt(value, currentAttachments);
     const display = sessionDisplayText(value, currentAttachments);
     setText(""); setAttachments([]); setMention(null);
-    if (stick) stickRef.current = true;
+    if (stick) scrollToBottom();
     try { return await transmit(prompt, display); }
     catch (error) {
       setText(value); setAttachments(currentAttachments); ferry.reportError(error);
@@ -111,6 +126,9 @@ export function useAgentComposer({
   const doSteer = () => runWith(text.trim(), (prompt, display) => ferry.steer(prompt, display), false);
 
   const onKeyDown = event => {
+    // WebKit 在输入法确认候选词时可能只保留 229,不再标记 isComposing。
+    if (event.isComposing || event.nativeEvent?.isComposing
+        || event.keyCode === 229 || event.nativeEvent?.keyCode === 229) return;
     if (window.__TAURI_INTERNALS__ && (event.metaKey || event.ctrlKey)
         && event.key.toLowerCase() === "v") {
       event.preventDefault();
@@ -129,6 +147,7 @@ export function useAgentComposer({
 
   return {
     text, setText, mention, setMention, taRef, scrollRef, onScroll, send,
+    showScrollToBottom, scrollToBottom,
     composerProps: {
       text, setTextValue: updateText, taRef, mention,
       onPickMention: pickMention, onKeyDown, onPaste,

@@ -1,0 +1,46 @@
+.agent-choice {
+  width: 100%;
+  max-width: 560px;
+  box-sizing: border-box;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--tx2);
+  overflow: hidden;
+}
+.agent-choice.is-pending { padding: 16px; }
+.agent-choice-eyebrow { display: flex; justify-content: space-between; gap: 12px; color: var(--tx4); font-size: 11px; margin-bottom: 7px; }
+.agent-choice-question { font-size: 13px; font-weight: 600; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-choice-details { display: flex; flex-direction: column; gap: 12px; }
+.is-pending > .agent-choice-details { margin-top: 13px; }
+.agent-choice-options { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.agent-choice-option { display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px; border: 1px solid var(--line2); border-radius: 8px; cursor: pointer; transition: background .12s, border-color .12s; }
+.agent-choice-option:hover { background: color-mix(in srgb, var(--tx1) 3%, transparent); }
+.agent-choice-option.is-selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--line2)); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.agent-choice-option input { margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+.agent-choice-option:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-choice-options:disabled .agent-choice-option { cursor: wait; opacity: .65; }
+.agent-choice-option-copy { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.agent-choice-option-title { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; line-height: 1.5; }
+.agent-choice-recommended { font-size: 10px; font-weight: 400; color: var(--tx4); }
+.agent-choice-description { display: block; margin: 2px 0 0; color: var(--tx4); font-size: 11.5px; line-height: 1.5; }
+.agent-choice-custom { width: 100%; box-sizing: border-box; resize: vertical; min-height: 54px; padding: 9px 10px; border: 1px solid var(--line2); border-radius: 8px; background: transparent; color: var(--tx1); font: inherit; font-size: 12px; }
+.agent-choice-custom:focus-visible, .agent-choice-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.agent-choice-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.agent-choice-actions .agent-choice-skip { border-color: transparent; background: transparent; color: var(--tx4); }
+.agent-choice-error { color: var(--err); font-size: 12px; overflow-wrap: anywhere; }
+.agent-choice-summary { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.agent-choice-summary:hover { background: color-mix(in srgb, var(--tx1) 3%, transparent); }
+.agent-choice-status { flex: none; font-size: 10.5px; color: var(--tx4); }
+.agent-choice-summary-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.agent-choice-summary-question { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-choice-answer { font-size: 11.5px; color: var(--tx4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-choice-chevron { flex: none; color: var(--tx4); transition: transform .12s; }
+.agent-choice-summary[aria-expanded="true"] .agent-choice-chevron { transform: rotate(90deg); }
+.is-complete > .agent-choice-details { padding: 0 14px 13px; }
+.agent-choice-record { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--line2); display: flex; flex-direction: column; gap: 8px; }
+.agent-choice-record li { display: flex; gap: 9px; color: var(--tx4); }
+.agent-choice-record li.is-selected { color: var(--tx1); }
+.agent-choice-record-mark { width: 12px; flex: none; font-size: 12px; line-height: 1.5; }
+.agent-choice-note { margin: 0; padding-left: 21px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .agent-choice-option, .agent-choice-chevron { transition: none; } }

@@ -2,17 +2,19 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  realpath,
   rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FileSkillStore } from "../src/skills/skill-store.js";
 import { SkillService } from "../src/skills/skill-service.js";
 import { discover } from "../src/skills/skill-discovery.js";
+import { createSkillTool } from "../src/tools/skill-tool.js";
 
 /** 造一个候选技能目录;所有测试都在临时目录里,绝不碰真实的 ~/.ferry。 */
 async function candidateDirectory(
@@ -105,7 +107,7 @@ describe("技能发现", () => {
 
 describe("技能导入", () => {
   it("导入后技能进入库,正文可读", async () => {
-    const { external, store, service } = await fixture();
+    const { data, external, store, service } = await fixture();
     await candidateDirectory(external, "code-review");
     const { candidates } = await store.candidates();
     const candidate = candidates.find((item) =>
@@ -120,7 +122,13 @@ describe("技能导入", () => {
 
     const content = await service.read("code-review");
     expect(content.body).toContain("正文内容。");
-    expect(content.files).toEqual(["SKILL.md", "reference.md"]);
+    const installed = await realpath(join(data, "skills", "code-review"));
+    expect(content.filePath).toBe(join(installed, "SKILL.md"));
+    expect(content.files).toEqual([
+      join(installed, "SKILL.md"),
+      join(installed, "reference.md"),
+    ]);
+    expect(content.body).not.toContain("description:");
   });
 
   it("导入后删掉上游目录,技能依旧可用", async () => {
@@ -163,7 +171,9 @@ describe("技能导入", () => {
     const { candidates } = await store.candidates();
     await store.import({ candidateId: candidates[0]!.candidateId });
     const content = await store.read("linked");
-    expect(content.files).not.toContain("leak.txt");
+    expect(content.files.some((file) => file.endsWith("/leak.txt"))).toBe(
+      false,
+    );
   });
 
   it("目录嵌套过深仍然被挡住——上限放宽了但没取消", async () => {
@@ -239,5 +249,110 @@ describe("技能配置", () => {
   it("内置扫描来源不可移除", async () => {
     const { store } = await fixture();
     await expect(store.removeSource("claude")).rejects.toThrow();
+  });
+});
+
+describe("pi 技能格式与路径", () => {
+  it("解析 YAML 多行描述与引号转义，并发现嵌套技能", async () => {
+    const { external, store } = await fixture();
+    const directory = await candidateDirectory(
+      join(external, "collection"),
+      "review",
+    );
+    await writeFile(
+      join(directory, "SKILL.md"),
+      `---
+name: review
+description: >-
+  Check changes
+  with "quoted" examples.
+---
+Read reference.md first.
+`,
+    );
+    const { candidates } = await store.candidates();
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        candidateId: "custom-1:collection/review",
+        description: 'Check changes with "quoted" examples.',
+        path: directory,
+      }),
+    ]);
+    const entry = await store.import({
+      candidateId: candidates[0]!.candidateId,
+    });
+    expect(entry.description).toBe('Check changes with "quoted" examples.');
+  });
+
+  it("遵循 ignore 文件，并终止循环软链扫描", async () => {
+    const { external, store } = await fixture();
+    await candidateDirectory(external, "visible");
+    await candidateDirectory(external, "ignored");
+    await writeFile(join(external, ".gitignore"), "ignored/\n");
+    await symlink(external, join(external, "loop"));
+    expect(
+      (await store.candidates()).candidates.map((skill) => skill.name),
+    ).toEqual(["visible 技能"]);
+  });
+
+  it("缺少 description 的文档不作为有效技能导入", async () => {
+    const { external, store } = await fixture();
+    const directory = await candidateDirectory(external, "invalid");
+    await writeFile(
+      join(directory, "SKILL.md"),
+      "---\nname: invalid\n---\nBody",
+    );
+    expect((await store.candidates()).candidates).toEqual([]);
+    await expect(store.import({ path: directory })).rejects.toThrow(
+      "description is required",
+    );
+    expect((await store.list()).skills).toEqual([]);
+  });
+
+  it("pi 加载前仍限制技能文档大小，拒绝导入超限正文", async () => {
+    const { external, store } = await fixture();
+    const directory = await candidateDirectory(external, "large");
+    await writeFile(
+      join(directory, "SKILL.md"),
+      `---\nname: large\ndescription: Large document\n---\n${"x".repeat(256 * 1024)}`,
+    );
+    expect((await store.candidates()).candidates).toEqual([]);
+    await expect(store.import({ path: directory })).rejects.toThrow(
+      "skill document is too large",
+    );
+    expect((await store.list()).skills).toEqual([]);
+  });
+
+  it("禁用模型调用的技能仍可显式读取，但不自动注入角色", async () => {
+    const { external, store, service } = await fixture();
+    const directory = await candidateDirectory(external, "manual");
+    await writeFile(
+      join(directory, "SKILL.md"),
+      "---\nname: manual\ndescription: explicit only\ndisable-model-invocation: true\n---\nManual body",
+    );
+    const entry = await store.import({ path: directory });
+    expect(entry.disableModelInvocation).toBe(true);
+    await store.setGlobal([entry.id]);
+    expect(await service.resolveFor([entry.id])).toEqual([]);
+    expect((await service.read(entry.id)).body).toBe("Manual body");
+  });
+
+  it("skill 工具标出导入后的绝对位置和配套文件，并校验角色可用集合", async () => {
+    const { data, external, store, service } = await fixture();
+    const directory = await candidateDirectory(external, "review");
+    await store.import({ path: directory });
+    const tool = createSkillTool((id) => service.read(id), ["review"]);
+    const result = await tool.execute("call-1", { skill_id: "review" });
+    const text = result.content[0];
+    const installed = await realpath(join(data, "skills", "review"));
+    expect(text).toMatchObject({ type: "text" });
+    if (text?.type !== "text") throw new Error("expected text");
+    expect(text.text).toContain(`location="${join(installed, "SKILL.md")}"`);
+    expect(text.text).toContain(`References are relative to ${installed}.`);
+    expect(text.text).toContain(join(installed, "reference.md"));
+    expect((await service.read("review")).files.every(isAbsolute)).toBe(true);
+    await expect(tool.execute("call-2", { skill_id: "other" })).rejects.toThrow(
+      "not available",
+    );
   });
 });

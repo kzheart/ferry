@@ -655,6 +655,20 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
 .chat-msg .fhact { opacity: 0; transition: opacity .15s ease; }
 .chat-msg:hover .fhact, .chat-msg .fhact:focus-within { opacity: 1; }
 
+/* 思考是辅助信息；Markdown 的正文与子元素不能恢复成正式回复的视觉权重。 */
+.chat-thinking { color: var(--tx3); font-size: 12px; line-height: 1.6; }
+.chat-thinking > summary { cursor: pointer; width: fit-content; }
+.chat-thinking > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.chat-thinking > summary svg { margin-left: 6px; vertical-align: middle; }
+.chat-thinking > .fmd {
+  margin-top: 6px; padding-left: 12px; border-left: 1px solid var(--line2);
+  font-size: inherit; line-height: inherit; color: inherit;
+}
+.chat-thinking .fmd :is(h1, h2, h3, h4, h5, h6) { font-size: 1em; font-weight: 600; }
+.chat-thinking .fmd :is(blockquote, th, a) { color: inherit; }
+.chat-thinking .fmd a { text-decoration: underline; text-underline-offset: 2px; }
+.chat-thinking .fmd :is(code, table) { font-size: 11px; }
+
 /* 用户消息的行内编辑框:形态沿用输入胶囊 */
 .chat-edit {
   background: var(--surface); border-radius: 16px;
@@ -677,6 +691,9 @@ html[data-reduce="1"] .fspin { animation: none !important; opacity: .65; }
   font-size: 12px; color: var(--tx4);
 }
 .chat-tool:hover { background: var(--hov-ghost); color: var(--tx3); }
+.agent-tool-toggle { border-radius: 6px; color: var(--tx3); }
+.agent-tool-toggle:hover { background: var(--hov-ghost) !important; }
+.agent-tool-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* 输入胶囊:焦点时投影轻微加深,不用系统蓝描边 */
 .chat-composer {

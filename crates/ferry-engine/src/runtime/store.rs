@@ -1,12 +1,12 @@
 //! Ferry Runtime 会话、消息与事件的 SQLite 存储。
 //!
-//! 这里只搬运 Runtime 已经做过体积约束的不透明 JSON，不解释 Provider / Role /
+//! 这里只搬运 Runtime 提交的不透明 JSON，不解释 Provider / Role /
 //! AgentMessage。写入按键不可变：同一 `(session_id, ordinal|seq)` 重复提交但
 //! 载荷不同即冲突（先 rollback 再报错）。
 
 use std::sync::Arc;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{Map, Value};
 
 use crate::operations::types::{EngineError, EngineResult};
@@ -30,38 +30,47 @@ impl RuntimeSessionStore {
         Self { connector }
     }
 
-    pub fn load_all(&self) -> EngineResult<Vec<Value>> {
+    pub fn list(&self) -> EngineResult<Vec<Value>> {
         self.connector.with_connection(|connection| {
-            let mut sessions =
-                connection.prepare("SELECT session_id, metadata_json FROM runtime_sessions")?;
-            let rows: Vec<(String, String)> = sessions
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })?
-                .collect::<Result<_, _>>()?;
+            let mut statement = connection.prepare(
+                "SELECT json_remove(metadata_json, '$.context_checkpoint'), created_at, updated_at FROM runtime_sessions ORDER BY updated_at DESC, session_id",
+            )?;
+            let rows = statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))?;
+            rows.map(|row| {
+                let (metadata, created_at, updated_at) = row?;
+                let mut summary = parse_object(&metadata)?;
+                summary.insert("created_at".into(), Value::String(created_at));
+                summary.insert("updated_at".into(), Value::String(updated_at));
+                Ok(Value::Object(summary))
+            }).collect()
+        })
+    }
 
-            let mut result = Vec::with_capacity(rows.len());
-            for (session_id, metadata_json) in rows {
-                let messages = load_column(
-                    connection,
-                    "SELECT message_json FROM runtime_messages
-                     WHERE session_id = ? ORDER BY ordinal",
-                    &session_id,
-                )?;
-                let events = load_column(
-                    connection,
-                    "SELECT event_json FROM runtime_events
-                     WHERE session_id = ? ORDER BY seq",
-                    &session_id,
-                )?;
-                let mut state = parse_object(&metadata_json)?;
-                state.insert("messages".into(), Value::Array(messages));
-                let mut entry = Map::new();
-                entry.insert("state".into(), Value::Object(state));
-                entry.insert("events".into(), Value::Array(events));
-                result.push(Value::Object(entry));
-            }
-            Ok(result)
+    pub fn load(&self, session_id: &str) -> EngineResult<Option<Value>> {
+        self.connector.with_connection(|connection| {
+            let metadata: Option<String> = connection
+                .query_row(
+                    "SELECT metadata_json FROM runtime_sessions WHERE session_id = ?",
+                    params![session_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(metadata) = metadata else {
+                return Ok(None);
+            };
+            let messages = load_column(
+                connection,
+                "SELECT message_json FROM runtime_messages WHERE session_id = ? ORDER BY ordinal",
+                session_id,
+            )?;
+            let events = load_column(
+                connection,
+                "SELECT event_json FROM runtime_events WHERE session_id = ? ORDER BY seq",
+                session_id,
+            )?;
+            let mut state = parse_object(&metadata)?;
+            state.insert("messages".into(), Value::Array(messages));
+            Ok(Some(serde_json::json!({"state": state, "events": events})))
         })
     }
 
@@ -258,25 +267,69 @@ mod tests {
     }
 
     #[test]
-    fn commit_then_load_all_round_trips_the_opaque_payload() {
+    fn commit_then_load_round_trips_the_opaque_payload() {
         let (_dir, database) = database();
         database
             .runtime_sessions
             .commit(&update("s1", "2026-01-01T00:00:00Z"))
             .unwrap();
 
-        let loaded = database.runtime_sessions.load_all().unwrap();
+        let loaded = database.runtime_sessions.load("s1").unwrap().unwrap();
         assert_eq!(
             loaded,
-            vec![json!({
+            json!({
                 "state": {
                     "session_id": "s1",
                     "title": "标题",
                     "messages": [{"role": "user"}],
                 },
                 "events": [{"seq": 0, "type": "run.started"}],
-            })]
+            })
         );
+    }
+
+    #[test]
+    fn listing_does_not_load_history_and_corrupt_history_is_isolated() {
+        let (_dir, database) = database();
+        database
+            .runtime_sessions
+            .commit(&update("bad", "t1"))
+            .unwrap();
+        let mut intact = update("good", "t2");
+        let original = "历史原文".repeat(20_000);
+        intact["messages"][0]["message"]["content"] = json!(original);
+        database.runtime_sessions.commit(&intact).unwrap();
+        let connection = Connection::open(&database.path).unwrap();
+        connection
+            .execute(
+                "UPDATE runtime_messages SET message_json = 'invalid' WHERE session_id = 'bad'",
+                [],
+            )
+            .unwrap();
+
+        let summaries = database.runtime_sessions.list().unwrap();
+        assert_eq!(summaries.len(), 2);
+        assert!(summaries
+            .iter()
+            .all(|summary| summary.get("messages").is_none()));
+        assert!(database.runtime_sessions.load("bad").is_err());
+        let good = database.runtime_sessions.load("good").unwrap().unwrap();
+        assert_eq!(good["state"]["messages"][0]["content"], json!(original));
+        assert!(database.runtime_sessions.load("missing").unwrap().is_none());
+    }
+
+    #[test]
+    fn summaries_exclude_context_checkpoints_but_load_preserves_them() {
+        let (_dir, database) = database();
+        let mut payload = update("s1", "t1");
+        let checkpoint =
+            json!({"messageCount": 1, "messages": [{"role": "user", "content": "compressed"}]});
+        payload["metadata"]["context_checkpoint"] = checkpoint.clone();
+        database.runtime_sessions.commit(&payload).unwrap();
+        let summaries = database.runtime_sessions.list().unwrap();
+        assert!(summaries[0].get("context_checkpoint").is_none());
+        let loaded = database.runtime_sessions.load("s1").unwrap().unwrap();
+        assert_eq!(loaded["state"]["context_checkpoint"], checkpoint);
     }
 
     #[test]
@@ -303,6 +356,9 @@ mod tests {
         };
         assert_eq!(created_at, "t1");
         assert_eq!(updated_at, "t2");
+        let summaries = database.runtime_sessions.list().unwrap();
+        assert_eq!(summaries[0]["created_at"], json!("t1"));
+        assert_eq!(summaries[0]["updated_at"], json!("t2"));
     }
 
     #[test]
@@ -323,8 +379,8 @@ mod tests {
             .runtime_sessions
             .commit(&update("s1", "t3"))
             .unwrap();
-        let loaded = database.runtime_sessions.load_all().unwrap();
-        assert_eq!(loaded[0]["state"]["messages"][0]["role"], json!("user"));
+        let loaded = database.runtime_sessions.load("s1").unwrap().unwrap();
+        assert_eq!(loaded["state"]["messages"][0]["role"], json!("user"));
     }
 
     #[test]
@@ -341,9 +397,9 @@ mod tests {
 
         let (messages, events) = database.runtime_sessions.truncate("s1", 1, 1).unwrap();
         assert_eq!((messages, events), (2, 1));
-        let loaded = database.runtime_sessions.load_all().unwrap();
-        assert_eq!(loaded[0]["state"]["messages"], json!([{"n": 0}]));
-        assert_eq!(loaded[0]["events"], json!([{"seq": 0}]));
+        let loaded = database.runtime_sessions.load("s1").unwrap().unwrap();
+        assert_eq!(loaded["state"]["messages"], json!([{"n": 0}]));
+        assert_eq!(loaded["events"], json!([{"seq": 0}]));
     }
 
     #[test]
@@ -356,7 +412,8 @@ mod tests {
 
         assert!(database.runtime_sessions.delete("s1").unwrap());
         assert!(!database.runtime_sessions.delete("s1").unwrap());
-        assert!(database.runtime_sessions.load_all().unwrap().is_empty());
+        assert!(database.runtime_sessions.list().unwrap().is_empty());
+        assert!(database.runtime_sessions.load("s1").unwrap().is_none());
         let remaining: i64 = {
             let connection = rusqlite::Connection::open(&database.path).unwrap();
             connection

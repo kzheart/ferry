@@ -381,7 +381,9 @@ export function createFerryTools(
     label: name,
     description: descriptions[name],
     parameters: schemas[name],
-    executionMode: "sequential",
+    executionMode: ["session_search", "session_read", "usage"].includes(name)
+      ? "parallel"
+      : "sequential",
     async execute(toolCallId, params, signal, onUpdate) {
       const input = params as Record<string, unknown>;
       if (name === "session_search") {

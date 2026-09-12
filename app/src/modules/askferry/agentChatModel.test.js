@@ -380,3 +380,23 @@ test("run 终态之后才补到的挂起卡,由下一次 run 终态兜底成未�
   assert.equal(orphan().status, "unanswered");
   assert.equal(orphan().answered, false);
 });
+
+test("thinking and compaction replay without becoming assistant answer text", () => {
+  let log = emptyLog();
+  const events = [
+    { type: "run.started", payload: { prompt: "hello" } },
+    { type: "content.thinking", payload: { delta: "reason" } },
+    { type: "content.delta", payload: { delta: "answer" } },
+    { type: "run.usage", payload: { usage: { totalTokens: 42 } } },
+    { type: "context.compacted", payload: {} },
+    { type: "run.completed", payload: {} },
+  ];
+  events.forEach((event, i) => { log = applyEvent(log, { ...event, seq: i + 1, run_id: "r" }); });
+  assert.equal(log.items[1].kind, "thinking");
+  assert.equal(log.items[1].streaming, false);
+  assert.equal(log.items[2].text, "answer");
+  assert.equal(log.items[2].streaming, false);
+  assert.equal(log.items[3].type, "context.compacted");
+  assert.equal(log.usage.totalTokens, 42);
+  assert.equal(log.status, "idle");
+});

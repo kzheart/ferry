@@ -14,6 +14,7 @@ import {
 import {
   candidatePath,
   discover,
+  listSources,
   normalizeScanSource,
   type SkillCandidate,
   type SkillSource,
@@ -142,6 +143,10 @@ abstract class BaseSkillStore implements SkillStore {
     return discover(this.config.scan_sources, this.includeBuiltinSources);
   }
 
+  protected sources() {
+    return listSources(this.config.scan_sources, this.includeBuiltinSources);
+  }
+
   async list(): Promise<SkillListing> {
     await this.settled();
     const skills = await this.library.list(this.config.installed);
@@ -149,7 +154,7 @@ abstract class BaseSkillStore implements SkillStore {
     return {
       skills,
       global: this.config.global.filter((id) => installed.has(id)),
-      scanSources: (await this.scan()).sources,
+      scanSources: await this.sources(),
       ...(this.configError ? { configError: this.configError } : {}),
     };
   }
@@ -226,12 +231,12 @@ abstract class BaseSkillStore implements SkillStore {
       this.config.scan_sources.push(normalized);
       await this.changed();
     }
-    return (await this.scan()).sources;
+    return this.sources();
   }
 
   async removeSource(sourceId: string): Promise<SkillSource[]> {
     await this.settled();
-    const { sources } = await this.scan();
+    const sources = await this.sources();
     const target = sources.find((source) => source.id === sourceId);
     if (!target) throw new Error("scan source not found");
     if (target.builtin)
@@ -240,7 +245,7 @@ abstract class BaseSkillStore implements SkillStore {
       (path) => normalizeScanSource(path) !== target.path,
     );
     await this.changed();
-    return (await this.scan()).sources;
+    return this.sources();
   }
 
   read(id: string): Promise<SkillContent> {

@@ -23,14 +23,29 @@
     "newChat": "新对话",
     "untitled": "未命名对话",
     "thinking": "正在思考…",
+    "thinkingProcess": "思考过程",
     "copy": "复制",
     "copied": "已复制",
     "edit": "编辑并重新发送",
     "editCancel": "取消编辑",
     "editSend": "重新发送",
+    "failure": {
+      "title": "运行未完成",
+      "genericTitle": "这次回复未能完成",
+      "genericHint": "查看详情排查问题；准备好后可编辑上一条消息并重新发送。",
+      "connectionTitle": "无法连接模型服务",
+      "connectionHint": "请检查网络和模型服务地址，再编辑上一条消息重新发送。",
+      "authTitle": "模型服务验证失败",
+      "authHint": "请在模型配置中检查 API 密钥和访问权限，再编辑上一条消息重新发送。",
+      "rateLimitTitle": "模型服务暂时繁忙",
+      "rateLimitHint": "请求已触发服务限流。请稍后编辑上一条消息并重新发送。",
+      "details": "查看错误详情"
+    },
     "runFailed": "本次运行失败 {{message}}",
     "runCancelled": "已停止",
-    "runInterrupted": "运行被中断(Agent 进程重启),不会自动重放,可重新发送"
+    "contextCompacted": "已整理较早的上下文，完整对话仍保留。",
+    "runInterrupted": "运行被中断(Agent 进程重启),不会自动重放,可重新发送",
+    "backToLatest": "回到最新消息"
   },
   "mode": {
     "manual": "手动",
@@ -79,17 +94,31 @@
     "submitting": "提交中…"
   },
   "composer": {
-    "placeholder": "询问任何问题",
+    "placeholder": "描述任务，或用 @ 引用会话",
     "desktopOnly": "Ask Ferry 仅在桌面端可用",
     "mentionHint": "@ 引用会话",
     "send": "发送",
-    "followUp": "追加",
+    "followUp": "排队发送",
     "steer": "转向",
     "stop": "停止",
-    "removeAttachment": "移除会话引用"
+    "removeAttachment": "移除会话引用",
+    "keyboardHint": "Enter 发送 · Shift Enter 换行",
+    "queueHint": "追加消息会在当前回复结束后发送",
+    "steerHint": "在下一步模型调用前插入这条指令",
+    "working": "正在处理你的请求",
+    "waitingChoice": "等待你的回答",
+    "waitingApproval": "等待你确认操作",
+    "usingTools": "正在执行工具"
   },
   "empty": {
-    "title": "有什么可以帮你?"
+    "title": "从一个任务开始",
+    "description": "搜索历史、理解上下文，让 Ferry 帮你接着完成。",
+    "find": "查找历史会话",
+    "findPrompt": "帮我查找最近讨论过的一个问题：",
+    "usage": "分析使用情况",
+    "usagePrompt": "总结我最近一周的 Agent 使用情况。",
+    "review": "梳理未完成工作",
+    "reviewPrompt": "查找最近的会话，帮我梳理尚未完成的工作。"
   },
   "float": {
     "open": "询问 AI",
@@ -135,7 +164,8 @@
       "migrate": "迁移会话",
       "session_edit": "编辑会话",
       "ask_user": "询问用户",
-      "bash": "执行命令"
+      "bash": "执行命令",
+      "skill": "加载技能"
     },
     "verbIntent": {
       "session_edit": {

@@ -32,6 +32,14 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
+  "content.thinking": {
+    "source": "runtime",
+    "forwardToUi": true
+  },
+  "context.compacted": {
+    "source": "runtime",
+    "forwardToUi": true
+  },
   "engine.request": {
     "source": "runtime",
     "forwardToUi": false
@@ -68,6 +76,10 @@ export const FERRY_EVENTS = {
     "source": "runtime",
     "forwardToUi": true
   },
+  "run.usage": {
+    "source": "runtime",
+    "forwardToUi": true
+  },
   "runtime.disconnected": {
     "source": "host",
     "forwardToUi": true
@@ -87,6 +99,10 @@ export const FERRY_EVENTS = {
   "sessions.changed": {
     "source": "engine",
     "forwardToUi": true
+  },
+  "tool.cancel": {
+    "source": "runtime",
+    "forwardToUi": false
   },
   "tool.completed": {
     "source": "runtime",

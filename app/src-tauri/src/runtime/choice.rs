@@ -18,6 +18,7 @@ const MAX_FINISHED_RUNS: usize = 64;
 
 struct PendingChoice {
     session_id: String,
+    run_id: String,
     labels: HashSet<String>,
     multi_select: bool,
     allow_custom: bool,
@@ -164,7 +165,9 @@ fn validate_answer(entry: &PendingChoice, answer: &Value) -> Result<(), String> 
     }
     if let Some(custom_text) = object.get("custom_text") {
         let custom_text = custom_text.as_str().ok_or_else(invalid_answer)?;
-        if !entry.allow_custom || custom_text.chars().count() > MAX_CUSTOM_TEXT_CHARS {
+        if (!entry.allow_custom && !custom_text.is_empty())
+            || custom_text.chars().count() > MAX_CUSTOM_TEXT_CHARS
+        {
             return Err(invalid_answer());
         }
     }
@@ -199,6 +202,7 @@ fn register_pending(
         request_id.to_owned(),
         PendingChoice {
             session_id: session_id.to_owned(),
+            run_id: run_id.to_owned(),
             labels: request.labels.clone(),
             multi_select: request.multi_select,
             allow_custom: request.allow_custom,
@@ -233,12 +237,26 @@ fn respond_value(session_id: &str, request_id: &str, answer: Value) -> Result<()
         .map_err(|_| "choice.request_closed".to_owned())
 }
 
-fn wait_for_answer(request_id: &str, receiver: Receiver<Value>) -> Value {
-    match receiver.recv_timeout(CHOICE_TIMEOUT) {
-        Ok(answer) => answer,
-        Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {
+fn wait_for_answer(
+    request_id: &str,
+    receiver: Receiver<Value>,
+    cancellation: Option<&super::tool_lifecycle::ToolRequest>,
+) -> Value {
+    let started = std::time::Instant::now();
+    loop {
+        if cancellation.is_some_and(|request| request.is_cancelled())
+            || started.elapsed() >= CHOICE_TIMEOUT
+        {
             remove_pending(request_id);
-            fallback_answer()
+            return fallback_answer();
+        }
+        match receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(answer) => return answer,
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => {
+                remove_pending(request_id);
+                return fallback_answer();
+            }
         }
     }
 }
@@ -270,10 +288,12 @@ pub(super) fn propose(
     request_id: &str,
     tool_call_id: &str,
     args: &Map<String, Value>,
+    cancellation: &super::tool_lifecycle::ToolRequest,
 ) -> Result<Value, String> {
     if session_id.is_empty() || request_id.is_empty() {
         return Err(invalid_args());
     }
+    cancellation.check()?;
     let request = validate_args(args)?;
     let Registration::Waiting(receiver) =
         register_pending(request_id, session_id, run_id, &request)?
@@ -298,7 +318,7 @@ pub(super) fn propose(
             },
         }),
     );
-    let answer = wait_for_answer(request_id, receiver);
+    let answer = wait_for_answer(request_id, receiver, Some(cancellation));
     emit_host_event(
         app,
         json!({
@@ -331,7 +351,7 @@ pub(super) fn finish_run(session_id: &str, run_id: &str) {
         let request_ids: Vec<String> = guard
             .pending
             .iter()
-            .filter(|(_, entry)| entry.session_id == session_id)
+            .filter(|(_, entry)| entry.session_id == session_id && entry.run_id == run_id)
             .map(|(request_id, _)| request_id.clone())
             .collect();
         request_ids
@@ -393,6 +413,7 @@ mod tests {
     fn entry_for(request: &ChoiceRequest) -> PendingChoice {
         PendingChoice {
             session_id: "session".to_owned(),
+            run_id: "run".to_owned(),
             labels: request.labels.clone(),
             multi_select: request.multi_select,
             allow_custom: request.allow_custom,
@@ -408,7 +429,7 @@ mod tests {
     }
 
     fn wait(request_id: &str, receiver: Receiver<Value>) -> Value {
-        wait_for_answer(request_id, receiver)
+        wait_for_answer(request_id, receiver, None)
     }
 
     #[test]
@@ -497,6 +518,46 @@ mod tests {
     }
 
     #[test]
+    fn options_and_skip_accept_empty_custom_text_when_custom_answers_are_disabled() {
+        let _serial = serial();
+        reset();
+        for (id, answer) in [
+            (
+                "option-empty-custom",
+                json!({"answered": true, "selected": ["keep"], "custom_text": ""}),
+            ),
+            (
+                "skip-empty-custom",
+                json!({"answered": false, "selected": [], "custom_text": ""}),
+            ),
+        ] {
+            let receiver = register(id, "no-custom-session");
+            respond_value("no-custom-session", id, answer.clone()).unwrap();
+            assert_eq!(wait(id, receiver), answer);
+        }
+    }
+
+    #[test]
+    fn nonempty_custom_text_is_still_rejected_without_consuming_the_pending_choice() {
+        let _serial = serial();
+        reset();
+        let receiver = register("disabled-custom", "no-custom-session");
+        for text in ["custom", " ", "\n"] {
+            assert!(respond_value(
+                "no-custom-session",
+                "disabled-custom",
+                json!({
+                    "answered": true, "selected": ["keep"], "custom_text": text,
+                })
+            )
+            .is_err());
+        }
+        let answer = json!({"answered": true, "selected": ["keep"], "custom_text": ""});
+        respond_value("no-custom-session", "disabled-custom", answer.clone()).unwrap();
+        assert_eq!(wait("disabled-custom", receiver), answer);
+    }
+
+    #[test]
     fn finish_run_only_closes_that_sessions_choices() {
         let _serial = serial();
         reset();
@@ -512,6 +573,32 @@ mod tests {
         let answer = json!({"answered": true, "selected": ["keep"]});
         respond_value("session-cancel-b", second_id, answer.clone()).unwrap();
         assert_eq!(wait(second_id, second), answer);
+    }
+
+    #[test]
+    fn finishing_an_old_run_does_not_close_a_new_runs_choice() {
+        let _serial = serial();
+        reset();
+        let receiver = register("new-choice", "same-session");
+        finish_run("same-session", "old-run");
+        let answer = json!({"answered": true, "selected": ["keep"]});
+        respond_value("same-session", "new-choice", answer.clone()).unwrap();
+        assert_eq!(wait("new-choice", receiver), answer);
+    }
+
+    #[test]
+    fn tool_cancellation_wakes_a_pending_choice_without_a_run_terminal() {
+        let _serial = serial();
+        reset();
+        let request =
+            super::super::tool_lifecycle::ToolRequest::register("choice-cancel", "run", "choice");
+        let receiver = register("choice", "choice-cancel");
+        super::super::tool_lifecycle::cancel("choice-cancel", "run", "choice");
+        assert_eq!(
+            wait_for_answer("choice", receiver, Some(&request)),
+            fallback_answer()
+        );
+        assert!(!state().pending.contains_key("choice"));
     }
 
     #[test]

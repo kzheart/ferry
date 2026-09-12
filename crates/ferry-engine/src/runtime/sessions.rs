@@ -11,10 +11,19 @@ use crate::errors::DomainError;
 use crate::operations::types::EngineResult;
 use crate::storage::database::cached_state_database;
 
-pub fn load_all(state_dir: impl AsRef<Path>) -> EngineResult<Vec<Value>> {
-    cached_state_database(state_dir)?
+pub fn list(state_dir: impl AsRef<Path>) -> EngineResult<Vec<Value>> {
+    cached_state_database(state_dir)?.runtime_sessions.list()
+}
+
+pub fn load(session_id: &Value, state_dir: impl AsRef<Path>) -> EngineResult<Value> {
+    let key = session_id
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| DomainError::agent_request_invalid("runtime load 缺少 session_id"))?;
+    Ok(cached_state_database(state_dir)?
         .runtime_sessions
-        .load_all()
+        .load(key)?
+        .unwrap_or(Value::Null))
 }
 
 /// 校验并提交一次 Runtime 更新。

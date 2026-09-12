@@ -23,14 +23,29 @@
     "newChat": "New chat",
     "untitled": "Untitled chat",
     "thinking": "Thinking…",
+    "thinkingProcess": "Thought process",
     "copy": "Copy",
     "copied": "Copied",
     "edit": "Edit & resend",
     "editCancel": "Cancel editing",
     "editSend": "Resend",
+    "failure": {
+      "title": "Run incomplete",
+      "genericTitle": "This reply could not be completed",
+      "genericHint": "Check the details below. When ready, edit your previous message and send it again.",
+      "connectionTitle": "Could not connect to the model",
+      "connectionHint": "Check your network and model service URL, then edit your previous message and send it again.",
+      "authTitle": "Model authentication failed",
+      "authHint": "Check the API key and access permissions in your model configuration, then edit your previous message and send it again.",
+      "rateLimitTitle": "Model service is temporarily busy",
+      "rateLimitHint": "The service rate limit was reached. Wait a moment, then edit your previous message and send it again.",
+      "details": "View error details"
+    },
     "runFailed": "Run failed {{message}}",
     "runCancelled": "Stopped",
-    "runInterrupted": "Run interrupted (agent restarted). It will not replay automatically; send again to retry."
+    "contextCompacted": "Earlier context summarized; full conversation preserved.",
+    "runInterrupted": "Run interrupted (agent restarted). It will not replay automatically; send again to retry.",
+    "backToLatest": "Back to latest"
   },
   "mode": {
     "manual": "Manual",
@@ -79,17 +94,31 @@
     "submitting": "Submitting…"
   },
   "composer": {
-    "placeholder": "Ask anything",
+    "placeholder": "Describe a task, or @ mention a session",
     "desktopOnly": "Ask Ferry is only available in the desktop app",
     "mentionHint": "@ reference a session",
     "send": "Send",
-    "followUp": "Follow up",
+    "followUp": "Queue",
     "steer": "Steer",
     "stop": "Stop",
-    "removeAttachment": "Remove session reference"
+    "removeAttachment": "Remove session reference",
+    "keyboardHint": "Enter to send · Shift Enter for a new line",
+    "queueHint": "Queued messages follow the current response",
+    "steerHint": "Insert instructions before the next model step",
+    "working": "Working on your request",
+    "waitingChoice": "Waiting for your answer",
+    "waitingApproval": "Waiting for your approval",
+    "usingTools": "Running tools"
   },
   "empty": {
-    "title": "What can I help with?"
+    "title": "Start with a task",
+    "description": "Find past work, understand the context, and pick up where you left off.",
+    "find": "Find a conversation",
+    "findPrompt": "Help me find a recent conversation about: ",
+    "usage": "Review usage",
+    "usagePrompt": "Summarize my agent usage over the past week.",
+    "review": "Review unfinished work",
+    "reviewPrompt": "Review my recent sessions and summarize unfinished work."
   },
   "float": {
     "open": "Ask AI",
@@ -137,7 +166,8 @@
       "migrate": "Migrate",
       "session_edit": "Edit session",
       "ask_user": "Ask the user",
-      "bash": "Run command"
+      "bash": "Run command",
+      "skill": "Load skill"
     },
     "verbIntent": {
       "session_edit": {

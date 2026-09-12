@@ -1,4 +1,3 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { EventEnvelope } from "../server/messages.js";
 
 const MAX_TOOL_RESULT_CHARS = 8_000;
@@ -111,69 +110,6 @@ export function summarizeToolResult(result: unknown) {
     : { ...summary, details: boundedJson(details) };
 }
 
-export function boundedMessages(messages: AgentMessage[]): AgentMessage[] {
-  return messages.map((message): AgentMessage => {
-    if (message.role === "assistant") {
-      return {
-        ...message,
-        ...(message.errorMessage
-          ? { errorMessage: truncateText(message.errorMessage, 1_000) }
-          : {}),
-        content: message.content.map((part) => {
-          if (part.type === "text") {
-            return { ...part, text: truncateText(part.text, 16_000) };
-          }
-          if (part.type === "thinking") {
-            return {
-              ...part,
-              thinking: truncateText(part.thinking, 16_000),
-            };
-          }
-          if (part.type === "toolCall") {
-            return {
-              ...part,
-              arguments: boundedJson(part.arguments) as Record<string, unknown>,
-            };
-          }
-          return part;
-        }),
-      };
-    }
-    if (message.role === "user") {
-      if (typeof message.content === "string") {
-        return {
-          ...message,
-          content: truncateText(message.content, 16_000),
-        };
-      }
-      return {
-        ...message,
-        content: message.content.map((part) =>
-          part.type === "text"
-            ? { ...part, text: truncateText(part.text, 16_000) }
-            : part,
-        ),
-      };
-    }
-    if (message.role === "toolResult") {
-      return {
-        ...message,
-        ...(message.details === undefined
-          ? {}
-          : { details: boundedJson(message.details) }),
-        content: message.content.map((part) =>
-          part.type === "text"
-            ? { ...part, text: truncateText(part.text, 4_000) }
-            : part.type === "image"
-              ? { ...part, data: truncateText(part.data, 64_000) }
-              : part,
-        ),
-      };
-    }
-    return message;
-  });
-}
-
 export function boundedEvents(events: EventEnvelope[]): EventEnvelope[] {
   return events.map((event) => {
     const payload = { ...event.payload };
@@ -198,12 +134,7 @@ export function boundedEvents(events: EventEnvelope[]): EventEnvelope[] {
         };
       }
     }
-    for (const [field, limit] of [
-      ["message", 1_000],
-      ["prompt", 16_000],
-      ["text", 16_000],
-      ["delta", 16_000],
-    ] as const) {
+    for (const [field, limit] of [["message", 1_000]] as const) {
       const value = payload[field];
       if (typeof value === "string" && value.length > limit) {
         payload[field] = truncateText(value, limit);
