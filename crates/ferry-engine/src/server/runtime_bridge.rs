@@ -6,7 +6,7 @@
 //! `contract_hash` 与本进程一致，再发真正的请求。
 //!
 //! 侧车定位三档：`FERRY_RUNTIME_BIN` → 解析 symlink 后 `current_exe()` 同目录的
-//! `ferry-runtime`（打包时两者是 `Contents/MacOS` 下的兄弟）→ debug 构建下
+//! `ferry-runtime`（Windows 为 `ferry-runtime.exe`）→ debug 构建下
 //! `node <repo>/ferry-runtime/dist/server/server.js`。
 
 use std::io::{BufRead, BufReader, Write};
@@ -68,7 +68,9 @@ pub fn candidates(
         found.push(Candidate::binary(PathBuf::from(bin)));
     }
     if let Some(dir) = exe.and_then(Path::parent) {
-        found.push(Candidate::binary(dir.join("ferry-runtime")));
+        found.push(Candidate::binary(
+            dir.join(format!("ferry-runtime{}", std::env::consts::EXE_SUFFIX)),
+        ));
     }
     if let Some(repo) = repo {
         found.push(Candidate::node(
@@ -453,23 +455,36 @@ mod tests {
     fn candidates_follow_the_documented_priority() {
         let exe = PathBuf::from("/Applications/Ferry.app/Contents/MacOS/ferry-engine");
         let repo = PathBuf::from("/src/ferry");
+        let runtime_name = if cfg!(windows) {
+            "ferry-runtime.exe"
+        } else {
+            "ferry-runtime"
+        };
+        let script = repo.join("ferry-runtime/dist/server/server.js");
         let found = candidates(Some("/custom/ferry-runtime"), Some(&exe), Some(&repo));
         assert_eq!(
             found,
             vec![
                 Candidate::binary(PathBuf::from("/custom/ferry-runtime")),
-                Candidate::binary(PathBuf::from(
-                    "/Applications/Ferry.app/Contents/MacOS/ferry-runtime"
-                )),
-                Candidate::node(PathBuf::from(
-                    "/src/ferry/ferry-runtime/dist/server/server.js"
-                )),
+                Candidate::binary(exe.with_file_name(runtime_name)),
+                Candidate::node(script.clone()),
             ]
         );
-        assert_eq!(
-            found[2].describe(),
-            "node /src/ferry/ferry-runtime/dist/server/server.js"
-        );
+        assert_eq!(found[2].describe(), format!("node {}", script.display()));
+    }
+
+    #[test]
+    fn packaged_runtime_candidate_points_to_the_platform_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let (engine, runtime) = if cfg!(windows) {
+            ("ferry-engine.exe", "ferry-runtime.exe")
+        } else {
+            ("ferry-engine", "ferry-runtime")
+        };
+        std::fs::write(dir.path().join(runtime), b"fixture").unwrap();
+        let found = candidates(None, Some(&dir.path().join(engine)), None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].program.is_file());
     }
 
     #[test]
