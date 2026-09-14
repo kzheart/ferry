@@ -31,6 +31,7 @@
       "root_id": "fixture-codex-plain",
       "size": 637,
       "title": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
+      "title_source": "derived",
       "tokens": null,
       "tool": "codex",
       "tree_count": 1,

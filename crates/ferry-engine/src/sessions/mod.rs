@@ -14,5 +14,7 @@ pub mod scan;
 pub mod scan_cache;
 pub mod scan_progress;
 pub mod search;
+pub mod title_evidence;
+pub mod title_style;
 pub mod topology;
 pub mod usage;

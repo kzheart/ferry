@@ -60,5 +60,34 @@
     "bulletTarget": "The session already migrated to {{tool}} is untouched and still resumable",
     "bulletIrreversible": "The record itself cannot be undone",
     "confirm": "Delete record"
+  },
+  "titleReset": {
+    "title": "Reset title with AI",
+    "batchTitle": "Reset titles with AI · {{n}} sessions",
+    "model": "Model {{model}}",
+    "modelUnknown": "Not generated yet",
+    "generating": "Generating titles in your style…",
+    "applying": "Writing titles back…",
+    "after": "New title",
+    "type": "Type",
+    "noTitle": "(no title)",
+    "skipped": "Left unchanged",
+    "empty": "No session can be renamed",
+    "includeManual": "Include manually named",
+    "cancel": "Cancel",
+    "apply": "Apply {{n}}",
+    "retry": "Retry",
+    "failed": "Generation failed",
+    "providerUnavailable": "No model available",
+    "providerHint": "Titles come from Ask Ferry's default model. Configure one under Settings → Models first.",
+    "openModels": "Open model settings",
+    "reason": {
+      "manual": "Named manually, skipped",
+      "too_short": "Too few messages",
+      "too_long": "Title too long",
+      "duplicate": "Duplicate title",
+      "error": "Could not read session",
+      "unknown": "Skipped"
+    }
   }
 }

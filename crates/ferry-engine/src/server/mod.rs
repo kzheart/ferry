@@ -8,5 +8,6 @@ pub mod commands;
 pub mod help;
 pub mod notify;
 pub mod rpc;
+pub mod runtime_bridge;
 pub mod serve;
 pub mod socket;

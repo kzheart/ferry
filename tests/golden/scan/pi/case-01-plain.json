@@ -23,6 +23,7 @@
       "root_id": "fixture-pi-plain",
       "size": 774,
       "title": "Keep /fixture/pi/plain and token sk-test-fixture unchanged.",
+      "title_source": "derived",
       "tokens": {
         "cache_read": 0,
         "cache_write": 0,

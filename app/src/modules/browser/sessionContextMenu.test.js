@@ -19,6 +19,7 @@ function createInput(overrides = {}) {
     metaFor: () => ({}),
     updateMetadata: () => {},
     setTagSelection: () => {},
+    setTitleReset: () => {},
     setRename: () => {},
     setMultiIds: () => {},
     setAgentAttachments: () => {},
@@ -56,8 +57,28 @@ test("多选菜单只暴露批量标签和取消动作", () => {
 
   assert.deepEqual(
     items.filter(item => !item.sep).map(item => item.label),
-    ["app:ctx.addTags", "app:ctx.cancelMulti"],
+    ["app:ctx.addTags", "app:ctx.titleResetBatch", "app:ctx.cancelMulti"],
   );
+});
+
+test("单选与多选都能把会话交给 AI 重置标题", () => {
+  let single = null;
+  const items = createSessionContextMenu(createInput({
+    setTitleReset: value => { single = value; },
+  }));
+  items.find(item => item.label === "app:ctx.titleReset").onClick();
+  assert.equal(single.batch, false);
+  assert.deepEqual(single.sessions.map(session => session.id), ["native-1"]);
+
+  let multi = null;
+  const batchItems = createSessionContextMenu(createInput({
+    menu: { key: "claude:native-1", multi: true },
+    multiIds: ["claude:native-1"],
+    setTitleReset: value => { multi = value; },
+  }));
+  batchItems.find(item => item.label === "app:ctx.titleResetBatch").onClick();
+  assert.equal(multi.batch, true);
+  assert.equal(multi.sessions.length, 1);
 });
 
 test("缺少能力的会话不显示恢复和迁移动作", () => {

@@ -28,9 +28,11 @@ pub struct CodexRenamer;
 const RPC_TIMEOUT: Duration = Duration::from_secs(6);
 pub const RESTART_NOTE: &str = "重启 Codex 后才会显示新标题";
 
-/// `rollout-<时间戳>-<uuid>.jsonl` → `<uuid>`。
+/// `rollout-<时间戳>-<uuid>.jsonl` → `<uuid>`。长线程续写的分段文件叫
+/// `…-<线程 uuid>_<分段 uuid>.jsonl`，线程 id 是下划线前那一段，末尾的是分段 id。
 pub(super) fn thread_id_of(path: &Path) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
+    let stem = stem.split('_').next()?;
     let candidate = stem.get(stem.len().checked_sub(36)?..)?;
     let shaped = candidate.chars().enumerate().all(|(index, character)| {
         if matches!(index, 8 | 13 | 18 | 23) {
@@ -238,6 +240,14 @@ mod tests {
             Some("01a09183-24a3-7a23-be23-ebd2d05a416f")
         );
         assert_eq!(thread_id_of(Path::new("/x/rollout-short.jsonl")), None);
+        // 续写分段文件：线程 id 在下划线前，不能拿成分段 id
+        let segment = PathBuf::from(
+            "/x/rollout-2026-09-02T18-08-36-01a06110-86ea-7972-be28-2a3273a0f2e8_01a06197-89ba-75e1-b840-03bcfd11d271.jsonl",
+        );
+        assert_eq!(
+            thread_id_of(&segment).as_deref(),
+            Some("01a06110-86ea-7972-be28-2a3273a0f2e8")
+        );
     }
 
     #[test]

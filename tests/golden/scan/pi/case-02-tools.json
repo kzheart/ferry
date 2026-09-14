@@ -23,6 +23,7 @@
       "root_id": "fixture-pi-tools",
       "size": 1643,
       "title": "Inspect /fixture/pi/tools and token sk-test-fixture.",
+      "title_source": "derived",
       "tokens": {
         "cache_read": 2,
         "cache_write": 1,

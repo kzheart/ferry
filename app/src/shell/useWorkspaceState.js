@@ -15,9 +15,10 @@ export function useWorkspaceState({
   scanning, searchOpen, searchPane, libIndex, select, selId, sessions,
   setConfirmApply, setCtxMenu, setDiff, setFloatChatOpen,
   setMetaFor, setMig, setMultiSel,
-  setPeekId, setSearchOpen,
-  setSettings, setSettingsOpen, setSettingsSection, setTagFor, setToast, setView,
-  settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
+  setPeekId, setSearchOpen, renameSession,
+  setSettings, setSettingsOpen, setSettingsSection, setTagFor, setTitleResetFor,
+  setToast, setView,
+  settings, settingsOpen, settingsSection, tagFor, titleResetFor, toast, updater, view,
 }) {
   // 悬浮球是内置 AI 助手的一个入口:不是列表项,直接读开关。
   const builtinAgent = useFeature("builtin-agent");
@@ -58,6 +59,14 @@ export function useWorkspaceState({
         metaFor,
         updateMetadata: setMetaFor,
       },
+      // AI 重置标题:预览面板自己跑取证与生成,这里只交出选中的会话与写回手段。
+      titleReset: {
+        selection: titleResetFor,
+        setSelection: setTitleResetFor,
+        renameSession,
+        updateMetadata: setMetaFor,
+        rescan: doScan,
+      },
     }),
     [
       peekId, cur, selId, detailMeta, detail, detailActs, navigationTarget,
@@ -65,6 +74,7 @@ export function useWorkspaceState({
       libIndex, sessions, select, ctxMenu,
       ctxItems,
       metaFor, setMetaFor, tagFor,
+      titleResetFor, setTitleResetFor, renameSession, doScan,
       setMultiSel,
     ],
   );

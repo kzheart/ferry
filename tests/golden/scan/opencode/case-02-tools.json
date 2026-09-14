@@ -25,6 +25,7 @@
       "root_id": "fixture-opencode-tools",
       "size": 0,
       "title": "Tools fixture",
+      "title_source": "native",
       "tokens": null,
       "tool": "opencode",
       "tree_count": 1,

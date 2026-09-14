@@ -14,6 +14,7 @@ import Roles from "./Roles.jsx";
 import Skills from "./Skills.jsx";
 import Integration from "./Integration.jsx";
 import Experimental from "./Experimental.jsx";
+import TitleStyle from "./TitleStyle.jsx";
 import {
   filterByFeatures,
   useFeaturesList,
@@ -31,6 +32,7 @@ const SECTIONS = [
   { key: "skills", labelKey: "settings:sections.skills", feature: "builtin-agent" },
   { key: "integration", labelKey: "settings:sections.integration" },
   { key: "sources", labelKey: "settings:sections.sources" },
+  { key: "titles", labelKey: "settings:sections.titles" },
   { key: "updates", labelKey: "settings:sections.updates" },
   { key: "experimental", labelKey: "settings:sections.experimental" },
 ];
@@ -407,6 +409,7 @@ export default function SettingsPage({ settings, setSettings, scan, env, scannin
                   onOpenGuide={onOpenGuide} />}
                 {section === "integration" && <Integration />}
                 {section === "experimental" && <Experimental features={features} />}
+                {section === "titles" && <TitleStyle sessions={scan?.sessions || []} />}
                 {section === "sources" && <Sources scan={scan} env={env}
                   scanning={scanning} onRescan={onRescan} />}
                 {section === "updates" && <Updates s={settings} set={setSettings} updater={updater} />}

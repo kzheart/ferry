@@ -13,7 +13,7 @@ import { useSessionContentSearch } from "./useSessionContentSearch.js";
 export function AppOverlayController({ t }) {
   const ferry = useFerryRuntime();
   const { toast, settings, guide } = useAppChrome();
-  const { peek, search, contextMenu, tags } = useBrowserState();
+  const { peek, search, contextMenu, tags, titleReset } = useBrowserState();
   const { migration, editing, floatChat } = useOperationsState();
   const updateAnnouncement = useUpdateAnnouncement();
   const isLibrarySearch = search.view !== "askferry";
@@ -175,6 +175,20 @@ export function AppOverlayController({ t }) {
               : nextTags;
             await tags.updateMetadata(session, { tags: merged });
           }
+        },
+      }}
+      titleReset={{
+        selection: titleReset?.selection || null,
+        renameSession: titleReset?.renameSession,
+        updateMetadata: titleReset?.updateMetadata,
+        rescan: titleReset?.rescan,
+        setToast: toast.setValue,
+        onClose: () => titleReset?.setSelection(null),
+        // 没配模型时把用户直接送到「设置 → 模型」,不让他自己找
+        onOpenModels: () => {
+          titleReset?.setSelection(null);
+          settings.setSection("models");
+          settings.setOpen(true);
         },
       }}
       toast={{ value: toast.value, onDismiss: () => toast.setValue(null) }}

@@ -47,6 +47,7 @@ const PUBLIC_RUNTIME_METHODS: &[&str] = &[
     "auth.login.start",
     "auth.login.respond",
     "auth.login.cancel",
+    "title.generate",
 ];
 
 pub(crate) fn is_public(method: &str) -> bool {

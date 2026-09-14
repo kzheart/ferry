@@ -13,5 +13,8 @@ export const UI_ENGINE_METHODS = [
   "session_asset",
   "session_meta_list",
   "session_search",
+  "title_evidence",
+  "title_style.get",
+  "title_style.set",
 ] as const;
 export type UiEngineMethod = (typeof UI_ENGINE_METHODS)[number];

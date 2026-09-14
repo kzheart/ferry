@@ -10,7 +10,8 @@
     "roles": "角色",
     "skills": "技能",
     "integration": "Agent 集成",
-    "experimental": "实验性功能"
+    "experimental": "实验性功能",
+    "titles": "标题风格"
   },
   "roles": {
     "create": "新建角色",
@@ -56,6 +57,10 @@
       "session_read": {
         "label": "会话读取",
         "desc": "读取指定会话的完整正文与附件"
+      },
+      "session_title_evidence": {
+        "label": "标题证据",
+        "desc": "读取会话摘要证据与标题风格设置，用于按规则生成标题；只读，写回仍走会话编辑"
       },
       "usage": {
         "label": "用量统计",
@@ -229,6 +234,7 @@
       "formatOpenAI": "OpenAI 兼容",
       "formatAnthropic": "Anthropic 兼容",
       "fetchModels": "拉取模型",
+      "urlInvalid": "Base URL 不合法，需形如 https://api.example.com/v1；未保存",
       "selectAll": "全选"
     },
     "showKey": "显示 Key",
@@ -337,5 +343,51 @@
     "label": "界面密度",
     "compact": "紧凑",
     "standard": "标准"
+  },
+  "titleStyle": {
+    "loading": "正在读取标题风格…",
+    "groupBasic": "基本",
+    "preset": "预设",
+    "presets": {
+      "ferry": "Ferry 默认",
+      "english": "英文短标签",
+      "bracket": "[类型] 正文",
+      "custom": "自定义"
+    },
+    "presetDesc": {
+      "ferry": "emoji 前缀 + 动词开头的陈述短句",
+      "english": "全小写英文短标签,不加前缀",
+      "bracket": "方括号里写类型名,后接正文",
+      "custom": "只按下面的自由指令与示例来写"
+    },
+    "language": "语言",
+    "languages": {
+      "follow": "跟随会话",
+      "zh": "中文",
+      "en": "英文"
+    },
+    "maxChars": "正文长度上限",
+    "maxCharsDesc": "汉字按 1 计,英文预设按字符计",
+    "typePrefix": "加类型前缀",
+    "groupTypes": "类型表",
+    "typeEmoji": "emoji",
+    "typeZh": "中文名",
+    "typeEn": "英文名",
+    "addType": "添加类型",
+    "removeType": "删除这一行",
+    "groupInstructions": "自由指令",
+    "instructions": "自由指令",
+    "instructionsPlaceholder": "例如:项目名放在最前面;不要出现版本号",
+    "groupExamples": "示例标题",
+    "example": "示例 {{n}}",
+    "examplePlaceholder": "写一条你满意的标题",
+    "save": "保存",
+    "saved": "已保存",
+    "tryOut": "试一试",
+    "groupTrial": "试生成结果",
+    "trialRunning": "正在用当前设置生成…",
+    "trialEmpty": "没有可用来试的会话",
+    "trialSkipped": "已跳过 {{reason}}",
+    "trialNoProvider": "还没有可用的模型,先到「模型」里配置一个。"
   }
 }

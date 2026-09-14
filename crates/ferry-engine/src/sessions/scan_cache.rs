@@ -1,11 +1,11 @@
 //! 基于文件修订信息的扫描缓存。
 //!
-//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 9`）是**兼容面**：`version`
+//! 磁盘格式（`~/.ferry/scan-cache.json`，`version: 10`）是**兼容面**：`version`
 //! 不变就必须能读旧文件，字段名与取值口径不可悄悄改；改口径就得升 `version`。
 //!
 //! ```jsonc
 //! {
-//!   "<path>":  {"version": 9, "mtime": <st_mtime_ns>, "size": <bytes>,
+//!   "<path>":  {"version": 10, "mtime": <st_mtime_ns>, "size": <bytes>,
 //!               "meta": <扫描行 | null>},
 //!   "digests": {"<path>": {"dev": .., "ino": .., "mtime": <st_mtime_ns>,
 //!                          "size": .., "sha256": "<hex>"}}
@@ -27,7 +27,7 @@ const DIGESTS_KEY: &str = "digests";
 /// v8：Codex `updated` 改为消息/用量活动时间，不再跟文件 mtime（设置写入会误伤“今日”）。
 /// v9：标题口径变化——Claude 读 `customTitle`/`aiTitle`，Pi 按整文件 session_info，
 /// Cursor 不再用 subtitle 兜底；文件没变但标题算法变了，旧条目必须整体失效。
-pub const SCAN_CACHE_VERSION: i64 = 9;
+pub const SCAN_CACHE_VERSION: i64 = 10;
 const MAX_SCAN_ENTRIES: usize = 20_000;
 const MAX_DIGEST_ENTRIES: usize = 20_000;
 

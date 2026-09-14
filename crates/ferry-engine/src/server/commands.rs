@@ -24,13 +24,15 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
+use crate::contracts::agents;
 use crate::contracts::ipc::FERRY_CONTRACT_HASH;
 use crate::contracts::operations::{OPERATION_SUCCESS_STATUS, OPERATION_TERMINAL_STATUSES};
 use crate::server::args::{self, Parsed};
 use crate::server::client::{self, Client, Failure};
 use crate::server::help;
+use crate::server::runtime_bridge;
 
 /// `scan --wait` 的轮询间隔与默认超时。
 const SCAN_POLL: Duration = Duration::from_secs(2);
@@ -51,6 +53,7 @@ pub enum ClientCommand {
     Resume,
     Migrate,
     Rename,
+    Title,
     History,
     Scan,
     Daemon,
@@ -69,6 +72,7 @@ impl ClientCommand {
             "resume" => Self::Resume,
             "migrate" => Self::Migrate,
             "rename" => Self::Rename,
+            "title" => Self::Title,
             "history" => Self::History,
             "scan" => Self::Scan,
             "daemon" => Self::Daemon,
@@ -112,6 +116,7 @@ pub fn run(command: ClientCommand, argv: &[String]) -> Result<u8, String> {
                 ClientCommand::Resume => "resume",
                 ClientCommand::Migrate => "migrate",
                 ClientCommand::Rename => "rename",
+                ClientCommand::Title => "title",
                 ClientCommand::History => "history",
                 ClientCommand::Scan => "scan",
                 ClientCommand::Daemon => "daemon",
@@ -145,6 +150,7 @@ pub fn run(command: ClientCommand, argv: &[String]) -> Result<u8, String> {
         ClientCommand::Scan => scan(&socket, argv)?,
         ClientCommand::Migrate => migrate(&socket, argv)?,
         ClientCommand::Rename => rename(&socket, argv)?,
+        ClientCommand::Title => title(&socket, argv)?,
     };
     Ok(emit(outcome))
 }
@@ -596,9 +602,400 @@ fn daemon(socket: &Path, argv: &[String]) -> Result<Outcome, String> {
     )
 }
 
+// ---------------------------------------------------------------------------
+// title
+//
+// `evidence` 只问引擎；`suggest` / `reset` 还要模型，所以额外拉起一个 runtime
+// 侧车（见 `server::runtime_bridge`）。写回一律走既有 operation：能改名的 agent
+// 用 `rename`，Cursor 只读，落到 Ferry 本地 metadata 的 `name`。
+// ---------------------------------------------------------------------------
+
+/// `<tool> <ref>... [<tool> <ref>...]`：token 命中 agent id 就切换当前 tool，
+/// 否则算当前 tool 的一个 ref。第一个 token 必须是 agent id。
+fn group_targets(positionals: &[String]) -> Result<Vec<Value>, String> {
+    let mut current: Option<&str> = None;
+    let mut targets: Vec<Value> = Vec::new();
+    for token in positionals {
+        if let Some(agent) = agents::agent(token) {
+            current = Some(agent.id);
+            continue;
+        }
+        let Some(tool) = current else {
+            return Err(format!(
+                "第一个参数必须是 agent（{}），而不是 {token}",
+                agents::AGENTS
+                    .iter()
+                    .map(|agent| agent.id)
+                    .collect::<Vec<_>>()
+                    .join("/")
+            ));
+        };
+        targets.push(json!({"tool": tool, "ref": token}));
+    }
+    if targets.is_empty() {
+        return Err("缺少会话：ferry title <子命令> <tool> <ref>...".into());
+    }
+    if targets.len() > MAX_TITLE_SESSIONS {
+        return Err(format!("一次最多 {MAX_TITLE_SESSIONS} 个会话"));
+    }
+    Ok(targets)
+}
+
+/// 一次最多处理的会话数，与引擎 `title_evidence` 的上限同源。
+const MAX_TITLE_SESSIONS: usize = crate::sessions::title_evidence::MAX_SESSIONS;
+
+/// manual 跳过项的固定形状：与 runtime 生成的 item 同构，方便前端一视同仁。
+fn manual_skip(session: &Value) -> Value {
+    json!({
+        "tool": session.get("tool").cloned().unwrap_or(Value::Null),
+        "ref": session.get("ref").cloned().unwrap_or(Value::Null),
+        "session_id": session.get("session_id").cloned().unwrap_or(Value::Null),
+        "revision": session.get("revision").cloned().unwrap_or(Value::Null),
+        "title": session.get("title").cloned().unwrap_or(Value::Null),
+        "type": Value::Null,
+        "skip": true,
+        "reason": "manual",
+        "before": session.get("title").cloned().unwrap_or(Value::Null),
+    })
+}
+
+/// evidence → （可选跳过 manual）→ runtime `title.generate`。
+///
+/// 全部被跳过时不进模型：`title.generate` 要求至少一个会话，为了跑一次空批
+/// 拉起侧车是纯浪费。
+fn title_suggest(socket: &Path, argv: &[String], extra: &[&str]) -> Result<Outcome, String> {
+    let mut switches = vec!["include-manual"];
+    switches.extend_from_slice(extra);
+    let parsed = args::parse(argv, &[], &switches)?;
+    let targets = group_targets(parsed.positionals())?;
+    let evidence = match call(socket, "title_evidence", json!({"sessions": targets})) {
+        Outcome::Done(value) => value,
+        other => return Ok(other),
+    };
+    let style = evidence.get("style").cloned().unwrap_or(Value::Null);
+    let errors = evidence.get("errors").cloned().unwrap_or(json!([]));
+    let empty: Vec<Value> = Vec::new();
+    let sessions = evidence
+        .get("sessions")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+
+    let mut generate: Vec<Value> = Vec::new();
+    let mut skipped: Vec<Value> = Vec::new();
+    for session in sessions {
+        let manual = session.get("title_source").and_then(Value::as_str) == Some("manual");
+        if manual && !parsed.has("include-manual") {
+            skipped.push(manual_skip(session));
+        } else {
+            generate.push(session.clone());
+        }
+    }
+
+    let mut result = if generate.is_empty() {
+        json!({"items": [], "model": Value::Null, "skipped": 0})
+    } else {
+        match runtime_bridge::call_once(
+            "title.generate",
+            json!({"sessions": generate, "style": style}),
+        ) {
+            Ok(value) => value,
+            Err(payload) => return Ok(Outcome::Failed(Failure::Engine(payload))),
+        }
+    };
+
+    let mut items = match result.get_mut("items") {
+        Some(Value::Array(items)) => std::mem::take(items),
+        _ => Vec::new(),
+    };
+    let manual_count = skipped.len() as i64;
+    items.extend(skipped);
+    let total_skipped = result
+        .get("skipped")
+        .and_then(Value::as_i64)
+        .unwrap_or_default()
+        + manual_count;
+    let mut payload = result.as_object().cloned().unwrap_or_default();
+    payload.insert("items".into(), Value::Array(items));
+    payload.insert("skipped".into(), Value::from(total_skipped));
+    payload.insert("errors".into(), errors);
+    payload.insert("style".into(), style);
+    Ok(Outcome::Done(Value::Object(payload)))
+}
+
+/// 单条写回：能改名的 agent 走 rename operation，Cursor 走本地 metadata `name`。
+fn write_title(socket: &Path, tool: &str, reference: &str, title: &str) -> Value {
+    let renamable = agents::agent(tool).is_some_and(|agent| agent.capabilities.contains(&"rename"));
+    let input = if renamable {
+        json!({"kind": "rename", "tool": tool, "ref": reference, "title": title})
+    } else {
+        json!({"kind": "metadata", "tool": tool, "ref": reference, "patch": {"name": title}})
+    };
+    let mut item = Map::new();
+    item.insert("tool".into(), Value::from(tool));
+    item.insert("ref".into(), Value::from(reference));
+    item.insert("title".into(), Value::from(title));
+    let planned = match call(socket, "operation.plan", json!({"input": input})) {
+        Outcome::Done(plan) => plan,
+        Outcome::Failed(failure) => {
+            item.insert("status".into(), Value::from("failed"));
+            item.insert("error".into(), failure.payload());
+            return Value::Object(item);
+        }
+        other => {
+            item.insert("status".into(), Value::from("failed"));
+            item.insert("error".into(), other_payload(other));
+            return Value::Object(item);
+        }
+    };
+    let Some(plan_id) = planned.get("plan_id").cloned() else {
+        item.insert("status".into(), Value::from("failed"));
+        item.insert(
+            "error".into(),
+            json!({"code": "internal.unexpected", "category": "internal", "retryable": false,
+                   "params": {"message": "引擎返回的计划缺少 plan_id"}}),
+        );
+        return Value::Object(item);
+    };
+    let applied = migrate_apply(socket, json!({"plan_id": plan_id}));
+    match applied {
+        Outcome::Done(status) => {
+            item.insert("status".into(), Value::from("applied"));
+            if let Some(native) = status.pointer("/result/native") {
+                item.insert("native".into(), native.clone());
+            }
+        }
+        Outcome::Unsuccessful(status) | Outcome::TimedOut(status) => {
+            item.insert("status".into(), Value::from("failed"));
+            item.insert("error".into(), status);
+        }
+        Outcome::Failed(failure) => {
+            item.insert("status".into(), Value::from("failed"));
+            item.insert("error".into(), failure.payload());
+        }
+    }
+    Value::Object(item)
+}
+
+fn other_payload(outcome: Outcome) -> Value {
+    match outcome {
+        Outcome::Done(value) | Outcome::Unsuccessful(value) | Outcome::TimedOut(value) => value,
+        Outcome::Failed(failure) => failure.payload(),
+    }
+}
+
+/// 逐条写回并汇总；任一条失败整条命令退出码为 1。
+fn apply_titles(socket: &Path, entries: &[Value]) -> Outcome {
+    let mut items: Vec<Value> = Vec::new();
+    let mut failed = 0usize;
+    for entry in entries {
+        let tool = entry
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let reference = entry.get("ref").and_then(Value::as_str).unwrap_or_default();
+        let title = entry
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let item = write_title(socket, tool, reference, title);
+        if item.get("status").and_then(Value::as_str) != Some("applied") {
+            failed += 1;
+        }
+        items.push(item);
+    }
+    let payload = json!({
+        "items": items, "applied": entries.len() - failed, "failed": failed,
+    });
+    if failed > 0 {
+        Outcome::Unsuccessful(payload)
+    } else {
+        Outcome::Done(payload)
+    }
+}
+
+/// 写回汇总也保留取证错误与跳过项，不能把「没有取到证据」报告为成功。
+fn finish_title_reset(suggested: &Value, applied: Outcome) -> Outcome {
+    let mut payload = match applied {
+        Outcome::Done(value) | Outcome::Unsuccessful(value) => value,
+        other => return other,
+    };
+    let errors = suggested
+        .get("errors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let skipped: Vec<Value> = suggested
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| item.get("skip") == Some(&Value::Bool(true)))
+        .cloned()
+        .collect();
+    let failed = payload
+        .get("failed")
+        .and_then(Value::as_u64)
+        .unwrap_or_default()
+        + errors.len() as u64;
+    let items = payload["items"]
+        .as_array_mut()
+        .expect("apply_titles 返回 items 数组");
+    items.extend(skipped.iter().cloned());
+    items.extend(errors.iter().map(|error| {
+        let mut item = error.clone();
+        item["status"] = Value::from("failed");
+        item
+    }));
+    payload["errors"] = Value::Array(errors);
+    payload["skipped"] = Value::from(skipped.len());
+    payload["failed"] = Value::from(failed);
+    if failed > 0 {
+        Outcome::Unsuccessful(payload)
+    } else {
+        Outcome::Done(payload)
+    }
+}
+
+/// suggest 的结果里 `skip=false` 的项就是待写回清单。
+fn writable_entries(result: &Value) -> Result<Vec<Value>, String> {
+    let items = result
+        .get("items")
+        .and_then(Value::as_array)
+        .ok_or("生成结果缺少 items")?;
+    Ok(items
+        .iter()
+        .filter(|item| item.get("skip") != Some(&Value::Bool(true)))
+        .filter(|item| {
+            item.get("title")
+                .and_then(Value::as_str)
+                .is_some_and(|title| !title.trim().is_empty())
+        })
+        .cloned()
+        .collect())
+}
+
+/// `--file <path|->` 读一段 JSON；`-` 读 stdin。
+fn read_json_file(path: &str) -> Result<Value, String> {
+    let text = if path == "-" {
+        let mut buffer = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)
+            .map_err(|error| format!("读取 stdin 失败: {error}"))?;
+        buffer
+    } else {
+        std::fs::read_to_string(path).map_err(|error| format!("读取 {path} 失败: {error}"))?
+    };
+    serde_json::from_str(&text).map_err(|error| format!("{path} 不是合法 JSON: {error}"))
+}
+
+/// `ferry title evidence|suggest|reset|apply|style`。
+fn title(socket: &Path, argv: &[String]) -> Result<Outcome, String> {
+    let action = argv
+        .first()
+        .map(String::as_str)
+        .ok_or("用法: ferry title evidence|suggest|reset|apply|style ...")?;
+    let rest = &argv[1..];
+    Ok(match action {
+        "evidence" => {
+            let parsed = args::parse(rest, &[], &[])?;
+            let targets = group_targets(parsed.positionals())?;
+            call(socket, "title_evidence", json!({"sessions": targets}))
+        }
+        "suggest" => title_suggest(socket, rest, &[])?,
+        "reset" => {
+            let suggested = match title_suggest(socket, rest, &["apply"])? {
+                Outcome::Done(value) => value,
+                other => return Ok(other),
+            };
+            if !args::parse(rest, &[], &["include-manual", "apply"])?.has("apply") {
+                return Ok(Outcome::Done(suggested));
+            }
+            let applied = apply_titles(socket, &writable_entries(&suggested)?);
+            finish_title_reset(&suggested, applied)
+        }
+        "apply" => {
+            let parsed = args::parse(rest, &["file"], &[])?;
+            let path = parsed
+                .value("file")
+                .ok_or("用法: ferry title apply --file <path|->")?;
+            let entries = read_json_file(path)?;
+            let entries = entries
+                .as_array()
+                .ok_or("--file 的内容必须是 [{\"tool\",\"ref\",\"title\"}] 数组")?;
+            for entry in entries {
+                for key in ["tool", "ref", "title"] {
+                    if !entry.get(key).is_some_and(Value::is_string) {
+                        return Err(format!("--file 的每项都要有字符串 {key}"));
+                    }
+                }
+            }
+            if entries.is_empty() || entries.len() > MAX_TITLE_SESSIONS {
+                return Err(format!("--file 的项数须在 1..{MAX_TITLE_SESSIONS}"));
+            }
+            apply_titles(socket, entries)
+        }
+        "style" => {
+            let parsed = args::parse(rest, &["file"], &[])?;
+            match parsed.value("file") {
+                None => call(socket, "title_style.get", empty()),
+                Some(path) => {
+                    let value = read_json_file(path)?;
+                    // 文件可以直接是 style，也可以是 `{"style": {...}}`。
+                    let style = value.get("style").cloned().unwrap_or(value);
+                    call(socket, "title_style.set", json!({"style": style}))
+                }
+            }
+        }
+        other => return Err(format!("未知的 title 子命令: {other}")),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn title_reset_keeps_evidence_errors_even_when_nothing_was_applied() {
+        let error = json!({"tool": "claude", "ref": "fsr_missing",
+            "error": {"code": "agent.reference_invalid", "params": {"reason": "session_changed"}}});
+        let suggested = json!({"items": [], "errors": [error.clone()]});
+        let applied = Outcome::Done(json!({"items": [], "applied": 0, "failed": 0}));
+        let Outcome::Unsuccessful(result) = finish_title_reset(&suggested, applied) else {
+            panic!("取证失败必须返回失败退出码");
+        };
+        assert_eq!(result["failed"], 1);
+        assert_eq!(result["applied"], 0);
+        assert_eq!(result["errors"], json!([error]));
+        assert_eq!(result["items"][0]["status"], "failed");
+        assert_eq!(result["items"][0]["ref"], "fsr_missing");
+    }
+
+    #[test]
+    fn title_reset_combines_write_failures_skips_and_evidence_errors() {
+        let skipped =
+            json!({"tool": "claude", "ref": "fsr_manual", "skip": true, "reason": "manual"});
+        let suggested = json!({"items": [skipped.clone()], "errors": [
+            {"tool": "cursor", "ref": "fsr_missing", "error": {"code": "agent.reference_invalid"}}
+        ]});
+        let applied = Outcome::Unsuccessful(json!({"items": [
+            {"ref": "fsr_ok", "status": "applied"},
+            {"ref": "fsr_failed", "status": "failed"}
+        ], "applied": 1, "failed": 1}));
+        let Outcome::Unsuccessful(result) = finish_title_reset(&suggested, applied) else {
+            panic!("批量失败不能被隐藏");
+        };
+        assert_eq!(result["applied"], 1);
+        assert_eq!(result["failed"], 2);
+        assert_eq!(result["skipped"], 1);
+        assert_eq!(result["items"][2], skipped);
+        assert_eq!(result["items"].as_array().unwrap().len(), 4);
+        assert!(matches!(
+            finish_title_reset(
+                &json!({"items": [skipped], "errors": []}),
+                Outcome::Done(json!({"items": [], "applied": 0, "failed": 0}))
+            ),
+            Outcome::Done(_)
+        ));
+    }
 
     fn argv(items: &[&str]) -> Vec<String> {
         items.iter().map(|item| item.to_string()).collect()
@@ -613,6 +1010,7 @@ mod tests {
             ("resume", ClientCommand::Resume),
             ("migrate", ClientCommand::Migrate),
             ("rename", ClientCommand::Rename),
+            ("title", ClientCommand::Title),
             ("history", ClientCommand::History),
             ("scan", ClientCommand::Scan),
             ("daemon", ClientCommand::Daemon),
@@ -625,6 +1023,64 @@ mod tests {
         }
         assert_eq!(ClientCommand::parse("meta"), None, "meta 归 P2");
         assert_eq!(ClientCommand::parse("show"), None, "show 不对 CLI 暴露");
+    }
+
+    #[test]
+    fn title_positionals_group_refs_under_the_preceding_agent() {
+        let targets = group_targets(&argv(&[
+            "claude", "fsr_a", "fsr_b", "codex", "fsr_c", "cursor", "fsr_d",
+        ]))
+        .unwrap();
+        assert_eq!(
+            targets,
+            vec![
+                json!({"tool": "claude", "ref": "fsr_a"}),
+                json!({"tool": "claude", "ref": "fsr_b"}),
+                json!({"tool": "codex", "ref": "fsr_c"}),
+                json!({"tool": "cursor", "ref": "fsr_d"}),
+            ]
+        );
+    }
+
+    #[test]
+    fn title_positionals_reject_a_leading_ref_and_an_empty_or_oversized_batch() {
+        assert!(
+            group_targets(&argv(&["fsr_a"])).is_err(),
+            "首个 token 必须是 agent"
+        );
+        assert!(group_targets(&argv(&[])).is_err());
+        assert!(
+            group_targets(&argv(&["claude"])).is_err(),
+            "只给 agent 没给 ref"
+        );
+        let mut oversized = vec!["claude".to_string()];
+        oversized.extend((0..=MAX_TITLE_SESSIONS).map(|index| format!("fsr_{index}")));
+        assert!(group_targets(&oversized).is_err());
+    }
+
+    #[test]
+    fn manual_sessions_become_skip_items_that_keep_the_old_title() {
+        let session = json!({"tool": "claude", "ref": "fsr_a", "session_id": "s",
+                             "revision": "r1", "title": "手动起的名字",
+                             "title_source": "manual"});
+        let item = manual_skip(&session);
+        assert_eq!(item["skip"], json!(true));
+        assert_eq!(item["reason"], json!("manual"));
+        assert_eq!(item["before"], json!("手动起的名字"));
+        assert_eq!(item["type"], Value::Null);
+    }
+
+    #[test]
+    fn only_unskipped_items_with_a_real_title_are_written_back() {
+        let result = json!({"items": [
+            {"tool": "claude", "ref": "a", "title": "✨ 实现 X", "skip": false},
+            {"tool": "claude", "ref": "b", "title": "y", "skip": true, "reason": "too_short"},
+            {"tool": "claude", "ref": "c", "title": "   ", "skip": false},
+        ]});
+        let entries = writable_entries(&result).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["ref"], json!("a"));
+        assert!(writable_entries(&json!({})).is_err());
     }
 
     #[test]

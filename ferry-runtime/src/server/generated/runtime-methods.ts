@@ -47,6 +47,7 @@ export const RUNTIME_METHODS = [
   "auth.login.start",
   "auth.login.respond",
   "auth.login.cancel",
+  "title.generate",
   "tool.result",
 ] as const;
 export const PUBLIC_RUNTIME_METHODS = [
@@ -97,6 +98,7 @@ export const PUBLIC_RUNTIME_METHODS = [
   "auth.login.start",
   "auth.login.respond",
   "auth.login.cancel",
+  "title.generate",
 ] as const;
 export type RuntimeMethod = (typeof RUNTIME_METHODS)[number];
 export function isRuntimeMethod(method: unknown): method is RuntimeMethod {

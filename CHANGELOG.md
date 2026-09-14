@@ -14,30 +14,41 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
-## [Unreleased]
+## [0.9.1] - 2026-09-14
 
 ### Added
 
-- **Native session renaming** — renaming a session in Ferry now writes the new
-  title into the agent's own store, so Claude Code, Codex, OpenCode, Pi Agent and
-  Grok Build show the same title in their own session lists. Claude Code and Pi
-  get an appended title record, Codex goes through its app-server (falling back
-  to the registry database), OpenCode uses the official session update API, and
-  Grok rewrites `summary.json` with the manual-title flag so auto-titling leaves
-  it alone. Cursor stays read-only and keeps the Ferry-local name.
+- **AI session titles** — generate titles for one session or a selected batch,
+  preview and edit the suggestions before applying them, and customize the
+  language, length, type prefixes and examples in Settings. Manual titles,
+  including Ferry-local names, are protected by default in batch mode.
+- **Native session renaming** — rename sessions in Claude Code, Codex, OpenCode,
+  Pi Agent and Grok Build from Ferry, the CLI or Ask Ferry. Cursor names remain
+  local to Ferry.
+- **Title tools for agents** — the CLI and Ask Ferry can collect naming evidence
+  and use your saved title style; `ferry title` also supports generation previews
+  and batch application.
+- **Repository ranking** — switch the overview ranking between session count
+  and token usage.
+
+### Changed
+
+- **Ask Ferry conversations** — clearer run status, approval and choice cards,
+  model menus and message composition, with more reliable session persistence
+  and tool cancellation.
+- **History workflows** — improved history audit pagination and streamlined
+  skills for finding, inspecting and resuming earlier sessions.
 
 ### Fixed
 
-- **Claude Code titles** — sessions renamed with `/rename` or auto-titled by
-  Claude Code were shown with the first prompt instead; Ferry now reads the
-  `customTitle` / `aiTitle` records with Claude Code's own priority.
-- **Codex titles** — Ferry now shows the thread name Codex itself displays
-  (from its registry database) instead of always truncating the first prompt.
-- **Cursor titles** — the assistant's status subtitle (often literally "New chat")
-  is no longer used as a session title; unnamed sessions fall back to the first
-  prompt like every other agent.
-- **Pi Agent titles** — session names are read in file order with cleared names
-  honoured, matching pi's own `/name` semantics.
+- **Native title display** — Claude Code, Codex and Pi Agent now show their saved
+  session names correctly. Cursor no longer uses an assistant status subtitle
+  as the session title, and segmented Codex sessions rename the correct thread.
+- **Batch title reliability** — large title batches have enough time to finish;
+  stalled CLI runtimes time out cleanly, and failed reads or writes are reported
+  accurately instead of being counted as successful renames.
+- **Custom model providers** — Base URLs without a protocol are completed with
+  HTTPS and saved automatically; invalid inputs show a validation hint.
 
 ## [0.9.0] - 2026-08-27
 

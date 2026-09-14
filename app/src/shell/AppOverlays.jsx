@@ -3,6 +3,7 @@ import { ApplyConfirm, DiffSheet } from "../modules/editing/public.js";
 import { MigrateSheet } from "../modules/migration/public.js";
 import { FloatingAgentPanel } from "../modules/askferry/public.js";
 import { Guide } from "../modules/onboarding/public.js";
+import { TitleResetSheet } from "../modules/titles/public.js";
 import { SettingsPage, UpdateAnnouncement } from "../modules/settings/public.js";
 import { ContextMenu } from "../shared/ui/ContextMenu.jsx";
 import { PromptBox } from "../shared/ui/PromptBox.jsx";
@@ -18,6 +19,7 @@ export function AppOverlays({
   search,
   contextMenu,
   tags,
+  titleReset = { selection: null },
   toast,
   settings,
   guide,
@@ -110,6 +112,18 @@ export function AppOverlays({
           initial={tags.initial}
           onCancel={tags.onCancel}
           onConfirm={tags.onConfirm}
+        />
+      )}
+      {titleReset.selection && (
+        <TitleResetSheet
+          sessions={titleReset.selection.sessions}
+          batch={titleReset.selection.batch}
+          renameSession={titleReset.renameSession}
+          updateMetadata={titleReset.updateMetadata}
+          rescan={titleReset.rescan}
+          setToast={titleReset.setToast}
+          onClose={titleReset.onClose}
+          onOpenModels={titleReset.onOpenModels}
         />
       )}
       {toast.value && <Toast toast={toast.value} onDismiss={toast.onDismiss} />}

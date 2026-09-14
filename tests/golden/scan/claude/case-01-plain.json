@@ -28,6 +28,7 @@
       "root_id": "fixture-claude-plain",
       "size": 666,
       "title": "Reply with exactly the text: FORMAT_FIXTURE_PLAIN_OK. Do not use any tools.",
+      "title_source": "derived",
       "tokens": null,
       "tool": "claude",
       "tree_count": 1,

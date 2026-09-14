@@ -34,6 +34,8 @@ use gateway::{complete_engine_request, complete_tool_request};
 
 const MAX_COMMAND_BYTES: usize = 16 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+// 标题生成最多 5 批，每批 2 次调用、每次 60 秒，另留 30 秒传输余量。
+const TITLE_GENERATE_TIMEOUT: Duration = Duration::from_secs(5 * 2 * 60 + 30);
 const STARTUP_HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -337,20 +339,32 @@ fn read_runtime_output(
     );
 }
 
+fn command_timeout(request: &Value) -> Duration {
+    if request.get("method").and_then(Value::as_str) == Some("title.generate") {
+        TITLE_GENERATE_TIMEOUT
+    } else {
+        COMMAND_TIMEOUT
+    }
+}
+
 fn request_runtime(
     app: &tauri::AppHandle,
     resource_dir: &Path,
     request: &str,
 ) -> Result<String, RuntimeError> {
-    let id = serde_json::from_str::<Value>(request)
-        .ok()
-        .and_then(|value| value.get("id").and_then(Value::as_str).map(str::to_owned))
+    let envelope = serde_json::from_str::<Value>(request)
+        .map_err(|error| RuntimeError::Message(error.to_string()))?;
+    let id = envelope
+        .get("id")
+        .and_then(Value::as_str)
         .ok_or("Runtime 命令缺少 id")?;
     let client = ensure_runtime(app, resource_dir).map_err(|error| {
         host_log("runtime", &format!("Runtime 启动失败: {error}"));
         error
     })?;
-    let result = client.transport.request(&id, request, COMMAND_TIMEOUT);
+    let result = client
+        .transport
+        .request(id, request, command_timeout(&envelope));
     if let Err(error) = &result {
         host_log("runtime", &format!("Runtime 命令失败 id={id}: {error}"));
     }
@@ -456,6 +470,16 @@ mod tests {
 
     /// 开关是进程级的覆盖位,翻动它的用例必须串行。
     static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn title_generation_allows_all_batches_and_retries() {
+        let budget = command_timeout(&json!({"method": "title.generate"}));
+        assert!(budget > Duration::from_secs(5 * 2 * 60));
+        assert_eq!(
+            command_timeout(&json!({"method": "health"})),
+            COMMAND_TIMEOUT
+        );
+    }
 
     fn with_switch(enabled: bool) -> MutexGuard<'static, ()> {
         let guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);

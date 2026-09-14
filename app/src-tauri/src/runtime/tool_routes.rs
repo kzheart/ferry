@@ -33,6 +33,13 @@ pub(super) fn resolve_tool_request(
     };
     Some(match name {
         "session_search" => read("content_search"),
+        // 标题证据：只读，返回会话证据与用户风格设置，由 Agent 自己拟标题。
+        "session_title_evidence" => {
+            if !has_exact_keys(args, &["sessions"], &[]) {
+                return None;
+            }
+            read("title_evidence")
+        }
         "session_read" => read("session_read"),
         "usage" => read("usage_stats"),
         "agent_prompt" => {
@@ -322,6 +329,37 @@ mod tests {
             None
         );
         assert_eq!(resolve_tool_request("shell", &map(json!({}))), None);
+    }
+
+    #[test]
+    fn title_evidence_is_read_only_and_takes_only_sessions() {
+        let evidence = resolve_tool_request(
+            "session_title_evidence",
+            &map(json!({"sessions": [{"tool": "claude", "ref": "fsr_a"}]})),
+        )
+        .unwrap();
+        assert_eq!(evidence.method, "title_evidence");
+        assert!(!evidence.requires_approval);
+        assert_eq!(
+            evidence.params,
+            json!({"sessions": [{"tool": "claude", "ref": "fsr_a"}]})
+        );
+        assert!(!is_mutating_tool(
+            "session_title_evidence",
+            &map(json!({"sessions": []}))
+        ));
+        // 多带一个键就不是这条路由：不允许借它夹带别的引擎参数。
+        assert_eq!(
+            resolve_tool_request(
+                "session_title_evidence",
+                &map(json!({"sessions": [], "style": {"preset": "custom"}})),
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_tool_request("session_title_evidence", &map(json!({}))),
+            None
+        );
     }
 
     #[test]

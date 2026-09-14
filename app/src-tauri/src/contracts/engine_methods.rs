@@ -124,6 +124,18 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
         }),
+        "title_evidence" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+        }),
+        "title_style.get" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+        }),
+        "title_style.set" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+        }),
         _ => None,
     }
 }
@@ -143,6 +155,9 @@ pub(crate) const UI_ENGINE_METHODS: &[&str] = &[
     "session_asset",
     "session_meta_list",
     "session_search",
+    "title_evidence",
+    "title_style.get",
+    "title_style.set",
 ];
 
 pub(crate) fn is_ui_engine_method(method: &str) -> bool {

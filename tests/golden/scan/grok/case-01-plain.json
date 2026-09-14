@@ -32,6 +32,7 @@
       "root_id": "fixture-grok-plain",
       "size": 306,
       "title": "Plain fixture",
+      "title_source": "native",
       "tokens": null,
       "tool": "grok",
       "tree_count": 1,

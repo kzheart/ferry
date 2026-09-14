@@ -32,6 +32,7 @@
       "root_id": "fixture-grok-chat",
       "size": 270,
       "title": "Chat fallback",
+      "title_source": "native",
       "tokens": null,
       "tool": "grok",
       "tree_count": 1,

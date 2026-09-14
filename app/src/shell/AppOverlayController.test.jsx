@@ -38,7 +38,7 @@ const editingSurface = {
 // browser 域的入参已从 props 下沉为 Context。用例仍按命名空间构造同一份数据,
 // 这里按 key 分流:browser 那几个进 Provider,其余照旧作为 props。
 const BROWSER_STATE_KEYS = [
-  "peek", "search", "contextMenu", "tags",
+  "peek", "search", "contextMenu", "tags", "titleReset",
 ];
 const OPERATIONS_STATE_KEYS = [
   "migration", "editing", "floatChat",
@@ -90,6 +90,10 @@ function baseProps(overrides = {}) {
     },
     contextMenu: { value: null, items: null, setValue: noop },
     tags: { selection: null, setSelection: noop, metaFor: () => ({}), updateMetadata: noop },
+    titleReset: {
+      selection: null, setSelection: noop, renameSession: async () => ({}),
+      updateMetadata: noop, rescan: noop,
+    },
     toast: { value: null, setValue: noop },
     railTip: { value: null, railOnly: false },
     settings: { open: false, value: {}, setOpen: noop, setView: noop, openGuide: noop },
@@ -402,4 +406,28 @@ test("就地预览要同时有 id 和已加载的会话才打开", () => {
     />,
   );
   assert.notEqual(container.innerHTML, "");
+});
+
+test("选中会话后挂起 AI 重置标题面板,取消即清空选择", async () => {
+  const cleared = [];
+  render(
+    <AppOverlayController
+      {...baseProps({
+        titleReset: {
+          selection: { sessions: [{ tool: "claude", ref: "fsr_a", id: "a" }], batch: false },
+          setSelection: value => cleared.push(value),
+          renameSession: async () => ({}),
+          updateMetadata: noop,
+          rescan: noop,
+        },
+      })}
+    />,
+  );
+  await act(async () => {});
+
+  assert.ok(screen.getByText("overlays:titleReset.title"));
+  const cancel = [...document.querySelectorAll("button")]
+    .find(button => button.textContent.includes("overlays:titleReset.cancel"));
+  fireEvent.click(cancel);
+  assert.deepEqual(cleared, [null]);
 });

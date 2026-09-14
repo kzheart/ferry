@@ -222,6 +222,7 @@ const sessionEditSupportDescription = AGENT_IDS.filter((tool) =>
 export const FERRY_TOOL_NAMES = [
   "session_search",
   "session_read",
+  "session_title_evidence",
   "usage",
   "migrate",
   "session_edit",
@@ -341,6 +342,21 @@ const schemas = {
     },
     { additionalProperties: false },
   ),
+  session_title_evidence: Type.Object(
+    {
+      sessions: Type.Array(
+        Type.Object(
+          {
+            tool: Type.String({ minLength: 1, maxLength: 32 }),
+            ref: opaqueSessionRef,
+          },
+          { additionalProperties: false },
+        ),
+        { minItems: 1, maxItems: 50 },
+      ),
+    },
+    { additionalProperties: false },
+  ),
   usage: Type.Object(
     {
       agents: Type.Optional(
@@ -394,6 +410,8 @@ const descriptions: Record<FerryToolName, string> = {
     'Search the whole session library: metadata (title, project, source tool, model) and, by default, full-text message content across every session — use this instead of reading sessions one by one or shelling out to grep. scope narrows matching to metadata or content only; default any matches either. Query words are ANDed within one message (or one metadata row): every word must appear there, substring-matched, so prefer one or two distinctive words. Quote "a phrase" for exact adjacency. For OR — alternative wordings, or a set of independent patterns like leaked-credential prefixes (sk-ant, ghp_, AKIA, "BEGIN PRIVATE KEY", "password=") — pass patterns: an array of up to 16 strings matched as a union, so one call covers them all; a session matches if ANY pattern matches, and each pattern keeps the same AND-within-a-message/phrase rules as query. For shapes substring matching cannot express — token formats, numeric patterns, high-entropy secrets with no fixed prefix — pass regex: one Python-syntax regular expression (not combinable with query/patterns). Regex matches run against original transcripts, not the index, so they also see content beyond the per-message indexing cap; when the regex contains required literal fragments the index narrows which sessions get scanned, otherwise every session passing your filters is scanned newest-first within a time/byte budget. After a regex search check content_index.regex_scan: skipped_sessions with a skip_reason means the budget cut the scan short (narrow time_range or projects and retry), and a non-zero clipped_sessions_not_scanned means the literal prefilter excluded sessions whose indexed text was truncated — pass exhaustive: true to force scanning those too. Pass query, patterns, or regex (at least one is required). Do NOT space-separate alternatives inside a single query string expecting OR — that ANDs them and silently returns nothing. Content hits carry matched_in, content_match_count and content_matches (message/turn/role plus a size-bounded original snippet) — jump to a hit with session_read from_message. Coding sessions keep most substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent from content. Check content_index in the result: when ready is false, pending_sessions are still being indexed and content results are partial — say so rather than presenting them as complete. Only the first 16KB per message is content-indexed for query/patterns; results from sessions where that cap dropped content carry partially_indexed_messages, and a lexical miss there is not proof of absence — escalate with regex (which scans originals) or session_read with terms. total_matches is how many sessions matched and returned is how many came back — when total_matches exceeds returned you have seen a sample, not the library, so never describe the result as the user\'s complete history. record_count counts raw transcript records and is larger than the message_count session_read reports for the same session. An fsr_ ref stops resolving once that session is written to again; if a read fails with reason session_changed, search again and use the fresh ref.',
   session_read:
     "Read one indexed session using an fsr_ ref returned by session_search. By default returns a size-bounded page of original messages; paginate with next_from_message, never turn numbers. Pass terms to search that session's content and get matching snippets; searched_scope tells you what was covered — by default only visible message text, and coding sessions keep most of their substance (code, file contents, command output) inside tool calls, so pass include_tool_outputs true before concluding a term is absent. Every returned message carries message_count, turn_count, an fml_ locator, and an editable flag; only editable=true messages may be rewritten, and locators must be copied exactly. message_count and turn_count differ, and both differ from search's record_count. If a search match has complete=false, re-read that message without terms before editing its full text.",
+  session_title_evidence:
+    "Read-only: collect the evidence needed to rename sessions (up to 50 fsr_ refs at once) plus the user's own title style settings. Each returned session carries its current title, title_source, project, message_count, turn_count, the first user messages, the last assistant message and the files it touched; the result also carries style (preset, language, max_chars, type_prefix, the type table, free-form instructions and examples). Compose the new titles yourself following that style — never invent a style of your own — then show the user a before -> after list and wait for confirmation before writing anything. Write each confirmed title back one by one with session_edit title (or session_edit patch.name for sources without native rename). Sessions whose title_source is manual were named by the user: leave them alone unless the user explicitly asks to include them. Sessions with message_count < 3 have too little content to name; report them as skipped instead of guessing.",
   usage:
     "Get aggregate usage: tokens and estimated cost overall, by_agent, by_model and by_project (each bucket keeps only the top spenders). cost is an estimate computed from public per-model prices, not a bill; models listed in unpriced_models had no price match and contribute tokens but no cost. Never invent amounts of your own — report these numbers or say they are unavailable.",
   migrate: `Migrate a session into another agent's format (targets: ${migrationTargets.join(", ")}). intent is required: use preview to inspect the impact without changing anything, or execute to create an approval-gated migration that writes an immutable copy in the target format once approved. source_tool and target_tool are agent names; ref is an fsr_ value.`,
@@ -414,7 +432,12 @@ export function createFerryTools(
     label: name,
     description: descriptions[name],
     parameters: schemas[name],
-    executionMode: ["session_search", "session_read", "usage"].includes(name)
+    executionMode: [
+      "session_search",
+      "session_read",
+      "session_title_evidence",
+      "usage",
+    ].includes(name)
       ? "parallel"
       : "sequential",
     async execute(toolCallId, params, signal, onUpdate) {

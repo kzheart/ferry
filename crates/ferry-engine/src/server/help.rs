@@ -60,6 +60,16 @@ pub const READ_OPTIONS: &[OptionSpec] = &[
     switch!("inert", "移除可识别脚手架，历史仅作为证据"),
 ];
 
+pub const TITLE_OPTIONS: &[OptionSpec] = &[
+    value!(
+        "file",
+        "PATH",
+        "apply 读改名清单；style 读风格 JSON，`-` 表示 stdin"
+    ),
+    switch!("include-manual", "连 title_source=manual 的会话一起重命名"),
+    switch!("apply", "reset 专用：把生成的标题写回原 agent"),
+];
+
 pub fn parse_options(argv: &[String], options: &[OptionSpec]) -> Result<Parsed, String> {
     let values: Vec<_> = options
         .iter()
@@ -95,6 +105,13 @@ const COMMANDS: &[CommandSpec] = &[
     CommandSpec { name: "resume", usage: "ferry resume <tool> <ref>", description: "返回在原 agent 续聊的终端命令", options: &[], notes: "此命令只返回描述，不执行目标 agent。跨 agent 接续使用 ferry-resume skill。" },
     CommandSpec { name: "migrate", usage: "ferry migrate plan <tool> <ref> --to <target> [--max-turn N] [--full]\nferry migrate apply <plan_id>\nferry migrate status <plan_id>\nferry migrate cancel <plan_id>", description: "预览、执行和查询原生迁移", options: &[], notes: "plan 不写源会话；检查影响并得到明确确认后 apply。计划十分钟过期。" },
     CommandSpec { name: "rename", usage: "ferry rename <tool> <ref> <title...> [--plan]", description: "改会话标题并写回原 agent 的存储", options: &[], notes: "支持 claude/codex/opencode/pi/grok；cursor 只读，请用桌面端的本地重命名。\n默认直接执行；--plan 只打印 before/after 预览。结果 native.notes 说明对方是否需重启才显示新标题。" },
+    CommandSpec {
+        name: "title",
+        usage: "ferry title evidence <tool> <ref>... [<tool> <ref>...]\nferry title suggest <tool> <ref>... [--include-manual]\nferry title reset <tool> <ref>... [--include-manual] [--apply]\nferry title apply --file <path|->\nferry title style [--file <path>]",
+        description: "用 AI 按用户风格重置会话标题",
+        options: TITLE_OPTIONS,
+        notes: "位置参数按 agent 分组：命中 agent id 的 token 切换当前 agent，其余都是它的 ref。\nevidence 只取证据（标题、前 3 条用户消息、最后一条助手回复、涉及文件）供你自己命名。\nsuggest/reset 会拉起本地 Ferry Runtime 调模型，未配置模型时报 provider_unavailable。\n默认跳过 title_source=manual 的会话；消息数 < 3 的由生成器标 skip。\nreset 不带 --apply 只打印预览；--apply 与 apply 逐条写回，claude/codex/opencode/pi/grok 写原生存储，cursor 写 Ferry 本地 name。\napply 的 --file 是 [{\"tool\",\"ref\",\"title\"}] 数组。任一条写回失败退出码为 1。",
+    },
     CommandSpec { name: "scan", usage: "ferry scan [--wait] [--timeout SEC] [--full]", description: "刷新会话索引", options: &[], notes: "--wait 等待内容索引就绪，默认超时 600 秒；--full 原始全库 DTO 无界。" },
     CommandSpec { name: "daemon", usage: "ferry daemon status|stop", description: "检查或停止 CLI 后台引擎", options: &[], notes: "不自动启动引擎；stop 不能停止桌面 App 的引擎。" },
     CommandSpec { name: "history", usage: "ferry history", description: "列出迁移历史", options: &[], notes: "返回 JSON 数组。" },

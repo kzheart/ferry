@@ -15,6 +15,7 @@ import type {
   ModelSelection,
 } from "./provider-config.js";
 import { FileProviderConfigStore } from "./provider-config-store.js";
+import { ProtocolError } from "../server/messages.js";
 import {
   UNSUPPORTED_PROVIDER_IDS,
   customProvider,
@@ -229,6 +230,46 @@ export class ProviderHost {
       },
     );
     return title.trim();
+  }
+
+  /**
+   * AI 重置标题用的补全器:固定走 Ask Ferry 的默认模型,提示词整段由调用方拼好。
+   * 返回可注入的 complete,便于生成器在测试里换成假模型。
+   */
+  async titleCompleter() {
+    const selection = await this.defaultModel();
+    if (!(await this.isConfigured(selection.provider))) {
+      throw new ProtocolError(
+        "provider_unavailable",
+        `provider ${selection.provider} is not configured`,
+      );
+    }
+    let model;
+    try {
+      model = this.model(selection);
+    } catch {
+      throw new ProtocolError(
+        "provider_unavailable",
+        `model ${selection.model} is not available`,
+      );
+    }
+    return {
+      selection,
+      complete: (prompt: string) =>
+        this.completeText(
+          model,
+          {
+            messages: [
+              { role: "user", content: prompt, timestamp: Date.now() },
+            ],
+          },
+          {
+            maxTokens: 1_500,
+            timeoutMs: 60_000,
+            errorMessage: "title generation failed",
+          },
+        ),
+    };
   }
 
   async deleteCustomModel(providerId: string, modelId: string) {

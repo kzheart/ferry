@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::adapters::contracts::{ScanCache, ScanRow};
 use crate::adapters::shared::scanner::{
     has_tokens, iso_ms, report_scan_advance, report_scan_total, session_roots, stat_digest, Tokens,
+    TITLE_SOURCE_EMPTY, TITLE_SOURCE_MANUAL, TITLE_SOURCE_NATIVE,
 };
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
@@ -110,6 +111,14 @@ fn meta(path: &Path) -> Option<ScanRow> {
         .or_else(|| summary.get("session_summary").filter(|value| truthy(value)))
         .and_then(Value::as_str)
         .unwrap_or_default();
+    // Ferry 改名会把 title_is_manual 写成 true，据此区分手动与自动生成。
+    let title_source = if title.trim().is_empty() {
+        TITLE_SOURCE_EMPTY
+    } else if summary.get("title_is_manual") == Some(&Value::Bool(true)) {
+        TITLE_SOURCE_MANUAL
+    } else {
+        TITLE_SOURCE_NATIVE
+    };
     let count = summary
         .get("num_chat_messages")
         .filter(|value| truthy(value))
@@ -128,6 +137,7 @@ fn meta(path: &Path) -> Option<ScanRow> {
     row.insert("tool".into(), Value::from("grok"));
     row.insert("id".into(), id.cloned().unwrap_or(Value::Null));
     row.insert("title".into(), Value::from(title));
+    row.insert("title_source".into(), Value::from(title_source));
     row.insert(
         "dir".into(),
         info.get("cwd").cloned().unwrap_or(Value::Null),
@@ -342,6 +352,7 @@ mod tests {
         assert_eq!(row["updated"], json!(1784980802000i64));
         assert_eq!(row["created"], json!(1784980800000i64));
         assert_eq!(row["title"], json!("T"));
+        assert_eq!(row["title_source"], json!("native"));
         assert_eq!(row["count"], json!(4));
         assert_eq!(row["root_id"], json!("s1"));
         assert_eq!(row["tokens"], Value::Null);
@@ -349,6 +360,35 @@ mod tests {
             row["authoritative_members"],
             json!(["summary.json", "updates.jsonl"])
         );
+    }
+
+    #[test]
+    fn a_manual_rename_flags_the_title_as_manual() {
+        let root = tempfile::tempdir().unwrap();
+        let path = write_bundle(
+            root.path(),
+            "b-manual",
+            json!({"info": {"id": "s2", "cwd": "/w"}, "chat_format_version": 1,
+                   "generated_title": "我起的名字", "title_is_manual": true,
+                   "num_messages": 4, "current_model_id": "grok-code-fast-1"}),
+            true,
+        );
+        let row = meta(&path).unwrap();
+        assert_eq!(row["title"], json!("我起的名字"));
+        assert_eq!(row["title_source"], json!("manual"));
+    }
+
+    #[test]
+    fn a_bundle_without_any_title_reports_empty() {
+        let root = tempfile::tempdir().unwrap();
+        let path = write_bundle(
+            root.path(),
+            "b-empty",
+            json!({"info": {"id": "s3", "cwd": "/w"}, "chat_format_version": 1,
+                   "num_messages": 2, "current_model_id": "grok-code-fast-1"}),
+            true,
+        );
+        assert_eq!(meta(&path).unwrap()["title_source"], json!("empty"));
     }
 
     #[test]

@@ -31,6 +31,7 @@ import {
 } from "../tools/catalog.js";
 import { RuntimeGateway, type ToolHandler } from "../tools/gateway.js";
 import { RuntimeEventBus } from "./event-bus.js";
+import { runTitleGenerate } from "../titles/commands.js";
 
 type BackendFactory = (selection?: ModelSelection) => AgentBackend;
 
@@ -344,6 +345,11 @@ export class AgentRuntime {
       return this.titleGenerator(selection, prompt, reply);
     if (!this.providerHost) return null;
     return this.providerHost.summarizeTitle(prompt, reply, selection);
+  }
+
+  /** AI 重置标题:批量给已有会话生成新标题,写回由调用方自己做。 */
+  async generateSessionTitles(params: Record<string, unknown>) {
+    return runTitleGenerate(this.providerHost, params);
   }
 
   async renameSession(sessionId: string, title: string) {

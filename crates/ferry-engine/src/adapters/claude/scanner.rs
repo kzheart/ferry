@@ -13,7 +13,8 @@ use sha2::{Digest as _, Sha256};
 use crate::adapters::contracts::{Fingerprint, ScanCache, ScanRow};
 use crate::adapters::shared::scanner::{
     add_tokens, clip_text_default, dominant_model, empty_tokens, has_tokens, iso_ms, iter_lines,
-    scan_jsonl, ScanOutcome, Tokens,
+    scan_jsonl, ScanOutcome, Tokens, TITLE_SOURCE_DERIVED, TITLE_SOURCE_EMPTY, TITLE_SOURCE_MANUAL,
+    TITLE_SOURCE_NATIVE,
 };
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
@@ -58,12 +59,24 @@ fn text_of(value: Option<&Value>) -> &str {
 
 /// 标题优先级：用户命名 > AI 命名 > 首句回退。scanner 与 reader 共用同一条规则。
 pub(super) fn pick_title(custom: String, ai: String, derived: String) -> String {
+    pick_title_with_source(custom, ai, derived).0
+}
+
+/// 同一条规则同时定出 `title_source`：`/rename` 是 manual，`ai-title` 是
+/// native，首句回退是 derived。
+pub(super) fn pick_title_with_source(
+    custom: String,
+    ai: String,
+    derived: String,
+) -> (String, &'static str) {
     if !custom.is_empty() {
-        custom
+        (custom, TITLE_SOURCE_MANUAL)
     } else if !ai.is_empty() {
-        ai
+        (ai, TITLE_SOURCE_NATIVE)
+    } else if derived.trim().is_empty() {
+        (derived, TITLE_SOURCE_EMPTY)
     } else {
-        derived
+        (derived, TITLE_SOURCE_DERIVED)
     }
 }
 
@@ -191,7 +204,7 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     if count == 0 {
         return Ok(ScanOutcome::Row(ScanRow::new()));
     }
-    let title = pick_title(custom_title, ai_title, title);
+    let (title, title_source) = pick_title_with_source(custom_title, ai_title, title);
     for (_, (model, tokens)) in seen_usage {
         if by_model.iter().all(|(name, _)| *name != model) {
             by_model.push((model.clone(), empty_tokens()));
@@ -222,6 +235,7 @@ fn meta(path: &Path, stat: &FileStat, base: &Path) -> DomainResult<ScanOutcome> 
     row.insert("tool".into(), Value::from("claude"));
     row.insert("id".into(), Value::from(stem));
     row.insert("title".into(), Value::from(title));
+    row.insert("title_source".into(), Value::from(title_source));
     row.insert("dir".into(), Value::from(cwd));
     if !branch.is_empty() {
         row.insert("branch".into(), Value::from(branch));
@@ -410,6 +424,7 @@ mod tests {
         assert_eq!(row["tool"], json!("claude"));
         assert_eq!(row["id"], json!("sess"));
         assert_eq!(row["title"], json!("Hello there"));
+        assert_eq!(row["title_source"], json!("derived"));
         assert_eq!(row["dir"], json!("/w"));
         assert_eq!(row["branch"], json!("feature/x"));
         assert_eq!(row["count"], json!(2));
@@ -460,6 +475,7 @@ mod tests {
             panic!("应当解析出扫描行");
         };
         assert_eq!(row["title"], json!("Real Title"));
+        assert_eq!(row["title_source"], json!("native"));
     }
 
     #[test]
@@ -480,6 +496,15 @@ mod tests {
             panic!("应当解析出扫描行");
         };
         assert_eq!(row["title"], json!("New Name"));
+        assert_eq!(row["title_source"], json!("manual"));
+    }
+
+    #[test]
+    fn a_session_with_no_title_at_all_reports_empty() {
+        assert_eq!(
+            pick_title_with_source(String::new(), String::new(), String::new()),
+            (String::new(), "empty")
+        );
     }
 
     #[test]

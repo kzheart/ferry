@@ -28,6 +28,7 @@
       "root_id": "fixture-claude-tools",
       "size": 2932,
       "title": "Run the fixture shell, write, and read operations.",
+      "title_source": "derived",
       "tokens": null,
       "tool": "claude",
       "tree_count": 1,

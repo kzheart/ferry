@@ -160,6 +160,7 @@
     "verb": {
       "session_search": "搜索会话",
       "session_read": "读取会话",
+      "session_title_evidence": "读取标题证据",
       "usage": "统计用量",
       "migrate": "迁移会话",
       "session_edit": "编辑会话",

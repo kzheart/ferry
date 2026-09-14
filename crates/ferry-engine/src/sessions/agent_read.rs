@@ -211,6 +211,7 @@ pub fn get_session_context(
     let base = json!({"tool": tool, "ref": opaque_ref,
         "session_id": record_session_id(&record.row, Some(&session.source_id)),
         "revision": record.revision, "title": title, "project": project,
+        "title_source": record.row.get("title_source").and_then(Value::as_str).unwrap_or(""),
         "title_truncated": title_truncated, "project_truncated": project_truncated,
         "message_count": session.messages.len(), "turn_count": total_turns,
         "mode": "context"});

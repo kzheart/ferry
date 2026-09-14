@@ -306,7 +306,12 @@ describe("Ferry mutation tool schemas", () => {
       execute({ tool: "codex", ref: "fsr_session", title: "   " }),
     ).rejects.toThrow("non-empty");
     await expect(
-      execute({ tool: "codex", ref: "fsr_session", title: "x", intent: "execute" }),
+      execute({
+        tool: "codex",
+        ref: "fsr_session",
+        title: "x",
+        intent: "execute",
+      }),
     ).rejects.toThrow("title does not accept intent");
     expect(invoke).not.toHaveBeenCalled();
     await execute({ tool: "codex", ref: "fsr_session", title: "新标题" });

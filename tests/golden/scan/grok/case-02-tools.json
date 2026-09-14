@@ -32,6 +32,7 @@
       "root_id": "fixture-grok-tools",
       "size": 306,
       "title": "Tools fixture",
+      "title_source": "native",
       "tokens": null,
       "tool": "grok",
       "tree_count": 1,

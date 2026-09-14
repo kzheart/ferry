@@ -38,7 +38,10 @@
     "resumeCopiedNoSkill": "Copied, but the ferry-resume skill is not installed yet",
     "resumeCopiedNoSkillDesc": "The instruction will not be recognized. Install it from Settings in one click.",
     "resumeInstallSkill": "Install",
-    "resumeCopyFail": "Could not copy"
+    "resumeCopyFail": "Could not copy",
+    "titleReset": "Reset {{n}} titles",
+    "titleResetPartial": "{{ok}} reset, {{failed}} failed",
+    "titleResetDesc": "New titles written back to {{n}} sessions"
   },
   "ctx": {
     "batchArchive": "Archive all",
@@ -66,7 +69,9 @@
     "more": "More",
     "favoriteProject": "Add to favorites",
     "unfavoriteProject": "Remove from favorites",
-    "onlyThisProject": "Only this project"
+    "onlyThisProject": "Only this project",
+    "titleReset": "Reset title with AI…",
+    "titleResetBatch": "Reset titles with AI…"
   },
   "drag": {
     "hint": "Drag to adjust width · double-click to reset"

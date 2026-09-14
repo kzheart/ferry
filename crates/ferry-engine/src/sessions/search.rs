@@ -585,6 +585,14 @@ pub fn search_sessions(
             Value::from(record_session_id(row, None)),
         );
         item.insert("title".into(), Value::from(title));
+        item.insert(
+            "title_source".into(),
+            Value::from(
+                row.get("title_source")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+            ),
+        );
         item.insert("project".into(), Value::from(candidate.project.as_str()));
         item.insert("title_truncated".into(), Value::Bool(title_truncated));
         item.insert(
@@ -917,7 +925,7 @@ pub fn search_sessions_for_ui(
             .and_then(Value::as_array)
             .and_then(|rows| rows.first());
         let mut entry = Map::new();
-        for key in ["tool", "ref", "title", "project", "updated"] {
+        for key in ["tool", "ref", "title", "title_source", "project", "updated"] {
             entry.insert(key.into(), item.get(key).cloned().unwrap_or(Value::Null));
         }
         // 无内容检索档位时 search_sessions 不写 matched_in，但结果本身就是

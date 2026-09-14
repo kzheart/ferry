@@ -25,6 +25,7 @@
       "root_id": "fixture-opencode-plain",
       "size": 0,
       "title": "Plain fixture",
+      "title_source": "native",
       "tokens": null,
       "tool": "opencode",
       "tree_count": 1,

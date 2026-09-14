@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 use crate::adapters::contracts::{ScanCache, ScanRow};
 use crate::adapters::shared::scanner::{
     add_tokens, clip_text_default, dominant_model, empty_tokens, has_tokens, iso_ms, iter_lines,
-    path_stat_fingerprint, scan_jsonl, ScanOutcome, Tokens,
+    path_stat_fingerprint, scan_jsonl, title_source_of, ScanOutcome, Tokens, TITLE_SOURCE_NATIVE,
 };
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::FileStat;
@@ -478,7 +478,9 @@ fn meta(path: &Path, stat: &FileStat) -> DomainResult<ScanOutcome> {
     let mut row = ScanRow::new();
     row.insert("tool".into(), Value::from("codex"));
     row.insert("id".into(), Value::from(sid.as_str()));
+    let title_source = title_source_of(false, &title);
     row.insert("title".into(), Value::from(title));
+    row.insert("title_source".into(), Value::from(title_source));
     row.insert("dir".into(), Value::from(cwd));
     row.insert("updated".into(), Value::from(updated_ms));
     row.insert("created".into(), created.map_or(Value::Null, Value::from));
@@ -529,6 +531,7 @@ pub(super) fn overlay_titles(rows: &mut [ScanRow], names: &HashMap<String, Strin
             continue;
         };
         row.insert("title".into(), Value::from(name.as_str()));
+        row.insert("title_source".into(), Value::from(TITLE_SOURCE_NATIVE));
     }
 }
 
@@ -604,6 +607,15 @@ mod tests {
         );
         let row = meta_of(&path);
         assert_eq!(row["title"], json!("hello world"));
+        // rollout 里没有原生标题，首句回退算 derived；注册库有名字时才升为 native。
+        assert_eq!(row["title_source"], json!("derived"));
+        let mut rows = vec![row.clone()];
+        overlay_titles(
+            &mut rows,
+            &HashMap::from([("a".to_string(), "原生名字".to_string())]),
+        );
+        assert_eq!(rows[0]["title"], json!("原生名字"));
+        assert_eq!(rows[0]["title_source"], json!("native"));
         assert_eq!(row["count"], json!(3));
         assert_eq!(row["id"], json!("a"));
         assert_eq!(row["root_id"], json!("a"));

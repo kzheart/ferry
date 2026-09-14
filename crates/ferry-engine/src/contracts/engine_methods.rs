@@ -65,6 +65,9 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
     "operation.apply",
     "operation.status",
     "operation.cancel",
+    "title_evidence",
+    "title_style.get",
+    "title_style.set",
 ];
 
 /// 允许进并发只读池的方法。
@@ -79,6 +82,8 @@ pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
     "content_search",
     "session_read",
     "usage_stats",
+    "title_evidence",
+    "title_style.get",
 ];
 
 /// 进独立轻量控制池的方法，不得被重读队列阻塞。
@@ -102,6 +107,9 @@ pub const CLI_METHOD_NAMES: &[&str] = &[
     "operation.apply",
     "operation.status",
     "operation.cancel",
+    "title_evidence",
+    "title_style.get",
+    "title_style.set",
 ];
 
 pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
@@ -257,6 +265,24 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
             dispatch: Dispatch::Serial,
         }),
         "operation.cancel" => Some(EngineMethodPolicy {
+            kind: MethodKind::Mutation,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+            dispatch: Dispatch::Serial,
+        }),
+        "title_evidence" => Some(EngineMethodPolicy {
+            kind: MethodKind::Read,
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+            dispatch: Dispatch::ParallelRead,
+        }),
+        "title_style.get" => Some(EngineMethodPolicy {
+            kind: MethodKind::Read,
+            timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::SafeRead,
+            dispatch: Dispatch::ParallelRead,
+        }),
+        "title_style.set" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,

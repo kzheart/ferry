@@ -47,6 +47,7 @@ export const PUBLIC_RUNTIME_METHODS = [
   "auth.login.start",
   "auth.login.respond",
   "auth.login.cancel",
+  "title.generate",
 ] as const;
 export type PublicRuntimeMethod =
   (typeof PUBLIC_RUNTIME_METHODS)[number];

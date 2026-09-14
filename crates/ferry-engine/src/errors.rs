@@ -72,6 +72,24 @@ impl DomainError {
         &mut self.detail.params
     }
 
+    /// 错误信封的 `error` 载荷：`{code, category, retryable, params}`。
+    /// 批量方法把逐项错误嵌进 result 时用的也是这同一形状。
+    pub fn payload(&self) -> Value {
+        let mut params = self.detail.params.clone();
+        if !params.contains_key("message") {
+            params.insert(
+                "message".into(),
+                Value::from(self.message().chars().take(500).collect::<String>()),
+            );
+        }
+        let mut payload = Map::new();
+        payload.insert("code".into(), Value::from(self.code));
+        payload.insert("params".into(), Value::Object(params));
+        payload.insert("category".into(), Value::from(self.category));
+        payload.insert("retryable".into(), Value::Bool(self.retryable));
+        Value::Object(payload)
+    }
+
     /// 未捕获异常的兜底：不泄漏异常文本（除非 FERRY_DEBUG）。
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal.unexpected", "DomainError", message, Map::new())

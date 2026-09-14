@@ -47,6 +47,9 @@ export async function dispatch(
             ...(await runtime.providerService.status()),
           };
           break;
+        case "title.generate":
+          result = await runtime.generateSessionTitles(params);
+          break;
         case "tool.result":
           result = runtime.completeTool(
             requireString(params, "request_id", 128),

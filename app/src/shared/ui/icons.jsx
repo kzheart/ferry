@@ -180,6 +180,8 @@ const SETTINGS_GLYPH = {
   roles: '<circle cx="9" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.8 15.2c.6-3 2.3-4.5 5.2-4.5s4.6 1.5 5.2 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   // 终端窗口:这一页装的就是「让 agent 在终端里用 Ferry」的那套东西
   integration: '<rect x="2.3" y="3.4" width="13.4" height="11.2" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.6 7.2 2.3 2.1-2.3 2.1M9.9 11.6h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  // 大写 T 加一点星芒:标题的排版规则由 AI 按这一页的风格拟
+  titles: '<path d="M3.4 4.4h9.2M8 4.4v10.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M14 9.4l.55 1.6 1.6.55-1.6.55-.55 1.6-.55-1.6-1.6-.55 1.6-.55Z" fill="currentColor"/>',
   // 锥形瓶:测试中的功能
   experimental: '<path d="M7.3 2.3v4.4L3.1 13a1.6 1.6 0 0 0 1.35 2.5h9.1A1.6 1.6 0 0 0 14.9 13l-4.2-6.3V2.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.4 2.3h5.2M5.1 10.4h7.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
 };

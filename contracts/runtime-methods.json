@@ -47,6 +47,7 @@
     {"name": "auth.login.start", "exposure": "public"},
     {"name": "auth.login.respond", "exposure": "public"},
     {"name": "auth.login.cancel", "exposure": "public"},
+    {"name": "title.generate", "exposure": "public"},
     {"name": "tool.result", "exposure": "internal"}
   ]
 }

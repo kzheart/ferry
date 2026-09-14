@@ -20,7 +20,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::adapters::contracts::{ScanCache, ScanRow};
-use crate::adapters::shared::scanner::{clip_text_default, session_roots};
+use crate::adapters::shared::scanner::{clip_text_default, session_roots, title_source_of};
 use crate::errors::DomainResult;
 use crate::jsonutil::FileStat;
 
@@ -97,6 +97,11 @@ impl NativeSession {
 
     fn title(&self, connection: &Connection) -> String {
         self.name().unwrap_or_else(|| self.first_prompt(connection))
+    }
+
+    /// composer name 是原生标题；没有名字时的首句回退算 derived。
+    fn title_source(&self, title: &str) -> &'static str {
+        title_source_of(self.name().is_some(), title)
     }
 
     /// 工作目录：head 优先，缺失时回落 composerData（v16 只有 40/176 带它）。
@@ -192,7 +197,10 @@ pub fn scan(_cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
             let mut row = ScanRow::new();
             row.insert("tool".into(), Value::from("cursor"));
             row.insert("id".into(), Value::from(session.id.as_str()));
-            row.insert("title".into(), Value::from(session.title(&connection)));
+            let title = session.title(&connection);
+            let title_source = session.title_source(&title);
+            row.insert("title".into(), Value::from(title));
+            row.insert("title_source".into(), Value::from(title_source));
             row.insert("dir".into(), Value::from(session.cwd()));
             row.insert("updated".into(), Value::from(session.updated));
             row.insert("created".into(), Value::from(session.created));
@@ -539,6 +547,7 @@ mod tests {
         assert_eq!(row["tool"], json!("cursor"));
         assert_eq!(row["id"], json!("root-1"));
         assert_eq!(row["title"], json!("Explore project structure"));
+        assert_eq!(row["title_source"], json!("native"));
         assert_eq!(row["dir"], json!("/Users/u/work"));
         assert_eq!(row["model"], json!("grok-4.5"));
         assert_eq!(row["path"], json!(""));

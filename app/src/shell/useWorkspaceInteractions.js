@@ -48,6 +48,7 @@ export function useWorkspaceInteractions({
   setMigration,
   setRename,
   setTagSelection,
+  setTitleReset,
   setAgentAttachments,
 }) {
   // 右键菜单是列表型入口:开关状态直接在这里取,不必由主壳层层转交。
@@ -71,6 +72,7 @@ export function useWorkspaceInteractions({
     metaFor,
     updateMetadata,
     setTagSelection,
+    setTitleReset,
     setRename,
     setMultiIds,
     setAgentAttachments,

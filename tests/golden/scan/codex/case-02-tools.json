@@ -31,6 +31,7 @@
       "root_id": "fixture-codex-tools",
       "size": 2502,
       "title": "Run the fixture shell, write, and read operations.",
+      "title_source": "derived",
       "tokens": null,
       "tool": "codex",
       "tree_count": 1,

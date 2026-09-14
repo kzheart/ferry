@@ -73,6 +73,7 @@ export default function App() {
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, key, multi?}
   const [renameFor, setRenameFor] = useState(null); // 行内重命名中的会话
   const [tagFor, setTagFor] = useState(null); // {sessions} 待编辑标签的会话
+  const [titleResetFor, setTitleResetFor] = useState(null); // {sessions, batch} AI 重置标题
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useSettings();
   // 特性开关的事实源在宿主的配置文件里,界面据此决定入口显不显示。列表型入口
@@ -258,6 +259,7 @@ export default function App() {
     setMigration: setMig,
     setRename: setRenameFor,
     setTagSelection: setTagFor,
+    setTitleReset: setTitleResetFor,
     setAgentAttachments,
   });
 
@@ -309,6 +311,7 @@ export default function App() {
       { open: Boolean(ctxMenu), dismiss: () => setCtxMenu(null) },
       { open: Boolean(renameFor), dismiss: () => setRenameFor(null) },
       { open: Boolean(tagFor), dismiss: () => setTagFor(null) },
+      { open: Boolean(titleResetFor), dismiss: () => setTitleResetFor(null) },
       { open: settingsOpen, dismiss: () => setSettingsOpen(false) },
       { open: confirmApply, dismiss: () => setConfirmApply(false) },
       { open: Boolean(diff), dismiss: () => setDiff(null) },
@@ -344,9 +347,10 @@ export default function App() {
     sessions, setConfirmApply, setCtxMenu, setDiff,
     setFloatChatOpen, setMetaFor, setMig,
     setMultiSel, setPeekId,
+    renameSession,
     setSearchOpen, setSettings, setSettingsOpen, setSettingsSection, setTagFor,
-    setToast, setView,
-    settings, settingsOpen, settingsSection, tagFor, toast, updater, view,
+    setTitleResetFor, setToast, setView,
+    settings, settingsOpen, settingsSection, tagFor, titleResetFor, toast, updater, view,
   });
 
   return (

@@ -5,6 +5,7 @@ import { runtime } from "../../platform/desktop/client.js";
 import { ProviderIcon, Spinner } from "../../shared/ui/icons.jsx";
 import { useFerryRuntime } from "../../shared/capabilities/ferryRuntime.jsx";
 import { Check, inputStyle } from "./parts.jsx";
+import { CustomProviderSettings } from "./CustomProviderSettings.jsx";
 
 // 从 auth.event 通知里挑出可打开的授权 URL / device code
 const noticeBits = notice => {
@@ -137,69 +138,6 @@ function Capability({ on, onChange, label }) {
       <Check on={on} size={15} />
       <span style={{ fontSize: 11.5, color: "var(--tx2b)" }}>{label}</span>
     </span>
-  );
-}
-
-// 自定义提供商就地编辑:改完自动保存,模型列表随后从端点自动拉取
-function CustomProviderSettings({ sel, onSave }) {
-  const { t } = useTranslation();
-  const [name, setName] = useState(sel.name);
-  const [api, setApi] = useState(sel.api || "openai-completions");
-  const [baseUrl, setBaseUrl] = useState(sel.base_url || "");
-  useEffect(() => {
-    setName(sel.name);
-    setApi(sel.api || "openai-completions");
-    setBaseUrl(sel.base_url || "");
-  }, [sel.id]);
-
-  useEffect(() => {
-    const dirty = name !== sel.name || api !== (sel.api || "openai-completions")
-      || baseUrl !== (sel.base_url || "");
-    if (!dirty || !name.trim() || !/^https?:\/\/\S+$/.test(baseUrl.trim())) return undefined;
-    const timer = setTimeout(() => onSave({
-      provider_id: sel.id,
-      name: name.trim(),
-      api,
-      base_url: baseUrl.trim(),
-      models: [],
-    }), 800);
-    return () => clearTimeout(timer);
-  }, [name, api, baseUrl]);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 6 }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-            {t("settings:providers.custom.name")}</span>
-          <input value={name} onChange={e => setName(e.target.value)}
-            placeholder={t("settings:providers.custom.namePlaceholder")}
-            style={{ ...inputStyle, width: "100%" }} />
-        </div>
-        <div style={{ flex: "none", display: "flex", flexDirection: "column", gap: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>
-            {t("settings:providers.custom.format")}</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[["openai-completions", t("settings:providers.custom.formatOpenAI")],
-              ["anthropic-messages", t("settings:providers.custom.formatAnthropic")]]
-              .map(([value, label]) => (
-                <button key={value} className="fbtn" onClick={() => setApi(value)}
-                  style={{ height: 32, fontSize: 12,
-                    ...(api === value ? { borderColor: "var(--accent)", color: "var(--acc-text)",
-                      background: "var(--acc-soft3)", fontWeight: 600 } : {}) }}>
-                  {label}</button>
-              ))}
-          </div>
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--tx2b)" }}>Base URL</span>
-        <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
-          placeholder={api === "anthropic-messages"
-            ? "https://api.example.com/anthropic" : "https://api.example.com/v1"}
-          className="mono" style={{ ...inputStyle, width: "100%" }} />
-      </div>
-    </div>
   );
 }
 

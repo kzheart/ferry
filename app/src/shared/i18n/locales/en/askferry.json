@@ -162,6 +162,7 @@
     "verb": {
       "session_search": "Searched sessions",
       "session_read": "Read session",
+      "session_title_evidence": "Read title evidence",
       "usage": "Usage",
       "migrate": "Migrate",
       "session_edit": "Edit session",

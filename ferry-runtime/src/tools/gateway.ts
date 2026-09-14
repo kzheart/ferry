@@ -19,6 +19,7 @@ interface PendingRequest {
 const TOOL_DEADLINES_MS: Record<FerryToolName, number> = {
   session_search: 25_000,
   session_read: 25_000,
+  session_title_evidence: 45_000,
   usage: 25_000,
   migrate: 125_000,
   session_edit: 125_000,

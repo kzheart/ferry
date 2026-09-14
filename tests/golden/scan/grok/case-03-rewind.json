@@ -32,6 +32,7 @@
       "root_id": "fixture-grok-rewind",
       "size": 275,
       "title": "Rewind fixture",
+      "title_source": "native",
       "tokens": null,
       "tool": "grok",
       "tree_count": 1,

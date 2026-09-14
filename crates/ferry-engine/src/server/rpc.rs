@@ -131,6 +131,9 @@ pub trait EngineService: Send + Sync {
     fn operation_apply(&self, plan_id: &Value) -> EngineResult<Value>;
     fn operation_status(&self, plan_id: &Value) -> EngineResult<Value>;
     fn operation_cancel(&self, plan_id: &Value) -> EngineResult<Value>;
+    fn title_evidence(&self, params: &Value) -> EngineResult<Value>;
+    fn title_style_get(&self) -> EngineResult<Value>;
+    fn title_style_set(&self, style: &Value) -> EngineResult<Value>;
 }
 
 /// 分发表覆盖的方法名，顺序与 `ENGINE_METHOD_NAMES` 一致。
@@ -161,6 +164,9 @@ const DISPATCH_METHOD_NAMES: &[&str] = &[
     "operation.apply",
     "operation.status",
     "operation.cancel",
+    "title_evidence",
+    "title_style.get",
+    "title_style.set",
 ];
 
 /// 绑定一个 `EngineService` 的 RPC 调度器。
@@ -367,6 +373,10 @@ impl RpcDispatcher {
             "operation.apply" => service.operation_apply(required(params, "plan_id")?),
             "operation.status" => service.operation_status(required(params, "plan_id")?),
             "operation.cancel" => service.operation_cancel(required(params, "plan_id")?),
+            // title_evidence 的 params 整体交给能力包：批量形状的校验只该有一处。
+            "title_evidence" => service.title_evidence(&Value::Object(params.clone())),
+            "title_style.get" => service.title_style_get(),
+            "title_style.set" => service.title_style_set(required(params, "style")?),
             // route() 已经拿 DISPATCH_METHOD_NAMES 过滤过。
             other => Err(DomainError::unknown_method(other).into()),
         }
@@ -407,24 +417,11 @@ pub fn result_envelope(result: Value, request_id: &str) -> Value {
 /// `message` 是 agent 自救指引的一部分：光有 code 模型只能盲猜，
 /// 与 runtime `ProtocolError.toEnvelope` 一致，借 `params.message` 下发。
 pub fn error_envelope(error: &DomainError, request_id: &str) -> Value {
-    let mut params = error.params().clone();
-    if !params.contains_key("message") {
-        params.insert(
-            "message".into(),
-            Value::from(error.message().chars().take(500).collect::<String>()),
-        );
-    }
-    let mut payload = Map::new();
-    payload.insert("code".into(), Value::from(error.code));
-    payload.insert("params".into(), Value::Object(params));
-    payload.insert("category".into(), Value::from(error.category));
-    payload.insert("retryable".into(), Value::Bool(error.retryable));
-
     let mut envelope = Map::new();
     envelope.insert("protocol".into(), Value::from(PROTOCOL));
     envelope.insert("id".into(), Value::from(request_id));
     envelope.insert("ok".into(), Value::Bool(false));
-    envelope.insert("error".into(), Value::Object(payload));
+    envelope.insert("error".into(), error.payload());
     Value::Object(envelope)
 }
 
@@ -643,6 +640,15 @@ mod tests {
         }
         fn operation_cancel(&self, plan_id: &Value) -> EngineResult<Value> {
             self.record("operation.cancel", recorded!("o", "plan_id" => plan_id))
+        }
+        fn title_evidence(&self, params: &Value) -> EngineResult<Value> {
+            self.record("title_evidence", params.clone())
+        }
+        fn title_style_get(&self) -> EngineResult<Value> {
+            self.record("title_style.get", Value::Null)
+        }
+        fn title_style_set(&self, style: &Value) -> EngineResult<Value> {
+            self.record("title_style.set", recorded!("t", "style" => style))
         }
     }
 
@@ -963,6 +969,9 @@ mod tests {
             ("operation.apply", json!({"plan_id": "op_x"})),
             ("operation.status", json!({"plan_id": "op_x"})),
             ("operation.cancel", json!({"plan_id": "op_x"})),
+            ("title_evidence", json!({"sessions": []})),
+            ("title_style.get", json!({})),
+            ("title_style.set", json!({"style": {}})),
         ];
         assert_eq!(params.len(), ENGINE_METHOD_NAMES.len());
         for (method, value) in params {

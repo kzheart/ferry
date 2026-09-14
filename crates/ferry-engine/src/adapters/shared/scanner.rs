@@ -84,6 +84,25 @@ pub fn clip_text_default(text: &str) -> String {
     clip_text(text, 80)
 }
 
+/// 扫描行 `title_source` 的取值：确知用户手动命名 / 来自 Agent 自身存储（无法
+/// 区分是否手动）/ 首条用户消息截断回退 / 没有任何标题。
+pub const TITLE_SOURCE_MANUAL: &str = "manual";
+pub const TITLE_SOURCE_NATIVE: &str = "native";
+pub const TITLE_SOURCE_DERIVED: &str = "derived";
+pub const TITLE_SOURCE_EMPTY: &str = "empty";
+
+/// 只有 native / derived 两种候选时的取值：标题非空且来自原生存储算 native，
+/// 否则看有没有回退出来的首句。
+pub fn title_source_of(native: bool, title: &str) -> &'static str {
+    if title.trim().is_empty() {
+        TITLE_SOURCE_EMPTY
+    } else if native {
+        TITLE_SOURCE_NATIVE
+    } else {
+        TITLE_SOURCE_DERIVED
+    }
+}
+
 /// 把文件 stat 折成稳定的修订标记；实现在 `jsonutil`，这里只做路径转字符串。
 pub fn stat_digest(path: &Path, stat: &FileStat) -> String {
     crate::jsonutil::stat_digest(&path.to_string_lossy(), stat)

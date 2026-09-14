@@ -15,7 +15,7 @@ use crate::adapters::contracts::{ScanCache, ScanRow};
 use crate::adapters::shared::dialect::python_str;
 use crate::adapters::shared::scanner::{
     add_tokens, clip_text_default, empty_tokens, has_tokens, iso_ms, iter_lines,
-    path_stat_fingerprint, report_scan_advance, report_scan_total, Tokens,
+    path_stat_fingerprint, report_scan_advance, report_scan_total, title_source_of, Tokens,
 };
 use crate::errors::{DomainError, DomainResult};
 use crate::jsonutil::{hash_bytes, FileStat};
@@ -106,6 +106,8 @@ fn meta(path: &Path, stat: &FileStat) -> ScanRow {
     // 与 pi 自己的 getSessionName() 同口径：整文件行序（不按分支）取最后一条
     // session_info，name 去首尾空白；空串表示显式清除标题，随后回退首条用户消息。
     let mut title = session_name(entries).unwrap_or_default();
+    // session_info 命名 = native；空串后由首条用户消息回退 = derived。
+    let native_title = !title.is_empty();
     let mut count = 0i64;
     let mut model = String::new();
     let mut tokens = empty_tokens();
@@ -158,7 +160,9 @@ fn meta(path: &Path, stat: &FileStat) -> ScanRow {
     let mut row = ScanRow::new();
     row.insert("tool".into(), Value::from("pi"));
     row.insert("id".into(), header["id"].clone());
+    let title_source = title_source_of(native_title, &title);
     row.insert("title".into(), Value::from(title));
+    row.insert("title_source".into(), Value::from(title_source));
     row.insert("dir".into(), header["cwd"].clone());
     row.insert(
         "updated".into(),
@@ -322,6 +326,38 @@ mod tests {
     }
 
     #[test]
+    fn a_session_info_name_is_a_native_title_and_clearing_it_falls_back_to_derived() {
+        let root = tempfile::tempdir().unwrap();
+        let message = json!({"type": "message", "id": "u", "parentId": null,
+                             "timestamp": "2026-07-25T00:00:01Z",
+                             "message": {"role": "user", "content": "首句", "timestamp": 1}});
+        write(
+            &root.path().join("named.jsonl"),
+            &[
+                header(),
+                message.clone(),
+                json!({"type": "session_info", "name": "  原生名字  "}),
+            ],
+        );
+        let rows = scan_roots(&MemoryCache::default(), &[root.path().to_path_buf()]).unwrap();
+        assert_eq!(rows[0]["title"], json!("原生名字"));
+        assert_eq!(rows[0]["title_source"], json!("native"));
+
+        // 空 name 是显式清除标题：回落首条用户消息。
+        let cleared = tempfile::tempdir().unwrap();
+        write(
+            &cleared.path().join("cleared.jsonl"),
+            &[
+                header(),
+                message,
+                json!({"type": "session_info", "name": ""}),
+            ],
+        );
+        let rows = scan_roots(&MemoryCache::default(), &[cleared.path().to_path_buf()]).unwrap();
+        assert_eq!(rows[0]["title_source"], json!("derived"));
+    }
+
+    #[test]
     fn accepts_only_v3_and_aggregates_usage() {
         let root = tempfile::tempdir().unwrap();
         write(
@@ -351,6 +387,8 @@ mod tests {
         assert_eq!(rows[0]["id"], json!("valid"));
         assert_eq!(rows[0]["dir"], json!("/raw/project"));
         assert_eq!(rows[0]["title"], json!("sk-test-title"));
+        // 没有 session_info 名字时标题是首条用户消息的回退。
+        assert_eq!(rows[0]["title_source"], json!("derived"));
         assert_eq!(
             rows[0]["tokens"],
             json!({"input": 10, "output": 4, "cache_read": 3, "cache_write": 2})

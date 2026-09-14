@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::context::EngineContext;
 use crate::contracts::ipc::FERRY_CONTRACT_HASH;
@@ -27,7 +27,9 @@ use crate::sessions::content_index::{ContentIndex, CoverageConverger};
 use crate::sessions::index::{AgentSessionIndex, IndexedSession, SessionPorts};
 use crate::sessions::live::LiveIndexService;
 use crate::sessions::search::SearchRequest;
-use crate::sessions::{agent_read, read as session_read, scan as scanning, search, usage};
+use crate::sessions::{
+    agent_read, read as session_read, scan as scanning, search, title_evidence, title_style, usage,
+};
 use crate::system::{environment, models, pricing};
 
 /// `tool` 参数取字符串；非字符串等价 Python 的 `self._items[tool]` 落空。
@@ -799,6 +801,18 @@ impl EngineService for Engine {
 
     fn operation_cancel(&self, plan_id: &Value) -> EngineResult<Value> {
         self.operations.cancel(plan_id)
+    }
+
+    fn title_evidence(&self, params: &Value) -> EngineResult<Value> {
+        title_evidence::collect(params, &self.index, self.op_ports.state_dir())
+    }
+
+    fn title_style_get(&self) -> EngineResult<Value> {
+        Ok(json!({"style": title_style::get(self.op_ports.state_dir())}))
+    }
+
+    fn title_style_set(&self, style: &Value) -> EngineResult<Value> {
+        Ok(json!({"style": title_style::set(style, self.op_ports.state_dir())?}))
     }
 }
 

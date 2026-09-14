@@ -38,7 +38,10 @@
     "resumeCopiedNoSkill": "已复制,但还没有安装 ferry-resume skill",
     "resumeCopiedNoSkillDesc": "粘贴后不会被识别。在设置页一键安装。",
     "resumeInstallSkill": "去安装",
-    "resumeCopyFail": "复制失败"
+    "resumeCopyFail": "复制失败",
+    "titleReset": "已重置 {{n}} 个标题",
+    "titleResetPartial": "{{ok}} 个已重置,{{failed}} 个失败",
+    "titleResetDesc": "新标题已写回 {{n}} 个会话"
   },
   "ctx": {
     "batchArchive": "批量归档",
@@ -66,7 +69,9 @@
     "more": "更多",
     "favoriteProject": "收藏到导航栏",
     "unfavoriteProject": "取消收藏",
-    "onlyThisProject": "只看此项目"
+    "onlyThisProject": "只看此项目",
+    "titleReset": "AI 重置标题…",
+    "titleResetBatch": "批量 AI 重置标题…"
   },
   "drag": {
     "hint": "拖动调整宽度 · 双击复位"

@@ -25,6 +25,7 @@ export function createSessionContextMenu({
   metaFor,
   updateMetadata,
   setTagSelection,
+  setTitleReset,
   setRename,
   setMultiIds,
   setAgentAttachments,
@@ -49,6 +50,10 @@ export function createSessionContextMenu({
       {
         label: t("app:ctx.addTags"),
         onClick: () => setTagSelection({ sessions: multipleSessions, batch: true }),
+      },
+      {
+        label: t("app:ctx.titleResetBatch"),
+        onClick: () => setTitleReset?.({ sessions: multipleSessions, batch: true }),
       },
       { sep: true },
       {
@@ -115,6 +120,11 @@ export function createSessionContextMenu({
       label: t("app:ctx.rename"),
       hint: "F2",
       onClick: () => setRename(session),
+    },
+    // 重置标题落在重命名旁边:两者做的是同一件事,一个手写一个让模型拟。
+    {
+      label: t("app:ctx.titleReset"),
+      onClick: () => setTitleReset?.({ sessions: [session], batch: false }),
     },
     {
       label: metadata.pinned ? t("app:ctx.unpin") : t("app:ctx.pin"),

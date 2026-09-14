@@ -39,12 +39,14 @@ export function useSessionMetadata({ setToast, t }) {
         else delete next[key];
         return next;
       });
+      return true;
     } catch (error) {
       setToast({
         kind: "fail",
         title: t("app:toast.metaSaveFail"),
         desc: error.message,
       });
+      return false;
     }
   }, [setToast, t]);
 

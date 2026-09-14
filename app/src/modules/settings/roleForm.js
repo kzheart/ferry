@@ -5,6 +5,7 @@ import { DEFAULT_ROLE_COLOR, DEFAULT_ROLE_ICON } from "../../shared/ui/roleIcons
 export const TOOLS = [
   "session_search",
   "session_read",
+  "session_title_evidence",
   "usage",
   "migrate",
   "session_edit",

@@ -60,5 +60,34 @@
     "bulletTarget": "已迁移到 {{tool}} 的会话不受影响,仍然可以接续",
     "bulletIrreversible": "记录本身无法撤销恢复",
     "confirm": "删除记录"
+  },
+  "titleReset": {
+    "title": "AI 重置标题",
+    "batchTitle": "AI 重置标题 · {{n}} 个会话",
+    "model": "模型 {{model}}",
+    "modelUnknown": "尚未生成",
+    "generating": "正在按你的标题风格生成…",
+    "applying": "正在写回标题…",
+    "after": "新标题",
+    "type": "类型",
+    "noTitle": "(没有标题)",
+    "skipped": "本次不改",
+    "empty": "没有可以重命名的会话",
+    "includeManual": "包含手动命名",
+    "cancel": "取消",
+    "apply": "应用 {{n}} 条",
+    "retry": "重试",
+    "failed": "生成失败",
+    "providerUnavailable": "还没有可用的模型",
+    "providerHint": "标题由 Ask Ferry 当前的默认模型生成。请先到「设置 → 模型」里配置一个模型。",
+    "openModels": "去配置模型",
+    "reason": {
+      "manual": "手动命名,已跳过",
+      "too_short": "消息太少",
+      "too_long": "标题超长",
+      "duplicate": "标题重复",
+      "error": "读取失败",
+      "unknown": "已跳过"
+    }
   }
 }

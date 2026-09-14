@@ -270,6 +270,39 @@
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"
+    },
+    {
+      "name": "title_evidence",
+      "kind": "read",
+      "callers": [
+        "ui",
+        "cli"
+      ],
+      "timeout": "lookup",
+      "retry": "never",
+      "dispatch": "parallel-read"
+    },
+    {
+      "name": "title_style.get",
+      "kind": "read",
+      "callers": [
+        "ui",
+        "cli"
+      ],
+      "timeout": "normal",
+      "retry": "safe-read",
+      "dispatch": "parallel-read"
+    },
+    {
+      "name": "title_style.set",
+      "kind": "mutation",
+      "callers": [
+        "ui",
+        "cli"
+      ],
+      "timeout": "normal",
+      "retry": "never",
+      "dispatch": "serial"
     }
   ]
 }

@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 
 use crate::adapters::contracts::{ScanCache, ScanRow};
 use crate::adapters::shared::scanner::{
-    add_tokens, dominant_model, empty_tokens, has_tokens, session_roots, Tokens,
+    add_tokens, dominant_model, empty_tokens, has_tokens, session_roots, title_source_of, Tokens,
 };
 use crate::errors::DomainResult;
 use crate::jsonutil::FileStat;
@@ -258,7 +258,11 @@ pub fn scan(_cache: &dyn ScanCache) -> DomainResult<Vec<ScanRow>> {
         let mut row = ScanRow::new();
         row.insert("tool".into(), Value::from("opencode"));
         row.insert("id".into(), Value::from(id.as_str()));
-        row.insert("title".into(), Value::from(title.unwrap_or_default()));
+        // session.title 就是 OpenCode 自己存的标题，没有首句回退这一档。
+        let title = title.unwrap_or_default();
+        let title_source = title_source_of(true, &title);
+        row.insert("title".into(), Value::from(title));
+        row.insert("title_source".into(), Value::from(title_source));
         row.insert("dir".into(), Value::from(directory.unwrap_or_default()));
         row.insert("updated".into(), Value::from(updated.unwrap_or(0)));
         row.insert("created".into(), created.map_or(Value::Null, Value::from));
