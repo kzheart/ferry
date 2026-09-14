@@ -7,6 +7,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::path::Path;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value};
@@ -23,6 +24,7 @@ use super::writer::index_bundle;
 
 pub struct GrokRenamer;
 
+#[cfg(unix)]
 const LOCK_WAIT: Duration = Duration::from_secs(3);
 
 /// grok 用 flock 的 `<file>.lock` sidecar 串行化对 summary.json 的写入；这里拿同一把锁。
@@ -64,8 +66,6 @@ impl BundleLock {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
-        #[cfg(not(unix))]
-        let _ = Instant::now();
         Ok(Self { file })
     }
 }
