@@ -136,6 +136,14 @@ pub(crate) fn policy(method: &str) -> Option<EngineMethodPolicy> {
             timeout: TimeoutClass::Normal,
             retry: RetryPolicy::Never,
         }),
+        "branch_point" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+        }),
+        "session_fork" => Some(EngineMethodPolicy {
+            timeout: TimeoutClass::AgentRun,
+            retry: RetryPolicy::Never,
+        }),
         _ => None,
     }
 }
@@ -158,6 +166,8 @@ pub(crate) const UI_ENGINE_METHODS: &[&str] = &[
     "title_evidence",
     "title_style.get",
     "title_style.set",
+    "branch_point",
+    "session_fork",
 ];
 
 pub(crate) fn is_ui_engine_method(method: &str) -> bool {

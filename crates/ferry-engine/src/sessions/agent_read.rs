@@ -160,6 +160,33 @@ pub fn get_session_context(
     cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
+    get_session_context_through(
+        tool,
+        opaque_ref,
+        from_message,
+        limit,
+        include_tool_outputs,
+        max_bytes,
+        inert,
+        cursor,
+        index,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn get_session_context_through(
+    tool: &str,
+    opaque_ref: &str,
+    from_message: Option<&Value>,
+    limit: Option<&Value>,
+    include_tool_outputs: bool,
+    max_bytes: Option<&Value>,
+    inert: bool,
+    cursor: Option<&Value>,
+    index: &AgentSessionIndex,
+    through: Option<&str>,
+) -> DomainResult<Map<String, Value>> {
     let first = bounded_int(from_message, 1, 1, 1_000_000, "from_message")?;
     let count = bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")? as usize;
     let budget = bounded_int(
@@ -172,15 +199,17 @@ pub fn get_session_context(
     let supplied = Cursor::decode(cursor)?;
     let continuing = supplied.is_some();
     let record = read_record(index, tool, opaque_ref, continuing)?;
-    let session = read_indexed_session(index, &record, true)
+    let mut session = read_indexed_session(index, &record, true)
         .map_err(|error| cursor_read_error(error, continuing))?;
+    super::branch_point::restrict(&mut session, through)?;
     let binding = read_cursor::digest(&json!([
         "context",
         tool,
         opaque_ref,
         first,
         inert,
-        include_tool_outputs
+        include_tool_outputs,
+        through
     ]));
     let snapshot = read_cursor::digest(&json!([record.revision, session]));
     let start = Cursor::resume(
@@ -556,6 +585,35 @@ pub fn search_session_content(
     cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
+    search_session_content_through(
+        tool,
+        opaque_ref,
+        terms,
+        roles,
+        limit,
+        include_tool_outputs,
+        inert,
+        max_bytes,
+        cursor,
+        index,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn search_session_content_through(
+    tool: &str,
+    opaque_ref: &str,
+    terms: Option<&Value>,
+    roles: Option<&Value>,
+    limit: Option<&Value>,
+    include_tool_outputs: bool,
+    inert: bool,
+    max_bytes: Option<&Value>,
+    cursor: Option<&Value>,
+    index: &AgentSessionIndex,
+    through: Option<&str>,
+) -> DomainResult<Map<String, Value>> {
     let supplied = Cursor::decode(cursor)?;
     let record = read_record(index, tool, opaque_ref, supplied.is_some())?;
     let wanted = string_set(terms, "terms", 20, 100)?;
@@ -592,8 +650,9 @@ pub fn search_session_content(
         .map(|term| (term.clone(), super::usage::casefold(term)))
         .collect();
 
-    let session = read_indexed_session(index, &record, true)
+    let mut session = read_indexed_session(index, &record, true)
         .map_err(|error| cursor_read_error(error, supplied.is_some()))?;
+    super::branch_point::restrict(&mut session, through)?;
     let budget = bounded_int(
         max_bytes,
         MAX_AGENT_DTO_BYTES as i64,
@@ -608,7 +667,8 @@ pub fn search_session_content(
         sorted_terms,
         allowed_roles,
         inert,
-        include_tool_outputs
+        include_tool_outputs,
+        through
     ]));
     let snapshot = read_cursor::digest(&json!([record.revision, session]));
     let start = Cursor::resume(supplied, &binding, &snapshot, Position::default())?;
@@ -845,6 +905,37 @@ pub fn session_read(
     cursor: Option<&Value>,
     index: &AgentSessionIndex,
 ) -> DomainResult<Map<String, Value>> {
+    session_read_through(
+        tool,
+        reference,
+        terms,
+        roles,
+        from_message,
+        limit,
+        include_tool_outputs,
+        max_bytes,
+        inert,
+        cursor,
+        index,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn session_read_through(
+    tool: &str,
+    reference: Option<&str>,
+    terms: Option<&Value>,
+    roles: Option<&Value>,
+    from_message: Option<&Value>,
+    limit: Option<&Value>,
+    include_tool_outputs: Option<&Value>,
+    max_bytes: Option<&Value>,
+    inert: Option<&Value>,
+    cursor: Option<&Value>,
+    index: &AgentSessionIndex,
+    through: Option<&str>,
+) -> DomainResult<Map<String, Value>> {
     let Some(reference) = reference.filter(|value| !value.is_empty()) else {
         let mut params = Map::new();
         params.insert("field".into(), Value::from("ref"));
@@ -873,13 +964,13 @@ pub fn session_read(
         Some(_) => return Err(DomainError::agent_request_invalid("inert 必须是 boolean")),
     };
     let mut result = if terms.is_some_and(|value| !value.is_null()) {
-        let mut payload = search_session_content(
-            tool, reference, terms, roles, limit, outputs, lazy, max_bytes, cursor, index,
+        let mut payload = search_session_content_through(
+            tool, reference, terms, roles, limit, outputs, lazy, max_bytes, cursor, index, through,
         )?;
         payload.insert("mode".into(), Value::from("search"));
         payload
     } else {
-        let mut payload = get_session_context(
+        let mut payload = get_session_context_through(
             tool,
             reference,
             from_message,
@@ -889,6 +980,7 @@ pub fn session_read(
             lazy,
             cursor,
             index,
+            through,
         )?;
         payload.insert("mode".into(), Value::from("context"));
         payload
@@ -908,6 +1000,72 @@ pub fn dto_bytes(value: &Value) -> usize {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn bounded_pages_and_tool_search_cannot_recover_later_history() {
+        use crate::model::{text_tool_result, Block, ToolCall, ToolResultStatus};
+        use crate::sessions::branch_point::{restrict, BranchPoint};
+        let mut session = Session::new("claude", "source", "/fixture");
+        for (i, role) in ["user", "assistant", "user", "assistant"]
+            .iter()
+            .enumerate()
+        {
+            let mut message = Message::new(*role);
+            message.source_id = Some(format!("m{i}"));
+            message.blocks.push(Block::text(if i < 2 {
+                "retained"
+            } else {
+                "FUTURE_SENTINEL"
+            }));
+            message.turn_complete = Some(true);
+            if i == 3 {
+                let mut block = Block::new(BlockKind::Tool);
+                let mut call = ToolCall::new("Bash", None, json!({}));
+                call.result = Some(text_tool_result(
+                    "FUTURE_TOOL_OUTPUT",
+                    ToolResultStatus::Success,
+                ));
+                block.tool = Some(call);
+                message.blocks.push(block);
+            }
+            session.messages.push(message);
+        }
+        let token = BranchPoint::issue(&session, "m0").unwrap();
+        restrict(&mut session, Some(&token)).unwrap();
+        let binding = read_cursor::digest(&json!("bounded"));
+        let snapshot = read_cursor::digest(&json!("snapshot"));
+        let mut position = Position::default();
+        loop {
+            let page = context_page(
+                &session,
+                json!({}),
+                position,
+                1,
+                4096,
+                true,
+                true,
+                &binding,
+                &snapshot,
+                |_, _| Ok("fml_fixture".into()),
+            )
+            .unwrap();
+            assert!(!serde_json::to_string(&page).unwrap().contains("FUTURE"));
+            let Some(cursor) = page["next_cursor"].as_str() else {
+                break;
+            };
+            position = Cursor::resume(
+                Cursor::decode(Some(&json!(cursor))).unwrap(),
+                &binding,
+                &snapshot,
+                Position::default(),
+            )
+            .unwrap();
+        }
+        assert!(session
+            .messages
+            .iter()
+            .all(|message| !searchable_text(message, true, true).contains("FUTURE")));
+    }
 
     /// `session_read` 的分发默认值只在**缺键**时生效；键在而值为 `null`
     /// 会走到 `isinstance(None, bool)` 的假分支（`agent_read.py:400-401`）。

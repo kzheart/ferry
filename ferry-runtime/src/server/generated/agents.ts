@@ -25,6 +25,7 @@ export const AGENT_CAPABILITIES = {
     "rename",
     "prompt",
     "models",
+    "fork",
   ],
   codex: [
     "browse",
@@ -35,6 +36,7 @@ export const AGENT_CAPABILITIES = {
     "rename",
     "prompt",
     "models",
+    "fork",
   ],
   opencode: [
     "browse",
@@ -45,6 +47,7 @@ export const AGENT_CAPABILITIES = {
     "rename",
     "prompt",
     "models",
+    "fork",
   ],
   pi: [
     "browse",
@@ -55,6 +58,7 @@ export const AGENT_CAPABILITIES = {
     "rename",
     "prompt",
     "models",
+    "fork",
   ],
   grok: [
     "browse",
@@ -64,6 +68,7 @@ export const AGENT_CAPABILITIES = {
     "rename",
     "prompt",
     "models",
+    "fork",
   ],
   cursor: ["browse", "resume", "migration-source"],
 } as const;

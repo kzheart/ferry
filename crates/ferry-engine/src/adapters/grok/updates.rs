@@ -41,6 +41,7 @@ pub struct Prompt {
     pub tools: Vec<PromptTool>,
     pub unknown: Vec<Value>,
     pub compaction: Option<Value>,
+    pub turn_complete: Option<bool>,
 }
 
 impl Prompt {
@@ -52,6 +53,7 @@ impl Prompt {
             tools: Vec::new(),
             unknown: Vec::new(),
             compaction: None,
+            turn_complete: None,
         }
     }
 
@@ -273,6 +275,13 @@ pub fn aggregate_updates(envelopes: &[Value]) -> Vec<Prompt> {
         }
         let prompt_id = prompt_id.unwrap_or_else(|| format!("prompt:{}", prompts.len()));
         let index = ensure_prompt(&mut prompts, &mut order, &prompt_id);
+
+        if session_update.as_deref() == Some("turn_completed") {
+            prompts[index].turn_complete = field(parts.update, "stop_reason")
+                .and_then(Value::as_str)
+                .map(|reason| reason == "end_turn");
+            continue;
+        }
 
         let is_user = matches!(update_type.as_deref(), Some("UserMessage" | "Prompt"))
             || session_update.as_deref() == Some("user_message_chunk")

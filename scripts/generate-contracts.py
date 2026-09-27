@@ -92,6 +92,7 @@ AGENT_CAPABILITIES = (
     "rename",
     "prompt",
     "models",
+    "fork",
 )
 
 

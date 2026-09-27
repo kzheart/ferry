@@ -16,5 +16,7 @@ export const UI_ENGINE_METHODS = [
   "title_evidence",
   "title_style.get",
   "title_style.set",
+  "branch_point",
+  "session_fork",
 ] as const;
 export type UiEngineMethod = (typeof UI_ENGINE_METHODS)[number];

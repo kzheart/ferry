@@ -215,6 +215,7 @@ export function useSessionSelection({
                   ...(page.messages || []),
                 ],
                 turns: [...(active.data?.turns || []), ...(page.turns || [])],
+                completed_turns: [...new Set([...(active.data?.completed_turns || []), ...(page.completed_turns || [])])],
                 returned_message_count:
                   (active.data?.returned_message_count || 0) +
                   (page.returned_message_count || 0),

@@ -303,6 +303,28 @@
       "timeout": "normal",
       "retry": "never",
       "dispatch": "serial"
+    },
+    {
+      "name": "branch_point",
+      "kind": "read",
+      "callers": [
+        "ui",
+        "cli"
+      ],
+      "timeout": "lookup",
+      "retry": "never",
+      "dispatch": "parallel-read"
+    },
+    {
+      "name": "session_fork",
+      "kind": "mutation",
+      "callers": [
+        "ui",
+        "cli"
+      ],
+      "timeout": "agent-run",
+      "retry": "never",
+      "dispatch": "serial"
     }
   ]
 }

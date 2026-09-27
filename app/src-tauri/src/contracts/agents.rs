@@ -12,6 +12,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
     ),
     (
@@ -25,6 +26,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
     ),
     (
@@ -38,6 +40,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
     ),
     (
@@ -51,6 +54,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
     ),
     (
@@ -63,6 +67,7 @@ pub(crate) const AGENT_CAPABILITIES: &[(&str, &[&str])] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
     ),
     ("cursor", &["browse", "resume", "migration-source"]),

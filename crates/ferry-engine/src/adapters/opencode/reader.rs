@@ -470,6 +470,10 @@ pub fn parse_session(data: &Value) -> DomainResult<(Session, Vec<AgentEdge>)> {
 
         if !blocks.is_empty() {
             let mut message = Message::new(role);
+            message.turn_complete = info
+                .get("finish")
+                .and_then(Value::as_str)
+                .map(|reason| reason == "stop" && info.get("error").is_none_or(Value::is_null));
             message.blocks = blocks;
             message.source_id = message_id.clone();
             message.parent_ids = text_of(info.get("parentID"))

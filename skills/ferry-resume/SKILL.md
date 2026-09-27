@@ -1,8 +1,8 @@
 ---
 name: ferry-resume
 description: 'Continue work from a session that ran in another coding agent, or an earlier session of this one, by reading it through the local `ferry` CLI. Use when the user names a past session to pick up — by native id (`/ferry-resume codex 01a02803-…`, copied from the Ferry app''s 「续聊到」 menu), by topic, or as "continue from Codex / 接着 Codex 里那个会话继续". Read-only: nothing is written into any agent''s store.'
-version: 0.9.1
-argument-hint: "[agent] [native session id | words describing the session | session ref]"
+version: 0.9.2
+argument-hint: "[agent] [native session id | words describing the session | session ref] [--through fbp_TOKEN]"
 ---
 
 # Ferry resume — pick up another agent's session
@@ -69,6 +69,21 @@ say so, then widen with `--since`, drop `--project`, or ask where the session ra
 `content_index.ready` is `false`, results are partial.
 
 ## Step 3 — read it, tail first
+
+If the instruction includes `--through fbp_...`, preserve it verbatim and add it to
+**every** `ferry read` call, including searches, pagination, and tool-output reads.
+This is the end of the selected complete answer, inclusive. Read the bounded
+`message_count` first; “the ending” and “last request” below mean the ending of
+that bounded history. Never fall back to an unbounded read on an error. If the
+checkpoint is invalid or its history changed, stop and ask the user to select the
+turn again in Ferry. Searching to resolve a new `fsr_` ref is allowed, but do not
+use search snippets or the full-session title as takeover evidence.
+
+Example: `ferry read codex fsr_XXXX --inert --through fbp_TOKEN --from 1 --limit 1`.
+The engine enforces the boundary before pagination and content search, excluding
+later messages, tool results, child sessions, and whole-session summaries.
+
+
 
 ```bash
 ferry read codex fsr_XXXX --inert --from 1 --limit 1 --max-bytes 4096                  # message_count, title

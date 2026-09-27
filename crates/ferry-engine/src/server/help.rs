@@ -46,6 +46,11 @@ pub const SEARCH_OPTIONS: &[OptionSpec] = &[
 ];
 
 pub const READ_OPTIONS: &[OptionSpec] = &[
+    value!(
+        "through",
+        "TOKEN",
+        "只读到已选完整轮次；每次分页和检索均须携带"
+    ),
     value!("from", "N", "起始原始消息号，1-based"),
     value!("limit", "N", "每页 1–50 条消息或命中，默认 20"),
     value!("roles", "user,assistant", "仅 --terms 搜索模式按角色过滤"),

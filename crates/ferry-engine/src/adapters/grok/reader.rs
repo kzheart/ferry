@@ -375,6 +375,7 @@ pub fn read(path: &Path) -> DomainResult<Session> {
             let mut message = Message::new("assistant");
             message.blocks = blocks;
             message.source_id = Some(format!("{}:assistant", prompt.id));
+            message.turn_complete = prompt.turn_complete;
             session.messages.push(message);
         }
         if let Some(compaction) = prompt.compaction.as_ref() {

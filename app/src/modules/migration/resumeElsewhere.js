@@ -28,11 +28,12 @@ export function canFallBackToResume(error) {
  * 带的是**原生** session id 而不是 `fsr_` ref——ref 是引擎实例内临时签发的,
  * 粘贴时可能已经换了;skill 会自己用 `ferry search --session-id` 换回来。
  */
-export function buildResumeCommand({ tool, sessionId } = {}) {
+export function buildResumeCommand({ tool, sessionId, through } = {}) {
   const id = String(sessionId || "").trim();
   const source = String(tool || "").trim();
   if (!source || !id) return "";
-  return `/ferry-resume ${source} ${id}`;
+  if (through != null && !/^fbp_[A-Za-z0-9_-]+$/.test(through)) return "";
+  return `/ferry-resume ${source} ${id}${through ? ` --through ${through}` : ""}`;
 }
 
 /**
@@ -57,8 +58,8 @@ async function skillInstalled() {
  * `copied` 表示剪贴板已写入;`noSkill` 只在确认没装 ferry-resume 时为 true
  * (读不到宿主状态时不吓唬用户);`error` 是写剪贴板失败的原因。
  */
-export async function copyResumeInstruction({ tool, sessionId } = {}) {
-  const command = buildResumeCommand({ tool, sessionId });
+export async function copyResumeInstruction({ tool, sessionId, through } = {}) {
+  const command = buildResumeCommand({ tool, sessionId, through });
   if (!command) return { command: "", copied: false };
   try {
     await writeClipboardText(command);
@@ -79,9 +80,9 @@ export async function copyResumeInstruction({ tool, sessionId } = {}) {
  * 根本不会被识别,得把「去安装」摆在前面;读不到状态就给一句中性的说明。
  */
 export async function copyResumeCommand({
-  tool, sessionId, t, setToast, openConfig,
+  tool, sessionId, through, t, setToast, openConfig,
 }) {
-  const result = await copyResumeInstruction({ tool, sessionId });
+  const result = await copyResumeInstruction({ tool, sessionId, through });
   if (!result.command) return "";
   if (!result.copied) {
     setToast?.({

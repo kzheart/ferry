@@ -301,6 +301,9 @@ fn read_params(argv: &[String]) -> Result<Value, String> {
         return Err("--roles 仅在 search 模式生效，需与 --terms 同用".to_string());
     }
     let mut params = Map::new();
+    if let Some(through) = parsed.value("through") {
+        params.insert("through".into(), Value::from(through));
+    }
     params.insert("tool".into(), Value::from(parsed.positional(0, "tool")?));
     params.insert("ref".into(), Value::from(parsed.positional(1, "ref")?));
     if let Some(cursor) = parsed.value("cursor") {
@@ -952,6 +955,19 @@ fn title(socket: &Path, argv: &[String]) -> Result<Outcome, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_read_preserves_checkpoint() {
+        let params = read_params(&argv(&[
+            "codex",
+            "fsr_x",
+            "--through",
+            "fbp_checkpoint",
+            "--inert",
+        ]))
+        .unwrap();
+        assert_eq!(params["through"], "fbp_checkpoint");
+    }
 
     #[test]
     fn title_reset_keeps_evidence_errors_even_when_nothing_was_applied() {

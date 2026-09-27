@@ -499,6 +499,10 @@ pub fn read(path: &str) -> DomainResult<Session> {
             session.title = title;
         }
         let mut message = Message::new(role.unwrap_or_default());
+        message.turn_complete = message_value
+            .get("stopReason")
+            .and_then(Value::as_str)
+            .map(|reason| reason == "stop");
         message.blocks = blocks;
         message.source_id = Some(id.clone());
         message.parent_ids = parent_ids(entry);

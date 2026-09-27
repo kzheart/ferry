@@ -323,7 +323,8 @@ mod tests {
                 "migration-target",
                 "rename",
                 "prompt",
-                "models"
+                "models",
+                "fork"
             ]
         );
         // 无 edit 能力 → 没有 editor 组件。

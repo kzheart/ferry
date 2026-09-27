@@ -526,6 +526,71 @@ impl EngineService for Engine {
         })
     }
 
+    fn branch_point(&self, params: &Value) -> EngineResult<Value> {
+        let tool = tool_name(&params["tool"])?;
+        let record = self
+            .index
+            .resolve(tool, reference_name(&params["ref"]), true)?;
+        let locator = self
+            .index
+            .resolve_message_locator(&record, params["turn_locator"].as_str().unwrap_or(""))?;
+        let session = agent_read::read_indexed_session(&self.index, &record, true)?;
+        let token =
+            crate::sessions::branch_point::BranchPoint::issue(&session, &locator.native_locator)?;
+        Ok(json!({"through": token, "tool": tool, "session_id": session.source_id}))
+    }
+
+    fn session_fork(&self, params: &Value) -> EngineResult<Value> {
+        let tool = tool_name(&params["tool"])?;
+        let adapter = SessionPorts::adapter(self.ports.as_ref(), tool)?;
+        if !adapter.supports("fork") {
+            return Err(DomainError::agent_request_invalid(
+                "This engine does not support native turn forks; use Ferry Resume.",
+            )
+            .into());
+        }
+        let record = self
+            .index
+            .resolve(tool, reference_name(&params["ref"]), true)?;
+        let session = agent_read::read_indexed_session(&self.index, &record, true)?;
+        let through = params["through"].as_str().unwrap_or("");
+        let point = crate::sessions::branch_point::BranchPoint::resolve(through, &session)?;
+        let mut request = point.native_request(&session, &record.canonical_ref);
+        request["executable"] =
+            json!(crate::system::executables::resolve(tool).unwrap_or_else(|| tool.to_string()));
+        let mut result = crate::operations::fork::create(
+            &self.op_ports.state_dir(),
+            params["request_id"].as_str().unwrap_or(""),
+            through,
+            request,
+            |request| {
+                if tool == "opencode" {
+                    return Ok(crate::adapters::opencode::fork::create(&request)?);
+                }
+                crate::server::runtime_bridge::call_once("native_session.fork", request).map_err(
+                    |error| {
+                        let message = error
+                            .pointer("/params/message")
+                            .and_then(Value::as_str)
+                            .unwrap_or(
+                                "Native fork failed; inspect session history before retrying.",
+                            );
+                        let mut failure = DomainError::agent_request_invalid(message);
+                        failure
+                            .params_mut()
+                            .insert("message".into(), json!(message));
+                        failure.into()
+                    },
+                )
+            },
+        )?;
+        let id = result["id"].as_str().unwrap_or("").to_string();
+        if let Some(reference) = self.refresh_agent_prompt_ref(tool, &id) {
+            result["ref"] = json!(reference);
+        }
+        Ok(result)
+    }
+
     fn list_models(&self, tool: &Value) -> EngineResult<Value> {
         let name = tool_name(tool)?;
         let adapter = SessionPorts::adapter(self.ports.as_ref(), name)?;
@@ -591,11 +656,33 @@ impl EngineService for Engine {
                     total_count: record.row.get("count").and_then(Value::as_i64),
                 }
             };
-            Ok(Value::Object(session_read::show(
-                &session,
-                options,
-                Some(&issuer),
-            )?))
+            let mut payload = session_read::show(&session, options, Some(&issuer))?;
+            let page_start = payload
+                .get("message_range")
+                .and_then(|r| r.get("from"))
+                .and_then(Value::as_u64)
+                .unwrap_or(1) as usize;
+            let page_end = payload
+                .get("message_range")
+                .and_then(|r| r.get("to"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as usize;
+            let completed =
+                crate::sessions::branch_point::completed_on_page(&session, page_start, page_end)
+                    .into_iter()
+                    .map(|i| issuer(&session.messages[i], i))
+                    .collect::<DomainResult<Vec<_>>>()?;
+            payload.insert("completed_turns".into(), json!(completed));
+            payload.insert(
+                "fork_origin".into(),
+                crate::operations::fork::origin(
+                    &self.op_ports.state_dir(),
+                    name,
+                    &session.source_id,
+                )
+                .unwrap_or(Value::Null),
+            );
+            Ok(Value::Object(payload))
         })
     }
 
@@ -694,7 +781,7 @@ impl EngineService for Engine {
     fn session_read(&self, request: &SessionReadRequest) -> EngineResult<Value> {
         let name = tool_name(&request.tool)?;
         SessionPorts::adapter(self.ports.as_ref(), name)?.require_browser()?;
-        Ok(Value::Object(agent_read::session_read(
+        Ok(Value::Object(agent_read::session_read_through(
             name,
             request.reference.as_str(),
             Some(&request.terms),
@@ -706,6 +793,16 @@ impl EngineService for Engine {
             Some(&request.inert),
             Some(&request.cursor).filter(|value| !value.is_null()),
             &self.index,
+            match &request.through {
+                Value::Null => None,
+                Value::String(s) if !s.is_empty() => Some(s.as_str()),
+                _ => {
+                    return Err(DomainError::agent_request_invalid(
+                        "through must be a non-empty branch point",
+                    )
+                    .into())
+                }
+            },
         )?))
     }
 

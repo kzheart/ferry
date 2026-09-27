@@ -10,6 +10,7 @@ pub const AGENT_CAPABILITIES: &[&str] = &[
     "rename",
     "prompt",
     "models",
+    "fork",
 ];
 
 /// 单个内置 Agent 的静态契约（AgentManifest 的事实源）。
@@ -40,6 +41,7 @@ pub const AGENTS: &[AgentContract] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
         edit_operations: &["delete-turn", "rewrite", "replace-assistant-reply"],
         executables: &["claude"],
@@ -59,6 +61,7 @@ pub const AGENTS: &[AgentContract] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
         edit_operations: &["delete-turn", "rewrite", "replace-assistant-reply"],
         executables: &["codex"],
@@ -78,6 +81,7 @@ pub const AGENTS: &[AgentContract] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
         edit_operations: &["rewrite"],
         executables: &["opencode"],
@@ -97,6 +101,7 @@ pub const AGENTS: &[AgentContract] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
         edit_operations: &["delete-turn", "rewrite", "replace-assistant-reply"],
         executables: &["pi"],
@@ -115,6 +120,7 @@ pub const AGENTS: &[AgentContract] = &[
             "rename",
             "prompt",
             "models",
+            "fork",
         ],
         edit_operations: &[],
         executables: &["grok"],

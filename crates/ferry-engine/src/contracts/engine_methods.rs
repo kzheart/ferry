@@ -68,6 +68,8 @@ pub const ENGINE_METHOD_NAMES: &[&str] = &[
     "title_evidence",
     "title_style.get",
     "title_style.set",
+    "branch_point",
+    "session_fork",
 ];
 
 /// 允许进并发只读池的方法。
@@ -84,6 +86,7 @@ pub const PARALLEL_READ_METHOD_NAMES: &[&str] = &[
     "usage_stats",
     "title_evidence",
     "title_style.get",
+    "branch_point",
 ];
 
 /// 进独立轻量控制池的方法，不得被重读队列阻塞。
@@ -110,6 +113,8 @@ pub const CLI_METHOD_NAMES: &[&str] = &[
     "title_evidence",
     "title_style.get",
     "title_style.set",
+    "branch_point",
+    "session_fork",
 ];
 
 pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
@@ -285,6 +290,18 @@ pub fn policy(method: &str) -> Option<EngineMethodPolicy> {
         "title_style.set" => Some(EngineMethodPolicy {
             kind: MethodKind::Mutation,
             timeout: TimeoutClass::Normal,
+            retry: RetryPolicy::Never,
+            dispatch: Dispatch::Serial,
+        }),
+        "branch_point" => Some(EngineMethodPolicy {
+            kind: MethodKind::Read,
+            timeout: TimeoutClass::Lookup,
+            retry: RetryPolicy::Never,
+            dispatch: Dispatch::ParallelRead,
+        }),
+        "session_fork" => Some(EngineMethodPolicy {
+            kind: MethodKind::Mutation,
+            timeout: TimeoutClass::AgentRun,
             retry: RetryPolicy::Never,
             dispatch: Dispatch::Serial,
         }),

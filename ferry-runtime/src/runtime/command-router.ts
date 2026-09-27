@@ -1,3 +1,4 @@
+import { dispatchNativeFork } from "../native-fork/commands.js";
 import { dispatchProviderCommand } from "../providers/commands.js";
 import { FERRY_CONTRACT_HASH } from "../server/generated/ipc.js";
 import type { AgentRuntime } from "./runtime.js";
@@ -21,6 +22,7 @@ export async function dispatch(
     let result: unknown;
     // 逐个域试派发,命中即止——未命中的域不该被无谓地调一遍
     const domains = [
+      () => dispatchNativeFork(command),
       () => dispatchProviderCommand(runtime.providerService, command),
       () => dispatchRoleCommand(runtime.roleService, command),
       () => dispatchSkillCommand(runtime.skillService, command),

@@ -69,6 +69,8 @@ export function WorkspaceRouter({
             loadingMore={detailActions.loadingMore}
             onResume={detailActions.onResume}
             onResumeElsewhere={detailActions.onResumeElsewhere}
+            onForkCreated={detailActions.onForkCreated}
+            onOpenForkOrigin={detailActions.onOpenForkOrigin}
           />
         ) : (
           <div

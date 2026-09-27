@@ -164,10 +164,21 @@ export function useWorkspaceInteractions({
     },
     loadMore,
     // 与右键菜单同一条指令,但不走 toast:按钮自己有反馈位,结果画在按钮上
-    resumeElsewhere: (meta) => copyResumeInstruction({
+    resumeElsewhere: (meta, through) => copyResumeInstruction({
+      through,
       tool: meta.tool,
       sessionId: meta.id,
     }),
+    forkCreated: async (result) => {
+      await rescan();
+      setPeekId(null);
+      setView("library");
+      loadEntitySession({ tool: result.tool, sessionId: result.id, ref: result.ref }, result);
+    },
+    openForkOrigin: (origin) => {
+      setNavigationTarget({ view: "library", tool: origin.tool, sessionId: origin.session_id, turn: origin.turn, nonce: Date.now() });
+      loadEntitySession({ tool: origin.tool, sessionId: origin.session_id });
+    },
     resume: async (meta) => {
       if (!supportsSessionResumeCli(meta?.tool)) return;
       setToast({
@@ -209,7 +220,9 @@ export function useWorkspaceInteractions({
       onOpenMigrate: (sc) => detailFns.current.openMigrate(sc),
       onLoadMore: () => detailFns.current.loadMore(),
       onResume: (meta) => detailFns.current.resume(meta),
-      onResumeElsewhere: (meta) => detailFns.current.resumeElsewhere(meta),
+      onResumeElsewhere: (meta, through) => detailFns.current.resumeElsewhere(meta, through),
+      onForkCreated: (result) => detailFns.current.forkCreated(result),
+      onOpenForkOrigin: (origin) => detailFns.current.openForkOrigin(origin),
     }),
     [],
   );

@@ -48,6 +48,7 @@
     {"name": "auth.login.respond", "exposure": "public"},
     {"name": "auth.login.cancel", "exposure": "public"},
     {"name": "title.generate", "exposure": "public"},
-    {"name": "tool.result", "exposure": "internal"}
+    {"name": "tool.result", "exposure": "internal"},
+    {"name": "native_session.fork", "exposure": "internal"}
   ]
 }

@@ -257,6 +257,9 @@ pub struct Message {
     pub agent_id: Option<String>,
     #[serde(default)]
     pub created_at: Option<Timestamp>,
+    /// Native end-of-turn evidence. Runtime-only: not part of migration format.
+    #[serde(skip)]
+    pub turn_complete: Option<bool>,
 }
 
 impl Message {
@@ -269,6 +272,7 @@ impl Message {
             turn_id: None,
             agent_id: None,
             created_at: None,
+            turn_complete: None,
         }
     }
 }

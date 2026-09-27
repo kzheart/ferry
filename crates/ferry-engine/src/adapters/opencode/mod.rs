@@ -17,3 +17,5 @@ pub mod scanner;
 pub mod store;
 pub mod tool_calls;
 pub mod writer;
+
+pub mod fork;

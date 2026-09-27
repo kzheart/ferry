@@ -1,3 +1,4 @@
+import BranchActions from "./BranchActions.jsx";
 // 会话详情:头部 + 会话树 chips + 按轮时间线;轮次操作 hover 显现,有暂存操作时底部浮出操作条
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +27,8 @@ export default memo(function SessionDetail({
   onOpenMigrate,
   onResume,
   onResumeElsewhere,
+  onForkCreated,
+  onOpenForkOrigin,
   navigationTarget,
   onLoadMore,
   loadingMore,
@@ -127,6 +130,7 @@ export default memo(function SessionDetail({
         style={{ flex: 1, overflowY: "auto", minWidth: 0 }}
       >
         <SessionDetailHeader
+          onOpenForkOrigin={onOpenForkOrigin}
           meta={meta}
           data={data}
           migrationOrigin={migrationOrigin}
@@ -179,6 +183,13 @@ export default memo(function SessionDetail({
                 <SessionRound
                   key={item.key}
                   r={r}
+                  branchActions={data.completed_turns?.includes(r.locator) && (
+                    <BranchActions
+                      meta={meta} round={r} disabled={ops.length > 0}
+                      onResumeElsewhere={onResumeElsewhere}
+                      onForkCreated={onForkCreated}
+                    />
+                  )}
                   canDelete={canDelete}
                   canRewrite={canRewrite}
                   delOp={opFor(r.n, "delete")}

@@ -500,6 +500,14 @@ fn append(session: &mut Session, bubble: &Bubble, bubble_id: &str, index: usize)
         return;
     }
     let mut message = Message::new("assistant");
+    // Cursor persists duration on closed native turns. Only a final text bubble
+    // without an error is a selectable answer; tools/thinking remain ineligible.
+    message.turn_complete = Some(
+        bubble.capability_type.is_none()
+            && !bubble.text.trim().is_empty()
+            && bubble.error_details.is_none()
+            && bubble.turn_duration_ms.is_some_and(|ms| ms > 0.0),
+    );
     message.blocks = blocks;
     message.source_id = Some(source_id);
     message.created_at = created;

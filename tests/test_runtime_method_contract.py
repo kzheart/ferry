@@ -21,6 +21,7 @@ def test_runtime_router_exactly_implements_contract_methods():
         ROOT / "ferry-runtime/src/roles/commands.ts",
         ROOT / "ferry-runtime/src/sessions/commands.ts",
         ROOT / "ferry-runtime/src/skills/commands.ts",
+        ROOT / "ferry-runtime/src/native-fork/commands.ts",
     ]
     implemented = {
         method
@@ -36,7 +37,7 @@ def test_internal_runtime_commands_never_enter_webview_allowlist():
     methods = _methods()
     public = {method["name"] for method in methods if method["exposure"] == "public"}
     internal = {method["name"] for method in methods if method["exposure"] == "internal"}
-    assert internal == {"tool.result"}
+    assert internal == {"tool.result", "native_session.fork"}
 
     frontend = (
         ROOT / "app/src/shared/contracts/generated/runtime-methods.ts"

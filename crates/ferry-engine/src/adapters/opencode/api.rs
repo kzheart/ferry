@@ -171,7 +171,7 @@ impl OpenCodeApi {
     pub fn request(&self, method: &str, path: &str, body: Option<&Value>) -> DomainResult<Value> {
         let url = format!("{}{path}", self.base_url);
         // 关掉「HTTP 错误码即 Err」：Python 侧会读错误响应体拼进报错信息。
-        // 用到的只有两个动词：GET 恒无请求体，PATCH 恒有。
+        // Read requests use GET; native edits and forks require distinct PATCH/POST verbs.
         let authorization = self.authorization();
         let sent: Result<ureq::http::Response<ureq::Body>, ureq::Error> = match body {
             None => ureq::get(&url)
@@ -181,16 +181,21 @@ impl OpenCodeApi {
                 .build()
                 .header("Authorization", authorization)
                 .call(),
-            Some(body) => ureq::patch(&url)
-                .config()
-                .timeout_global(Some(self.timeout))
-                .http_status_as_error(false)
-                .build()
-                .header("Authorization", authorization)
-                .header("Content-Type", "application/json")
-                .send(serde_json::to_string(body).map_err(|error| {
-                    DomainError::internal(format!("请求体序列化失败: {error}"))
-                })?),
+            Some(body) => match method {
+                "POST" => ureq::post(&url),
+                "PATCH" => ureq::patch(&url),
+                _ => return Err(DomainError::internal("Unsupported OpenCode API verb")),
+            }
+            .config()
+            .timeout_global(Some(self.timeout))
+            .http_status_as_error(false)
+            .build()
+            .header("Authorization", authorization)
+            .header("Content-Type", "application/json")
+            .send(
+                serde_json::to_string(body)
+                    .map_err(|error| DomainError::internal(format!("请求体序列化失败: {error}")))?,
+            ),
         };
         let response = match sent {
             Ok(response) => response,
@@ -224,7 +229,7 @@ impl OpenCodeApi {
     }
 
     /// 所有会话级路由都要带 `directory` 查询参数。
-    fn scoped(&self, path: &str) -> String {
+    pub(crate) fn scoped(&self, path: &str) -> String {
         let encoded =
             percent_encoding::utf8_percent_encode(&self.cwd, percent_encoding::NON_ALPHANUMERIC)
                 .to_string();

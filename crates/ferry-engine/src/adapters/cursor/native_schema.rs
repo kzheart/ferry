@@ -171,6 +171,8 @@ pub struct Bubble {
     pub tool_former_data: Option<ToolFormerData>,
     #[serde(default, rename = "errorDetails")]
     pub error_details: Option<Value>,
+    #[serde(default, rename = "turnDurationMs")]
+    pub turn_duration_ms: Option<f64>,
 }
 
 /// 工具 bubble 的 capabilityType。

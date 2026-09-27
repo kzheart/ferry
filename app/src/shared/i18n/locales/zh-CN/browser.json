@@ -132,5 +132,15 @@
     "cancel": "放弃 AI 回复修改",
     "addText": "+ 文本",
     "addTool": "+ 工具调用"
+  },
+  "branch": {
+    "fork": "从此轮 Fork",
+    "resume": "从此轮续接",
+    "copied": "已复制：只继承截至此轮的历史。",
+    "noSkill": "已复制；请先在设置中安装 Ferry Resume 技能。",
+    "copyFailed": "续接指令复制失败",
+    "changed": "此轮历史已变化，请重新打开会话后再分叉。",
+    "created": "已创建新会话：{{id}}",
+    "origin": "分叉自 {{id}} · 第 {{n}} 轮"
   }
 }

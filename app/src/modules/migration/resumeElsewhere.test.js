@@ -90,3 +90,9 @@ test("读不到集成状态时给中性说明:不确定不等于没装", async (
   assert.equal(toast.desc, "app:toast.resumeCopiedDesc");
   assert.equal(toast.action, undefined);
 });
+
+test("bounded resume preserves the token in the copied command", async () => {
+  await copyResumeCommand({ tool: "pi", sessionId: "sid", through: "fbp_abc-123", t });
+  assert.equal(clipboard, "/ferry-resume pi sid --through fbp_abc-123");
+  assert.equal(buildResumeCommand({ tool: "pi", sessionId: "sid", through: "bad token" }), "");
+});

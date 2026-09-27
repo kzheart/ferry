@@ -14,6 +14,17 @@ fails validation if its version has no section.
 - **Audience** — write for users, not contributors. Explain what changed and why, not how.
 - **Scope** — one entry per logical change, not per commit. Merge related commits into a single entry.
 
+## [0.9.2] - 2026-09-27
+
+### Added
+
+- **Native session forks** — branch after a completed answer in Claude Code,
+  Codex, OpenCode, Pi Agent and Grok Build, then continue in the new native
+  session. Forked sessions can be branched again, with a link back to their origin.
+- **Resume from a selected answer** — copy a Ferry Resume command that includes
+  only history through the selected completed turn, including its tool results.
+  Fork and resume actions appear as icons beside copy and edit.
+
 ## [0.9.1] - 2026-09-14
 
 ### Added

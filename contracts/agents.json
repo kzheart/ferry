@@ -7,7 +7,8 @@
     "edit",
     "rename",
     "prompt",
-    "models"
+    "models",
+    "fork"
   ],
   "agents": [
     {
@@ -26,7 +27,8 @@
         "edit",
         "rename",
         "prompt",
-        "models"
+        "models",
+        "fork"
       ],
       "edit_operations": [
         "delete-turn",
@@ -54,7 +56,8 @@
         "edit",
         "rename",
         "prompt",
-        "models"
+        "models",
+        "fork"
       ],
       "edit_operations": [
         "delete-turn",
@@ -82,7 +85,8 @@
         "edit",
         "rename",
         "prompt",
-        "models"
+        "models",
+        "fork"
       ],
       "edit_operations": [
         "rewrite"
@@ -108,7 +112,8 @@
         "edit",
         "rename",
         "prompt",
-        "models"
+        "models",
+        "fork"
       ],
       "edit_operations": [
         "delete-turn",
@@ -133,7 +138,8 @@
         "migration-target",
         "rename",
         "prompt",
-        "models"
+        "models",
+        "fork"
       ],
       "edit_operations": [],
       "executables": [

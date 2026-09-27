@@ -216,6 +216,7 @@ export default function SessionRound({
   canRewrite,
   delOp,
   rewOp,
+  branchActions,
   onDelete,
   onUndoDelete,
   onRewrite,
@@ -561,6 +562,7 @@ export default function SessionRound({
                   <PencilIcon />
                 </IconBtn>
               )}
+              {!deleted && branchActions}
             </div>
           </div>
         )}

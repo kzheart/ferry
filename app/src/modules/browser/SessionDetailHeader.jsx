@@ -26,6 +26,7 @@ export default function SessionDetailHeader({
   migrationOrigin,
   onResume,
   onResumeElsewhere,
+  onOpenForkOrigin,
   canResume,
   canMigrate,
   onOpenMigrate,
@@ -201,6 +202,14 @@ export default function SessionDetailHeader({
               </b>
             </span>
             {/* 迁移产物的出处:历史页已移除,来源就落在这条元信息里 */}
+            {data?.fork_origin && (
+              <button type="button" className="ficon-btn"
+                style={{ width: "auto", padding: "5px 8px" }}
+                onClick={() => onOpenForkOrigin?.(data.fork_origin)}>
+                <BranchIcon size={12} />
+                {tt("browser:branch.origin", { id: data.fork_origin.session_id, n: data.fork_origin.turn })}
+              </button>
+            )}
             {migrationOrigin && (
               <span
                 title={fmtTime(migrationOrigin.time, tt)}

@@ -54,6 +54,7 @@ pub struct ContentSearchRequest {
 /// `session_read` 的分发层参数包。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SessionReadRequest {
+    pub through: Value,
     pub cursor: Value,
     pub tool: Value,
     pub reference: Value,
@@ -77,6 +78,8 @@ pub trait EngineService: Send + Sync {
     fn scan_progress(&self) -> EngineResult<Value>;
     fn environment(&self) -> EngineResult<Value>;
     fn resume_command(&self, tool: &Value, reference: &Value) -> EngineResult<Value>;
+    fn branch_point(&self, params: &Value) -> EngineResult<Value>;
+    fn session_fork(&self, params: &Value) -> EngineResult<Value>;
     fn list_models(&self, tool: &Value) -> EngineResult<Value>;
     fn migration_history(&self) -> EngineResult<Value>;
     fn pricing(&self, force: &Value) -> EngineResult<Value>;
@@ -138,6 +141,8 @@ pub trait EngineService: Send + Sync {
 
 /// 分发表覆盖的方法名，顺序与 `ENGINE_METHOD_NAMES` 一致。
 const DISPATCH_METHOD_NAMES: &[&str] = &[
+    "branch_point",
+    "session_fork",
     "health",
     "version",
     "scan",
@@ -277,6 +282,8 @@ impl RpcDispatcher {
     fn dispatch(&self, method: &str, params: &Map<String, Value>) -> EngineResult<Value> {
         let service = self.service.as_ref();
         match method {
+            "branch_point" => service.branch_point(&Value::Object(params.clone())),
+            "session_fork" => service.session_fork(&Value::Object(params.clone())),
             "health" => service.health(),
             "version" => service.version(),
             "scan" => service.scan(),
@@ -338,6 +345,7 @@ impl RpcDispatcher {
                 exhaustive: default_of(params, "exhaustive", Value::Bool(false)),
             }),
             "session_read" => service.session_read(&SessionReadRequest {
+                through: optional(params, "through").clone(),
                 cursor: optional(params, "cursor").clone(),
                 tool: required(params, "tool")?.clone(),
                 reference: required(params, "ref")?.clone(),
@@ -465,6 +473,12 @@ mod tests {
     }
 
     impl EngineService for Recorder {
+        fn branch_point(&self, params: &Value) -> EngineResult<Value> {
+            self.record("branch_point", params.clone())
+        }
+        fn session_fork(&self, params: &Value) -> EngineResult<Value> {
+            self.record("session_fork", params.clone())
+        }
         fn health(&self) -> EngineResult<Value> {
             self.calls
                 .lock()
@@ -600,7 +614,7 @@ mod tests {
                     "from_message" => request.from_message, "limit" => request.limit,
                     "include_tool_outputs" => request.include_tool_outputs,
                     "max_bytes" => request.max_bytes,
-                    "inert" => request.inert),
+                    "inert" => request.inert, "through" => request.through),
             )
         }
         fn usage_stats(
@@ -934,6 +948,8 @@ mod tests {
         let engine = dispatcher(Arc::clone(&service));
         // 每个方法都带齐必需参数，确认没有一个落进 unknown_method。
         let params: &[(&str, Value)] = &[
+            ("branch_point", json!({})),
+            ("session_fork", json!({})),
             ("health", json!({})),
             ("version", json!({})),
             ("scan", json!({})),

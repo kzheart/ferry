@@ -49,6 +49,7 @@ export const RUNTIME_METHODS = [
   "auth.login.cancel",
   "title.generate",
   "tool.result",
+  "native_session.fork",
 ] as const;
 export const PUBLIC_RUNTIME_METHODS = [
   "health",

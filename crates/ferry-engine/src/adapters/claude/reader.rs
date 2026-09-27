@@ -521,6 +521,10 @@ fn decode_transcript(path: &Path, is_child: bool) -> DomainResult<DecodeResult> 
             .to_string();
         let mut message = Message::new(role);
         message.source_id = text_field(record, "uuid");
+        message.turn_complete = body
+            .and_then(|b| b.get("stop_reason"))
+            .and_then(Value::as_str)
+            .map(|reason| matches!(reason, "end_turn" | "stop_sequence"));
         message.parent_ids = match record.get("parentUuid").filter(|value| truthy(Some(value))) {
             Some(parent) => vec![parent.as_str().unwrap_or_default().to_string()],
             None => Vec::new(),

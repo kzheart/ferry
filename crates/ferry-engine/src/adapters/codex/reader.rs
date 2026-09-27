@@ -444,6 +444,16 @@ impl RolloutParser {
                 .push(codex_compaction(&entries, ordinal, after));
             return;
         }
+        if record_type == "event_msg" {
+            let kind = record.pointer("/payload/type").and_then(Value::as_str);
+            if matches!(kind, Some("task_complete" | "turn_aborted")) {
+                if let Some(message) = self.session.as_mut().and_then(|s| s.messages.last_mut()) {
+                    if message.role == "assistant" {
+                        message.turn_complete = Some(kind == Some("task_complete"));
+                    }
+                }
+            }
+        }
         if record_type != "response_item" {
             return;
         }

@@ -51,6 +51,10 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node22",
+  define: { "import.meta.url": "__ferryModuleUrl" },
+  banner: {
+    js: 'const __ferryModuleUrl = require("node:url").pathToFileURL(__filename).href;',
+  },
   sourcemap: false,
   minify: false,
   logLevel: "info",

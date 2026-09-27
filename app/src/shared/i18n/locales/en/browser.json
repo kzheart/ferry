@@ -132,5 +132,15 @@
     "cancel": "Cancel assistant reply edit",
     "addText": "+ Text",
     "addTool": "+ Tool call"
+  },
+  "branch": {
+    "fork": "Fork after this turn",
+    "resume": "Resume from this turn",
+    "copied": "Copied. Only history through this turn will be read.",
+    "noSkill": "Copied. Install Ferry Resume in Settings before using it.",
+    "copyFailed": "Could not copy resume instruction",
+    "changed": "This turn changed. Reopen the session before forking.",
+    "created": "Created session: {{id}}",
+    "origin": "Forked from {{id}} · Turn {{n}}"
   }
 }
