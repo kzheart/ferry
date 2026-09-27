@@ -28,15 +28,7 @@ const withoutImagePlaceholders = text => String(text || "")
   .replace(/\n{3,}/g, "\n\n")
   .trim();
 
-function IconBtn({
-  title,
-  danger,
-  accent,
-  onClick,
-  style,
-  children,
-  ...rest
-}) {
+function IconBtn({ title, danger, accent, onClick, style, children, ...rest }) {
   return (
     <button
       title={title}
