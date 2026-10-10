@@ -11,15 +11,19 @@ use crate::errors::{DomainError, DomainResult};
 use crate::model::{native_locator, tool_result_text, BlockKind, Message, Session};
 
 use super::index::{AgentSessionIndex, IndexedSession};
-use super::safety::{
-    bounded_int, python_json, python_json_len, record_session_id, string_set, truncate_text,
-    MAX_AGENT_DTO_BYTES,
-};
+use super::safety::{python_json, python_json_len, string_set, truncate_text};
 
-pub const MAX_CONTENT_SEARCH_RESULTS: i64 = 50;
-pub const MAX_CONTEXT_MESSAGES: i64 = 50;
-pub const MAX_CONTEXT_BYTES: i64 = 64 * 1024;
-pub const DEFAULT_CONTEXT_BYTES: i64 = 24 * 1024;
+pub const MAX_CONTENT_SEARCH_RESULTS: i64 = super::read_query::MAX_RESULTS;
+pub const MAX_CONTEXT_MESSAGES: i64 = super::read_query::MAX_MESSAGES;
+pub const MAX_CONTEXT_BYTES: i64 = super::read_query::MAX_BYTES;
+pub const DEFAULT_CONTEXT_BYTES: i64 = super::read_query::DEFAULT_BYTES;
+
+use super::block_fragment::BlockFragment;
+use super::read_metadata::ReadMetadata;
+use super::read_query::{ContextOptions, ReadScope, SearchOptions};
+use super::session_view::{content_snapshot, message_identity, raw_turns_before};
+pub use super::text_window::{char_find, char_slice};
+use super::text_window::{searchable_text, TextWindow};
 
 /// 读取前后各做一次 `validate_read_scope`，中间夹一次 `resolve` 的钉内容校验。
 ///
@@ -187,37 +191,31 @@ pub fn get_session_context_through(
     index: &AgentSessionIndex,
     through: Option<&str>,
 ) -> DomainResult<Map<String, Value>> {
-    let first = bounded_int(from_message, 1, 1, 1_000_000, "from_message")?;
-    let count = bounded_int(limit, 20, 1, MAX_CONTEXT_MESSAGES, "limit")? as usize;
-    let budget = bounded_int(
-        max_bytes,
-        DEFAULT_CONTEXT_BYTES,
-        1024,
-        MAX_CONTEXT_BYTES,
-        "max_bytes",
-    )? as usize;
+    let options = ContextOptions::parse(from_message, limit, max_bytes)?;
+    let first = options.first;
+    let count = options.count;
+    let budget = options.budget;
     let supplied = Cursor::decode(cursor)?;
     let continuing = supplied.is_some();
     let record = read_record(index, tool, opaque_ref, continuing)?;
     let mut session = read_indexed_session(index, &record, true)
         .map_err(|error| cursor_read_error(error, continuing))?;
     super::branch_point::restrict(&mut session, through)?;
-    let binding = read_cursor::digest(&json!([
-        "context",
+    let scope = ReadScope {
         tool,
-        opaque_ref,
-        first,
+        reference: opaque_ref,
         inert,
-        include_tool_outputs,
-        through
-    ]));
-    let snapshot = read_cursor::digest(&json!([record.revision, session]));
+        outputs: include_tool_outputs,
+        through,
+    };
+    let binding = scope.context_binding(first);
+    let snapshot = content_snapshot(&record.revision, &session);
     let start = Cursor::resume(
         supplied,
         &binding,
         &snapshot,
         Position {
-            message: first as usize - 1,
+            message: first - 1,
             block: 0,
             offset: 0,
         },
@@ -225,25 +223,7 @@ pub fn get_session_context_through(
     if continuing && start.message >= session.messages.len() {
         return Err(read_cursor::error("cursor_invalid", "游标消息位置无效"));
     }
-    let total_turns = session
-        .messages
-        .iter()
-        .filter(|message| message.role == "user")
-        .count();
-    let title_source = if inert {
-        super::inert::strip_text(&session.title)
-    } else {
-        session.title.clone()
-    };
-    let (title, title_truncated) = truncate_text(&title_source, 200);
-    let (project, project_truncated) = truncate_text(&session.cwd, 1024);
-    let base = json!({"tool": tool, "ref": opaque_ref,
-        "session_id": record_session_id(&record.row, Some(&session.source_id)),
-        "revision": record.revision, "title": title, "project": project,
-        "title_source": record.row.get("title_source").and_then(Value::as_str).unwrap_or(""),
-        "title_truncated": title_truncated, "project_truncated": project_truncated,
-        "message_count": session.messages.len(), "turn_count": total_turns,
-        "mode": "context"});
+    let base = ReadMetadata::new(tool, opaque_ref, &record, &session).context(inert);
     context_page(
         &session,
         base,
@@ -288,12 +268,7 @@ fn context_page(
     let mut scanned = 0usize;
     let omissions = std::cell::Cell::new((0usize, 0usize));
     let mut byte_limited = false;
-    let mut current_turn = session
-        .messages
-        .iter()
-        .take(start.message)
-        .filter(|message| message.role == "user")
-        .count();
+    let mut current_turn = raw_turns_before(session, start.message);
     if inert {
         base["inert"] = json!(true);
     }
@@ -367,15 +342,15 @@ fn context_page(
         let mut item = json!({"message": message_index + 1, "turn": current_turn, "role": message.role,
             "editable": message_is_rewritable(message), "locator": locator(message, message_index)?,
             "blocks": [], "complete": false,
-            "origin": super::inert::message_origin(message), "duplicate_key": super::inert::duplicate_key(message)});
+            "origin": message_identity(message)["origin"], "duplicate_key": message_identity(message)["duplicate_key"]});
         if inert {
             item["inert"] = json!(true);
         }
         let mut returned_blocks = Vec::<Value>::new();
         while position.block < blocks.len() {
             let block = &blocks[position.block];
-            let encoded = serde_json::to_string(block).expect("Value 可编码");
-            if position.offset >= encoded.len() || !encoded.is_char_boundary(position.offset) {
+            let fragment = BlockFragment::new(block);
+            if !fragment.valid_offset(position.offset) {
                 return Err(read_cursor::error("cursor_invalid", "游标字节位置无效"));
             }
             let next_block = if position.block + 1 == blocks.len() {
@@ -411,43 +386,7 @@ fn context_page(
                 }
                 continue;
             }
-            // 按完整 DTO 的实际编码大小二分，而非将正文长度误当成输出预算。
-            let fragment = |end: usize| {
-                json!({"kind": "fragment", "block": block["block"],
-                "fragment": {"encoding": "json", "offset_bytes": position.offset,
-                    "total_bytes": encoded.len(), "text": &encoded[position.offset..end], "complete": end == encoded.len()}})
-            };
-            let mut low = position.offset;
-            let mut high = encoded.len();
-            while low < high {
-                let mut end = low + (high - low).div_ceil(2);
-                while end > low && !encoded.is_char_boundary(end) {
-                    end -= 1;
-                }
-                if end == low {
-                    end = encoded[low..]
-                        .char_indices()
-                        .nth(1)
-                        .map(|(n, _)| low + n)
-                        .unwrap_or(encoded.len());
-                    if end > high {
-                        break;
-                    }
-                }
-                let next = if end == encoded.len() {
-                    next_block
-                } else {
-                    Position {
-                        offset: end,
-                        ..position
-                    }
-                };
-                if python_json_len(&candidate(fragment(end), next)) <= budget {
-                    low = end;
-                } else {
-                    high = end - 1;
-                }
-            }
+            let low = fragment.fitting_end(position, budget, next_block, candidate);
             if low == position.offset {
                 byte_limited = true;
                 if !returned_blocks.is_empty() {
@@ -456,15 +395,8 @@ fn context_page(
                 }
                 break 'messages;
             }
-            returned_blocks.push(fragment(low));
-            position = if low == encoded.len() {
-                next_block
-            } else {
-                Position {
-                    offset: low,
-                    ..position
-                }
-            };
+            returned_blocks.push(fragment.value(position.offset, low));
+            position = fragment.next_position(position, low, next_block);
             if position.offset > 0 {
                 byte_limited = true;
                 break;
@@ -524,51 +456,6 @@ fn status_text(status: crate::model::ToolResultStatus) -> &'static str {
         Pending => "pending",
         Unknown => "unknown",
     }
-}
-
-/// 检索用文本：调用方要求带工具输出时一并纳入范围。
-///
-/// `inert=true` 时文本先过一遍剥离，检索与 snippet 都不会命中源 agent 的
-/// system prompt——否则 `--inert --terms` 会是个静默无效的组合。
-fn searchable_text(message: &Message, include_tool_outputs: bool, inert: bool) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    for block in &message.blocks {
-        if block.kind == BlockKind::Text && !block.text.is_empty() {
-            let text = if inert {
-                super::inert::strip_text(&block.text)
-            } else {
-                block.text.clone()
-            };
-            if !text.is_empty() {
-                parts.push(text);
-            }
-        } else if include_tool_outputs && block.kind == BlockKind::Tool {
-            let Some(call) = block.tool.as_ref() else {
-                continue;
-            };
-            parts.push(format!("[tool {}]", call.name));
-            let output = tool_result_text(call.result.as_ref());
-            if !output.is_empty() {
-                parts.push(output);
-            }
-        }
-    }
-    parts.join("\n")
-}
-
-/// 以字符（不是字节）为单位取子串，对齐 Python 的切片语义。
-pub fn char_slice(text: &str, start: usize, end: usize) -> String {
-    text.chars()
-        .skip(start)
-        .take(end.saturating_sub(start))
-        .collect()
-}
-
-/// 以字符为单位查找子串位置。
-pub fn char_find(haystack: &str, needle: &str) -> Option<usize> {
-    haystack
-        .find(needle)
-        .map(|byte| haystack[..byte].chars().count())
 }
 
 /// `session_read` 的 search 档位。
@@ -642,7 +529,8 @@ pub fn search_session_content_through(
             params,
         ));
     }
-    let maximum = bounded_int(limit, 20, 1, MAX_CONTENT_SEARCH_RESULTS, "limit")? as usize;
+    let options = SearchOptions::parse(limit, max_bytes)?;
+    let maximum = options.count;
     let mut sorted_terms = wanted;
     sorted_terms.sort();
     let normalized: Vec<(String, String)> = sorted_terms
@@ -653,33 +541,20 @@ pub fn search_session_content_through(
     let mut session = read_indexed_session(index, &record, true)
         .map_err(|error| cursor_read_error(error, supplied.is_some()))?;
     super::branch_point::restrict(&mut session, through)?;
-    let budget = bounded_int(
-        max_bytes,
-        MAX_AGENT_DTO_BYTES as i64,
-        1024,
-        MAX_CONTEXT_BYTES,
-        "max_bytes",
-    )? as usize;
-    let binding = read_cursor::digest(&json!([
-        "search",
+    let budget = options.budget;
+    let scope = ReadScope {
         tool,
-        opaque_ref,
-        sorted_terms,
-        allowed_roles,
+        reference: opaque_ref,
         inert,
-        include_tool_outputs,
-        through
-    ]));
-    let snapshot = read_cursor::digest(&json!([record.revision, session]));
+        outputs: include_tool_outputs,
+        through,
+    };
+    let binding = scope.search_binding(&sorted_terms, &allowed_roles);
+    let snapshot = content_snapshot(&record.revision, &session);
     let start = Cursor::resume(supplied, &binding, &snapshot, Position::default())?;
     if start.block != 0 || start.offset != 0 || start.message > session.messages.len() {
         return Err(read_cursor::error("cursor_invalid", "搜索游标位置无效"));
     }
-    let total_turns = session
-        .messages
-        .iter()
-        .filter(|message| message.role == "user")
-        .count() as i64;
     let mut matches: Vec<Value> = Vec::new();
     let mut current_turn = 0i64;
     let mut total_matches = 0i64;
@@ -723,15 +598,7 @@ pub fn search_session_content_through(
             .filter_map(|(_, folded_term)| char_find(&folded, folded_term))
             .min()
             .unwrap_or(0);
-        let text_chars = text.chars().count();
-        let start = first_hit.saturating_sub(240);
-        let end = text_chars.min(first_hit + 560);
-        let snippet = format!(
-            "{}{}{}",
-            if start > 0 { "…" } else { "" },
-            char_slice(&text, start, end),
-            if end < text_chars { "…" } else { "" }
-        );
+        let window = TextWindow::around(&text, first_hit);
         let editable = message_is_rewritable(message);
         let mut item = Map::new();
         item.insert(
@@ -765,12 +632,9 @@ pub fn search_session_content_through(
         );
         item.insert(
             "snippet".into(),
-            Value::from(truncate_text(&snippet, 900).0),
+            Value::from(truncate_text(&window.snippet, 900).0),
         );
-        item.insert(
-            "complete".into(),
-            Value::Bool(start == 0 && end == text_chars),
-        );
+        item.insert("complete".into(), Value::Bool(window.complete));
         if inert {
             item.insert("inert".into(), Value::Bool(true));
         }
@@ -781,16 +645,7 @@ pub fn search_session_content_through(
 
     let has_more = next_message.is_some();
 
-    let mut result = Map::new();
-    result.insert("tool".into(), Value::from(tool));
-    result.insert("ref".into(), Value::from(opaque_ref));
-    result.insert(
-        "session_id".into(),
-        Value::from(record_session_id(&record.row, Some(&session.source_id))),
-    );
-    result.insert("revision".into(), Value::from(record.revision.as_str()));
-    result.insert("message_count".into(), Value::from(session.messages.len()));
-    result.insert("turn_count".into(), Value::from(total_turns));
+    let mut result = ReadMetadata::new(tool, opaque_ref, &record, &session).search();
     if inert {
         result.insert("inert".into(), Value::Bool(true));
     }
