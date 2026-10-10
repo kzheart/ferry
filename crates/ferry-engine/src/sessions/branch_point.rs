@@ -149,6 +149,26 @@ mod tests {
     }
 
     #[test]
+    fn native_anchor_uses_the_raw_end_when_an_earlier_summary_is_hidden() {
+        let mut s = sample();
+        let mut summary = Message::new("user");
+        summary.source_id = Some("internal-summary".into());
+        summary.blocks.push(Block::text("internal"));
+        s.messages.insert(0, summary);
+        let mut compaction = crate::model::ContextCompaction::new("compact", "pi");
+        compaction.summary_message_id = Some("internal-summary".into());
+        s.context_compactions.push(compaction);
+
+        let token = BranchPoint::issue(&s, "m0").unwrap();
+        let point = BranchPoint::resolve(&token, &s).unwrap();
+        let request = point.native_request(&s, "file");
+
+        assert_eq!(point.end, 3);
+        assert_eq!(request["lastMessageId"], "m1");
+        assert_eq!(request["turn"], 1);
+    }
+
+    #[test]
     fn point_survives_append_but_not_rewrite_or_other_session() {
         let mut s = sample();
         let token = BranchPoint::issue(&s, "m0").unwrap();

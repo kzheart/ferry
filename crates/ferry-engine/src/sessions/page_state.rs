@@ -14,10 +14,7 @@ impl<'a> ContextStart<'a> {
     }
 
     pub fn turn_prefix(&self) -> usize {
-        raw_turns_before(
-            self.session,
-            self.position.message + usize::from(self.position.offset > 0),
-        )
+        raw_turns_before(self.session, self.position.message)
     }
 
     pub fn position(&self) -> Position {
@@ -45,9 +42,42 @@ impl SearchWindow {
             return false;
         }
         if returned >= self.maximum {
-            self.next_message.get_or_insert(self.first + returned);
+            self.next_message.get_or_insert(message_index);
             return false;
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Message;
+
+    #[test]
+    fn fragmented_user_message_keeps_its_original_turn() {
+        let mut session = Session::new("fixture", "fragmented", "/fixture");
+        session.messages.push(Message::new("user"));
+        session.messages.push(Message::new("user"));
+
+        let start = ContextStart::new(
+            &session,
+            Position {
+                message: 1,
+                block: 0,
+                offset: 4,
+            },
+        );
+
+        assert_eq!(start.turn_prefix(), 1);
+    }
+
+    #[test]
+    fn sparse_search_resumes_at_the_overflowing_match() {
+        let mut window = SearchWindow::new(0, 1);
+
+        assert!(window.collect_at(10, 0));
+        assert!(!window.collect_at(20, 1));
+        assert_eq!(window.next_message, Some(20));
     }
 }

@@ -83,12 +83,7 @@ impl<'a> SessionView<'a> {
     }
 
     pub fn native_anchor(&self, end: usize) -> &'a Message {
-        self.session
-            .messages
-            .iter()
-            .filter(|message| self.visible(message))
-            .nth(end - 1)
-            .unwrap_or(&self.session.messages[end - 1])
+        &self.session.messages[end - 1]
     }
 
     pub fn visible_turns(&self, end: usize) -> usize {
