@@ -14,6 +14,23 @@ pub(super) struct Position {
     pub offset: usize,
 }
 
+impl Position {
+    pub fn following_block(self, block_count: usize) -> Self {
+        if self.block + 1 == block_count {
+            Self {
+                message: self.message + 1,
+                block: 0,
+                offset: 0,
+            }
+        } else {
+            Self {
+                block: self.block + 1,
+                ..self
+            }
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Cursor {

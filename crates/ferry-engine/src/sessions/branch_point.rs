@@ -4,9 +4,9 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::read_cursor::digest;
+use super::session_view::{clear_derived_metadata, SessionView};
 use crate::errors::{DomainError, DomainResult};
-use crate::model::{native_locator, BlockKind, Session};
+use crate::model::{native_locator, Session};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,63 +25,14 @@ fn invalid(reason: &str) -> DomainError {
     error
 }
 
-fn visible(session: &Session, message: &crate::model::Message) -> bool {
-    !session
-        .context_compactions
-        .iter()
-        .any(|c| c.summary_message_id.is_some() && c.summary_message_id == message.source_id)
-}
-
 /// End is exclusive. Internal compaction messages do not create UI turns.
 pub fn complete_end(session: &Session, start: usize) -> Option<usize> {
-    let first = session.messages.get(start)?;
-    if first.role != "user" || !visible(session, first) {
-        return None;
-    }
-    let next = session
-        .messages
-        .iter()
-        .enumerate()
-        .skip(start + 1)
-        .find(|(_, m)| m.role == "user" && visible(session, m))
-        .map_or(session.messages.len(), |(i, _)| i);
-    let (last_index, last) = session.messages[..next]
-        .iter()
-        .enumerate()
-        .skip(start + 1)
-        .rev()
-        .find(|(_, m)| visible(session, m))?;
-    (last.role == "assistant"
-        && last.turn_complete == Some(true)
-        && last
-            .blocks
-            .iter()
-            .any(|b| b.kind == BlockKind::Text && !b.text.trim().is_empty()))
-    .then_some(last_index + 1)
+    SessionView::new(session).complete_end(start)
 }
 
 /// Match show()'s visible-message pagination without issuing locators for unloaded turns.
 pub fn completed_on_page(session: &Session, from: usize, to: usize) -> Vec<usize> {
-    let mut count = 0;
-    let positions: Vec<usize> = session
-        .messages
-        .iter()
-        .map(|m| {
-            if visible(session, m) {
-                count += 1;
-            }
-            count
-        })
-        .collect();
-    session
-        .messages
-        .iter()
-        .enumerate()
-        .filter_map(|(i, _)| {
-            let end = complete_end(session, i)?;
-            (positions[end - 1] >= from && positions[end - 1] <= to).then_some(i)
-        })
-        .collect()
+    SessionView::new(session).completed_on_page(from, to)
 }
 
 impl BranchPoint {
@@ -127,9 +78,8 @@ impl BranchPoint {
         {
             return Err(fail());
         }
-        let start = session.messages[..point.end]
-            .iter()
-            .rposition(|m| m.role == "user" && visible(session, m))
+        let start = SessionView::new(session)
+            .latest_user_before(point.end)
             .ok_or_else(fail)?;
         if complete_end(session, start) != Some(point.end) {
             return Err(fail());
@@ -138,19 +88,15 @@ impl BranchPoint {
     }
 
     pub fn native_request(&self, session: &Session, reference: &str) -> Value {
-        let last = &session.messages[self.end - 1];
+        let last = SessionView::new(session).native_anchor(self.end);
         json!({"tool": self.tool, "sessionId": self.session, "cwd": session.cwd,
             "sourceRef": reference, "lastMessageId": last.source_id,
-            "turn": session.messages[..self.end].iter().filter(|m| m.role == "user" && visible(session, m)).count()})
+            "turn": SessionView::new(session).visible_turns(self.end)})
     }
 }
 
 fn prefix_hash(session: &Session, end: usize) -> String {
-    digest(&json!([
-        session.source_tool,
-        session.source_id,
-        &session.messages[..end]
-    ]))
+    SessionView::new(session).prefix_digest(end)
 }
 
 /// Drop every derived whole-session object as well: child transcripts and later summaries
@@ -159,11 +105,7 @@ pub fn restrict(session: &mut Session, token: Option<&str>) -> DomainResult<()> 
     if let Some(token) = token {
         let point = BranchPoint::resolve(token, session)?;
         session.messages.truncate(point.end);
-        session.children.clear();
-        session.agent_edges.clear();
-        session.context_compactions.clear();
-        session.loss.clear();
-        session.title = "Bounded conversation".into();
+        clear_derived_metadata(session);
     }
     Ok(())
 }
