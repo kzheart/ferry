@@ -158,7 +158,7 @@ fn prefix_hash(session: &Session, end: usize) -> String {
 pub fn restrict(session: &mut Session, token: Option<&str>) -> DomainResult<()> {
     if let Some(token) = token {
         let point = BranchPoint::resolve(token, session)?;
-        session.messages.truncate(point.end);
+        session.messages.truncate(point.end + 1);
         session.children.clear();
         session.agent_edges.clear();
         session.context_compactions.clear();
