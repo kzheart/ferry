@@ -1,7 +1,7 @@
 {
   "welcome": {
     "title": "欢迎使用 Ferry",
-    "desc": "Ferry 在本机运行,扫描你的 AI 编码工具会话并统一浏览。无需登录,不上传任何数据。",
+    "desc": "Ferry 在本机运行，扫描你的 AI 编码工具会话并统一浏览。无需登录，不上传任何数据。",
     "detectedTools": "检测到的工具",
     "detectWithSessions": "{{path}} · {{count}} 会话",
     "detectInstalled": "已检测到可执行文件",
